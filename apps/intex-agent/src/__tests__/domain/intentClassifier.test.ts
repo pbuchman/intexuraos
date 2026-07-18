@@ -224,6 +224,14 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       },
       { kind: 'no_action', reason: 'conversation' },
     ],
+    [
+      'retain context',
+      {
+        outcome: 'retain_context',
+        confidence: 0.95,
+      },
+      { kind: 'no_action', reason: 'retain_context' },
+    ],
   ] as const)('normalizes validated LLM classifier output: %s', async (_name, content, expected) => {
     const client = new FakeStructuredClient([ok(generateResult(content))]);
     const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
@@ -343,6 +351,24 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         stylePreferenceAction: 'apply_this_turn_only',
         languageOverride: 'en',
         decisionEvidence: 'The user asks for discussion rather than a tool action.',
+      },
+    ],
+    [
+      'retain-context metadata',
+      'do not save this; only retain this context',
+      {
+        outcome: 'retain_context',
+        confidence: 0.96,
+        stylePreferenceAction: 'apply_this_turn_only',
+        languageOverride: 'pl',
+        decisionEvidence: 'The sole request is temporary current-session retention.',
+      },
+      {
+        kind: 'no_action',
+        reason: 'retain_context',
+        stylePreferenceAction: 'apply_this_turn_only',
+        languageOverride: 'pl',
+        decisionEvidence: 'The sole request is temporary current-session retention.',
       },
     ],
   ] as const)(

@@ -2,30 +2,41 @@ import { describe, expect, it } from 'vitest';
 import { INTEX_AGENT_SYSTEM_PROMPT, buildIntexAgentSystemPrompt } from '../systemPrompt.js';
 
 const CURRENT_DATE_TIME = '2026-06-24T10:00:00.000Z';
+const TIME_ZONE = 'UTC';
 
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('15.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('17.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('8.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('10.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: null,
     });
 
     expect(prompt).toBe(
-      `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
+      [
+        INTEX_AGENT_SYSTEM_PROMPT.text,
+        '',
+        'IANA time zone: UTC',
+        'Current date-time: 2026-06-24T10:00:00.000+00:00',
+        'Whole-day local bounds for query_calendar_events:',
+        'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00',
+        'tomorrow: timeMin=2026-06-25T00:00:00.000+00:00; timeMax=2026-06-26T00:00:00.000+00:00',
+      ].join('\n')
     );
   });
 
   it('includes non-empty user preferences behind the durable-guidance guard', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: '  - Prefer concise Polish replies.  ',
     });
 
@@ -35,12 +46,13 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('unavailable data access');
     expect(prompt).toContain('conflict with an explicit current-turn instruction');
     expect(prompt).toContain('- Prefer concise Polish replies.');
-    expect(prompt).toContain(`Current date-time: ${CURRENT_DATE_TIME}`);
+    expect(prompt).toContain('Current date-time: 2026-06-24T10:00:00.000+00:00');
   });
 
   it('uses Intex display copy and asks before unsupported refusals', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: null,
     });
 
@@ -53,6 +65,7 @@ describe('buildIntexAgentSystemPrompt', () => {
   it('instructs assistant replies to bold with single asterisks', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: null,
     });
 
@@ -66,6 +79,7 @@ describe('buildIntexAgentSystemPrompt', () => {
   it('prioritizes useful analysis before tool execution boundaries', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: null,
     });
 
@@ -80,6 +94,7 @@ describe('buildIntexAgentSystemPrompt', () => {
   it('acknowledges current-session context retention without echoing fragment details', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: null,
     });
 
@@ -88,9 +103,81 @@ describe('buildIntexAgentSystemPrompt', () => {
     );
   });
 
+  it('localizes a production UTC instant and emits DST-safe Warsaw day bounds', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: '2026-03-28T10:15:30.000Z',
+      timeZone: 'Europe/Warsaw',
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain('IANA time zone: Europe/Warsaw');
+    expect(prompt).toContain('Current date-time: 2026-03-28T11:15:30.000+01:00');
+    expect(prompt).toContain(
+      'today: timeMin=2026-03-28T00:00:00.000+01:00; timeMax=2026-03-29T00:00:00.000+01:00'
+    );
+    expect(prompt).toContain(
+      'tomorrow: timeMin=2026-03-29T00:00:00.000+01:00; timeMax=2026-03-30T00:00:00.000+02:00'
+    );
+    expect(prompt).toContain('copy the exact timeMin and timeMax from Whole-day local bounds');
+  });
+
+  it.each([
+    {
+      timeZone: 'America/Santiago',
+      currentDateTime: '2026-09-05T12:00:00.000Z',
+      expectedTomorrowBounds:
+        'tomorrow: timeMin=2026-09-06T01:00:00.000-03:00; timeMax=2026-09-07T00:00:00.000-03:00',
+    },
+    {
+      timeZone: 'America/Havana',
+      currentDateTime: '2026-03-07T12:00:00.000Z',
+      expectedTomorrowBounds:
+        'tomorrow: timeMin=2026-03-08T01:00:00.000-04:00; timeMax=2026-03-09T00:00:00.000-04:00',
+    },
+    {
+      timeZone: 'Atlantic/Azores',
+      currentDateTime: '2026-03-28T12:00:00.000Z',
+      expectedTomorrowBounds:
+        'tomorrow: timeMin=2026-03-29T01:00:00.000+00:00; timeMax=2026-03-30T00:00:00.000+00:00',
+    },
+    {
+      timeZone: 'Africa/Cairo',
+      currentDateTime: '2026-04-23T12:00:00.000Z',
+      expectedTomorrowBounds:
+        'tomorrow: timeMin=2026-04-24T01:00:00.000+03:00; timeMax=2026-04-25T00:00:00.000+03:00',
+    },
+  ])(
+    'uses the first valid instant when local midnight is skipped in $timeZone',
+    ({ currentDateTime, expectedTomorrowBounds, timeZone }) => {
+      const prompt = buildIntexAgentSystemPrompt.build({
+        currentDateTime,
+        timeZone,
+        userPreferences: null,
+      });
+
+      expect(prompt).toContain(expectedTomorrowBounds);
+    }
+  );
+
+  it('emits an empty interval instead of throwing when a civil date is skipped entirely', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: '2011-12-29T12:00:00.000Z',
+      timeZone: 'Pacific/Apia',
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain(
+      'today: timeMin=2011-12-29T00:00:00.000-10:00; timeMax=2011-12-31T00:00:00.000+14:00'
+    );
+    expect(prompt).toContain(
+      'tomorrow: timeMin=2011-12-31T00:00:00.000+14:00; timeMax=2011-12-31T00:00:00.000+14:00'
+    );
+  });
+
   it('keeps direct answers and explicit tool requests out of generic protocol fallback', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: null,
     });
 
@@ -111,10 +198,11 @@ describe('buildIntexAgentSystemPrompt', () => {
   it('omits blank user preferences', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
       userPreferences: '   ',
     });
 
     expect(prompt).not.toContain('User Preferences are durable user guidance');
-    expect(prompt).toContain(`Current date-time: ${CURRENT_DATE_TIME}`);
+    expect(prompt).toContain('Current date-time: 2026-06-24T10:00:00.000+00:00');
   });
 });

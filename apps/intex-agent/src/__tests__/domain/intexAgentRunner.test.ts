@@ -26,19 +26,34 @@ const ENGLISH_GREETING_REPLY = 'Hi! I am doing well. How can I help?';
 const POLISH_GREETING_REPLY = 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?';
 
 type CreateRunnerConfig = Parameters<typeof createBaseIntexAgentRunner>[0];
+type BaseRunner = ReturnType<typeof createBaseIntexAgentRunner>;
+type BaseRunnerInput = Parameters<BaseRunner['run']>[0];
+type TestRunner = Omit<BaseRunner, 'run'> & {
+  run(
+    input: Omit<BaseRunnerInput, 'timeZone'> & { timeZone?: string }
+  ): ReturnType<BaseRunner['run']>;
+};
 
-function createIntexAgentRunner(config: CreateRunnerConfig): ReturnType<typeof createBaseIntexAgentRunner> {
+function createIntexAgentRunner(config: CreateRunnerConfig): TestRunner {
+  let runner: BaseRunner;
   if (
     config.intentClassifier === undefined &&
     config.client instanceof ToolExecutingFakeToolCallingClient
   ) {
-    return createBaseIntexAgentRunner({
+    runner = createBaseIntexAgentRunner({
       ...config,
       intentClassifier: toolIntentClassifier(config.client.toolNames()),
     });
+  } else {
+    runner = createBaseIntexAgentRunner(config);
   }
 
-  return createBaseIntexAgentRunner(config);
+  return {
+    executeConfirmed: runner.executeConfirmed,
+    async run(input): ReturnType<BaseRunner['run']> {
+      return await runner.run({ ...input, timeZone: input.timeZone ?? 'UTC' });
+    },
+  };
 }
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLY =
   'No external system is configured for this message, so I cannot process it. Configure external save in Intex Agent preferences and send it again.';
@@ -90,10 +105,14 @@ describe('createIntexAgentRunner', () => {
       toolName: 'create_note',
       toolArgs: { content: 'The door code is 1234.', title: 'Door code' },
     });
-    expect(client.calls[0]?.systemPrompt).toBe(
-      `${INTEX_AGENT_SYSTEM_PROMPT.text}\n\nCurrent date-time: ${CURRENT_DATE_TIME}`
+    expect(client.calls[0]?.systemPrompt).toContain('IANA time zone: UTC');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Current date-time: 2026-06-24T10:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('15.0.0');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
+    );
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('17.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -108,6 +127,9 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
     expect(client.calls[0]?.systemPrompt).toContain('answer whether existing events are present');
     expect(client.calls[0]?.systemPrompt).toContain('For "next week", use the next calendar week after the current week');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'copy the exact timeMin and timeMax from Whole-day local bounds'
+    );
     expect(client.calls[0]?.systemPrompt).toContain('previous calendar month unless the user says "last 30 days"');
     expect(client.calls[0]?.systemPrompt).toContain('put the event name in query and set mode to count');
     expect(client.calls[0]?.systemPrompt).toContain('Never use query_calendar_events to create, update, delete, or reschedule events');
@@ -789,6 +811,255 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'no_action',
       reply: ENGLISH_GREETING_REPLY,
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    {
+      label: 'English',
+      message:
+        'INTEX-EVAL context fragment: Project Atlas uses a green folder. Do not save yet; only retain this context.',
+      expectedReply: 'Noted for this session only. No note or other resource was created.',
+    },
+    {
+      label: 'English with a typographic apostrophe',
+      message: 'Project Atlas uses a green folder. Don’t save yet; just hold this context.',
+      expectedReply: 'Noted for this session only. No note or other resource was created.',
+    },
+    {
+      label: 'Polish',
+      message:
+        'Fragment kontekstu: Projekt Atlas używa zielonego folderu. Nie zapisuj tego jeszcze; tylko zachowaj ten kontekst.',
+      expectedReply:
+        'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
+    },
+    {
+      label: 'short Polish without diacritics',
+      message: 'Nie zapisuj tego jeszcze; tylko zachowaj ten kontekst.',
+      expectedReply:
+        'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
+    },
+  ])(
+    'handles an explicit retain-only turn in $label after classification without calling the runner LLM',
+    async ({ message, expectedReply }) => {
+      const client = new FakeToolCallingClient([
+        ok(toolResult({ outcome: 'no_action', reply: 'Echoed private fragment.' })),
+      ]);
+      let classifierCalls = 0;
+      const intentClassifier: IntexAgentIntentClassifier = {
+        async classify() {
+          classifierCalls += 1;
+          return { kind: 'no_action', reason: 'retain_context' };
+        },
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier,
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'no_action',
+        reply: expectedReply,
+      });
+      expect(classifierCalls).toBe(1);
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it('does not intercept an explicit note save after retained context', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { title: 'Atlas', content: 'Retained context.' },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' }))]
+    );
+    let classifierCalls = 0;
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        classifierCalls += 1;
+        return { kind: 'tool', allowedToolNames: ['create_note'] };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Project Atlas uses a green folder. Do not save yet; only retain this context.',
+          }),
+          event('assistant_message', {
+            text: 'Noted for this session only. No note or other resource was created.',
+          }),
+        ],
+        message: 'Now save one note containing all context retained in this session.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_note',
+    });
+    expect(classifierCalls).toBe(1);
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.messages).toEqual([
+      {
+        role: 'user',
+        content:
+          'Project Atlas uses a green folder. Do not save yet; only retain this context.',
+      },
+      {
+        role: 'assistant',
+        content: 'Noted for this session only. No note or other resource was created.',
+      },
+      {
+        role: 'user',
+        content: 'Now save one note containing all context retained in this session.',
+      },
+    ]);
+  });
+
+  it.each([
+    'Do not save https://example.com as a note; just keep it as a bookmark.',
+    'Do not save this externally; only retain this context and create a note.',
+    'Do not save this note; only retain this context and add a calendar event.',
+    'Do not persist this draft; only hold this context and create a research draft.',
+    'Do not store this note; just keep this context and create a code task.',
+    'Nie zapisuj notatki; tylko zachowaj ten kontekst i dodaj preferencję.',
+    'Bookmark https://example.com. Do not save the description as a note; only retain this context.',
+    'Translate into Polish: Do not save yet; only retain this context.',
+    'Could you translate into Polish: Do not save yet; only retain this context.',
+    'Do not save it yet; translate it into Polish, then only retain this context.',
+    "Calculate 2+2, but don't save it; only keep this context.",
+    'Czy możesz przetłumaczyć na angielski: Nie zapisuj tego jeszcze; tylko zachowaj ten kontekst.',
+    'Nie zapisuj tego jeszcze; przetłumacz to na angielski, a potem tylko zachowaj ten kontekst.',
+  ])('does not intercept a mixed or non-context retain request: %s', async (message) => {
+    const client = new FakeToolCallingClient([
+      ok(toolResult({ outcome: 'no_action', reply: 'Normal classified response.' })),
+    ]);
+    let classifierCalls = 0;
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        classifierCalls += 1;
+        return { kind: 'no_action', reason: 'conversation' };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'Normal classified response.',
+    });
+    expect(classifierCalls).toBe(1);
+    expect(client.calls).toHaveLength(1);
+  });
+
+  it.each([
+    'Bookmark https://example.com. Do not save it; only retain this context.',
+    'Please retain this for later.',
+    'Translate into Polish: Do not save yet; only retain this context.',
+    'Przetłumacz to: Nie zapisuj; tylko zachowaj ten kontekst.',
+  ])(
+    'falls through safely when retain_context classification lacks a pure retain-only shape: %s',
+    async (message) => {
+      const client = new FakeToolCallingClient([
+        ok(toolResult({ outcome: 'no_action', reply: 'Normal classified response.' })),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return { kind: 'no_action', reason: 'retain_context' };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'UTC',
+        })
+      ).resolves.toEqual({
+        outcome: 'no_action',
+        reply: 'Normal classified response.',
+      });
+      expect(client.calls).toHaveLength(1);
+    }
+  );
+
+  it('does not override a tool intent even when its message ends with a retain-only clause', async () => {
+    const client = new FakeToolCallingClient([
+      ok(toolResult({ outcome: 'no_action', reply: 'Tool-routed response.' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'Do not save yet; only retain this context.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
+  });
+
+  it('honors a classifier language override for a retain-only acknowledgement', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return { kind: 'no_action', reason: 'retain_context', languageOverride: 'pl' };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Please answer in Polish. Do not save yet; only retain this context.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
     });
     expect(client.calls).toEqual([]);
   });
@@ -1550,7 +1821,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('15.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('17.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -1771,7 +2042,7 @@ describe('createIntexAgentRunner', () => {
       toolName: 'query_calendar_events',
     });
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
-    expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000Z');
+    expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000+00:00');
   });
 
   it('executes exact Polish natural calendar lookup immediately without confirmation', async () => {
@@ -1877,7 +2148,7 @@ describe('createIntexAgentRunner', () => {
       toolName: 'query_calendar_events',
     });
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
-    expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000Z');
+    expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000+00:00');
   });
 
   it('asks for clarification when the successful model result is malformed', async () => {
@@ -2727,6 +2998,33 @@ describe('createIntexAgentRunner', () => {
       toolArgs: {
         message: 'Lunch receipt',
         sourceUrl: 'https://storage.example.com/signed/receipt.jpg',
+      },
+    });
+  });
+
+  it('keeps WhatsApp image handling ahead of a retain-only-looking caption', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Do not save yet; only retain this context.',
+      sourceType: 'whatsapp_image',
+      sourceUrl: 'https://storage.example.com/signed/context.jpg',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(client.calls).toEqual([]);
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'save_external',
+      toolArgs: {
+        message: 'Do not save yet; only retain this context.',
+        sourceUrl: 'https://storage.example.com/signed/context.jpg',
       },
     });
   });
@@ -4059,7 +4357,7 @@ describe('createIntexAgentRunner', () => {
       'User Preferences are durable user guidance. Apply preferences for supported Intex Agent jobs'
     );
     expect(systemPrompt).toContain(promptBlock);
-    expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');
+    expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000+00:00');
   });
 
   it('ignores empty user preferences when building the system prompt', async () => {
@@ -4081,7 +4379,7 @@ describe('createIntexAgentRunner', () => {
 
     const systemPrompt = client.calls[0]?.systemPrompt ?? '';
     expect(systemPrompt).not.toContain('User Preferences are durable user guidance');
-    expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000Z');
+    expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000+00:00');
   });
 });
 

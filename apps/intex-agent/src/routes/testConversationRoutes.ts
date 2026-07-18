@@ -231,6 +231,19 @@ function validateTestConversationRequest(input: unknown): string | null {
   if (!Number.isFinite(date)) {
     return 'currentDateTime must be a valid date-time string';
   }
+  const timeZone = input['timeZone'];
+  /* v8 ignore start -- schema: Fastify schema validation guarantees supplied timeZone is a string before custom validation @preserve */
+  if (timeZone !== undefined && typeof timeZone !== 'string') {
+    return 'timeZone must be a valid IANA time zone';
+  }
+  /* v8 ignore stop @preserve */
+  if (timeZone !== undefined) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone }).format(0);
+    } catch {
+      return 'timeZone must be a valid IANA time zone';
+    }
+  }
   const turns = input['turns'];
   /* v8 ignore start -- schema: Fastify schema validation guarantees turns is an array before custom validation @preserve */
   if (!Array.isArray(turns)) {

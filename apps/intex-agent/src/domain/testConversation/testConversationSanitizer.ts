@@ -23,7 +23,7 @@ const SECRET_FIELD_PATTERN =
   /token|secret|password|key|authorization|auth|credential|toolargs|promptblock|replycontext|sourceurl|whatsappsender/iu;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"')]+|\/#\/[^\s<>"')]+/giu;
 const SENSITIVE_REPLY_LINE_PATTERN =
-  /^\s*(url|source|zrodlo|źródło|title|tytuł|content|treść|tresc|start|początek|end|koniec|location|miejsce|attendees|uczestnicy|prompt|mode|tryb|worker|typ workera|new entry|nowy wpis|entry|wpis|before|przed|after|po)\s*:/iu;
+  /^\s*(?:(?:>|[-+*•‣◦▪]|\d+[.)])\s+)?(?:[*_]{1,2})?\s*(url|source|zrodlo|źródło|title|tytuł|content|treść|tresc|start|początek|end|koniec|location|miejsce|attendees|uczestnicy|prompt|polecenie|mode|tryb|worker|typ workera|linear|new entry|nowy wpis|entry|wpis|before|wcześniej|przed|after|po zmianie|po)\s*:\s*(?:[*_]{1,2})?(?:\s*.*)?$/iu;
 const PREFERENCE_BLOCK_HEADER_PATTERN =
   /^\s*(user preferences|prompt preferences|current preferences|rendered prompt block|preferencje|preferencje użytkownika)\b/iu;
 const PREFERENCE_BLOCK_ITEM_PATTERN = /^\s*(?:[-*]|\d+[).])\s+\S/u;
@@ -623,14 +623,17 @@ function truncateTo(text: string, limit: number): string {
 function redactSensitiveText(text: string): string {
   let inPreferenceBlock = false;
   let inSensitiveReplyDetails = false;
-  return text
+  const lines = text
     .replace(URL_PATTERN, '[redacted-url]')
-    .split(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/u)
+    .replaceAll('\u001C', '\n')
+    .replaceAll('\u001D', '\n')
+    .replaceAll('\u001E', '\n')
+    .replaceAll('\u001F', '\n')
+    .split(/\r\n|[\n\v\f\r\u0085\u2028\u2029]/u);
+  return lines
     .map((line) => {
       if (inSensitiveReplyDetails) {
-        return SENSITIVE_REPLY_LINE_PATTERN.test(line)
-          ? line.replace(/:\s*.*$/u, ': [redacted]')
-          : '[redacted]';
+        return redactSensitiveReplyLine(line) ?? '';
       }
       if (PREFERENCE_BLOCK_HEADER_PATTERN.test(line)) {
         inPreferenceBlock = true;
@@ -644,13 +647,23 @@ function redactSensitiveText(text: string): string {
         return line;
       }
       inPreferenceBlock = false;
-      if (!SENSITIVE_REPLY_LINE_PATTERN.test(line)) {
+      const redactedSensitiveLine = redactSensitiveReplyLine(line);
+      if (redactedSensitiveLine === null) {
         return line;
       }
       inSensitiveReplyDetails = true;
-      return line.replace(/:\s*.*$/u, ': [redacted]');
+      return redactedSensitiveLine;
     })
     .join('\n');
+}
+
+function redactSensitiveReplyLine(line: string): string | null {
+  const normalized = line
+    .normalize('NFKC')
+    .replace(/\p{Default_Ignorable_Code_Point}/gu, '');
+  const match = SENSITIVE_REPLY_LINE_PATTERN.exec(normalized);
+  const label = match?.[1];
+  return label === undefined ? null : `${label}: [redacted]`;
 }
 
 function redactSyntheticMarkers(text: string): string {

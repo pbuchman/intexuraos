@@ -84,6 +84,7 @@ export async function runTestConversation(
       runner: deps.runner,
       replyPublisher,
       clock: { now: () => turnNow },
+      resolveTimeZone: () => Promise.resolve(input.timeZone ?? 'UTC'),
       ids: deps.ids,
       sessionTimeoutMs: deps.sessionTimeoutMs,
     });

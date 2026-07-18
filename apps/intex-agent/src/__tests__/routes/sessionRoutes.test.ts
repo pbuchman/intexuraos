@@ -150,6 +150,7 @@ describe('intex-agent routes', () => {
         host: '127.0.0.1',
         gcpProjectId: 'test-project',
         internalAuthToken: INTERNAL_AUTH_TOKEN,
+        userServiceUrl: 'http://user-service.test',
         notesAgentUrl: 'http://notes-agent.test',
         calendarAgentUrl: 'http://calendar-agent.test',
         researchAgentUrl: 'http://research-agent.test',

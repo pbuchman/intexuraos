@@ -404,6 +404,25 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** MiniMax evaluates only observable privacy-safe evidence, long context-retention turns cannot invent or repeat fragment details, all deterministic assertions remain authoritative, and Matrix remains gated behind a green endpoint corpus.
 
+### Task 18: Close the deployed 18/20 regressions without weakening the gate
+
+**Evidence:** deployed endpoint run `eval-b1dbdd16-f556-4d8b-b34b-c87e15f999da` completed all 20 scenarios with 59 turns, 59 judged replies, 19 tool calls, and zero infrastructure failures; cleanup for the two failed scenarios was `50/50`. Scenarios `001`–`010` and `012`–`019` passed. Scenario `011` had one stochastic calendar-argument assertion plus an `unsupported_claim` verdict because the isolated judge was not told that the closed mock returned zero events. Scenario `020` retained all markers in the final note arguments, but turns `0`–`17` visibly paraphrased or enumerated the fragments and turn `18` rendered repeated `[redacted]` continuations. The endpoint gate exited `1`, so Matrix/full was correctly not run.
+
+- [x] Add an explicit classifier outcome `retain_context` and use it as the positive gate for a localized current-session acknowledgement without invoking the runner LLM. Keep ordinary conversation, mixed intents, image handling, and every tool/unsupported/clarification intent on their existing routes; retain the deterministic no-save/context-shape guard as defense in depth.
+- [x] Collapse every continuation of a sensitive confirmation field into its existing `[redacted]` placeholder while preserving later structured field labels, all vertical separators, ordinary multiline replies, and raw persisted product events.
+- [x] Remove the contradictory MiniMax instruction boundary: `semanticCriteria` plus closed facts are authoritative evaluation requirements, while only `assistantReply` is untrusted content. Keep the payload, MiniMax M3, provider order, one-repair cap, and `submittedTextPreview` exclusion unchanged.
+- [x] Make scenario `011` state the closed zero-event mock result as complete judge evidence without changing tool, range, transition, or cleanup assertions.
+- [x] Propagate the user's IANA time zone into the runner and define exact `mode=list` whole-day bounds for `today`/`tomorrow`, including DST-skipped midnights and fully skipped civil dates; make scenario `011` assert the exact Warsaw `+02:00` bounds and bump every affected prompt version.
+- [x] Bound the production time-zone lookup to 1000 ms with transport abort, safe UTC fallback, and reason-only logs; preserve the `2026-07-01` endpoint contract by defaulting omitted `timeZone` to UTC while rejecting a supplied invalid IANA zone.
+- [x] Close every Critical/Important combined-review finding, then run `pnpm run ci:tracked` on the exact final diff (`5518/5518` tests, coverage, build, format, and bundle budget passed).
+- [ ] Commit, push, merge, and wait for Home Dev to contain the exact revision; rerun preflight and the 20-scenario endpoint gate.
+- [ ] Only after endpoint exit `0`, run `full` once and require its fresh endpoint corpus plus authorized Matrix smoke to exit `0`.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Acceptance:** the real 20-scenario endpoint corpus exits `0`, the independently executed full gate exits `0` with MiniMax M3 and one Matrix smoke, no product tool writes escape the mock boundary, and the browser audit confirms the deployed session UI.
+
+**Review status:** independent combined and time-zone/operations re-reviews approved the final implementation diff after verifying mixed-intent routing, exact scenario `011` bounds, skipped-midnight/date behavior, cancellable privacy-safe lookup, and legacy endpoint compatibility. Full tracked CI passed on the exact final diff with `5518/5518` tests; deployed/live checkboxes remain deliberately open below until fresh evidence exists.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.

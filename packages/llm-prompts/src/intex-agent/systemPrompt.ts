@@ -1,7 +1,7 @@
 import type { PromptBuilder } from '../types.js';
 
 export const INTEX_AGENT_SYSTEM_PROMPT = {
-  version: '15.0.0',
+  version: '17.0.0',
   text: [
     'You are Intex in WhatsApp Assistant conversations.',
     'Default to the language of the last reasonable user message in the current session, unless an explicit current-turn instruction or allowed user preference says otherwise. Ignore bare links, image-only messages, attachments, and trivial greetings such as "hello" when selecting the language. For ambiguous simple messages, use the wider conversation context before falling back to English. If no specific language can be classified, reply in English. The JSON reply value must follow this language rule.',
@@ -32,6 +32,7 @@ export const INTEX_AGENT_SYSTEM_PROMPT = {
     'Use query_calendar_events only for read-only calendar questions that ask to list, show, check, count, search, or answer whether existing events are present in a time window.',
     'For availability questions such as free one-hour meeting slots, use query_calendar_events for the requested time range, infer free windows from returned events, propose a few options, and do not create the event until the user chooses a specific option and explicitly asks to schedule it.',
     'For query_calendar_events, always provide timeMin and timeMax as ISO date-time strings. For "next week", use the next calendar week after the current week. For "last month", use the previous calendar month unless the user says "last 30 days".',
+    'For whole-day list requests for today or tomorrow, use mode list and copy the exact timeMin and timeMax from Whole-day local bounds supplied below. Do not calculate, reinterpret, or convert these bounds yourself.',
     'If query_calendar_events returns truncated: true for count mode, phrase the answer as a lower bound such as "at least N" rather than an exact total.',
     'For event-name count questions, put the event name in query and set mode to count.',
     'Never use query_calendar_events to create, update, delete, or reschedule events.',
@@ -58,14 +59,15 @@ export const INTEX_AGENT_SYSTEM_PROMPT = {
 
 export interface BuildIntexAgentSystemPromptInput {
   currentDateTime: string;
+  timeZone: string;
   userPreferences: string | null;
 }
 
 export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPromptInput> = {
   name: 'intex-agent-system-prompt',
   description:
-    'Intex Agent system prompt with optional user preferences block and current date-time suffix',
-  version: '8.0.0',
+    'Intex Agent system prompt with optional user preferences and DST-safe local calendar context',
+  version: '10.0.0',
   build(input: BuildIntexAgentSystemPromptInput): string {
     const lines: string[] = [INTEX_AGENT_SYSTEM_PROMPT.text];
     if (input.userPreferences !== null && input.userPreferences.trim() !== '') {
@@ -75,7 +77,209 @@ export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPro
         input.userPreferences.trim()
       );
     }
-    lines.push('', `Current date-time: ${input.currentDateTime}`);
+    const calendarContext = buildLocalCalendarContext(input.currentDateTime, input.timeZone);
+    lines.push(
+      '',
+      `IANA time zone: ${input.timeZone}`,
+      `Current date-time: ${calendarContext.currentDateTime}`,
+      'Whole-day local bounds for query_calendar_events:',
+      `today: timeMin=${calendarContext.today.timeMin}; timeMax=${calendarContext.today.timeMax}`,
+      `tomorrow: timeMin=${calendarContext.tomorrow.timeMin}; timeMax=${calendarContext.tomorrow.timeMax}`
+    );
     return lines.join('\n');
   },
 };
+
+interface LocalDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+interface ZonedDateTimeParts extends LocalDate {
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+interface LocalDayBounds {
+  timeMin: string;
+  timeMax: string;
+}
+
+function buildLocalCalendarContext(
+  currentDateTime: string,
+  timeZone: string
+): {
+  currentDateTime: string;
+  today: LocalDayBounds;
+  tomorrow: LocalDayBounds;
+} {
+  const currentInstant = new Date(currentDateTime);
+  const currentParts = getZonedDateTimeParts(currentInstant, timeZone);
+  const today = toLocalDate(currentParts);
+  const tomorrow = addLocalDays(today, 1);
+  const dayAfterTomorrow = addLocalDays(today, 2);
+  const todayStart = resolveLocalMidnight(today, timeZone);
+  const tomorrowStart = resolveLocalMidnight(tomorrow, timeZone);
+  const dayAfterTomorrowStart = resolveLocalMidnight(dayAfterTomorrow, timeZone);
+
+  return {
+    currentDateTime: formatZonedIso(currentInstant, timeZone),
+    today: {
+      timeMin: formatZonedIso(todayStart, timeZone),
+      timeMax: formatZonedIso(tomorrowStart, timeZone),
+    },
+    tomorrow: {
+      timeMin: formatZonedIso(tomorrowStart, timeZone),
+      timeMax: formatZonedIso(dayAfterTomorrowStart, timeZone),
+    },
+  };
+}
+
+function getZonedDateTimeParts(instant: Date, timeZone: string): ZonedDateTimeParts {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const values = Object.fromEntries(
+    formatter
+      .formatToParts(instant)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+
+  return {
+    year: Number(values['year']),
+    month: Number(values['month']),
+    day: Number(values['day']),
+    hour: Number(values['hour']),
+    minute: Number(values['minute']),
+    second: Number(values['second']),
+  };
+}
+
+function toLocalDate(parts: ZonedDateTimeParts): LocalDate {
+  return { year: parts.year, month: parts.month, day: parts.day };
+}
+
+function addLocalDays(date: LocalDate, days: number): LocalDate {
+  const shifted = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+  };
+}
+
+function resolveLocalMidnight(date: LocalDate, timeZone: string): Date {
+  const desiredLocalMs = Date.UTC(date.year, date.month - 1, date.day);
+  let candidateMs = desiredLocalMs;
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const candidate = new Date(candidateMs);
+    const actual = getZonedDateTimeParts(candidate, timeZone);
+    const actualLocalMs = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second
+    );
+    const differenceMs = desiredLocalMs - actualLocalMs;
+    if (differenceMs === 0) {
+      return candidate;
+    }
+    candidateMs += differenceMs;
+  }
+
+  return findFirstInstantAtOrAfterLocalDate(date, timeZone);
+}
+
+function findFirstInstantAtOrAfterLocalDate(date: LocalDate, timeZone: string): Date {
+  const nominalMidnightMs = Date.UTC(date.year, date.month - 1, date.day);
+  const searchStepMs = 17 * 60 * 1000;
+  let previousMs = nominalMidnightMs - 36 * 60 * 60 * 1000;
+  let previousIsAtOrAfter = isLocalDateAtOrAfter(new Date(previousMs), date, timeZone);
+
+  for (
+    let candidateMs = previousMs + searchStepMs;
+    candidateMs <= nominalMidnightMs + 36 * 60 * 60 * 1000;
+    candidateMs += searchStepMs
+  ) {
+    const candidateIsAtOrAfter = isLocalDateAtOrAfter(new Date(candidateMs), date, timeZone);
+    if (candidateIsAtOrAfter && !previousIsAtOrAfter) {
+      return findLocalDateBoundary(previousMs, candidateMs, date, timeZone);
+    }
+    previousMs = candidateMs;
+    previousIsAtOrAfter = candidateIsAtOrAfter;
+  }
+
+  throw new Error(`Unable to resolve the start of local date in time zone ${timeZone}`);
+}
+
+function findLocalDateBoundary(
+  lowerExclusiveMs: number,
+  upperInclusiveMs: number,
+  date: LocalDate,
+  timeZone: string
+): Date {
+  let lowerMs = lowerExclusiveMs;
+  let upperMs = upperInclusiveMs;
+  while (upperMs - lowerMs > 1) {
+    const midpointMs = Math.floor((lowerMs + upperMs) / 2);
+    if (isLocalDateAtOrAfter(new Date(midpointMs), date, timeZone)) {
+      upperMs = midpointMs;
+    } else {
+      lowerMs = midpointMs;
+    }
+  }
+  return new Date(upperMs);
+}
+
+function isLocalDateAtOrAfter(instant: Date, date: LocalDate, timeZone: string): boolean {
+  const parts = getZonedDateTimeParts(instant, timeZone);
+  const actualDateKey = parts.year * 10_000 + parts.month * 100 + parts.day;
+  const requestedDateKey = date.year * 10_000 + date.month * 100 + date.day;
+  return actualDateKey >= requestedDateKey;
+}
+
+function formatZonedIso(instant: Date, timeZone: string): string {
+  const parts = getZonedDateTimeParts(instant, timeZone);
+  const milliseconds = instant.getUTCMilliseconds();
+  const localAsUtcMs = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+    milliseconds
+  );
+  const offsetMs = localAsUtcMs - instant.getTime();
+
+  return [
+    `${pad(parts.year, 4)}-${pad(parts.month)}-${pad(parts.day)}`,
+    `T${pad(parts.hour)}:${pad(parts.minute)}:${pad(parts.second)}.${pad(milliseconds, 3)}`,
+    formatOffset(offsetMs),
+  ].join('');
+}
+
+function formatOffset(offsetMs: number): string {
+  const sign = offsetMs < 0 ? '-' : '+';
+  const totalMinutes = Math.abs(offsetMs) / (60 * 1000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${sign}${pad(hours)}:${pad(minutes)}`;
+}
+
+function pad(value: number, width = 2): string {
+  return String(value).padStart(width, '0');
+}

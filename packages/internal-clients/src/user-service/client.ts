@@ -27,6 +27,7 @@ import type {
   UserServiceClient,
   OAuthTokenResult,
   OAuthProvider,
+  UserTimezoneLookupOptions,
 } from './types.js';
 
 export type { LlmProvider } from '@intexuraos/llm-contract';
@@ -37,6 +38,7 @@ export type {
   UserServiceClient,
   OAuthTokenResult,
   OAuthProvider,
+  UserTimezoneLookupOptions,
 } from './types.js';
 
 const PROVIDER_KEYS: Record<LlmProvider, string> = {
@@ -350,16 +352,23 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
       }
     },
 
-    async getUserTimezone(userId: string): Promise<string | undefined> {
+    async getUserTimezone(
+      userId: string,
+      options?: UserTimezoneLookupOptions
+    ): Promise<string | undefined> {
       try {
         const response = await fetch(
           `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/settings`,
           {
             headers: { 'X-Internal-Auth': config.internalAuthToken },
+            ...(options?.signal !== undefined ? { signal: options.signal } : {}),
           }
         );
 
         if (!response.ok) {
+          if (options?.throwOnError === true) {
+            throw new Error(`HTTP ${String(response.status)}`);
+          }
           logger.warn({ userId, status: response.status }, 'Failed to fetch user timezone');
           return undefined;
         }
@@ -373,6 +382,9 @@ export function createUserServiceClient(config: UserServiceConfig): UserServiceC
 
         return body.data.timezone;
       } catch (error) {
+        if (options?.throwOnError === true) {
+          throw error;
+        }
         logger.warn({ userId, error: getErrorMessage(error) }, 'Failed to fetch user timezone');
         return undefined;
       }

@@ -49,8 +49,8 @@ describe('IntexAgentIntentClassifierOutputSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts conversation and greeting classifications without tools', () => {
-    for (const outcome of ['conversation', 'greeting'] as const) {
+  it('accepts conversation, greeting, and retain-context classifications without tools', () => {
+    for (const outcome of ['conversation', 'greeting', 'retain_context'] as const) {
       const result = IntexAgentIntentClassifierOutputSchema.safeParse({
         outcome,
         confidence: 0.9,

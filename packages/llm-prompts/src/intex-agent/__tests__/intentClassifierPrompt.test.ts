@@ -10,7 +10,7 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('3.0.0');
+    expect(intexAgentIntentClassifierPrompt.version).toBe('4.0.0');
     expect(intexAgentIntentClassifierRepairPrompt.version).toBe('2.0.0');
   });
 
@@ -54,6 +54,24 @@ describe('intexAgentIntentClassifierPrompt', () => {
     expect(prompt).toContain('lists of possible calendar events');
     expect(prompt).toContain('"outcome":"conversation"');
     expect(prompt).toContain('extract event candidates before any calendar creation');
+  });
+
+  it('separates sole temporary retention from mixed conversation intent', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      messages: [
+        {
+          role: 'user',
+          content: "Calculate 2+2, but don't save it; only keep this context.",
+        },
+      ],
+    });
+
+    expect(prompt).toContain('sole current-turn request');
+    expect(prompt).toContain('never use retain_context for a mixed intent');
+    expect(prompt).toContain('"outcome":"retain_context"');
+    expect(prompt).toContain('calculation request makes this a mixed intent');
+    expect(prompt).toContain('"retain_context"');
   });
 
   it('includes few-shot examples for ambiguous, preference, URL, and calendar boundaries', () => {

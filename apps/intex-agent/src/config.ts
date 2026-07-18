@@ -7,6 +7,7 @@ export interface ServiceConfig {
   host: string;
   gcpProjectId: string;
   internalAuthToken: string;
+  userServiceUrl: string;
   notesAgentUrl: string;
   calendarAgentUrl: string;
   researchAgentUrl: string;
@@ -26,6 +27,7 @@ export function loadConfig(): ServiceConfig {
     host: process.env['HOST'] ?? '0.0.0.0',
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'] ?? '',
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
+    userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'] ?? '',
     notesAgentUrl: process.env['INTEXURAOS_NOTES_AGENT_URL'] ?? '',
     calendarAgentUrl: process.env['INTEXURAOS_CALENDAR_AGENT_URL'] ?? '',
     researchAgentUrl: process.env['INTEXURAOS_RESEARCH_AGENT_URL'] ?? '',
