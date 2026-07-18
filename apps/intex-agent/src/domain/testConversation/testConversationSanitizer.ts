@@ -500,7 +500,8 @@ function toolOutcomeForTurn(
 
 function sanitizeValue(value: unknown): unknown {
   if (typeof value === 'string') {
-    return truncate(value);
+    const normalized = truncate(value);
+    return normalized === '' ? undefined : normalized;
   }
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
     return value;

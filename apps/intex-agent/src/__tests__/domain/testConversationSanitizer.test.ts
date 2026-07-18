@@ -533,6 +533,10 @@ describe('test conversation sanitizer', () => {
     });
   });
 
+  it('omits strings that normalize to empty values', () => {
+    expect(sanitizeRecord({ textPreview: ' \n\t ', reason: 'kept' })).toEqual({ reason: 'kept' });
+  });
+
   it('redacts captured reply URLs, source lines, prompt lines, and CTA URLs', () => {
     const sanitized = sanitizeAssistantReplies([
       {
