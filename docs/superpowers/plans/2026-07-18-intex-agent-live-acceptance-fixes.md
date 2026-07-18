@@ -272,11 +272,22 @@
 
 - [x] Independently review each task and the combined diff; close every Critical or Important finding.
 - [x] Run focused suites and `pnpm run ci:tracked` on the exact final revision.
-- [ ] Push the branch, open and merge a PR into `development`, and wait until Home Dev contains the exact fix revision through the existing deployment path.
-- [ ] Verify Home Dev health and deployed-revision ancestry.
-- [ ] Run `scripts/run-intex-agent-evals-home-dev.sh preflight`.
-- [ ] Run `scripts/run-intex-agent-evals-home-dev.sh endpoint`; stop before Matrix on nonzero exit.
-- [ ] Only after endpoint exit `0`, run `scripts/run-intex-agent-evals-home-dev.sh full` exactly once.
-- [ ] Report the two artifact paths, MiniMax provider-reported USD, failed scenario IDs, and cleanup evidence without private content.
+- [x] Push the branch, open and merge PR [#2328](https://github.com/pbuchman/intexuraos/pull/2328) into `development`, and wait until Home Dev contains the exact fix revision through the existing deployment path.
+- [x] Verify Home Dev health and deployed-revision ancestry.
+- [x] Run `scripts/run-intex-agent-evals-home-dev.sh preflight`.
+- [x] Run `scripts/run-intex-agent-evals-home-dev.sh endpoint`; stop before Matrix on nonzero exit.
+- [ ] Only after endpoint exit `0`, run `scripts/run-intex-agent-evals-home-dev.sh full` exactly once. The current endpoint result is `1`, so this step is intentionally blocked by the safety gate.
+- [x] Record the available endpoint artifact path, MiniMax provider-reported USD, failed scenario IDs, and cleanup evidence without private content. A second/full artifact does not exist because Matrix/full was not attempted after the non-passing endpoint corpus.
+
+### Live evidence — 2026-07-18
+
+- Home Dev contains the merged fix revision; Intex Agent was restarted and Intex Agent, WhatsApp Service, and Matrix adapter health checks pass.
+- Preflight passed all 12 checks and reported the expected 20-scenario catalog and MiniMax M3 judge.
+- Endpoint run `eval-8c81de82-b675-42a6-a23b-6ed7e9cfbd2f` wrote `.artifacts/intex-agent-evals/eval-8c81de82-b675-42a6-a23b-6ed7e9cfbd2f/report.json` on Home Dev.
+- The complete corpus finished with exit `1`: 6 passed, 14 behavioral failures, zero infrastructure failures, 58 turns/replies, 18 tool calls, and full 20-turn execution in scenario `020`.
+- MiniMax made 70 calls including 12 repairs, reported 95,069 total tokens and USD `0.0280443`. Cleanup passed `214/214`.
+- Passed scenarios: `011`, `012`, `013`, `014`, `015`, `019`. Behavioral failures: `001`–`010`, `016`, `017`, `018`, `020`.
+- Scenario `016` is a repeatable product event/result-coherence regression. Scenario `017` is model/flow variance: one run stopped behaviorally before unavailable confirmation, while a repeated run completed both turns. The remaining failures are judge semantics, including several verdict-contract ambiguities already covered by the frozen deferred-perfection annotation.
+- No Matrix prompt was sent because the operator procedure stopped before `full` after endpoint exit `1`. The internal `full` hard gate is contract-tested but remains to be exercised live after a preceding green endpoint run.
 
 **Final acceptance:** Home Dev `full` exits `0`; all 20 scenarios pass deterministic and MiniMax checks; one safe Matrix smoke passes; all reports are private and complete.
