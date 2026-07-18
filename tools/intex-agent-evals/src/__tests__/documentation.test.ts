@@ -90,7 +90,11 @@ describe('Intex Agent evaluation documentation', () => {
     ]) {
       expect(runbook).toContain(fact);
     }
-    expect(runbook).toMatch(/full\s+sends exactly one safe\s+message/u);
+    expect(runbook).toContain('`full` sends that one prompt only when');
+    expect(runbook).toContain(
+      'the endpoint corpus executed by the same invocation passes; otherwise it stops'
+    );
+    expect(runbook).toContain('The fresh endpoint corpus inside `full` independently gates its');
 
     for (const field of CONFIG_FIELDS) {
       expect(runbook).toContain(`"${field}"`);

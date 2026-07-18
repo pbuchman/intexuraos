@@ -724,35 +724,52 @@ describe('test conversation contract', () => {
     }
   });
 
-  it('fails fast when a semantic confirmation cannot find a captured button', async () => {
+  it('stops with the executed prefix when a semantic confirmation button is unavailable', async () => {
     const repository = new MemorySessionRepository();
+    const runner = new ScriptedRunner([
+      { outcome: 'no_action', reply: 'Odpowiedź bez przycisków.' },
+      { outcome: 'no_action', reply: 'Ta tura nie może się wykonać.' },
+    ]);
 
-    await expect(
-      runTestConversation(
-        {
-          contractVersion: '2026-07-01',
-          mode: 'live_llm_mock_tools',
-          userId: 'test-intex-agent-intex-e2e-missing-button',
-          runId: 'intex-e2e-missing-button',
-          currentDateTime: '2026-07-01T10:00:00.000Z',
-          turns: [
-            {
-              kind: 'message',
-              text: 'Tylko odpowiedz tekstem. intex-e2e-missing-button',
-            },
-            { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
-          ],
-        },
-        {
-          sessionRepository: repository,
-          runner: new ScriptedRunner([{ outcome: 'no_action', reply: 'Odpowiedź bez przycisków.' }]),
-          sessionTimeoutMs: 30 * 60 * 1000,
-          ids: fixedTestIds(),
-          toolCalls: [],
-          logger: silentLogger(),
-        }
-      )
-    ).rejects.toThrow('confirmation_button could not resolve a captured confirmation button');
+    const result = await runTestConversation(
+      {
+        contractVersion: '2026-07-01',
+        mode: 'live_llm_mock_tools',
+        userId: 'test-intex-agent-intex-e2e-missing-button',
+        runId: 'intex-e2e-missing-button',
+        currentDateTime: '2026-07-01T10:00:00.000Z',
+        turns: [
+          {
+            kind: 'message',
+            text: 'Tylko odpowiedz tekstem. intex-e2e-missing-button',
+          },
+          { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
+          { kind: 'message', text: 'Ta tura nie może się wykonać.' },
+        ],
+      },
+      {
+        sessionRepository: repository,
+        runner,
+        sessionTimeoutMs: 30 * 60 * 1000,
+        ids: fixedTestIds(),
+        toolCalls: [],
+        logger: silentLogger(),
+      }
+    );
+
+    expect(result).toMatchObject({
+      finalSessionId: 'intex_session_test_1',
+      stoppedBeforeTurn: { turnIndex: 1, reason: 'confirmation_button_unavailable' },
+    });
+    expect(result.turns).toHaveLength(1);
+    expect(result.sessionTransitions).toHaveLength(1);
+    expect(result.behavioralTranscript.turns).toHaveLength(1);
+    expect(result.sessions).toHaveLength(1);
+    expect(runner.calls).toHaveLength(1);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(repository.events.every((event) => event.sessionId === 'intex_session_test_1')).toBe(
+      true
+    );
   });
 
   it('fails fast when a semantic confirmation references an unexecuted turn', async () => {
@@ -775,7 +792,48 @@ describe('test conversation contract', () => {
           logger: silentLogger(),
         }
       )
-    ).rejects.toThrow('confirmation_button previousTurnIndex does not reference an executed turn');
+    ).rejects.toThrow(
+      'confirmation_button previousTurnIndex does not reference an executed message turn'
+    );
+  });
+
+  it('fails fast when a semantic confirmation references an executed confirmation turn', async () => {
+    await expect(
+      runTestConversation(
+        {
+          contractVersion: '2026-07-01',
+          mode: 'live_llm_mock_tools',
+          userId: 'test-intex-agent-intex-e2e-confirm-target',
+          runId: 'intex-e2e-confirm-target',
+          currentDateTime: '2026-07-01T10:00:00.000Z',
+          turns: [
+            { kind: 'message', text: 'Dodaj notatkę.' },
+            { kind: 'confirmation_button', previousTurnIndex: 0, decision: 'accept' },
+            { kind: 'confirmation_button', previousTurnIndex: 1, decision: 'accept' },
+          ],
+        },
+        {
+          sessionRepository: new MemorySessionRepository(),
+          runner: new ScriptedRunner(
+            [
+              {
+                outcome: 'needs_confirmation',
+                reply: 'Czy dodać notatkę?',
+                toolName: 'create_note',
+                toolArgs: { content: 'notatka' },
+              },
+            ],
+            [{ outcome: 'completed', reply: 'Notatka dodana.', toolName: 'create_note' }]
+          ),
+          sessionTimeoutMs: 30 * 60 * 1000,
+          ids: fixedTestIds(),
+          toolCalls: [],
+          logger: silentLogger(),
+        }
+      )
+    ).rejects.toThrow(
+      'confirmation_button previousTurnIndex does not reference an executed message turn'
+    );
   });
 });
 

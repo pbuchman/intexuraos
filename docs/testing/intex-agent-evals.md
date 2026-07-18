@@ -13,11 +13,12 @@ exactly 20 product turns. `or:minimax/minimax-m3` is the only semantic judge.
 Missing credentials, a timeout, invalid output, or provider failure is an
 infrastructure failure with exit `2`; there is no fallback judge.
 
-`endpoint` and `scenario` send no real Matrix message. `matrix-smoke` and `full`
-each send one safe operator-owned Matrix/WhatsApp prompt and can leave one real
-Intex Agent session plus bridge metadata. The documented final acceptance runs
-`full`, not a preceding standalone `matrix-smoke`. During that acceptance, full
-sends exactly one safe message.
+`endpoint` and `scenario` send no real Matrix message. `matrix-smoke` sends one
+safe operator-owned Matrix/WhatsApp prompt. `full` sends that one prompt only when
+the endpoint corpus executed by the same invocation passes; otherwise it stops
+before Matrix. A sent prompt can leave one real Intex Agent session plus bridge
+metadata. The documented final acceptance runs `full`, not a preceding standalone
+`matrix-smoke`, and therefore sends at most one safe message.
 
 Preparation commands never run the wrapper. Every wrapper command below is
 **LIVE** and requires the explicit instruction “odpal testy” or equally explicit
@@ -121,7 +122,9 @@ Normal operator acceptance is `preflight` → `endpoint` → `full`. If prefligh
 returns `CONFIG_NOT_FOUND`, obtain the operator's values through one interactive
 `setup`, then rerun preflight. Stop on a nonzero endpoint result before sending a
 real message. After endpoint exit `0`, run `full` once and do not also run
-`matrix-smoke`.
+`matrix-smoke`. The fresh endpoint corpus inside `full` independently gates its
+Matrix stage, so a behavioral or infrastructure result there also sends no
+message.
 
 ## Exit codes and triage
 
@@ -137,6 +140,7 @@ tokens, or protected paths.
 
 `revision_mismatch` means the reviewed revision has not reached the existing Home
 Dev deployment. Wait for deployment; do not use remote `git pull`, `rsync`, `scp`,
-service restarts, or a wrapper bypass. A missing configuration requires the
-operator's interactive values; never infer them from e-mail or adapter legacy
-fields.
+or a wrapper bypass. After the reviewed merge is an ancestor of deployed `HEAD`,
+restart only the Home Dev `intex-agent` PM2 process and verify health on all three
+fixed ports before preflight. A missing configuration requires the operator's
+interactive values; never infer them from e-mail or adapter legacy fields.

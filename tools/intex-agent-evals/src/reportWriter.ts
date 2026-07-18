@@ -140,6 +140,7 @@ const DETERMINISTIC_FAILURE_CODES = defineExhaustiveCodes<DeterministicFailureCo
   'timeline_payload_assertion_failed',
   'assistant_reply_missing',
   'assistant_reply_unexpected',
+  'confirmation_button_unavailable',
 ] as const satisfies readonly DeterministicFailureCode[]);
 
 const DETERMINISTIC_REPORT_FAILURE_CODES = defineExhaustiveCodes<DeterministicReportFailureCode>()([
@@ -483,7 +484,19 @@ export const ScenarioReportV1Schema = z
       verdictReferences.add(reference);
     }
     for (const [index, failure] of scenario.deterministicFailures.entries()) {
-      if (failure.turnIndex !== undefined && failure.turnIndex >= scenario.turnCount) {
+      if (failure.code === 'confirmation_button_unavailable') {
+        if (
+          scenario.turnCount === 0 ||
+          failure.turnIndex !== scenario.turnCount ||
+          failure.replyIndex !== undefined
+        ) {
+          addCustomIssue(
+            context,
+            ['deterministicFailures', index],
+            'Stopped confirmation reference is incoherent'
+          );
+        }
+      } else if (failure.turnIndex !== undefined && failure.turnIndex >= scenario.turnCount) {
         addCustomIssue(
           context,
           ['deterministicFailures', index, 'turnIndex'],
@@ -707,6 +720,9 @@ export const EvaluationReportV1Schema = z
     const hasEndpointInterruption =
       hasGlobalEndpointInterruption ||
       report.scenarios.some((scenario) => scenario.status === 'infrastructure_failure');
+    const hasEndpointBehavioralFailure = report.scenarios.some(
+      (scenario) => scenario.status === 'behavioral_failure'
+    );
 
     if (report.preflight.status === 'failed') {
       if (report.scenarios.length !== 0 || report.matrixSmoke !== undefined) {
@@ -752,7 +768,8 @@ export const EvaluationReportV1Schema = z
       report.preflight.status === 'passed' &&
       report.command === 'full' &&
       report.matrixSmoke === undefined &&
-      !hasEndpointInterruption
+      !hasEndpointInterruption &&
+      !hasEndpointBehavioralFailure
     ) {
       addCustomIssue(
         context,
@@ -760,8 +777,12 @@ export const EvaluationReportV1Schema = z
         'Full command is missing its authorized Matrix result'
       );
     }
-    if (report.command === 'full' && hasEndpointInterruption && report.matrixSmoke !== undefined) {
-      addCustomIssue(context, ['matrixSmoke'], 'Endpoint infrastructure must stop before Matrix');
+    if (
+      report.command === 'full' &&
+      (hasEndpointInterruption || hasEndpointBehavioralFailure) &&
+      report.matrixSmoke !== undefined
+    ) {
+      addCustomIssue(context, ['matrixSmoke'], 'Endpoint failure must stop before Matrix');
     }
     if (
       report.command === 'matrix-smoke' &&
@@ -836,7 +857,19 @@ function validateFailureEvidence(
       addCustomIssue(context, ['failures', index, 'scenarioId'], 'Scenario reference is missing');
     }
     if (scenario !== undefined) {
-      if (failure.turnIndex !== undefined && failure.turnIndex >= scenario.turnCount) {
+      if (failure.code === 'confirmation_button_unavailable') {
+        if (
+          scenario.turnCount === 0 ||
+          failure.turnIndex !== scenario.turnCount ||
+          failure.replyIndex !== undefined
+        ) {
+          addCustomIssue(
+            context,
+            ['failures', index],
+            'Stopped confirmation reference is incoherent'
+          );
+        }
+      } else if (failure.turnIndex !== undefined && failure.turnIndex >= scenario.turnCount) {
         addCustomIssue(context, ['failures', index, 'turnIndex'], 'Turn reference is out of range');
       }
       if (failure.replyIndex !== undefined && failure.replyIndex >= scenario.replyCount) {

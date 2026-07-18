@@ -208,6 +208,10 @@ export interface TestConversationResponse {
   scenarioId?: string;
   userId: string;
   finalSessionId: string | null;
+  stoppedBeforeTurn?: {
+    turnIndex: number;
+    reason: 'confirmation_button_unavailable';
+  };
   turns: TestConversationTurnResult[];
   toolCalls: SanitizedToolCall[];
   sessions: SanitizedTestConversationSession[];

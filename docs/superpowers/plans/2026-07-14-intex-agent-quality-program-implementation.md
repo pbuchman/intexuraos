@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` to implement this plan task-by-task. Every production change follows RED → GREEN → review.
 
-**Goal:** Provide one repository command that runs every tracked Intex Agent scenario on Home Dev, verifies tool/session behavior deterministically, evaluates every assistant response with MiniMax M3, performs one safe Matrix round-trip, and writes a complete report.
+**Goal:** Provide one repository command that runs every tracked Intex Agent scenario on Home Dev, verifies tool/session behavior deterministically, evaluates every assistant response with MiniMax M3, performs one safe Matrix round-trip only after its endpoint corpus passes, and writes a complete report.
 
-**Architecture:** A small evaluator under `tools/intex-agent-evals` runs on Home Dev and calls the existing local/dev-only `POST /internal/intex-agent/test/conversation` endpoint. The endpoint keeps the real Intex Agent LLM flow and mocked product tools, and additively exposes sanitized per-turn evidence already computed by the domain runner. Deterministic assertions remain authoritative; MiniMax M3 evaluates response semantics. The same command finishes with one real Matrix smoke whose prompt forbids product-tool side effects.
+**Architecture:** A small evaluator under `tools/intex-agent-evals` runs on Home Dev and calls the existing local/dev-only `POST /internal/intex-agent/test/conversation` endpoint. The endpoint keeps the real Intex Agent LLM flow and mocked product tools, and additively exposes sanitized per-turn evidence already computed by the domain runner. Deterministic assertions remain authoritative; MiniMax M3 evaluates response semantics. Only after its endpoint corpus passes, the same command finishes with one real Matrix smoke whose prompt forbids product-tool side effects.
 
 **Tech Stack:** TypeScript 5.7, Node.js 22, pnpm 10, Vitest 4, Zod 3, the existing Intex Agent test endpoint, the existing OpenRouter client, MiniMax M3, SSH, Matrix/Synapse on Home Dev.
 
@@ -21,9 +21,9 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - Tasks 1–8 are implemented, independently reviewed, and green in `pnpm run ci:tracked`.
 - Delivered commits through Task 8: `deada8c2d` (20-turn endpoint), `839a9dda6` + `6acb58c64` (strict evaluator contract), `f2eed4d60` + `fb656ce44` + `c15b0c2fe` (20-scenario corpus), `52680fd04` + `56b24fe21` (secure Home Dev configuration and preflight), `c2d673683` + `6cd0dd44e` + `3033e438f` (scenario lifecycle), `4382f9223` + `f40dda449` (MiniMax M3 judge), `e75bc6f3a` (safe Matrix smoke), and `6f1fbb351` (CLI, reports, and Home Dev wrapper).
 - The offline completion audit is implemented and independently approved: every correlated assistant reply is judged, scenarios 001–010 enforce their source lifecycle semantics, tool/error evidence is closed and privacy-safe, setup is non-echoing, and the Home Dev wrapper accepts only one private framed CLI stream with selector/status validation. A fresh `pnpm run ci:tracked` passed on 2026-07-17.
-- The user explicitly authorized the Task 9 live lane. The implementation and the first two acceptance fixes were delivered through `development`; Home Dev health, deployed revision, account, Firebase, Matrix identity, and delivery readiness were verified.
-- Real preflight and endpoint evaluation calls have been executed. Preflight reached exit `0` after the prompt-only experiment, but the endpoint run stopped on scenario 001 when MiniMax returned invalid judge output both initially and after the one allowed repair; deterministic endpoint execution and cleanup succeeded. No Matrix message has been sent.
-- The remaining executable work is to deliver the self-contained verdict prompt and verified three-host routing contract, then repeat `preflight` → `endpoint` → `full`. Offline/unit/contract success is not final acceptance.
+- The user explicitly authorized the Task 9 live lane. The implementation and MiniMax contract fixes were delivered through `development`; Home Dev health, deployed revision, account, Firebase, Matrix identity, and delivery readiness were verified.
+- Real preflight and endpoint evaluation calls have been executed. The self-contained verdict contract produced 15 schema-valid MiniMax verdicts without repair across scenarios 001–006; those scenarios completed with real behavioral findings, zero deterministic failures, and complete cleanup. Scenario 007 then exposed a separate runner defect: a stochastic missing confirmation button became endpoint HTTP 500 instead of a behavioral stop. A later isolated 007 run completed as a behavioral result, confirming that transport and tool execution are healthy. No Matrix message has been sent.
+- The remaining executable work is to represent an unavailable dependent confirmation as a correlated partial response, then repeat `preflight` → `endpoint` → `full`. Offline/unit/contract success is not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
 ### Live contract correction — 2026-07-18
@@ -33,6 +33,8 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - Two otherwise identical probes with `response_format` plus `provider.require_parameters: true` returned the expected final string while keeping reasoning separate. The evaluator therefore preserves JSON-object mode and requires OpenRouter to route only to endpoints that support every requested parameter.
 - A real endpoint retry then proved two remaining defects. The judge and repair prompts referred to “documented failure enums” without listing the six allowed values, so three parameter-compatible MiniMax M3 hosts returned valid JSON that failed only at `failures[]`; the repair repeated the same error. The same privacy-safe provider matrix also found one host returning `content: null` and another rate-limited.
 - The final contract uses one canonical failure-code tuple in Zod and every judge prompt, makes repair self-contained, and orders the three verified string-content MiniMax M3 hosts with fallback outside that list disabled. It does not parse `message.reasoning`, change the judge model, add a second model, or weaken local `JSON.parse` plus strict Zod validation. All privacy, fail-closed, cost-accounting, temperature, model, and repair constraints remain authoritative.
+- A scenario turn that depends on an assistant-generated confirmation button must not turn a missing button into HTTP 500. The endpoint returns the fully correlated executed prefix plus a closed `stoppedBeforeTurn` reason; deterministic evaluation records one behavioral stop and does not invent evidence for unexecuted turns.
+- The `full` command must enforce the same hard Matrix gate internally: it sends the one safe Matrix prompt only when its own endpoint corpus has `effectiveKind === 'passed'`. A behavioral or infrastructure endpoint result skips Matrix.
 
 ## Global constraints
 
@@ -43,12 +45,14 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - The system under test uses the currently deployed Intex Agent model. Product model selection is outside this plan.
 - The endpoint accepts from 1 through exactly 20 product turns. The independent provider tool-loop limit remains unchanged.
 - Product tools stay mocked in the endpoint scenario suite.
+- A missing assistant-generated confirmation button stops the scenario before that dependent turn and is a deterministic behavioral failure, not an infrastructure failure or fabricated user action.
+- Matrix smoke is never attempted after a non-passing endpoint corpus, including inside the combined `full` command.
 - Every synthetic test user is removed through the existing cleanup utility in a `finally` path; cleanup failure is exit `2`.
 - All tracked scenario content is synthetic. No real e-mail, Auth0 user ID, phone number, Matrix room ID, message, or token enters Git.
 - Home Dev is fixed: SSH alias `home-dev`, repository `~/deploy/intexuraos`, Intex Agent port `8134`, WhatsApp Service port `8113`, Matrix adapter port `8099`.
 - Machine-specific account data and Matrix paths live only in `~/.config/intexuraos/intex-agent-evals.json` on Home Dev with mode `0600`.
 - The workstation wrapper passes its exact implementation commit as a required ancestor; Home Dev refuses the run until `~/deploy/intexuraos` contains that revision.
-- `full` runs the endpoint corpus and one safe Matrix smoke. `endpoint` exists for a run with no real message.
+- `full` runs the endpoint corpus and, only when that corpus passes, one safe Matrix smoke. `endpoint` exists for a run with no real message.
 - The Matrix smoke is safe with respect to product tools, but it is not storage-free: it creates one real outbound Matrix/WhatsApp prompt and one real Intex Agent session on the configured operator account. Synthetic endpoint cleanup must not delete those operator-owned records; dedicated-account lifecycle cleanup remains deferred.
 - No evaluation gateway, new cloud service, Terraform, WIF, GitHub Actions, dedicated account, or production rollout work belongs to this plan.
 - Reports are written below ignored `.artifacts/intex-agent-evals/` and are never committed.
@@ -59,7 +63,7 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 
 ### Modified
 
-- `POST /internal/intex-agent/test/conversation`: increase from 5 to 20 turns, confirmation reference maximum from 4 to 19, request body limit from 64 KiB to 256 KiB, and additive sanitized per-turn `toolCalls`, `sessionAfterTurn`, and `timelineEvents` evidence. Sanitized `user_message` event payloads also retain `sourceType`.
+- `POST /internal/intex-agent/test/conversation`: increase from 5 to 20 turns, confirmation reference maximum from 4 to 19, request body limit from 64 KiB to 256 KiB, and additive sanitized per-turn `toolCalls`, `sessionAfterTurn`, and `timelineEvents` evidence. Sanitized `user_message` event payloads also retain `sourceType`. When a dependent confirmation button is unavailable, the existing endpoint additionally returns the correlated executed prefix and optional closed `stoppedBeforeTurn` marker instead of HTTP 500.
 
 ### Created
 
@@ -71,7 +75,7 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 
 ### Unchanged
 
-- Internal authentication, local/dev-only availability, `live_llm_mock_tools` mode, exact `test-intex-agent-<runId>` namespace, every existing response field, production `404`, and the independent provider tool-loop limit.
+- Endpoint path, request contract, internal authentication, local/dev-only availability, `live_llm_mock_tools` mode, exact `test-intex-agent-<runId>` namespace, every existing response field, full-response behavior without a stop marker, production `404`, and the independent provider tool-loop limit.
 
 ## Canonical operator contract
 
@@ -105,7 +109,7 @@ Future-agent interpretation:
 - “Odpal scenariusz …” means `scenario <id>`.
 - “Odpal test Matrix” means `matrix-smoke`.
 
-The phrase “odpal testy” is the explicit authorization for the one safe Matrix message included in `full`. Merely inspecting status or editing code is not.
+The phrase “odpal testy” is the explicit authorization for the one safe Matrix message conditionally included in `full`; the message is still skipped unless that invocation's endpoint corpus passes. Merely inspecting status or editing code is not.
 
 ## Success criteria
 
@@ -117,7 +121,7 @@ The phrase “odpal testy” is the explicit authorization for the one safe Matr
 6. Failures identify scenario, turn, deterministic mismatch, and judge criterion without secrets.
 7. JSON and Markdown reports exist for every run.
 8. Preflight identifies endpoints, environment, judge, scenario count, and configured account alias without real identifiers.
-9. Full mode verifies one Matrix → WhatsApp → Intex Agent → Matrix response from the WhatsApp puppet without authorizing any product-tool side effect. This smoke proves transport and reply semantics; deterministic tool behavior is proven by the endpoint corpus.
+9. After its endpoint corpus passes, full mode verifies one Matrix → WhatsApp → Intex Agent → Matrix response from the WhatsApp puppet without authorizing any product-tool side effect. This smoke proves transport and reply semantics; deterministic tool behavior is proven by the endpoint corpus.
 10. A new Codex session can run everything from the repository runbook without rediscovering paths, ports, or commands.
 
 ## Locked file map
@@ -382,7 +386,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 - [x] Write `.artifacts/intex-agent-evals/<runId>/report.json` and `report.md` atomically through a restrictive temporary directory plus rename, with totals, tool/turn summaries, judge verdicts, provider-reported cost, duration, and safe failure codes. Evaluation commands produce reports; `setup` and `preflight` print safe summaries only.
 - [x] Ignore the artifact root in Git.
 - [x] Add root scripts `eval:intex-agent:setup`, `eval:intex-agent:preflight`, `eval:intex-agent:endpoint`, `eval:intex-agent`, and `eval:intex-agent:matrix-smoke`.
-- [x] Continue corpus and the authorized Matrix smoke after behavioral failures so the report is complete; stop before later scenarios or Matrix only after infrastructure, cleanup, judge-protocol, or reporting failure. Exit precedence is `2` over `1` over `0`, while preserving all earlier verdicts.
+- [x] Continue the endpoint corpus after behavioral failures so its report is complete. Run the authorized Matrix smoke only when the corpus executed by that same `full` invocation passes; any behavioral or infrastructure endpoint result stops before Matrix. Stop later endpoint scenarios only after infrastructure, cleanup, judge-protocol, or reporting failure. Exit precedence is `2` over `1` over `0`, while preserving all earlier verdicts.
 - [x] Implement the wrapper with a closed selector set and fixed `home-dev` / `~/deploy/intexuraos`.
 - [x] Execute remotely through `zsh -lic` and `direnv exec .`. Never forward secrets as SSH arguments.
 - [x] Resolve the local implementation SHA, pass it only as the revision proof, and require remote `git merge-base --is-ancestor <requiredSha> HEAD` before preflight or tests.
@@ -408,7 +412,7 @@ const MiniMaxJudgeVerdictSchema = z.object({
 - [x] Judge the first new assistant text through the dedicated MiniMax M3 Matrix seam; return/report only the closed verdict fields and usage, never rationale or message text.
 - [x] Retain no token, room/user/event ID, phone, or room history in reports.
 
-**Acceptance:** `endpoint` never sends a real message. `full` and `matrix-smoke` each send exactly one safe outbound prompt and may persist its real bridge/message metadata plus one real Intex Agent session on the configured operator account. The prompt never authorizes a product side effect, and synthetic cleanup never targets these records. This Matrix smoke does not claim hidden tool-call auditing; deterministic tool selection is covered by the endpoint corpus.
+**Acceptance:** `endpoint` never sends a real message. `full` sends exactly one safe outbound prompt only after its endpoint corpus passes; `matrix-smoke` sends exactly one when explicitly selected. Either Matrix path may persist real bridge/message metadata plus one real Intex Agent session on the configured operator account. The prompt never authorizes a product side effect, and synthetic cleanup never targets these records. This Matrix smoke does not claim hidden tool-call auditing; deterministic tool selection is covered by the endpoint corpus.
 
 ## Task 9: Write the runbook and prove the workflow
 
@@ -439,6 +443,7 @@ The following would make the system more comprehensive or portable, but is inten
 - a verified DeepSeek product-model identifier and DeepSeek-specific exact-20 evidence;
 - mechanical 95% capability coverage and a large generated catalog;
 - repetitions, statistical flake policy, baselines, drift alerts, nightly CI, and protected releases;
+- atomic semantic criteria with closed `failedSemanticCriterionIndexes`, enforced failure-code/boolean coherence, and calibration fixtures that distinguish judge instability from product instability;
 - a restricted evaluation gateway, separate evaluation credential, budgets, IAM, WIF, and attestation;
 - automatic debug-session → privacy-safe regression draft → review → promotion;
 - authoring/verifying skill teams for regression scenarios;

@@ -687,7 +687,7 @@ describe('runCli evaluation orchestration and projection', () => {
     ]);
   });
 
-  it('continues full to exactly one Matrix smoke after endpoint behavior', async () => {
+  it('stops full before Matrix after endpoint behavioral failure and preserves the report', async () => {
     const endpointResults = [
       lifecycleFor(SCENARIOS[0], 'behavioral_failure'),
       lifecycleFor(SCENARIOS[1], 'passed'),
@@ -710,16 +710,16 @@ describe('runCli evaluation orchestration and projection', () => {
 
     await expect(runCli(['full'], harness.dependencies)).resolves.toBe(1);
 
-    expect(harness.runMatrixSmoke).toHaveBeenCalledOnce();
+    expect(harness.runMatrixSmoke).not.toHaveBeenCalled();
     const report = requiredItem(reports, 0);
     expect(EvaluationReportV1Schema.parse(report)).toEqual(report);
     expect(report).toMatchObject({
       status: 'behavioral_failure',
       exitCode: 1,
       scenarios: [{ status: 'behavioral_failure' }, { status: 'passed' }],
-      matrixSmoke: { status: 'passed', exitCode: 0 },
     });
-    expect(harness.stdout.mock.calls).toContainEqual(['matrix-smoke PASS']);
+    expect(report).not.toHaveProperty('matrixSmoke');
+    expect(harness.stdout.mock.calls).not.toContainEqual(['matrix-smoke PASS']);
     expect(harness.stdout.mock.calls).toContainEqual([
       'evaluation result BEHAVIORAL_FAILURE exit 1',
     ]);
@@ -911,9 +911,9 @@ describe('runCli evaluation orchestration and projection', () => {
     expect(harness.outputText()).not.toContain('private-endpoint-runner-error-sentinel');
   });
 
-  it('applies infrastructure over behavior and retains both endpoint and Matrix evidence', async () => {
+  it('runs Matrix after a passed endpoint corpus and reports Matrix infrastructure failure', async () => {
     const endpointResults = [
-      lifecycleFor(SCENARIOS[0], 'behavioral_failure'),
+      lifecycleFor(SCENARIOS[0], 'passed'),
       lifecycleFor(SCENARIOS[1], 'passed'),
     ];
     const matrixResult = matrixResultFor('infrastructure_failure');
@@ -940,7 +940,7 @@ describe('runCli evaluation orchestration and projection', () => {
     expect(report).toMatchObject({
       status: 'infrastructure_failure',
       exitCode: 2,
-      scenarios: [{ status: 'behavioral_failure' }, { status: 'passed' }],
+      scenarios: [{ status: 'passed' }, { status: 'passed' }],
       matrixSmoke: { status: 'infrastructure_failure', exitCode: 2 },
     });
     expect(report.failures).toContainEqual({

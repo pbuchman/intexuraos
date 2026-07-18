@@ -30,7 +30,8 @@ export type DeterministicFailureCode =
   | 'forbidden_timeline_event_present'
   | 'timeline_payload_assertion_failed'
   | 'assistant_reply_missing'
-  | 'assistant_reply_unexpected';
+  | 'assistant_reply_unexpected'
+  | 'confirmation_button_unavailable';
 
 export interface DeterministicFailure {
   code: DeterministicFailureCode;
@@ -133,8 +134,12 @@ export function evaluateDeterministically(
   const repliesForJudge: ReplyEvaluationInput[] = [];
   const turnsByIndex = groupByTurnIndex(response.turns);
   const transitionsByIndex = groupByTurnIndex(response.sessionTransitions);
+  const stoppedBeforeTurnIndex = response.stoppedBeforeTurn?.turnIndex;
 
   for (const expectation of scenario.expected.turns) {
+    if (stoppedBeforeTurnIndex !== undefined && expectation.turnIndex >= stoppedBeforeTurnIndex) {
+      continue;
+    }
     const turnStart = failures.length;
     const actualTurns = turnsByIndex.get(expectation.turnIndex) ?? [];
     const actualTurn = actualTurns.length === 1 ? actualTurns[0] : undefined;
@@ -201,6 +206,14 @@ export function evaluateDeterministically(
         technicalFacts,
       });
     }
+  }
+
+  if (stoppedBeforeTurnIndex !== undefined) {
+    failures.push({
+      code: 'confirmation_button_unavailable',
+      scenarioId: scenario.id,
+      turnIndex: stoppedBeforeTurnIndex,
+    });
   }
 
   return { passed: failures.length === 0, failures, repliesForJudge };
