@@ -584,6 +584,26 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** private evaluator JSON and Markdown identify the exact schema-whitelisted deterministic assertion path without exposing compared values or payloads; multi-event timeline groups report the first assertion that deterministically eliminates all candidates; strict report validation rejects unknown, cross-kind, and locally/globally inconsistent paths.
 
+### Task 29: Keep synthetic markers out of Linear association
+
+**Evidence:** the focused scenario `014` retry identified privacy-safe deterministic paths `argsSummary.hasLinearIssueId` and `hasLinearIssueId`; the MiniMax judge also returned `unsupported_claim`. The existing prompt treated any user-supplied identifier as sufficient for `linearIssueId`, so synthetic tracking/evaluation markers could be incorrectly associated with Linear.
+
+- [x] Add RED prompt and tool-contract regressions requiring an explicit semantic Linear issue/ticket association and stating that arbitrary opaque identifiers or tracking/evaluation markers are insufficient.
+- [x] Preserve the existing no-invented-identifiers rule, bump `INTEX_AGENT_SYSTEM_PROMPT` to `20.0.0`, and align the `create_code_task` description, property, and positive example with the same boundary.
+- [x] Make scenario `014` state that its two existing synthetic markers belong only in the code-task prompt and are not Linear issue IDs; preserve its turn/tool/criterion structure, absent-Linear assertions, marker evidence, and marker digest, then regenerate only the intentional full-catalog digest.
+- [ ] Ship the reviewed change, verify the exact Home Dev deployment, and require the focused scenario `014` to pass once without retrying through a failure.
+- [ ] Require a fresh complete 20-scenario endpoint gate to exit `0`; only then run `full` exactly once and require its independently fresh endpoint corpus plus the authorized Matrix smoke to exit `0` with MiniMax M3.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+#### Endpoint Changes
+
+- **Modified:** none.
+- **Created:** none.
+- **Removed:** none.
+- **Unchanged:** the existing dev-only conversation test endpoint, request/response schema, Home Dev wrapper commands, mocked-product-tool boundary, MiniMax M3 judge, cleanup contract, and Matrix ordering gate.
+
+**Acceptance:** scenario `014` preserves both synthetic markers in the created task prompt while omitting Linear association; focused prompt/tool/catalog regressions pass, and the ordered shipping, endpoint, Matrix, and browser gates remain fail closed.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.

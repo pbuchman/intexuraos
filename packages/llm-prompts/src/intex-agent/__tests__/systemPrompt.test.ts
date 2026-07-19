@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('19.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('20.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('12.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('13.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -91,7 +91,7 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('Current-date questions are answerable from Current date-time');
   });
 
-  it('requires an explicit calendar date and preserves exact identifiers across clarification', () => {
+  it('requires explicit semantic Linear association and preserves exact identifiers across clarification', () => {
     const prompt = buildIntexAgentSystemPrompt.build({
       currentDateTime: CURRENT_DATE_TIME,
       timeZone: TIME_ZONE,
@@ -108,7 +108,10 @@ describe('buildIntexAgentSystemPrompt', () => {
       'For a new explicit create or save request after a completed tool action, build the new mutating tool arguments from the current request and its unresolved active clarification chain only'
     );
     expect(prompt).toContain(
-      'Never invent an identifier or code that the user did not provide; omit linearIssueId unless the user explicitly supplies it'
+      'Never invent an identifier or code that the user did not provide; set linearIssueId only when the user explicitly associates a supplied identifier with a Linear issue or ticket'
+    );
+    expect(prompt).toContain(
+      'An arbitrary opaque identifier, tracking marker, or evaluation marker in the task prompt is not enough; preserve it in the task prompt and omit linearIssueId'
     );
   });
 

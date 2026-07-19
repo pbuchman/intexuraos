@@ -8,7 +8,7 @@
   "turns": [
     {
       "kind": "message",
-      "text": "Create a MiniMax planning code task to investigate synthetic cache behavior INTEX-EVAL-014 INTEX-EVAL-014-F01.",
+      "text": "Create a MiniMax planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.",
       "sourceType": "whatsapp_text"
     },
     {

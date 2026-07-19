@@ -988,6 +988,9 @@ describe('tracked scenario catalog', () => {
     const request = scenario.expected.turns[0];
     const execution = findRequiredToolCall(scenario, 'create_code_task');
 
+    expect(messageText(scenario, 0)).toBe(
+      'Create a MiniMax planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.'
+    );
     expect(
       request === undefined
         ? false
@@ -1102,7 +1105,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      'e6165511fd385be173d1ae3b8f28f5d1953073945acc363f5978c26c026c7957'
+      '6e69c02ec4d06d25d7934997d734486b46f27ab42828a3124f437b3e6bf1b9e8'
     );
   });
 });

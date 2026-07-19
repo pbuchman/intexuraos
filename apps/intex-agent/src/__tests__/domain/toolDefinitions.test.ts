@@ -156,16 +156,31 @@ describe('createIntexAgentToolDefinitions', () => {
     });
   });
 
-  it('allows a Linear issue only when the user explicitly supplied its identifier', () => {
+  it('allows a Linear issue only when the user explicitly associates an identifier with Linear', () => {
     const codeTaskTool = createIntexAgentToolDefinitions(createExecutor()).find(
       (tool) => tool.name === 'create_code_task'
     );
 
     expect(codeTaskTool?.parameters['required']).not.toContain('linearIssueId');
+    expect(codeTaskTool?.description).toContain(
+      'Set linearIssueId only when the user explicitly associates a supplied identifier with a Linear issue or ticket.'
+    );
+    expect(codeTaskTool?.description).toContain(
+      'An arbitrary opaque identifier, tracking marker, or evaluation marker is not enough'
+    );
     expect(codeTaskTool?.parameters['properties']).toMatchObject({
       linearIssueId: {
         type: 'string',
-        description: expect.stringMatching(/omit.*unless.*user explicitly supplies/iu),
+        description: expect.stringContaining(
+          'Set only when the user explicitly associates the supplied identifier with a Linear issue or ticket.'
+        ),
+      },
+    });
+    expect(codeTaskTool?.parameters['properties']).toMatchObject({
+      linearIssueId: {
+        description: expect.stringContaining(
+          'An arbitrary opaque identifier, tracking marker, or evaluation marker is not enough'
+        ),
       },
     });
   });
