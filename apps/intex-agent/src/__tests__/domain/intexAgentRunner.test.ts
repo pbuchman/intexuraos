@@ -4009,10 +4009,10 @@ describe('createIntexAgentRunner', () => {
     expect(saveCalls).toBe(0);
   });
 
-  it('uses default planning mode when building a code task confirmation without explicit mode', async () => {
+  it('normalizes a missing code-task mode at the typed tool boundary', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_code_task',
-      args: { prompt: 'Investigate the webhook retry path.' },
+      args: { prompt: 'Investigate the webhook retry path.', workerType: 'minimax' },
     }, [
       ok(
         toolResult({
@@ -4034,9 +4034,43 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning',
+        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning\nWorker: minimax',
       toolName: 'create_code_task',
-      toolArgs: { prompt: 'Investigate the webhook retry path.' },
+      toolArgs: {
+        prompt: 'Investigate the webhook retry path.',
+        taskMode: 'planning',
+        workerType: 'minimax',
+      },
+    });
+  });
+
+  it('preserves an explicit code-task execution mode without synthesizing optional fields', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_code_task',
+      args: { prompt: 'Execute the webhook retry fix.', taskMode: 'execution' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          toolName: 'create_code_task',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a code task to execute the webhook retry fix.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: 'Create this code task?\n\nPrompt: Execute the webhook retry fix.\nMode: execution',
+      toolName: 'create_code_task',
+      toolArgs: { prompt: 'Execute the webhook retry fix.', taskMode: 'execution' },
     });
   });
 

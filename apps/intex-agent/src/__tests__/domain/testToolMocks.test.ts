@@ -300,7 +300,7 @@ describe('test tool mocks', () => {
     [
       'create_code_task',
       async (executor: TestToolExecutor): Promise<string> =>
-        await executor.createCodeTask({ prompt: 'Fix the prompt' }),
+        await executor.createCodeTask({ prompt: 'Fix the prompt', taskMode: 'planning' }),
     ],
     [
       'save_external',

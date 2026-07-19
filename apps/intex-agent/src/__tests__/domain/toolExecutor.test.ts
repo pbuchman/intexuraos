@@ -568,7 +568,7 @@ describe('createIntexAgentToolExecutor', () => {
     ).rejects.toThrow('Failed to create link: bookmarks-agent unavailable');
   });
 
-  it('creates planning code tasks by default without sending omitted worker types', async () => {
+  it('creates normalized planning code tasks without sending omitted worker types', async () => {
     const codeClient = new FakeCodeTaskClient();
     const executor = createIntexAgentToolExecutor(createExecutorDeps({
       codeClient,
@@ -577,6 +577,7 @@ describe('createIntexAgentToolExecutor', () => {
     const result = await executor.createCodeTask({
       prompt: 'Plan the new import flow.',
       linearIssueId: 'LIN-123',
+      taskMode: 'planning',
     });
 
     expect(codeClient.calls).toEqual([
@@ -604,6 +605,7 @@ describe('createIntexAgentToolExecutor', () => {
     await executor.createCodeTask({
       prompt: 'Plan the new import flow.',
       workerType: 'codex',
+      taskMode: 'planning',
     });
 
     expect(codeClient.calls).toEqual([
@@ -650,6 +652,7 @@ describe('createIntexAgentToolExecutor', () => {
     await expect(
       executor.createCodeTask({
         prompt: 'Plan the new import flow.',
+        taskMode: 'planning',
       })
     ).rejects.toThrow('Failed to create code task: Worker is not configured');
   });

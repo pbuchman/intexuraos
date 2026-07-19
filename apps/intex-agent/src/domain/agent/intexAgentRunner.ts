@@ -78,7 +78,6 @@ const OPAQUE_REFERENCE_PATTERN =
   /(?<![\p{L}\p{N}_-])(?=[\p{L}\p{N}_-]*\p{L})(?=[\p{L}\p{N}_-]*\p{N})[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+(?![\p{L}\p{N}_-])/gu;
 const EXPLICIT_REFERENCE_EXCLUSION_PREFIX_PATTERN =
   /(?<!\p{L})(?:(?:do not|don['’]?t)\s+(?:include|copy|keep|repeat|save)|(?:omit|exclude|remove|without)|nie\s+(?:uwzględniaj|uwzgledniaj|dodawaj|kopiuj|zapisuj|powtarzaj)|(?:pomiń|pomin|wyklucz|usuń|usun|bez))\s*(?:(?:the|this|ten|tego|tę|ta)\s+)?(?:(?:code|reference|identifier|token|kod|referencję|referencje|identyfikator)\s*)?(?:[:=-]\s*)?$/iu;
-
 type LocalizedText = Record<IntexAgentReplyLanguage, string>;
 interface ClassifierUnsupportedReplyMap {
   unsupported_capability: string;
@@ -882,7 +881,6 @@ function preserveCurrentTurnOpaqueReferences(
   currentMessage: string
 ): Record<string, unknown> {
   if (toolName !== 'create_note') return args;
-
   const currentReferences = extractRestorableOpaqueReferences(currentMessage);
   if (currentReferences.length === 0) return args;
 
@@ -1274,7 +1272,7 @@ function buildConfirmationReply(
     appendConfirmationLine(
       lines,
       CONFIRMATION_LABELS.mode[replyLanguage],
-      readRawString(args, 'taskMode') ?? 'planning'
+      readRawString(args, 'taskMode')
     );
     appendConfirmationLine(lines, CONFIRMATION_LABELS.worker[replyLanguage], readRawString(args, 'workerType'));
     appendConfirmationLine(lines, 'Linear', readRawString(args, 'linearIssueId'));

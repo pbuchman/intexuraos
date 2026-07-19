@@ -168,6 +168,11 @@ const OBSERVABLE_NOTE_CONFIRMATION_CRITERIA = [
   'Does not claim the note already exists or expose raw argument content in the sanitized reply.',
 ] as const;
 
+const OBSERVABLE_NOTE_CONFIRMATION_WITH_OPTIONAL_TITLE_CRITERIA = [
+  'Expected complete sanitized confirmation evidence: Content: [redacted]; an additional Title: [redacted] line is optional.',
+  COMPLETE_REDACTED_CONFIRMATION_EVIDENCE,
+] as const;
+
 const CONCISE_NOTE_COMPLETION_CRITERIA = [
   'Clearly communicates that the requested note was saved successfully.',
   'A concise completion-only reply is sufficient and should not restate details or invite another action.',
@@ -778,6 +783,36 @@ describe('tracked scenario catalog', () => {
     }
   });
 
+  it('keeps scenarios 001 and 007 note confirmations observable from complete redacted evidence', () => {
+    for (const testCase of [
+      {
+        scenarioId: 'intex-eval-001',
+        firstCriterion:
+          'Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.',
+        finalCriterion:
+          'Does not claim the note already exists or expose raw argument content in the sanitized reply.',
+      },
+      {
+        scenarioId: 'intex-eval-007',
+        firstCriterion:
+          'Correctly identifies a note-save request and asks for explicit confirmation in an appropriate, concise tone.',
+        finalCriterion:
+          'Does not classify the request as unsupported or expose raw argument content in the sanitized reply.',
+      },
+    ]) {
+      const scenario = findScenario(scenarios, testCase.scenarioId);
+      const criteria = scenario.expected.turns[0]?.replies[0]?.semanticCriteria;
+
+      expect(criteria).toEqual([
+        testCase.firstCriterion,
+        ...OBSERVABLE_NOTE_CONFIRMATION_WITH_OPTIONAL_TITLE_CRITERIA,
+        testCase.finalCriterion,
+      ]);
+      expect(criteria?.join(' ')).not.toMatch(SYNTHETIC_MARKER_PATTERN);
+      expect(criteria?.join(' ')).not.toContain(messageText(scenario, 0));
+    }
+  });
+
   it('keeps scenario 020 final confirmation and completion observable in isolation', () => {
     const scenario = findScenario(scenarios, 'intex-eval-020');
 
@@ -1067,7 +1102,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '96de4db99eb1f367908838bdf233d976613207561e325846fbd0e72830d18416'
+      'e6165511fd385be173d1ae3b8f28f5d1953073945acc363f5978c26c026c7957'
     );
   });
 });

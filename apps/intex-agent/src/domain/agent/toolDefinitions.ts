@@ -46,7 +46,7 @@ export interface CreateCodeTaskToolArgs {
   prompt: string;
   workerType?: string;
   linearIssueId?: string;
-  taskMode?: 'planning' | 'execution';
+  taskMode: 'planning' | 'execution';
 }
 
 export interface SaveExternalToolArgs {
@@ -657,13 +657,13 @@ function toCreateCodeTaskArgs(args: Record<string, unknown>): CreateCodeTaskTool
   const prompt = requiredString(args, 'prompt');
   const workerType = optionalString(args, 'workerType');
   const linearIssueId = optionalString(args, 'linearIssueId');
-  const taskMode = optionalTaskMode(args, 'taskMode');
+  const taskMode = optionalTaskMode(args, 'taskMode') ?? 'planning';
 
   return {
     prompt,
     ...(workerType !== undefined ? { workerType } : {}),
     ...(linearIssueId !== undefined ? { linearIssueId } : {}),
-    ...(taskMode !== undefined ? { taskMode } : {}),
+    taskMode,
   };
 }
 
