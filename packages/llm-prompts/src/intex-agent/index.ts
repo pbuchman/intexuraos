@@ -20,6 +20,7 @@ export {
   INTEX_AGENT_INTENT_CLASSIFIER_CONFIDENCE_THRESHOLDS,
   intexAgentIntentClassifierPrompt,
   intexAgentIntentClassifierRepairPrompt,
+  type IntexAgentIntentClassifierActiveClarification,
   type IntexAgentIntentClassifierPromptInput,
   type IntexAgentIntentClassifierPromptMessage,
   type IntexAgentIntentClassifierRepairPromptDeps,

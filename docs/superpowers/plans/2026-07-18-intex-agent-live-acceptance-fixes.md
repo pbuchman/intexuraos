@@ -448,12 +448,29 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 - [x] Strengthen the versioned product prompt so a new save/create action cannot inherit content or identifiers from an earlier completed action unless the user explicitly requests reuse; for note previews, deterministically restore every exact current-turn opaque letter-digit reference that a stochastic model omitted, without rewriting other tool arguments.
 - [x] Calibrate scenario `010` to the observable sanitized contract: `Content: [redacted]` is required, `Title: [redacted]` is optional, redacted values are complete evidence, and the isolated reply need not name its audio/transcript source.
 - [x] Make completed closed tool evidence authoritative to MiniMax M3 for a concise completion claim while preserving every failure enum, privacy boundary, deterministic assertion, model, provider order, repair limit, and fail-closed behavior.
-- [ ] Close every Critical/Important independent-review finding and run `pnpm run ci:tracked` on the exact final source/test/evaluation diff.
+- [x] Close every Critical/Important independent-review finding and run `pnpm run ci:tracked` on the exact final source/test/evaluation diff (`5553/5553` tests, coverage, build, format, and bundle budget passed).
 - [ ] Commit, push, merge, wait for the exact Home Dev deployment, rerun preflight, and require focused live scenarios `006`, `008`, and `010` to pass before the complete endpoint corpus.
 - [ ] Require the 20-scenario endpoint gate to exit `0`; only then run `full` once and require its fresh endpoint corpus plus the authorized Matrix smoke to exit `0`.
 - [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
 
 **Acceptance:** clarification metadata survives every runner-generated follow-up, new mutating requests are isolated from completed actions, MiniMax judges only observable closed facts, the real endpoint and full gates exit `0`, Matrix remains strictly downstream of endpoint success, and the deployed sessions UI passes the logged-in desktop/mobile audit.
+
+**Review status:** two independent reviews approved the Task 20 implementation after checking classifier-authoritative runner metadata, exact-reference restoration and exclusion boundaries, the scenario `010` sanitized contract, and the MiniMax closed-evidence rule. PR `#2334` merged with every GitHub check green and Home Dev ran the exact merge `0514971e74367b53b88145ba40e94125da753176`. Focused scenario `006` passed; scenario `008` then exposed the separate classifier-contract defect below, so scenario `010`, the endpoint corpus, Matrix/full, and Chrome remained gated.
+
+### Task 21: Make missing-detail intent metadata structural and continue it safely
+
+**Evidence:** focused deployed run `eval-704078ae-4f14-4cb2-8893-e023e2497663` failed before confirmation with no tool execution. Two privacy-safe direct diagnostics showed the first calendar turn consistently persisted a metadata-free clarification, while the time-only continuation classified once as another generic clarification and once as the intended calendar tool. The classifier schema allowed that output, its calendar few-shot omitted `candidateIntents`, and the classifier transcript discarded the event metadata. This is classifier-contract variance, not an endpoint, date-gate, runner, or Matrix defect. Both diagnostics completed cleanup `8/8`; Matrix/full remained closed.
+
+- [x] Add RED → GREEN schema tests requiring every `needs_clarification` to identify its blocker and every `missing_required_details` result to carry non-empty `missingFields` plus at least one canonical `candidateIntent`; keep `not_enough_context` available without a guessed tool.
+- [x] Add a separately guarded active-clarification context containing only validated blocker and canonical tool enums. Ignore arbitrary payload fields, raw missing-field names, malformed legacy metadata, duplicate assistant events, and stale chains after a newer user turn.
+- [x] Update and version the classifier plus repair prompts so a reply supplying the requested detail continues one active candidate unless the user cancels or changes topic. Give repair a bounded current-turn context because the bounded original-prompt preview ends before the transcript.
+- [x] Cover metadata-free repair, duplicate candidate normalization, malformed/empty candidate lists, stale topic boundaries, payload non-disclosure, and the exact missing-time continuation shape; retain 100% branch coverage for the classifier.
+- [ ] Close every Critical/Important independent-review finding and run `pnpm run ci:tracked` on the exact final diff.
+- [ ] Commit, push, merge, wait for the exact Home Dev revision, rerun preflight, and require three consecutive focused scenario `008` passes followed by focused `006` and `010` passes.
+- [ ] Require the complete 20-scenario endpoint gate to exit `0`; only then run `full` once and require its fresh endpoint corpus plus the authorized Matrix smoke to exit `0` with MiniMax M3.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Acceptance:** metadata-free missing-detail classifications fail structural validation and repair with the current turn available; only validated active intent metadata crosses turns; explicit cancellation/topic changes cannot inherit a stale tool; scenario `008` is stable rather than retry-passing; and endpoint, Matrix, and browser gates remain ordered and fail closed.
 
 ### Deferred perfection (recorded, not implemented in this loop)
 

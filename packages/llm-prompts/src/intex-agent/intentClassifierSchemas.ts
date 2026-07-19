@@ -53,7 +53,7 @@ const commonClassifierFields = {
   clarification: z.string().optional(),
   reason: optionalReasonSchema,
   blockerReason: IntexAgentBlockerReasonSchema.optional(),
-  missingFields: z.array(z.string()).optional(),
+  missingFields: z.array(nonEmptyStringSchema).optional(),
   candidateIntents: z.array(IntexAgentIntentClassifierToolNameSchema).optional(),
   suggestedNextStep: z.string().optional(),
   stylePreferenceAction: IntexAgentStylePreferenceActionSchema,
@@ -96,6 +96,7 @@ export const IntexAgentIntentClassifierOutputSchema = z.union([
     .object({
       outcome: z.literal('needs_clarification'),
       ...commonClassifierFields,
+      blockerReason: IntexAgentBlockerReasonSchema,
     })
     .strict()
     .superRefine((value, context) => {
@@ -105,6 +106,22 @@ export const IntexAgentIntentClassifierOutputSchema = z.union([
           message: 'needs_clarification requires question or clarification',
           path: ['question'],
         });
+      }
+      if (value.blockerReason === 'missing_required_details') {
+        if (value.missingFields === undefined || value.missingFields.length === 0) {
+          context.addIssue({
+            code: 'custom',
+            message: 'missing_required_details requires at least one missing field',
+            path: ['missingFields'],
+          });
+        }
+        if (value.candidateIntents === undefined || value.candidateIntents.length === 0) {
+          context.addIssue({
+            code: 'custom',
+            message: 'missing_required_details requires at least one candidate tool intent',
+            path: ['candidateIntents'],
+          });
+        }
       }
     }),
   z
