@@ -78,16 +78,50 @@ const OPAQUE_REFERENCE_PATTERN =
   /(?<![\p{L}\p{N}_-])(?=[\p{L}\p{N}_-]*\p{L})(?=[\p{L}\p{N}_-]*\p{N})[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+(?![\p{L}\p{N}_-])/gu;
 const EXPLICIT_REFERENCE_EXCLUSION_PREFIX_PATTERN =
   /(?<!\p{L})(?:(?:do not|don['’]?t)\s+(?:include|copy|keep|repeat|save)|(?:omit|exclude|remove|without)|nie\s+(?:uwzględniaj|uwzgledniaj|dodawaj|kopiuj|zapisuj|powtarzaj)|(?:pomiń|pomin|wyklucz|usuń|usun|bez))\s*(?:(?:the|this|ten|tego|tę|ta)\s+)?(?:(?:code|reference|identifier|token|kod|referencję|referencje|identyfikator)\s*)?(?:[:=-]\s*)?$/iu;
-const EXPLICIT_CODE_TASK_MODE_PATTERN =
-  /\b(?:a\s+)?(planning|execution)\s+code\s+task\b|\bcode\s+task\s+(?:in|for)\s+(planning|execution)\s+mode\b/giu;
-const EXPLICIT_CODE_TASK_MINIMAX_PATTERN =
-  /\b(?:a\s+)?(minimax)\s+(?:(?:planning|execution)\s+)?code\s+task\b|\bcode\s+task\s+(?:in\s+(?:planning|execution)\s+mode\s+)?(?:with|using)\s+(?:the\s+)?(minimax)(?:\s+worker)?(?=\s*(?:[.!?]|$))/giu;
-const COMPETING_CODE_TASK_MODE_PATTERN =
-  /\b(?:planning|execution)\b\s*(?:or|and)\s*\b(?:planning|execution)\b/iu;
-const COMPETING_CODE_TASK_WORKER_PATTERN =
-  /\b(?:minimax|codex(?:-xhigh)?)\b\s*(?:or|and)\s*\b(?:minimax|codex(?:-xhigh)?)\b/iu;
-const EXPLICIT_CODE_TASK_NEGATION_PREFIX_PATTERN =
-  /\b(?:do\s+not|don['’]?t|avoid|exclude|without|not)\s+(?:(?:use|choose|select|create|run|make)\s+)?(?:a\s+|an\s+|the\s+)?$/iu;
+const EXPLICIT_CODE_TASK_MODE_PATTERNS = [
+  {
+    pattern:
+      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?(?:minimax\s+)?(planning|execution)\s+code\s+task\b/giu,
+    choiceIndex: 2,
+    negationIndex: 1,
+  },
+  {
+    pattern:
+      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?(?:minimax\s+)?code\s+task\s+in\s+(planning|execution)\s+mode\b/giu,
+    choiceIndex: 2,
+    negationIndex: 1,
+  },
+  {
+    pattern:
+      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?code\s+task\s+(?:with|using)\s+(?:the\s+)?minimax(?:\s+worker)?\s+in\s+(planning|execution)\s+mode\b/giu,
+    choiceIndex: 2,
+    negationIndex: 1,
+  },
+  {
+    pattern:
+      /\b(?:pick|choose|select)\s+(planning|execution)\s+mode\s+for\s+(?:a\s+|an\s+|the\s+)?code\s+task\b/giu,
+    choiceIndex: 1,
+  },
+] as const;
+const EXPLICIT_CODE_TASK_MINIMAX_PATTERNS = [
+  {
+    pattern:
+      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?(minimax)\s+(?:(?:planning|execution)\s+)?code\s+task\b/giu,
+    choiceIndex: 2,
+    negationIndex: 1,
+  },
+  {
+    pattern:
+      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?code\s+task\s+(?:in\s+(?:planning|execution)\s+mode\s+)?(?:with|using)\s+(?:the\s+)?(minimax)(?:\s+worker)?\b/giu,
+    choiceIndex: 2,
+    negationIndex: 1,
+  },
+  {
+    pattern:
+      /\b(?:pick|choose|select)\s+(minimax)\s+for\s+(?:a\s+|an\s+|the\s+)?code\s+task\b/giu,
+    choiceIndex: 1,
+  },
+] as const;
 
 type LocalizedText = Record<IntexAgentReplyLanguage, string>;
 interface ClassifierUnsupportedReplyMap {
@@ -787,7 +821,7 @@ async function parseRunnerContent(
   const parsed = await validateRunnerOutput(input);
   const toolExecution = getCompletedToolExecution(toolExecutions);
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
-    const confirmationArgs = preserveCurrentTurnOpaqueReferences(
+    const confirmationArgs = canonicalizeCurrentConfirmationArguments(
       toolExecution.toolName,
       toolExecution.args,
       input.currentMessage
@@ -886,7 +920,7 @@ async function parseRunnerContent(
   }
 }
 
-function preserveCurrentTurnOpaqueReferences(
+function canonicalizeCurrentConfirmationArguments(
   toolName: MutatingIntexAgentToolName,
   args: Record<string, unknown>,
   currentMessage: string
@@ -895,6 +929,14 @@ function preserveCurrentTurnOpaqueReferences(
     return canonicalizeCurrentCodeTaskSelections(args, currentMessage);
   }
   if (toolName !== 'create_note') return args;
+
+  return canonicalizeCurrentNoteOpaqueReferences(args, currentMessage);
+}
+
+function canonicalizeCurrentNoteOpaqueReferences(
+  args: Record<string, unknown>,
+  currentMessage: string
+): Record<string, unknown> {
 
   const currentReferences = extractRestorableOpaqueReferences(currentMessage);
   if (currentReferences.length === 0) return args;
@@ -916,12 +958,16 @@ function canonicalizeCurrentCodeTaskSelections(
   args: Record<string, unknown>,
   currentMessage: string
 ): Record<string, unknown> {
-  const taskMode = COMPETING_CODE_TASK_MODE_PATTERN.test(currentMessage)
-    ? undefined
-    : extractUniqueExplicitCodeTaskChoice(currentMessage, EXPLICIT_CODE_TASK_MODE_PATTERN);
-  const workerType = COMPETING_CODE_TASK_WORKER_PATTERN.test(currentMessage)
-    ? undefined
-    : extractUniqueExplicitCodeTaskChoice(currentMessage, EXPLICIT_CODE_TASK_MINIMAX_PATTERN);
+  const taskMode = extractUniqueExplicitCodeTaskChoice(
+    currentMessage,
+    EXPLICIT_CODE_TASK_MODE_PATTERNS,
+    'mode'
+  );
+  const workerType = extractUniqueExplicitCodeTaskChoice(
+    currentMessage,
+    EXPLICIT_CODE_TASK_MINIMAX_PATTERNS,
+    'worker'
+  );
 
   if (taskMode === undefined && workerType === undefined) return args;
   return {
@@ -931,24 +977,44 @@ function canonicalizeCurrentCodeTaskSelections(
   };
 }
 
-function extractUniqueExplicitCodeTaskChoice(value: string, pattern: RegExp): string | undefined {
+function extractUniqueExplicitCodeTaskChoice(
+  value: string,
+  patterns: readonly {
+    readonly pattern: RegExp;
+    readonly choiceIndex: number;
+    readonly negationIndex?: number;
+  }[],
+  choiceType: 'mode' | 'worker'
+): string | undefined {
   const choices = new Set<string>();
-  for (const match of value.matchAll(pattern)) {
-    const choice = match[1] ?? match[2];
-    const index = match.index;
-    if (choice !== undefined && !isNegatedExplicitCodeTaskChoice(value, index)) {
-      choices.add(choice.toLowerCase());
+  for (const { pattern, choiceIndex, negationIndex } of patterns) {
+    for (const match of value.matchAll(pattern)) {
+      const choice = match[choiceIndex];
+      if (
+        choice !== undefined &&
+        (negationIndex === undefined || match[negationIndex] === undefined) &&
+        !hasCodeTaskChoiceAlternative(value, match, choiceType)
+      ) {
+        choices.add(choice.toLowerCase());
+      }
     }
   }
   return choices.size === 1 ? [...choices][0] : undefined;
 }
 
-function isNegatedExplicitCodeTaskChoice(value: string, index: number): boolean {
-  const prefix = value.slice(Math.max(0, index - 80), index);
-  return (
-    EXPLICIT_CODE_TASK_NEGATION_PREFIX_PATTERN.test(prefix) ||
-    /\b(?:do\s+not|don['’]?t)\s+(?:create|make|run)\b[^.!?]{0,60}$/iu.test(prefix)
-  );
+function hasCodeTaskChoiceAlternative(
+  value: string,
+  match: RegExpMatchArray,
+  choiceType: 'mode' | 'worker'
+): boolean {
+  const index = match.index as number;
+  const suffix = value.slice(index + match[0].length, index + match[0].length + 80);
+  const alternative = choiceType === 'mode' ? '(?:planning|execution)' : '(?:minimax|codex(?:-xhigh)?)';
+  const taskContext = choiceType === 'mode' ? '(?:\\s+mode|\\s+code\\s+task)' : '(?:\\s+code\\s+task|\\s+worker)?';
+  return new RegExp(
+    `^\\s*(?:,\\s*)?(?:or|and)\\s+(?:a\\s+|an\\s+|the\\s+)?${alternative}${taskContext}\\b`,
+    'iu'
+  ).test(suffix);
 }
 
 function extractOpaqueReferences(value: string): string[] {

@@ -1,4 +1,8 @@
+import { ok } from '@intexuraos/common-core';
+import type { ToolCallingClient, ToolCallingResult } from '@intexuraos/llm-contract';
 import { describe, expect, it } from 'vitest';
+import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
+import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
 import type { IntexIncomingMessage } from '../../domain/ports/incomingMessageHandler.js';
 import type {
   SessionRepository,
@@ -274,6 +278,62 @@ describe('handleIncomingMessage', () => {
         correlationId: 'session-existing',
       },
     ]);
+  });
+
+  it('persists and executes canonical code-task confirmation arguments from the real runner', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const createCodeTaskCalls: Record<string, unknown>[] = [];
+    const runner = createIntexAgentRunner({
+      client: forcedCodeTaskToolClient({
+        prompt: 'Investigate synthetic cache behavior.',
+        taskMode: 'execution',
+        workerType: 'codex-xhigh',
+      }),
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool', allowedToolNames: ['create_code_task'] as const };
+        },
+      },
+      toolExecutor: codeTaskCapturingExecutor(createCodeTaskCalls),
+    });
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-code-task-request',
+        text: 'Create a MiniMax planning code task to investigate synthetic cache behavior.',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    const canonicalArgs = {
+      prompt: 'Investigate synthetic cache behavior.',
+      taskMode: 'planning',
+      workerType: 'minimax',
+    };
+    expect(replies.messages[0]?.message).toContain('Mode: planning');
+    expect(replies.messages[0]?.message).toContain('Worker: minimax');
+    expect(eventPayloads(repo, 'confirmation_requested')[0]).toMatchObject({
+      toolName: 'create_code_task',
+      toolArgs: canonicalArgs,
+    });
+    expect(eventPayloads(repo, 'confirmation_requested')[0]?.['toolArgs']).toEqual(canonicalArgs);
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-code-task-confirmation',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirmation-3:yes',
+          buttonTitle: 'Yes',
+          replyToWamid: 'wamid-code-task-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(createCodeTaskCalls).toEqual([canonicalArgs]);
   });
 
   it('records a failed confirmed execution and does not reinterpret the request', async () => {
@@ -1800,7 +1860,7 @@ describe('handleIncomingMessage', () => {
 
 function deps(
   sessionRepository: FakeSessionRepository,
-  runner: FakeRunner,
+  runner: IntexAgentRunner,
   replies: FakeReplyPublisher,
   clock: { now: () => string } = { now: () => NOW },
   resolveTimeZone: (userId: string) => Promise<string> = async () => 'UTC'
@@ -1817,6 +1877,48 @@ function deps(
       confirmationId: () => `confirmation-${String(sessionRepository.events.length + 1)}`,
     },
     sessionTimeoutMs: 30 * 60 * 1000,
+  };
+}
+
+function forcedCodeTaskToolClient(args: Record<string, unknown>): ToolCallingClient {
+  return {
+    async run(params): ReturnType<ToolCallingClient['run']> {
+      const tool = params.tools.find((candidate) => candidate.name === 'create_code_task');
+      if (tool === undefined) throw new Error('Missing create_code_task tool');
+      await tool.run(args);
+      return ok({
+        content: JSON.stringify({
+          outcome: 'completed',
+          reply: 'Ready.',
+          toolName: 'create_code_task',
+        }),
+        toolCallsMade: 1,
+        iterationCount: 2,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      } satisfies ToolCallingResult);
+    },
+  };
+}
+
+function codeTaskCapturingExecutor(
+  createCodeTaskCalls: Record<string, unknown>[]
+): IntexAgentToolExecutor {
+  const unsupported = async (): Promise<string> => JSON.stringify({ status: 'completed' });
+  return {
+    createNote: unsupported,
+    createCalendarEvent: unsupported,
+    queryCalendarEvents: unsupported,
+    createResearch: unsupported,
+    createLink: unsupported,
+    async createCodeTask(args): Promise<string> {
+      createCodeTaskCalls.push({ ...args });
+      return JSON.stringify({ status: 'completed', id: 'task-1' });
+    },
+    saveExternal: unsupported,
+    getUserPreferences: unsupported,
+    addUserPreference: unsupported,
+    updateUserPreference: unsupported,
+    deleteUserPreference: unsupported,
   };
 }
 

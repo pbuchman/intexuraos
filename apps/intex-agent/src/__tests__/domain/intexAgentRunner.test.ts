@@ -478,6 +478,70 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toMatchObject({ toolArgs: args });
   });
 
+  it.each([
+    {
+      message: 'Create a code task to fix a planning code task parsing bug.',
+      expectedArgs: { prompt: 'Investigate the parser.' },
+    },
+    {
+      message: 'Create a code task in planning mode or execution mode.',
+      expectedArgs: { prompt: 'Investigate the parser.' },
+    },
+    {
+      message: 'Create a MiniMax code task or a Codex code task.',
+      expectedArgs: { prompt: 'Investigate the parser.' },
+    },
+    {
+      message: 'Create a non-MiniMax code task.',
+      expectedArgs: { prompt: 'Investigate the parser.' },
+    },
+    {
+      message: 'Do not create a planning code task, create an execution code task.',
+      expectedArgs: { prompt: 'Investigate the parser.', taskMode: 'execution' },
+    },
+    {
+      message: 'Avoid MiniMax and pick execution mode for a code task.',
+      expectedArgs: { prompt: 'Investigate the parser.', taskMode: 'execution' },
+    },
+    {
+      message: 'Pick MiniMax for the code task.',
+      expectedArgs: { prompt: 'Investigate the parser.', workerType: 'minimax' },
+    },
+    {
+      message: 'Create a code task using MiniMax in planning mode.',
+      expectedArgs: {
+        prompt: 'Investigate the parser.',
+        workerType: 'minimax',
+        taskMode: 'planning',
+      },
+    },
+    {
+      message: 'Create a code task using MiniMax in execution mode.',
+      expectedArgs: {
+        prompt: 'Investigate the parser.',
+        workerType: 'minimax',
+        taskMode: 'execution',
+      },
+    },
+  ])('fails closed for clause-local code-task selections: $message', async ({ message, expectedArgs }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_code_task', args: { prompt: 'Investigate the parser.' } },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_code_task' }))]
+    );
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message,
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({ outcome: 'needs_confirmation', toolName: 'create_code_task' });
+    if (result.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
+    expect(result.toolArgs).toEqual(expectedArgs);
+  });
+
   it('formats replied-message context as context-only user message content', async () => {
     const client = new FakeToolCallingClient([
       ok(toolResult({ outcome: 'no_action', reply: 'Jasne, sprawdzę.' })),
