@@ -542,9 +542,35 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Review status:** two independent analyses approved the narrow `save_external` mapping over a general tool-action map, and final diff review found no Critical/Important issues. Focused evaluator checks passed (`783/783`), followed by exact tracked CI with `5554/5554` tests, coverage, build, format, and bundle budget green.
 
+### Task 27: Close the final observable-confirmation and explicit code-task regressions
+
+**Evidence:** PR `#2341` deployed exact merge `212fb2c4286e9262e8e217aacfe57ecda2c713dc`. The four-case external-save calibration kept all negative controls fail closed; the exact wrong-action failure taxonomy varied in the batched judge call, so batch-stable diagnostic taxonomy is recorded under Deferred perfection rather than weakening the binary semantic gate. Focused scenario `015` then passed. The next complete endpoint run, `eval-cc82cc9d-e2c9-49cf-a434-e8f696df811a`, completed 59 turns/replies and 19 tool calls with complete cleanup, but exited `1` at 17/20; `full` and Matrix remained closed.
+
+- Scenarios `001` and `007` each completed the expected `create_note` flow with zero deterministic failures and a passing final reply. MiniMax failed only the confirmation reply because their isolated criteria did not state that the sanitized `Content: [redacted]` preview is complete evidence and that `Title: [redacted]` is optional.
+- Scenario `014` selected `create_code_task` with `workerType=minimax`, but the LLM omitted raw `taskMode` because planning is the product default. The confirmation renderer displayed its own planning fallback while the persisted/executed arguments remained without `taskMode`, causing one timeline payload failure and one tool-argument failure for the same missing field.
+
+- [ ] Add RED catalog tests requiring scenarios `001` and `007` to expose `Content: [redacted]`, describe `Title: [redacted]` as optional, and mark those redacted values as complete judge evidence without exposing markers or raw arguments.
+- [ ] Update only those two semantic contracts and regenerate the intentional full-catalog digest; preserve all messages, turns, tool/timeline/cleanup assertions, marker evidence, and completion criteria.
+- [ ] Add RED runner tests proving that unique, unnegated, explicit current-message code-task choices are canonical: `planning`/`execution` map to `taskMode`, and an explicit MiniMax worker selection maps case-insensitively to `workerType=minimax`.
+- [ ] Keep canonicalization scoped to `create_code_task` and the current message. Do not infer a mode or worker from a topical mention, negated choice, multiple competing choices, prior turn, default, or absent selection; do not create or infer `linearIssueId`; preserve unrelated existing arguments. An explicit current choice overrides a conflicting LLM argument and the canonical payload is the one persisted for confirmation and later execution.
+- [ ] Close every Critical/Important independent-review finding, run focused evaluator and Intex Agent checks, and run exact `pnpm run ci:tracked` on the final diff.
+- [ ] Ship through a reviewed PR, verify exact Home Dev deployment, rerun the 12-check preflight, then require focused scenarios `001`, `007`, and `014` to pass once each without retrying through a failure.
+- [ ] Require a fresh complete 20-scenario endpoint gate to exit `0`; only then run `full` exactly once and require its independently fresh endpoint corpus plus the authorized Matrix smoke to exit `0` with MiniMax M3.
+- [ ] Complete the logged-in desktop/mobile Chrome audit of the Intex Agent session list/detail and affected settings, fix every production-readiness defect found through the same test-first/review/deploy loop, and record final privacy-safe evidence.
+
+#### Endpoint Changes
+
+- **Modified:** none.
+- **Created:** none.
+- **Removed:** none.
+- **Unchanged:** the existing dev-only conversation test endpoint, request/response schema, Home Dev wrapper commands, mocked-product-tool boundary, MiniMax M3 judge, cleanup contract, and Matrix ordering gate.
+
+**Acceptance:** both note confirmations are judged from complete observable sanitized evidence; explicit code-task worker/mode selections survive the LLM boundary in the persisted confirmation payload; focused regressions, the 20-scenario endpoint gate, the fresh full-plus-Matrix gate, and the production desktop/mobile UX audit all pass in order.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
 - Automatic conversion of every debug-session request into a newly curated scenario and pull request.
 - Richer judge calibration fixtures, `failedSemanticCriterionIndexes`, and per-criterion diagnostics beyond the active closed failure-code mapping.
+- Batch-stable exact failure taxonomy for semantically rejected wrong-action controls. The binary gate is authoritative and remains fail closed; classification-label determinism is not required for current acceptance.
 - A per-user Intex Agent model selector matching the existing Default Model client contract. The current Home Dev UI exposes only the global default/fallback model and prompt preferences; implement the already frozen model-selection design separately after the evaluation baseline is stable.
