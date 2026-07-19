@@ -357,15 +357,15 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
       description: toolDescription({
         purpose: 'Create an IntexuraOS code task.',
         useFor:
-          '"Create a code task to investigate auth bug", "Create code task execution for INT-123".',
+          '"Create a code task to investigate auth bug", "Create code task execution for Linear issue INT-123".',
         doNotUseFor:
           '"How do HTTP requests work?", "Can you code this right here?", "What parameters do code tasks need?", or general programming explanations.',
         requiredInput:
           'prompt is required. workerType, linearIssueId, and taskMode are optional. workerType is only codex, codex-xhigh, or minimax.',
         boundary:
-          'planning mode is default. Use execution mode only when explicitly requested or when the user says the task is in execution stage.',
+          'planning mode is default. Use execution mode only when explicitly requested or when the user says the task is in execution stage. Set linearIssueId only when the user explicitly associates a supplied identifier with a Linear issue or ticket. An arbitrary opaque identifier, tracking marker, or evaluation marker is not enough; keep it in the task prompt and omit linearIssueId.',
         examples:
-          'Positive: "Create a code task execution for INT-123." Negative: "Explain React hooks."',
+          'Positive: "Create a code task execution for Linear issue INT-123." Negative: "Explain React hooks."',
         result: 'Returns status, code task ID, and resource URL.',
         errors: 'Validation covers missing prompt, invalid worker type, invalid task mode, or invalid Linear issue ID.',
       }),
@@ -387,7 +387,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
           linearIssueId: {
             type: 'string',
             description:
-              'Optional Linear issue ID to associate with the task. Omit it unless the user explicitly supplies the identifier.',
+              'Optional Linear issue ID to associate with the task. Set only when the user explicitly associates the supplied identifier with a Linear issue or ticket. An arbitrary opaque identifier, tracking marker, or evaluation marker is not enough; keep it in the task prompt and omit linearIssueId.',
           },
           taskMode: {
             type: 'string',
