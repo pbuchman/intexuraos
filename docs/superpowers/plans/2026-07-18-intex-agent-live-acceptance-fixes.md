@@ -513,6 +513,18 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** MiniMax does not infer passive aggression from brevity or direct confirmation syntax, but still rejects observable hostile or disrespectful tone; no scenario, deterministic assertion, payload, privacy boundary, model, provider, repair, Matrix, or cleanup contract is weakened.
 
+### Task 25: Make clarified calendar previews observable to the isolated judge
+
+**Evidence:** after PR `#2338` deployed exact merge `6c3225b81f5df994dde98403d80380a817fa58f7`, endpoint and Matrix tone calibrations passed neutral and explicitly hostile controls, and preflight passed 12/12. The first restarted scenario `008` run, `eval-469c0297-46a6-4b4b-94da-fcdfadf01a03`, again completed all three turns with zero deterministic failures, exactly one completed `create_calendar_event`, passing first/final replies, and cleanup `12/12`. MiniMax failed only the middle confirmation preview as `missing_information`/`unhelpful`. The runner builds that preview deterministically and the sanitizer exposes `Title: [redacted]`, `Start: [redacted]`, and `End: [redacted]`; unlike the eight confirmation cases already protected by the catalog invariant, clarified calendar scenarios `003` and `008` did not tell the isolated judge that those redacted labels are complete expected evidence.
+
+- [x] Extend the RED catalog invariant so the confirmation turns of scenarios `003` and `008` require the observable `Title`, `Start`, and `End` redacted labels plus the existing complete-evidence sentence.
+- [x] Replace inaccessible “clarified request” wording with an isolated-reply contract that judges the complete calendar action, reviewable sanitized preview, explicit confirmation, concise tone, and absence of another date/time request.
+- [x] Preserve every user message, turn count, exact deterministic date/time assertion, tool count, transition, timeline event, confirmation boundary, marker digest, cleanup contract, MiniMax model, and privacy boundary; regenerate only the intentional full-catalog digest.
+- [ ] Close every Critical/Important independent-review finding and run focused package checks plus `pnpm run ci:tracked` on the exact final diff.
+- [ ] Ship through a separate reviewed PR, verify exact Home Dev deployment and preflight, then restart the ordered 3x`008`, `006`, `010`, endpoint, full/Matrix, and Chrome gates.
+
+**Acceptance:** MiniMax judges the sanitized confirmation text it can actually observe and never treats intentionally redacted calendar values as missing; deterministic checks remain solely authoritative for exact dates, times, identifiers, and tool arguments.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.

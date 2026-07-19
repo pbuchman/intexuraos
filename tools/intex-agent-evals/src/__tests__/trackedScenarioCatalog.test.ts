@@ -110,6 +110,11 @@ const REDACTED_CONFIRMATION_CASES = [
     labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]', 'Location: [redacted]'],
   },
   {
+    scenarioId: 'intex-eval-003',
+    turnIndex: 1,
+    labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]'],
+  },
+  {
     scenarioId: 'intex-eval-006',
     turnIndex: 0,
     labels: ['Title: [redacted]', 'Content: [redacted]'],
@@ -118,6 +123,11 @@ const REDACTED_CONFIRMATION_CASES = [
     scenarioId: 'intex-eval-006',
     turnIndex: 2,
     labels: ['Title: [redacted]', 'Content: [redacted]'],
+  },
+  {
+    scenarioId: 'intex-eval-008',
+    turnIndex: 1,
+    labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]'],
   },
   {
     scenarioId: 'intex-eval-010',
@@ -1057,7 +1067,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      'a6f53a18a99e3bfefc14d84a7cf8be2986715df0487df6c1702d0f54229a1119'
+      '96de4db99eb1f367908838bdf233d976613207561e325846fbd0e72830d18416'
     );
   });
 });
