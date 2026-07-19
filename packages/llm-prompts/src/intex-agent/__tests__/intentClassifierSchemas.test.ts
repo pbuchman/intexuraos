@@ -113,6 +113,55 @@ describe('IntexAgentIntentClassifierOutputSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects clarification without a blocker reason', () => {
+    const result = IntexAgentIntentClassifierOutputSchema.safeParse({
+      outcome: 'needs_clarification',
+      confidence: 0.7,
+      question: 'What time should the event start?',
+      candidateIntents: ['create_calendar_event'],
+      stylePreferenceAction: 'none',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it.each([
+    { candidateIntents: undefined, missingFields: ['start'] },
+    { candidateIntents: [], missingFields: ['start'] },
+    { candidateIntents: ['create_calendar_event'], missingFields: undefined },
+    { candidateIntents: ['create_calendar_event'], missingFields: [] },
+    { candidateIntents: ['create_calendar_event'], missingFields: [''] },
+  ] as const)(
+    'rejects missing-required-details clarification without non-empty candidate and field lists: $candidateIntents / $missingFields',
+    ({ candidateIntents, missingFields }) => {
+      const result = IntexAgentIntentClassifierOutputSchema.safeParse({
+        outcome: 'needs_clarification',
+        confidence: 0.8,
+        question: 'What time should the event start?',
+        blockerReason: 'missing_required_details',
+        ...(candidateIntents !== undefined ? { candidateIntents } : {}),
+        ...(missingFields !== undefined ? { missingFields } : {}),
+        stylePreferenceAction: 'none',
+      });
+
+      expect(result.success).toBe(false);
+    }
+  );
+
+  it('accepts missing-required-details clarification with a canonical tool candidate', () => {
+    const result = IntexAgentIntentClassifierOutputSchema.safeParse({
+      outcome: 'needs_clarification',
+      confidence: 0.8,
+      question: 'What time should the event start?',
+      blockerReason: 'missing_required_details',
+      candidateIntents: ['create_calendar_event'],
+      missingFields: ['start'],
+      stylePreferenceAction: 'none',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects tool classifications with empty allowed tool lists', () => {
     const result = IntexAgentIntentClassifierOutputSchema.safeParse({
       outcome: 'tool',

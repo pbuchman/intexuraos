@@ -1,5 +1,7 @@
 import {
   IntexAgentIntentClassifierOutputSchema,
+  IntexAgentIntentClassifierToolNameSchema,
+  IntexAgentBlockerReasonSchema,
   intexAgentIntentClassifierPrompt,
   intexAgentIntentClassifierRepairPrompt,
   type IntexAgentBlockerReason,
@@ -37,6 +39,8 @@ const GENERIC_CLARIFICATION_NEXT_STEPS: Record<IntexAgentReplyLanguage, string> 
   en: 'Ask the user to restate the action.',
   pl: 'Poproś użytkownika o doprecyzowanie akcji.',
 };
+const MULTIPLE_TOOL_CLARIFICATION_NEXT_STEP =
+  'Ask the user which supported action to handle first.';
 
 const PREFERENCE_TOOL_NAMES = [
   'get_user_preferences',
@@ -110,21 +114,27 @@ export function createLlmIntexAgentIntentClassifier(deps: {
         return directIntent;
       }
 
+      const activeClarification = readActiveClarificationContext(input.events);
       const prompt = intexAgentIntentClassifierPrompt.build({
         currentDateTime: input.currentDateTime,
         messages: buildClassifierMessages(input.events, input.message, input.replyContext),
+        ...(activeClarification !== undefined ? { activeClarification } : {}),
       });
       const retryingClient = createRetryingStructuredClient(deps.client);
       const result = await generateStructured({
         client: retryingClient,
         prompt,
-        schema: IntexAgentIntentClassifierOutputSchema,
+        schema: classifierSchemaFor(activeClarification),
         promptType: INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE,
         repairBuilder: (raw, error) =>
           intexAgentIntentClassifierRepairPrompt.build({
             originalPrompt: prompt,
             invalidResponse: raw,
             errorMessage: formatZodErrors(error),
+            currentTurnContext: {
+              message: formatUserMessageWithReplyContext(input.message, input.replyContext),
+              ...(activeClarification !== undefined ? { activeClarification } : {}),
+            },
           }),
         maxRepairAttempts: 1,
       });
@@ -167,7 +177,11 @@ function mapValidatedClassifierOutput(
       allowedToolNames.length > 1 &&
       !allowedToolNames.every((toolName) => PREFERENCE_TOOL_NAME_SET.has(toolName))
     ) {
-      return clarificationFromOutput(output, replyLanguage);
+      return clarificationFromOutput(output, replyLanguage, {
+        blockerReason: 'multiple_possible_intents',
+        candidateIntents: allowedToolNames,
+        suggestedNextStep: MULTIPLE_TOOL_CLARIFICATION_NEXT_STEP,
+      });
     }
     return {
       kind: 'tool',
@@ -180,7 +194,15 @@ function mapValidatedClassifierOutput(
   }
 
   if (output.outcome === 'needs_clarification') {
-    return clarificationFromOutput(output, replyLanguage);
+    return clarificationFromOutput(output, replyLanguage, {
+      blockerReason: output.blockerReason,
+      ...(output.candidateIntents !== undefined
+        ? { candidateIntents: output.candidateIntents }
+        : {}),
+      ...(output.suggestedNextStep !== undefined
+        ? { suggestedNextStep: output.suggestedNextStep }
+        : {}),
+    });
   }
 
   if (output.outcome === 'unsupported') {
@@ -271,6 +293,73 @@ function classifierMessageFromEvent(
   return null;
 }
 
+interface ActiveClarificationContext {
+  blockerReason: IntexAgentBlockerReason;
+  candidateIntents: IntexAgentIntentClassifierToolName[];
+}
+
+type IntentClassifierSchema =
+  | typeof IntexAgentIntentClassifierOutputSchema
+  | ReturnType<typeof IntexAgentIntentClassifierOutputSchema.superRefine>;
+
+function classifierSchemaFor(
+  activeClarification: ActiveClarificationContext | undefined
+): IntentClassifierSchema {
+  if (activeClarification === undefined) {
+    return IntexAgentIntentClassifierOutputSchema;
+  }
+
+  return IntexAgentIntentClassifierOutputSchema.superRefine((output, context) => {
+    if (
+      output.outcome === 'needs_clarification' &&
+      (output.candidateIntents === undefined || output.candidateIntents.length === 0)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'active clarification continuation requires at least one candidate tool intent',
+        path: ['candidateIntents'],
+      });
+    }
+  });
+}
+
+function readActiveClarificationContext(
+  events: readonly IntexAgentSessionEvent[]
+): ActiveClarificationContext | undefined {
+  for (const event of [...events].reverse()) {
+    if (event.type === 'assistant_message' || event.type === 'agent_fallback') {
+      continue;
+    }
+    if (event.type !== 'clarification_requested') {
+      return undefined;
+    }
+
+    const blockerReason = IntexAgentBlockerReasonSchema.safeParse(event.payload['blockerReason']);
+    const rawCandidateIntents = event.payload['candidateIntents'];
+    if (!blockerReason.success || !Array.isArray(rawCandidateIntents)) {
+      return undefined;
+    }
+
+    const candidateIntents: IntexAgentIntentClassifierToolName[] = [];
+    for (const rawCandidateIntent of rawCandidateIntents) {
+      const parsed = IntexAgentIntentClassifierToolNameSchema.safeParse(rawCandidateIntent);
+      if (!parsed.success) {
+        return undefined;
+      }
+      if (!candidateIntents.includes(parsed.data)) {
+        candidateIntents.push(parsed.data);
+      }
+    }
+    if (candidateIntents.length === 0) {
+      return undefined;
+    }
+
+    return { blockerReason: blockerReason.data, candidateIntents };
+  }
+
+  return undefined;
+}
+
 function normalizeAllowedToolNames(
   values: readonly IntexAgentIntentClassifierToolName[]
 ): IntexAgentToolName[] {
@@ -285,7 +374,12 @@ function normalizeAllowedToolNames(
 
 function clarificationFromOutput(
   output: Extract<IntexAgentIntentClassifierOutput, { outcome: 'needs_clarification' | 'tool' }>,
-  replyLanguage: IntexAgentReplyLanguage
+  replyLanguage: IntexAgentReplyLanguage,
+  metadata: {
+    blockerReason: IntexAgentBlockerReason;
+    candidateIntents?: IntexAgentToolName[];
+    suggestedNextStep?: string;
+  }
 ): IntexAgentIntentClassification {
   return {
     kind: 'needs_clarification',
@@ -293,12 +387,14 @@ function clarificationFromOutput(
       readQuestion(output.question) ??
       readQuestion(output.clarification) ??
       GENERIC_CLARIFICATION_QUESTIONS[replyLanguage],
-    ...(output.blockerReason !== undefined ? { blockerReason: output.blockerReason } : {}),
+    blockerReason: metadata.blockerReason,
     ...(output.missingFields !== undefined ? { missingFields: output.missingFields } : {}),
-    ...(output.candidateIntents !== undefined
-      ? { candidateIntents: normalizeAllowedToolNames(output.candidateIntents) }
+    ...(metadata.candidateIntents !== undefined
+      ? { candidateIntents: normalizeAllowedToolNames(metadata.candidateIntents) }
       : {}),
-    ...(output.suggestedNextStep !== undefined ? { suggestedNextStep: output.suggestedNextStep } : {}),
+    ...(metadata.suggestedNextStep !== undefined
+      ? { suggestedNextStep: metadata.suggestedNextStep }
+      : {}),
     ...stylePreferenceFields(output.stylePreferenceAction),
     ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
     ...(output.reason !== undefined ? { reason: output.reason } : {}),

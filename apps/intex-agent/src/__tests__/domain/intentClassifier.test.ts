@@ -139,7 +139,13 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         confidence: 0.9,
         question: 'Should I save a note or a bookmark?',
       },
-      { kind: 'needs_clarification', question: 'Should I save a note or a bookmark?' },
+      {
+        kind: 'needs_clarification',
+        question: 'Should I save a note or a bookmark?',
+        blockerReason: 'multiple_possible_intents',
+        candidateIntents: ['create_note', 'create_link'],
+        suggestedNextStep: 'Ask the user which supported action to handle first.',
+      },
     ],
     [
       'preference tool group',
@@ -164,6 +170,9 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       {
         kind: 'needs_clarification',
         question: 'Should I manage preferences or create a note?',
+        blockerReason: 'multiple_possible_intents',
+        candidateIntents: ['get_user_preferences', 'create_note'],
+        suggestedNextStep: 'Ask the user which supported action to handle first.',
       },
     ],
     [
@@ -173,7 +182,13 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         allowedToolNames: ['create_note', 'create_link'],
         confidence: 0.9,
       },
-      { kind: 'needs_clarification', question: 'What would you like me to do with this?' },
+      {
+        kind: 'needs_clarification',
+        question: 'What would you like me to do with this?',
+        blockerReason: 'multiple_possible_intents',
+        candidateIntents: ['create_note', 'create_link'],
+        suggestedNextStep: 'Ask the user which supported action to handle first.',
+      },
     ],
     [
       'duplicate tool names',
@@ -190,8 +205,13 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         outcome: 'needs_clarification',
         confidence: 0.9,
         question: 'Which date?',
+        blockerReason: 'not_enough_context',
       },
-      { kind: 'needs_clarification', question: 'Which date?' },
+      {
+        kind: 'needs_clarification',
+        question: 'Which date?',
+        blockerReason: 'not_enough_context',
+      },
     ],
     [
       'high-confidence unsupported',
@@ -481,6 +501,244 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls[0]?.prompt).toContain('Please check tomorrow.');
     expect(client.calls[0]?.prompt).toContain('yes, that one');
   });
+
+  it('passes only canonical active clarification metadata beside the classifier transcript', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'tool',
+          confidence: 0.95,
+          allowedToolNames: ['create_calendar_event'],
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await classifier.classify({
+      message: '3 PM for one hour.',
+      events: [
+        event('user_message', { text: 'Put the project review on September 10 2026.' }),
+        event('clarification_requested', {
+          message: 'What time should it start?',
+          blockerReason: 'missing_required_details',
+          candidateIntents: ['create_calendar_event', 'create_calendar_event'],
+          missingFields: ['PRIVATE-MISSING-FIELD'],
+          suggestedNextStep: 'PRIVATE-NEXT-STEP',
+          arbitraryPayload: 'PRIVATE-ARBITRARY-PAYLOAD',
+        }),
+        event('agent_fallback', { privateFallback: 'PRIVATE-FALLBACK' }),
+        event('assistant_message', { text: 'What time should it start?' }),
+      ],
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    const prompt = client.calls[0]?.prompt ?? '';
+    expect(prompt).toContain('<active_clarification_context_json>');
+    expect(prompt).toContain('"blockerReason": "missing_required_details"');
+    expect(prompt).toContain('"candidateIntents": [');
+    expect(prompt).toContain('"create_calendar_event"');
+    expect(prompt).not.toContain('PRIVATE-MISSING-FIELD');
+    expect(prompt).not.toContain('PRIVATE-NEXT-STEP');
+    expect(prompt).not.toContain('PRIVATE-ARBITRARY-PAYLOAD');
+    expect(prompt).not.toContain('PRIVATE-FALLBACK');
+  });
+
+  it('does not carry stale or malformed clarification metadata into a new request', async () => {
+    const client = new FakeStructuredClient(
+      Array.from({ length: 5 }, () =>
+        ok(generateResult({ outcome: 'conversation', confidence: 0.9 }))
+      )
+    );
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await classifier.classify({
+      message: 'Tell me something else.',
+      events: [
+        event('clarification_requested', {
+          message: 'What time?',
+          blockerReason: 'missing_required_details',
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', { text: 'What time?' }),
+        event('user_message', { text: 'Never mind.' }),
+        event('assistant_message', { text: 'Okay.' }),
+      ],
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+    await classifier.classify({
+      message: 'Continue.',
+      events: [
+        event('user_message', { text: 'Old request.' }),
+        event('clarification_requested', {
+          message: 'What time?',
+          blockerReason: 'not-a-blocker',
+          candidateIntents: ['send_email'],
+        }),
+        event('assistant_message', { text: 'What time?' }),
+      ],
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+    await classifier.classify({
+      message: 'Continue.',
+      events: [
+        event('clarification_requested', {
+          message: 'What time?',
+          blockerReason: 'missing_required_details',
+          candidateIntents: ['send_email'],
+        }),
+      ],
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+    await classifier.classify({
+      message: 'Continue.',
+      events: [
+        event('clarification_requested', {
+          message: 'What time?',
+          blockerReason: 'missing_required_details',
+          candidateIntents: [],
+        }),
+      ],
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+    await classifier.classify({
+      message: 'Continue.',
+      events: [
+        event('clarification_requested', {
+          message: 'What time?',
+          blockerReason: 'missing_required_details',
+          candidateIntents: 'create_calendar_event',
+        }),
+      ],
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(client.calls[0]?.prompt).not.toContain('<active_clarification_context_json>');
+    expect(client.calls[1]?.prompt).not.toContain('<active_clarification_context_json>');
+    expect(client.calls[2]?.prompt).not.toContain('<active_clarification_context_json>');
+    expect(client.calls[3]?.prompt).not.toContain('<active_clarification_context_json>');
+    expect(client.calls[4]?.prompt).not.toContain('<active_clarification_context_json>');
+  });
+
+  it('repairs metadata-free missing-details clarification into an explicit tool candidate', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.8,
+          question: 'What time should it start?',
+        })
+      ),
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.8,
+          question: 'What time should it start?',
+          blockerReason: 'missing_required_details',
+          candidateIntents: ['create_calendar_event'],
+          missingFields: ['start'],
+          suggestedNextStep: 'Ask for the missing start time.',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Put the project review on September 10 2026.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'needs_clarification',
+      question: 'What time should it start?',
+      blockerReason: 'missing_required_details',
+      candidateIntents: ['create_calendar_event'],
+      missingFields: ['start'],
+      suggestedNextStep: 'Ask for the missing start time.',
+    });
+    expect(client.calls).toHaveLength(2);
+    expect(client.calls[1]?.prompt).toContain('<current_turn_context_json>');
+    expect(client.calls[1]?.prompt).toContain(
+      'Put the project review on September 10 2026.'
+    );
+  });
+
+  it('repairs a clarification that would drop an active candidate intent', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.7,
+          question: 'What do you mean?',
+          blockerReason: 'not_enough_context',
+        })
+      ),
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.8,
+          question: 'What duration should I use?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['end'],
+          candidateIntents: ['create_calendar_event'],
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: '3 PM.',
+        events: [
+          event('user_message', { text: 'Add the review on September 10 2026.' }),
+          event('clarification_requested', {
+            message: 'What time should it start?',
+            blockerReason: 'missing_required_details',
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'What time should it start?' }),
+        ],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'needs_clarification',
+      question: 'What duration should I use?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['end'],
+      candidateIntents: ['create_calendar_event'],
+    });
+    expect(client.calls).toHaveLength(2);
+    expect(client.calls[1]?.prompt).toContain('"create_calendar_event"');
+  });
+
+  it.each(['Cancel that.', 'Actually, I need help with something else.'])(
+    'does not force an active candidate after cancellation or topic replacement: %s',
+    async (message) => {
+      const client = new FakeStructuredClient([
+        ok(generateResult({ outcome: 'conversation', confidence: 0.95 })),
+      ]);
+      const classifier = createLlmIntexAgentIntentClassifier({
+        client,
+        logger: new FakeLogger(),
+      });
+
+      await expect(
+        classifier.classify({
+          message,
+          events: [
+            event('clarification_requested', {
+              message: 'What time should it start?',
+              blockerReason: 'missing_required_details',
+              candidateIntents: ['create_calendar_event'],
+            }),
+            event('assistant_message', { text: 'What time should it start?' }),
+          ],
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({ kind: 'no_action', reason: 'conversation' });
+      expect(client.calls).toHaveLength(1);
+    }
+  );
 
   it('lets the LLM ask targeted clarification for mixed intents instead of using direct regex fallback', async () => {
     const client = new FakeStructuredClient([
