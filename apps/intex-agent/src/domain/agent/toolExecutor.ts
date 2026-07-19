@@ -361,7 +361,7 @@ function toCodeTaskInput(args: CreateCodeTaskToolArgs, userId: string): CreateCo
     prompt: args.prompt,
     ...(args.workerType !== undefined ? { workerType: args.workerType } : {}),
     ...(args.linearIssueId !== undefined ? { linearIssueId: args.linearIssueId } : {}),
-    taskMode: args.taskMode ?? 'planning',
+    taskMode: args.taskMode,
   };
 }
 

@@ -46,7 +46,7 @@ export interface CreateCodeTaskToolArgs {
   prompt: string;
   workerType?: string;
   linearIssueId?: string;
-  taskMode?: 'planning' | 'execution';
+  taskMode: 'planning' | 'execution';
 }
 
 export interface SaveExternalToolArgs {

@@ -1,10 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   createIntexAgentToolDefinitions,
+  type CreateCodeTaskToolArgs,
   type IntexAgentToolExecutor,
 } from '../../domain/agent/toolDefinitions.js';
 
 describe('createIntexAgentToolDefinitions', () => {
+  it('requires task mode on normalized code-task arguments', () => {
+    const taskModeIsRequired: CreateCodeTaskToolArgs extends {
+      taskMode: 'planning' | 'execution';
+    }
+      ? true
+      : false = true;
+
+    expect(taskModeIsRequired).toBe(true);
+  });
+
   it('defines exactly the supported tools', () => {
     const tools = createIntexAgentToolDefinitions(createExecutor());
 
