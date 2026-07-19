@@ -501,6 +501,18 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** closed tool facts support a truthful matching completion claim but never turn a bare or wrong-action reply into a semantic pass; calibration, scenario stability, endpoint, Matrix, and browser gates remain fail closed and ordered.
 
+### Task 24: Require observable evidence before assigning passive aggression
+
+**Evidence:** after PR `#2337` deployed exact merge `99f22437a7660f1637da64a64ba6f368d4bd051a`, the matching/bare/wrong-action MiniMax calibration passed all three expected outcomes without retry and preflight passed 12/12. The first restarted scenario `008` stability run, `eval-b266c701-062a-4ec1-8c7e-8a4a54d11034`, then completed all three turns with zero deterministic failures, exactly one completed `create_calendar_event`, passing first and final replies, and cleanup `12/12`. MiniMax alone failed the middle confirmation reply as `bad_tone` while simultaneously marking it understood, helpful, clear, and professional; only `noPassiveAggression` was false. The run stopped the stability sequence and Matrix/full remained closed.
+
+- [x] Add a RED prompt/version regression requiring every failed tone criterion to be grounded in concrete wording observable in `assistantReply`, in any language, rather than inferred from brevity or omitted social niceties.
+- [x] State that concise direct questions, confirmation requests, second-person address, and imperative grammar are professional and non-passive-aggressive by default; without a concrete hostile, sarcastic, blaming, resentful, guilt-tripping, reproachful, abusive, vulgar, or disrespectful cue, both tone criteria remain true and `bad_tone` is forbidden.
+- [x] Use the exact shared tone rule in both endpoint and Matrix judge prompts, bump their behavior versions to `8.0.0` and `5.0.0`, and keep genuine negative cues mapped to the affected false tone criteria plus `bad_tone`.
+- [ ] Close every Critical/Important independent-review finding and run focused checks plus `pnpm run ci:tracked` on the exact final diff.
+- [ ] Ship through a separate reviewed PR, verify the exact Home Dev merge, rerun preflight, and require a neutral-confirmation tone calibration PASS plus an explicitly hostile control FAIL before restarting Task 22 gates.
+
+**Acceptance:** MiniMax does not infer passive aggression from brevity or direct confirmation syntax, but still rejects observable hostile or disrespectful tone; no scenario, deterministic assertion, payload, privacy boundary, model, provider, repair, Matrix, or cleanup contract is weakened.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
