@@ -145,8 +145,17 @@
   list plus one successful event response on refresh, no network failures, and no console
   warnings/errors.
 
-- [ ] **Step 3: Record final evidence and close the loop**
+- [x] **Step 3: Record final evidence and close the loop**
 
   Update Task 30 and Task 31 checkboxes/evidence without private content. Run the exact
   commit gate again for the documentation-only evidence commit, ship it through a final
   reviewed PR, and audit the complete user goal requirement by requirement.
+
+  **Closeout evidence:** PR [#2347](https://github.com/pbuchman/intexuraos/pull/2347)
+  merged as `7210fb225133ef2e13bd6c92e386abc883e4059c` after all 15 non-skipped
+  GitHub checks passed, including all eight required status checks. Its exact
+  documentation diff passed local
+  `pnpm run ci:tracked` with `5556/5556` tests, coverage, build, format, and bundle
+  budget; independent review reported zero Critical, Important, or Minor findings.
+  The committed evidence contains no private message content, identifiers, tool
+  arguments, or user-specific account data.
