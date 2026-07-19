@@ -357,191 +357,6 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toMatchObject({ toolArgs: args });
   });
 
-  it.each([
-    {
-      message: 'Create a MiniMax planning code task to investigate synthetic cache behavior.',
-      args: {
-        prompt: 'Investigate synthetic cache behavior.',
-        taskMode: 'execution',
-        workerType: 'codex-xhigh',
-        linearIssueId: 'LIN-123',
-      },
-      expectedArgs: {
-        prompt: 'Investigate synthetic cache behavior.',
-        taskMode: 'planning',
-        workerType: 'minimax',
-        linearIssueId: 'LIN-123',
-      },
-    },
-    {
-      message: 'Create a MiniMax planning code task to investigate synthetic cache behavior.',
-      args: {
-        prompt: 'Investigate synthetic cache behavior.',
-        workerType: 'minimax',
-      },
-      expectedArgs: {
-        prompt: 'Investigate synthetic cache behavior.',
-        taskMode: 'planning',
-        workerType: 'minimax',
-      },
-    },
-    {
-      message: 'Create a planning code task to investigate synthetic cache behavior.',
-      args: { prompt: 'Investigate synthetic cache behavior.' },
-      expectedArgs: {
-        prompt: 'Investigate synthetic cache behavior.',
-        taskMode: 'planning',
-      },
-    },
-    {
-      message: 'Create a MiniMax code task to investigate synthetic cache behavior.',
-      args: { prompt: 'Investigate synthetic cache behavior.' },
-      expectedArgs: {
-        prompt: 'Investigate synthetic cache behavior.',
-        workerType: 'minimax',
-      },
-    },
-    {
-      message: 'Create a code task in execution mode using MINIMAX.',
-      args: { prompt: 'Investigate the execution path.' },
-      expectedArgs: {
-        prompt: 'Investigate the execution path.',
-        taskMode: 'execution',
-        workerType: 'minimax',
-      },
-    },
-  ])(
-    'canonicalizes unique, explicit current-message code-task selections: $message',
-    async ({ message, args, expectedArgs }) => {
-      const client = new ToolExecutingFakeToolCallingClient(
-        { toolName: 'create_code_task', args },
-        [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_code_task' }))]
-      );
-      const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
-
-      const result = await runner.run({
-        session: session(),
-        events: [],
-        message,
-        currentDateTime: CURRENT_DATE_TIME,
-      });
-
-      expect(result).toMatchObject({
-        outcome: 'needs_confirmation',
-        toolName: 'create_code_task',
-      });
-      if (result.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
-      expect(result.toolArgs).toEqual(expectedArgs);
-    }
-  );
-
-  it.each([
-    'Create a code task about a MiniMax planning comparison.',
-    'Create a code task about using MiniMax.',
-    'Do not create a MiniMax execution code task.',
-    'Create a planning or execution code task.',
-    'Create a code task with MiniMax or codex.',
-    'Create a code task to investigate this issue.',
-  ])('does not infer code-task selections from non-explicit current-message text: %s', async (message) => {
-    const args = { prompt: 'Investigate this issue.', workerType: 'codex-xhigh' };
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_code_task', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_code_task' }))]
-    );
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
-
-    await expect(
-      runner.run({
-        session: session(),
-        events: [],
-        message,
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toMatchObject({ toolArgs: args });
-  });
-
-  it('does not infer code-task selections from a prior turn', async () => {
-    const args = { prompt: 'Investigate this issue.' };
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_code_task', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_code_task' }))]
-    );
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
-
-    await expect(
-      runner.run({
-        session: session(),
-        events: [event('user_message', { text: 'Use MiniMax in planning mode.' })],
-        message: 'Create a code task to investigate this issue.',
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toMatchObject({ toolArgs: args });
-  });
-
-  it.each([
-    {
-      message: 'Create a code task to fix a planning code task parsing bug.',
-      expectedArgs: { prompt: 'Investigate the parser.' },
-    },
-    {
-      message: 'Create a code task in planning mode or execution mode.',
-      expectedArgs: { prompt: 'Investigate the parser.' },
-    },
-    {
-      message: 'Create a MiniMax code task or a Codex code task.',
-      expectedArgs: { prompt: 'Investigate the parser.' },
-    },
-    {
-      message: 'Create a non-MiniMax code task.',
-      expectedArgs: { prompt: 'Investigate the parser.' },
-    },
-    {
-      message: 'Do not create a planning code task, create an execution code task.',
-      expectedArgs: { prompt: 'Investigate the parser.', taskMode: 'execution' },
-    },
-    {
-      message: 'Avoid MiniMax and pick execution mode for a code task.',
-      expectedArgs: { prompt: 'Investigate the parser.', taskMode: 'execution' },
-    },
-    {
-      message: 'Pick MiniMax for the code task.',
-      expectedArgs: { prompt: 'Investigate the parser.', workerType: 'minimax' },
-    },
-    {
-      message: 'Create a code task using MiniMax in planning mode.',
-      expectedArgs: {
-        prompt: 'Investigate the parser.',
-        workerType: 'minimax',
-        taskMode: 'planning',
-      },
-    },
-    {
-      message: 'Create a code task using MiniMax in execution mode.',
-      expectedArgs: {
-        prompt: 'Investigate the parser.',
-        workerType: 'minimax',
-        taskMode: 'execution',
-      },
-    },
-  ])('fails closed for clause-local code-task selections: $message', async ({ message, expectedArgs }) => {
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_code_task', args: { prompt: 'Investigate the parser.' } },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_code_task' }))]
-    );
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
-
-    const result = await runner.run({
-      session: session(),
-      events: [],
-      message,
-      currentDateTime: CURRENT_DATE_TIME,
-    });
-
-    expect(result).toMatchObject({ outcome: 'needs_confirmation', toolName: 'create_code_task' });
-    if (result.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
-    expect(result.toolArgs).toEqual(expectedArgs);
-  });
-
   it('formats replied-message context as context-only user message content', async () => {
     const client = new FakeToolCallingClient([
       ok(toolResult({ outcome: 'no_action', reply: 'Jasne, sprawdzę.' })),
@@ -4194,10 +4009,10 @@ describe('createIntexAgentRunner', () => {
     expect(saveCalls).toBe(0);
   });
 
-  it('uses default planning mode when building a code task confirmation without explicit mode', async () => {
+  it('normalizes a missing code-task mode at the typed tool boundary', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_code_task',
-      args: { prompt: 'Investigate the webhook retry path.' },
+      args: { prompt: 'Investigate the webhook retry path.', workerType: 'minimax' },
     }, [
       ok(
         toolResult({
@@ -4219,9 +4034,43 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning',
+        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning\nWorker: minimax',
       toolName: 'create_code_task',
-      toolArgs: { prompt: 'Investigate the webhook retry path.' },
+      toolArgs: {
+        prompt: 'Investigate the webhook retry path.',
+        taskMode: 'planning',
+        workerType: 'minimax',
+      },
+    });
+  });
+
+  it('preserves an explicit code-task execution mode without synthesizing optional fields', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_code_task',
+      args: { prompt: 'Execute the webhook retry fix.', taskMode: 'execution' },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          toolName: 'create_code_task',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a code task to execute the webhook retry fix.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: 'Create this code task?\n\nPrompt: Execute the webhook retry fix.\nMode: execution',
+      toolName: 'create_code_task',
+      toolArgs: { prompt: 'Execute the webhook retry fix.', taskMode: 'execution' },
     });
   });
 

@@ -280,15 +280,14 @@ describe('handleIncomingMessage', () => {
     ]);
   });
 
-  it('persists and executes canonical code-task confirmation arguments from the real runner', async () => {
+  it('persists and executes typed code-task confirmation arguments from the real runner', async () => {
     const repo = new FakeSessionRepository();
     const replies = new FakeReplyPublisher();
     const createCodeTaskCalls: Record<string, unknown>[] = [];
     const runner = createIntexAgentRunner({
       client: forcedCodeTaskToolClient({
         prompt: 'Investigate synthetic cache behavior.',
-        taskMode: 'execution',
-        workerType: 'codex-xhigh',
+        workerType: 'minimax',
       }),
       intentClassifier: {
         async classify() {
@@ -301,7 +300,7 @@ describe('handleIncomingMessage', () => {
     await handleIncomingMessage(
       message({
         messageId: 'wamid-code-task-request',
-        text: 'Create a MiniMax planning code task to investigate synthetic cache behavior.',
+        text: 'Create a code task to investigate synthetic cache behavior.',
       }),
       deps(repo, runner, replies)
     );

@@ -551,8 +551,8 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 - [ ] Add RED catalog tests requiring scenarios `001` and `007` to expose `Content: [redacted]`, describe `Title: [redacted]` as optional, and mark those redacted values as complete judge evidence without exposing markers or raw arguments.
 - [ ] Update only those two semantic contracts and regenerate the intentional full-catalog digest; preserve all messages, turns, tool/timeline/cleanup assertions, marker evidence, and completion criteria.
-- [ ] Add RED runner tests proving that unique, unnegated, explicit current-message code-task choices are canonical: `planning`/`execution` map to `taskMode`, and an explicit MiniMax worker selection maps case-insensitively to `workerType=minimax`.
-- [ ] Keep canonicalization scoped to `create_code_task` and the current message. Do not infer a mode or worker from a topical mention, negated choice, multiple competing choices, prior turn, default, or absent selection; do not create or infer `linearIssueId`; preserve unrelated existing arguments. An explicit current choice overrides a conflicting LLM argument and the canonical payload is the one persisted for confirmation and later execution.
+- [ ] Add RED runner and real message-handling regressions for the live typed tool payload `{ prompt, workerType: 'minimax' }`: normalize its omitted `taskMode` to the product default `planning`, preserve explicit `execution`, preserve the supplied worker, and never synthesize a worker or `linearIssueId`.
+- [ ] Normalize the product default exclusively in `toCreateCodeTaskArgs` at the typed `create_code_task` boundary, so the confirmation payload and accepted execution receive the same arguments. Do not parse the current message for code-task worker or mode selections: deterministic regex parsing was rejected because equivalent valid wording continually escaped its grammar and could overwrite an otherwise correct LLM selection. Keep opaque-reference restoration limited to note confirmation arguments.
 - [ ] Close every Critical/Important independent-review finding, run focused evaluator and Intex Agent checks, and run exact `pnpm run ci:tracked` on the final diff.
 - [ ] Ship through a reviewed PR, verify exact Home Dev deployment, rerun the 12-check preflight, then require focused scenarios `001`, `007`, and `014` to pass once each without retrying through a failure.
 - [ ] Require a fresh complete 20-scenario endpoint gate to exit `0`; only then run `full` exactly once and require its independently fresh endpoint corpus plus the authorized Matrix smoke to exit `0` with MiniMax M3.
@@ -565,7 +565,7 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 - **Removed:** none.
 - **Unchanged:** the existing dev-only conversation test endpoint, request/response schema, Home Dev wrapper commands, mocked-product-tool boundary, MiniMax M3 judge, cleanup contract, and Matrix ordering gate.
 
-**Acceptance:** both note confirmations are judged from complete observable sanitized evidence; explicit code-task worker/mode selections survive the LLM boundary in the persisted confirmation payload; focused regressions, the 20-scenario endpoint gate, the fresh full-plus-Matrix gate, and the production desktop/mobile UX audit all pass in order.
+**Acceptance:** both note confirmations are judged from complete observable sanitized evidence; typed code-task arguments normalize the planning default and preserve supplied worker/mode values through the persisted confirmation payload; focused regressions, the 20-scenario endpoint gate, the fresh full-plus-Matrix gate, and the production desktop/mobile UX audit all pass in order.
 
 ### Deferred perfection (recorded, not implemented in this loop)
 

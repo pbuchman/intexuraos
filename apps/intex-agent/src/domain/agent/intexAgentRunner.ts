@@ -78,51 +78,6 @@ const OPAQUE_REFERENCE_PATTERN =
   /(?<![\p{L}\p{N}_-])(?=[\p{L}\p{N}_-]*\p{L})(?=[\p{L}\p{N}_-]*\p{N})[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+(?![\p{L}\p{N}_-])/gu;
 const EXPLICIT_REFERENCE_EXCLUSION_PREFIX_PATTERN =
   /(?<!\p{L})(?:(?:do not|don['’]?t)\s+(?:include|copy|keep|repeat|save)|(?:omit|exclude|remove|without)|nie\s+(?:uwzględniaj|uwzgledniaj|dodawaj|kopiuj|zapisuj|powtarzaj)|(?:pomiń|pomin|wyklucz|usuń|usun|bez))\s*(?:(?:the|this|ten|tego|tę|ta)\s+)?(?:(?:code|reference|identifier|token|kod|referencję|referencje|identyfikator)\s*)?(?:[:=-]\s*)?$/iu;
-const EXPLICIT_CODE_TASK_MODE_PATTERNS = [
-  {
-    pattern:
-      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?(?:minimax\s+)?(planning|execution)\s+code\s+task\b/giu,
-    choiceIndex: 2,
-    negationIndex: 1,
-  },
-  {
-    pattern:
-      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?(?:minimax\s+)?code\s+task\s+in\s+(planning|execution)\s+mode\b/giu,
-    choiceIndex: 2,
-    negationIndex: 1,
-  },
-  {
-    pattern:
-      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?code\s+task\s+(?:with|using)\s+(?:the\s+)?minimax(?:\s+worker)?\s+in\s+(planning|execution)\s+mode\b/giu,
-    choiceIndex: 2,
-    negationIndex: 1,
-  },
-  {
-    pattern:
-      /\b(?:pick|choose|select)\s+(planning|execution)\s+mode\s+for\s+(?:a\s+|an\s+|the\s+)?code\s+task\b/giu,
-    choiceIndex: 1,
-  },
-] as const;
-const EXPLICIT_CODE_TASK_MINIMAX_PATTERNS = [
-  {
-    pattern:
-      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?(minimax)\s+(?:(?:planning|execution)\s+)?code\s+task\b/giu,
-    choiceIndex: 2,
-    negationIndex: 1,
-  },
-  {
-    pattern:
-      /\b(?:(do\s+not|don['’]?t|avoid)\s+)?(?:create|make|start|open|add|build)\s+(?:a\s+|an\s+|the\s+)?code\s+task\s+(?:in\s+(?:planning|execution)\s+mode\s+)?(?:with|using)\s+(?:the\s+)?(minimax)(?:\s+worker)?\b/giu,
-    choiceIndex: 2,
-    negationIndex: 1,
-  },
-  {
-    pattern:
-      /\b(?:pick|choose|select)\s+(minimax)\s+for\s+(?:a\s+|an\s+|the\s+)?code\s+task\b/giu,
-    choiceIndex: 1,
-  },
-] as const;
-
 type LocalizedText = Record<IntexAgentReplyLanguage, string>;
 interface ClassifierUnsupportedReplyMap {
   unsupported_capability: string;
@@ -821,7 +776,7 @@ async function parseRunnerContent(
   const parsed = await validateRunnerOutput(input);
   const toolExecution = getCompletedToolExecution(toolExecutions);
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
-    const confirmationArgs = canonicalizeCurrentConfirmationArguments(
+    const confirmationArgs = preserveCurrentTurnOpaqueReferences(
       toolExecution.toolName,
       toolExecution.args,
       input.currentMessage
@@ -920,24 +875,12 @@ async function parseRunnerContent(
   }
 }
 
-function canonicalizeCurrentConfirmationArguments(
+function preserveCurrentTurnOpaqueReferences(
   toolName: MutatingIntexAgentToolName,
   args: Record<string, unknown>,
   currentMessage: string
 ): Record<string, unknown> {
-  if (toolName === 'create_code_task') {
-    return canonicalizeCurrentCodeTaskSelections(args, currentMessage);
-  }
   if (toolName !== 'create_note') return args;
-
-  return canonicalizeCurrentNoteOpaqueReferences(args, currentMessage);
-}
-
-function canonicalizeCurrentNoteOpaqueReferences(
-  args: Record<string, unknown>,
-  currentMessage: string
-): Record<string, unknown> {
-
   const currentReferences = extractRestorableOpaqueReferences(currentMessage);
   if (currentReferences.length === 0) return args;
 
@@ -952,69 +895,6 @@ function canonicalizeCurrentNoteOpaqueReferences(
     ...args,
     content: [noteArgs.content, ...missingReferences].join(' '),
   };
-}
-
-function canonicalizeCurrentCodeTaskSelections(
-  args: Record<string, unknown>,
-  currentMessage: string
-): Record<string, unknown> {
-  const taskMode = extractUniqueExplicitCodeTaskChoice(
-    currentMessage,
-    EXPLICIT_CODE_TASK_MODE_PATTERNS,
-    'mode'
-  );
-  const workerType = extractUniqueExplicitCodeTaskChoice(
-    currentMessage,
-    EXPLICIT_CODE_TASK_MINIMAX_PATTERNS,
-    'worker'
-  );
-
-  if (taskMode === undefined && workerType === undefined) return args;
-  return {
-    ...args,
-    ...(taskMode !== undefined ? { taskMode } : {}),
-    ...(workerType !== undefined ? { workerType } : {}),
-  };
-}
-
-function extractUniqueExplicitCodeTaskChoice(
-  value: string,
-  patterns: readonly {
-    readonly pattern: RegExp;
-    readonly choiceIndex: number;
-    readonly negationIndex?: number;
-  }[],
-  choiceType: 'mode' | 'worker'
-): string | undefined {
-  const choices = new Set<string>();
-  for (const { pattern, choiceIndex, negationIndex } of patterns) {
-    for (const match of value.matchAll(pattern)) {
-      const choice = match[choiceIndex];
-      if (
-        choice !== undefined &&
-        (negationIndex === undefined || match[negationIndex] === undefined) &&
-        !hasCodeTaskChoiceAlternative(value, match, choiceType)
-      ) {
-        choices.add(choice.toLowerCase());
-      }
-    }
-  }
-  return choices.size === 1 ? [...choices][0] : undefined;
-}
-
-function hasCodeTaskChoiceAlternative(
-  value: string,
-  match: RegExpMatchArray,
-  choiceType: 'mode' | 'worker'
-): boolean {
-  const index = match.index as number;
-  const suffix = value.slice(index + match[0].length, index + match[0].length + 80);
-  const alternative = choiceType === 'mode' ? '(?:planning|execution)' : '(?:minimax|codex(?:-xhigh)?)';
-  const taskContext = choiceType === 'mode' ? '(?:\\s+mode|\\s+code\\s+task)' : '(?:\\s+code\\s+task|\\s+worker)?';
-  return new RegExp(
-    `^\\s*(?:,\\s*)?(?:or|and)\\s+(?:a\\s+|an\\s+|the\\s+)?${alternative}${taskContext}\\b`,
-    'iu'
-  ).test(suffix);
 }
 
 function extractOpaqueReferences(value: string): string[] {
@@ -1392,7 +1272,7 @@ function buildConfirmationReply(
     appendConfirmationLine(
       lines,
       CONFIRMATION_LABELS.mode[replyLanguage],
-      readRawString(args, 'taskMode') ?? 'planning'
+      readRawString(args, 'taskMode')
     );
     appendConfirmationLine(lines, CONFIRMATION_LABELS.worker[replyLanguage], readRawString(args, 'workerType'));
     appendConfirmationLine(lines, 'Linear', readRawString(args, 'linearIssueId'));

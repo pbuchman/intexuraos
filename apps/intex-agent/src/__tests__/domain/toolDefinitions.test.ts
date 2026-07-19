@@ -478,7 +478,7 @@ describe('createIntexAgentToolDefinitions', () => {
     ]);
   });
 
-  it('omits code task mode by default so the executor can create planning tasks', async () => {
+  it('normalizes the default planning mode before delegating to the executor', async () => {
     const executor = createExecutor();
     const codeTaskTool = createIntexAgentToolDefinitions(executor).find(
       (tool) => tool.name === 'create_code_task'
@@ -487,7 +487,9 @@ describe('createIntexAgentToolDefinitions', () => {
     await expect(codeTaskTool?.run({ prompt: 'Plan the new import flow.' })).resolves.toBe(
       'code-task-created'
     );
-    expect(executor.codeTaskArgs).toEqual([{ prompt: 'Plan the new import flow.' }]);
+    expect(executor.codeTaskArgs).toEqual([
+      { prompt: 'Plan the new import flow.', taskMode: 'planning' },
+    ]);
   });
 
   it('delegates external save execution to the injected executor', async () => {
