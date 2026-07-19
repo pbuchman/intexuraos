@@ -489,6 +489,18 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** concise success replies are evaluated against the observable sanitized contract and closed tool outcome rather than unavailable raw arguments; incomplete or unrelated replies still fail; the three-run stability gate, focused regressions, 20-scenario endpoint gate, fresh full-plus-Matrix gate, and browser audit all pass in order.
 
+### Task 23: Keep completed tool facts from substituting for reply semantics
+
+**Evidence:** PR `#2336` merged as `8ab12361e103211104d74665321cec3e4f0b8acb`; Home Dev matched that exact SHA and preflight passed all 12 checks with 20 scenarios and MiniMax M3. A three-case synthetic judge calibration then accepted the concise matching calendar completion, rejected a bare acknowledgement in an isolated run, but incorrectly accepted a reply that claimed a note was created while the closed tool outcome and criterion required a calendar event. No user content, raw arguments, identifiers, or model rationale were printed. Endpoint stability testing stopped before scenario execution and Matrix/full remained closed.
+
+- [x] Add a RED prompt/version regression separating evidence of what happened from whether `assistantReply` communicates the required action.
+- [x] Require a bare acknowledgement to fail the applicable success criterion coherently through `helpful=false` plus `missing_information` or `unhelpful`.
+- [x] Require a reply naming a different action to fail coherently through `understoodIntent=false` plus `misunderstood_intent`; preserve all closed failure-to-criterion mappings.
+- [ ] Close every Critical/Important independent-review finding, rerun focused package checks and `pnpm run ci:tracked`, then ship through a separate reviewed PR.
+- [ ] On the exact deployed merge, require one matching-completion calibration PASS and two negative calibration FAIL verdicts before restarting the ordered Task 22 live gates.
+
+**Acceptance:** closed tool facts support a truthful matching completion claim but never turn a bare or wrong-action reply into a semantic pass; calibration, scenario stability, endpoint, Matrix, and browser gates remain fail closed and ordered.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
