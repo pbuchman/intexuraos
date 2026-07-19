@@ -525,6 +525,21 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** MiniMax judges the sanitized confirmation text it can actually observe and never treats intentionally redacted calendar values as missing; deterministic checks remain solely authoritative for exact dates, times, identifiers, and tool arguments.
 
+### Task 26: Map the external-save completion phrase to its closed tool action
+
+**Evidence:** after PR `#2339` deployed exact merge `cd00dd5f756de69eaced78fa0b75d5fa161ffa0e`, preflight passed 12/12; scenarios `008` passed three consecutive focused runs and focused scenarios `006` and `010` passed. The ordered endpoint run `eval-6d351edc-bc9e-4c10-810d-7cf4ae615bc1` completed 59 turns/replies, 19 tool calls, all cleanup, and 19/20 scenarios. Scenario `015` had zero deterministic failures and one completed `save_external`, but MiniMax marked the deterministic product reply `Saved externally` as `missing_information`/`unhelpful`. The endpoint exited `1`, so `full` and Matrix were correctly not run.
+
+- [x] Add a RED prompt/version regression that defines the natural-language action represented by `save_external` and recognizes `Saved externally` or an equivalent explicit completion phrase.
+- [x] Limit the equivalence to `toolName=save_external` plus `status=completed`; keep bare acknowledgements, failed outcomes, and replies naming a note, bookmark, link, or other action fail closed.
+- [x] Close every Critical/Important independent-review finding and run focused package checks plus `pnpm run ci:tracked` on the exact final diff.
+- [ ] Ship through a separate reviewed PR, verify the exact Home Dev merge, and run one positive plus three negative MiniMax calibration controls without retrying through a failure.
+- [ ] Restart the ordered endpoint gate; only after exit `0`, run `full` exactly once and require its fresh endpoint corpus plus the authorized Matrix smoke to exit `0`.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Acceptance:** the judge recognizes the product's explicit external-save success phrase only when closed tool evidence proves that exact action completed; failed, bare, and wrong-action controls remain rejected, and the endpoint, Matrix, and browser gates stay ordered and fail closed.
+
+**Review status:** two independent analyses approved the narrow `save_external` mapping over a general tool-action map, and final diff review found no Critical/Important issues. Focused evaluator checks passed (`783/783`), followed by exact tracked CI with `5554/5554` tests, coverage, build, format, and bundle budget green.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
