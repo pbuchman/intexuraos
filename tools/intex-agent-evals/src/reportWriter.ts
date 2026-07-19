@@ -19,7 +19,12 @@ import type {
   JudgeInfrastructureCode,
 } from './runEndpointScenario.js';
 import type { DeterministicFailureCode } from './deterministicEvaluator.js';
-import { IntexAgentToolNameSchema } from './types.js';
+import {
+  IntexAgentToolNameSchema,
+  ScenarioAssertionPathSchema,
+  TimelinePayloadAssertionPathSchema,
+  ToolArgumentAssertionPathSchema,
+} from './types.js';
 
 const PRIVATE_DIRECTORY_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
@@ -147,6 +152,34 @@ const DETERMINISTIC_REPORT_FAILURE_CODES = defineExhaustiveCodes<DeterministicRe
   ...DETERMINISTIC_FAILURE_CODES,
   'deterministic_evaluator_failed',
 ] as const satisfies readonly DeterministicReportFailureCode[]);
+
+function validateDeterministicFailurePath(
+  failure: { code: DeterministicReportFailureCode; path?: string | undefined },
+  context: z.RefinementCtx
+): void {
+  if (failure.path === undefined) return;
+  const expectedPathSchema =
+    failure.code === 'tool_argument_assertion_failed'
+      ? ToolArgumentAssertionPathSchema
+      : failure.code === 'timeline_payload_assertion_failed'
+        ? TimelinePayloadAssertionPathSchema
+        : undefined;
+  if (expectedPathSchema === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['path'],
+      message: 'Only deterministic assertion failures may contain a path',
+    });
+    return;
+  }
+  if (!expectedPathSchema.safeParse(failure.path).success) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['path'],
+      message: 'Deterministic assertion path does not match its failure code',
+    });
+  }
+}
 
 const JUDGE_INFRASTRUCTURE_CODES = defineExhaustiveCodes<JudgeInfrastructureCode>()([
   'MINIMAX_JUDGE_KEY_MISSING',
@@ -389,8 +422,10 @@ const DeterministicFailureReportV1Schema = z
     code: z.enum(DETERMINISTIC_FAILURE_CODES),
     turnIndex: NonNegativeSafeIntegerSchema.optional(),
     replyIndex: NonNegativeSafeIntegerSchema.optional(),
+    path: ScenarioAssertionPathSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(validateDeterministicFailurePath);
 
 const CleanupReportV1Schema = z.union([
   z.object({ status: z.literal('not_required'), code: z.literal('identity_not_created') }).strict(),
@@ -590,7 +625,7 @@ const FailureReferenceShape = {
 
 export const SafeReportFailureCodeSchema = z.enum(REPORT_FAILURE_CODES);
 
-export const SafeReportFailureV1Schema = z.discriminatedUnion('stage', [
+const SafeReportFailureV1BaseSchema = z.discriminatedUnion('stage', [
   z
     .object({
       stage: z.literal('preflight'),
@@ -610,6 +645,7 @@ export const SafeReportFailureV1Schema = z.discriminatedUnion('stage', [
       stage: z.literal('deterministic'),
       code: z.enum(DETERMINISTIC_REPORT_FAILURE_CODES),
       ...FailureReferenceShape,
+      path: ScenarioAssertionPathSchema.optional(),
     })
     .strict(),
   z
@@ -634,6 +670,12 @@ export const SafeReportFailureV1Schema = z.discriminatedUnion('stage', [
     })
     .strict(),
 ]);
+
+export const SafeReportFailureV1Schema = SafeReportFailureV1BaseSchema.superRefine(
+  (failure, context) => {
+    if (failure.stage === 'deterministic') validateDeterministicFailurePath(failure, context);
+  }
+);
 
 export type SafeReportFailureV1 = z.infer<typeof SafeReportFailureV1Schema>;
 
@@ -961,7 +1003,8 @@ function validateFailureStageTuple(
           (candidate) =>
             candidate.code === failure.code &&
             candidate.turnIndex === failure.turnIndex &&
-            candidate.replyIndex === failure.replyIndex
+            candidate.replyIndex === failure.replyIndex &&
+            candidate.path === failure.path
         )
       ) {
         addCustomIssue(context, [...path], 'Deterministic failure projection is missing');
@@ -1097,7 +1140,8 @@ function validateScenarioEvidence(
             candidate.code === failure.code &&
             candidate.scenarioId === scenario.scenarioId &&
             candidate.turnIndex === failure.turnIndex &&
-            candidate.replyIndex === failure.replyIndex
+            candidate.replyIndex === failure.replyIndex &&
+            candidate.path === failure.path
         )
       ) {
         addCustomIssue(
@@ -1539,17 +1583,17 @@ function renderMarkdown(report: EvaluationReportV1): string {
     '',
     '## Deterministic failures',
     '',
-    '| Scenario | Code | Turn | Reply |',
-    '| --- | --- | ---: | ---: |'
+    '| Scenario | Code | Path | Turn | Reply |',
+    '| --- | --- | --- | ---: | ---: |'
   );
   const deterministicRows = report.scenarios.flatMap((scenario) =>
     scenario.deterministicFailures.map(
       (failure) =>
-        `| ${code(scenario.scenarioId)} | ${code(failure.code)} | ${optionalNumber(failure.turnIndex)} | ${optionalNumber(failure.replyIndex)} |`
+        `| ${code(scenario.scenarioId)} | ${code(failure.code)} | ${optionalCode(failure.path)} | ${optionalNumber(failure.turnIndex)} | ${optionalNumber(failure.replyIndex)} |`
     )
   );
   lines.push(
-    ...(deterministicRows.length === 0 ? ['| _none_ | _none_ | - | - |'] : deterministicRows)
+    ...(deterministicRows.length === 0 ? ['| _none_ | _none_ | - | - | - |'] : deterministicRows)
   );
 
   lines.push(
@@ -1592,15 +1636,15 @@ function renderMarkdown(report: EvaluationReportV1): string {
     '',
     '## Failures',
     '',
-    '| Stage | Code | Scenario | Turn | Reply |',
-    '| --- | --- | --- | ---: | ---: |'
+    '| Stage | Code | Path | Scenario | Turn | Reply |',
+    '| --- | --- | --- | --- | ---: | ---: |'
   );
   if (report.failures.length === 0) {
-    lines.push('| _none_ | _none_ | _none_ | - | - |');
+    lines.push('| _none_ | _none_ | - | _none_ | - | - |');
   } else {
     for (const failure of report.failures) {
       lines.push(
-        `| ${code(failure.stage)} | ${code(failure.code)} | ${failure.scenarioId === undefined ? '_none_' : code(failure.scenarioId)} | ${optionalNumber(failure.turnIndex)} | ${optionalNumber(failure.replyIndex)} |`
+        `| ${code(failure.stage)} | ${code(failure.code)} | ${failure.stage === 'deterministic' ? optionalCode(failure.path) : '-'} | ${failure.scenarioId === undefined ? '_none_' : code(failure.scenarioId)} | ${optionalNumber(failure.turnIndex)} | ${optionalNumber(failure.replyIndex)} |`
       );
     }
   }
@@ -1644,6 +1688,10 @@ function renderMarkdown(report: EvaluationReportV1): string {
 
 function code(value: string): string {
   return `\`${value}\``;
+}
+
+function optionalCode(value: string | undefined): string {
+  return value === undefined ? '-' : code(value);
 }
 
 function optionalNumber(value: number | undefined): string {

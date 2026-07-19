@@ -442,6 +442,62 @@ describe('deterministic evaluator', () => {
     expect(evaluateDeterministically(scenario, response).failures).toEqual([]);
   });
 
+  it('reports the first assertion that actually fails within a timeline payload group', () => {
+    const scenario = scenarioFor((expected) => {
+      expected.timeline.payloadAssertions = [
+        {
+          eventType: 'confirmation_requested',
+          assertions: [
+            { path: 'toolName', operator: 'equals', value: 'create_note' },
+            { path: 'status', operator: 'equals', value: 'pending' },
+          ],
+        },
+      ];
+    });
+    const response = responseFor(scenario);
+    const confirmation = requiredItem(response.turns, 0).timelineEvents.find(
+      (candidate) => candidate.type === 'confirmation_requested'
+    );
+    if (confirmation === undefined) throw new Error('Expected confirmation event');
+    confirmation.payload = { toolName: 'create_calendar_event', status: 'pending' };
+    requiredItem(response.turns, 0).timelineEvents.push(
+      event('confirmation_requested', { toolName: 'create_note', status: 'completed' })
+    );
+
+    expect(evaluateDeterministically(scenario, response).failures).toContainEqual({
+      code: 'timeline_payload_assertion_failed',
+      scenarioId: scenario.id,
+      turnIndex: 0,
+      path: 'status',
+    });
+  });
+
+  it('omits the assertion path when no matching timeline event was observed', () => {
+    const scenario = scenarioFor((expected) => {
+      expected.timeline.payloadAssertions = [
+        {
+          eventType: 'confirmation_requested',
+          assertions: [{ path: 'toolName', operator: 'equals', value: 'create_note' }],
+        },
+      ];
+    });
+    const response = responseFor(scenario);
+    requiredItem(response.turns, 0).timelineEvents = requiredItem(
+      response.turns,
+      0
+    ).timelineEvents.filter((event) => event.type !== 'confirmation_requested');
+
+    expect(
+      evaluateDeterministically(scenario, response).failures.find(
+        (failure) => failure.code === 'timeline_payload_assertion_failed'
+      )
+    ).toEqual({
+      code: 'timeline_payload_assertion_failed',
+      scenarioId: scenario.id,
+      turnIndex: 0,
+    });
+  });
+
   it('reports missing required and present forbidden timeline types in expectation order', () => {
     const scenario = scenarioFor();
     const response = responseFor(scenario);

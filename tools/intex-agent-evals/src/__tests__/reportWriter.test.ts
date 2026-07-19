@@ -212,6 +212,23 @@ function behavioralReport(): EvaluationReportV1 {
   };
 }
 
+function assertionFailureReport(
+  path = 'contentLength',
+  code = 'tool_argument_assertion_failed'
+): Record<string, unknown> {
+  const report = cloneReport(behavioralReport());
+  const scenario = first(report['scenarios'] as Record<string, unknown>[]);
+  const deterministicFailure = first(
+    scenario['deterministicFailures'] as Record<string, unknown>[]
+  );
+  deterministicFailure['code'] = code;
+  deterministicFailure['path'] = path;
+  const projectedFailure = first(report['failures'] as Record<string, unknown>[]);
+  projectedFailure['code'] = code;
+  projectedFailure['path'] = path;
+  return report;
+}
+
 function stoppedConfirmationReport(): Record<string, unknown> {
   const report = cloneReport(passReport());
   report['status'] = 'behavioral_failure';
@@ -969,6 +986,37 @@ describe('EvaluationReportV1Schema', () => {
     }
   });
 
+  it('accepts only schema-whitelisted paths on deterministic assertion failures', () => {
+    expect(EvaluationReportV1Schema.safeParse(assertionFailureReport()).success).toBe(true);
+    expect(
+      EvaluationReportV1Schema.safeParse(
+        assertionFailureReport('status', 'timeline_payload_assertion_failed')
+      ).success
+    ).toBe(true);
+
+    for (const path of ['private-tool-argument-sentinel', 'argsSummary.privateValue']) {
+      expect(EvaluationReportV1Schema.safeParse(assertionFailureReport(path)).success).toBe(false);
+    }
+    expect(
+      EvaluationReportV1Schema.safeParse(assertionFailureReport('argsSummary.workerType')).success
+    ).toBe(false);
+    expect(
+      EvaluationReportV1Schema.safeParse(
+        assertionFailureReport('contentLength', 'timeline_payload_assertion_failed')
+      ).success
+    ).toBe(false);
+
+    const nonAssertion = cloneReport(behavioralReport());
+    const scenario = first(nonAssertion['scenarios'] as Record<string, unknown>[]);
+    first(scenario['deterministicFailures'] as Record<string, unknown>[])['path'] = 'contentLength';
+    first(nonAssertion['failures'] as Record<string, unknown>[])['path'] = 'contentLength';
+    expect(EvaluationReportV1Schema.safeParse(nonAssertion).success).toBe(false);
+
+    const mismatchedProjection = assertionFailureReport();
+    first(mismatchedProjection['failures'] as Record<string, unknown>[])['path'] = 'promptLength';
+    expect(EvaluationReportV1Schema.safeParse(mismatchedProjection).success).toBe(false);
+  });
+
   it('rejects invalid closed codes and stage/code mismatches', () => {
     const unknownCode = cloneReport(preflightFailureReport());
     first(unknownCode['failures'] as Record<string, unknown>[])['code'] = 'RAW_ERROR';
@@ -1123,6 +1171,39 @@ describe('EvaluationReportV1Schema', () => {
 });
 
 describe('private atomic report writer', () => {
+  it('writes whitelisted assertion paths to JSON and Markdown without private failure values', async () => {
+    const repositoryRoot = await createRepositoryRoot();
+    expect(
+      await createReportWriter({ repositoryRoot })(asReport(assertionFailureReport()))
+    ).toMatchObject({ ok: true });
+
+    const json = await readFile(join(finalDirectory(repositoryRoot), 'report.json'), 'utf8');
+    const markdown = await readFile(join(finalDirectory(repositoryRoot), 'report.md'), 'utf8');
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    const scenario = first(parsed['scenarios'] as Record<string, unknown>[]);
+    expect(first(scenario['deterministicFailures'] as Record<string, unknown>[])).toEqual({
+      code: 'tool_argument_assertion_failed',
+      turnIndex: 1,
+      path: 'contentLength',
+    });
+    expect(first(parsed['failures'] as Record<string, unknown>[])).toEqual({
+      stage: 'deterministic',
+      code: 'tool_argument_assertion_failed',
+      scenarioId: 'intex-eval-001',
+      turnIndex: 1,
+      path: 'contentLength',
+    });
+    expect(markdown).toContain(
+      '| `intex-eval-001` | `tool_argument_assertion_failed` | `contentLength` | 1 | - |'
+    );
+    expect(markdown).toContain(
+      '| `deterministic` | `tool_argument_assertion_failed` | `contentLength` | `intex-eval-001` | 1 | - |'
+    );
+    expect(`${json}\n${markdown}`).not.toMatch(
+      /private-(?:expected|actual|message|tool)-sentinel/u
+    );
+  });
+
   it('publishes a parsed JSON/Markdown pair and returns only the fixed relative directory', async () => {
     const repositoryRoot = await createRepositoryRoot();
     const result = await createReportWriter({ repositoryRoot })(passReport());
@@ -1192,9 +1273,9 @@ describe('private atomic report writer', () => {
 
       ## Deterministic failures
 
-      | Scenario | Code | Turn | Reply |
-      | --- | --- | ---: | ---: |
-      | _none_ | _none_ | - | - |
+      | Scenario | Code | Path | Turn | Reply |
+      | --- | --- | --- | ---: | ---: |
+      | _none_ | _none_ | - | - | - |
 
       ## Judge verdicts
 
@@ -1211,9 +1292,9 @@ describe('private atomic report writer', () => {
 
       ## Failures
 
-      | Stage | Code | Scenario | Turn | Reply |
-      | --- | --- | --- | ---: | ---: |
-      | _none_ | _none_ | _none_ | - | - |
+      | Stage | Code | Path | Scenario | Turn | Reply |
+      | --- | --- | --- | --- | ---: | ---: |
+      | _none_ | _none_ | - | _none_ | - | - |
       "
     `);
     expect(markdown.endsWith('\n')).toBe(true);
@@ -1285,9 +1366,9 @@ describe('private atomic report writer', () => {
 
       ## Deterministic failures
 
-      | Scenario | Code | Turn | Reply |
-      | --- | --- | ---: | ---: |
-      | \`intex-eval-001\` | \`forbidden_tool_called\` | 1 | - |
+      | Scenario | Code | Path | Turn | Reply |
+      | --- | --- | --- | ---: | ---: |
+      | \`intex-eval-001\` | \`forbidden_tool_called\` | - | 1 | - |
 
       ## Judge verdicts
 
@@ -1304,10 +1385,10 @@ describe('private atomic report writer', () => {
 
       ## Failures
 
-      | Stage | Code | Scenario | Turn | Reply |
-      | --- | --- | --- | ---: | ---: |
-      | \`deterministic\` | \`forbidden_tool_called\` | \`intex-eval-001\` | 1 | - |
-      | \`judge\` | \`unhelpful\` | \`intex-eval-001\` | 1 | 0 |
+      | Stage | Code | Path | Scenario | Turn | Reply |
+      | --- | --- | --- | --- | ---: | ---: |
+      | \`deterministic\` | \`forbidden_tool_called\` | - | \`intex-eval-001\` | 1 | - |
+      | \`judge\` | \`unhelpful\` | - | \`intex-eval-001\` | 1 | 0 |
       "
     `);
   });
@@ -1374,9 +1455,9 @@ describe('private atomic report writer', () => {
 
       ## Deterministic failures
 
-      | Scenario | Code | Turn | Reply |
-      | --- | --- | ---: | ---: |
-      | _none_ | _none_ | - | - |
+      | Scenario | Code | Path | Turn | Reply |
+      | --- | --- | --- | ---: | ---: |
+      | _none_ | _none_ | - | - | - |
 
       ## Judge verdicts
 
@@ -1392,9 +1473,9 @@ describe('private atomic report writer', () => {
 
       ## Failures
 
-      | Stage | Code | Scenario | Turn | Reply |
-      | --- | --- | --- | ---: | ---: |
-      | \`preflight\` | \`MINIMAX_KEY_MISSING\` | _none_ | - | - |
+      | Stage | Code | Path | Scenario | Turn | Reply |
+      | --- | --- | --- | --- | ---: | ---: |
+      | \`preflight\` | \`MINIMAX_KEY_MISSING\` | - | _none_ | - | - |
       "
     `);
   });
@@ -1463,9 +1544,9 @@ describe('private atomic report writer', () => {
 
       ## Deterministic failures
 
-      | Scenario | Code | Turn | Reply |
-      | --- | --- | ---: | ---: |
-      | _none_ | _none_ | - | - |
+      | Scenario | Code | Path | Turn | Reply |
+      | --- | --- | --- | ---: | ---: |
+      | _none_ | _none_ | - | - | - |
 
       ## Judge verdicts
 
@@ -1481,9 +1562,9 @@ describe('private atomic report writer', () => {
 
       ## Failures
 
-      | Stage | Code | Scenario | Turn | Reply |
-      | --- | --- | --- | ---: | ---: |
-      | \`judge\` | \`unhelpful\` | _none_ | - | - |
+      | Stage | Code | Path | Scenario | Turn | Reply |
+      | --- | --- | --- | --- | ---: | ---: |
+      | \`judge\` | \`unhelpful\` | - | _none_ | - | - |
 
       ## Matrix smoke
 

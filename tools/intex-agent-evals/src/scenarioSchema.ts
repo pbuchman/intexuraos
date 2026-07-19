@@ -7,6 +7,7 @@ import {
   IntexAgentSessionStatusSchema,
   IntexAgentToolNameSchema,
   IntexAgentTransitionActionSchema,
+  ScenarioAssertionPathSchema,
   ScenarioSourceTypeSchema,
   TIMELINE_PAYLOAD_PATH_METADATA,
   TOOL_ARGUMENT_PATH_METADATA,
@@ -66,7 +67,7 @@ export type AssertionValue = z.infer<typeof AssertionValueSchema>;
 
 export const ValueAssertionSchema = z
   .object({
-    path: trimmedString(100),
+    path: ScenarioAssertionPathSchema,
     operator: z.enum(['equals', 'contains', 'exists', 'absent']),
     value: AssertionValueSchema.optional(),
   })

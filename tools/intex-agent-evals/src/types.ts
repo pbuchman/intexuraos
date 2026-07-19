@@ -190,4 +190,44 @@ export const TIMELINE_PAYLOAD_PATH_METADATA = {
   'argsSummary.hasLinearIssueId': 'boolean',
 } as const satisfies AssertionPathMetadata;
 
-export const TIMELINE_PAYLOAD_PATHS = Object.keys(TIMELINE_PAYLOAD_PATH_METADATA);
+type ToolArgumentPathByTool = {
+  [ToolName in keyof typeof TOOL_ARGUMENT_PATH_METADATA]: keyof (typeof TOOL_ARGUMENT_PATH_METADATA)[ToolName];
+};
+
+export type ToolArgumentAssertionPath = Extract<
+  ToolArgumentPathByTool[keyof ToolArgumentPathByTool],
+  string
+>;
+export type TimelinePayloadAssertionPath = Extract<
+  keyof typeof TIMELINE_PAYLOAD_PATH_METADATA,
+  string
+>;
+export type ScenarioAssertionPath = ToolArgumentAssertionPath | TimelinePayloadAssertionPath;
+
+function nonEmptyPathTuple<TPath extends string>(
+  values: readonly TPath[],
+  label: string
+): [TPath, ...TPath[]] {
+  const [first, ...rest] = values;
+  if (first === undefined) throw new Error(`${label} path whitelist cannot be empty`);
+  return [first, ...rest];
+}
+
+export const TOOL_ARGUMENT_ASSERTION_PATHS = nonEmptyPathTuple(
+  [...new Set(Object.values(TOOL_ARGUMENT_PATHS).flat())] as ToolArgumentAssertionPath[],
+  'Tool argument assertion'
+);
+export const TIMELINE_PAYLOAD_PATHS = Object.keys(
+  TIMELINE_PAYLOAD_PATH_METADATA
+) as TimelinePayloadAssertionPath[];
+export const TIMELINE_PAYLOAD_ASSERTION_PATHS = nonEmptyPathTuple(
+  TIMELINE_PAYLOAD_PATHS,
+  'Timeline payload assertion'
+);
+
+export const ToolArgumentAssertionPathSchema = z.enum(TOOL_ARGUMENT_ASSERTION_PATHS);
+export const TimelinePayloadAssertionPathSchema = z.enum(TIMELINE_PAYLOAD_ASSERTION_PATHS);
+export const ScenarioAssertionPathSchema = z.union([
+  ToolArgumentAssertionPathSchema,
+  TimelinePayloadAssertionPathSchema,
+]);
