@@ -173,6 +173,19 @@ const OBSERVABLE_NOTE_CONFIRMATION_WITH_OPTIONAL_TITLE_CRITERIA = [
   COMPLETE_REDACTED_CONFIRMATION_EVIDENCE,
 ] as const;
 
+const SCENARIO_010_COMPLETION_CRITERIA = [
+  'The closed technical fact that `create_note` completed is authoritative execution evidence; `Saved the note.` or an explicit equivalent clearly and completely communicates the successful result.',
+  'The completion reply need not repeat the audio/transcript source.',
+  'Does not ask the user to repeat the transcript or reconfirm the same action.',
+] as const;
+
+const OBSERVABLE_EXTERNAL_SAVE_CONFIRMATION_CRITERIA = [
+  'Correctly identifies an external-save request and asks for explicit confirmation in an appropriate tone.',
+  'Expected complete sanitized external-save confirmation evidence: `Send this content to the external system?` and `Content: [redacted]`; `Source:` is not expected because this scenario has no URL.',
+  COMPLETE_REDACTED_CONFIRMATION_EVIDENCE,
+  'Does not claim the external save already completed or expose raw argument content in the sanitized reply.',
+] as const;
+
 const CONCISE_NOTE_COMPLETION_CRITERIA = [
   'Clearly communicates that the requested note was saved successfully.',
   'A concise completion-only reply is sufficient and should not restate details or invite another action.',
@@ -745,6 +758,33 @@ describe('tracked scenario catalog', () => {
     expect(markersIn(criteria)).toEqual([]);
   });
 
+  it('makes scenario 004 superseding note confirmation complete from sanitized evidence', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-004');
+
+    expect(scenario.expected.turns[1]?.replies[0]?.semanticCriteria).toEqual([
+      'Correctly treats the new-session request as a note action rather than the abandoned calendar request and asks for confirmation.',
+      ...OBSERVABLE_NOTE_CONFIRMATION_WITH_OPTIONAL_TITLE_CRITERIA,
+      'The sanitized confirmation need not mention the abandoned calendar request; the closed technical transition and timeline facts are complete authoritative supersession evidence.',
+      'Does not claim either action already completed or expose raw argument content in the sanitized reply.',
+    ]);
+  });
+
+  it('makes scenario 010 deterministic note completion complete without repeating voice context', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-010');
+
+    expect(scenario.expected.turns[1]?.replies[0]?.semanticCriteria).toEqual(
+      SCENARIO_010_COMPLETION_CRITERIA
+    );
+  });
+
+  it('makes scenario 015 external-save confirmation complete from sanitized evidence', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-015');
+
+    expect(scenario.expected.turns[0]?.replies[0]?.semanticCriteria).toEqual(
+      OBSERVABLE_EXTERNAL_SAVE_CONFIRMATION_CRITERIA
+    );
+  });
+
   it('uses a privacy-safe isolated-reply contract for scenario 020 context turns', () => {
     const scenario = findScenario(scenarios, 'intex-eval-020');
 
@@ -1105,7 +1145,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '6e69c02ec4d06d25d7934997d734486b46f27ab42828a3124f437b3e6bf1b9e8'
+      'c9e1bc9c9ada1ace85b9b8d49a27cc18f3bb631cef078f5f1a2a88ebd7a26f0f'
     );
   });
 });

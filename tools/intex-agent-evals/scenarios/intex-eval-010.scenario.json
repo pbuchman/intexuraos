@@ -202,7 +202,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the note from the voice transcript was saved successfully.",
+              "The closed technical fact that `create_note` completed is authoritative execution evidence; `Saved the note.` or an explicit equivalent clearly and completely communicates the successful result.",
+              "The completion reply need not repeat the audio/transcript source.",
               "Does not ask the user to repeat the transcript or reconfirm the same action."
             ]
           }

@@ -191,6 +191,9 @@
             "replyIndex": 0,
             "semanticCriteria": [
               "Correctly treats the new-session request as a note action rather than the abandoned calendar request and asks for confirmation.",
+              "Expected complete sanitized confirmation evidence: Content: [redacted]; an additional Title: [redacted] line is optional.",
+              "The redacted values are complete expected evidence for the judge and are not missing information.",
+              "The sanitized confirmation need not mention the abandoned calendar request; the closed technical transition and timeline facts are complete authoritative supersession evidence.",
               "Does not claim either action already completed or expose raw argument content in the sanitized reply."
             ]
           }

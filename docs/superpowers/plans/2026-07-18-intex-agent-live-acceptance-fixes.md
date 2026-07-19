@@ -604,6 +604,29 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** scenario `014` preserves both synthetic markers in the created task prompt while omitting Linear association; focused prompt/tool/catalog regressions pass, and the ordered shipping, endpoint, Matrix, and browser gates remain fail closed.
 
+### Task 30: Align the final judge criteria with closed observable evidence
+
+**Evidence:** the latest complete endpoint corpus passed 17 of 20 scenarios. Scenarios `004`, `010`, and `015` had zero deterministic failures, exactly one expected completed tool call each, and successful cleanup. MiniMax M3 alone rejected scenario `004` turn 1 and scenario `010` turn 1 as `missing_information`, and scenario `015` turn 0 as `unhelpful`. No run identifier, private value, assistant text, or tool argument is recorded here.
+
+- [x] Add RED exact-catalog tests requiring scenario `004` turn 1 to keep its note-confirmation action/header, expose `Content: [redacted]` with optional `Title: [redacted]`, mark those redacted values complete, and state that the sanitized confirmation need not narrate the abandoned calendar because closed transition/timeline facts prove supersession.
+- [x] Add a RED exact-catalog test requiring scenario `010` turn 1 to treat the closed completed `create_note` fact as execution evidence and `Saved the note.` or an explicit equivalent as a complete communication of that result; retain the no-repeat/no-reconfirm rule and state that the reply need not repeat its audio/transcript source.
+- [x] Add a RED exact-catalog test requiring scenario `015` turn 0 to define both `Send this content to the external system?` and `Content: [redacted]` as complete sanitized confirmation evidence, while stating that `Source:` is not expected because the scenario has no URL.
+- [x] Change only those three semantic-criteria arrays and intentionally regenerate the full canonical catalog digest; preserve every scenario message, turn, tool/timeline assertion, marker assertion, and marker digest.
+- [ ] Close every Critical/Important independent-review finding, run focused evaluator tests/typecheck/lint plus exact tracked CI, and ship through a reviewed PR.
+- [ ] Verify the exact Home Dev deployment and preflight, then run focused scenarios `004`, `010`, and `015` once each without retrying through a failure.
+- [ ] Require a fresh complete 20-scenario endpoint gate to exit `0`.
+- [ ] Only after endpoint success, run `full` exactly once and require its independently fresh endpoint corpus plus the single authorized Matrix smoke to exit `0` with MiniMax M3.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+#### Endpoint Changes
+
+- **Modified:** none.
+- **Created:** none.
+- **Removed:** none.
+- **Unchanged:** the existing dev-only conversation test endpoint, request/response schema, production prompts and product behavior, Home Dev wrapper commands, mocked-product-tool boundary, MiniMax M3 judge, cleanup contract, and Matrix ordering gate.
+
+**Acceptance:** the isolated judge receives complete observable sanitized criteria for all three replies while closed technical facts remain authoritative for execution and supersession; every deterministic contract is unchanged, and the ordered shipping, focused, endpoint, full/Matrix, and browser gates remain fail closed.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
