@@ -627,6 +627,42 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** the isolated judge receives complete observable sanitized criteria for all three replies while closed technical facts remain authoritative for execution and supersession; every deterministic contract is unchanged, and the ordered shipping, focused, endpoint, full/Matrix, and browser gates remain fail closed.
 
+### Task 31: Keep technical event payloads out of the session timeline
+
+**Evidence:** the logged-in desktop/mobile Home Dev audit passed session selection,
+responsive ordering, focus restoration, refresh, preferences validation/history,
+settings rendering, console, and network checks. The selected timeline nevertheless
+contained four visible structured JSON bodies, including technical message and
+confirmation metadata. No payload value or private identifier is recorded here.
+
+- [x] Record the approved strict frontend allow-list design in
+  `docs/superpowers/specs/2026-07-19-intex-session-timeline-safe-presentation-design.md`.
+- [x] Add RED component tests proving ordinary conversation text remains visible,
+  structured JSON strings and unknown payloads remain absent, confirmation resolution
+  exposes only its safe state, and tool events ignore extra metadata.
+- [x] Replace the generic payload serialization with the event-specific allow-list and
+  omit the body paragraph when no safe display value exists.
+- [x] Preserve API/storage contracts, event title/timestamp/order, desktop/mobile layout,
+  search, refresh, accessibility, and every endpoint/Matrix invariant.
+- [ ] Close every independent-review finding, run focused web tests plus exact
+  `pnpm run ci:tracked`, and ship through a reviewed PR.
+- [ ] Verify the exact Home Dev deployment, then repeat the logged-in desktop/mobile
+  Chrome audit and require zero structured JSON bodies, zero console/network failures,
+  successful refresh/rapid selection, and no horizontal overflow.
+
+#### Endpoint Changes
+
+- **Modified:** none.
+- **Created:** none.
+- **Removed:** none.
+- **Unchanged:** the dev-only conversation endpoint, request/response schema, scenario
+  catalog, MiniMax M3 judge, mocked-tool boundary, cleanup, and Matrix gate.
+
+**Acceptance:** the authenticated session timeline never serializes arbitrary event
+payloads or displays noncanonical technical event fields, while established user-facing
+session summaries, safe human-readable event evidence, and all previously verified
+endpoint behavior remain intact.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
