@@ -612,11 +612,28 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 - [x] Add a RED exact-catalog test requiring scenario `010` turn 1 to treat the closed completed `create_note` fact as execution evidence and `Saved the note.` or an explicit equivalent as a complete communication of that result; retain the no-repeat/no-reconfirm rule and state that the reply need not repeat its audio/transcript source.
 - [x] Add a RED exact-catalog test requiring scenario `015` turn 0 to define both `Send this content to the external system?` and `Content: [redacted]` as complete sanitized confirmation evidence, while stating that `Source:` is not expected because the scenario has no URL.
 - [x] Change only those three semantic-criteria arrays and intentionally regenerate the full canonical catalog digest; preserve every scenario message, turn, tool/timeline assertion, marker assertion, and marker digest.
-- [ ] Close every Critical/Important independent-review finding, run focused evaluator tests/typecheck/lint plus exact tracked CI, and ship through a reviewed PR.
-- [ ] Verify the exact Home Dev deployment and preflight, then run focused scenarios `004`, `010`, and `015` once each without retrying through a failure.
-- [ ] Require a fresh complete 20-scenario endpoint gate to exit `0`.
-- [ ] Only after endpoint success, run `full` exactly once and require its independently fresh endpoint corpus plus the single authorized Matrix smoke to exit `0` with MiniMax M3.
-- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+- [x] Close every Critical/Important independent-review finding, run focused evaluator tests/typecheck/lint plus exact tracked CI, and ship through a reviewed PR.
+- [x] Verify the exact Home Dev deployment and preflight, then run focused scenarios `004`, `010`, and `015` once each without retrying through a failure.
+- [x] Require a fresh complete 20-scenario endpoint gate to exit `0`.
+- [x] Only after endpoint success, run `full` exactly once and require its independently fresh endpoint corpus plus the single authorized Matrix smoke to exit `0` with MiniMax M3.
+- [x] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Final verification evidence:** PR [#2345](https://github.com/pbuchman/intexuraos/pull/2345)
+merged as `22cd6ea657407acdc7d732e30a67478ecf317c74`; every required, non-skipped
+GitHub check and the exact tracked CI gate passed. Home Dev ran that exact revision, preflight passed all
+12 checks, and the first focused runs of `004`, `010`, and `015` each exited `0` without
+a failure retry. The fresh endpoint report
+`.artifacts/intex-agent-evals/eval-51ed02db-8a96-4946-905e-9d3382e72458/report.json`
+passed `20/20` scenarios with 59 turns, 59 replies, 19 mocked tool calls, cleanup
+`218/218`, provider-reported MiniMax cost USD `0.025630800000000002`, and no failed
+scenario IDs. Only then, the single fresh `full` invocation wrote
+`.artifacts/intex-agent-evals/eval-8a931fd5-0907-4c21-afb0-693fb25385a0/report.json`;
+it independently passed `20/20` scenarios with the same closed totals, cleanup
+`218/218`, provider-reported MiniMax cost USD `0.02201754`, no failed scenario IDs, and
+exactly one authorized Matrix smoke that also passed. The logged-in desktop/mobile
+Chrome audit passed session loading, selection, refresh, responsive ordering, focus,
+network, console, settings, and overflow checks; the separate Task 31 fix below closes
+the technical-payload presentation defect found during that audit.
 
 #### Endpoint Changes
 
@@ -644,11 +661,26 @@ confirmation metadata. No payload value or private identifier is recorded here.
   omit the body paragraph when no safe display value exists.
 - [x] Preserve API/storage contracts, event title/timestamp/order, desktop/mobile layout,
   search, refresh, accessibility, and every endpoint/Matrix invariant.
-- [ ] Close every independent-review finding, run focused web tests plus exact
+- [x] Close every independent-review finding, run focused web tests plus exact
   `pnpm run ci:tracked`, and ship through a reviewed PR.
-- [ ] Verify the exact Home Dev deployment, then repeat the logged-in desktop/mobile
+- [x] Verify the exact Home Dev deployment, then repeat the logged-in desktop/mobile
   Chrome audit and require zero structured JSON bodies, zero console/network failures,
   successful refresh/rapid selection, and no horizontal overflow.
+
+**Delivery evidence:** PR [#2346](https://github.com/pbuchman/intexuraos/pull/2346)
+merged as `aef9a446ddd2977fe447ca5f0f4eeff1445d2058`; every required, non-skipped
+GitHub check passed, and Home Dev served that exact frontend revision after the targeted web restart. The
+focused timeline suite passed `39/39`; web typecheck, lint, formatting, diff checks,
+and exact `pnpm run ci:tracked` passed `5556/5556` tests plus coverage, build, format,
+and bundle-budget gates. Independent review reported zero Critical, Important, or
+Minor findings. In the post-deploy logged-in audit, desktop and the narrow mobile
+breakpoint both rendered the timeline before the capped session rail without horizontal
+overflow; mobile selection returned focus to the timeline. Refresh produced one session
+list and one event response, both `2xx`, with no loading failures. Rapid selection kept
+exactly one selected session and matching title/date. Across the inspected desktop,
+rapid-selection, and mobile timelines there were zero bodies parsing as JSON objects or
+arrays, zero displayed technical key names from the regression, and zero unsafe tool
+titles. Chrome reported zero console warnings/errors.
 
 #### Endpoint Changes
 

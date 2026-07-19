@@ -105,7 +105,7 @@
 
   Expected: all commands exit `0`.
 
-- [ ] **Step 5: Review, verify, and record implementation evidence**
+- [x] **Step 5: Review, verify, and record implementation evidence**
 
   Request independent spec and code-quality reviews, resolve every Critical/Important
   finding, run `git diff --check`, then run exact `pnpm run ci:tracked`. Mark only the
@@ -120,13 +120,13 @@
 - Consumes: merged `development` revision containing Task 1.
 - Produces: exact Home Dev deployment evidence and privacy-safe Chrome acceptance evidence.
 
-- [ ] **Step 1: Ship through the repository workflow**
+- [x] **Step 1: Ship through the repository workflow**
 
   Commit only the intended design, plan, component, test, and active-plan files. Push a
   `codex/` branch, create a reviewed PR to `development`, require every GitHub check to
   pass, merge it, and verify Home Dev runs the exact merge SHA.
 
-- [ ] **Step 2: Repeat the logged-in Chrome audit**
+- [x] **Step 2: Repeat the logged-in Chrome audit**
 
   On desktop and a narrow mobile breakpoint, verify session loading, rapid selection,
   focus restoration, refresh, timeline/rail ordering, and no horizontal overflow.
@@ -134,6 +134,16 @@
   arrays, zero displayed technical key names from the observed regression, generic safe
   titles for noncanonical tool names, zero console warnings/errors, and only successful
   session list/event responses.
+
+  **Live evidence:** PR [#2346](https://github.com/pbuchman/intexuraos/pull/2346)
+  merged as `aef9a446ddd2977fe447ca5f0f4eeff1445d2058`; Home Dev served that exact
+  frontend revision. The focused suite passed `39/39`, exact tracked CI passed
+  `5556/5556`, and independent review found no Critical, Important, or Minor issues.
+  The logged-in desktop/mobile audit found zero structured JSON bodies, zero displayed
+  regression key names, zero unsafe tool titles, no horizontal overflow, correct
+  responsive ordering and focus restoration, consistent rapid selection, one successful
+  list plus one successful event response on refresh, no network failures, and no console
+  warnings/errors.
 
 - [ ] **Step 3: Record final evidence and close the loop**
 

@@ -30,6 +30,16 @@ The ten narrative scenarios in [`2026-06-24-intex-agent-dev-api-test-scenarios.m
 - The endpoint evaluation pipeline is delivered and live-proven. Final green acceptance now requires a separately scoped product-behavior and judge-calibration pass, followed by a fresh `endpoint` run and exactly one gated `full` run. Offline/unit/contract success alone is still not final acceptance.
 - The “Deferred perfection backlog” remains intentionally frozen and must not be implemented as part of this plan.
 
+### Final acceptance status — 2026-07-19
+
+- The remediation loop completed through Task 30. PR [#2345](https://github.com/pbuchman/intexuraos/pull/2345) merged as `22cd6ea657407acdc7d732e30a67478ecf317c74`; Home Dev ran the exact revision and preflight passed all 12 checks.
+- The first focused runs of scenarios `004`, `010`, and `015` each passed once without retrying through a failure.
+- The fresh endpoint report `.artifacts/intex-agent-evals/eval-51ed02db-8a96-4946-905e-9d3382e72458/report.json` exited `0`: `20/20` scenarios, 59 turns, 59 judged replies, 19 mocked tool calls, cleanup `218/218`, provider-reported MiniMax cost USD `0.025630800000000002`, and no failed scenario IDs.
+- Only after that pass, the single fresh `full` invocation wrote `.artifacts/intex-agent-evals/eval-8a931fd5-0907-4c21-afb0-693fb25385a0/report.json` and exited `0`: an independently executed `20/20` endpoint corpus with the same turn/reply/tool and cleanup totals, provider-reported MiniMax cost USD `0.02201754`, no failed scenario IDs, and exactly one authorized Matrix smoke that passed.
+- The logged-in production-readiness audit found one presentation defect and closed it through Task 31. PR [#2346](https://github.com/pbuchman/intexuraos/pull/2346) merged as `aef9a446ddd2977fe447ca5f0f4eeff1445d2058`; Home Dev served the exact frontend revision, focused tests passed `39/39`, exact tracked CI passed `5556/5556`, and independent review found no Critical, Important, or Minor issues.
+- The post-deploy desktop/mobile Chrome audit passed session load, refresh, rapid selection, responsive order, focus restoration, settings checks, network, console, and overflow checks. Timeline evidence contained zero structured object/array bodies, zero displayed technical regression keys, and zero unsafe tool titles.
+- This closes the executable endpoint-plus-one-Matrix-smoke plan. A later request to transport the full 20-scenario corpus through Matrix requires a separate, session-bound mocked-execution design; the current Matrix path must not be used for that because it selects production tools.
+
 ### Live contract correction — 2026-07-18
 
 - Home Dev A/B evidence showed that OpenRouter's mixed MiniMax M3 endpoint pool can send `response_format: { type: 'json_object' }` to an endpoint that does not support it; the affected path returned `finish_reason: 'stop'` with `message.content: null`.
@@ -436,15 +446,15 @@ scripts/run-intex-agent-evals-home-dev.sh preflight
 scripts/run-intex-agent-evals-home-dev.sh endpoint
 ```
 
-- [ ] After product and judge findings are resolved and `endpoint` exits `0`, run the internally gated final command exactly once:
+- [x] After product and judge findings are resolved and `endpoint` exits `0`, run the internally gated final command exactly once:
 
 ```bash
 scripts/run-intex-agent-evals-home-dev.sh full
 ```
 
-**Current acceptance result:** the endpoint pipeline, 20-turn execution, evaluator, cleanup, and reporting are live-proven. The internal `full` Matrix gate is contract-tested but not yet live-proven. The endpoint artifact path, MiniMax cost, failed scenario IDs, and cleanup totals are recorded above. The operator procedure correctly stopped before `full` after endpoint exit `1`.
+**Current acceptance result:** final acceptance passed. The endpoint and `full` artifact paths, MiniMax costs, cleanup totals, and absence of failed scenario IDs are recorded in the dated final-status amendment above. `full` ran exactly once after the separate endpoint gate passed, and its own fresh endpoint corpus plus single authorized Matrix smoke both passed.
 
-**Final acceptance:** after the behavioral remediation scope is approved and completed, preserve both report paths in the handoff, state MiniMax cost, and list any failed scenario IDs. Unit tests alone are insufficient; Home Dev `full` must pass.
+**Final acceptance:** satisfied for the executable endpoint-plus-one-Matrix-smoke scope. The later full-corpus-through-Matrix request is a separate expansion that requires a trusted dev-only mocked-execution boundary before any live corpus messages are sent.
 
 ## Deferred perfection backlog — frozen, do not implement now
 
