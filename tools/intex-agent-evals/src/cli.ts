@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { evaluateDeterministically } from './deterministicEvaluator.js';
+import {
+  evaluateDeterministically,
+  type DeterministicEvaluation,
+} from './deterministicEvaluator.js';
 import {
   createEndpointClient,
   createSyntheticRunIdentity,
@@ -45,7 +48,12 @@ import {
 } from './runEndpointScenario.js';
 import { loadScenarioCatalog } from './scenarioCatalog.js';
 import type { IntexEvalScenario } from './scenarioSchema.js';
-import type { IntexAgentToolName } from './types.js';
+import {
+  TimelinePayloadAssertionPathSchema,
+  ToolArgumentAssertionPathSchema,
+  type IntexAgentToolName,
+  type ScenarioAssertionPath,
+} from './types.js';
 
 export type ExitCode = 0 | 1 | 2;
 
@@ -687,6 +695,7 @@ function projectScenario(
           code: failure.code,
           ...(failure.turnIndex !== undefined ? { turnIndex: failure.turnIndex } : {}),
           ...(failure.replyIndex !== undefined ? { replyIndex: failure.replyIndex } : {}),
+          ...projectDeterministicAssertionPath(failure),
         }))
       : [];
   const judgeVerdicts = projectScenarioVerdicts(result);
@@ -830,6 +839,7 @@ function projectScenarioFailures(result: ScenarioLifecycleResult): SafeReportFai
         scenarioId: result.scenarioId,
         ...(failure.turnIndex !== undefined ? { turnIndex: failure.turnIndex } : {}),
         ...(failure.replyIndex !== undefined ? { replyIndex: failure.replyIndex } : {}),
+        ...projectDeterministicAssertionPath(failure),
       });
     }
   }
@@ -871,6 +881,21 @@ function projectScenarioFailures(result: ScenarioLifecycleResult): SafeReportFai
     });
   }
   return failures;
+}
+
+function projectDeterministicAssertionPath(failure: DeterministicEvaluation['failures'][number]): {
+  path?: ScenarioAssertionPath;
+} {
+  if (failure.path === undefined) return {};
+  const pathSchema =
+    failure.code === 'tool_argument_assertion_failed'
+      ? ToolArgumentAssertionPathSchema
+      : failure.code === 'timeline_payload_assertion_failed'
+        ? TimelinePayloadAssertionPathSchema
+        : undefined;
+  if (pathSchema === undefined) return {};
+  const parsed = pathSchema.safeParse(failure.path);
+  return parsed.success ? { path: parsed.data } : {};
 }
 
 function projectScenarioInfrastructureCode(

@@ -435,15 +435,24 @@ function evaluateTimeline(
   });
   const payloadGroups = expectation.timeline.payloadAssertions.map((group) => {
     const matchingEvents = events.filter((event) => event.type === group.eventType);
-    const passed = matchingEvents.some((event) =>
-      group.assertions.every((assertion) => assertionPasses(event.payload, assertion))
-    );
+    let candidates = matchingEvents;
+    let failingAssertion: ValueAssertion | undefined;
+    for (const assertion of group.assertions) {
+      if (candidates.length === 0) break;
+      const narrowed = candidates.filter((event) => assertionPasses(event.payload, assertion));
+      candidates = narrowed;
+      if (narrowed.length === 0) {
+        failingAssertion = assertion;
+        break;
+      }
+    }
+    const passed = candidates.length > 0;
     if (!passed) {
       failures.push({
         code: 'timeline_payload_assertion_failed',
         scenarioId,
         turnIndex: expectation.turnIndex,
-        ...(group.assertions[0] !== undefined ? { path: group.assertions[0].path } : {}),
+        ...(failingAssertion !== undefined ? { path: failingAssertion.path } : {}),
       });
     }
     return {

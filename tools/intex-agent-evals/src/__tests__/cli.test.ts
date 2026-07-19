@@ -1133,6 +1133,75 @@ describe('runCli evaluation orchestration and projection', () => {
     );
   });
 
+  it('projects exact deterministic assertion paths without expected, actual, or private values', async () => {
+    const lifecycle = lifecycleFor(SCENARIOS[0], 'behavioral_failure');
+    if (lifecycle.primary.deterministic.status !== 'completed') {
+      throw new Error('Expected completed deterministic evaluation');
+    }
+    lifecycle.primary.deterministic.value.failures = [
+      {
+        code: 'tool_argument_assertion_failed',
+        scenarioId: 'intex-eval-001',
+        turnIndex: 0,
+        path: 'contentLength',
+        expected: 'private-expected-value-sentinel',
+        actual: 'private-actual-value-sentinel',
+      },
+    ];
+    const privatePathLifecycle = lifecycleFor(SCENARIOS[1], 'behavioral_failure');
+    if (privatePathLifecycle.primary.deterministic.status !== 'completed') {
+      throw new Error('Expected completed deterministic evaluation');
+    }
+    privatePathLifecycle.primary.deterministic.value.failures = [
+      {
+        code: 'tool_argument_assertion_failed',
+        scenarioId: 'intex-eval-002',
+        turnIndex: 0,
+        path: 'private-tool-argument-path-sentinel',
+      },
+    ];
+    const reports: EvaluationReportV1[] = [];
+    const harness = createHarness({
+      runEndpoint: vi.fn(async () =>
+        timedCorpus([lifecycle, privatePathLifecycle], {
+          'intex-eval-001': 125,
+          'intex-eval-002': 250,
+        })
+      ),
+      writeReport: vi.fn(async (report: EvaluationReportV1) => {
+        reports.push(report);
+        return reportSuccess(report.runId);
+      }),
+    });
+
+    await expect(runCli(['endpoint'], harness.dependencies)).resolves.toBe(1);
+
+    const report = requiredItem(reports, 0);
+    expect(EvaluationReportV1Schema.parse(report)).toEqual(report);
+    expect(requiredItem(report.scenarios, 0).deterministicFailures).toEqual([
+      { code: 'tool_argument_assertion_failed', turnIndex: 0, path: 'contentLength' },
+    ]);
+    expect(report.failures).toContainEqual({
+      stage: 'deterministic',
+      code: 'tool_argument_assertion_failed',
+      scenarioId: 'intex-eval-001',
+      turnIndex: 0,
+      path: 'contentLength',
+    });
+    expect(requiredItem(report.scenarios, 1).deterministicFailures).toEqual([
+      { code: 'tool_argument_assertion_failed', turnIndex: 0 },
+    ]);
+    expect(report.failures).toContainEqual({
+      stage: 'deterministic',
+      code: 'tool_argument_assertion_failed',
+      scenarioId: 'intex-eval-002',
+      turnIndex: 0,
+    });
+    expect(JSON.stringify(report)).not.toMatch(
+      /private-(?:expected|actual)-value-sentinel|private-tool-argument-path-sentinel|"expected"|"actual"/u
+    );
+  });
+
   it('rejects an unsafe generated report ID before preflight or paid work', async () => {
     const harness = createHarness({ createReportRunId: vi.fn(() => '../private-run-id') });
 

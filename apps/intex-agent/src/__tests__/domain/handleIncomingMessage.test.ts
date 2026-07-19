@@ -310,8 +310,15 @@ describe('handleIncomingMessage', () => {
       taskMode: 'planning',
       workerType: 'minimax',
     };
-    expect(replies.messages[0]?.message).toContain('Mode: planning');
-    expect(replies.messages[0]?.message).toContain('Worker: minimax');
+    expect(replies.messages[0]?.message).toBe(
+      [
+        'Create this code task?',
+        '',
+        'Prompt: Investigate synthetic cache behavior.',
+        'Mode: planning',
+        'Worker: minimax',
+      ].join('\n')
+    );
     expect(eventPayloads(repo, 'confirmation_requested')[0]).toMatchObject({
       toolName: 'create_code_task',
       toolArgs: canonicalArgs,
