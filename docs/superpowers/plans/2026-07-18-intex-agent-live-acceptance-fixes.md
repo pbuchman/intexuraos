@@ -472,6 +472,23 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 
 **Acceptance:** metadata-free missing-detail classifications fail structural validation and repair with the current turn available; only validated active intent metadata crosses turns; explicit cancellation/topic changes cannot inherit a stale tool; scenario `008` is stable rather than retry-passing; and endpoint, Matrix, and browser gates remain ordered and fail closed.
 
+**Review status:** Task 21 shipped through PR `#2335`; all GitHub checks and the exact local tracked CI passed, two independent reviews approved the final change, and Home Dev ran exact merge `803b13c2480a4efb6b9881255209aa35107b2085`. The first focused scenario `008` run then completed all three turns with zero deterministic failures and exactly one completed `create_calendar_event`, but MiniMax M3 assigned `missing_information` to the final concise completion reply. A privacy-safe product-only diagnostic confirmed that the reply identified both the calendar action and completion without asking another question. Cleanup passed `12/12`. This isolates a judge false negative; the stability series stopped after that first non-pass and Matrix/full remained closed.
+
+### Task 22: Treat a named, deterministically completed action as a complete concise success reply
+
+**Evidence:** focused deployed run `eval-418a6c13-5fb8-4b3d-98a0-e6a14c4309ac` passed every deterministic assertion and the first two MiniMax verdicts. Its final reply was concise, named the calendar action, communicated completion, and contained no question, while closed `technicalFacts.toolOutcome` proved `create_calendar_event` completed. MiniMax nevertheless classified the reply as `missing_information` because it did not repeat intentionally redacted event details.
+
+- [x] Add a RED prompt/version regression requiring MiniMax to treat a reply that identifies the closed completed action as complete when the semantic criterion only asks whether that action succeeded.
+- [x] Exclude bare acknowledgements and replies that do not identify the completed action; do not relax deterministic argument, tool-count, transition, timeline, cleanup, or confirmation assertions.
+- [x] Explicitly prohibit `missing_information` and `unhelpful` solely because title, date, time, content, or other redacted tool arguments are omitted; preserve the raw-argument privacy boundary.
+- [ ] Close every Critical/Important independent-review finding and run focused package checks plus `pnpm run ci:tracked` on the exact final diff.
+- [ ] Commit, push, merge, wait for exact Home Dev deployment, and rerun the 12-check preflight.
+- [ ] Require three consecutive focused scenario `008` passes, then focused `006` and `010` passes, without retrying through any failure.
+- [ ] Require the complete 20-scenario endpoint gate to exit `0`; only then run `full` once and require its fresh endpoint corpus plus the authorized Matrix smoke to exit `0` with MiniMax M3.
+- [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
+
+**Acceptance:** concise success replies are evaluated against the observable sanitized contract and closed tool outcome rather than unavailable raw arguments; incomplete or unrelated replies still fail; the three-run stability gate, focused regressions, 20-scenario endpoint gate, fresh full-plus-Matrix gate, and browser audit all pass in order.
+
 ### Deferred perfection (recorded, not implemented in this loop)
 
 - Dedicated portable WhatsApp integration accounts and cross-machine credential bootstrap.
