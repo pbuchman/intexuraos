@@ -532,7 +532,9 @@ The first authorized Matrix message and Chrome audit exposed additional defects 
 - [x] Add a RED prompt/version regression that defines the natural-language action represented by `save_external` and recognizes `Saved externally` or an equivalent explicit completion phrase.
 - [x] Limit the equivalence to `toolName=save_external` plus `status=completed`; keep bare acknowledgements, failed outcomes, and replies naming a note, bookmark, link, or other action fail closed.
 - [x] Close every Critical/Important independent-review finding and run focused package checks plus `pnpm run ci:tracked` on the exact final diff.
-- [ ] Ship through a separate reviewed PR, verify the exact Home Dev merge, and run one positive plus three negative MiniMax calibration controls without retrying through a failure.
+- [x] Ship PR `#2340`, verify exact Home Dev merge `e87ad81e3cdab63d25acc15fa39d8573754570ae`, and run the first one-positive/three-negative calibration once. Matching completion and bare acknowledgement produced the expected results; wrong-action and failed-outcome controls were safely rejected but used the wrong failure taxonomy, so the calibration remained non-passing and downstream gates stayed closed.
+- [x] Add a second RED prompt/version regression requiring a wrong completed resource to map to `understoodIntent=false` plus `misunderstood_intent`, and a matching success claim over `status=failed` to map to `helpful=false` plus `unsupported_claim` without falsely marking the action misunderstood.
+- [ ] Ship the reviewed taxonomy follow-up, verify its exact Home Dev merge, and rerun the full four-case calibration once without retrying through a failure.
 - [ ] Restart the ordered endpoint gate; only after exit `0`, run `full` exactly once and require its fresh endpoint corpus plus the authorized Matrix smoke to exit `0`.
 - [ ] Complete the logged-in desktop/mobile Chrome audit and record final privacy-safe evidence.
 
