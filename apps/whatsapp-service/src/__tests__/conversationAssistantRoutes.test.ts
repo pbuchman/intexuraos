@@ -107,6 +107,8 @@ describe('Conversation Assistant routes', () => {
   }
 
   async function prepareSession(sessionId: string): Promise<void> {
+    const session = await ctx.conversationAssistantRepository.getSessionById(sessionId);
+    const generationId = session?.generationId;
     const response = await ctx.app.inject({
       method: 'POST',
       url: '/internal/whatsapp/pubsub/process-webhook',
@@ -119,6 +121,7 @@ describe('Conversation Assistant routes', () => {
               sessionId,
               userId: USER_ID,
               attempt: 1,
+              ...(generationId !== undefined ? { generationId } : {}),
             })
           ).toString('base64'),
           messageId: `prepare-${sessionId}`,
@@ -157,6 +160,8 @@ describe('Conversation Assistant routes', () => {
           modelDisplayName: string;
           status: string;
           preparationStage: string;
+          deletionToken: string;
+          deletionPending: boolean;
         };
       };
     };
@@ -170,6 +175,8 @@ describe('Conversation Assistant routes', () => {
     expect(body.data.session.modelDisplayName).toBe('MiniMax M3');
     expect(body.data.session.status).toBe('preparing');
     expect(body.data.session.preparationStage).toBe('queued');
+    expect(body.data.session.deletionToken).toMatch(/^[a-f0-9]{64}$/);
+    expect(body.data.session.deletionPending).toBe(false);
     expect(JSON.stringify(body)).not.toContain('We agreed to meet');
     expect(JSON.stringify(body)).not.toContain('transcriptText');
     expect(body.data).not.toHaveProperty('turns');
@@ -179,6 +186,7 @@ describe('Conversation Assistant routes', () => {
         sessionId: body.data.session.id,
         userId: USER_ID,
         attempt: 1,
+        generationId: expect.any(String),
       },
     ]);
 
@@ -191,6 +199,66 @@ describe('Conversation Assistant routes', () => {
     expect(JSON.parse(contextBeforeReady.body).error.message).toBe(
       'Conversation context is not ready yet'
     );
+  });
+
+  it('deletes an owned analysis and treats missing or foreign deletion as an idempotent success', async () => {
+    const token = await seed();
+    const sessionId = await createSessionWithFirstTurn(token);
+    const foreignToken = await createToken({ sub: 'other-user' });
+    const sessionResponse = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${sessionId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const deletionToken = (
+      JSON.parse(sessionResponse.body) as { data: { session: { deletionToken: string } } }
+    ).data.session.deletionToken;
+
+    const missingTokenDelete = await ctx.app.inject({
+      method: 'DELETE',
+      url: `/conversation-assistant/sessions/${sessionId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(missingTokenDelete.statusCode).toBe(400);
+    await expect(
+      ctx.conversationAssistantRepository.getSessionById(sessionId)
+    ).resolves.not.toBeNull();
+
+    const foreignDelete = await ctx.app.inject({
+      method: 'DELETE',
+      url: `/conversation-assistant/sessions/${sessionId}`,
+      headers: {
+        authorization: `Bearer ${foreignToken}`,
+        'x-conversation-assistant-deletion-token': deletionToken,
+      },
+    });
+    expect(foreignDelete.statusCode).toBe(200);
+    expect(JSON.parse(foreignDelete.body).data).toEqual({ deleted: true });
+    await expect(ctx.conversationAssistantRepository.getSessionById(sessionId)).resolves.not.toBeNull();
+
+    const response = await ctx.app.inject({
+      method: 'DELETE',
+      url: `/conversation-assistant/sessions/${sessionId}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'x-conversation-assistant-deletion-token': deletionToken,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).data).toEqual({ deleted: true });
+    await expect(ctx.conversationAssistantRepository.getSessionById(sessionId)).resolves.toBeNull();
+    await expect(ctx.conversationAssistantRepository.listTurnsBySessionId(sessionId)).resolves.toEqual([]);
+
+    const repeated = await ctx.app.inject({
+      method: 'DELETE',
+      url: `/conversation-assistant/sessions/${sessionId}`,
+      headers: {
+        authorization: `Bearer ${token}`,
+        'x-conversation-assistant-deletion-token': deletionToken,
+      },
+    });
+    expect(repeated.statusCode).toBe(200);
+    expect(JSON.parse(repeated.body).data).toEqual({ deleted: true });
   });
 
   it('does not expose internal preparation bookkeeping in public session DTOs', async () => {
@@ -246,6 +314,8 @@ describe('Conversation Assistant routes', () => {
       expect(response.body).not.toContain('preparationClaimId');
       expect(response.body).not.toContain('preparationLeaseExpiresAt');
       expect(response.body).not.toContain('contextSnapshotId');
+      expect(response.body).not.toContain('generationId');
+      expect(response.body).not.toContain('deletionStartedAt');
     }
   });
 
@@ -371,6 +441,7 @@ describe('Conversation Assistant routes', () => {
         sessionId: failedSession.id,
         userId: USER_ID,
         attempt: 2,
+        generationId: expect.any(String),
       },
     ]);
 
@@ -949,6 +1020,7 @@ describe('Conversation Assistant routes', () => {
       { method: 'POST' as const, url: '/conversation-assistant/context/check', payload: {} },
       { method: 'GET' as const, url: '/conversation-assistant/session-requests/missing' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing' },
+      { method: 'DELETE' as const, url: '/conversation-assistant/sessions/missing' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/context' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/export.pdf' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/turns' },
@@ -997,6 +1069,7 @@ describe('Conversation Assistant routes', () => {
       },
       { method: 'GET' as const, url: '/conversation-assistant/session-requests/missing' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing' },
+      { method: 'DELETE' as const, url: '/conversation-assistant/sessions/missing' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/context' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/export.pdf' },
       { method: 'GET' as const, url: '/conversation-assistant/sessions/missing/turns' },
@@ -1038,6 +1111,9 @@ describe('Conversation Assistant routes', () => {
       listSessionsByUserId: () => {
         throw new Error('list failed');
       },
+      deleteSession: () => {
+        throw new Error('delete failed');
+      },
       claimPreparation: (input) =>
         ctx.conversationAssistantRepository.claimPreparation(input),
       saveClaimedPreparationSession: (input) =>
@@ -1062,6 +1138,13 @@ describe('Conversation Assistant routes', () => {
       getContextPage: (sessionId, snapshotId, input) =>
         ctx.conversationAssistantRepository.getContextPage(sessionId, snapshotId, input),
       saveTurn: (turn) => ctx.conversationAssistantRepository.saveTurn(turn),
+      saveTurnIfSessionExists: (turn, expectedGenerationId) =>
+        ctx.conversationAssistantRepository.saveTurnIfSessionExists(
+          turn,
+          expectedGenerationId
+        ),
+      saveAssistantTurnAndTouchSession: (input) =>
+        ctx.conversationAssistantRepository.saveAssistantTurnAndTouchSession(input),
       listTurnsBySessionId: (sessionId) =>
         ctx.conversationAssistantRepository.listTurnsBySessionId(sessionId),
     };
@@ -1078,5 +1161,16 @@ describe('Conversation Assistant routes', () => {
 
     expect(response.statusCode).toBe(500);
     expect(JSON.parse(response.body).error.code).toBe('INTERNAL_ERROR');
+
+    const deleteResponse = await ctx.app.inject({
+      method: 'DELETE',
+      url: '/conversation-assistant/sessions/missing',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'x-conversation-assistant-deletion-token': 'stale-token',
+      },
+    });
+    expect(deleteResponse.statusCode).toBe(500);
+    expect(JSON.parse(deleteResponse.body).error.code).toBe('INTERNAL_ERROR');
   });
 });

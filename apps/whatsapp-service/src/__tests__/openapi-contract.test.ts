@@ -14,7 +14,7 @@ interface OpenApiSpec {
       {
         operationId?: string;
         responses?: Record<string, { content?: Record<string, unknown> }>;
-        parameters?: { in: string; name: string }[];
+        parameters?: { in: string; name: string; required?: boolean }[];
       }
     >
   >;
@@ -133,6 +133,19 @@ describe('whatsapp-service OpenAPI contract', () => {
 
     expect(paths?.['/webhooks']).toBeDefined();
     expect(paths?.['/health']).toBeDefined();
+  });
+
+  it('documents the required Conversation Assistant deletion token header', () => {
+    const deleteSession =
+      openapiSpec.paths?.['/conversation-assistant/sessions/{sessionId}']?.['delete'];
+
+    expect(deleteSession?.parameters).toContainEqual(
+      expect.objectContaining({
+        in: 'header',
+        name: 'x-conversation-assistant-deletion-token',
+        required: true,
+      })
+    );
   });
 
   it('POST /webhooks documents signature header', () => {

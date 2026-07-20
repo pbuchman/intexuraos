@@ -11,6 +11,7 @@ import {
   conversationAssistantRandomIds,
   conversationAssistantSystemClock,
   createConversationAssistantSession,
+  deleteConversationAssistantSession,
   exportConversationAssistantSessionPdf,
   getConversationAssistantContext,
   getConversationAssistantSession,
@@ -30,6 +31,7 @@ import type {
   CreateConversationAssistantSessionInput,
   PublicConversationAssistantSession,
 } from '../domain/conversation-assistant/types.js';
+import { createConversationAssistantDeletionToken } from '../domain/conversation-assistant/deletionToken.js';
 
 type ValidatedRequest = FastifyRequest & { validationError?: unknown };
 
@@ -50,6 +52,10 @@ interface CheckContextBody {
 
 interface SessionParams {
   sessionId: string;
+}
+
+interface DeleteSessionHeaders {
+  'x-conversation-assistant-deletion-token'?: string;
 }
 
 interface SessionRequestParams {
@@ -233,6 +239,55 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
         return await sendConversationAssistantError(reply, result.error);
       }
       return await reply.ok({ session: toPublicSession(result.value) });
+    }
+  );
+
+  fastify.delete<{ Params: SessionParams; Headers: DeleteSessionHeaders }>(
+    '/conversation-assistant/sessions/:sessionId',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'deleteWhatsAppConversationAssistantSession',
+        tags: ['whatsapp'],
+        headers: {
+          type: 'object',
+          required: ['x-conversation-assistant-deletion-token'],
+          properties: {
+            'x-conversation-assistant-deletion-token': { type: 'string', minLength: 1 },
+          },
+        },
+        response: routeResponseSchema(),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to DELETE /whatsapp/conversation-assistant/sessions/:sessionId',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_delete_session' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+      const deletionToken = request.headers['x-conversation-assistant-deletion-token'];
+      if (typeof deletionToken !== 'string' || deletionToken.trim() === '') {
+        return await reply.fail('INVALID_REQUEST', 'Deletion token is required');
+      }
+
+      const result = await safeCall(() =>
+        deleteConversationAssistantSession(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            deletionToken,
+          },
+          deps
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantError(reply, result.error);
+      }
+      return await reply.ok(result.value);
     }
   );
 
@@ -598,10 +653,14 @@ function toPublicSession(
     preparationClaimId: _preparationClaimId,
     preparationLeaseExpiresAt: _preparationLeaseExpiresAt,
     contextSnapshotId: _contextSnapshotId,
+    generationId: _generationId,
+    deletionStartedAt: _deletionStartedAt,
     ...publicSession
   } = session;
   return {
     ...publicSession,
+    deletionToken: createConversationAssistantDeletionToken(session),
+    deletionPending: session.deletionStartedAt !== undefined,
     modelDisplayName: getConversationAssistantModelDisplayName(session.model),
   };
 }

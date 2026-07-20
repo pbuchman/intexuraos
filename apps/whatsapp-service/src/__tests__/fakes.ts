@@ -93,6 +93,7 @@ import type {
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../domain/conversation-assistant/types.js';
+import { createConversationAssistantDeletionToken } from '../domain/conversation-assistant/deletionToken.js';
 import type {
   MatrixOutboundGateway,
   MatrixOutboundReadinessInput,
@@ -107,7 +108,10 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   private readonly turns = new Map<string, ConversationAssistantTurn>();
   private readonly contextSnapshots = new Map<
     string,
-    Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'> & { userId: string }
+    Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'> & {
+      userId: string;
+      generationId?: string;
+    }
   >();
   readonly snapshotRequests: { sessionId: string; userId: string }[] = [];
 
@@ -130,7 +134,9 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
 
   getSessionById(sessionId: string): Promise<ConversationAssistantSession | null> {
     const session = this.sessions.get(sessionId);
-    return Promise.resolve(session === undefined ? null : { ...session });
+    return Promise.resolve(
+      session === undefined || session.deletionStartedAt !== undefined ? null : { ...session }
+    );
   }
 
   getSessionSnapshotById(
@@ -138,7 +144,11 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
     this.snapshotRequests.push(input);
     const session = this.sessions.get(input.sessionId);
-    if (session === undefined || session.userId !== input.userId) {
+    if (
+      session === undefined ||
+      session.userId !== input.userId ||
+      session.deletionStartedAt !== undefined
+    ) {
       return Promise.resolve(null);
     }
     return Promise.resolve({
@@ -158,6 +168,32 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     return Promise.resolve(sessions);
   }
 
+  deleteSession(input: {
+    sessionId: string;
+    userId: string;
+    deletionToken: string;
+  }): Promise<void> {
+    const session = this.sessions.get(input.sessionId);
+    if (
+      session?.userId !== input.userId ||
+      createConversationAssistantDeletionToken(session) !== input.deletionToken
+    ) {
+      return Promise.resolve();
+    }
+    this.sessions.delete(input.sessionId);
+    for (const [turnId, turn] of this.turns.entries()) {
+      if (turn.sessionId === input.sessionId && turn.userId === input.userId) {
+        this.turns.delete(turnId);
+      }
+    }
+    for (const [snapshotId, snapshot] of this.contextSnapshots.entries()) {
+      if (snapshotId.startsWith(`${input.sessionId}:`) && snapshot.userId === input.userId) {
+        this.contextSnapshots.delete(snapshotId);
+      }
+    }
+    return Promise.resolve();
+  }
+
   claimPreparation(input: {
     sessionId: string;
     userId: string;
@@ -165,6 +201,7 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     claimId: string;
     now: string;
     leaseExpiresAt: string;
+    expectedGenerationId?: string;
   }): Promise<
     | { status: 'claimed'; session: ConversationAssistantSession }
     | { status: 'busy'; session: ConversationAssistantSession }
@@ -172,7 +209,12 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     | { status: 'not_found' }
   > {
     const session = this.sessions.get(input.sessionId);
-    if (session === undefined || session.userId !== input.userId) {
+    if (
+      session === undefined ||
+      session.userId !== input.userId ||
+      session.deletionStartedAt !== undefined ||
+      session.generationId !== input.expectedGenerationId
+    ) {
       return Promise.resolve({ status: 'not_found' });
     }
     if (session.status !== 'preparing' || session.preparationAttempt !== input.attempt) {
@@ -205,7 +247,9 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     const current = this.sessions.get(input.session.id);
     if (
       current?.preparationAttempt !== input.attempt ||
-      current.preparationClaimId !== input.claimId
+      current.preparationClaimId !== input.claimId ||
+      current.deletionStartedAt !== undefined ||
+      current.generationId !== input.session.generationId
     ) {
       return Promise.resolve(false);
     }
@@ -218,12 +262,18 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     userId: string;
     expectedAttempt: number;
     updatedAt: string;
+    expectedGenerationId?: string;
   }): Promise<
     | { status: 'queued' | 'stale'; session: ConversationAssistantSession }
     | { status: 'not_found' }
   > {
     const session = this.sessions.get(input.sessionId);
-    if (session === undefined || session.userId !== input.userId) {
+    if (
+      session === undefined ||
+      session.userId !== input.userId ||
+      session.deletionStartedAt !== undefined ||
+      session.generationId !== input.expectedGenerationId
+    ) {
       return Promise.resolve({ status: 'not_found' });
     }
     if (
@@ -252,12 +302,18 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     attempt: number;
     error: { code: string; message: string };
     updatedAt: string;
+    expectedGenerationId?: string;
   }): Promise<
     | { status: 'saved' | 'stale'; session: ConversationAssistantSession }
     | { status: 'not_found' }
   > {
     const session = this.sessions.get(input.sessionId);
-    if (session === undefined || session.userId !== input.userId) {
+    if (
+      session === undefined ||
+      session.userId !== input.userId ||
+      session.deletionStartedAt !== undefined ||
+      session.generationId !== input.expectedGenerationId
+    ) {
       return Promise.resolve({ status: 'not_found' });
     }
     if (
@@ -283,26 +339,43 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     sessionId: string,
     userId: string,
     snapshotId: string,
-    snapshot: Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'>
-  ): Promise<void> {
+    snapshot: Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'>,
+    expectedGenerationId?: string
+  ): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
+    if (
+      session?.userId !== userId ||
+      session.deletionStartedAt !== undefined ||
+      session.generationId !== expectedGenerationId
+    ) {
+      return Promise.resolve(false);
+    }
     this.contextSnapshots.set(
       `${sessionId}:${snapshotId}`,
       {
         userId,
+        ...(expectedGenerationId !== undefined
+          ? { generationId: expectedGenerationId }
+          : {}),
         messages: snapshot.messages.map((message) => ({ ...message })),
         omittedMessages: snapshot.omittedMessages.map((message) => ({ ...message })),
       }
     );
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   deleteContextSnapshot(
     sessionId: string,
     userId: string,
-    snapshotId: string
+    snapshotId: string,
+    expectedGenerationId?: string
   ): Promise<void> {
     const key = `${sessionId}:${snapshotId}`;
-    if (this.contextSnapshots.get(key)?.userId === userId) {
+    const snapshot = this.contextSnapshots.get(key);
+    if (
+      snapshot?.userId === userId &&
+      snapshot.generationId === expectedGenerationId
+    ) {
       this.contextSnapshots.delete(key);
     }
     return Promise.resolve();
@@ -339,6 +412,46 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   saveTurn(turn: ConversationAssistantTurn): Promise<void> {
     this.turns.set(turn.id, { ...turn });
     return Promise.resolve();
+  }
+
+  saveTurnIfSessionExists(
+    turn: ConversationAssistantTurn,
+    expectedGenerationId: string | undefined
+  ): Promise<boolean> {
+    const current = this.sessions.get(turn.sessionId);
+    if (
+      current?.userId !== turn.userId ||
+      current.deletionStartedAt !== undefined ||
+      current.generationId !== expectedGenerationId ||
+      (current.status !== 'ready' && current.status !== 'active')
+    ) {
+      return Promise.resolve(false);
+    }
+    this.turns.set(turn.id, { ...turn });
+    return Promise.resolve(true);
+  }
+
+  saveAssistantTurnAndTouchSession(input: {
+    session: ConversationAssistantSession;
+    turn: ConversationAssistantTurn;
+  }): Promise<boolean> {
+    const current = this.sessions.get(input.session.id);
+    if (
+      current?.userId !== input.session.userId ||
+      input.turn.userId !== input.session.userId ||
+      current.deletionStartedAt !== undefined ||
+      current.generationId !== input.session.generationId ||
+      (current.status !== 'ready' && current.status !== 'active')
+    ) {
+      return Promise.resolve(false);
+    }
+    this.turns.set(input.turn.id, { ...input.turn });
+    this.sessions.set(input.session.id, {
+      ...current,
+      updatedAt: input.turn.createdAt,
+      lastTurnAt: input.turn.createdAt,
+    });
+    return Promise.resolve(true);
   }
 
   listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]> {

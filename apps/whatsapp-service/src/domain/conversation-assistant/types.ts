@@ -49,6 +49,8 @@ export interface ConversationAssistantSession {
   lastTurnAt?: string;
   creationRequestId?: string;
   maxMessages?: number;
+  generationId?: string;
+  deletionStartedAt?: string;
 }
 
 export type PublicConversationAssistantSession = Omit<
@@ -59,7 +61,11 @@ export type PublicConversationAssistantSession = Omit<
   | 'preparationClaimId'
   | 'preparationLeaseExpiresAt'
   | 'contextSnapshotId'
+  | 'generationId'
+  | 'deletionStartedAt'
 > & {
+  deletionToken: string;
+  deletionPending: boolean;
   modelDisplayName: string;
 };
 
@@ -103,6 +109,12 @@ export interface SendConversationAssistantTurnInput {
   question: string;
 }
 
+export interface DeleteConversationAssistantSessionInput {
+  userId: string;
+  sessionId: string;
+  deletionToken: string;
+}
+
 export interface ExportConversationAssistantPdfInput {
   userId: string;
   sessionId: string;
@@ -117,6 +129,7 @@ export interface PrepareConversationAssistantSessionInput {
   sessionId: string;
   attempt?: number;
   claimId?: string;
+  generationId?: string;
 }
 
 export interface GetConversationAssistantSessionByRequestInput {

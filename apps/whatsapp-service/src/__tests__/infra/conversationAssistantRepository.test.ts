@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import {
+  CASCADE_DELETE_BATCH_SIZE,
   CONTEXT_CHUNK_MAX_BYTES,
   createConversationAssistantRepository,
   TRANSCRIPT_CHUNK_MAX_BYTES,
@@ -14,6 +15,7 @@ import type {
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../../domain/conversation-assistant/types.js';
+import { createConversationAssistantDeletionToken } from '../../domain/conversation-assistant/deletionToken.js';
 
 function makeSession(overrides: Partial<ConversationAssistantSession> = {}): ConversationAssistantSession {
   return {
@@ -49,6 +51,17 @@ function makeTurn(overrides: Partial<ConversationAssistantTurn> = {}): Conversat
   };
 }
 
+function deletionInput(
+  session: ConversationAssistantSession,
+  userId = session.userId
+): { sessionId: string; userId: string; deletionToken: string } {
+  return {
+    sessionId: session.id,
+    userId,
+    deletionToken: createConversationAssistantDeletionToken(session),
+  };
+}
+
 describe('conversationAssistantRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
   let repository: ReturnType<typeof createConversationAssistantRepository>;
@@ -61,6 +74,57 @@ describe('conversationAssistantRepository', () => {
 
   afterEach(() => {
     resetFirestore();
+  });
+
+  it('keeps cascade-delete transactions below a conservative Firestore payload budget', () => {
+    const largestChunkBytes = Math.max(TRANSCRIPT_CHUNK_MAX_BYTES, CONTEXT_CHUNK_MAX_BYTES);
+
+    expect(CASCADE_DELETE_BATCH_SIZE * largestChunkBytes).toBeLessThanOrEqual(5_000_000);
+  });
+
+  it('revalidates and deletes at most one cascade document per transaction', async () => {
+    const session = {
+      ...makeSession(),
+      generationId: 'generation-delete-one-at-a-time',
+    } as ConversationAssistantSession;
+    await repository.saveSession(session);
+    fakeFirestore.seedCollection(
+      WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
+      Array.from({ length: 3 }, (_value, index) => ({
+        id: `large-turn-${String(index)}`,
+        data: {
+          ...makeTurn({ id: `large-turn-${String(index)}` }),
+          sessionGenerationId: session.generationId,
+        },
+      }))
+    );
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let maximumReadsInOneTransaction = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) =>
+      await originalRunTransaction(async (transaction) => {
+        let reads = 0;
+        const instrumentedTransaction = new Proxy(transaction, {
+          get(target, property, receiver): unknown {
+            if (property === 'get') {
+              return async (
+                ...args: Parameters<typeof target.get>
+              ): Promise<Awaited<ReturnType<typeof target.get>>> => {
+                reads += 1;
+                maximumReadsInOneTransaction = Math.max(maximumReadsInOneTransaction, reads);
+                return await target.get(...args);
+              };
+            }
+            const value = Reflect.get(target, property, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
+        return await updateFn(instrumentedTransaction);
+      })
+    );
+
+    await repository.deleteSession(deletionInput(session));
+
+    expect(maximumReadsInOneTransaction).toBe(1);
   });
 
   it('stores private transcript text in chunks and lists only the owning user sessions', async () => {
@@ -128,6 +192,591 @@ describe('conversationAssistantRepository', () => {
     expect(storedDoc.data()?.['role']).toBe('assistant');
   });
 
+  it('deletes every owned session record and leaves foreign records untouched', async () => {
+    const ownedSession = makeSession();
+    await repository.saveSession(ownedSession);
+    await repository.saveTurn(makeTurn());
+    fakeFirestore.seedCollection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION, [
+      {
+        id: 'owned-context',
+        data: {
+          sessionId: 'whatsapp_conv_session_1',
+          userId: 'user-123',
+          snapshotId: 'snapshot-1',
+        },
+      },
+      {
+        id: 'foreign-context',
+        data: { sessionId: 'foreign-session', userId: 'other-user', snapshotId: 'snapshot-2' },
+      },
+    ]);
+    await repository.saveSession(
+      makeSession({ id: 'foreign-session', userId: 'other-user', transcriptSha256: 'foreign-hash' })
+    );
+    await repository.saveTurn(
+      makeTurn({ id: 'foreign-turn', sessionId: 'foreign-session', userId: 'other-user' })
+    );
+
+    await repository.deleteSession(deletionInput(ownedSession, 'other-user'));
+    expect(await repository.getSessionById('whatsapp_conv_session_1')).not.toBeNull();
+
+    await repository.deleteSession(deletionInput(ownedSession));
+
+    await expect(repository.getSessionById('whatsapp_conv_session_1')).resolves.toBeNull();
+    await expect(repository.listTurnsBySessionId('whatsapp_conv_session_1')).resolves.toEqual([]);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+          .doc('whatsapp_conv_session_1_hash_000000')
+          .get()
+      ).exists
+    ).toBe(false);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+          .doc('owned-context')
+          .get()
+      ).exists
+    ).toBe(false);
+    await expect(repository.getSessionById('foreign-session')).resolves.not.toBeNull();
+    await expect(repository.listTurnsBySessionId('foreign-session')).resolves.toHaveLength(1);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+          .doc('foreign-context')
+          .get()
+      ).exists
+    ).toBe(true);
+
+    await expect(
+      repository.deleteSession(deletionInput(ownedSession))
+    ).resolves.toBeUndefined();
+  });
+
+  it('persists turns only while their owned session still exists', async () => {
+    const session = makeSession();
+    const userTurn = makeTurn();
+    const assistantTurn = makeTurn({
+      id: 'assistant-turn',
+      role: 'assistant',
+      text: 'Answer',
+      createdAt: '2026-06-30T10:02:00.000Z',
+    });
+    await repository.saveSession(session);
+
+    await expect(
+      repository.saveTurnIfSessionExists(userTurn, session.generationId)
+    ).resolves.toBe(true);
+    await expect(
+      repository.saveAssistantTurnAndTouchSession({ session, turn: assistantTurn })
+    ).resolves.toBe(true);
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toHaveLength(2);
+    await expect(repository.getSessionById(session.id)).resolves.toMatchObject({
+      updatedAt: assistantTurn.createdAt,
+      lastTurnAt: assistantTurn.createdAt,
+    });
+
+    await repository.deleteSession(deletionInput(session));
+    await expect(
+      repository.saveTurnIfSessionExists(userTurn, session.generationId)
+    ).resolves.toBe(false);
+    await expect(
+      repository.saveAssistantTurnAndTouchSession({ session, turn: assistantTurn })
+    ).resolves.toBe(false);
+    await expect(repository.getSessionById(session.id)).resolves.toBeNull();
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+  });
+
+  it('touches a legacy session that has no transcript storage metadata', async () => {
+    const session = makeSession();
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id)
+      .set(session);
+    const assistantTurn = makeTurn({
+      id: 'legacy-storage-assistant-turn',
+      role: 'assistant',
+      text: 'Legacy answer',
+      createdAt: '2026-06-30T10:03:00.000Z',
+    });
+
+    await expect(
+      repository.saveAssistantTurnAndTouchSession({ session, turn: assistantTurn })
+    ).resolves.toBe(true);
+    const stored = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id)
+      .get();
+    expect(stored.data()?.['transcriptStorage']).toMatchObject({
+      type: 'chunks',
+      chunkCount: 0,
+    });
+  });
+
+  it('rejects delayed turns from an older generation of the same session id', async () => {
+    const originalSession = {
+      ...makeSession(),
+      generationId: 'generation-original',
+    } as ConversationAssistantSession;
+    const replacementSession = {
+      ...makeSession({ updatedAt: '2026-06-30T11:00:00.000Z' }),
+      generationId: 'generation-replacement',
+    } as ConversationAssistantSession;
+    const saveTurnForGeneration = repository.saveTurnIfSessionExists as unknown as (
+      turn: ConversationAssistantTurn,
+      expectedGenerationId: string | undefined
+    ) => Promise<boolean>;
+
+    await repository.saveSession(originalSession);
+    await repository.saveSession(replacementSession);
+
+    await expect(
+      saveTurnForGeneration(makeTurn({ id: 'late-user-turn' }), 'generation-original')
+    ).resolves.toBe(false);
+    await expect(
+      repository.saveAssistantTurnAndTouchSession({
+        session: originalSession,
+        turn: makeTurn({ id: 'late-assistant-turn', role: 'assistant', text: 'Late answer' }),
+      })
+    ).resolves.toBe(false);
+    await expect(repository.listTurnsBySessionId(originalSession.id)).resolves.toEqual([]);
+    await expect(repository.getSessionById(originalSession.id)).resolves.toMatchObject({
+      generationId: 'generation-replacement',
+      updatedAt: replacementSession.updatedAt,
+    });
+  });
+
+  it('keeps interrupted cascade deletion hidden and resumes it in bounded batches', async () => {
+    const session = {
+      ...makeSession(),
+      generationId: 'generation-delete',
+    } as ConversationAssistantSession;
+    await repository.saveSession(session);
+    fakeFirestore.seedCollection(
+      WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
+      Array.from({ length: 251 }, (_value, index) => ({
+        id: `turn-${String(index)}`,
+        data: {
+          ...makeTurn({ id: `turn-${String(index)}` }),
+          sessionGenerationId: 'generation-delete',
+        },
+      }))
+    );
+    fakeFirestore.seedCollection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION, [
+      {
+        id: 'context-delete',
+        data: {
+          sessionId: session.id,
+          userId: session.userId,
+          sessionGenerationId: 'generation-delete',
+          snapshotId: 'snapshot-delete',
+        },
+      },
+    ]);
+
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionCount = 0;
+    const transactionSpy = vi
+      .spyOn(fakeFirestore, 'runTransaction')
+      .mockImplementation(async (updateFn) => {
+        transactionCount += 1;
+        if (transactionCount === 3) throw new Error('interrupted cascade');
+        return await originalRunTransaction(updateFn);
+      });
+
+    await expect(
+      repository.deleteSession(deletionInput(session))
+    ).rejects.toThrow('interrupted cascade');
+    const storedDuringDeletion = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id)
+      .get();
+    expect(storedDuringDeletion.exists).toBe(true);
+    expect(storedDuringDeletion.data()?.['deletionStartedAt']).toEqual(expect.any(String));
+    await expect(repository.getSessionById(session.id)).resolves.toBeNull();
+    await expect(repository.listSessionsByUserId(session.userId)).resolves.toEqual([
+      expect.objectContaining({ id: session.id, deletionStartedAt: expect.any(String) }),
+    ]);
+
+    const saveTurnForGeneration = repository.saveTurnIfSessionExists as unknown as (
+      turn: ConversationAssistantTurn,
+      expectedGenerationId: string | undefined
+    ) => Promise<boolean>;
+    await expect(
+      saveTurnForGeneration(makeTurn({ id: 'turn-during-delete' }), 'generation-delete')
+    ).resolves.toBe(false);
+
+    transactionSpy.mockRestore();
+    await expect(
+      repository.deleteSession(deletionInput(session))
+    ).resolves.toBeUndefined();
+    expect(transactionCount).toBeGreaterThan(1);
+    await expect(repository.getSessionById(session.id)).resolves.toBeNull();
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+          .doc('context-delete')
+          .get()
+      ).exists
+    ).toBe(false);
+  });
+
+  it('finishes idempotently when the deletion marker disappears before final cleanup', async () => {
+    const session = makeSession({ transcriptText: '', transcriptSha256: '' });
+    await repository.saveSession(session);
+    const sessionRef = fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id);
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+      transactionNumber += 1;
+      if (transactionNumber === 2) await sessionRef.delete();
+      return await originalRunTransaction(updateFn);
+    });
+
+    await expect(repository.deleteSession(deletionInput(session))).resolves.toBeUndefined();
+    expect(transactionNumber).toBe(2);
+  });
+
+  it('deletes generation-less legacy data across more than one bounded query', async () => {
+    const session = makeSession({ transcriptText: '', transcriptSha256: '' });
+    await repository.saveSession(session);
+    fakeFirestore.seedCollection(
+      WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
+      Array.from({ length: 21 }, (_value, index) => ({
+        id: `legacy-turn-${String(index).padStart(2, '0')}`,
+        data: {
+          ...makeTurn({ id: `legacy-turn-${String(index).padStart(2, '0')}` }),
+          sessionGenerationId: null,
+        },
+      }))
+    );
+
+    await repository.deleteSession(deletionInput(session));
+
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+  });
+
+  it('does not let a stale conditional delete remove a replacement transcript chunk', async () => {
+    const originalSession = {
+      ...makeSession(),
+      generationId: 'generation-original',
+    } as ConversationAssistantSession;
+    await repository.saveSession(originalSession);
+    let releaseSlowDelete!: () => void;
+    let reportSlowDeleteStarted!: () => void;
+    const slowDeleteStarted = new Promise<void>((resolve) => {
+      reportSlowDeleteStarted = resolve;
+    });
+    const releaseSlow = new Promise<void>((resolve) => {
+      releaseSlowDelete = resolve;
+    });
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+      transactionNumber += 1;
+      if (transactionNumber === 2) {
+        reportSlowDeleteStarted();
+        await releaseSlow;
+      }
+      return await originalRunTransaction(updateFn);
+    });
+
+    const slowDeletion = repository.deleteSession({
+      sessionId: originalSession.id,
+      userId: originalSession.userId,
+      deletionToken: createConversationAssistantDeletionToken(originalSession),
+    });
+    await slowDeleteStarted;
+    await repository.deleteSession({
+      sessionId: originalSession.id,
+      userId: originalSession.userId,
+      deletionToken: createConversationAssistantDeletionToken(originalSession),
+    });
+    const replacementSession = {
+      ...makeSession({
+        updatedAt: '2026-06-30T13:00:00.000Z',
+        transcriptText: 'replacement transcript',
+      }),
+      generationId: 'generation-replacement',
+    } as ConversationAssistantSession;
+    await repository.saveSession(replacementSession);
+    await repository.saveTurn(
+      makeTurn({ id: 'replacement-turn', createdAt: '2026-06-30T13:01:00.000Z' })
+    );
+
+    releaseSlowDelete();
+    await slowDeletion;
+
+    await expect(repository.getSessionById(replacementSession.id)).resolves.toMatchObject({
+      generationId: 'generation-replacement',
+    });
+    const replacementChunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc(`${replacementSession.id}_${replacementSession.transcriptSha256}_000000`)
+      .get();
+    expect(replacementChunk.data()).toMatchObject({
+      sessionGenerationId: 'generation-replacement',
+      text: 'replacement transcript',
+    });
+  });
+
+  it('does not let a completed deletion retry remove a replacement session', async () => {
+    const originalSession = {
+      ...makeSession(),
+      generationId: 'generation-original',
+    } as ConversationAssistantSession;
+    await repository.saveSession(originalSession);
+    await repository.deleteSession(deletionInput(originalSession));
+
+    const replacementSession = {
+      ...makeSession({
+        createdAt: '2026-06-30T13:00:00.000Z',
+        updatedAt: '2026-06-30T13:00:00.000Z',
+      }),
+      generationId: 'generation-replacement',
+    } as ConversationAssistantSession;
+    await repository.saveSession(replacementSession);
+
+    await repository.deleteSession(deletionInput(originalSession));
+
+    await expect(repository.getSessionById(replacementSession.id)).resolves.toMatchObject({
+      generationId: 'generation-replacement',
+    });
+  });
+
+  it('fences queued preparation failure by session generation', async () => {
+    const replacementSession = {
+      ...makeSession({
+        status: 'preparing',
+        preparationStage: 'queued',
+        preparationAttempt: 1,
+        transcriptText: '',
+        transcriptSha256: '',
+      }),
+      generationId: 'generation-replacement',
+    } as ConversationAssistantSession;
+    await repository.saveSession(replacementSession);
+    const failForGeneration = repository.failQueuedPreparation as unknown as (
+      input: Parameters<typeof repository.failQueuedPreparation>[0] & {
+        expectedGenerationId: string | undefined;
+      }
+    ) => ReturnType<typeof repository.failQueuedPreparation>;
+
+    await expect(
+      failForGeneration({
+        sessionId: replacementSession.id,
+        userId: replacementSession.userId,
+        attempt: 1,
+        expectedGenerationId: 'generation-original',
+        error: { code: 'INTERNAL_ERROR', message: 'Old publish failed' },
+        updatedAt: '2026-06-30T13:02:00.000Z',
+      })
+    ).resolves.toEqual({ status: 'not_found' });
+    await expect(repository.getSessionById(replacementSession.id)).resolves.toMatchObject({
+      generationId: 'generation-replacement',
+      status: 'preparing',
+    });
+  });
+
+  it('does not let a generation-less failure mutate a generated session', async () => {
+    const replacementSession = {
+      ...makeSession({
+        status: 'preparing',
+        preparationStage: 'queued',
+        preparationAttempt: 1,
+        transcriptText: '',
+        transcriptSha256: '',
+      }),
+      generationId: 'generation-replacement',
+    } as ConversationAssistantSession;
+    await repository.saveSession(replacementSession);
+
+    await expect(
+      repository.failQueuedPreparation({
+        sessionId: replacementSession.id,
+        userId: replacementSession.userId,
+        attempt: 1,
+        error: { code: 'INTERNAL_ERROR', message: 'Old publish failed' },
+        updatedAt: '2026-06-30T13:02:00.000Z',
+      })
+    ).resolves.toEqual({ status: 'not_found' });
+    await expect(repository.getSessionById(replacementSession.id)).resolves.toMatchObject({
+      generationId: 'generation-replacement',
+      status: 'preparing',
+    });
+  });
+
+  it('does not overwrite or clean up transcript chunks owned by a replacement generation', async () => {
+    const transcriptSha256 = 'shared-transcript';
+    const replacementSession = {
+      ...makeSession({
+        status: 'preparing',
+        preparationStage: 'loading_messages',
+        preparationAttempt: 1,
+        preparationClaimId: 'claim-replacement',
+        transcriptText: 'replacement transcript',
+        transcriptSha256,
+      }),
+      generationId: 'generation-replacement',
+    } as ConversationAssistantSession;
+    await repository.saveSession(replacementSession);
+    const sharedChunkId = `${replacementSession.id}_${transcriptSha256}_000000`;
+
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...replacementSession,
+          status: 'ready',
+          preparationStage: 'ready',
+          preparationClaimId: 'claim-original',
+          generationId: 'generation-original',
+          transcriptSha256,
+          transcriptText: 'replacement transcript',
+        },
+        attempt: 1,
+        claimId: 'claim-original',
+      })
+    ).resolves.toBe(false);
+    const sharedChunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc(sharedChunkId)
+      .get();
+    expect(sharedChunk.data()).toMatchObject({
+      sessionGenerationId: 'generation-replacement',
+      text: 'replacement transcript',
+    });
+  });
+
+  it('does not write context chunks after deletion has started', async () => {
+    const session = {
+      ...makeSession(),
+      generationId: 'generation-delete-context',
+      deletionStartedAt: '2026-06-30T13:00:00.000Z',
+    } as ConversationAssistantSession;
+    await repository.saveSession(session);
+    const saveForGeneration = repository.saveContextSnapshot as unknown as (
+      sessionId: string,
+      userId: string,
+      snapshotId: string,
+      snapshot: { messages: []; omittedMessages: [] },
+      expectedGenerationId: string | undefined
+    ) => Promise<boolean>;
+
+    await expect(
+      saveForGeneration(
+        session.id,
+        session.userId,
+        'blocked-context',
+        { messages: [], omittedMessages: [] },
+        session.generationId
+      )
+    ).resolves.toBe(false);
+    const chunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', session.id)
+      .get();
+    expect(chunks.empty).toBe(true);
+  });
+
+  it('rejects context snapshots when the session is missing before or during chunk writes', async () => {
+    const message = {
+      id: 'context-race-message',
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      importedAt: '2026-06-30T10:00:01.000Z',
+      direction: 'incoming' as const,
+      speakerLabel: 'Alice',
+      messageType: 'text' as const,
+      contentKind: 'text' as const,
+      content: 'Context race',
+    };
+    await expect(
+      repository.saveContextSnapshot('missing-session', 'user-123', 'missing-snapshot', {
+        messages: [message],
+        omittedMessages: [],
+      })
+    ).resolves.toBe(false);
+
+    const session = {
+      ...makeSession({ transcriptText: '', transcriptSha256: '' }),
+      generationId: 'generation-context-race',
+    } as ConversationAssistantSession;
+    await repository.saveSession(session);
+    const sessionRef = fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id);
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+      transactionNumber += 1;
+      if (transactionNumber === 2) await sessionRef.delete();
+      return await originalRunTransaction(updateFn);
+    });
+
+    await expect(
+      repository.saveContextSnapshot(
+        session.id,
+        session.userId,
+        'racing-snapshot',
+        { messages: [message], omittedMessages: [] },
+        session.generationId
+      )
+    ).resolves.toBe(false);
+  });
+
+  it('cleans a context snapshot when its generation changes during a chunk write', async () => {
+    const session = {
+      ...makeSession({ transcriptText: '', transcriptSha256: '' }),
+      generationId: 'generation-context-original',
+    } as ConversationAssistantSession;
+    await repository.saveSession(session);
+    const message = {
+      id: 'context-replacement-message',
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      importedAt: '2026-06-30T10:00:01.000Z',
+      direction: 'incoming' as const,
+      speakerLabel: 'Alice',
+      messageType: 'text' as const,
+      contentKind: 'text' as const,
+      content: 'Context replacement',
+    };
+    const sessionRef = fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id);
+    const storedData = (await sessionRef.get()).data();
+    expect(storedData).toBeDefined();
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+      transactionNumber += 1;
+      if (transactionNumber === 2) {
+        await sessionRef.set({ ...storedData, generationId: 'generation-context-replacement' });
+      }
+      return await originalRunTransaction(updateFn);
+    });
+
+    await expect(
+      repository.saveContextSnapshot(
+        session.id,
+        session.userId,
+        'replacement-snapshot',
+        { messages: [message], omittedMessages: [] },
+        session.generationId
+      )
+    ).resolves.toBe(false);
+    const chunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+      .where('snapshotId', '==', 'replacement-snapshot')
+      .get();
+    expect(chunks.empty).toBe(true);
+  });
+
   it('creates a session only once without overwriting a preparation claim', async () => {
     const queued = makeSession({
       status: 'preparing',
@@ -160,6 +809,17 @@ describe('conversationAssistantRepository', () => {
     expect(
       (await repository.getSessionById(queued.id))?.preparationClaimId
     ).toBe('active-claim');
+
+    const deleting = {
+      ...queued,
+      id: 'whatsapp_conv_session_deleting_existing',
+      deletionStartedAt: '2026-06-30T10:02:00.000Z',
+    };
+    await repository.saveSession(deleting);
+    await expect(repository.createSessionIfAbsent(deleting)).resolves.toMatchObject({
+      status: 'existing',
+      session: { id: deleting.id, deletionStartedAt: deleting.deletionStartedAt },
+    });
   });
 
   it('handles missing, foreign, stale, and legacy preparation claims', async () => {
@@ -234,13 +894,21 @@ describe('conversationAssistantRepository', () => {
           status: 'ready',
           preparationStage: 'ready',
           preparationAttempt: 1,
-          transcriptText: '',
-          transcriptSha256: '',
+          transcriptText: 'orphan transcript',
+          transcriptSha256: 'orphan-hash',
         }),
         attempt: 1,
         claimId: 'claim-1',
       })
     ).resolves.toBe(false);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+          .doc('missing-session_orphan-hash_000000')
+          .get()
+      ).exists
+    ).toBe(false);
 
     await expect(
       repository.requeueFailedPreparation({
@@ -468,6 +1136,100 @@ describe('conversationAssistantRepository', () => {
     expect((await repository.getSessionById('whatsapp_conv_session_1'))?.status).toBe('ready');
   });
 
+  it('does not let stale claim cleanup remove a newer claim transcript', async () => {
+    const claimedByA = {
+      ...makeSession({
+        status: 'preparing',
+        preparationStage: 'loading_messages',
+        preparationAttempt: 1,
+        preparationClaimId: 'claim-a',
+        transcriptText: '',
+        transcriptSha256: '',
+      }),
+      generationId: 'shared-generation',
+    } as ConversationAssistantSession;
+    await repository.saveSession(claimedByA);
+
+    let releaseASessionWrite!: () => void;
+    let reportASessionWriteStarted!: () => void;
+    const aSessionWriteStarted = new Promise<void>((resolve) => {
+      reportASessionWriteStarted = resolve;
+    });
+    const aSessionWriteRelease = new Promise<void>((resolve) => {
+      releaseASessionWrite = resolve;
+    });
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+      transactionNumber += 1;
+      if (transactionNumber === 2) {
+        reportASessionWriteStarted();
+        await aSessionWriteRelease;
+      }
+      return await originalRunTransaction(updateFn);
+    });
+
+    const readyA = {
+      ...claimedByA,
+      status: 'ready' as const,
+      preparationStage: 'ready' as const,
+      transcriptSha256: 'shared-transcript',
+      transcriptText: 'transcript from claim A',
+    };
+    const saveA = repository.saveClaimedPreparationSession({
+      session: readyA,
+      attempt: 1,
+      claimId: 'claim-a',
+    });
+    await aSessionWriteStarted;
+
+    const claimedByB = {
+      ...claimedByA,
+      preparationClaimId: 'claim-b',
+    };
+    await repository.saveSession(claimedByB);
+    const readyB = {
+      ...claimedByB,
+      status: 'ready' as const,
+      preparationStage: 'ready' as const,
+      transcriptSha256: 'shared-transcript',
+      transcriptText: 'transcript from claim B',
+    };
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc(`${claimedByA.id}_shared-transcript_000000`)
+      .set({
+        sessionId: claimedByA.id,
+        sessionGenerationId: 'shared-generation',
+        preparationAttempt: 1,
+        preparationClaimId: 'claim-b',
+        snapshotId: 'shared-transcript',
+        chunkIndex: 0,
+        text: 'transcript from claim B',
+      });
+
+    releaseASessionWrite();
+    await expect(saveA).resolves.toBe(false);
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: readyB,
+        attempt: 1,
+        claimId: 'claim-b',
+      })
+    ).resolves.toBe(true);
+
+    const sharedChunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc(`${claimedByA.id}_shared-transcript_000000`)
+      .get();
+    expect(sharedChunk.data()).toMatchObject({
+      sessionGenerationId: 'shared-generation',
+      preparationAttempt: 1,
+      preparationClaimId: 'claim-b',
+      text: 'transcript from claim B',
+    });
+  });
+
   it('fails only an unclaimed queued preparation and preserves an active claim', async () => {
     await repository.saveSession(
       makeSession({
@@ -535,6 +1297,7 @@ describe('conversationAssistantRepository', () => {
   });
 
   it('round-trips reactions and exact omitted messages in a versioned context snapshot', async () => {
+    await repository.saveSession(makeSession());
     const includedMessage = {
       id: 'message-included',
       eventTimestamp: '2026-06-30T10:00:00.000Z',
@@ -877,6 +1640,7 @@ describe('conversationAssistantRepository', () => {
   });
 
   it('stores the frozen context in ordered chunks and replaces stale chunks on retry', async () => {
+    await repository.saveSession(makeSession());
     const firstMessage = {
       id: 'message-1',
       eventTimestamp: '2026-06-30T10:00:00.000Z',
@@ -953,6 +1717,7 @@ describe('conversationAssistantRepository', () => {
   });
 
   it('deletes only the owned context snapshot selected for cleanup', async () => {
+    await repository.saveSession(makeSession());
     const message = {
       id: 'message-1',
       eventTimestamp: '2026-06-30T10:00:00.000Z',
@@ -1112,6 +1877,7 @@ describe('conversationAssistantRepository', () => {
       .get();
     expect(chunk.data()).toEqual({
       sessionId: chunkSessionId,
+      sessionGenerationId: null,
       chunkIndex: 0,
       text: 'legacy chunk',
     });

@@ -1082,6 +1082,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
               userId: preparationEvent.userId,
               sessionId: preparationEvent.sessionId,
               attempt: preparationEvent.attempt,
+              ...(typeof preparationEvent.generationId === 'string'
+                ? { generationId: preparationEvent.generationId }
+                : {}),
             },
             deps
           );

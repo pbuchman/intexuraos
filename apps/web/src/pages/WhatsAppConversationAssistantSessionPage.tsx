@@ -7,15 +7,17 @@ import {
   MessageSquareText,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button } from '@/components/ui/Button';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { ConversationAssistantComposer } from '@/components/whatsapp/ConversationAssistantComposer';
+import { ConversationAssistantActionsMenu } from '@/components/whatsapp/ConversationAssistantActionsMenu';
 import { ConversationAssistantContextModal } from '@/components/whatsapp/ConversationAssistantContextModal';
+import { ConversationAssistantDeleteDialog } from '@/components/whatsapp/ConversationAssistantDeleteDialog';
 import { useWhatsAppConversationAssistant } from '@/hooks/useWhatsAppConversationAssistant';
-import type { ConversationAssistantOmittedCounts } from '@/types';
+import type { ConversationAssistantOmittedCounts, ConversationAssistantSession } from '@/types';
 import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
 
 function sumOmitted(omitted: ConversationAssistantOmittedCounts): number {
@@ -44,6 +46,7 @@ function getPreparationStageLabel(
 
 export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const assistant = useWhatsAppConversationAssistant({
     ...(sessionId !== undefined ? { sessionId } : {}),
     loadChats: false,
@@ -51,7 +54,11 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   });
   const turnsScrollRef = useRef<HTMLDivElement | null>(null);
   const followTurnsRef = useRef(true);
+  const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [contextOpen, setContextOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ConversationAssistantSession | undefined>(
+    undefined
+  );
 
   const updateTurnScrollFollow = useCallback((): void => {
     const element = turnsScrollRef.current;
@@ -77,21 +84,26 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   }, [assistant.loadingTurns, assistant.turns]);
 
   useEffect(() => {
-    if (!assistant.sending) return;
+    if (assistant.turnPhase === 'idle') return;
     followTurnsRef.current = true;
     const element = turnsScrollRef.current;
     if (element !== null) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [assistant.sending]);
+  }, [assistant.turnPhase]);
 
   const session = assistant.selectedSession;
-  const contextReady = session?.status === 'ready' || session?.status === 'active';
-  const contextPreparing = session?.status === 'preparing';
-  const contextFailed = session?.status === 'failed';
+  const deletionPending = session?.deletionPending === true;
+  const contextReady =
+    !deletionPending && (session?.status === 'ready' || session?.status === 'active');
+  const contextPreparing = !deletionPending && session?.status === 'preparing';
+  const contextFailed = !deletionPending && session?.status === 'failed';
   const hasUserQuestion = assistant.turns.some((turn) => turn.role === 'user');
   const canExport =
-    contextReady && assistant.turns.length > 0 && !assistant.sending && !assistant.exporting;
+    contextReady &&
+    assistant.turns.length > 0 &&
+    assistant.turnPhase === 'idle' &&
+    !assistant.exporting;
 
   return (
     <Layout>
@@ -105,7 +117,7 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               <ArrowLeft className="mr-1.5 h-4 w-4" />
               Back to analyses
             </Link>
-            <h2 className="mt-3 truncate text-2xl font-bold text-slate-950 dark:text-slate-50">
+            <h2 className="mt-3 line-clamp-2 break-words text-xl font-bold leading-tight text-slate-950 dark:text-slate-50 sm:block sm:truncate sm:text-2xl">
               {session?.title ?? 'Loading analysis...'}
             </h2>
             {session !== undefined ? (
@@ -123,22 +135,63 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               </div>
             ) : null}
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={(): void => {
-              void assistant.exportSelectedSessionPdf();
-            }}
-            isLoading={assistant.exporting}
-            loadingText="Exporting"
-            disabled={!canExport}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Export PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(): void => {
+                void assistant.exportSelectedSessionPdf();
+              }}
+              isLoading={assistant.exporting}
+              loadingText="Exporting"
+              disabled={!canExport}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export PDF
+            </Button>
+            {session !== undefined ? (
+              <ConversationAssistantActionsMenu
+                title={session.title}
+                onDelete={(trigger): void => {
+                  deleteTriggerRef.current = trigger;
+                  assistant.clearDeleteError();
+                  setDeleteTarget({ ...session });
+                }}
+                deleteLabel={session.deletionPending === true ? 'Finish deletion' : 'Delete analysis'}
+              />
+            ) : null}
+          </div>
         </header>
 
         <ErrorBanner message={assistant.error} />
+
+        {session !== undefined && deletionPending ? (
+          <section
+            role="status"
+            className="flex flex-col items-start rounded-lg border border-amber-200 bg-amber-50 px-5 py-5 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            <div className="flex items-center gap-2 font-semibold">
+              <AlertTriangle aria-hidden="true" className="h-5 w-5" />
+              Deletion interrupted
+            </div>
+            <p className="mt-2 text-sm">
+              This analysis is no longer available. Finish deletion to remove its remaining data.
+            </p>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              className="mt-4 min-h-11"
+              onClick={(event): void => {
+                deleteTriggerRef.current = event.currentTarget;
+                assistant.clearDeleteError();
+                setDeleteTarget({ ...session });
+              }}
+            >
+              Finish deletion
+            </Button>
+          </section>
+        ) : null}
 
         {session !== undefined && contextReady ? (
           <button
@@ -160,7 +213,8 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
           </button>
         ) : null}
 
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        {!deletionPending ? (
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
           <div
             ref={turnsScrollRef}
             data-testid="conversation-assistant-turns"
@@ -218,8 +272,12 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
                 </p>
               </div>
             ) : null}
-            {assistant.turns.map((turn) => {
+            {assistant.turns.map((turn, index) => {
               const isUser = turn.role === 'user';
+              const isStreamingAnswer =
+                assistant.turnPhase === 'streaming' &&
+                !isUser &&
+                index === assistant.turns.length - 1;
               return (
                 <article
                   key={turn.id}
@@ -230,7 +288,17 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
                   }`}
                 >
                   <div className="mb-1 flex items-start justify-between gap-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                    <span>{isUser ? 'You' : (session?.assistantRoleLabel ?? 'Assistant')}</span>
+                    <span className="flex items-center gap-2">
+                      {isUser ? 'You' : (session?.assistantRoleLabel ?? 'Assistant')}
+                      {isStreamingAnswer ? (
+                        <span
+                          aria-hidden="true"
+                          className="normal-case text-blue-600 dark:text-blue-400"
+                        >
+                          Responding…
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="shrink-0">{formatDateTimeCompact(turn.createdAt)}</span>
                   </div>
                   {isUser ? (
@@ -250,21 +318,37 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
                 </article>
               );
             })}
+            {assistant.turnPhase === 'waiting' ? (
+              <article
+                role="status"
+                aria-live="polite"
+                className="mr-auto flex max-w-[min(46rem,100%)] items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+              >
+                <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" />
+                Assistant is thinking…
+              </article>
+            ) : null}
+            {assistant.turnPhase === 'streaming' ? (
+              <span role="status" aria-live="polite" className="sr-only">
+                Assistant is responding.
+              </span>
+            ) : null}
           </div>
 
           {contextReady ? (
             <ConversationAssistantComposer
               value={assistant.followUpQuestion}
               disabled={assistant.retryingPreparation}
-              sending={assistant.sending}
+              turnPhase={assistant.turnPhase}
               mode={hasUserQuestion ? 'follow-up' : 'first-question'}
               onChange={assistant.setFollowUpQuestion}
               onSend={assistant.sendFollowUp}
             />
           ) : null}
-        </section>
+          </section>
+        ) : null}
 
-        {contextOpen && session !== undefined ? (
+        {contextOpen && session !== undefined && !deletionPending ? (
           <ConversationAssistantContextModal
             context={assistant.context}
             loading={assistant.loadingContext}
@@ -284,6 +368,38 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
             }}
             onClose={(): void => {
               setContextOpen(false);
+            }}
+          />
+        ) : null}
+        {deleteTarget !== undefined ? (
+          <ConversationAssistantDeleteDialog
+            open
+            title={deleteTarget.title}
+            deleting={assistant.deletingSessionId === deleteTarget.id}
+            error={assistant.deleteError}
+            resumePending={
+              deleteTarget.deletionPending === true ||
+              (session?.id === deleteTarget.id &&
+                session.deletionToken === deleteTarget.deletionToken &&
+                session.deletionPending === true)
+            }
+            returnFocusTo={deleteTriggerRef.current}
+            onOpenChange={(open): void => {
+              if (!open) {
+                assistant.clearDeleteError();
+                setDeleteTarget(undefined);
+              }
+            }}
+            onConfirm={async (): Promise<void> => {
+              const deleted = await assistant.deleteSession(
+                deleteTarget.id,
+                deleteTarget.deletionToken
+              );
+              if (!deleted) return;
+              await navigate('/whatsapp/conversation-assistant', {
+                replace: true,
+                state: { deletedAnalysisTitle: deleteTarget.title },
+              });
             }}
           />
         ) : null}
