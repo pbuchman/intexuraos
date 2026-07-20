@@ -385,6 +385,8 @@ export interface ConversationAssistantSession {
   createdAt: string;
   updatedAt: string;
   lastTurnAt?: string;
+  deletionToken?: string;
+  deletionPending?: boolean;
 }
 
 export interface ConversationAssistantTurn {

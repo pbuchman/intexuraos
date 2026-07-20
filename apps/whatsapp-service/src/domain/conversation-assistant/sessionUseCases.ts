@@ -25,6 +25,7 @@ import type {
   ConversationAssistantTurn,
   CreateConversationAssistantSessionInput,
   CreateConversationAssistantSessionResult,
+  DeleteConversationAssistantSessionInput,
   ExportConversationAssistantPdfInput,
   ExportConversationAssistantPdfResult,
   GetConversationAssistantContextInput,
@@ -51,6 +52,7 @@ export const conversationAssistantRandomIds = {
           .update(`${input.userId}:${input.requestId}`)
           .digest('hex')
           .slice(0, 32)}`,
+  sessionGenerationId: (): string => randomUUID(),
   turnId: (): string => `whatsapp_conv_turn_${randomUUID()}`,
 };
 
@@ -126,6 +128,7 @@ export async function createConversationAssistantSession(
     createdAt: now,
     updatedAt: now,
     creationRequestId,
+    generationId: deps.ids.sessionGenerationId(),
   };
   if (chatLoadResult.value.chat.displayName !== undefined) {
     session.chatDisplayName = chatLoadResult.value.chat.displayName;
@@ -146,12 +149,23 @@ export async function createConversationAssistantSession(
   return ok({ session: await publishQueuedConversationAssistantPreparation(session, deps) });
 }
 
+export async function deleteConversationAssistantSession(
+  input: DeleteConversationAssistantSessionInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<{ deleted: true }>> {
+  await deps.repository.deleteSession(input);
+  return ok({ deleted: true });
+}
+
 export async function prepareConversationAssistantSession(
   input: PrepareConversationAssistantSessionInput,
   deps: ConversationAssistantDeps
 ): Promise<ConversationAssistantResult<PrepareConversationAssistantSessionResult>> {
   const session = await deps.repository.getSessionById(input.sessionId);
   if (!isOwnedSession(session, input.userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  if (session.generationId !== input.generationId) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
   }
   if (isSessionReady(session)) {
@@ -169,6 +183,9 @@ export async function prepareConversationAssistantSession(
     claimId,
     now,
     leaseExpiresAt: new Date(Date.parse(now) + CONVERSATION_PREPARATION_LEASE_MS).toISOString(),
+    ...(session.generationId !== undefined
+      ? { expectedGenerationId: session.generationId }
+      : {}),
   });
   if (claim.status === 'not_found') {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
@@ -259,17 +276,22 @@ export async function prepareConversationAssistantSession(
 
   const contextSnapshotId = createContextSnapshotId(workingSession.id, attempt, claimId);
   try {
-    await deps.repository.saveContextSnapshot(
+    const contextSaved = await deps.repository.saveContextSnapshot(
       workingSession.id,
       workingSession.userId,
       contextSnapshotId,
-      { messages: context.messages, omittedMessages: context.omittedMessages }
+      { messages: context.messages, omittedMessages: context.omittedMessages },
+      workingSession.generationId
     );
+    if (!contextSaved) {
+      return await currentPreparationResult(session.id, input.userId, deps);
+    }
   } catch (error) {
     await deps.repository.deleteContextSnapshot(
       workingSession.id,
       workingSession.userId,
-      contextSnapshotId
+      contextSnapshotId,
+      workingSession.generationId
     );
     throw error;
   }
@@ -300,7 +322,8 @@ export async function prepareConversationAssistantSession(
     await deps.repository.deleteContextSnapshot(
       workingSession.id,
       workingSession.userId,
-      contextSnapshotId
+      contextSnapshotId,
+      workingSession.generationId
     );
     throw error;
   }
@@ -308,7 +331,8 @@ export async function prepareConversationAssistantSession(
     await deps.repository.deleteContextSnapshot(
       workingSession.id,
       workingSession.userId,
-      contextSnapshotId
+      contextSnapshotId,
+      workingSession.generationId
     );
     return await currentPreparationResult(session.id, input.userId, deps);
   }
@@ -409,7 +433,7 @@ export async function sendConversationAssistantTurn(
   }
 
   const result = await appendQuestionAndAssistantTurn({ session, question }, deps);
-  return ok(result.turns);
+  return result.ok ? ok(result.value.turns) : result;
 }
 
 export async function streamConversationAssistantTurn(
@@ -434,7 +458,9 @@ export async function streamConversationAssistantTurn(
   }
 
   const userTurn = createTurn(session, 'user', question, deps);
-  await deps.repository.saveTurn(userTurn);
+  if (!(await deps.repository.saveTurnIfSessionExists(userTurn, session.generationId))) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
   onEvent({ type: 'user_turn', turn: userTurn });
 
   const promptInput = await buildPromptInputAfterUserTurn({ session, question }, deps);
@@ -458,7 +484,9 @@ export async function streamConversationAssistantTurn(
     });
   }
 
-  await persistAssistantTurnAndTouchSession(session, assistantTurn, deps);
+  if (!(await persistAssistantTurnAndTouchSession(session, assistantTurn, deps))) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
   onEvent({ type: 'assistant_turn', turn: assistantTurn });
   onEvent({ type: 'done' });
 
@@ -632,9 +660,11 @@ export async function exportConversationAssistantSessionPdf(
 async function appendQuestionAndAssistantTurn(
   input: { session: ConversationAssistantSession; question: string },
   deps: ConversationAssistantDeps
-): Promise<{ turns: ConversationAssistantTurn[] }> {
+): Promise<ConversationAssistantResult<{ turns: ConversationAssistantTurn[] }>> {
   const userTurn = createTurn(input.session, 'user', input.question, deps);
-  await deps.repository.saveTurn(userTurn);
+  if (!(await deps.repository.saveTurnIfSessionExists(userTurn, input.session.generationId))) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
 
   const promptInput = await buildPromptInputAfterUserTurn(input, deps);
   const llmResult = await callConversationAssistantModel(input.session, promptInput, deps);
@@ -645,9 +675,11 @@ async function appendQuestionAndAssistantTurn(
     'Chat message generation is unavailable'
   );
 
-  await persistAssistantTurnAndTouchSession(input.session, assistantTurn, deps);
+  if (!(await persistAssistantTurnAndTouchSession(input.session, assistantTurn, deps))) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
 
-  return { turns: [userTurn, assistantTurn] };
+  return ok({ turns: [userTurn, assistantTurn] });
 }
 
 async function reuseOrRequeueConversationAssistantSession(
@@ -656,6 +688,9 @@ async function reuseOrRequeueConversationAssistantSession(
   creationRequestId: string,
   deps: ConversationAssistantDeps
 ): Promise<ConversationAssistantResult<CreateConversationAssistantSessionResult>> {
+  if (session.deletionStartedAt !== undefined) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
   if (!isOwnedSession(session, userId) || session.creationRequestId !== creationRequestId) {
     return err({ code: 'INTERNAL_ERROR', message: 'Conversation Assistant request collision' });
   }
@@ -678,6 +713,9 @@ async function requeueConversationAssistantPreparation(
     userId: session.userId,
     expectedAttempt: session.preparationAttempt ?? 0,
     updatedAt: deps.clock.now(),
+    ...(session.generationId !== undefined
+      ? { expectedGenerationId: session.generationId }
+      : {}),
   });
   if (result.status === 'not_found') {
     return null;
@@ -697,6 +735,7 @@ async function publishQueuedConversationAssistantPreparation(
     sessionId: session.id,
     userId: session.userId,
     attempt: session.preparationAttempt ?? 1,
+    ...(session.generationId !== undefined ? { generationId: session.generationId } : {}),
   });
   if (publishResult.ok) {
     return session;
@@ -707,6 +746,9 @@ async function publishQueuedConversationAssistantPreparation(
     attempt: session.preparationAttempt ?? 1,
     error: publishResult.error,
     updatedAt: deps.clock.now(),
+    ...(session.generationId !== undefined
+      ? { expectedGenerationId: session.generationId }
+      : {}),
   });
   return failure.status === 'not_found' ? session : failure.session;
 }
@@ -902,12 +944,10 @@ async function persistAssistantTurnAndTouchSession(
   session: ConversationAssistantSession,
   assistantTurn: ConversationAssistantTurn,
   deps: ConversationAssistantDeps
-): Promise<void> {
-  await deps.repository.saveTurn(assistantTurn);
-  await deps.repository.saveSession({
-    ...session,
-    updatedAt: assistantTurn.createdAt,
-    lastTurnAt: assistantTurn.createdAt,
+): Promise<boolean> {
+  return await deps.repository.saveAssistantTurnAndTouchSession({
+    session,
+    turn: assistantTurn,
   });
 }
 

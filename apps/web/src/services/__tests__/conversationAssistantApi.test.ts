@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkConversationAssistantContext,
   createConversationAssistantSession,
+  deleteConversationAssistantSession,
   exportConversationAssistantSessionPdf,
   getConversationAssistantContext,
   getConversationAssistantSession,
@@ -150,6 +151,23 @@ describe('conversationAssistantApi', () => {
     expect(result).toEqual(session);
   });
 
+  it('deletes a conversation assistant session with a URL-encoded id', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({ deleted: true });
+
+    await deleteConversationAssistantSession(TOKEN, 'session/with spaces?', 'delete-token');
+
+    expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
+      'https://wa.test',
+      '/conversation-assistant/sessions/session%2Fwith%20spaces%3F',
+      TOKEN,
+      {
+        method: 'DELETE',
+        headers: { 'X-Conversation-Assistant-Deletion-Token': 'delete-token' },
+      }
+    );
+  });
+
   it('loads the frozen context with a URL-encoded session id', async () => {
     const { apiRequest } = await import('../apiClient.js');
     const context = {
@@ -245,6 +263,11 @@ describe('conversationAssistantApi', () => {
         controller.enqueue(
           encoder.encode('event: assistant_delta\ndata: {"type":"assistant_delta","text":"Hello"}\n\n')
         );
+        controller.enqueue(
+          encoder.encode(
+            'event: assistant_turn\ndata: {"type":"assistant_turn","turn":{"id":"turn-2","sessionId":"session/with spaces?","userId":"user-1","role":"assistant","text":"Hello","createdAt":"2026-06-01T00:00:01.000Z"}}\n\n'
+          )
+        );
         controller.enqueue(encoder.encode('event: done\ndata: {"type":"done"}\n\n'));
         controller.close();
       },
@@ -282,8 +305,116 @@ describe('conversationAssistantApi', () => {
     expect(events.map((event) => (event as { type: string }).type)).toEqual([
       'user_turn',
       'assistant_delta',
+      'assistant_turn',
       'done',
     ]);
+  });
+
+  it('rejects an acknowledged error stream even when it ends with done', async () => {
+    const encoder = new TextEncoder();
+    const frames = [
+      'event: user_turn\ndata: {"type":"user_turn","turn":{"id":"turn-1","sessionId":"session-1","userId":"user-1","role":"user","text":"Hi","createdAt":"2026-06-01T00:00:00.000Z"}}\n\n',
+      'event: assistant_delta\ndata: {"type":"assistant_delta","text":"Partial"}\n\n',
+      'event: error\ndata: {"type":"error","error":{"code":"LLM_ERROR","message":"Disconnected"}}\n\n',
+      'event: done\ndata: {"type":"done"}\n\n',
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller): void {
+        controller.enqueue(encoder.encode(frames.join('')));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    );
+
+    await expect(
+      streamConversationAssistantTurn(TOKEN, 'session-1', { question: 'Hi' }, vi.fn())
+    ).rejects.toThrow('Assistant response stream ended before completion');
+  });
+
+  it('accepts a persisted model error when the assistant turn and stream both complete', async () => {
+    const encoder = new TextEncoder();
+    const frames = [
+      'event: user_turn\ndata: {"type":"user_turn","turn":{"id":"turn-1","sessionId":"session-1","userId":"user-1","role":"user","text":"Hi","createdAt":"2026-06-01T00:00:00.000Z"}}\n\n',
+      'event: assistant_delta\ndata: {"type":"assistant_delta","text":"Partial"}\n\n',
+      'event: error\ndata: {"type":"error","error":{"code":"LLM_ERROR","message":"Disconnected"}}\n\n',
+      'event: assistant_turn\ndata: {"type":"assistant_turn","turn":{"id":"turn-2","sessionId":"session-1","userId":"user-1","role":"assistant","text":"Partial","createdAt":"2026-06-01T00:00:01.000Z","error":{"code":"LLM_ERROR","message":"Disconnected"}}}\n\n',
+      'event: done\ndata: {"type":"done"}\n\n',
+    ];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller): void {
+        controller.enqueue(encoder.encode(frames.join('')));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    );
+    const events: unknown[] = [];
+
+    await expect(
+      streamConversationAssistantTurn(TOKEN, 'session-1', { question: 'Hi' }, (event) =>
+        events.push(event)
+      )
+    ).resolves.toBeUndefined();
+    expect(events.map((event) => (event as { type: string }).type)).toEqual([
+      'user_turn',
+      'assistant_delta',
+      'error',
+      'assistant_turn',
+      'done',
+    ]);
+  });
+
+  it.each([
+    { name: 'empty', frames: '' },
+    {
+      name: 'user acknowledgement only',
+      frames:
+        'event: user_turn\ndata: {"type":"user_turn","turn":{"id":"turn-1","sessionId":"session-1","userId":"user-1","role":"user","text":"Hi","createdAt":"2026-06-01T00:00:00.000Z"}}\n\n',
+    },
+    {
+      name: 'partial assistant answer',
+      frames:
+        'event: user_turn\ndata: {"type":"user_turn","turn":{"id":"turn-1","sessionId":"session-1","userId":"user-1","role":"user","text":"Hi","createdAt":"2026-06-01T00:00:00.000Z"}}\n\nevent: assistant_delta\ndata: {"type":"assistant_delta","text":"Partial"}\n\n',
+    },
+  ])('rejects a $name stream that closes without a done event', async ({ frames }) => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller): void {
+        if (frames !== '') controller.enqueue(encoder.encode(frames));
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        })
+      )
+    );
+
+    await expect(
+      streamConversationAssistantTurn(TOKEN, 'session-1', { question: 'Hi' }, vi.fn())
+    ).rejects.toMatchObject<ApiError>({
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Assistant response stream ended before completion',
+    });
   });
 
   it('exports conversation assistant PDF with filename from content disposition', async () => {

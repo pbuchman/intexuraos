@@ -8,6 +8,7 @@ import type {
   ConversationAssistantTurn,
 } from '../../domain/conversation-assistant/types.js';
 import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from '../../domain/conversation-assistant/roleInference.js';
+import { createConversationAssistantDeletionToken } from '../../domain/conversation-assistant/deletionToken.js';
 
 export const WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION =
   'whatsapp_conversation_assistant_sessions';
@@ -19,6 +20,7 @@ export const WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION =
   'whatsapp_conversation_assistant_turns';
 export const TRANSCRIPT_CHUNK_MAX_BYTES = 200_000;
 export const CONTEXT_CHUNK_MAX_BYTES = 200_000;
+export const CASCADE_DELETE_BATCH_SIZE = 20;
 
 interface TranscriptChunkStorage {
   type: 'chunks';
@@ -77,6 +79,10 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         if (result.status === 'created') {
           return { status: 'created', session };
         }
+        const existing = toSession(session.id, result.data);
+        if (existing.deletionStartedAt !== undefined) {
+          return { status: 'existing', session: existing };
+        }
         return {
           status: 'existing',
           session: await toHydratedSession(db, session.id, result.data),
@@ -96,6 +102,9 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           .doc(sessionId)
           .get();
         if (!doc.exists) {
+          return null;
+        }
+        if (toSession(doc.id, doc.data()).deletionStartedAt !== undefined) {
           return null;
         }
         return await toHydratedSession(db, doc.id, doc.data());
@@ -119,7 +128,10 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           return null;
         }
         const sessionWithoutTranscript = toSession(sessionDoc.id, sessionDoc.data());
-        if (sessionWithoutTranscript.userId !== input.userId) {
+        if (
+          sessionWithoutTranscript.userId !== input.userId ||
+          sessionWithoutTranscript.deletionStartedAt !== undefined
+        ) {
           return null;
         }
         const session = await toHydratedSession(db, sessionDoc.id, sessionDoc.data());
@@ -157,6 +169,67 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
       }
     },
 
+    async deleteSession(input: {
+      sessionId: string;
+      userId: string;
+      deletionToken: string;
+    }): Promise<void> {
+      try {
+        const db = getFirestore();
+        const sessionRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(input.sessionId);
+        const deletionTarget = await db.runTransaction(async (transaction) => {
+          const sessionSnapshot = await transaction.get(sessionRef);
+          if (!sessionSnapshot.exists) return null;
+          const session = toSession(sessionSnapshot.id, sessionSnapshot.data());
+          if (
+            session.userId !== input.userId ||
+            createConversationAssistantDeletionToken(session) !== input.deletionToken
+          ) {
+            return null;
+          }
+          if (session.deletionStartedAt === undefined) {
+            transaction.set(sessionRef, {
+              ...sessionSnapshot.data(),
+              deletionStartedAt: new Date().toISOString(),
+            });
+          }
+          return { generationId: session.generationId };
+        });
+        if (deletionTarget === null) return;
+
+        for (const collectionName of [
+          WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
+          WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION,
+          WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION,
+        ]) {
+          await deleteGenerationDocuments(
+            db,
+            collectionName,
+            input.sessionId,
+            deletionTarget.generationId
+          );
+        }
+        await db.runTransaction(async (transaction) => {
+          const currentSnapshot = await transaction.get(sessionRef);
+          if (!currentSnapshot.exists) return;
+          const current = toSession(currentSnapshot.id, currentSnapshot.data());
+          if (
+            current.userId === input.userId &&
+            current.deletionStartedAt !== undefined &&
+            current.generationId === deletionTarget.generationId
+          ) {
+            transaction.delete(sessionRef);
+          }
+        });
+      } catch (error) {
+        throw new Error(
+          `Failed to delete Conversation Assistant session: ${getErrorMessage(error)}`
+        );
+      }
+    },
+
     async claimPreparation(input): Promise<PreparationClaimResult> {
       try {
         const db = getFirestore();
@@ -169,7 +242,11 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             return { status: 'not_found' as const };
           }
           const session = toSession(snapshot.id, snapshot.data());
-          if (session.userId !== input.userId) {
+          if (
+            session.userId !== input.userId ||
+            session.deletionStartedAt !== undefined ||
+            session.generationId !== input.expectedGenerationId
+          ) {
             return { status: 'not_found' as const };
           }
           if (
@@ -209,17 +286,22 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
     async saveClaimedPreparationSession(input): Promise<boolean> {
       try {
         const db = getFirestore();
-        const transcriptStorage = await saveTranscriptChunks(db, input.session);
+        const transcriptStorage = await saveTranscriptChunks(db, input.session, {
+          attempt: input.attempt,
+          claimId: input.claimId,
+        });
         const sessionRef = db
           .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
           .doc(input.session.id);
-        return await db.runTransaction(async (transaction) => {
+        const saved = await db.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(sessionRef);
           if (!snapshot.exists) {
             return false;
           }
           const current = toSession(snapshot.id, snapshot.data());
           if (
+            current.deletionStartedAt !== undefined ||
+            current.generationId !== input.session.generationId ||
             current.preparationAttempt !== input.attempt ||
             current.preparationClaimId !== input.claimId
           ) {
@@ -228,6 +310,22 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           transaction.set(sessionRef, toSessionDocument(input.session, transcriptStorage));
           return true;
         });
+        if (!saved && transcriptStorage.chunkCount > 0) {
+          const currentSnapshot = await sessionRef.get();
+          const currentStorage = parseTranscriptStorage(
+            currentSnapshot.data()?.['transcriptStorage']
+          );
+          if (currentStorage?.snapshotId !== transcriptStorage.snapshotId) {
+            await deleteTranscriptChunks(
+              db,
+              input.session.id,
+              transcriptStorage,
+              input.session.generationId,
+              { attempt: input.attempt, claimId: input.claimId }
+            );
+          }
+        }
+        return saved;
       } catch (error) {
         throw new Error(
           `Failed to save claimed Conversation Assistant preparation: ${getErrorMessage(error)}`
@@ -247,7 +345,11 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             return { status: 'not_found' as const };
           }
           const session = toSession(snapshot.id, snapshot.data());
-          if (session.userId !== input.userId) {
+          if (
+            session.userId !== input.userId ||
+            session.deletionStartedAt !== undefined ||
+            session.generationId !== input.expectedGenerationId
+          ) {
             return { status: 'not_found' as const };
           }
           if (
@@ -290,7 +392,11 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             return { status: 'not_found' as const };
           }
           const session = toSession(snapshot.id, snapshot.data());
-          if (session.userId !== input.userId) {
+          if (
+            session.userId !== input.userId ||
+            session.deletionStartedAt !== undefined ||
+            session.generationId !== input.expectedGenerationId
+          ) {
             return { status: 'not_found' as const };
           }
           if (
@@ -327,12 +433,28 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
       contextSnapshot: Pick<
         ConversationAssistantContextResult,
         'messages' | 'omittedMessages'
-      >
-    ): Promise<void> {
+      >,
+      expectedGenerationId?: string
+    ): Promise<boolean> {
       try {
-        const collection = getFirestore().collection(
+        const db = getFirestore();
+        const collection = db.collection(
           WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION
         );
+        const canWrite = await db.runTransaction(async (transaction) => {
+          const sessionRef = db
+            .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+            .doc(sessionId);
+          const sessionSnapshot = await transaction.get(sessionRef);
+          if (!sessionSnapshot.exists) return false;
+          const session = toSession(sessionSnapshot.id, sessionSnapshot.data());
+          return (
+            session.userId === userId &&
+            session.deletionStartedAt === undefined &&
+            session.generationId === expectedGenerationId
+          );
+        });
+        if (!canWrite) return false;
         const existing = await collection
           .where('sessionId', '==', sessionId)
           .where('snapshotId', '==', snapshotId)
@@ -343,23 +465,56 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         for (const [chunkIndex, chunk] of chunks.entries()) {
           const chunkId = toContextChunkId(sessionId, snapshotId, chunkIndex);
           expectedIds.add(chunkId);
-          await collection.doc(chunkId).set({
-            sessionId,
-            userId,
-            snapshotId,
-            chunkIndex,
-            kind: chunk.kind,
-            start: chunk.start,
-            end: chunk.end,
-            messages: chunk.messages,
-            omittedMessages: chunk.omittedMessages,
+          const saved = await db.runTransaction(async (transaction) => {
+            const sessionRef = db
+              .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+              .doc(sessionId);
+            const sessionSnapshot = await transaction.get(sessionRef);
+            if (!sessionSnapshot.exists) return false;
+            const session = toSession(sessionSnapshot.id, sessionSnapshot.data());
+            if (
+              session.userId !== userId ||
+              session.deletionStartedAt !== undefined ||
+              session.generationId !== expectedGenerationId
+            ) {
+              return false;
+            }
+            transaction.set(collection.doc(chunkId), {
+              sessionId,
+              userId,
+              sessionGenerationId: expectedGenerationId ?? null,
+              snapshotId,
+              chunkIndex,
+              kind: chunk.kind,
+              start: chunk.start,
+              end: chunk.end,
+              messages: chunk.messages,
+              omittedMessages: chunk.omittedMessages,
+            });
+            return true;
           });
-        }
-        for (const document of existing.docs) {
-          if (!expectedIds.has(document.id)) {
-            await collection.doc(document.id).delete();
+          if (!saved) {
+            await deleteContextSnapshotForGeneration(
+              db,
+              sessionId,
+              userId,
+              snapshotId,
+              expectedGenerationId
+            );
+            return false;
           }
         }
+        for (const document of existing.docs) {
+          if (
+            !expectedIds.has(document.id) &&
+            documentBelongsToGeneration(document.data(), expectedGenerationId)
+          ) {
+            await deleteDocumentIfCurrentMatches(db, document.ref, (data) =>
+              documentBelongsToGeneration(data, expectedGenerationId)
+            );
+          }
+        }
+        return true;
       } catch (error) {
         throw new Error(
           `Failed to save Conversation Assistant context: ${getErrorMessage(error)}`
@@ -370,21 +525,17 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
     async deleteContextSnapshot(
       sessionId: string,
       userId: string,
-      snapshotId: string
+      snapshotId: string,
+      expectedGenerationId?: string
     ): Promise<void> {
       try {
-        const collection = getFirestore().collection(
-          WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION
+        await deleteContextSnapshotForGeneration(
+          getFirestore(),
+          sessionId,
+          userId,
+          snapshotId,
+          expectedGenerationId
         );
-        const snapshot = await collection
-          .where('sessionId', '==', sessionId)
-          .where('snapshotId', '==', snapshotId)
-          .get();
-        for (const document of snapshot.docs) {
-          if (document.data()['userId'] === userId) {
-            await collection.doc(document.id).delete();
-          }
-        }
       } catch (error) {
         throw new Error(
           `Failed to delete Conversation Assistant context: ${getErrorMessage(error)}`
@@ -468,6 +619,97 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
       }
     },
 
+    async saveTurnIfSessionExists(
+      turn: ConversationAssistantTurn,
+      expectedGenerationId: string | undefined
+    ): Promise<boolean> {
+      try {
+        const db = getFirestore();
+        const sessionRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(turn.sessionId);
+        const turnRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
+          .doc(turn.id);
+        return await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(sessionRef);
+          if (!snapshot.exists) {
+            return false;
+          }
+          const current = toSession(snapshot.id, snapshot.data());
+          if (
+            current.userId !== turn.userId ||
+            current.deletionStartedAt !== undefined ||
+            current.generationId !== expectedGenerationId ||
+            (current.status !== 'ready' && current.status !== 'active')
+          ) {
+            return false;
+          }
+          transaction.set(turnRef, {
+            ...turn,
+            sessionGenerationId: expectedGenerationId ?? null,
+          });
+          return true;
+        });
+      } catch (error) {
+        throw new Error(
+          `Failed to save Conversation Assistant turn conditionally: ${getErrorMessage(error)}`
+        );
+      }
+    },
+
+    async saveAssistantTurnAndTouchSession(input: {
+      session: ConversationAssistantSession;
+      turn: ConversationAssistantTurn;
+    }): Promise<boolean> {
+      try {
+        const db = getFirestore();
+        const sessionRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(input.session.id);
+        const turnRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
+          .doc(input.turn.id);
+        return await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(sessionRef);
+          if (!snapshot.exists) return false;
+          const current = toSession(snapshot.id, snapshot.data());
+          if (
+            current.userId !== input.session.userId ||
+            input.turn.userId !== input.session.userId ||
+            current.deletionStartedAt !== undefined ||
+            current.generationId !== input.session.generationId ||
+            (current.status !== 'ready' && current.status !== 'active')
+          ) {
+            return false;
+          }
+          const storage =
+            parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
+            emptyTranscriptStorage();
+          transaction.set(turnRef, {
+            ...input.turn,
+            sessionGenerationId: input.session.generationId ?? null,
+          });
+          transaction.set(
+            sessionRef,
+            toSessionDocument(
+              {
+                ...current,
+                updatedAt: input.turn.createdAt,
+                lastTurnAt: input.turn.createdAt,
+              },
+              storage
+            )
+          );
+          return true;
+        });
+      } catch (error) {
+        throw new Error(
+          `Failed to save Conversation Assistant response conditionally: ${getErrorMessage(error)}`
+        );
+      }
+    },
+
     async listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]> {
       try {
         const snapshot = await getFirestore()
@@ -516,7 +758,10 @@ function toSession(
     userId: session?.userId ?? '',
     chatId: session?.chatId ?? '',
     status:
-      session?.status === 'preparing' || session?.status === 'failed' || session?.status === 'ready'
+      session?.status === 'preparing' ||
+      session?.status === 'failed' ||
+      session?.status === 'ready' ||
+      session?.status === 'active'
         ? session.status
         : 'ready',
     range,
@@ -576,6 +821,12 @@ function toSession(
   }
   if (typeof session?.contextSnapshotId === 'string') {
     projected.contextSnapshotId = session.contextSnapshotId;
+  }
+  if (typeof session?.generationId === 'string') {
+    projected.generationId = session.generationId;
+  }
+  if (typeof session?.deletionStartedAt === 'string') {
+    projected.deletionStartedAt = session.deletionStartedAt;
   }
   if (typeof session?.preparationClaimId === 'string') {
     projected.preparationClaimId = session.preparationClaimId;
@@ -663,7 +914,8 @@ function emptyTranscriptStorage(): TranscriptChunkStorage {
 
 async function saveTranscriptChunks(
   db: ReturnType<typeof getFirestore>,
-  session: ConversationAssistantSession
+  session: ConversationAssistantSession,
+  fence?: { attempt: number; claimId: string }
 ): Promise<TranscriptChunkStorage> {
   const chunks = splitTranscriptText(session.transcriptText);
   const snapshotId = chunks.length === 0 ? '' : session.transcriptSha256.trim();
@@ -678,14 +930,172 @@ async function saveTranscriptChunks(
     WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION
   );
   for (const [chunkIndex, text] of chunks.entries()) {
-    await chunkCollection.doc(toTranscriptChunkId(session.id, chunkIndex, storage.snapshotId)).set({
+    const chunkRef = chunkCollection.doc(
+      toTranscriptChunkId(session.id, chunkIndex, storage.snapshotId)
+    );
+    const chunkDocument = {
       sessionId: session.id,
+      sessionGenerationId: session.generationId ?? null,
+      ...(fence !== undefined
+        ? {
+            preparationAttempt: fence.attempt,
+            preparationClaimId: fence.claimId,
+          }
+        : {}),
       ...(storage.snapshotId !== undefined ? { snapshotId: storage.snapshotId } : {}),
       chunkIndex,
       text,
+    };
+    if (fence === undefined) {
+      await chunkRef.set(chunkDocument);
+      continue;
+    }
+    const sessionRef = db
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(session.id);
+    const saved = await db.runTransaction(async (transaction) => {
+      const sessionSnapshot = await transaction.get(sessionRef);
+      if (!sessionSnapshot.exists) return false;
+      const current = toSession(sessionSnapshot.id, sessionSnapshot.data());
+      if (
+        current.userId !== session.userId ||
+        current.deletionStartedAt !== undefined ||
+        current.generationId !== session.generationId ||
+        current.preparationAttempt !== fence.attempt ||
+        current.preparationClaimId !== fence.claimId
+      ) {
+        return false;
+      }
+      transaction.set(chunkRef, chunkDocument);
+      return true;
     });
+    if (!saved) break;
   }
   return storage;
+}
+
+async function deleteTranscriptChunks(
+  db: ReturnType<typeof getFirestore>,
+  sessionId: string,
+  storage: TranscriptChunkStorage,
+  expectedGenerationId?: string,
+  expectedFence?: { attempt: number; claimId: string }
+): Promise<void> {
+  const collection = db.collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION);
+  for (let chunkIndex = 0; chunkIndex < storage.chunkCount; chunkIndex += 1) {
+    const chunkRef = collection.doc(
+      toTranscriptChunkId(sessionId, chunkIndex, storage.snapshotId)
+    );
+    await deleteDocumentIfCurrentMatches(db, chunkRef, (data) =>
+      documentBelongsToGeneration(data, expectedGenerationId) &&
+      (expectedFence === undefined ||
+        (data?.['preparationAttempt'] === expectedFence.attempt &&
+          data['preparationClaimId'] === expectedFence.claimId))
+    );
+  }
+}
+
+async function deleteContextSnapshotForGeneration(
+  db: ReturnType<typeof getFirestore>,
+  sessionId: string,
+  userId: string,
+  snapshotId: string,
+  expectedGenerationId?: string
+): Promise<void> {
+  const collection = db.collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION);
+  const snapshot = await collection
+    .where('sessionId', '==', sessionId)
+    .where('snapshotId', '==', snapshotId)
+    .get();
+  for (const document of snapshot.docs) {
+    await deleteDocumentIfCurrentMatches(
+      db,
+      document.ref,
+      (data) =>
+        data?.['userId'] === userId &&
+        data['snapshotId'] === snapshotId &&
+        documentBelongsToGeneration(data, expectedGenerationId)
+    );
+  }
+}
+
+function documentBelongsToGeneration(
+  data: Record<string, unknown> | undefined,
+  expectedGenerationId: string | undefined
+): boolean {
+  const storedGenerationId = data?.['sessionGenerationId'];
+  return expectedGenerationId === undefined
+    ? typeof storedGenerationId !== 'string'
+    : storedGenerationId === expectedGenerationId;
+}
+
+async function deleteGenerationDocuments(
+  db: ReturnType<typeof getFirestore>,
+  collectionName: string,
+  sessionId: string,
+  expectedGenerationId: string | undefined
+): Promise<void> {
+  const collection = db.collection(collectionName);
+  if (expectedGenerationId !== undefined) {
+    let deletedDocumentCount: number;
+    do {
+      const snapshot = await collection
+        .where('sessionId', '==', sessionId)
+        .where('sessionGenerationId', '==', expectedGenerationId)
+        .limit(CASCADE_DELETE_BATCH_SIZE)
+        .get();
+      deletedDocumentCount = snapshot.size;
+      if (snapshot.empty) continue;
+      await deleteDocumentsIfCurrentMatch(db, snapshot.docs, (data) =>
+        documentBelongsToGeneration(data, expectedGenerationId)
+      );
+    } while (deletedDocumentCount > 0);
+    return;
+  }
+
+  let cursor: string | undefined;
+  let scannedDocumentCount: number;
+  do {
+    let query = collection
+      .where('sessionId', '==', sessionId)
+      .orderBy(FieldPath.documentId(), 'asc')
+      .limit(CASCADE_DELETE_BATCH_SIZE);
+    if (cursor !== undefined) query = query.startAfter(cursor);
+    const snapshot = await query.get();
+    scannedDocumentCount = snapshot.size;
+    const documents = snapshot.docs.filter((document) =>
+      documentBelongsToGeneration(document.data(), undefined)
+    );
+    if (documents.length > 0) {
+      await deleteDocumentsIfCurrentMatch(db, documents, (data) =>
+        documentBelongsToGeneration(data, undefined)
+      );
+    }
+    cursor = snapshot.docs.at(-1)?.id;
+  } while (scannedDocumentCount === CASCADE_DELETE_BATCH_SIZE && cursor !== undefined);
+}
+
+async function deleteDocumentIfCurrentMatches(
+  db: ReturnType<typeof getFirestore>,
+  documentRef: FirebaseFirestore.DocumentReference,
+  predicate: (data: Record<string, unknown> | undefined) => boolean
+): Promise<boolean> {
+  return await db.runTransaction(async (transaction) => {
+    const current = await transaction.get(documentRef);
+    if (!current.exists || !predicate(current.data())) return false;
+    transaction.delete(documentRef);
+    return true;
+  });
+}
+
+async function deleteDocumentsIfCurrentMatch(
+  db: ReturnType<typeof getFirestore>,
+  documents: FirebaseFirestore.QueryDocumentSnapshot[],
+  predicate: (data: Record<string, unknown> | undefined) => boolean
+): Promise<void> {
+  for (const document of documents) {
+    await deleteDocumentIfCurrentMatches(db, document.ref, predicate);
+  }
 }
 
 function splitTranscriptText(transcriptText: string): string[] {

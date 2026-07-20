@@ -372,6 +372,7 @@ export interface ConversationAssistantPreparationRequestedEvent {
   sessionId: string;
   userId: string;
   attempt: number;
+  generationId?: string;
 }
 
 /**

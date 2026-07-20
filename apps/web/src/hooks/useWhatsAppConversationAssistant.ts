@@ -9,6 +9,7 @@ import {
 import { useAuth } from '@/context';
 import {
   createConversationAssistantSession,
+  deleteConversationAssistantSession,
   exportConversationAssistantSessionPdf,
   getConversationAssistantContext,
   getConversationAssistantSession,
@@ -31,6 +32,23 @@ import type {
 const CHAT_PAGE_SIZE = 100;
 const PENDING_CREATION_STORAGE_KEY = 'whatsapp-conversation-assistant-pending-creation';
 const CREATION_RECOVERY_DELAYS_MS = [0, 250, 750, 1500] as const;
+const TURN_RECOVERY_DELAYS_MS = [0, 150, 400, 900] as const;
+const BEST_EFFORT_RECONCILIATION_TIMEOUT_MS = 750;
+const MESSAGE_NOT_SENT_ERROR = 'Message was not sent. Your draft was kept. Try again.';
+
+async function withBestEffortReconciliationTimeout<T>(request: Promise<T>): Promise<T> {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error('Best-effort reconciliation timed out'));
+    }, BEST_EFFORT_RECONCILIATION_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([request, timeout]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
+}
 
 interface StoredPendingCreation {
   request: CreateConversationAssistantSessionRequest;
@@ -133,6 +151,40 @@ async function recoverPendingCreation(
   throw lastError;
 }
 
+async function recoverAcknowledgedTurn(
+  token: string,
+  sessionId: string,
+  acknowledgedUserTurnId: string,
+  isCurrentRequest: () => boolean
+): Promise<ConversationAssistantTurn[] | null> {
+  for (const delay of TURN_RECOVERY_DELAYS_MS) {
+    if (!isCurrentRequest()) return null;
+    if (delay > 0) {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, delay);
+      });
+    }
+    if (!isCurrentRequest()) return null;
+    try {
+      const response = await withBestEffortReconciliationTimeout(
+        listConversationAssistantTurns(token, sessionId)
+      );
+      const acknowledgedIndex = response.turns.findIndex(
+        (turn) => turn.id === acknowledgedUserTurnId
+      );
+      if (
+        acknowledgedIndex >= 0 &&
+        response.turns.slice(acknowledgedIndex + 1).some((turn) => turn.role === 'assistant')
+      ) {
+        return response.turns;
+      }
+    } catch {
+      // Persistence can finish after the stream closes; retry within the bounded window.
+    }
+  }
+  return null;
+}
+
 export interface UseWhatsAppConversationAssistantResult {
   sessions: ConversationAssistantSession[];
   selectedSessionId: string | undefined;
@@ -150,11 +202,13 @@ export interface UseWhatsAppConversationAssistantResult {
   loadingContext: boolean;
   loadingMoreContext: boolean;
   creating: boolean;
-  sending: boolean;
+  turnPhase: ConversationAssistantTurnPhase;
   retryingPreparation: boolean;
   exporting: boolean;
+  deletingSessionId: string | undefined;
   error: string | null;
   contextError: string | null;
+  deleteError: string | null;
   selectSession: (sessionId: string) => void;
   selectChat: (chatId: string) => void;
   selectModel: (model: ConversationAssistantModel) => void;
@@ -167,8 +221,16 @@ export interface UseWhatsAppConversationAssistantResult {
   loadMoreContext: () => Promise<void>;
   retryPreparation: () => Promise<void>;
   exportSelectedSessionPdf: () => Promise<void>;
+  deleteSession: (sessionId: string, deletionToken: string | undefined) => Promise<boolean>;
+  clearDeleteError: () => void;
   refresh: () => Promise<void>;
 }
+
+export type ConversationAssistantTurnPhase =
+  | 'idle'
+  | 'submitting'
+  | 'waiting'
+  | 'streaming';
 
 export interface UseWhatsAppConversationAssistantOptions {
   sessionId?: string;
@@ -212,7 +274,10 @@ export function useWhatsAppConversationAssistant(
   const sessionListRequestIdRef = useRef(0);
   const sendRequestIdRef = useRef(0);
   const sendInFlightRef = useRef(false);
+  const acknowledgedSendRequestIdRef = useRef<number | null>(null);
+  const acknowledgedUserTurnIdRef = useRef<string | null>(null);
   const exportInFlightRef = useRef(false);
+  const deleteInFlightSessionIdRef = useRef<string | null>(null);
   const retryPreparationInFlightRef = useRef(false);
   const creationRecoveryStartedRef = useRef(false);
   const turnsRequestIdRef = useRef(0);
@@ -243,11 +308,13 @@ export function useWhatsAppConversationAssistant(
   const [loadingContext, setLoadingContext] = useState(false);
   const [loadingMoreContext, setLoadingMoreContext] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [turnPhase, setTurnPhase] = useState<ConversationAssistantTurnPhase>('idle');
   const [retryingPreparation, setRetryingPreparation] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId;
@@ -262,7 +329,8 @@ export function useWhatsAppConversationAssistant(
     setLoadingMoreContext(false);
     setFollowUpQuestion('');
     sendInFlightRef.current = false;
-    setSending(false);
+    acknowledgedSendRequestIdRef.current = null;
+    setTurnPhase('idle');
     setError(null);
     setInvalidSelectedSessionId(undefined);
     if (selectedSessionId === undefined) {
@@ -425,7 +493,13 @@ export function useWhatsAppConversationAssistant(
   }, [getAccessToken, loadChats, loadSessions, selectedSessionId, setSessionParam]);
 
   useEffect(() => {
-    if (selectedSessionId === undefined || selectedSession?.status !== 'preparing') return;
+    if (
+      selectedSessionId === undefined ||
+      selectedSession?.status !== 'preparing' ||
+      selectedSession.deletionPending === true
+    ) {
+      return;
+    }
     let cancelled = false;
     let requestInFlight = false;
     const poll = async (): Promise<void> => {
@@ -450,10 +524,17 @@ export function useWhatsAppConversationAssistant(
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [getAccessToken, selectedSession?.status, selectedSessionId]);
+  }, [getAccessToken, selectedSession?.deletionPending, selectedSession?.status, selectedSessionId]);
 
   useEffect(() => {
-    if (!loadSessions || !sessions.some((item) => item.status === 'preparing')) return;
+    if (
+      !loadSessions ||
+      !sessions.some(
+        (item) => item.status === 'preparing' && item.deletionPending !== true
+      )
+    ) {
+      return;
+    }
     let refreshInFlight = false;
     const intervalId = window.setInterval(() => {
       if (refreshInFlight) return;
@@ -516,7 +597,9 @@ export function useWhatsAppConversationAssistant(
       const requestId = activeRequestId ?? sendRequestIdRef.current + 1;
       sendRequestIdRef.current = requestId;
       sendInFlightRef.current = true;
-      setSending(true);
+      acknowledgedSendRequestIdRef.current = null;
+      acknowledgedUserTurnIdRef.current = null;
+      setTurnPhase('submitting');
       let streamUserId = '';
       let streamedAssistantText = '';
       let streamedAssistantUsage: ConversationAssistantTurn['usage'];
@@ -527,12 +610,16 @@ export function useWhatsAppConversationAssistant(
       const applyStreamEvent = (event: ConversationAssistantStreamEvent): void => {
         if (!isCurrentRequest()) return;
         if (event.type === 'user_turn') {
+          acknowledgedSendRequestIdRef.current = requestId;
+          acknowledgedUserTurnIdRef.current = event.turn.id;
           streamUserId = event.turn.userId;
           clearQuestion();
           setTurns((current) => [...current, event.turn]);
+          setTurnPhase('waiting');
           return;
         }
         if (event.type === 'assistant_delta') {
+          setTurnPhase('streaming');
           streamedAssistantText += event.text;
           setTurns((current) => {
             const existing = current.find((turn) => turn.id === streamingAssistantTurnId);
@@ -569,7 +656,11 @@ export function useWhatsAppConversationAssistant(
           return;
         }
         if (event.type === 'error') {
-          setError(event.error.message);
+          setError(
+            acknowledgedSendRequestIdRef.current === requestId
+              ? event.error.message
+              : MESSAGE_NOT_SENT_ERROR
+          );
           return;
         }
         if (event.type === 'assistant_turn') {
@@ -579,28 +670,32 @@ export function useWhatsAppConversationAssistant(
             );
             return [...withoutPlaceholder, event.turn];
           });
+          return;
         }
       };
 
       try {
         await streamConversationAssistantTurn(token, sessionId, { question }, applyStreamEvent);
         if (refreshSessionList) {
-          try {
-            const sessionRequestId = sessionListRequestIdRef.current + 1;
-            sessionListRequestIdRef.current = sessionRequestId;
-            const sessionResponse = await listConversationAssistantSessions(token);
-            if (sessionListRequestIdRef.current === sessionRequestId) {
-              setSessions(sessionResponse.sessions);
-            }
-          } catch {
-            // The turn was already saved; session-list refresh can recover on the next explicit refresh.
-          }
+          const sessionRequestId = sessionListRequestIdRef.current + 1;
+          sessionListRequestIdRef.current = sessionRequestId;
+          void listConversationAssistantSessions(token)
+            .then((sessionResponse) => {
+              if (sessionListRequestIdRef.current === sessionRequestId) {
+                setSessions(sessionResponse.sessions);
+              }
+            })
+            .catch(() => {
+              // The turn was already saved; an explicit refresh can recover the summary later.
+            });
         }
-      } finally {
-        if (sendRequestIdRef.current === requestId) {
-          sendInFlightRef.current = false;
-          setSending(false);
+      } catch (streamError) {
+        if (isCurrentRequest() && streamUserId !== '') {
+          setTurns((current) =>
+            current.filter((turn) => turn.id !== streamingAssistantTurnId)
+          );
         }
+        throw streamError;
       }
     },
     []
@@ -635,7 +730,7 @@ export function useWhatsAppConversationAssistant(
       setInvalidSelectedSessionId(undefined);
       setSelectedSessionOverride(session);
       setFollowUpQuestion('');
-      setSending(false);
+      setTurnPhase('idle');
       setError(null);
       creationClientRequestIdRef.current = null;
       pendingCreationRequestRef.current = null;
@@ -702,11 +797,19 @@ export function useWhatsAppConversationAssistant(
     if (sessionId === undefined || question === '') return;
 
     const requestId = sendRequestIdRef.current + 1;
+    sendRequestIdRef.current = requestId;
     sendInFlightRef.current = true;
-    setSending(true);
+    setTurnPhase('submitting');
     setError(null);
+    let token: string | undefined;
     try {
-      const token = await getAccessToken();
+      token = await getAccessToken();
+      if (
+        selectedSessionIdRef.current !== sessionId ||
+        sendRequestIdRef.current !== requestId
+      ) {
+        return;
+      }
       await streamQuestionIntoSession(
         token,
         sessionId,
@@ -717,14 +820,58 @@ export function useWhatsAppConversationAssistant(
         requestId,
         loadSessions
       );
-    } catch (err) {
+    } catch {
       if (selectedSessionIdRef.current === sessionId && sendRequestIdRef.current === requestId) {
-        setError(getErrorMessage(err, 'Failed to send follow-up question'));
+        if (acknowledgedSendRequestIdRef.current !== requestId) {
+          setError(MESSAGE_NOT_SENT_ERROR);
+        } else {
+          let reconciled = false;
+          let reconciliationRequestId: number | null = null;
+          const acknowledgedUserTurnId = acknowledgedUserTurnIdRef.current;
+          if (token !== undefined && acknowledgedUserTurnId !== null) {
+            reconciliationRequestId = turnsRequestIdRef.current + 1;
+            turnsRequestIdRef.current = reconciliationRequestId;
+            const savedTurns = await recoverAcknowledgedTurn(
+              token,
+              sessionId,
+              acknowledgedUserTurnId,
+              () =>
+                selectedSessionIdRef.current === sessionId &&
+                sendRequestIdRef.current === requestId &&
+                turnsRequestIdRef.current === reconciliationRequestId
+            );
+            if (savedTurns !== null) {
+              if (
+                selectedSessionIdRef.current === sessionId &&
+                sendRequestIdRef.current === requestId &&
+                turnsRequestIdRef.current === reconciliationRequestId
+              ) {
+                setTurns(savedTurns);
+                reconciled = true;
+              }
+            }
+          }
+          if (
+            selectedSessionIdRef.current !== sessionId ||
+            sendRequestIdRef.current !== requestId ||
+            (reconciliationRequestId !== null &&
+              turnsRequestIdRef.current !== reconciliationRequestId)
+          ) {
+            return;
+          }
+          setError(
+            reconciled
+              ? 'The live response was interrupted. Saved messages were refreshed.'
+              : 'The live response was interrupted. Refresh the page to check the saved response.'
+          );
+        }
       }
     } finally {
       if (selectedSessionIdRef.current === sessionId && sendRequestIdRef.current === requestId) {
         sendInFlightRef.current = false;
-        setSending(false);
+        acknowledgedSendRequestIdRef.current = null;
+        acknowledgedUserTurnIdRef.current = null;
+        setTurnPhase('idle');
       }
     }
   }, [followUpQuestion, getAccessToken, loadSessions, streamQuestionIntoSession]);
@@ -885,6 +1032,90 @@ export function useWhatsAppConversationAssistant(
     }
   }, [getAccessToken, selectedSession]);
 
+  const deleteSession = useCallback(
+    async (sessionId: string, deletionToken: string | undefined): Promise<boolean> => {
+      if (deleteInFlightSessionIdRef.current !== null) return false;
+      deleteInFlightSessionIdRef.current = sessionId;
+      setDeletingSessionId(sessionId);
+      setDeleteError(null);
+      let accessToken: string | undefined;
+      try {
+        if (deletionToken === undefined) {
+          setDeleteError('Refresh analyses before deleting this item.');
+          return false;
+        }
+        accessToken = await getAccessToken();
+        sessionListRequestIdRef.current += 1;
+        await deleteConversationAssistantSession(accessToken, sessionId, deletionToken);
+        sessionListRequestIdRef.current += 1;
+        setSessions((current) =>
+          current.filter(
+            (item) => item.id !== sessionId || item.deletionToken !== deletionToken
+          )
+        );
+        if (
+          selectedSessionIdRef.current === sessionId &&
+          selectedSession?.deletionToken === deletionToken
+        ) {
+          setSelectedSessionOverride(undefined);
+          setInvalidSelectedSessionId(sessionId);
+          setTurns([]);
+          setContext(null);
+        }
+        return true;
+      } catch (err) {
+        if (accessToken !== undefined) {
+          const reconciliationRequestId = sessionListRequestIdRef.current + 1;
+          sessionListRequestIdRef.current = reconciliationRequestId;
+          try {
+            const response = await withBestEffortReconciliationTimeout(
+              listConversationAssistantSessions(accessToken)
+            );
+            if (sessionListRequestIdRef.current === reconciliationRequestId) {
+              const reconciledSession = response.sessions.find((item) => item.id === sessionId);
+              setSessions(response.sessions);
+              if (reconciledSession === undefined) {
+                if (selectedSessionIdRef.current === sessionId) {
+                  setSelectedSessionOverride(undefined);
+                  setInvalidSelectedSessionId(sessionId);
+                  setTurns([]);
+                  setContext(null);
+                }
+                return true;
+              }
+              if (
+                reconciledSession.deletionToken === deletionToken &&
+                reconciledSession.deletionPending === true
+              ) {
+                if (selectedSessionIdRef.current === sessionId) {
+                  setSelectedSessionOverride(reconciledSession);
+                  setTurns([]);
+                  setContext(null);
+                }
+                setDeleteError(
+                  'Deletion was interrupted. Finish deletion to remove the remaining analysis data.'
+                );
+                return false;
+              }
+            }
+          } catch {
+            // Keep the original deletion error when reconciliation is unavailable.
+          }
+        }
+        setDeleteError(getErrorMessage(err, 'Failed to delete analysis'));
+        return false;
+      } finally {
+        deleteInFlightSessionIdRef.current = null;
+        setDeletingSessionId(undefined);
+      }
+    },
+    [getAccessToken, selectedSession]
+  );
+
+  const clearDeleteError = useCallback((): void => {
+    setDeleteError(null);
+  }, []);
+
   return {
     sessions,
     selectedSessionId,
@@ -902,11 +1133,13 @@ export function useWhatsAppConversationAssistant(
     loadingContext,
     loadingMoreContext,
     creating,
-    sending,
+    turnPhase,
     retryingPreparation,
     exporting,
+    deletingSessionId,
     error,
     contextError,
+    deleteError,
     selectSession,
     selectChat,
     selectModel,
@@ -919,6 +1152,8 @@ export function useWhatsAppConversationAssistant(
     loadMoreContext,
     retryPreparation,
     exportSelectedSessionPdf,
+    deleteSession,
+    clearDeleteError,
     refresh,
   };
 }

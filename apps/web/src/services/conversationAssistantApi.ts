@@ -99,6 +99,22 @@ export async function getConversationAssistantSession(
   return response.session;
 }
 
+export async function deleteConversationAssistantSession(
+  accessToken: string,
+  sessionId: string,
+  deletionToken: string
+): Promise<void> {
+  await apiRequest<{ deleted: true }>(
+    config.whatsappServiceUrl,
+    getSessionPath(sessionId),
+    accessToken,
+    {
+      method: 'DELETE',
+      headers: { 'X-Conversation-Assistant-Deletion-Token': deletionToken },
+    }
+  );
+}
+
 export async function getConversationAssistantContext(
   accessToken: string,
   sessionId: string,
@@ -218,17 +234,32 @@ async function readConversationAssistantEventStream(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  const receivedEventTypes = new Set<ConversationAssistantStreamEvent['type']>();
+  const trackEvent = (event: ConversationAssistantStreamEvent): void => {
+    receivedEventTypes.add(event.type);
+    onEvent(event);
+  };
 
   let next = await reader.read();
   while (!next.done) {
     buffer += decoder.decode(next.value, { stream: true });
-    buffer = dispatchCompleteSseFrames(buffer, onEvent);
+    buffer = dispatchCompleteSseFrames(buffer, trackEvent);
     next = await reader.read();
   }
 
   buffer += decoder.decode();
   if (buffer.trim() !== '') {
-    dispatchSseFrame(buffer, onEvent);
+    dispatchSseFrame(buffer, trackEvent);
+  }
+  if (
+    !receivedEventTypes.has('done') ||
+    (receivedEventTypes.has('user_turn') && !receivedEventTypes.has('assistant_turn'))
+  ) {
+    throw new ApiError(
+      'SERVICE_UNAVAILABLE',
+      'Assistant response stream ended before completion',
+      503
+    );
   }
 }
 

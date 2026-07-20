@@ -12,6 +12,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConversationAssistantSession,
+  ConversationAssistantStreamEvent,
   ConversationAssistantTurn,
   PrivateWhatsAppChat,
 } from '@/types';
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   listConversationAssistantSessions: vi.fn(),
   checkConversationAssistantContext: vi.fn(),
   createConversationAssistantSession: vi.fn(),
+  deleteConversationAssistantSession: vi.fn(),
   exportConversationAssistantSessionPdf: vi.fn(),
   getConversationAssistantContext: vi.fn(),
   getConversationAssistantSession: vi.fn(),
@@ -45,6 +47,7 @@ vi.mock('@/services/conversationAssistantApi', () => ({
   listConversationAssistantSessions: mocks.listConversationAssistantSessions,
   checkConversationAssistantContext: mocks.checkConversationAssistantContext,
   createConversationAssistantSession: mocks.createConversationAssistantSession,
+  deleteConversationAssistantSession: mocks.deleteConversationAssistantSession,
   exportConversationAssistantSessionPdf: mocks.exportConversationAssistantSessionPdf,
   getConversationAssistantContext: mocks.getConversationAssistantContext,
   getConversationAssistantSession: mocks.getConversationAssistantSession,
@@ -80,6 +83,7 @@ const groupChat: PrivateWhatsAppChat = {
 
 const session: ConversationAssistantSession = {
   id: 'session-1',
+  deletionToken: 'deletion-token-session-1',
   userId: 'user-1',
   chatId: directChat.id,
   chatDisplayName: directChat.displayName,
@@ -224,6 +228,7 @@ describe('useWhatsAppConversationAssistant', () => {
     mocks.getConversationAssistantSessionByRequest.mockRejectedValue(new Error('Not found'));
     mocks.listConversationAssistantTurns.mockResolvedValue({ turns });
     mocks.createConversationAssistantSession.mockResolvedValue(session);
+    mocks.deleteConversationAssistantSession.mockResolvedValue(undefined);
     mocks.retryConversationAssistantPreparation.mockResolvedValue(session);
     mocks.exportConversationAssistantSessionPdf.mockResolvedValue({
       blob: new Blob(['pdf-bytes'], { type: 'application/pdf' }),
@@ -301,6 +306,244 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(mocks.listPrivateWhatsAppChats).toHaveBeenCalledWith('tok', { limit: 100 });
     expect(mocks.getConversationAssistantSession).toHaveBeenCalledWith('tok', session.id);
     expect(mocks.listConversationAssistantTurns).toHaveBeenCalledWith('tok', session.id);
+  });
+
+  it('deletes one session, blocks duplicate deletion, and removes it from local state', async () => {
+    const deletion = createDeferred<undefined>();
+    mocks.deleteConversationAssistantSession.mockReturnValue(deletion.promise);
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([session]);
+    });
+
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    act(() => {
+      first = result.current.deleteSession(session.id, session.deletionToken);
+      second = result.current.deleteSession(session.id, session.deletionToken);
+    });
+    await waitFor(() => {
+      expect(result.current.deletingSessionId).toBe(session.id);
+    });
+    expect(mocks.deleteConversationAssistantSession).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteConversationAssistantSession).toHaveBeenCalledWith(
+      'tok',
+      session.id,
+      session.deletionToken
+    );
+
+    await act(async () => {
+      deletion.resolve(undefined);
+      await deletion.promise;
+    });
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(false);
+    expect(result.current.sessions).toEqual([]);
+    expect(result.current.deletingSessionId).toBeUndefined();
+    expect(result.current.deleteError).toBeNull();
+  });
+
+  it('keeps a session visible and exposes a retryable error when deletion fails', async () => {
+    mocks.deleteConversationAssistantSession.mockRejectedValue(new Error('Delete failed'));
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([session]);
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.deleteSession(session.id, session.deletionToken)
+      ).resolves.toBe(false);
+    });
+
+    expect(result.current.sessions).toEqual([session]);
+    expect(result.current.deleteError).toBe('Delete failed');
+    act(() => {
+      result.current.clearDeleteError();
+    });
+    expect(result.current.deleteError).toBeNull();
+  });
+
+  it('bounds best-effort deletion reconciliation when the refresh never answers', async () => {
+    const hangingRefresh = createDeferred<{ sessions: ConversationAssistantSession[] }>();
+    mocks.listConversationAssistantSessions
+      .mockResolvedValueOnce({ sessions: [session] })
+      .mockReturnValueOnce(hangingRefresh.promise);
+    mocks.deleteConversationAssistantSession.mockRejectedValue(new Error('Delete timed out'));
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([session]);
+    });
+
+    let deletePromise!: Promise<boolean>;
+    act(() => {
+      deletePromise = result.current.deleteSession(session.id, session.deletionToken);
+    });
+    const completion = await Promise.race([
+      deletePromise.then(() => 'settled' as const),
+      new Promise<'timed-out'>((resolve) => {
+        window.setTimeout(() => resolve('timed-out'), 1500);
+      }),
+    ]);
+    await act(async () => {
+      hangingRefresh.resolve({ sessions: [session] });
+      await deletePromise;
+    });
+
+    expect(completion).toBe('settled');
+    expect(result.current.deletingSessionId).toBeUndefined();
+    expect(result.current.deleteError).toBe('Delete timed out');
+  });
+
+  it('reconciles an interrupted deletion into a non-openable pending session', async () => {
+    const pendingDeletion: ConversationAssistantSession = {
+      ...session,
+      status: 'preparing',
+      preparationStage: 'queued',
+      deletionPending: true,
+    };
+    let sessionListCall = 0;
+    mocks.listConversationAssistantSessions.mockImplementation(() => {
+      sessionListCall += 1;
+      return Promise.resolve({
+        sessions: sessionListCall === 1 ? [session] : [pendingDeletion],
+      });
+    });
+    mocks.deleteConversationAssistantSession.mockRejectedValue(new Error('Connection lost'));
+    const intervalSpy = vi.spyOn(window, 'setInterval');
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([session]);
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.deleteSession(session.id, session.deletionToken)
+      ).resolves.toBe(false);
+    });
+
+    expect(result.current.sessions).toEqual([pendingDeletion]);
+    expect(result.current.deleteError).toBe(
+      'Deletion was interrupted. Finish deletion to remove the remaining analysis data.'
+    );
+    expect(intervalSpy).not.toHaveBeenCalledWith(expect.any(Function), 3000);
+  });
+
+  it('does not let an in-flight list refresh restore a successfully deleted session', async () => {
+    const staleSessionList = createDeferred<{ sessions: ConversationAssistantSession[] }>();
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([session]);
+    });
+    mocks.listConversationAssistantSessions.mockReturnValueOnce(staleSessionList.promise);
+    let refreshPromise!: Promise<void>;
+    act(() => {
+      refreshPromise = result.current.refresh();
+    });
+    await waitFor(() => {
+      expect(mocks.listConversationAssistantSessions).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.deleteSession(session.id, session.deletionToken)
+      ).resolves.toBe(true);
+    });
+    expect(result.current.sessions).toEqual([]);
+
+    await act(async () => {
+      staleSessionList.resolve({ sessions: [session] });
+      await refreshPromise;
+    });
+    expect(result.current.sessions).toEqual([]);
+  });
+
+  it('does not let a list refresh started during deletion restore the deleted session', async () => {
+    const deletion = createDeferred<undefined>();
+    const staleSessionList = createDeferred<{ sessions: ConversationAssistantSession[] }>();
+    mocks.deleteConversationAssistantSession.mockReturnValue(deletion.promise);
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([session]);
+    });
+
+    let deletePromise!: Promise<boolean>;
+    act(() => {
+      deletePromise = result.current.deleteSession(session.id, session.deletionToken);
+    });
+    await waitFor(() => {
+      expect(mocks.deleteConversationAssistantSession).toHaveBeenCalledTimes(1);
+    });
+
+    mocks.listConversationAssistantSessions.mockReturnValueOnce(staleSessionList.promise);
+    let refreshPromise!: Promise<void>;
+    act(() => {
+      refreshPromise = result.current.refresh();
+    });
+    await waitFor(() => {
+      expect(mocks.listConversationAssistantSessions).toHaveBeenCalledTimes(2);
+    });
+
+    await act(async () => {
+      deletion.resolve(undefined);
+      await deletePromise;
+    });
+    expect(result.current.sessions).toEqual([]);
+
+    await act(async () => {
+      staleSessionList.resolve({ sessions: [session] });
+      await refreshPromise;
+    });
+    expect(result.current.sessions).toEqual([]);
+  });
+
+  it('keeps a replacement generation when an older deletion token completes as a no-op', async () => {
+    const replacementSession: ConversationAssistantSession = {
+      ...session,
+      deletionToken: 'deletion-token-replacement',
+      title: 'Replacement analysis',
+    };
+    mocks.listConversationAssistantSessions.mockResolvedValue({
+      sessions: [replacementSession],
+    });
+    const { result } = renderHook(
+      () => useWhatsAppConversationAssistant({ loadChats: false, loadSessions: true }),
+      { wrapper: createWrapper() }
+    );
+    await waitFor(() => {
+      expect(result.current.sessions).toEqual([replacementSession]);
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.deleteSession(session.id, session.deletionToken)
+      ).resolves.toBe(true);
+    });
+
+    expect(mocks.deleteConversationAssistantSession).toHaveBeenCalledWith(
+      'tok',
+      session.id,
+      session.deletionToken
+    );
+    expect(result.current.sessions).toEqual([replacementSession]);
   });
 
   it('loads the selected conversation from an explicit route session id', async () => {
@@ -927,6 +1170,428 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(mocks.listConversationAssistantSessions).toHaveBeenCalledTimes(2);
   });
 
+  it('reports submitting, waiting, streaming, and idle phases from stream events', async () => {
+    const sendRequest = createDeferred<undefined>();
+    let streamEventHandler: ((event: ConversationAssistantStreamEvent) => void) | undefined;
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _sessionId: string,
+        _request: { question: string },
+        onEvent: (event: ConversationAssistantStreamEvent) => void
+      ) => {
+        streamEventHandler = onEvent;
+        return await sendRequest.promise;
+      }
+    );
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Follow up?');
+    });
+    act(() => {
+      void result.current.sendFollowUp();
+    });
+    await waitFor(() => {
+      expect(result.current.turnPhase).toBe('submitting');
+    });
+    expect(result.current.followUpQuestion).toBe('Follow up?');
+
+    act(() => {
+      streamEventHandler?.({
+        type: 'user_turn',
+        turn: {
+          id: 'phase-user',
+          sessionId: session.id,
+          userId: 'user-1',
+          role: 'user',
+          text: 'Follow up?',
+          createdAt: '2026-06-21T11:06:00.000Z',
+        },
+      });
+    });
+    expect(result.current.turnPhase).toBe('waiting');
+    expect(result.current.followUpQuestion).toBe('');
+
+    act(() => {
+      result.current.setFollowUpQuestion('Draft the next question');
+      streamEventHandler?.({ type: 'assistant_delta', text: 'Answer starts' });
+    });
+    expect(result.current.turnPhase).toBe('streaming');
+    expect(result.current.followUpQuestion).toBe('Draft the next question');
+
+    act(() => {
+      streamEventHandler?.({
+        type: 'assistant_turn',
+        turn: {
+          id: 'phase-assistant',
+          sessionId: session.id,
+          userId: 'user-1',
+          role: 'assistant',
+          text: 'Answer starts and finishes.',
+          createdAt: '2026-06-21T11:07:00.000Z',
+        },
+      });
+    });
+    expect(result.current.turnPhase).toBe('streaming');
+
+    await act(async () => {
+      sendRequest.resolve(undefined);
+      await sendRequest.promise;
+    });
+    expect(result.current.turnPhase).toBe('idle');
+  });
+
+  it('returns to idle as soon as the completed stream closes without waiting for summary refresh', async () => {
+    const summaryRefresh = createDeferred<{ sessions: ConversationAssistantSession[] }>();
+    mocks.listConversationAssistantSessions
+      .mockResolvedValueOnce({ sessions: [session] })
+      .mockReturnValueOnce(summaryRefresh.promise);
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        streamSessionId: string,
+        request: { question: string },
+        onEvent: (event: ConversationAssistantStreamEvent) => void
+      ) => {
+        onEvent({
+          type: 'user_turn',
+          turn: {
+            id: 'completed-user',
+            sessionId: streamSessionId,
+            userId: 'user-1',
+            role: 'user',
+            text: request.question,
+            createdAt: '2026-06-21T11:06:00.000Z',
+          },
+        });
+        onEvent({ type: 'assistant_delta', text: 'Complete answer.' });
+        onEvent({
+          type: 'assistant_turn',
+          turn: {
+            id: 'completed-assistant',
+            sessionId: streamSessionId,
+            userId: 'user-1',
+            role: 'assistant',
+            text: 'Complete answer.',
+            createdAt: '2026-06-21T11:07:00.000Z',
+          },
+        });
+        onEvent({ type: 'done' });
+      }
+    );
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Follow up?');
+    });
+    let sendPromise!: Promise<void>;
+    act(() => {
+      sendPromise = result.current.sendFollowUp();
+    });
+    await waitFor(() => {
+      expect(mocks.listConversationAssistantSessions).toHaveBeenCalledTimes(2);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const phaseBeforeSummaryRefresh = result.current.turnPhase;
+
+    await act(async () => {
+      summaryRefresh.resolve({ sessions: [session] });
+      await sendPromise;
+    });
+    expect(phaseBeforeSummaryRefresh).toBe('idle');
+  });
+
+  it('returns to idle and preserves the draft when submission fails before acknowledgement', async () => {
+    mocks.streamConversationAssistantTurn.mockRejectedValue(new Error('Network failed'));
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Keep this draft');
+    });
+
+    await act(async () => {
+      await result.current.sendFollowUp();
+    });
+
+    expect(result.current.turnPhase).toBe('idle');
+    expect(result.current.followUpQuestion).toBe('Keep this draft');
+    expect(result.current.error).toBe(
+      'Message was not sent. Your draft was kept. Try again.'
+    );
+  });
+
+  it('reports an acknowledged stream failure without restoring the already-sent draft', async () => {
+    const acknowledgedUserTurn: ConversationAssistantTurn = {
+      id: 'acknowledged-user',
+      sessionId: session.id,
+      userId: 'user-1',
+      role: 'user',
+      text: 'Already sent',
+      createdAt: '2026-06-21T11:06:00.000Z',
+    };
+    const savedErrorTurn: ConversationAssistantTurn = {
+      id: 'saved-error-answer',
+      sessionId: session.id,
+      userId: 'user-1',
+      role: 'assistant',
+      text: 'The assistant could not finish this answer.',
+      createdAt: '2026-06-21T11:07:00.000Z',
+      error: { code: 'LLM_ERROR', message: 'Answer stream disconnected' },
+    };
+    mocks.listConversationAssistantTurns
+      .mockResolvedValueOnce({ turns })
+      .mockResolvedValueOnce({ turns: [...turns, acknowledgedUserTurn] })
+      .mockResolvedValueOnce({ turns: [...turns, acknowledgedUserTurn, savedErrorTurn] });
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _sessionId: string,
+        _request: { question: string },
+        onEvent: (event: ConversationAssistantStreamEvent) => void
+      ) => {
+        onEvent({
+          type: 'user_turn',
+          turn: acknowledgedUserTurn,
+        });
+        onEvent({ type: 'assistant_delta', text: 'Unpersisted partial answer' });
+        throw new Error('Answer stream disconnected');
+      }
+    );
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Already sent');
+    });
+
+    await act(async () => {
+      await result.current.sendFollowUp();
+    });
+
+    expect(result.current.turnPhase).toBe('idle');
+    expect(result.current.followUpQuestion).toBe('');
+    expect(result.current.turns).toEqual([...turns, acknowledgedUserTurn, savedErrorTurn]);
+    expect(result.current.turns.some((turn) => turn.text === 'Unpersisted partial answer')).toBe(
+      false
+    );
+    expect(mocks.listConversationAssistantTurns).toHaveBeenCalledTimes(3);
+    expect(result.current.error).toBe(
+      'The live response was interrupted. Saved messages were refreshed.'
+    );
+  });
+
+  it('bounds acknowledged-turn recovery when one refresh attempt never answers', async () => {
+    const acknowledgedUserTurn: ConversationAssistantTurn = {
+      id: 'bounded-recovery-user',
+      sessionId: session.id,
+      userId: 'user-1',
+      role: 'user',
+      text: 'Already sent',
+      createdAt: '2026-06-21T11:06:00.000Z',
+    };
+    const savedAssistantTurn: ConversationAssistantTurn = {
+      id: 'bounded-recovery-assistant',
+      sessionId: session.id,
+      userId: 'user-1',
+      role: 'assistant',
+      text: 'Saved after disconnect.',
+      createdAt: '2026-06-21T11:07:00.000Z',
+    };
+    const hangingRefresh = createDeferred<{ turns: ConversationAssistantTurn[] }>();
+    mocks.listConversationAssistantTurns
+      .mockResolvedValueOnce({ turns })
+      .mockReturnValueOnce(hangingRefresh.promise)
+      .mockResolvedValue({ turns: [...turns, acknowledgedUserTurn, savedAssistantTurn] });
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _sessionId: string,
+        _request: { question: string },
+        onEvent: (event: ConversationAssistantStreamEvent) => void
+      ) => {
+        onEvent({ type: 'user_turn', turn: acknowledgedUserTurn });
+        onEvent({ type: 'assistant_delta', text: 'Partial' });
+        throw new Error('Disconnected');
+      }
+    );
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Already sent');
+    });
+
+    let sendPromise!: Promise<void>;
+    act(() => {
+      sendPromise = result.current.sendFollowUp();
+    });
+    const completion = await Promise.race([
+      sendPromise.then(() => 'settled' as const),
+      new Promise<'timed-out'>((resolve) => {
+        window.setTimeout(() => resolve('timed-out'), 1500);
+      }),
+    ]);
+    await act(async () => {
+      hangingRefresh.resolve({ turns: [...turns, acknowledgedUserTurn, savedAssistantTurn] });
+      await sendPromise;
+    });
+
+    expect(completion).toBe('settled');
+    expect(result.current.turnPhase).toBe('idle');
+  });
+
+  it('removes an unpersisted partial answer and asks for refresh when reconciliation fails', async () => {
+    mocks.listConversationAssistantTurns
+      .mockResolvedValueOnce({ turns })
+      .mockRejectedValue(new Error('Refresh failed'));
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _sessionId: string,
+        _request: { question: string },
+        onEvent: (event: ConversationAssistantStreamEvent) => void
+      ) => {
+        onEvent({
+          type: 'user_turn',
+          turn: {
+            id: 'acknowledged-user',
+            sessionId: session.id,
+            userId: 'user-1',
+            role: 'user',
+            text: 'Already sent',
+            createdAt: '2026-06-21T11:06:00.000Z',
+          },
+        });
+        onEvent({ type: 'assistant_delta', text: 'Misleading partial answer' });
+        throw new Error('Connection ended');
+      }
+    );
+    const { result } = renderHook(() => useWhatsAppConversationAssistant(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Already sent');
+    });
+
+    await act(async () => {
+      await result.current.sendFollowUp();
+    });
+
+    expect(result.current.turns.some((turn) => turn.text === 'Misleading partial answer')).toBe(
+      false
+    );
+    expect(result.current.error).toBe(
+      'The live response was interrupted. Refresh the page to check the saved response.'
+    );
+  });
+
+  it('does not show a stale recovery error after switching analyses', async () => {
+    const secondSession: ConversationAssistantSession = {
+      ...session,
+      id: 'session-2',
+      title: 'Second context',
+      transcriptSha256: 'def456',
+    };
+    const acknowledgedUserTurn: ConversationAssistantTurn = {
+      id: 'acknowledged-user',
+      sessionId: session.id,
+      userId: 'user-1',
+      role: 'user',
+      text: 'Already sent',
+      createdAt: '2026-06-21T11:06:00.000Z',
+    };
+    const savedAssistantTurn: ConversationAssistantTurn = {
+      id: 'saved-assistant',
+      sessionId: session.id,
+      userId: 'user-1',
+      role: 'assistant',
+      text: 'Saved after the stream closed.',
+      createdAt: '2026-06-21T11:07:00.000Z',
+    };
+    const recoveryRequest = createDeferred<{ turns: ConversationAssistantTurn[] }>();
+    let firstSessionTurnsCalls = 0;
+    mocks.listConversationAssistantSessions.mockResolvedValue({ sessions: [session, secondSession] });
+    mocks.getConversationAssistantSession.mockImplementation((_token: string, sessionId: string) =>
+      Promise.resolve(sessionId === secondSession.id ? secondSession : session)
+    );
+    mocks.listConversationAssistantTurns.mockImplementation((_token: string, sessionId: string) => {
+      if (sessionId === secondSession.id) return Promise.resolve({ turns: [] });
+      firstSessionTurnsCalls += 1;
+      return firstSessionTurnsCalls === 1
+        ? Promise.resolve({ turns })
+        : recoveryRequest.promise;
+    });
+    mocks.streamConversationAssistantTurn.mockImplementation(
+      async (
+        _token: string,
+        _sessionId: string,
+        _request: { question: string },
+        onEvent: (event: ConversationAssistantStreamEvent) => void
+      ) => {
+        onEvent({ type: 'user_turn', turn: acknowledgedUserTurn });
+        throw new Error('Connection ended');
+      }
+    );
+
+    const { result } = renderHook(() => useAssistantWithLocationControls(), {
+      wrapper: createWrapper('/whatsapp/conversation-assistant?session=session-1'),
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(session.id);
+    });
+    act(() => {
+      result.current.setFollowUpQuestion('Already sent');
+    });
+
+    let sendPromise!: Promise<void>;
+    act(() => {
+      sendPromise = result.current.sendFollowUp();
+    });
+    await waitFor(() => {
+      expect(firstSessionTurnsCalls).toBe(2);
+    });
+
+    act(() => {
+      result.current.navigateToSession(secondSession.id);
+    });
+    await waitFor(() => {
+      expect(result.current.selectedSession?.id).toBe(secondSession.id);
+    });
+
+    await act(async () => {
+      recoveryRequest.resolve({ turns: [...turns, acknowledgedUserTurn, savedAssistantTurn] });
+      await sendPromise;
+    });
+
+    expect(result.current.selectedSession?.id).toBe(secondSession.id);
+    expect(result.current.turns).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
+
   it('ignores duplicate follow-up sends while a send is in flight', async () => {
     const sendRequest = createDeferred<undefined>();
     mocks.streamConversationAssistantTurn.mockReturnValue(sendRequest.promise);
@@ -1052,7 +1717,7 @@ describe('useWhatsAppConversationAssistant', () => {
     expect(result.current.selectedSession?.id).toBe(secondSession.id);
     expect(result.current.turns).toEqual([]);
     expect(result.current.followUpQuestion).toBe('');
-    expect(result.current.sending).toBe(false);
+    expect(result.current.turnPhase).toBe('idle');
     expect(result.current.error).toBeNull();
   });
 

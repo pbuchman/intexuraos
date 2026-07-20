@@ -22,6 +22,11 @@ export interface ConversationAssistantRepository {
     input: { sessionId: string; userId: string }
   ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null>;
   listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]>;
+  deleteSession(input: {
+    sessionId: string;
+    userId: string;
+    deletionToken: string;
+  }): Promise<void>;
   claimPreparation(input: {
     sessionId: string;
     userId: string;
@@ -29,6 +34,7 @@ export interface ConversationAssistantRepository {
     claimId: string;
     now: string;
     leaseExpiresAt: string;
+    expectedGenerationId?: string;
   }): Promise<
     | { status: 'claimed'; session: ConversationAssistantSession }
     | { status: 'busy'; session: ConversationAssistantSession }
@@ -45,6 +51,7 @@ export interface ConversationAssistantRepository {
     userId: string;
     expectedAttempt: number;
     updatedAt: string;
+    expectedGenerationId?: string;
   }): Promise<
     | { status: 'queued' | 'stale'; session: ConversationAssistantSession }
     | { status: 'not_found' }
@@ -55,6 +62,7 @@ export interface ConversationAssistantRepository {
     attempt: number;
     error: { code: string; message: string };
     updatedAt: string;
+    expectedGenerationId?: string;
   }): Promise<
     | { status: 'saved' | 'stale'; session: ConversationAssistantSession }
     | { status: 'not_found' }
@@ -63,12 +71,14 @@ export interface ConversationAssistantRepository {
     sessionId: string,
     userId: string,
     snapshotId: string,
-    snapshot: Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'>
-  ): Promise<void>;
+    snapshot: Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'>,
+    expectedGenerationId?: string
+  ): Promise<boolean>;
   deleteContextSnapshot(
     sessionId: string,
     userId: string,
-    snapshotId: string
+    snapshotId: string,
+    expectedGenerationId?: string
   ): Promise<void>;
   getContextPage(
     sessionId: string,
@@ -84,6 +94,14 @@ export interface ConversationAssistantRepository {
     Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages' | 'snapshotAvailable'>
   >;
   saveTurn(turn: ConversationAssistantTurn): Promise<void>;
+  saveTurnIfSessionExists(
+    turn: ConversationAssistantTurn,
+    expectedGenerationId: string | undefined
+  ): Promise<boolean>;
+  saveAssistantTurnAndTouchSession(input: {
+    session: ConversationAssistantSession;
+    turn: ConversationAssistantTurn;
+  }): Promise<boolean>;
   listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]>;
 }
 
@@ -93,6 +111,7 @@ export interface ConversationAssistantClock {
 
 export interface ConversationAssistantIdGenerator {
   sessionId(input?: { userId: string; requestId: string }): string;
+  sessionGenerationId(): string;
   turnId(): string;
 }
 

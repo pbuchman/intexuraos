@@ -14,6 +14,7 @@ import {
   checkConversationAssistantContext,
   conversationAssistantRandomIds,
   createConversationAssistantSession as createQueuedConversationAssistantSession,
+  deleteConversationAssistantSession,
   deriveEffectiveRange,
   exportConversationAssistantSessionPdf,
   getConversationAssistantContext,
@@ -41,6 +42,7 @@ import type {
   StorePrivateWhatsAppMessageInput,
 } from '../../../domain/whatsapp/models/PrivateWhatsApp.js';
 import { createHash } from 'node:crypto';
+import { createConversationAssistantDeletionToken } from '../../../domain/conversation-assistant/deletionToken.js';
 
 const USER_ID = 'user-123';
 const SOURCE_ACCOUNT_ID = 'source-123';
@@ -75,6 +77,13 @@ function makeDeps(): {
       sessionIdsByRequest.set(key, id);
       return id;
     },
+    sessionGenerationId: (() => {
+      let counter = 0;
+      return (): string => {
+        counter += 1;
+        return `generation-${String(counter)}`;
+      };
+    })(),
     turnId: (() => {
       let counter = 0;
       return (): string => {
@@ -241,9 +250,27 @@ async function createConversationAssistantSession(
     return created;
   }
   return await prepareConversationAssistantSession(
-    { userId: input.userId, sessionId: created.value.session.id },
+    preparationInput(created.value.session),
     deps
   );
+}
+
+function preparationInput(
+  session: { id: string; userId: string; generationId?: string },
+  overrides: { attempt?: number; claimId?: string } = {}
+): {
+  userId: string;
+  sessionId: string;
+  generationId?: string;
+  attempt?: number;
+  claimId?: string;
+} {
+  return {
+    userId: session.userId,
+    sessionId: session.id,
+    ...(session.generationId !== undefined ? { generationId: session.generationId } : {}),
+    ...overrides,
+  };
 }
 
 describe('Conversation Assistant session use cases', () => {
@@ -287,6 +314,7 @@ describe('Conversation Assistant session use cases', () => {
         sessionId: result.value.session.id,
         userId: USER_ID,
         attempt: 1,
+        generationId: 'generation-1',
       },
     ]);
   });
@@ -308,7 +336,7 @@ describe('Conversation Assistant session use cases', () => {
     if (!created.ok) return;
 
     const prepared = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: created.value.session.id },
+      preparationInput(created.value.session),
       deps
     );
 
@@ -332,6 +360,36 @@ describe('Conversation Assistant session use cases', () => {
       prepared.value.context?.messages
     );
     expect(llmFactoryCalls).toEqual([]);
+  });
+
+  it('rejects a generation-less preparation event for a generated session', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-generation-fence',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    await expect(
+      prepareConversationAssistantSession(
+        { userId: USER_ID, sessionId: created.value.session.id },
+        deps
+      )
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+    await expect(
+      conversationRepository.getSessionById(created.value.session.id)
+    ).resolves.toMatchObject({ status: 'preparing', preparationStage: 'queued' });
   });
 
   it('covers preparation entry boundaries and the legacy default attempt', async () => {
@@ -375,7 +433,7 @@ describe('Conversation Assistant session use cases', () => {
       preparationStage: 'ready',
     });
     const alreadyReady = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: created.value.session.id },
+      preparationInput(created.value.session),
       deps
     );
     expect(alreadyReady.ok && alreadyReady.value.session.status).toBe('ready');
@@ -385,6 +443,7 @@ describe('Conversation Assistant session use cases', () => {
       id: 'whatsapp_conv_session_legacy_attempt',
     };
     delete legacy.preparationAttempt;
+    delete legacy.generationId;
     await conversationRepository.saveSession(legacy);
     const attempts: number[] = [];
     conversationRepository.claimPreparation = (
@@ -394,7 +453,7 @@ describe('Conversation Assistant session use cases', () => {
       return Promise.resolve({ status: 'not_found' });
     };
     const disappeared = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: legacy.id },
+      preparationInput(legacy),
       deps
     );
     expect(attempts).toEqual([1]);
@@ -421,7 +480,7 @@ describe('Conversation Assistant session use cases', () => {
     if (!chatFailureSession.ok) return;
     first.privateRepository.failNext({ code: 'PERSISTENCE_ERROR', message: 'account failed' });
     const savedFailure = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: chatFailureSession.value.session.id },
+      preparationInput(chatFailureSession.value.session),
       first.deps
     );
     expect(savedFailure).toEqual({
@@ -448,7 +507,7 @@ describe('Conversation Assistant session use cases', () => {
       false
     );
     const currentAfterChatFailure = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: lostChatFailure.value.session.id },
+      preparationInput(lostChatFailure.value.session),
       second.deps
     );
     expect(currentAfterChatFailure.ok).toBe(true);
@@ -475,7 +534,7 @@ describe('Conversation Assistant session use cases', () => {
       false
     );
     const currentAfterMessageFailure = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: messageFailureSession.value.session.id },
+      preparationInput(messageFailureSession.value.session),
       third.deps
     );
     expect(currentAfterMessageFailure.ok).toBe(true);
@@ -505,7 +564,7 @@ describe('Conversation Assistant session use cases', () => {
     });
 
     const result = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: created.value.session.id },
+      preparationInput(created.value.session),
       deps
     );
 
@@ -540,7 +599,7 @@ describe('Conversation Assistant session use cases', () => {
     );
 
     const result = await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: created.value.session.id },
+      preparationInput(created.value.session),
       deps
     );
 
@@ -573,12 +632,10 @@ describe('Conversation Assistant session use cases', () => {
     );
 
     const prepared = await prepareConversationAssistantSession(
-      {
-        userId: USER_ID,
-        sessionId: created.value.session.id,
+      preparationInput(created.value.session, {
         attempt: 1,
         claimId,
-      },
+      }),
       deps
     );
 
@@ -589,6 +646,32 @@ describe('Conversation Assistant session use cases', () => {
     expect(
       conversationRepository.getContextMessages(created.value.session.id, snapshotId)
     ).toEqual([]);
+  });
+
+  it('returns the current preparation state when the context snapshot fence is lost', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-context-snapshot-fence-loss',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    vi.spyOn(conversationRepository, 'saveContextSnapshot').mockResolvedValue(false);
+
+    const prepared = await prepareConversationAssistantSession(
+      preparationInput(created.value.session),
+      deps
+    );
+
+    expect(prepared.ok).toBe(true);
+    if (prepared.ok) expect(prepared.value.session.status).toBe('preparing');
   });
 
   it('removes a partially written context snapshot when snapshot persistence fails', async () => {
@@ -619,12 +702,10 @@ describe('Conversation Assistant session use cases', () => {
 
     await expect(
       prepareConversationAssistantSession(
-        {
-          userId: USER_ID,
-          sessionId: created.value.session.id,
+        preparationInput(created.value.session, {
           attempt: 1,
           claimId,
-        },
+        }),
         deps
       )
     ).rejects.toThrow('Partial snapshot write');
@@ -660,16 +741,17 @@ describe('Conversation Assistant session use cases', () => {
       claimId: 'claim-1',
       now: '2026-06-30T12:00:00.000Z',
       leaseExpiresAt: '2026-06-30T12:05:00.000Z',
+      ...(created.value.session.generationId !== undefined
+        ? { expectedGenerationId: created.value.session.generationId }
+        : {}),
     });
     expect(firstClaim.status).toBe('claimed');
 
     const duplicate = await prepareConversationAssistantSession(
-      {
-        userId: USER_ID,
-        sessionId: created.value.session.id,
+      preparationInput(created.value.session, {
         attempt: 1,
         claimId: 'claim-2',
-      },
+      }),
       deps
     );
     expect(duplicate).toEqual({
@@ -694,12 +776,10 @@ describe('Conversation Assistant session use cases', () => {
     expect(retried.ok).toBe(true);
 
     const stale = await prepareConversationAssistantSession(
-      {
-        userId: USER_ID,
-        sessionId: created.value.session.id,
+      preparationInput(created.value.session, {
         attempt: 1,
         claimId: 'late-claim-1',
-      },
+      }),
       deps
     );
     expect(stale.ok).toBe(true);
@@ -733,11 +813,11 @@ describe('Conversation Assistant session use cases', () => {
     };
 
     await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: created.value.session.id, attempt: 1 },
+      preparationInput(created.value.session, { attempt: 1 }),
       deps
     );
     await prepareConversationAssistantSession(
-      { userId: USER_ID, sessionId: created.value.session.id, attempt: 1 },
+      preparationInput(created.value.session, { attempt: 1 }),
       deps
     );
 
@@ -758,6 +838,9 @@ describe('Conversation Assistant session use cases', () => {
         claimId: 'worker-claim',
         now: '2026-06-30T12:00:00.000Z',
         leaseExpiresAt: '2026-06-30T12:05:00.000Z',
+        ...(event.generationId !== undefined
+          ? { expectedGenerationId: event.generationId }
+          : {}),
       });
       expect(claimed.status).toBe('claimed');
       return err({ code: 'INTERNAL_ERROR', message: 'Publish response was lost' });
@@ -914,6 +997,30 @@ describe('Conversation Assistant session use cases', () => {
     });
   });
 
+  it('does not reuse an idempotent session after deletion has started', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const input = {
+      userId: USER_ID,
+      requestId: 'request-deleting-reuse',
+      chatId: CHAT_ID,
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    };
+    const created = await createQueuedConversationAssistantSession(input, deps);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      deletionStartedAt: '2026-06-30T12:01:00.000Z',
+    });
+
+    await expect(createQueuedConversationAssistantSession(input, deps)).resolves.toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+  });
+
   it('reuses a ready idempotent analysis and requeues a failed legacy analysis', async () => {
     const readyCase = makeDeps();
     await seedDirectMessage(readyCase.privateRepository);
@@ -950,6 +1057,7 @@ describe('Conversation Assistant session use cases', () => {
       preparationStage: 'failed' as const,
     };
     delete failedLegacy.preparationAttempt;
+    delete failedLegacy.generationId;
     await legacyCase.conversationRepository.saveSession(failedLegacy);
 
     const requeued = await createQueuedConversationAssistantSession(
@@ -1009,6 +1117,7 @@ describe('Conversation Assistant session use cases', () => {
       preparationStage: 'failed' as const,
     };
     delete failedFallback.preparationAttempt;
+    delete failedFallback.generationId;
     await fallbackCase.conversationRepository.saveSession(failedFallback);
     const queuedWithoutAttempt = {
       ...failedFallback,
@@ -1668,6 +1777,55 @@ describe('Conversation Assistant session use cases', () => {
     );
   });
 
+  it('returns not found when generation fences reject user or assistant turn persistence', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const input = {
+      userId: USER_ID,
+      sessionId: created.value.session.id,
+      question: 'Will this persist?',
+    };
+
+    const rejectedUserTurn = vi
+      .spyOn(conversationRepository, 'saveTurnIfSessionExists')
+      .mockResolvedValueOnce(false);
+    await expect(sendConversationAssistantTurn(input, deps)).resolves.toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+    rejectedUserTurn.mockRestore();
+
+    const rejectedAssistantTurn = vi
+      .spyOn(conversationRepository, 'saveAssistantTurnAndTouchSession')
+      .mockResolvedValueOnce(false);
+    await expect(sendConversationAssistantTurn(input, deps)).resolves.toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+    rejectedAssistantTurn.mockRestore();
+
+    vi.spyOn(conversationRepository, 'saveTurnIfSessionExists').mockResolvedValueOnce(false);
+    const events: ConversationAssistantStreamEvent[] = [];
+    await expect(
+      streamConversationAssistantTurn(input, deps, (event) => events.push(event))
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+    expect(events).toEqual([]);
+  });
+
   it('keeps neutral session metadata when the first private message is sent', async () => {
     const { deps, conversationRepository } = makeDeps();
     await seedDirectMessage(deps.privateWhatsAppRepository as FakePrivateWhatsAppRepository);
@@ -1781,6 +1939,95 @@ describe('Conversation Assistant session use cases', () => {
       code: 'LLM_ERROR',
       message: 'stream broke',
     });
+  });
+
+  it('does not recreate a session when it is deleted during a streamed response', async () => {
+    const { deps, privateRepository, conversationRepository, llmClient } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    llmClient.setNextStreamEvents([{ type: 'delta', text: 'late answer' }]);
+
+    const result = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Delete while answering.' },
+      deps,
+      (event) => {
+        if (event.type === 'user_turn') {
+          void conversationRepository.deleteSession({
+            sessionId: created.value.session.id,
+            userId: USER_ID,
+            deletionToken: createConversationAssistantDeletionToken(created.value.session),
+          });
+        }
+      }
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+    expect(await conversationRepository.getSessionById(created.value.session.id)).toBeNull();
+    expect(conversationRepository.getAllTurns()).toEqual([]);
+  });
+
+  it('does not write a delayed streamed response into a replacement session with the same id', async () => {
+    const { deps, privateRepository, conversationRepository, llmClient } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const originalSession = {
+      ...created.value.session,
+      generationId: 'generation-original',
+    } as typeof created.value.session;
+    await conversationRepository.saveSession(originalSession);
+    llmClient.setNextStreamEvents([{ type: 'delta', text: 'late answer' }]);
+
+    const result = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: originalSession.id, question: 'Replace while answering.' },
+      deps,
+      (event) => {
+        if (event.type === 'user_turn') {
+          void conversationRepository.deleteSession({
+            sessionId: originalSession.id,
+            userId: USER_ID,
+            deletionToken: createConversationAssistantDeletionToken(originalSession),
+          });
+          void conversationRepository.saveSession({
+            ...originalSession,
+            generationId: 'generation-replacement',
+            updatedAt: '2026-06-30T13:00:00.000Z',
+          } as typeof originalSession);
+        }
+      }
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+    expect(await conversationRepository.getSessionById(originalSession.id)).toMatchObject({
+      generationId: 'generation-replacement',
+      updatedAt: '2026-06-30T13:00:00.000Z',
+    });
+    expect(conversationRepository.getAllTurns()).toEqual([]);
   });
 
   it('exports an owned session PDF with mapped counts and chronological turns', async () => {
@@ -2305,7 +2552,8 @@ describe('Conversation Assistant session use cases', () => {
       legacyReady.id,
       USER_ID,
       snapshotId,
-      { messages: [], omittedMessages }
+      { messages: [], omittedMessages },
+      legacyReady.generationId
     );
     await conversationRepository.saveSession({
       ...legacyReady,
@@ -2575,6 +2823,85 @@ describe('Conversation Assistant session use cases', () => {
     expect(foreignTurns.ok).toBe(false);
     expect(ownedGet.ok).toBe(true);
     expect(ownedTurns).toEqual({ ok: true, value: [] });
+  });
+
+  it('deletes an owned session idempotently without deleting a foreign session', async () => {
+    const { deps, conversationRepository, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const ownedSession = created.value.session;
+    await conversationRepository.saveTurn({
+      id: 'owned-turn',
+      sessionId: ownedSession.id,
+      userId: USER_ID,
+      role: 'user',
+      text: 'Delete this analysis',
+      createdAt: '2026-06-30T12:01:00.000Z',
+    });
+    await conversationRepository.saveContextSnapshot(
+      ownedSession.id,
+      USER_ID,
+      'owned-snapshot',
+      { messages: [], omittedMessages: [] }
+    );
+    await conversationRepository.saveSession({
+      ...ownedSession,
+      id: 'foreign-session',
+      userId: 'other-user',
+    });
+
+    await expect(
+      deleteConversationAssistantSession(
+        {
+          userId: USER_ID,
+          sessionId: 'foreign-session',
+          deletionToken: createConversationAssistantDeletionToken({
+            ...ownedSession,
+            id: 'foreign-session',
+          }),
+        },
+        deps
+      )
+    ).resolves.toEqual({ ok: true, value: { deleted: true } });
+    expect(await conversationRepository.getSessionById('foreign-session')).not.toBeNull();
+
+    await expect(
+      deleteConversationAssistantSession(
+        {
+          userId: USER_ID,
+          sessionId: ownedSession.id,
+          deletionToken: createConversationAssistantDeletionToken(ownedSession),
+        },
+        deps
+      )
+    ).resolves.toEqual({ ok: true, value: { deleted: true } });
+    expect(await conversationRepository.getSessionById(ownedSession.id)).toBeNull();
+    expect(conversationRepository.getAllTurns()).toEqual([]);
+    expect(
+      conversationRepository.getContextMessages(ownedSession.id, 'owned-snapshot')
+    ).toEqual([]);
+
+    await expect(
+      deleteConversationAssistantSession(
+        {
+          userId: USER_ID,
+          sessionId: ownedSession.id,
+          deletionToken: createConversationAssistantDeletionToken(ownedSession),
+        },
+        deps
+      )
+    ).resolves.toEqual({ ok: true, value: { deleted: true } });
   });
 
   it('derives fallback titles and assistant error turns for unavailable chat generation', async () => {
