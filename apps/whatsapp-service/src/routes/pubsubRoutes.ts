@@ -7,6 +7,7 @@ import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-htt
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import type {
+  ConversationAssistantPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageSourceType,
   MediaCleanupEvent,
@@ -24,6 +25,12 @@ import {
 } from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { WebhookPayload } from './schemas.js';
+import {
+  conversationAssistantRandomIds,
+  conversationAssistantSystemClock,
+  prepareConversationAssistantSession,
+} from '../domain/conversation-assistant/sessionUseCases.js';
+import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
 
 interface PubSubPushMessage {
   message: {
@@ -954,9 +961,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
       {
         schema: {
           operationId: 'processWebhookEvent',
-          summary: 'Process webhook event or trigger link preview extraction via web-agent',
+          summary: 'Process queued WhatsApp service work',
           description:
-            'Internal endpoint for PubSub push. Handles two event types: webhook.process (processes WhatsApp webhook events directly) and linkpreview.extract (delegates Open Graph metadata extraction to web-agent via internal API).',
+            'Internal endpoint for PubSub push. Processes webhook, link preview, and Conversation Assistant preparation events.',
           tags: ['internal'],
           body: {
             type: 'object',
@@ -1029,6 +1036,81 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         const parsedType = eventData.type as string;
+
+        if (parsedType === 'whatsapp.conversation-assistant.prepare') {
+          const preparationEvent = eventData as unknown as ConversationAssistantPreparationRequestedEvent;
+          if (
+            typeof preparationEvent.sessionId !== 'string' ||
+            typeof preparationEvent.userId !== 'string' ||
+            !Number.isInteger(preparationEvent.attempt) ||
+            preparationEvent.attempt < 1
+          ) {
+            request.log.error(
+              { messageId: body.message.messageId },
+              'Invalid Conversation Assistant preparation event'
+            );
+            return await reply.ok({});
+          }
+          const services = getServices();
+          if (
+            services.conversationAssistantRepository === undefined ||
+            services.llmClientFactory === undefined ||
+            services.conversationAssistantModel === undefined
+          ) {
+            return await reply.fail(
+              'INTERNAL_ERROR',
+              'Conversation Assistant services are not configured'
+            );
+          }
+          const deps: ConversationAssistantDeps = {
+            repository: services.conversationAssistantRepository,
+            privateWhatsAppRepository: services.privateWhatsAppRepository,
+            llmClientFactory: services.llmClientFactory,
+            preparationPublisher: {
+              publish: () => Promise.resolve({ ok: true as const, value: undefined }),
+            },
+            defaultModel: services.conversationAssistantModel,
+            clock: conversationAssistantSystemClock,
+            ids: conversationAssistantRandomIds,
+          };
+          if (services.pdfConversationExporter !== undefined) {
+            deps.pdfExporter = services.pdfConversationExporter;
+          }
+
+          const result = await prepareConversationAssistantSession(
+            {
+              userId: preparationEvent.userId,
+              sessionId: preparationEvent.sessionId,
+              attempt: preparationEvent.attempt,
+            },
+            deps
+          );
+          if (!result.ok) {
+            request.log.error(
+              {
+                sessionId: preparationEvent.sessionId,
+                userId: preparationEvent.userId,
+                code: result.error.code,
+                error: result.error.message,
+              },
+              'Conversation Assistant preparation failed'
+            );
+            if (result.error.code === 'PERSISTENCE_ERROR') {
+              return await reply.fail('INTERNAL_ERROR', result.error.message);
+            }
+            return await reply.ok({});
+          }
+
+          request.log.info(
+            {
+              sessionId: preparationEvent.sessionId,
+              userId: preparationEvent.userId,
+              status: result.value.session.status,
+            },
+            'Conversation Assistant preparation completed'
+          );
+          return await reply.ok({});
+        }
 
         if (parsedType === 'whatsapp.webhook.process') {
           request.log.info(

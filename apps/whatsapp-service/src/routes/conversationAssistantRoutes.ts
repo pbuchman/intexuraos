@@ -12,11 +12,14 @@ import {
   conversationAssistantSystemClock,
   createConversationAssistantSession,
   exportConversationAssistantSessionPdf,
+  getConversationAssistantContext,
   getConversationAssistantSession,
+  getConversationAssistantSessionByRequest,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
   sendConversationAssistantTurn,
   streamConversationAssistantTurn,
+  retryConversationAssistantPreparation,
 } from '../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
 import type {
@@ -31,12 +34,12 @@ import type {
 type ValidatedRequest = FastifyRequest & { validationError?: unknown };
 
 interface CreateSessionBody {
+  requestId: string;
   chatId: string;
   from: string;
   to: string;
   model?: string;
   maxMessages?: number;
-  question?: string;
 }
 
 interface CheckContextBody {
@@ -47,6 +50,15 @@ interface CheckContextBody {
 
 interface SessionParams {
   sessionId: string;
+}
+
+interface SessionRequestParams {
+  requestId: string;
+}
+
+interface ContextQuerystring {
+  messageCursor?: string;
+  omittedCursor?: string;
 }
 
 interface SendTurnBody {
@@ -141,16 +153,17 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
           type: 'object',
           additionalProperties: false,
           properties: {
+            requestId: { type: 'string', minLength: 1, maxLength: 128 },
             chatId: { type: 'string', minLength: 1 },
             from: { type: 'string', minLength: 1 },
             to: { type: 'string', minLength: 1 },
             model: { type: 'string', minLength: 1 },
             maxMessages: { type: 'integer', minimum: 1 },
-            question: { type: 'string' },
+            question: false,
           },
-          required: ['chatId', 'from', 'to'],
+          required: ['requestId', 'chatId', 'from', 'to'],
         },
-        response: routeResponseSchema(201),
+        response: routeResponseSchema(202),
       },
     },
     async (request, reply) => {
@@ -169,6 +182,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
 
       const input: CreateConversationAssistantSessionInput = {
         userId: user.userId,
+        requestId: request.body.requestId,
         chatId: request.body.chatId,
         from: request.body.from,
         to: request.body.to,
@@ -177,15 +191,13 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
         input.model = request.body.model as ConversationAssistantModel;
       }
       if (request.body.maxMessages !== undefined) input.maxMessages = request.body.maxMessages;
-      if (request.body.question !== undefined) input.question = request.body.question;
 
       const result = await safeCall(() => createConversationAssistantSession(input, deps));
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.status(201).ok({
+      return await reply.status(202).ok({
         session: toPublicSession(result.value.session),
-        turns: result.value.turns,
       });
     }
   );
@@ -221,6 +233,122 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
         return await sendConversationAssistantError(reply, result.error);
       }
       return await reply.ok({ session: toPublicSession(result.value) });
+    }
+  );
+
+  fastify.get<{ Params: SessionRequestParams }>(
+    '/conversation-assistant/session-requests/:requestId',
+    {
+      schema: {
+        operationId: 'getWhatsAppConversationAssistantSessionByRequest',
+        tags: ['whatsapp'],
+        response: routeResponseSchema(),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to recover a Conversation Assistant session request',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_recover_session' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+
+      const result = await safeCall(() =>
+        getConversationAssistantSessionByRequest(
+          { userId: user.userId, requestId: request.params.requestId },
+          deps
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantError(reply, result.error);
+      }
+      return await reply.ok({ session: toPublicSession(result.value) });
+    }
+  );
+
+  fastify.get<{ Params: SessionParams; Querystring: ContextQuerystring }>(
+    '/conversation-assistant/sessions/:sessionId/context',
+    {
+      schema: {
+        operationId: 'getWhatsAppConversationAssistantContext',
+        tags: ['whatsapp'],
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            messageCursor: { type: 'string' },
+            omittedCursor: { type: 'string' },
+          },
+        },
+        response: routeResponseSchema(),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to inspect a frozen Conversation Assistant context',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_get_context' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+
+      const result = await safeCall(() =>
+        getConversationAssistantContext(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            ...(request.query.messageCursor !== undefined
+              ? { messageCursor: Number(request.query.messageCursor) }
+              : {}),
+            ...(request.query.omittedCursor !== undefined
+              ? { omittedCursor: Number(request.query.omittedCursor) }
+              : {}),
+          },
+          deps
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantError(reply, result.error);
+      }
+      return await reply.ok(result.value);
+    }
+  );
+
+  fastify.post<{ Params: SessionParams }>(
+    '/conversation-assistant/sessions/:sessionId/preparation/retry',
+    {
+      schema: {
+        operationId: 'retryWhatsAppConversationAssistantPreparation',
+        tags: ['whatsapp'],
+        response: routeResponseSchema(202),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to retry Conversation Assistant preparation',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_retry_preparation' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      const deps = await getConversationAssistantDeps(reply);
+      if (deps === null) return;
+
+      const result = await safeCall(() =>
+        retryConversationAssistantPreparation(
+          { userId: user.userId, sessionId: request.params.sessionId },
+          deps
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantError(reply, result.error);
+      }
+      return await reply.status(202).ok({ session: toPublicSession(result.value) });
     }
   );
 
@@ -425,6 +553,17 @@ async function getConversationAssistantDeps(
     repository: services.conversationAssistantRepository,
     privateWhatsAppRepository: services.privateWhatsAppRepository,
     llmClientFactory: services.llmClientFactory,
+    preparationPublisher: {
+      async publish(event) {
+        const result = await services.eventPublisher.publishConversationAssistantPreparation(event);
+        return result.ok
+          ? { ok: true as const, value: undefined }
+          : {
+              ok: false as const,
+              error: { code: 'INTERNAL_ERROR' as const, message: result.error.message },
+            };
+      },
+    },
     defaultModel: services.conversationAssistantModel,
     clock: conversationAssistantSystemClock,
     ids: conversationAssistantRandomIds,
@@ -452,7 +591,15 @@ async function getConversationAssistantExportDeps(
 function toPublicSession(
   session: ConversationAssistantSession
 ): PublicConversationAssistantSession {
-  const { transcriptText: _transcriptText, ...publicSession } = session;
+  const {
+    transcriptText: _transcriptText,
+    creationRequestId: _creationRequestId,
+    maxMessages: _maxMessages,
+    preparationClaimId: _preparationClaimId,
+    preparationLeaseExpiresAt: _preparationLeaseExpiresAt,
+    contextSnapshotId: _contextSnapshotId,
+    ...publicSession
+  } = session;
   return {
     ...publicSession,
     modelDisplayName: getConversationAssistantModelDisplayName(session.model),
@@ -465,6 +612,9 @@ async function sendConversationAssistantError(
 ): Promise<FastifyReply> {
   if (error.code === 'NOT_FOUND') {
     return await reply.fail('NOT_FOUND', error.message);
+  }
+  if (error.code === 'CONTEXT_NOT_READY') {
+    return await reply.fail('INVALID_REQUEST', error.message);
   }
   if (error.code === 'INVALID_REQUEST' || error.code === 'EMPTY_TRANSCRIPT') {
     return await reply.fail(error.code, error.message);

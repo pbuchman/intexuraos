@@ -339,7 +339,13 @@ export interface PrivateWhatsAppSenderDaysResponse {
   nextCursor?: string;
 }
 
-export type ConversationAssistantSessionStatus = 'active' | 'archived';
+export type ConversationAssistantSessionStatus = 'preparing' | 'ready' | 'failed' | 'active';
+export type ConversationAssistantPreparationStage =
+  | 'queued'
+  | 'loading_messages'
+  | 'building_context'
+  | 'ready'
+  | 'failed';
 
 export interface ConversationAssistantOmittedCounts {
   mediaOnly: number;
@@ -364,6 +370,9 @@ export interface ConversationAssistantSession {
   chatId: string;
   chatDisplayName?: string;
   status: ConversationAssistantSessionStatus;
+  preparationStage?: ConversationAssistantPreparationStage;
+  preparationAttempt?: number;
+  preparationError?: { code: string; message: string };
   range: ConversationAssistantDateRange;
   effectiveRange: ConversationAssistantDateRange;
   model: ConversationAssistantModel | string;
@@ -417,12 +426,68 @@ export interface ConversationAssistantContextCheckResponse {
   requiresConfirmation: boolean;
 }
 
+export interface ConversationAssistantContextMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: 'incoming' | 'outgoing';
+  speakerLabel: string;
+  messageType: string;
+  contentKind: 'text' | 'transcription';
+  content: string;
+  reactions?: ConversationAssistantContextReaction[];
+}
+
+export interface ConversationAssistantContextReaction {
+  id: string;
+  emoji: string;
+  senderDisplayName?: string;
+  direction: 'incoming' | 'outgoing';
+  eventTimestamp: string;
+}
+
+export interface ConversationAssistantOmittedContextMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: 'incoming' | 'outgoing';
+  speakerLabel: string;
+  messageType: string;
+  omissionReason:
+    | 'media_only'
+    | 'failed_transcription'
+    | 'pending_transcription'
+    | 'non_text'
+    | 'over_limit';
+  contentKind?: 'text' | 'transcription';
+  content?: string;
+  reactions?: ConversationAssistantContextReaction[];
+  reaction?: {
+    emoji: string;
+    targetMatrixEventId?: string;
+    targetMessageId?: string;
+  };
+}
+
+export interface ConversationAssistantContextResponse {
+  sessionId: string;
+  messages: ConversationAssistantContextMessage[];
+  omittedMessages: ConversationAssistantOmittedContextMessage[];
+  messageCount: number;
+  omittedMessageCount: number;
+  snapshotAvailable: boolean;
+  omitted: ConversationAssistantOmittedCounts;
+  transcriptSha256: string;
+  nextMessageCursor?: number;
+  nextOmittedCursor?: number;
+}
+
 export interface CreateConversationAssistantSessionRequest {
+  requestId: string;
   chatId: string;
   from: string;
   to: string;
   model?: ConversationAssistantModel;
-  question?: string;
 }
 
 export interface SendConversationAssistantTurnRequest {

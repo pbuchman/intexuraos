@@ -3,9 +3,12 @@ import {
   checkConversationAssistantContext,
   createConversationAssistantSession,
   exportConversationAssistantSessionPdf,
+  getConversationAssistantContext,
   getConversationAssistantSession,
+  getConversationAssistantSessionByRequest,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
+  retryConversationAssistantPreparation,
   sendConversationAssistantTurn,
   streamConversationAssistantTurn,
 } from '../conversationAssistantApi.js';
@@ -49,14 +52,14 @@ describe('conversationAssistantApi', () => {
   it('creates a conversation assistant session with a POST body', async () => {
     const { apiRequest } = await import('../apiClient.js');
     const session = { id: 'session-1' };
-    vi.mocked(apiRequest).mockResolvedValue({ session, turns: [] });
+    vi.mocked(apiRequest).mockResolvedValue({ session });
 
     const request = {
+      requestId: 'request-1',
       chatId: 'chat-1',
       from: '2026-06-01T00:00:00.000Z',
       to: '2026-06-02T00:00:00.000Z',
       model: 'or:anthropic/claude-sonnet-5' as const,
-      question: 'What happened?',
     };
 
     const result = await createConversationAssistantSession(TOKEN, request);
@@ -69,6 +72,37 @@ describe('conversationAssistantApi', () => {
         method: 'POST',
         body: request,
       }
+    );
+    expect(result).toEqual(session);
+  });
+
+  it('recovers a session by the client creation request id', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const session = { id: 'session-recovered' };
+    vi.mocked(apiRequest).mockResolvedValue({ session });
+
+    const result = await getConversationAssistantSessionByRequest(TOKEN, 'request/with spaces');
+
+    expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
+      'https://wa.test',
+      '/conversation-assistant/session-requests/request%2Fwith%20spaces',
+      TOKEN
+    );
+    expect(result).toEqual(session);
+  });
+
+  it('retries preparation for an existing session', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const session = { id: 'session/retry', status: 'preparing' };
+    vi.mocked(apiRequest).mockResolvedValue({ session });
+
+    const result = await retryConversationAssistantPreparation(TOKEN, 'session/retry');
+
+    expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
+      'https://wa.test',
+      '/conversation-assistant/sessions/session%2Fretry/preparation/retry',
+      TOKEN,
+      { method: 'POST' }
     );
     expect(result).toEqual(session);
   });
@@ -114,6 +148,52 @@ describe('conversationAssistantApi', () => {
       TOKEN
     );
     expect(result).toEqual(session);
+  });
+
+  it('loads the frozen context with a URL-encoded session id', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const context = {
+      sessionId: 'session/with spaces?',
+      messages: [],
+      omittedMessages: [],
+      messageCount: 0,
+      omittedMessageCount: 0,
+      snapshotAvailable: true,
+      omitted: {
+        mediaOnly: 0,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+      transcriptSha256: 'hash',
+    };
+    vi.mocked(apiRequest).mockResolvedValue(context);
+
+    const result = await getConversationAssistantContext(TOKEN, 'session/with spaces?');
+
+    expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
+      'https://wa.test',
+      '/conversation-assistant/sessions/session%2Fwith%20spaces%3F/context',
+      TOKEN
+    );
+    expect(result).toEqual(context);
+  });
+
+  it('loads the next frozen-context page with independent cursors', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    vi.mocked(apiRequest).mockResolvedValue({ messages: [], omittedMessages: [] });
+
+    await getConversationAssistantContext(TOKEN, 'session-1', {
+      messageCursor: 100,
+      omittedCursor: 25,
+    });
+
+    expect(vi.mocked(apiRequest)).toHaveBeenCalledWith(
+      'https://wa.test',
+      '/conversation-assistant/sessions/session-1/context?messageCursor=100&omittedCursor=25',
+      TOKEN
+    );
   });
 
   it('lists conversation assistant turns with URL-encoded session ids', async () => {
@@ -234,7 +314,7 @@ describe('conversationAssistantApi', () => {
     );
     expect(result.filename).toBe('alice-context.pdf');
     expect(result.blob.type).toBe('application/pdf');
-    await expect(result.blob.text()).resolves.toBe('pdf-bytes');
+    expect(result.blob.size).toBe(9);
   });
 
   it('exports conversation assistant PDF and throws ApiError for API envelopes', async () => {

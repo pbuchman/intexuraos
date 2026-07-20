@@ -1,19 +1,15 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { GenerateChatResult, LLMError } from '@intexuraos/llm-factory';
 import {
   getConversationAssistantModelDisplayName,
   isConversationAssistantModel,
-  type ConversationAssistantModel,
 } from '@intexuraos/llm-contract';
 import {
   WHATSAPP_CONVERSATION_ASSISTANT_PROMPT,
   buildWhatsAppConversationAssistantMessages,
 } from '@intexuraos/llm-prompts';
-import {
-  DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
-  inferConversationAssistantRoleLabel,
-} from './roleInference.js';
+import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from './roleInference.js';
 import {
   buildPrivateConversationTranscriptText,
   projectPrivateConversationContext,
@@ -22,6 +18,7 @@ import type { ConversationAssistantDeps } from './ports.js';
 import type {
   CheckConversationAssistantContextInput,
   CheckConversationAssistantContextResult,
+  ConversationAssistantError,
   ConversationAssistantResult,
   ConversationAssistantSession,
   ConversationAssistantStreamEvent,
@@ -30,7 +27,12 @@ import type {
   CreateConversationAssistantSessionResult,
   ExportConversationAssistantPdfInput,
   ExportConversationAssistantPdfResult,
+  GetConversationAssistantContextInput,
+  GetConversationAssistantSessionByRequestInput,
   SendConversationAssistantTurnInput,
+  ConversationAssistantContextResult,
+  PrepareConversationAssistantSessionInput,
+  PrepareConversationAssistantSessionResult,
 } from './types.js';
 import {
   CONVERSATION_ASSISTANT_LARGE_CONTEXT_WARNING_THRESHOLD,
@@ -42,11 +44,19 @@ export const conversationAssistantSystemClock = {
 };
 
 export const conversationAssistantRandomIds = {
-  sessionId: (): string => `whatsapp_conv_session_${randomUUID()}`,
+  sessionId: (input?: { userId: string; requestId: string }): string =>
+    input === undefined
+      ? `whatsapp_conv_session_${randomUUID()}`
+      : `whatsapp_conv_session_${createHash('sha256')
+          .update(`${input.userId}:${input.requestId}`)
+          .digest('hex')
+          .slice(0, 32)}`,
   turnId: (): string => `whatsapp_conv_turn_${randomUUID()}`,
 };
 
 const CONVERSATION_CONTEXT_RAW_SCAN_LIMIT = 5000;
+const CONVERSATION_CONTEXT_PAGE_SIZE = 100;
+const CONVERSATION_PREPARATION_LEASE_MS = 5 * 60 * 1000;
 
 export function deriveEffectiveRange(
   messages: readonly { eventTimestamp: string }[],
@@ -77,88 +87,272 @@ export async function createConversationAssistantSession(
     });
   }
 
+  const trimmedRequestId = input.requestId?.trim();
+  const creationRequestId =
+    trimmedRequestId === undefined || trimmedRequestId === '' ? randomUUID() : trimmedRequestId;
+  const sessionId = deps.ids.sessionId({ userId: input.userId, requestId: creationRequestId });
+  const existing = await deps.repository.getSessionById(sessionId);
+  if (existing !== null) {
+    return await reuseOrRequeueConversationAssistantSession(
+      existing,
+      input.userId,
+      creationRequestId,
+      deps
+    );
+  }
+
   const chatLoadResult = await loadOwnedDirectChat(input, deps);
   if (!chatLoadResult.ok) {
     return chatLoadResult;
   }
 
-  const messages: PrivateWhatsAppMessage[] = [];
-  let cursor: string | undefined;
-  do {
-    const messagesResult = await deps.privateWhatsAppRepository.findConversationContextMessages({
-      sourceAccountId: chatLoadResult.value.sourceAccountId,
-      chatId: input.chatId,
-      from: input.from,
-      to: input.to,
-      limit: CONVERSATION_CONTEXT_RAW_SCAN_LIMIT,
-      ...(cursor !== undefined ? { cursor } : {}),
-    });
-    if (!messagesResult.ok) {
-      return err(toPersistenceError(messagesResult.error.message));
-    }
-    messages.push(...messagesResult.value.messages);
-    cursor = messagesResult.value.nextCursor;
-  } while (cursor !== undefined);
-
-  if (messages.length === 0) {
-    return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });
-  }
-
-  const context = projectPrivateConversationContext({
-    chat: chatLoadResult.value.chat,
-    range: { from: input.from, to: input.to },
-    messages,
-    ...(input.maxMessages !== undefined ? { maxMessages: input.maxMessages } : {}),
-  });
-  if (context.messages.length === 0) {
-    return err({ code: 'EMPTY_TRANSCRIPT', message: 'Selected range contains no textual messages' });
-  }
-
   const now = deps.clock.now();
-  const sessionId = deps.ids.sessionId();
-  const assistantRoleLabel = await inferRoleLabelForInitialQuestion(
-    {
-      userId: input.userId,
-      model: selectedModel,
-      sessionId,
-      question: input.question,
-    },
-    deps
-  );
   const session: ConversationAssistantSession = {
     id: sessionId,
     userId: input.userId,
     chatId: input.chatId,
-    status: 'active',
+    status: 'preparing',
+    preparationStage: 'queued',
+    preparationAttempt: 1,
     range: { from: input.from, to: input.to },
-    effectiveRange: deriveEffectiveRange(context.messages, {
-      from: input.from,
-      to: input.to,
-    }),
+    effectiveRange: { from: input.from, to: input.to },
     model: selectedModel,
-    transcriptSha256: context.transcriptSha256,
-    transcriptMessageCount: context.messageCount,
-    transcriptText: buildPrivateConversationTranscriptText(context.messages),
-    assistantRoleLabel,
-    omitted: context.omitted,
-    title: deriveTitle(chatLoadResult.value.chat.displayName, input.from, input.to, input.question),
+    transcriptSha256: '',
+    transcriptMessageCount: 0,
+    transcriptText: '',
+    assistantRoleLabel: DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
+    omitted: emptyOmittedCounts(),
+    title: deriveTitle(chatLoadResult.value.chat.displayName, input.from, input.to),
     createdAt: now,
     updatedAt: now,
+    creationRequestId,
   };
   if (chatLoadResult.value.chat.displayName !== undefined) {
     session.chatDisplayName = chatLoadResult.value.chat.displayName;
   }
-
-  await deps.repository.saveSession(session);
-
-  const turns: ConversationAssistantTurn[] = [];
-  const question = input.question?.trim();
-  if (question !== undefined && question.length > 0) {
-    const turnResult = await appendQuestionAndAssistantTurn({ session, question }, deps);
-    turns.push(...turnResult.turns);
+  if (input.maxMessages !== undefined) {
+    session.maxMessages = input.maxMessages;
   }
 
-  return ok({ session, turns, context });
+  const creation = await deps.repository.createSessionIfAbsent(session);
+  if (creation.status === 'existing') {
+    return await reuseOrRequeueConversationAssistantSession(
+      creation.session,
+      input.userId,
+      creationRequestId,
+      deps
+    );
+  }
+  return ok({ session: await publishQueuedConversationAssistantPreparation(session, deps) });
+}
+
+export async function prepareConversationAssistantSession(
+  input: PrepareConversationAssistantSessionInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<PrepareConversationAssistantSessionResult>> {
+  const session = await deps.repository.getSessionById(input.sessionId);
+  if (!isOwnedSession(session, input.userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  if (isSessionReady(session)) {
+    return ok({ session });
+  }
+  const attempt = input.attempt ?? session.preparationAttempt ?? 1;
+  const trimmedClaimId = input.claimId?.trim();
+  const claimId =
+    trimmedClaimId === undefined || trimmedClaimId === '' ? randomUUID() : trimmedClaimId;
+  const now = deps.clock.now();
+  const claim = await deps.repository.claimPreparation({
+    sessionId: session.id,
+    userId: input.userId,
+    attempt,
+    claimId,
+    now,
+    leaseExpiresAt: new Date(Date.parse(now) + CONVERSATION_PREPARATION_LEASE_MS).toISOString(),
+  });
+  if (claim.status === 'not_found') {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  if (claim.status === 'busy') {
+    return err({
+      code: 'PERSISTENCE_ERROR',
+      message: 'Conversation Assistant preparation is already in progress',
+    });
+  }
+  if (claim.status === 'stale') {
+    return ok({ session: claim.session });
+  }
+
+  let workingSession = claim.session;
+
+  const chatLoadResult = await loadOwnedDirectChat(
+    { userId: workingSession.userId, chatId: workingSession.chatId },
+    deps
+  );
+  if (!chatLoadResult.ok) {
+    const saved = await markClaimedConversationAssistantPreparationFailed(
+      workingSession,
+      chatLoadResult.error,
+      attempt,
+      claimId,
+      deps
+    );
+    if (!saved) return await currentPreparationResult(session.id, input.userId, deps);
+    return chatLoadResult;
+  }
+
+  const messagesResult = await loadConversationAssistantMessages(
+    workingSession,
+    chatLoadResult.value.sourceAccountId,
+    deps
+  );
+  if (!messagesResult.ok) {
+    const saved = await markClaimedConversationAssistantPreparationFailed(
+      workingSession,
+      messagesResult.error,
+      attempt,
+      claimId,
+      deps
+    );
+    if (!saved) return await currentPreparationResult(session.id, input.userId, deps);
+    return messagesResult;
+  }
+
+  workingSession = {
+    ...workingSession,
+    preparationStage: 'building_context',
+    updatedAt: deps.clock.now(),
+  };
+  const savedBuildingStage = await deps.repository.saveClaimedPreparationSession({
+    session: workingSession,
+    attempt,
+    claimId,
+  });
+  if (!savedBuildingStage) {
+    return await currentPreparationResult(session.id, input.userId, deps);
+  }
+
+  const context = projectPrivateConversationContext({
+    chat: chatLoadResult.value.chat,
+    range: workingSession.range,
+    messages: messagesResult.value,
+    captureOmittedMessages: true,
+    ...(workingSession.maxMessages !== undefined
+      ? { maxMessages: workingSession.maxMessages }
+      : {}),
+  });
+  if (context.messages.length === 0) {
+    const emptyError = {
+      code: 'EMPTY_TRANSCRIPT' as const,
+      message: 'Selected range contains no textual messages',
+    };
+    const saved = await markClaimedConversationAssistantPreparationFailed(
+      workingSession,
+      emptyError,
+      attempt,
+      claimId,
+      deps
+    );
+    if (!saved) return await currentPreparationResult(session.id, input.userId, deps);
+    return err(emptyError);
+  }
+
+  const contextSnapshotId = createContextSnapshotId(workingSession.id, attempt, claimId);
+  try {
+    await deps.repository.saveContextSnapshot(
+      workingSession.id,
+      workingSession.userId,
+      contextSnapshotId,
+      { messages: context.messages, omittedMessages: context.omittedMessages }
+    );
+  } catch (error) {
+    await deps.repository.deleteContextSnapshot(
+      workingSession.id,
+      workingSession.userId,
+      contextSnapshotId
+    );
+    throw error;
+  }
+
+  const readySession: ConversationAssistantSession = {
+    ...workingSession,
+    status: 'ready',
+    preparationStage: 'ready',
+    effectiveRange: deriveEffectiveRange(context.messages, workingSession.range),
+    transcriptSha256: context.transcriptSha256,
+    contextSnapshotId,
+    transcriptMessageCount: context.messageCount,
+    transcriptText: buildPrivateConversationTranscriptText(context.messages),
+    omitted: context.omitted,
+    updatedAt: deps.clock.now(),
+  };
+  delete readySession.preparationError;
+  delete readySession.preparationClaimId;
+  delete readySession.preparationLeaseExpiresAt;
+  let savedReadySession: boolean;
+  try {
+    savedReadySession = await deps.repository.saveClaimedPreparationSession({
+      session: readySession,
+      attempt,
+      claimId,
+    });
+  } catch (error) {
+    await deps.repository.deleteContextSnapshot(
+      workingSession.id,
+      workingSession.userId,
+      contextSnapshotId
+    );
+    throw error;
+  }
+  if (!savedReadySession) {
+    await deps.repository.deleteContextSnapshot(
+      workingSession.id,
+      workingSession.userId,
+      contextSnapshotId
+    );
+    return await currentPreparationResult(session.id, input.userId, deps);
+  }
+  return ok({ session: readySession, context });
+}
+
+export async function getConversationAssistantSessionByRequest(
+  input: GetConversationAssistantSessionByRequestInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<ConversationAssistantSession>> {
+  const requestId = input.requestId.trim();
+  if (requestId.length === 0) {
+    return err({ code: 'INVALID_REQUEST', message: 'Request id is required' });
+  }
+  const sessionId = deps.ids.sessionId({ userId: input.userId, requestId });
+  const session = await deps.repository.getSessionById(sessionId);
+  if (
+    !isOwnedSession(session, input.userId) ||
+    session.creationRequestId !== requestId
+  ) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  return ok(session);
+}
+
+export async function retryConversationAssistantPreparation(
+  input: PrepareConversationAssistantSessionInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<ConversationAssistantSession>> {
+  const session = await deps.repository.getSessionById(input.sessionId);
+  if (!isOwnedSession(session, input.userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  if (isSessionReady(session)) {
+    return err({ code: 'INVALID_REQUEST', message: 'Conversation context is already ready' });
+  }
+  if (session.status !== 'failed') {
+    return err({ code: 'INVALID_REQUEST', message: 'Conversation context is already preparing' });
+  }
+  const requeued = await requeueConversationAssistantPreparation(session, deps);
+  if (requeued === null) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  return ok(requeued);
 }
 
 export async function checkConversationAssistantContext(
@@ -207,6 +401,12 @@ export async function sendConversationAssistantTurn(
   if (!isOwnedSession(session, input.userId)) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
   }
+  if (!isSessionReady(session)) {
+    return err({
+      code: 'CONTEXT_NOT_READY',
+      message: 'Conversation context is not ready yet',
+    });
+  }
 
   const result = await appendQuestionAndAssistantTurn({ session, question }, deps);
   return ok(result.turns);
@@ -225,6 +425,12 @@ export async function streamConversationAssistantTurn(
   const session = await deps.repository.getSessionById(input.sessionId);
   if (!isOwnedSession(session, input.userId)) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  if (!isSessionReady(session)) {
+    return err({
+      code: 'CONTEXT_NOT_READY',
+      message: 'Conversation context is not ready yet',
+    });
   }
 
   const userTurn = createTurn(session, 'user', question, deps);
@@ -275,6 +481,67 @@ export async function getConversationAssistantSession(
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
   }
   return ok(session);
+}
+
+export async function getConversationAssistantContext(
+  input: GetConversationAssistantContextInput,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<ConversationAssistantContextResult>> {
+  const session = await deps.repository.getSessionById(input.sessionId);
+  if (!isOwnedSession(session, input.userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  if (!isSessionReady(session)) {
+    return err({
+      code: 'CONTEXT_NOT_READY',
+      message: 'Conversation context is not ready yet',
+    });
+  }
+  const messageCursor = input.messageCursor ?? 0;
+  const omittedCursor = input.omittedCursor ?? 0;
+  if (!isValidContextCursor(messageCursor) || !isValidContextCursor(omittedCursor)) {
+    return err({ code: 'INVALID_REQUEST', message: 'Context cursor must be a non-negative integer' });
+  }
+  const omittedMessageCount = totalOmittedCount(session.omitted);
+  const snapshot =
+    session.contextSnapshotId === undefined
+      ? { messages: [], omittedMessages: [], snapshotAvailable: false }
+      : await deps.repository.getContextPage(session.id, session.contextSnapshotId, {
+          messageCursor,
+          omittedCursor,
+          limit: CONVERSATION_CONTEXT_PAGE_SIZE,
+          messageCount: session.transcriptMessageCount,
+          omittedMessageCount,
+        });
+  const messages = snapshot.messages;
+  const omittedMessages = snapshot.omittedMessages;
+  const result: ConversationAssistantContextResult = {
+    sessionId: session.id,
+    messages,
+    omittedMessages,
+    messageCount: session.transcriptMessageCount,
+    omittedMessageCount,
+    snapshotAvailable: snapshot.snapshotAvailable,
+    omitted: { ...session.omitted },
+    transcriptSha256: session.transcriptSha256,
+  };
+  const nextMessageCursor = messageCursor + messages.length;
+  if (
+    snapshot.snapshotAvailable &&
+    messages.length > 0 &&
+    nextMessageCursor < session.transcriptMessageCount
+  ) {
+    result.nextMessageCursor = nextMessageCursor;
+  }
+  const nextOmittedCursor = omittedCursor + omittedMessages.length;
+  if (
+    snapshot.snapshotAvailable &&
+    omittedMessages.length > 0 &&
+    nextOmittedCursor < omittedMessageCount
+  ) {
+    result.nextOmittedCursor = nextOmittedCursor;
+  }
+  return ok(result);
 }
 
 export async function listConversationAssistantTurns(
@@ -383,33 +650,166 @@ async function appendQuestionAndAssistantTurn(
   return { turns: [userTurn, assistantTurn] };
 }
 
-async function inferRoleLabelForInitialQuestion(
-  input: {
-    userId: string;
-    model: ConversationAssistantModel | string;
-    sessionId: string;
-    question: string | undefined;
-  },
+async function reuseOrRequeueConversationAssistantSession(
+  session: ConversationAssistantSession,
+  userId: string,
+  creationRequestId: string,
   deps: ConversationAssistantDeps
-): Promise<string> {
-  const question = input.question?.trim();
-  if (question === undefined || question.length === 0) {
-    return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
+): Promise<ConversationAssistantResult<CreateConversationAssistantSessionResult>> {
+  if (!isOwnedSession(session, userId) || session.creationRequestId !== creationRequestId) {
+    return err({ code: 'INTERNAL_ERROR', message: 'Conversation Assistant request collision' });
   }
+  if (isSessionReady(session) || session.status === 'preparing') {
+    return ok({ session });
+  }
+  const requeued = await requeueConversationAssistantPreparation(session, deps);
+  if (requeued === null) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  return ok({ session: requeued });
+}
 
-  try {
-    const clientResult = await deps.llmClientFactory.createLlmClientForUser(input.userId, input.model);
-    if (!clientResult.ok) {
-      return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
-    }
-    return await inferConversationAssistantRoleLabel({
-      initialQuestion: question,
-      client: clientResult.value,
-      sessionId: input.sessionId,
-    });
-  } catch {
-    return DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL;
+async function requeueConversationAssistantPreparation(
+  session: ConversationAssistantSession,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantSession | null> {
+  const result = await deps.repository.requeueFailedPreparation({
+    sessionId: session.id,
+    userId: session.userId,
+    expectedAttempt: session.preparationAttempt ?? 0,
+    updatedAt: deps.clock.now(),
+  });
+  if (result.status === 'not_found') {
+    return null;
   }
+  if (result.status === 'stale') {
+    return result.session;
+  }
+  return await publishQueuedConversationAssistantPreparation(result.session, deps);
+}
+
+async function publishQueuedConversationAssistantPreparation(
+  session: ConversationAssistantSession,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantSession> {
+  const publishResult = await deps.preparationPublisher.publish({
+    type: 'whatsapp.conversation-assistant.prepare',
+    sessionId: session.id,
+    userId: session.userId,
+    attempt: session.preparationAttempt ?? 1,
+  });
+  if (publishResult.ok) {
+    return session;
+  }
+  const failure = await deps.repository.failQueuedPreparation({
+    sessionId: session.id,
+    userId: session.userId,
+    attempt: session.preparationAttempt ?? 1,
+    error: publishResult.error,
+    updatedAt: deps.clock.now(),
+  });
+  return failure.status === 'not_found' ? session : failure.session;
+}
+
+async function loadConversationAssistantMessages(
+  session: ConversationAssistantSession,
+  sourceAccountId: string,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<PrivateWhatsAppMessage[]>> {
+  const messages: PrivateWhatsAppMessage[] = [];
+  let cursor: string | undefined;
+  do {
+    const messagesResult = await deps.privateWhatsAppRepository.findConversationContextMessages({
+      sourceAccountId,
+      chatId: session.chatId,
+      from: session.range.from,
+      to: session.range.to,
+      limit: CONVERSATION_CONTEXT_RAW_SCAN_LIMIT,
+      ...(cursor !== undefined ? { cursor } : {}),
+    });
+    if (!messagesResult.ok) {
+      return err(toPersistenceError(messagesResult.error.message));
+    }
+    messages.push(...messagesResult.value.messages);
+    cursor = messagesResult.value.nextCursor;
+  } while (cursor !== undefined);
+
+  if (messages.length === 0) {
+    return err({
+      code: 'EMPTY_TRANSCRIPT',
+      message: 'Selected range contains no textual messages',
+    });
+  }
+  return ok(messages);
+}
+
+async function markClaimedConversationAssistantPreparationFailed(
+  session: ConversationAssistantSession,
+  error: ConversationAssistantError,
+  attempt: number,
+  claimId: string,
+  deps: ConversationAssistantDeps
+): Promise<boolean> {
+  const failedSession: ConversationAssistantSession = {
+    ...session,
+    status: 'failed',
+    preparationStage: 'failed',
+    preparationError: { code: error.code, message: error.message },
+    updatedAt: deps.clock.now(),
+  };
+  delete failedSession.preparationClaimId;
+  delete failedSession.preparationLeaseExpiresAt;
+  return await deps.repository.saveClaimedPreparationSession({
+    session: failedSession,
+    attempt,
+    claimId,
+  });
+}
+
+async function currentPreparationResult(
+  sessionId: string,
+  userId: string,
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<PrepareConversationAssistantSessionResult>> {
+  const current = await deps.repository.getSessionById(sessionId);
+  if (!isOwnedSession(current, userId)) {
+    return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
+  }
+  return ok({ session: current });
+}
+
+function emptyOmittedCounts(): ConversationAssistantSession['omitted'] {
+  return {
+    mediaOnly: 0,
+    failedTranscriptions: 0,
+    pendingTranscriptions: 0,
+    nonText: 0,
+    overLimit: 0,
+  };
+}
+
+function totalOmittedCount(omitted: ConversationAssistantSession['omitted']): number {
+  return (
+    omitted.mediaOnly +
+    omitted.failedTranscriptions +
+    omitted.pendingTranscriptions +
+    omitted.nonText +
+    omitted.overLimit
+  );
+}
+
+function isValidContextCursor(value: number): boolean {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function createContextSnapshotId(sessionId: string, attempt: number, claimId: string): string {
+  return createHash('sha256')
+    .update(`${sessionId}:${String(attempt)}:${claimId}`)
+    .digest('hex');
+}
+
+function isSessionReady(session: ConversationAssistantSession): boolean {
+  return session.status === 'ready' || session.status === 'active';
 }
 
 async function loadOwnedDirectChat(
@@ -622,13 +1022,8 @@ function parseIsoUtcTimestamp(value: string): number | null {
 function deriveTitle(
   chatDisplayName: string | undefined,
   from: string,
-  to: string,
-  question: string | undefined
+  to: string
 ): string {
-  const firstQuestion = question?.trim();
-  if (firstQuestion !== undefined && firstQuestion.length > 0) {
-    return firstQuestion.length > 80 ? `${firstQuestion.slice(0, 77)}...` : firstQuestion;
-  }
   return `${chatDisplayName ?? 'WhatsApp chat'} (${from.slice(0, 10)} to ${to.slice(0, 10)})`;
 }
 

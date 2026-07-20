@@ -105,6 +105,7 @@ describe('projectPrivateConversationContext', () => {
         from: '2026-06-22T09:00:00.000Z',
         to: '2026-06-22T11:00:00.000Z',
       },
+      captureOmittedMessages: true,
       messages: [
         message({ id: 'message-1', text: ' hello from private chat ' }),
         message({
@@ -179,6 +180,12 @@ describe('projectPrivateConversationContext', () => {
       nonText: 1,
       overLimit: 0,
     });
+    expect(result.omittedMessages.map((item) => [item.id, item.omissionReason])).toEqual([
+      ['message-3', 'pending_transcription'],
+      ['message-4', 'failed_transcription'],
+      ['message-5', 'media_only'],
+      ['message-6', 'non_text'],
+    ]);
     expect(result.messageCount).toBe(2);
     const expectedTranscript = [
       '[Sent 22 June 2026; imported 22 June 2026] Alice: hello from private chat',
@@ -261,9 +268,95 @@ describe('projectPrivateConversationContext', () => {
     });
 
     expect(context.messages).toHaveLength(1);
+    expect(JSON.parse(JSON.stringify(context.messages[0]))).toMatchObject({
+      reactions: [{ id: 'reaction-message', emoji: '👍' }],
+    });
     expect(buildPrivateConversationTranscriptText(context.messages)).toContain(
       '[Sent 3 July 2026; imported 22 June 2026] Alice: See you at five\n  Reactions: 👍 Alice'
     );
+  });
+
+  it('preserves reactions attached to an omitted media message', () => {
+    const mediaTarget = message({
+      id: 'media-target',
+      matrixEventId: '$media-target',
+      messageType: 'image',
+      text: undefined,
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+      media: { mxcUri: 'mxc://matrix.example/private-image' },
+    });
+    const reaction = message({
+      id: 'media-reaction',
+      matrixEventId: '$media-reaction',
+      messageType: 'reaction',
+      text: undefined,
+      direction: 'outgoing',
+      senderDisplayName: undefined,
+      senderPhoneNumber: undefined,
+      senderKey: undefined,
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      reaction: {
+        emoji: '❤️',
+        targetMatrixEventId: '$media-target',
+        targetMessageId: 'media-target',
+      },
+    });
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      captureOmittedMessages: true,
+      messages: [mediaTarget, reaction],
+    });
+
+    expect(context.messages).toEqual([]);
+    expect(context.omittedMessages).toEqual([
+      expect.objectContaining({
+        id: 'media-target',
+        omissionReason: 'media_only',
+        reactions: [
+          expect.objectContaining({
+            id: 'media-reaction',
+            emoji: '❤️',
+            direction: 'outgoing',
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('preserves an unresolved reaction event as an auditable omission', () => {
+    const reaction = message({
+      id: 'orphan-reaction',
+      matrixEventId: '$orphan-reaction',
+      messageType: 'reaction',
+      text: undefined,
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$target-outside-range',
+        targetMessageId: 'target-outside-range',
+      },
+    });
+
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      captureOmittedMessages: true,
+      messages: [reaction],
+    });
+
+    expect(context.omittedMessages).toEqual([
+      expect.objectContaining({
+        id: 'orphan-reaction',
+        omissionReason: 'non_text',
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$target-outside-range',
+          targetMessageId: 'target-outside-range',
+        },
+      }),
+    ]);
   });
 
   it('does not expose private reaction sender identifiers in transcript text', () => {
@@ -497,6 +590,7 @@ describe('projectPrivateConversationContext', () => {
         to: '2026-06-22T11:00:00.000Z',
       },
       maxMessages: 1,
+      captureOmittedMessages: true,
       messages: [
         message({ id: 'message-1', text: 'first' }),
         message({ id: 'message-2', matrixEventId: '$event-2', text: 'second' }),
@@ -506,6 +600,20 @@ describe('projectPrivateConversationContext', () => {
 
     expect(result.messages.map((item) => item.content)).toEqual(['first']);
     expect(result.omitted.overLimit).toBe(2);
+    expect(result.omittedMessages).toEqual([
+      expect.objectContaining({
+        id: 'message-2',
+        omissionReason: 'over_limit',
+        contentKind: 'text',
+        content: 'second',
+      }),
+      expect.objectContaining({
+        id: 'message-3',
+        omissionReason: 'over_limit',
+        contentKind: 'text',
+        content: 'third',
+      }),
+    ]);
   });
 
   it('counts completed transcriptions over an explicit max-message cap', () => {

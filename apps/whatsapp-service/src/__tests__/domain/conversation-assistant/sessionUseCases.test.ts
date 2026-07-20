@@ -12,11 +12,16 @@ import {
 } from '../../fakes.js';
 import {
   checkConversationAssistantContext,
-  createConversationAssistantSession,
+  conversationAssistantRandomIds,
+  createConversationAssistantSession as createQueuedConversationAssistantSession,
   deriveEffectiveRange,
   exportConversationAssistantSessionPdf,
+  getConversationAssistantContext,
   getConversationAssistantSession,
+  getConversationAssistantSessionByRequest,
   listConversationAssistantTurns,
+  prepareConversationAssistantSession,
+  retryConversationAssistantPreparation,
   sendConversationAssistantTurn,
   streamConversationAssistantTurn,
 } from '../../../domain/conversation-assistant/sessionUseCases.js';
@@ -35,6 +40,7 @@ import type {
   PrivateConversationContextMessageQueryInput,
   StorePrivateWhatsAppMessageInput,
 } from '../../../domain/whatsapp/models/PrivateWhatsApp.js';
+import { createHash } from 'node:crypto';
 
 const USER_ID = 'user-123';
 const SOURCE_ACCOUNT_ID = 'source-123';
@@ -47,15 +53,28 @@ function makeDeps(): {
   llmClient: FakeLlmGenerateClient;
   pdfExporter: FakePdfConversationExporter;
   llmFactoryCalls: { userId: string; model: string }[];
+  preparationEvents: { sessionId: string; userId: string; attempt: number }[];
 } {
   const conversationRepository = new FakeConversationAssistantRepository();
   const privateRepository = new FakePrivateWhatsAppRepository();
   const llmClient = new FakeLlmGenerateClient();
   const pdfExporter = new FakePdfConversationExporter();
   const llmFactoryCalls: { userId: string; model: string }[] = [];
+  const preparationEvents: { sessionId: string; userId: string; attempt: number }[] = [];
   const clock = { now: (): string => '2026-06-30T12:00:00.000Z' };
+  const sessionIdsByRequest = new Map<string, string>();
   const ids = {
-    sessionId: (): string => 'whatsapp_conv_session_test',
+    sessionId: (input?: { userId: string; requestId: string }): string => {
+      const key = input === undefined ? `unseeded-${String(sessionIdsByRequest.size)}` : input.requestId;
+      const existing = sessionIdsByRequest.get(key);
+      if (existing !== undefined) return existing;
+      const id =
+        sessionIdsByRequest.size === 0
+          ? 'whatsapp_conv_session_test'
+          : `whatsapp_conv_session_test_${String(sessionIdsByRequest.size + 1)}`;
+      sessionIdsByRequest.set(key, id);
+      return id;
+    },
     turnId: (() => {
       let counter = 0;
       return (): string => {
@@ -77,6 +96,16 @@ function makeDeps(): {
         },
       },
       pdfExporter,
+      preparationPublisher: {
+        publish(event: {
+          sessionId: string;
+          userId: string;
+          attempt: number;
+        }): Promise<ReturnType<typeof ok<void>>> {
+          preparationEvents.push(event);
+          return Promise.resolve(ok(undefined));
+        },
+      },
       defaultModel: ConversationAssistantModels.Gemini35FlashThinking,
       clock,
       ids,
@@ -86,6 +115,7 @@ function makeDeps(): {
     llmClient,
     pdfExporter,
     llmFactoryCalls,
+    preparationEvents,
   };
 }
 
@@ -202,6 +232,20 @@ function makeTranscriptMessage(index: number): PrivateWhatsAppMessage {
   };
 }
 
+async function createConversationAssistantSession(
+  input: Parameters<typeof createQueuedConversationAssistantSession>[0],
+  deps: ConversationAssistantDeps
+): Promise<Awaited<ReturnType<typeof prepareConversationAssistantSession>>> {
+  const created = await createQueuedConversationAssistantSession(input, deps);
+  if (!created.ok) {
+    return created;
+  }
+  return await prepareConversationAssistantSession(
+    { userId: input.userId, sessionId: created.value.session.id },
+    deps
+  );
+}
+
 describe('Conversation Assistant session use cases', () => {
   it('falls back to the selected range when no projected messages are available', () => {
     expect(
@@ -213,6 +257,958 @@ describe('Conversation Assistant session use cases', () => {
       from: '2026-06-30T00:00:00.000Z',
       to: '2026-07-01T00:00:00.000Z',
     });
+  });
+
+  it('creates an idempotent queued analysis without scanning its message range', async () => {
+    const { deps, privateRepository, preparationEvents } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const contextQuery = vi.spyOn(privateRepository, 'findConversationContextMessages');
+
+    const result = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-123',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.session.status).toBe('preparing');
+    expect(result.value.session.preparationStage).toBe('queued');
+    expect(result.value).not.toHaveProperty('context');
+    expect(contextQuery).not.toHaveBeenCalled();
+    expect(preparationEvents).toEqual([
+      {
+        type: 'whatsapp.conversation-assistant.prepare',
+        sessionId: result.value.session.id,
+        userId: USER_ID,
+        attempt: 1,
+      },
+    ]);
+  });
+
+  it('prepares the frozen context asynchronously and makes the analysis ready', async () => {
+    const { deps, privateRepository, conversationRepository, llmFactoryCalls } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-prepare',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const prepared = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.value.session.status).toBe('ready');
+    expect(prepared.value.session.preparationStage).toBe('ready');
+    expect(prepared.value.session.transcriptMessageCount).toBe(1);
+    expect(prepared.value.session.contextSnapshotId).toEqual(expect.any(String));
+    expect(prepared.value.session.contextSnapshotId).not.toBe(
+      prepared.value.session.transcriptSha256
+    );
+    expect(prepared.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
+    expect(prepared.value.context?.messages).toHaveLength(1);
+    expect(
+      conversationRepository.getContextMessages(
+        prepared.value.session.id,
+        prepared.value.session.contextSnapshotId ?? ''
+      )
+    ).toEqual(
+      prepared.value.context?.messages
+    );
+    expect(llmFactoryCalls).toEqual([]);
+  });
+
+  it('covers preparation entry boundaries and the legacy default attempt', async () => {
+    expect(conversationAssistantRandomIds.sessionId()).toMatch(/^whatsapp_conv_session_/);
+    expect(conversationAssistantRandomIds.sessionId()).not.toBe(
+      conversationAssistantRandomIds.sessionId()
+    );
+    expect(
+      conversationAssistantRandomIds.sessionId({
+        userId: USER_ID,
+        requestId: 'request-deterministic-id',
+      })
+    ).toMatch(/^whatsapp_conv_session_[a-f0-9]{32}$/);
+
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    const missing = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: 'missing-session' },
+      deps
+    );
+    expect(missing).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-preparation-boundaries',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      status: 'ready',
+      preparationStage: 'ready',
+    });
+    const alreadyReady = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    expect(alreadyReady.ok && alreadyReady.value.session.status).toBe('ready');
+
+    const legacy = {
+      ...created.value.session,
+      id: 'whatsapp_conv_session_legacy_attempt',
+    };
+    delete legacy.preparationAttempt;
+    await conversationRepository.saveSession(legacy);
+    const attempts: number[] = [];
+    conversationRepository.claimPreparation = (
+      input
+    ): ReturnType<ConversationAssistantDeps['repository']['claimPreparation']> => {
+      attempts.push(input.attempt);
+      return Promise.resolve({ status: 'not_found' });
+    };
+    const disappeared = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: legacy.id },
+      deps
+    );
+    expect(attempts).toEqual([1]);
+    expect(disappeared).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+  });
+
+  it('handles source failures before and during message loading after claiming preparation', async () => {
+    const first = makeDeps();
+    await seedDirectMessage(first.privateRepository);
+    const chatFailureSession = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-chat-load-failure',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      first.deps
+    );
+    expect(chatFailureSession.ok).toBe(true);
+    if (!chatFailureSession.ok) return;
+    first.privateRepository.failNext({ code: 'PERSISTENCE_ERROR', message: 'account failed' });
+    const savedFailure = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: chatFailureSession.value.session.id },
+      first.deps
+    );
+    expect(savedFailure).toEqual({
+      ok: false,
+      error: { code: 'PERSISTENCE_ERROR', message: 'account failed' },
+    });
+
+    const second = makeDeps();
+    await seedDirectMessage(second.privateRepository);
+    const lostChatFailure = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-lost-chat-failure',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      second.deps
+    );
+    expect(lostChatFailure.ok).toBe(true);
+    if (!lostChatFailure.ok) return;
+    second.privateRepository.failNext({ code: 'PERSISTENCE_ERROR', message: 'account failed' });
+    vi.spyOn(second.conversationRepository, 'saveClaimedPreparationSession').mockResolvedValue(
+      false
+    );
+    const currentAfterChatFailure = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: lostChatFailure.value.session.id },
+      second.deps
+    );
+    expect(currentAfterChatFailure.ok).toBe(true);
+
+    const third = makeDeps();
+    await seedDirectMessage(third.privateRepository);
+    const messageFailureSession = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-message-load-failure',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      third.deps
+    );
+    expect(messageFailureSession.ok).toBe(true);
+    if (!messageFailureSession.ok) return;
+    third.privateRepository.failNextConversationContextQuery({
+      code: 'PERSISTENCE_ERROR',
+      message: 'messages failed',
+    });
+    vi.spyOn(third.conversationRepository, 'saveClaimedPreparationSession').mockResolvedValue(
+      false
+    );
+    const currentAfterMessageFailure = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: messageFailureSession.value.session.id },
+      third.deps
+    );
+    expect(currentAfterMessageFailure.ok).toBe(true);
+  });
+
+  it('returns the latest state when preparation loses its claim before context projection', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-building-fence-loss',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    vi.spyOn(conversationRepository, 'saveClaimedPreparationSession').mockResolvedValue(false);
+    const getSessionById = conversationRepository.getSessionById.bind(conversationRepository);
+    let reads = 0;
+    vi.spyOn(conversationRepository, 'getSessionById').mockImplementation(async (sessionId) => {
+      reads += 1;
+      return reads === 1 ? await getSessionById(sessionId) : null;
+    });
+
+    const result = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+  });
+
+  it('returns the latest state when an empty projected context loses its failure fence', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, { type: 'image' });
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-empty-context-fence-loss',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const saveClaimedPreparationSession =
+      conversationRepository.saveClaimedPreparationSession.bind(conversationRepository);
+    vi.spyOn(conversationRepository, 'saveClaimedPreparationSession').mockImplementation(
+      async (input) =>
+        input.session.status === 'failed'
+          ? false
+          : await saveClaimedPreparationSession(input)
+    );
+
+    const result = await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('removes a newly written context snapshot when the preparation fence is lost', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-lost-fence',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const claimId = 'claim-lost-after-snapshot';
+    const saveClaimedPreparationSession =
+      conversationRepository.saveClaimedPreparationSession.bind(conversationRepository);
+    vi.spyOn(conversationRepository, 'saveClaimedPreparationSession').mockImplementation(
+      async (input) => {
+        if (input.session.status === 'ready') return false;
+        return await saveClaimedPreparationSession(input);
+      }
+    );
+
+    const prepared = await prepareConversationAssistantSession(
+      {
+        userId: USER_ID,
+        sessionId: created.value.session.id,
+        attempt: 1,
+        claimId,
+      },
+      deps
+    );
+
+    expect(prepared.ok).toBe(true);
+    const snapshotId = createHash('sha256')
+      .update(`${created.value.session.id}:1:${claimId}`)
+      .digest('hex');
+    expect(
+      conversationRepository.getContextMessages(created.value.session.id, snapshotId)
+    ).toEqual([]);
+  });
+
+  it('removes a partially written context snapshot when snapshot persistence fails', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-partial-snapshot',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const claimId = 'claim-partial-snapshot';
+    const saveContextSnapshot = conversationRepository.saveContextSnapshot.bind(
+      conversationRepository
+    );
+    vi.spyOn(conversationRepository, 'saveContextSnapshot').mockImplementation(
+      async (...input) => {
+        await saveContextSnapshot(...input);
+        throw new Error('Partial snapshot write');
+      }
+    );
+
+    await expect(
+      prepareConversationAssistantSession(
+        {
+          userId: USER_ID,
+          sessionId: created.value.session.id,
+          attempt: 1,
+          claimId,
+        },
+        deps
+      )
+    ).rejects.toThrow('Partial snapshot write');
+
+    const snapshotId = createHash('sha256')
+      .update(`${created.value.session.id}:1:${claimId}`)
+      .digest('hex');
+    expect(
+      conversationRepository.getContextMessages(created.value.session.id, snapshotId)
+    ).toEqual([]);
+  });
+
+  it('rejects a parallel preparation claim and ignores stale preparation events', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-concurrency',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const firstClaim = await conversationRepository.claimPreparation({
+      sessionId: created.value.session.id,
+      userId: USER_ID,
+      attempt: 1,
+      claimId: 'claim-1',
+      now: '2026-06-30T12:00:00.000Z',
+      leaseExpiresAt: '2026-06-30T12:05:00.000Z',
+    });
+    expect(firstClaim.status).toBe('claimed');
+
+    const duplicate = await prepareConversationAssistantSession(
+      {
+        userId: USER_ID,
+        sessionId: created.value.session.id,
+        attempt: 1,
+        claimId: 'claim-2',
+      },
+      deps
+    );
+    expect(duplicate).toEqual({
+      ok: false,
+      error: {
+        code: 'PERSISTENCE_ERROR',
+        message: 'Conversation Assistant preparation is already in progress',
+      },
+    });
+
+    const claimedSession = await conversationRepository.getSessionById(created.value.session.id);
+    expect(claimedSession).not.toBeNull();
+    if (claimedSession === null) return;
+    const failed = { ...claimedSession, status: 'failed' as const, preparationStage: 'failed' as const };
+    delete failed.preparationClaimId;
+    delete failed.preparationLeaseExpiresAt;
+    await conversationRepository.saveSession(failed);
+    const retried = await retryConversationAssistantPreparation(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    expect(retried.ok).toBe(true);
+
+    const stale = await prepareConversationAssistantSession(
+      {
+        userId: USER_ID,
+        sessionId: created.value.session.id,
+        attempt: 1,
+        claimId: 'late-claim-1',
+      },
+      deps
+    );
+    expect(stale.ok).toBe(true);
+    if (stale.ok) {
+      expect(stale.value.session.preparationAttempt).toBe(2);
+      expect(stale.value.session.status).toBe('preparing');
+    }
+  });
+
+  it('uses a fresh fencing token for every preparation execution', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-fencing',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const claims: string[] = [];
+    conversationRepository.claimPreparation = (
+      input
+    ): ReturnType<FakeConversationAssistantRepository['claimPreparation']> => {
+      claims.push(input.claimId);
+      return Promise.resolve({ status: 'busy', session: created.value.session });
+    };
+
+    await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id, attempt: 1 },
+      deps
+    );
+    await prepareConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id, attempt: 1 },
+      deps
+    );
+
+    expect(claims).toHaveLength(2);
+    expect(claims[0]).not.toBe(claims[1]);
+  });
+
+  it('does not overwrite a preparation claim when publishing reports a failure', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    deps.preparationPublisher.publish = async (
+      event
+    ): ReturnType<ConversationAssistantDeps['preparationPublisher']['publish']> => {
+      const claimed = await conversationRepository.claimPreparation({
+        sessionId: event.sessionId,
+        userId: event.userId,
+        attempt: event.attempt,
+        claimId: 'worker-claim',
+        now: '2026-06-30T12:00:00.000Z',
+        leaseExpiresAt: '2026-06-30T12:05:00.000Z',
+      });
+      expect(claimed.status).toBe('claimed');
+      return err({ code: 'INTERNAL_ERROR', message: 'Publish response was lost' });
+    };
+
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-publish-race',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.value.session.status).toBe('preparing');
+    expect(created.value.session.preparationStage).toBe('loading_messages');
+    expect(created.value.session.preparationClaimId).toBe('worker-claim');
+  });
+
+  it('returns the exact frozen messages used by the analysis', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, {
+      matrixEventId: '$frozen-message',
+      text: 'Frozen message used by the model.',
+    });
+    const prepared = await createConversationAssistantSession(
+      {
+        userId: USER_ID,
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T11:00:00.000Z',
+      matrixEventId: '$later-message',
+      text: 'Added to the source after the snapshot.',
+    });
+    const context = await getConversationAssistantContext(
+      { userId: USER_ID, sessionId: prepared.value.session.id },
+      deps
+    );
+
+    expect(context.ok).toBe(true);
+    if (!context.ok) return;
+    expect(context.value.snapshotAvailable).toBe(true);
+    expect(context.value.messageCount).toBe(1);
+    expect(context.value.messages).toEqual([
+      expect.objectContaining({
+        id: expect.any(String),
+        speakerLabel: 'Alice',
+        content: 'Frozen message used by the model.',
+        contentKind: 'text',
+      }),
+    ]);
+    expect(context.value.messages[0]?.content).not.toContain('Added to the source');
+    expect(context.value.transcriptSha256).toBe(prepared.value.session.transcriptSha256);
+  });
+
+  it('returns one session for repeated creation requests and supports recovery by request id', async () => {
+    const { deps, privateRepository, conversationRepository, preparationEvents } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const input = {
+      userId: USER_ID,
+      requestId: 'request-idempotent',
+      chatId: CHAT_ID,
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    };
+
+    const first = await createQueuedConversationAssistantSession(input, deps);
+    const repeated = await createQueuedConversationAssistantSession(input, deps);
+    const recovered = await getConversationAssistantSessionByRequest(
+      { userId: USER_ID, requestId: input.requestId },
+      deps
+    );
+
+    expect(first.ok && repeated.ok ? repeated.value.session.id : undefined).toBe(
+      first.ok ? first.value.session.id : undefined
+    );
+    expect(conversationRepository.getAllSessions()).toHaveLength(1);
+    expect(preparationEvents).toHaveLength(1);
+    expect(recovered.ok ? recovered.value.id : undefined).toBe(
+      first.ok ? first.value.session.id : undefined
+    );
+    const unavailableContext = await getConversationAssistantContext(
+      { userId: USER_ID, sessionId: first.ok ? first.value.session.id : 'missing' },
+      deps
+    );
+    expect(unavailableContext).toEqual({
+      ok: false,
+      error: {
+        code: 'CONTEXT_NOT_READY',
+        message: 'Conversation context is not ready yet',
+      },
+    });
+  });
+
+  it('validates request recovery and detects deterministic request collisions', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    expect(
+      await getConversationAssistantSessionByRequest({ userId: USER_ID, requestId: '   ' }, deps)
+    ).toEqual({
+      ok: false,
+      error: { code: 'INVALID_REQUEST', message: 'Request id is required' },
+    });
+
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-recovery-collision',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      creationRequestId: 'different-request',
+    });
+
+    const recovered = await getConversationAssistantSessionByRequest(
+      { userId: USER_ID, requestId: 'request-recovery-collision' },
+      deps
+    );
+    const collision = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-recovery-collision',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(recovered.ok).toBe(false);
+    if (!recovered.ok) expect(recovered.error.code).toBe('NOT_FOUND');
+    expect(collision).toEqual({
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: 'Conversation Assistant request collision' },
+    });
+  });
+
+  it('reuses a ready idempotent analysis and requeues a failed legacy analysis', async () => {
+    const readyCase = makeDeps();
+    await seedDirectMessage(readyCase.privateRepository);
+    const input = {
+      userId: USER_ID,
+      requestId: 'request-ready-reuse',
+      chatId: CHAT_ID,
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    };
+    const createdReady = await createQueuedConversationAssistantSession(input, readyCase.deps);
+    expect(createdReady.ok).toBe(true);
+    if (!createdReady.ok) return;
+    await readyCase.conversationRepository.saveSession({
+      ...createdReady.value.session,
+      status: 'ready',
+      preparationStage: 'ready',
+    });
+    const reusedReady = await createQueuedConversationAssistantSession(input, readyCase.deps);
+    expect(reusedReady.ok && reusedReady.value.session.status).toBe('ready');
+
+    const legacyCase = makeDeps();
+    await seedDirectMessage(legacyCase.privateRepository);
+    const legacyInput = { ...input, requestId: 'request-legacy-requeue' };
+    const createdLegacy = await createQueuedConversationAssistantSession(
+      legacyInput,
+      legacyCase.deps
+    );
+    expect(createdLegacy.ok).toBe(true);
+    if (!createdLegacy.ok) return;
+    const failedLegacy = {
+      ...createdLegacy.value.session,
+      status: 'failed' as const,
+      preparationStage: 'failed' as const,
+    };
+    delete failedLegacy.preparationAttempt;
+    await legacyCase.conversationRepository.saveSession(failedLegacy);
+
+    const requeued = await createQueuedConversationAssistantSession(
+      legacyInput,
+      legacyCase.deps
+    );
+
+    expect(requeued.ok).toBe(true);
+    if (requeued.ok) {
+      expect(requeued.value.session.preparationAttempt).toBe(1);
+      expect(requeued.value.session.status).toBe('preparing');
+    }
+  });
+
+  it('handles a disappeared requeue and fallback attempt values after legacy retries', async () => {
+    const missingCase = makeDeps();
+    await seedDirectMessage(missingCase.privateRepository);
+    const missingInput = {
+      userId: USER_ID,
+      requestId: 'request-requeue-disappeared',
+      chatId: CHAT_ID,
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    };
+    const createdMissing = await createQueuedConversationAssistantSession(
+      missingInput,
+      missingCase.deps
+    );
+    expect(createdMissing.ok).toBe(true);
+    if (!createdMissing.ok) return;
+    await missingCase.conversationRepository.saveSession({
+      ...createdMissing.value.session,
+      status: 'failed',
+      preparationStage: 'failed',
+    });
+    vi.spyOn(missingCase.conversationRepository, 'requeueFailedPreparation').mockResolvedValue({
+      status: 'not_found',
+    });
+    const disappeared = await createQueuedConversationAssistantSession(
+      missingInput,
+      missingCase.deps
+    );
+    expect(disappeared.ok).toBe(false);
+    if (!disappeared.ok) expect(disappeared.error.code).toBe('NOT_FOUND');
+
+    const fallbackCase = makeDeps();
+    await seedDirectMessage(fallbackCase.privateRepository);
+    const createdFallback = await createQueuedConversationAssistantSession(
+      { ...missingInput, requestId: 'request-fallback-attempt' },
+      fallbackCase.deps
+    );
+    expect(createdFallback.ok).toBe(true);
+    if (!createdFallback.ok) return;
+    const failedFallback = {
+      ...createdFallback.value.session,
+      status: 'failed' as const,
+      preparationStage: 'failed' as const,
+    };
+    delete failedFallback.preparationAttempt;
+    await fallbackCase.conversationRepository.saveSession(failedFallback);
+    const queuedWithoutAttempt = {
+      ...failedFallback,
+      status: 'preparing' as const,
+      preparationStage: 'queued' as const,
+    };
+    fallbackCase.conversationRepository.requeueFailedPreparation = (): ReturnType<
+      ConversationAssistantDeps['repository']['requeueFailedPreparation']
+    > => Promise.resolve({ status: 'queued', session: queuedWithoutAttempt });
+    const publishedAttempts: number[] = [];
+    fallbackCase.deps.preparationPublisher.publish = (
+      event
+    ): ReturnType<ConversationAssistantDeps['preparationPublisher']['publish']> => {
+      publishedAttempts.push(event.attempt);
+      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'publish failed' }));
+    };
+    const failedAttempts: number[] = [];
+    fallbackCase.conversationRepository.failQueuedPreparation = (
+      request
+    ): ReturnType<ConversationAssistantDeps['repository']['failQueuedPreparation']> => {
+      failedAttempts.push(request.attempt);
+      return Promise.resolve({ status: 'not_found' });
+    };
+
+    const fallback = await retryConversationAssistantPreparation(
+      { userId: USER_ID, sessionId: failedFallback.id },
+      fallbackCase.deps
+    );
+
+    expect(fallback.ok).toBe(true);
+    expect(publishedAttempts).toEqual([1]);
+    expect(failedAttempts).toEqual([1]);
+  });
+
+  it('publishes only once for concurrent creates with the same request id', async () => {
+    const { deps, privateRepository, conversationRepository, preparationEvents } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const input = {
+      userId: USER_ID,
+      requestId: 'request-concurrent-create',
+      chatId: CHAT_ID,
+      from: '2026-06-30T00:00:00.000Z',
+      to: '2026-07-01T00:00:00.000Z',
+    };
+
+    const [first, second] = await Promise.all([
+      createQueuedConversationAssistantSession(input, deps),
+      createQueuedConversationAssistantSession(input, deps),
+    ]);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(conversationRepository.getAllSessions()).toHaveLength(1);
+    expect(preparationEvents).toHaveLength(1);
+  });
+
+  it('blocks messages until context is ready and can requeue a failed preparation', async () => {
+    const { deps, privateRepository, conversationRepository, preparationEvents } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-retry',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const blocked = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Too early' },
+      deps
+    );
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.error.code).toBe('CONTEXT_NOT_READY');
+
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      status: 'failed',
+      preparationStage: 'failed',
+      preparationError: { code: 'PERSISTENCE_ERROR', message: 'Temporary failure' },
+    });
+    const retried = await retryConversationAssistantPreparation(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    expect(retried.ok).toBe(true);
+    if (!retried.ok) return;
+    expect(retried.value.status).toBe('preparing');
+    expect(retried.value.preparationStage).toBe('queued');
+    expect(retried.value.preparationError).toBeUndefined();
+    expect(retried.value.preparationAttempt).toBe(2);
+    expect(preparationEvents).toHaveLength(2);
+    expect(preparationEvents[1]?.attempt).toBe(2);
+  });
+
+  it('publishes only once for concurrent retries of the same failed preparation', async () => {
+    const { deps, privateRepository, conversationRepository, preparationEvents } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-concurrent-retry',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      status: 'failed',
+      preparationStage: 'failed',
+      preparationError: { code: 'PERSISTENCE_ERROR', message: 'Temporary failure' },
+    });
+
+    const [first, second] = await Promise.all([
+      retryConversationAssistantPreparation(
+        { userId: USER_ID, sessionId: created.value.session.id },
+        deps
+      ),
+      retryConversationAssistantPreparation(
+        { userId: USER_ID, sessionId: created.value.session.id },
+        deps
+      ),
+    ]);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(preparationEvents).toHaveLength(2);
+    expect(preparationEvents[1]?.attempt).toBe(2);
+    expect(
+      (await conversationRepository.getSessionById(created.value.session.id))
+        ?.preparationAttempt
+    ).toBe(2);
+  });
+
+  it('validates every retry state and handles a session disappearing during requeue', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    expect(
+      await retryConversationAssistantPreparation(
+        { userId: USER_ID, sessionId: 'missing-session' },
+        deps
+      )
+    ).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-retry-states',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const preparing = await retryConversationAssistantPreparation(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    expect(preparing.ok).toBe(false);
+    if (!preparing.ok) expect(preparing.error.message).toBe('Conversation context is already preparing');
+
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      status: 'ready',
+      preparationStage: 'ready',
+    });
+    const ready = await retryConversationAssistantPreparation(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    expect(ready.ok).toBe(false);
+    if (!ready.ok) expect(ready.error.message).toBe('Conversation context is already ready');
+
+    await conversationRepository.saveSession({
+      ...created.value.session,
+      status: 'failed',
+      preparationStage: 'failed',
+    });
+    vi.spyOn(conversationRepository, 'requeueFailedPreparation').mockResolvedValue({
+      status: 'not_found',
+    });
+    const disappeared = await retryConversationAssistantPreparation(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    expect(disappeared.ok).toBe(false);
+    if (!disappeared.ok) expect(disappeared.error.code).toBe('NOT_FOUND');
   });
 
   it('creates a shell session with frozen transcript text and no turns', async () => {
@@ -231,8 +1227,10 @@ describe('Conversation Assistant session use cases', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.turns).toEqual([]);
+    expect(result.value).not.toHaveProperty('turns');
     expect(result.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
+    expect(result.value.context).toBeDefined();
+    if (result.value.context === undefined) return;
     expect(result.value.session.transcriptSha256).toBe(result.value.context.transcriptSha256);
     expect(conversationRepository.getAllSessions()).toHaveLength(1);
   });
@@ -380,6 +1378,8 @@ describe('Conversation Assistant session use cases', () => {
     expect(calls).toHaveLength(2);
     expect(calls[1]?.cursor).toBe('page-two');
     if (result.ok) {
+      expect(result.value.context).toBeDefined();
+      if (result.value.context === undefined) return;
       expect(result.value.context.messages).toHaveLength(1);
     }
   });
@@ -411,6 +1411,28 @@ describe('Conversation Assistant session use cases', () => {
     if (!result.ok) return;
     expect(result.value.session.transcriptMessageCount).toBe(2001);
     expect(result.value.session.transcriptText).toContain('Message 2001');
+    const firstPage = await getConversationAssistantContext(
+      { userId: USER_ID, sessionId: result.value.session.id },
+      deps
+    );
+    expect(firstPage.ok).toBe(true);
+    if (!firstPage.ok) return;
+    expect(firstPage.value.messages).toHaveLength(100);
+    expect(firstPage.value.nextMessageCursor).toBe(100);
+    const nextMessageCursor = firstPage.value.nextMessageCursor;
+    if (nextMessageCursor === undefined) return;
+    const secondPage = await getConversationAssistantContext(
+      {
+        userId: USER_ID,
+        sessionId: result.value.session.id,
+        messageCursor: nextMessageCursor,
+      },
+      deps
+    );
+    expect(secondPage.ok).toBe(true);
+    if (secondPage.ok) {
+      expect(secondPage.value.messages[0]?.content).toBe('Message 101');
+    }
   });
 
   it('checks context size with the large-context warning threshold', async () => {
@@ -510,7 +1532,7 @@ describe('Conversation Assistant session use cases', () => {
     if (!queryFailure.ok) expect(queryFailure.error.code).toBe('PERSISTENCE_ERROR');
   });
 
-  it('creates a session with first user and assistant turns using OpenRouter session id', async () => {
+  it('creates a shell and sends the first user and assistant turns separately', async () => {
     const { deps, conversationRepository, privateRepository, llmClient, llmFactoryCalls } =
       makeDeps();
     await seedDirectMessage(privateRepository);
@@ -521,17 +1543,23 @@ describe('Conversation Assistant session use cases', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
-        question: 'What was agreed?',
       },
       deps
     );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.turns.map((turn) => turn.role)).toEqual(['user', 'assistant']);
+    const firstTurn = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: result.value.session.id, question: 'What was agreed?' },
+      deps
+    );
+    expect(firstTurn.ok).toBe(true);
+    expect(firstTurn.ok ? firstTurn.value.map((turn) => turn.role) : []).toEqual([
+      'user',
+      'assistant',
+    ]);
     expect(conversationRepository.getAllTurns()).toHaveLength(2);
     expect(llmFactoryCalls).toEqual([
-      { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
       { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
     ]);
     expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
@@ -547,17 +1575,22 @@ describe('Conversation Assistant session use cases', () => {
     await seedDirectMessage(privateRepository);
     llmClient.failNextChat('upstream model error');
 
-    const result = await createConversationAssistantSession(
+    const created = await createConversationAssistantSession(
       {
         userId: USER_ID,
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
-        question: 'Summarize.',
       },
       deps
     );
 
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const result = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Summarize.' },
+      deps
+    );
     expect(result.ok).toBe(true);
     expect(conversationRepository.getAllTurns()[1]?.error?.code).toBe('LLM_ERROR');
   });
@@ -566,23 +1599,31 @@ describe('Conversation Assistant session use cases', () => {
     const { deps, privateRepository, conversationRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
 
-    const result = await createConversationAssistantSession(
+    const unavailableDeps = {
+      ...deps,
+      llmClientFactory: {
+        createLlmClientForUser: (): ReturnType<
+          ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']
+        > =>
+          Promise.resolve(err({ code: 'LLM_ERROR' as const, message: 'OpenRouter key missing' })),
+      },
+    };
+    const created = await createConversationAssistantSession(
       {
         userId: USER_ID,
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
-        question: 'Summarize.',
       },
-      {
-        ...deps,
-        llmClientFactory: {
-          createLlmClientForUser: () =>
-            Promise.resolve(err({ code: 'LLM_ERROR', message: 'OpenRouter key missing' })),
-        },
-      }
+      unavailableDeps
     );
 
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const result = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Summarize.' },
+      unavailableDeps
+    );
     expect(result.ok).toBe(true);
     expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
       code: 'LLM_ERROR',
@@ -600,13 +1641,17 @@ describe('Conversation Assistant session use cases', () => {
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
         model: 'or:anthropic/claude-sonnet-5' as ConversationAssistantModel,
-        question: 'What was agreed?',
       },
       deps
     );
     expect(created.ok).toBe(true);
     if (!created.ok) return;
 
+    const firstTurn = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'What was agreed?' },
+      deps
+    );
+    expect(firstTurn.ok).toBe(true);
     const followUp = await sendConversationAssistantTurn(
       { userId: USER_ID, sessionId: created.value.session.id, question: 'What time?' },
       deps
@@ -617,21 +1662,15 @@ describe('Conversation Assistant session use cases', () => {
     expect(llmFactoryCalls).toEqual([
       { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
       { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
-      { userId: USER_ID, model: 'or:anthropic/claude-sonnet-5' },
     ]);
     expect(JSON.stringify(llmClient.chatCalls[0]?.messages[1])).toBe(
       JSON.stringify(llmClient.chatCalls[1]?.messages[1])
     );
   });
 
-  it('stores an inferred assistant role label from the initial question', async () => {
-    const { deps, llmClient } = makeDeps();
+  it('keeps neutral session metadata when the first private message is sent', async () => {
+    const { deps, conversationRepository } = makeDeps();
     await seedDirectMessage(deps.privateWhatsAppRepository as FakePrivateWhatsAppRepository);
-    llmClient.queueGenerateResponse({
-      content:
-        '{"roleLabel":"psychologist","confidence":0.88,"rationale":"The user asks about anxiety."}',
-    });
-    llmClient.queueChatResponse('The selected context shows...');
 
     const result = await createConversationAssistantSession(
       {
@@ -639,37 +1678,24 @@ describe('Conversation Assistant session use cases', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const firstTurn = await sendConversationAssistantTurn(
+      {
+        userId: USER_ID,
+        sessionId: result.value.session.id,
         question: 'Why do I keep feeling anxious after these messages?',
       },
       deps
     );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.session.assistantRoleLabel).toBe('Psychologist');
-  });
-
-  it('falls back to Assistant when role classification returns invalid content', async () => {
-    const { deps, llmClient } = makeDeps();
-    await seedDirectMessage(deps.privateWhatsAppRepository as FakePrivateWhatsAppRepository);
-    llmClient.queueGenerateResponse({ content: 'not json' });
-    llmClient.queueGenerateResponse({ content: '{"roleLabel":"","confidence":2,"rationale":""}' });
-    llmClient.queueChatResponse('The selected context shows...');
-
-    const result = await createConversationAssistantSession(
-      {
-        userId: USER_ID,
-        chatId: CHAT_ID,
-        from: '2026-06-30T00:00:00.000Z',
-        to: '2026-07-01T00:00:00.000Z',
-        question: 'Do I need a doctor?',
-      },
-      deps
-    );
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.session.assistantRoleLabel).toBe('Assistant');
+    expect(firstTurn.ok).toBe(true);
+    const updatedSession = await conversationRepository.getSessionById(result.value.session.id);
+    expect(updatedSession?.assistantRoleLabel).toBe('Assistant');
+    expect(updatedSession?.title).toBe('Alice (2026-06-30 to 2026-07-01)');
   });
 
   it('streams follow-up turns and persists the final assistant turn', async () => {
@@ -1189,6 +2215,120 @@ describe('Conversation Assistant session use cases', () => {
     expect(conversationRepository.getAllTurns()).toHaveLength(0);
   });
 
+  it('blocks streaming while the frozen context is still preparing', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-stream-before-ready',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const events = vi.fn();
+
+    const result = await streamConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Too early' },
+      deps,
+      events
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'CONTEXT_NOT_READY', message: 'Conversation context is not ready yet' },
+    });
+    expect(events).not.toHaveBeenCalled();
+    expect(conversationRepository.getAllTurns()).toHaveLength(0);
+  });
+
+  it('validates context ownership and cursors and supports legacy and omitted-only snapshots', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    expect(
+      await getConversationAssistantContext(
+        { userId: USER_ID, sessionId: 'missing-session' },
+        deps
+      )
+    ).toEqual({
+      ok: false,
+      error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' },
+    });
+
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-context-boundaries',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const legacyReady = {
+      ...created.value.session,
+      status: 'ready' as const,
+      preparationStage: 'ready' as const,
+    };
+    await conversationRepository.saveSession(legacyReady);
+
+    const invalidCursor = await getConversationAssistantContext(
+      { userId: USER_ID, sessionId: legacyReady.id, messageCursor: -1 },
+      deps
+    );
+    expect(invalidCursor.ok).toBe(false);
+    if (!invalidCursor.ok) expect(invalidCursor.error.code).toBe('INVALID_REQUEST');
+    const legacyContext = await getConversationAssistantContext(
+      { userId: USER_ID, sessionId: legacyReady.id },
+      deps
+    );
+    expect(legacyContext.ok).toBe(true);
+    if (legacyContext.ok) expect(legacyContext.value.snapshotAvailable).toBe(false);
+
+    const omittedMessages = Array.from({ length: 101 }, (_, index) => ({
+      id: `omitted-${String(index)}`,
+      eventTimestamp: new Date(Date.UTC(2026, 5, 30, 10, 0, index)).toISOString(),
+      importedAt: new Date(Date.UTC(2026, 5, 30, 10, 0, index)).toISOString(),
+      direction: 'incoming' as const,
+      speakerLabel: 'Alice',
+      messageType: 'image' as const,
+      omissionReason: 'media_only' as const,
+    }));
+    const snapshotId = 'omitted-only-snapshot';
+    await conversationRepository.saveContextSnapshot(
+      legacyReady.id,
+      USER_ID,
+      snapshotId,
+      { messages: [], omittedMessages }
+    );
+    await conversationRepository.saveSession({
+      ...legacyReady,
+      contextSnapshotId: snapshotId,
+      omitted: {
+        mediaOnly: 101,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+    });
+    const omittedPage = await getConversationAssistantContext(
+      { userId: USER_ID, sessionId: legacyReady.id },
+      deps
+    );
+    expect(omittedPage.ok).toBe(true);
+    if (omittedPage.ok) {
+      expect(omittedPage.value.omittedMessages).toHaveLength(100);
+      expect(omittedPage.value.nextOmittedCursor).toBe(100);
+    }
+  });
+
   it('rejects group chats and empty transcript ranges', async () => {
     const { deps, privateRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
@@ -1422,13 +2562,23 @@ describe('Conversation Assistant session use cases', () => {
       { userId: 'other-user', sessionId: created.value.session.id },
       deps
     );
+    const ownedGet = await getConversationAssistantSession(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
+    const ownedTurns = await listConversationAssistantTurns(
+      { userId: USER_ID, sessionId: created.value.session.id },
+      deps
+    );
     expect(foreignSend.ok).toBe(false);
     expect(foreignGet.ok).toBe(false);
     expect(foreignTurns.ok).toBe(false);
+    expect(ownedGet.ok).toBe(true);
+    expect(ownedTurns).toEqual({ ok: true, value: [] });
   });
 
   it('derives fallback titles and assistant error turns for unavailable chat generation', async () => {
-    const { deps, privateRepository } = makeDeps();
+    const { deps, privateRepository, conversationRepository } = makeDeps();
     await seedDirectMessage(privateRepository, {
       displayName: undefined,
       text: 'A message without a stored chat display name.',
@@ -1444,6 +2594,14 @@ describe('Conversation Assistant session use cases', () => {
           } satisfies GenerateResult)
         ),
     };
+    const unavailableChatDeps = {
+      ...deps,
+      llmClientFactory: {
+        createLlmClientForUser: (): ReturnType<
+          ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']
+        > => Promise.resolve(ok(llmClientWithoutChat)),
+      },
+    };
 
     const created = await createConversationAssistantSession(
       {
@@ -1451,14 +2609,8 @@ describe('Conversation Assistant session use cases', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
-        question: longQuestion,
       },
-      {
-        ...deps,
-        llmClientFactory: {
-          createLlmClientForUser: () => Promise.resolve(ok(llmClientWithoutChat)),
-        },
-      }
+      unavailableChatDeps
     );
     expect(created.ok).toBe(true);
     if (!created.ok) return;
@@ -1466,8 +2618,16 @@ describe('Conversation Assistant session use cases', () => {
     expect(created.value.session.transcriptText).toContain('Unknown:');
     expect(created.value.session.transcriptText).not.toContain('phone:');
     expect(created.value.session.transcriptText).not.toContain('+48');
-    expect(created.value.session.title).toBe(`${'x'.repeat(77)}...`);
-    expect(created.value.turns[1]?.error?.message).toBe('Chat message generation is unavailable');
+    const firstTurn = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: longQuestion },
+      unavailableChatDeps
+    );
+    expect(firstTurn.ok).toBe(true);
+    const updatedSession = await conversationRepository.getSessionById(created.value.session.id);
+    expect(updatedSession?.title).toBe('WhatsApp chat (2026-06-30 to 2026-07-01)');
+    expect(firstTurn.ok ? firstTurn.value[1]?.error?.message : undefined).toBe(
+      'Chat message generation is unavailable'
+    );
 
     const shell = await createConversationAssistantSession(
       {
@@ -1500,22 +2660,30 @@ describe('Conversation Assistant session use cases', () => {
       generateChat: () => Promise.reject(new Error('network down')),
     };
 
-    const result = await createConversationAssistantSession(
+    const rejectingDeps = {
+      ...deps,
+      llmClientFactory: {
+        createLlmClientForUser: (): ReturnType<
+          ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']
+        > => Promise.resolve(ok(rejectingClient)),
+      },
+    };
+    const created = await createConversationAssistantSession(
       {
         userId: USER_ID,
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
-        question: 'Summarize.',
       },
-      {
-        ...deps,
-        llmClientFactory: {
-          createLlmClientForUser: () => Promise.resolve(ok(rejectingClient)),
-        },
-      }
+      rejectingDeps
     );
 
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const result = await sendConversationAssistantTurn(
+      { userId: USER_ID, sessionId: created.value.session.id, question: 'Summarize.' },
+      rejectingDeps
+    );
     expect(result.ok).toBe(true);
     expect(conversationRepository.getAllTurns().map((turn) => turn.role)).toEqual([
       'user',

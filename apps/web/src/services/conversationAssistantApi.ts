@@ -2,10 +2,10 @@ import { config } from '@/config';
 import type {
   ConversationAssistantContextCheckRequest,
   ConversationAssistantContextCheckResponse,
+  ConversationAssistantContextResponse,
   ConversationAssistantPdfDownload,
   ConversationAssistantSession,
   ConversationAssistantStreamEvent,
-  ConversationAssistantTurn,
   ConversationAssistantSessionsResponse,
   ConversationAssistantTurnsResponse,
   CreateConversationAssistantSessionRequest,
@@ -23,7 +23,6 @@ interface ConversationAssistantSessionResponse {
 
 interface CreateConversationAssistantSessionResponse {
   session: ConversationAssistantSession;
-  turns: ConversationAssistantTurn[];
 }
 
 function getSessionPath(sessionId: string): string {
@@ -96,6 +95,49 @@ export async function getConversationAssistantSession(
     config.whatsappServiceUrl,
     getSessionPath(sessionId),
     accessToken
+  );
+  return response.session;
+}
+
+export async function getConversationAssistantContext(
+  accessToken: string,
+  sessionId: string,
+  cursors?: { messageCursor: number; omittedCursor: number }
+): Promise<ConversationAssistantContextResponse> {
+  const search = new URLSearchParams();
+  if (cursors !== undefined) {
+    search.set('messageCursor', String(cursors.messageCursor));
+    search.set('omittedCursor', String(cursors.omittedCursor));
+  }
+  const query = search.size === 0 ? '' : `?${search.toString()}`;
+  return await apiRequest<ConversationAssistantContextResponse>(
+    config.whatsappServiceUrl,
+    `${getSessionPath(sessionId)}/context${query}`,
+    accessToken
+  );
+}
+
+export async function getConversationAssistantSessionByRequest(
+  accessToken: string,
+  requestId: string
+): Promise<ConversationAssistantSession> {
+  const response = await apiRequest<ConversationAssistantSessionResponse>(
+    config.whatsappServiceUrl,
+    `/conversation-assistant/session-requests/${encodeURIComponent(requestId)}`,
+    accessToken
+  );
+  return response.session;
+}
+
+export async function retryConversationAssistantPreparation(
+  accessToken: string,
+  sessionId: string
+): Promise<ConversationAssistantSession> {
+  const response = await apiRequest<ConversationAssistantSessionResponse>(
+    config.whatsappServiceUrl,
+    `${getSessionPath(sessionId)}/preparation/retry`,
+    accessToken,
+    { method: 'POST' }
   );
   return response.session;
 }

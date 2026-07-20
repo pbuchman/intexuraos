@@ -3,21 +3,24 @@ import { useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '@intexuraos/common-core/errors';
 import {
   DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+  isConversationAssistantModel,
   type ConversationAssistantModel,
 } from '@intexuraos/llm-contract';
 import { useAuth } from '@/context';
 import {
-  checkConversationAssistantContext,
   createConversationAssistantSession,
   exportConversationAssistantSessionPdf,
+  getConversationAssistantContext,
   getConversationAssistantSession,
+  getConversationAssistantSessionByRequest,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
   streamConversationAssistantTurn,
+  retryConversationAssistantPreparation,
 } from '@/services/conversationAssistantApi';
 import { listPrivateWhatsAppChats } from '@/services/whatsappApi';
 import type {
-  ConversationAssistantContextCheckResponse,
+  ConversationAssistantContextResponse,
   ConversationAssistantStreamEvent,
   CreateConversationAssistantSessionRequest,
   ConversationAssistantSession,
@@ -26,12 +29,12 @@ import type {
 } from '@/types';
 
 const CHAT_PAGE_SIZE = 100;
+const PENDING_CREATION_STORAGE_KEY = 'whatsapp-conversation-assistant-pending-creation';
+const CREATION_RECOVERY_DELAYS_MS = [0, 250, 750, 1500] as const;
 
-interface PendingLargeContextCreate {
-  check: ConversationAssistantContextCheckResponse;
+interface StoredPendingCreation {
   request: CreateConversationAssistantSessionRequest;
-  firstQuestion: string;
-  originatingSessionId: string | undefined;
+  savedAt: number;
 }
 
 function toDateTimeLocalValue(value: Date): string {
@@ -52,39 +55,125 @@ function getDefaultRange(): { from: string; to: string } {
   };
 }
 
+function newCreationRequestId(): string {
+  return globalThis.crypto.randomUUID();
+}
+
+function rememberPendingCreation(request: CreateConversationAssistantSessionRequest): void {
+  try {
+    globalThis.sessionStorage.setItem(
+      PENDING_CREATION_STORAGE_KEY,
+      JSON.stringify({ request, savedAt: Date.now() })
+    );
+  } catch {
+    // Recovery storage is best-effort; request idempotency still protects the active page.
+  }
+}
+
+function clearPendingCreation(): void {
+  try {
+    globalThis.sessionStorage.removeItem(PENDING_CREATION_STORAGE_KEY);
+  } catch {
+    // Ignore unavailable browser storage.
+  }
+}
+
+function readPendingCreation(): StoredPendingCreation | null {
+  try {
+    const raw = globalThis.sessionStorage.getItem(PENDING_CREATION_STORAGE_KEY);
+    if (raw === null) return null;
+    const value = JSON.parse(raw) as { request?: unknown; savedAt?: unknown };
+    if (
+      !isStoredCreationRequest(value.request) ||
+      typeof value.savedAt !== 'number' ||
+      Date.now() - value.savedAt > 10 * 60 * 1000
+    ) {
+      clearPendingCreation();
+      return null;
+    }
+    return { request: value.request, savedAt: value.savedAt };
+  } catch {
+    clearPendingCreation();
+    return null;
+  }
+}
+
+function isStoredCreationRequest(value: unknown): value is CreateConversationAssistantSessionRequest {
+  if (typeof value !== 'object' || value === null) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    typeof request['requestId'] === 'string' &&
+    typeof request['chatId'] === 'string' &&
+    typeof request['from'] === 'string' &&
+    Number.isFinite(Date.parse(request['from'])) &&
+    typeof request['to'] === 'string' &&
+    Number.isFinite(Date.parse(request['to'])) &&
+    (request['model'] === undefined ||
+      (typeof request['model'] === 'string' && isConversationAssistantModel(request['model'])))
+  );
+}
+
+async function recoverPendingCreation(
+  token: string,
+  requestId: string
+): Promise<ConversationAssistantSession> {
+  let lastError: unknown;
+  for (const delay of CREATION_RECOVERY_DELAYS_MS) {
+    if (delay > 0) {
+      await new Promise<void>((resolve) => {
+        window.setTimeout(resolve, delay);
+      });
+    }
+    try {
+      return await getConversationAssistantSessionByRequest(token, requestId);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 export interface UseWhatsAppConversationAssistantResult {
   sessions: ConversationAssistantSession[];
   selectedSessionId: string | undefined;
   selectedSession: ConversationAssistantSession | undefined;
   turns: ConversationAssistantTurn[];
+  context: ConversationAssistantContextResponse | null;
   directChats: PrivateWhatsAppChat[];
   selectedChatId: string | undefined;
   selectedModel: ConversationAssistantModel;
   fromDateTimeLocal: string;
   toDateTimeLocal: string;
-  firstQuestion: string;
   followUpQuestion: string;
   loading: boolean;
   loadingTurns: boolean;
+  loadingContext: boolean;
+  loadingMoreContext: boolean;
   creating: boolean;
-  checkingContext: boolean;
   sending: boolean;
+  retryingPreparation: boolean;
   exporting: boolean;
   error: string | null;
-  largeContextWarning: ConversationAssistantContextCheckResponse | null;
+  contextError: string | null;
   selectSession: (sessionId: string) => void;
   selectChat: (chatId: string) => void;
   selectModel: (model: ConversationAssistantModel) => void;
   setFromDateTimeLocal: (value: string) => void;
   setToDateTimeLocal: (value: string) => void;
-  setFirstQuestion: (value: string) => void;
   setFollowUpQuestion: (value: string) => void;
   createSession: () => Promise<void>;
-  confirmLargeContextCreate: () => Promise<void>;
-  dismissLargeContextWarning: () => void;
   sendFollowUp: () => Promise<void>;
+  loadContext: () => Promise<void>;
+  loadMoreContext: () => Promise<void>;
+  retryPreparation: () => Promise<void>;
   exportSelectedSessionPdf: () => Promise<void>;
   refresh: () => Promise<void>;
+}
+
+export interface UseWhatsAppConversationAssistantOptions {
+  sessionId?: string;
+  loadChats?: boolean;
+  loadSessions?: boolean;
 }
 
 async function listAllPrivateWhatsAppChats(
@@ -105,19 +194,31 @@ async function listAllPrivateWhatsAppChats(
   return chats;
 }
 
-export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssistantResult {
+export function useWhatsAppConversationAssistant(
+  input?: string | UseWhatsAppConversationAssistantOptions
+): UseWhatsAppConversationAssistantResult {
   const { getAccessToken } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const selectedSessionId = searchParams.get('session') ?? undefined;
+  const routeSessionId = typeof input === 'string' ? input : input?.sessionId;
+  const loadChats = typeof input === 'string' ? true : (input?.loadChats ?? true);
+  const loadSessions = typeof input === 'string' ? true : (input?.loadSessions ?? true);
+  const selectedSessionId = routeSessionId ?? searchParams.get('session') ?? undefined;
   const createRequestIdRef = useRef(0);
   const createInFlightRef = useRef(false);
+  const creationClientRequestIdRef = useRef<string | null>(null);
+  const pendingCreationRequestRef = useRef<CreateConversationAssistantSessionRequest | null>(null);
   const selectedSessionIdRef = useRef<string | undefined>(selectedSessionId);
   const chatListRequestIdRef = useRef(0);
   const sessionListRequestIdRef = useRef(0);
   const sendRequestIdRef = useRef(0);
   const sendInFlightRef = useRef(false);
   const exportInFlightRef = useRef(false);
+  const retryPreparationInFlightRef = useRef(false);
+  const creationRecoveryStartedRef = useRef(false);
   const turnsRequestIdRef = useRef(0);
+  const contextRequestIdRef = useRef(0);
+  const contextLoadedSessionIdRef = useRef<string | null>(null);
+  const contextInFlightSessionIdRef = useRef<string | null>(null);
 
   const defaultRange = useMemo(() => getDefaultRange(), []);
   const [sessions, setSessions] = useState<ConversationAssistantSession[]>([]);
@@ -128,6 +229,7 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     undefined
   );
   const [turns, setTurns] = useState<ConversationAssistantTurn[]>([]);
+  const [context, setContext] = useState<ConversationAssistantContextResponse | null>(null);
   const [directChats, setDirectChats] = useState<PrivateWhatsAppChat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | undefined>(undefined);
   const [selectedModel, setSelectedModel] = useState<ConversationAssistantModel>(
@@ -135,28 +237,33 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   );
   const [fromDateTimeLocal, setFromDateTimeLocalState] = useState(defaultRange.from);
   const [toDateTimeLocal, setToDateTimeLocalState] = useState(defaultRange.to);
-  const [firstQuestion, setFirstQuestionState] = useState('');
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingTurns, setLoadingTurns] = useState(false);
+  const [loadingContext, setLoadingContext] = useState(false);
+  const [loadingMoreContext, setLoadingMoreContext] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [checkingContext, setCheckingContext] = useState(false);
   const [sending, setSending] = useState(false);
+  const [retryingPreparation, setRetryingPreparation] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingLargeContext, setPendingLargeContext] =
-    useState<PendingLargeContextCreate | null>(null);
+  const [contextError, setContextError] = useState<string | null>(null);
 
   useEffect(() => {
     selectedSessionIdRef.current = selectedSessionId;
     setSelectedSessionOverride(undefined);
     setTurns([]);
+    contextRequestIdRef.current += 1;
+    contextLoadedSessionIdRef.current = null;
+    contextInFlightSessionIdRef.current = null;
+    setContext(null);
+    setContextError(null);
+    setLoadingContext(false);
+    setLoadingMoreContext(false);
     setFollowUpQuestion('');
     sendInFlightRef.current = false;
     setSending(false);
-    setCheckingContext(false);
     setError(null);
-    setPendingLargeContext(null);
     setInvalidSelectedSessionId(undefined);
     if (selectedSessionId === undefined) {
       setLoadingTurns(false);
@@ -180,6 +287,8 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
 
   const loadSessionsAndChats = useCallback(async (): Promise<void> => {
     setError(null);
+    if (!loadChats && !loadSessions) return;
+
     const chatRequestId = chatListRequestIdRef.current + 1;
     chatListRequestIdRef.current = chatRequestId;
     const sessionRequestId = sessionListRequestIdRef.current + 1;
@@ -187,35 +296,30 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     try {
       const token = await getAccessToken();
       const [chatResponse, sessionResponse] = await Promise.all([
-        listAllPrivateWhatsAppChats(token),
-        listConversationAssistantSessions(token),
+        loadChats ? listAllPrivateWhatsAppChats(token) : Promise.resolve(null),
+        loadSessions ? listConversationAssistantSessions(token) : Promise.resolve(null),
       ]);
-      const directOnly = chatResponse.filter((chat) => chat.chatType === 'direct');
-      if (chatListRequestIdRef.current === chatRequestId) {
+      const directOnly = chatResponse?.filter((chat) => chat.chatType === 'direct');
+      if (directOnly !== undefined && chatListRequestIdRef.current === chatRequestId) {
         setDirectChats(directOnly);
         setSelectedChatId((current) => {
-          const next =
-            current !== undefined && directOnly.some((chat) => chat.id === current)
-              ? current
-              : directOnly[0]?.id;
-          if (next !== current) {
-            setPendingLargeContext(null);
-          }
-          return next;
+          return current !== undefined && directOnly.some((chat) => chat.id === current)
+            ? current
+            : undefined;
         });
       }
-      if (sessionListRequestIdRef.current === sessionRequestId) {
+      if (sessionResponse !== null && sessionListRequestIdRef.current === sessionRequestId) {
         setSessions(sessionResponse.sessions);
       }
     } catch (err) {
       if (
-        chatListRequestIdRef.current === chatRequestId ||
-        sessionListRequestIdRef.current === sessionRequestId
+        (loadChats && chatListRequestIdRef.current === chatRequestId) ||
+        (loadSessions && sessionListRequestIdRef.current === sessionRequestId)
       ) {
         setError(getErrorMessage(err, 'Failed to load WhatsApp Conversation Assistant'));
       }
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, loadChats, loadSessions]);
 
   const loadSelectedSession = useCallback(async (): Promise<void> => {
     if (selectedSessionId === undefined) {
@@ -282,6 +386,87 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     return selectedSessionOverride ?? sessions.find((session) => session.id === selectedSessionId);
   }, [invalidSelectedSessionId, selectedSessionId, selectedSessionOverride, sessions]);
 
+  useEffect(() => {
+    if (
+      creationRecoveryStartedRef.current ||
+      !loadChats ||
+      loadSessions ||
+      selectedSessionId !== undefined
+    ) {
+      return;
+    }
+    const pendingCreation = readPendingCreation();
+    if (pendingCreation === null) return;
+    const { request } = pendingCreation;
+    creationRecoveryStartedRef.current = true;
+    creationClientRequestIdRef.current = request.requestId;
+    pendingCreationRequestRef.current = request;
+    setSelectedChatId(request.chatId);
+    setFromDateTimeLocalState(toDateTimeLocalValue(new Date(request.from)));
+    setToDateTimeLocalState(toDateTimeLocalValue(new Date(request.to)));
+    if (request.model !== undefined) setSelectedModel(request.model);
+    void (async (): Promise<void> => {
+      try {
+        const token = await getAccessToken();
+        const recovered = await recoverPendingCreation(token, request.requestId);
+        setSessions([recovered]);
+        setSelectedSessionOverride(recovered);
+        selectedSessionIdRef.current = recovered.id;
+        creationClientRequestIdRef.current = null;
+        pendingCreationRequestRef.current = null;
+        clearPendingCreation();
+        setSessionParam(recovered.id);
+      } catch {
+        setError(
+          'The pending analysis could not be confirmed yet. Retry to safely reuse the same request.'
+        );
+      }
+    })();
+  }, [getAccessToken, loadChats, loadSessions, selectedSessionId, setSessionParam]);
+
+  useEffect(() => {
+    if (selectedSessionId === undefined || selectedSession?.status !== 'preparing') return;
+    let cancelled = false;
+    let requestInFlight = false;
+    const poll = async (): Promise<void> => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        const token = await getAccessToken();
+        const refreshed = await getConversationAssistantSession(token, selectedSessionId);
+        if (!cancelled && selectedSessionIdRef.current === selectedSessionId) {
+          setSelectedSessionOverride(refreshed);
+        }
+      } catch {
+        // Polling is best-effort; explicit refresh remains available.
+      } finally {
+        requestInFlight = false;
+      }
+    };
+    const intervalId = window.setInterval(() => {
+      void poll();
+    }, 1500);
+    return (): void => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [getAccessToken, selectedSession?.status, selectedSessionId]);
+
+  useEffect(() => {
+    if (!loadSessions || !sessions.some((item) => item.status === 'preparing')) return;
+    let refreshInFlight = false;
+    const intervalId = window.setInterval(() => {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      void loadSessionsAndChats().finally(() => {
+        refreshInFlight = false;
+      });
+    }, 3000);
+    return (): void => {
+      window.clearInterval(intervalId);
+    };
+  }, [loadSessions, loadSessionsAndChats, sessions]);
+
   const selectSession = useCallback(
     (sessionId: string): void => {
       createRequestIdRef.current += 1;
@@ -292,32 +477,31 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
   );
 
   const selectChat = useCallback((chatId: string): void => {
-    setPendingLargeContext(null);
+    creationClientRequestIdRef.current = null;
+    pendingCreationRequestRef.current = null;
+    clearPendingCreation();
     setSelectedChatId(chatId);
   }, []);
 
   const selectModel = useCallback((model: ConversationAssistantModel): void => {
-    setPendingLargeContext(null);
+    creationClientRequestIdRef.current = null;
+    pendingCreationRequestRef.current = null;
+    clearPendingCreation();
     setSelectedModel(model);
   }, []);
 
   const setFromDateTimeLocal = useCallback((value: string): void => {
-    setPendingLargeContext(null);
+    creationClientRequestIdRef.current = null;
+    pendingCreationRequestRef.current = null;
+    clearPendingCreation();
     setFromDateTimeLocalState(value);
   }, []);
 
   const setToDateTimeLocal = useCallback((value: string): void => {
-    setPendingLargeContext(null);
+    creationClientRequestIdRef.current = null;
+    pendingCreationRequestRef.current = null;
+    clearPendingCreation();
     setToDateTimeLocalState(value);
-  }, []);
-
-  const setFirstQuestion = useCallback((value: string): void => {
-    setPendingLargeContext(null);
-    setFirstQuestionState(value);
-  }, []);
-
-  const dismissLargeContextWarning = useCallback((): void => {
-    setPendingLargeContext(null);
   }, []);
 
   const streamQuestionIntoSession = useCallback(
@@ -426,14 +610,21 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     async (
       token: string,
       request: CreateConversationAssistantSessionRequest,
-      firstQuestionForCreate: string,
       requestId: number,
       originatingSessionId: string | undefined
     ): Promise<void> => {
-      const session = await createConversationAssistantSession(token, {
-        ...request,
-        ...(firstQuestionForCreate !== '' ? { question: firstQuestionForCreate } : {}),
-      });
+      pendingCreationRequestRef.current = request;
+      rememberPendingCreation(request);
+      let session: ConversationAssistantSession;
+      try {
+        session = await createConversationAssistantSession(token, request);
+      } catch (creationError) {
+        try {
+          session = await recoverPendingCreation(token, request.requestId);
+        } catch {
+          throw creationError;
+        }
+      }
       if (
         createRequestIdRef.current !== requestId ||
         selectedSessionIdRef.current !== originatingSessionId
@@ -443,15 +634,15 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
       setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
       setInvalidSelectedSessionId(undefined);
       setSelectedSessionOverride(session);
-      setFirstQuestionState('');
       setFollowUpQuestion('');
       setSending(false);
       setError(null);
+      creationClientRequestIdRef.current = null;
+      pendingCreationRequestRef.current = null;
+      clearPendingCreation();
       turnsRequestIdRef.current += 1;
       selectedSessionIdRef.current = session.id;
-      if (firstQuestionForCreate !== '') {
-        setTurns([]);
-      }
+      setTurns([]);
       setSessionParam(session.id);
     },
     [setSessionParam]
@@ -466,37 +657,24 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
 
     createInFlightRef.current = true;
     setCreating(true);
-    setCheckingContext(true);
     setError(null);
-    setPendingLargeContext(null);
     const requestId = createRequestIdRef.current + 1;
     createRequestIdRef.current = requestId;
     const originatingSessionId = selectedSessionIdRef.current;
     try {
       const token = await getAccessToken();
-      const question = firstQuestion.trim();
-      const request: CreateConversationAssistantSessionRequest = {
+      const pendingRequest = pendingCreationRequestRef.current;
+      const clientRequestId =
+        pendingRequest?.requestId ?? creationClientRequestIdRef.current ?? newCreationRequestId();
+      creationClientRequestIdRef.current = clientRequestId;
+      const request: CreateConversationAssistantSessionRequest = pendingRequest ?? {
+        requestId: clientRequestId,
         chatId: selectedChatId,
         from: fromDateTimeLocalValue(fromDateTimeLocal),
         to: fromDateTimeLocalValue(toDateTimeLocal),
         model: selectedModel,
       };
-      const check = await checkConversationAssistantContext(token, {
-        chatId: request.chatId,
-        from: request.from,
-        to: request.to,
-      });
-      if (
-        createRequestIdRef.current !== requestId ||
-        selectedSessionIdRef.current !== originatingSessionId
-      ) {
-        return;
-      }
-      if (check.requiresConfirmation) {
-        setPendingLargeContext({ check, request, firstQuestion: question, originatingSessionId });
-        return;
-      }
-      await createSessionFromRequest(token, request, question, requestId, originatingSessionId);
+      await createSessionFromRequest(token, request, requestId, originatingSessionId);
     } catch (err) {
       if (
         createRequestIdRef.current === requestId &&
@@ -507,46 +685,15 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     } finally {
       createInFlightRef.current = false;
       setCreating(false);
-      setCheckingContext(false);
     }
   }, [
     createSessionFromRequest,
-    firstQuestion,
     fromDateTimeLocal,
     getAccessToken,
     selectedChatId,
     selectedModel,
     toDateTimeLocal,
   ]);
-
-  const confirmLargeContextCreate = useCallback(async (): Promise<void> => {
-    if (createInFlightRef.current || pendingLargeContext === null) return;
-
-    createInFlightRef.current = true;
-    setCreating(true);
-    setCheckingContext(false);
-    setError(null);
-    setPendingLargeContext(null);
-    const requestId = createRequestIdRef.current + 1;
-    createRequestIdRef.current = requestId;
-    try {
-      const token = await getAccessToken();
-      await createSessionFromRequest(
-        token,
-        pendingLargeContext.request,
-        pendingLargeContext.firstQuestion,
-        requestId,
-        pendingLargeContext.originatingSessionId
-      );
-    } catch (err) {
-      if (selectedSessionIdRef.current === pendingLargeContext.originatingSessionId) {
-        setError(getErrorMessage(err, 'Failed to create assistant session'));
-      }
-    } finally {
-      createInFlightRef.current = false;
-      setCreating(false);
-    }
-  }, [createSessionFromRequest, getAccessToken, pendingLargeContext]);
 
   const sendFollowUp = useCallback(async (): Promise<void> => {
     if (sendInFlightRef.current) return;
@@ -567,7 +714,8 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
         () => {
           setFollowUpQuestion('');
         },
-        requestId
+        requestId,
+        loadSessions
       );
     } catch (err) {
       if (selectedSessionIdRef.current === sessionId && sendRequestIdRef.current === requestId) {
@@ -579,7 +727,128 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
         setSending(false);
       }
     }
-  }, [followUpQuestion, getAccessToken, streamQuestionIntoSession]);
+  }, [followUpQuestion, getAccessToken, loadSessions, streamQuestionIntoSession]);
+
+  const loadContext = useCallback(async (): Promise<void> => {
+    const sessionId = selectedSessionIdRef.current;
+    if (
+      sessionId === undefined ||
+      contextLoadedSessionIdRef.current === sessionId ||
+      contextInFlightSessionIdRef.current === sessionId
+    ) {
+      return;
+    }
+    const requestId = contextRequestIdRef.current + 1;
+    contextRequestIdRef.current = requestId;
+    contextInFlightSessionIdRef.current = sessionId;
+    setLoadingContext(true);
+    setContextError(null);
+    try {
+      const token = await getAccessToken();
+      const loadedContext = await getConversationAssistantContext(token, sessionId);
+      if (
+        contextRequestIdRef.current === requestId &&
+        selectedSessionIdRef.current === sessionId
+      ) {
+        setContext(loadedContext);
+        contextLoadedSessionIdRef.current = sessionId;
+      }
+    } catch (err) {
+      if (
+        contextRequestIdRef.current === requestId &&
+        selectedSessionIdRef.current === sessionId
+      ) {
+        setContextError(getErrorMessage(err, 'Failed to load frozen context'));
+      }
+    } finally {
+      if (contextRequestIdRef.current === requestId) {
+        contextInFlightSessionIdRef.current = null;
+        setLoadingContext(false);
+      }
+    }
+  }, [getAccessToken]);
+
+  const loadMoreContext = useCallback(async (): Promise<void> => {
+    const sessionId = selectedSessionIdRef.current;
+    const currentContext = context;
+    if (
+      sessionId === undefined ||
+      currentContext === null ||
+      contextInFlightSessionIdRef.current === sessionId ||
+      (currentContext.nextMessageCursor === undefined &&
+        currentContext.nextOmittedCursor === undefined)
+    ) {
+      return;
+    }
+    const requestId = contextRequestIdRef.current + 1;
+    contextRequestIdRef.current = requestId;
+    contextInFlightSessionIdRef.current = sessionId;
+    setLoadingMoreContext(true);
+    setContextError(null);
+    try {
+      const token = await getAccessToken();
+      const loadedContext = await getConversationAssistantContext(token, sessionId, {
+        messageCursor: currentContext.nextMessageCursor ?? currentContext.messageCount,
+        omittedCursor:
+          currentContext.nextOmittedCursor ?? currentContext.omittedMessageCount,
+      });
+      if (
+        contextRequestIdRef.current === requestId &&
+        selectedSessionIdRef.current === sessionId
+      ) {
+        setContext((latest) =>
+          latest === null
+            ? loadedContext
+            : {
+                ...loadedContext,
+                messages: [...latest.messages, ...loadedContext.messages],
+                omittedMessages: [
+                  ...latest.omittedMessages,
+                  ...loadedContext.omittedMessages,
+                ],
+              }
+        );
+      }
+    } catch (err) {
+      if (
+        contextRequestIdRef.current === requestId &&
+        selectedSessionIdRef.current === sessionId
+      ) {
+        setContextError(getErrorMessage(err, 'Failed to load more frozen context'));
+      }
+    } finally {
+      if (contextRequestIdRef.current === requestId) {
+        contextInFlightSessionIdRef.current = null;
+        setLoadingMoreContext(false);
+      }
+    }
+  }, [context, getAccessToken]);
+
+  const retryPreparation = useCallback(async (): Promise<void> => {
+    if (retryPreparationInFlightRef.current) return;
+    const sessionId = selectedSessionIdRef.current;
+    if (sessionId === undefined) return;
+    retryPreparationInFlightRef.current = true;
+    setRetryingPreparation(true);
+    setError(null);
+    try {
+      const token = await getAccessToken();
+      const retried = await retryConversationAssistantPreparation(token, sessionId);
+      if (selectedSessionIdRef.current === sessionId) {
+        setSelectedSessionOverride(retried);
+        setSessions((current) =>
+          current.map((item) => (item.id === retried.id ? retried : item))
+        );
+      }
+    } catch (err) {
+      if (selectedSessionIdRef.current === sessionId) {
+        setError(getErrorMessage(err, 'Failed to retry context preparation'));
+      }
+    } finally {
+      retryPreparationInFlightRef.current = false;
+      setRetryingPreparation(false);
+    }
+  }, [getAccessToken]);
 
   const exportSelectedSessionPdf = useCallback(async (): Promise<void> => {
     if (exportInFlightRef.current) return;
@@ -621,32 +890,34 @@ export function useWhatsAppConversationAssistant(): UseWhatsAppConversationAssis
     selectedSessionId,
     selectedSession,
     turns,
+    context,
     directChats,
     selectedChatId,
     selectedModel,
     fromDateTimeLocal,
     toDateTimeLocal,
-    firstQuestion,
     followUpQuestion,
     loading,
     loadingTurns,
+    loadingContext,
+    loadingMoreContext,
     creating,
-    checkingContext,
     sending,
+    retryingPreparation,
     exporting,
     error,
-    largeContextWarning: pendingLargeContext?.check ?? null,
+    contextError,
     selectSession,
     selectChat,
     selectModel,
     setFromDateTimeLocal,
     setToDateTimeLocal,
-    setFirstQuestion,
     setFollowUpQuestion,
     createSession,
-    confirmLargeContextCreate,
-    dismissLargeContextWarning,
     sendFollowUp,
+    loadContext,
+    loadMoreContext,
+    retryPreparation,
     exportSelectedSessionPdf,
     refresh,
   };

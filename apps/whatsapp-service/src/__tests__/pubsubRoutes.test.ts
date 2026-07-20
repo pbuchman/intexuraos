@@ -7,9 +7,11 @@ import type { FastifyInstance } from 'fastify';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { buildServer } from '../server.js';
-import { resetServices, setServices } from '../services.js';
+import { getServices, resetServices, setServices } from '../services.js';
 import {
   FakeEventPublisher,
+  FakeConversationAssistantRepository,
+  FakeLlmGenerateClient,
   FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
   FakeMatrixOutboundGateway,
@@ -84,6 +86,8 @@ describe('Pub/Sub Routes', () => {
   let eventPublisher: FakeEventPublisher;
   let whatsappCloudApi: FakeWhatsAppCloudApiPort;
   let privateWhatsAppRepository: FakePrivateWhatsAppRepository;
+  let conversationAssistantRepository: FakeConversationAssistantRepository;
+  let llmClient: FakeLlmGenerateClient;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -96,6 +100,8 @@ describe('Pub/Sub Routes', () => {
     eventPublisher = new FakeEventPublisher();
     whatsappCloudApi = new FakeWhatsAppCloudApiPort();
     privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
+    conversationAssistantRepository = new FakeConversationAssistantRepository();
+    llmClient = new FakeLlmGenerateClient();
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -112,6 +118,11 @@ describe('Pub/Sub Routes', () => {
       notificationPreferencesRepository: prefs,
       privateWhatsAppRepository,
       matrixOutboundGateway: new FakeMatrixOutboundGateway(),
+      conversationAssistantRepository,
+      llmClientFactory: {
+        createLlmClientForUser: () => Promise.resolve({ ok: true, value: llmClient }),
+      },
+      conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -1249,6 +1260,222 @@ describe('Pub/Sub Routes', () => {
   });
 
   describe('POST /internal/whatsapp/pubsub/process-webhook', () => {
+    it('prepares a queued Conversation Assistant context', async () => {
+      privateWhatsAppRepository.setAccount({
+        id: 'user-123',
+        userId: 'user-123',
+        sourceAccountId: 'source-123',
+        phoneNumberNormalized: '48123456789',
+        displayName: 'Test Number',
+        status: 'active',
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+        schemaVersion: 1,
+      });
+      await privateWhatsAppRepository.storeIncomingMessage({
+        sourceAccountId: 'source-123',
+        userId: 'user-123',
+        deliveryMode: 'backfill',
+        receivedAt: '2026-06-30T10:00:00.000Z',
+        chat: { matrixRoomId: '!direct', type: 'direct', displayName: 'Test Number' },
+        message: {
+          matrixRoomId: '!direct',
+          matrixEventId: '$event-1',
+          matrixSenderId: '@test:matrix.example',
+          senderKey: 'phone:+48111111111',
+          direction: 'incoming',
+          type: 'text',
+          text: 'Message for the frozen context.',
+          eventTimestamp: '2026-06-30T10:00:00.000Z',
+          rawMatrixEvent: {},
+        },
+      });
+      await conversationAssistantRepository.saveSession({
+        id: 'whatsapp_conv_session_prepare',
+        userId: 'user-123',
+        chatId: 'chat:source-123:!direct',
+        chatDisplayName: 'Test Number',
+        status: 'preparing',
+        preparationStage: 'queued',
+        preparationAttempt: 1,
+        range: {
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        effectiveRange: {
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+        transcriptSha256: '',
+        transcriptMessageCount: 0,
+        transcriptText: '',
+        assistantRoleLabel: 'Assistant',
+        omitted: {
+          mediaOnly: 0,
+          failedTranscriptions: 0,
+          pendingTranscriptions: 0,
+          nonText: 0,
+          overLimit: 0,
+        },
+        title: 'Test Number (2026-06-30 to 2026-07-01)',
+        createdAt: '2026-06-30T12:00:00.000Z',
+        updatedAt: '2026-06-30T12:00:00.000Z',
+        creationRequestId: 'request-prepare',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.conversation-assistant.prepare',
+          sessionId: 'whatsapp_conv_session_prepare',
+          userId: 'user-123',
+          attempt: 1,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const prepared = await conversationAssistantRepository.getSessionById(
+        'whatsapp_conv_session_prepare'
+      );
+      expect(prepared?.status).toBe('ready');
+      expect(prepared?.transcriptText).toContain('Message for the frozen context.');
+    });
+
+    it.each([
+      { name: 'missing session id', event: { userId: 'user-123', attempt: 1 } },
+      {
+        name: 'missing user id',
+        event: { sessionId: 'whatsapp_conv_session_prepare', attempt: 1 },
+      },
+      {
+        name: 'non-integer attempt',
+        event: {
+          sessionId: 'whatsapp_conv_session_prepare',
+          userId: 'user-123',
+          attempt: 1.5,
+        },
+      },
+      {
+        name: 'non-positive attempt',
+        event: {
+          sessionId: 'whatsapp_conv_session_prepare',
+          userId: 'user-123',
+          attempt: 0,
+        },
+      },
+    ])('acknowledges an invalid Conversation Assistant event with $name', async ({ event }) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.conversation-assistant.prepare',
+          ...event,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('rejects each missing Conversation Assistant worker dependency', async () => {
+      const configured = getServices();
+      for (const missingService of [
+        'conversationAssistantRepository',
+        'llmClientFactory',
+        'conversationAssistantModel',
+      ] as const) {
+        setServices({ ...configured, [missingService]: undefined });
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/process-webhook',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody({
+            type: 'whatsapp.conversation-assistant.prepare',
+            sessionId: 'whatsapp_conv_session_prepare',
+            userId: 'user-123',
+            attempt: 1,
+          }),
+        });
+
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toMatchObject({
+          code: 'INTERNAL_ERROR',
+          message: 'Conversation Assistant services are not configured',
+        });
+      }
+    });
+
+    it('acknowledges a preparation request for a missing session', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.conversation-assistant.prepare',
+          sessionId: 'whatsapp_conv_session_missing',
+          userId: 'user-123',
+          attempt: 1,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
+    it('returns 500 while another worker owns the active preparation claim', async () => {
+      await conversationAssistantRepository.saveSession({
+        id: 'whatsapp_conv_session_busy',
+        userId: 'user-123',
+        chatId: 'chat:source-123:!direct',
+        chatDisplayName: 'Test Number',
+        status: 'preparing',
+        preparationStage: 'loading_messages',
+        preparationAttempt: 1,
+        preparationClaimId: 'existing-claim',
+        preparationLeaseExpiresAt: '2999-01-01T00:00:00.000Z',
+        range: {
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        effectiveRange: {
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+        transcriptSha256: '',
+        transcriptMessageCount: 0,
+        transcriptText: '',
+        assistantRoleLabel: 'Assistant',
+        omitted: {
+          mediaOnly: 0,
+          failedTranscriptions: 0,
+          pendingTranscriptions: 0,
+          nonText: 0,
+          overLimit: 0,
+        },
+        title: 'Busy preparation',
+        createdAt: '2026-06-30T12:00:00.000Z',
+        updatedAt: '2026-06-30T12:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.conversation-assistant.prepare',
+          sessionId: 'whatsapp_conv_session_busy',
+          userId: 'user-123',
+          attempt: 1,
+        }),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body).error.code).toBe('INTERNAL_ERROR');
+    });
+
     it('returns 401 when auth is missing', async () => {
       const body = createPubSubBody({
         type: 'whatsapp.webhook.process',

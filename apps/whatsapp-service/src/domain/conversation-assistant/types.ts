@@ -1,6 +1,8 @@
 import type { GenerateChatResult } from '@intexuraos/llm-factory';
 import type { ConversationAssistantDateRange, ConversationAssistantModel } from '@intexuraos/llm-contract';
 import type {
+  PrivateConversationContextMessage,
+  PrivateConversationContextOmittedMessage,
   PrivateConversationContextOmittedCounts,
   PrivateConversationContextResponse,
 } from '../whatsapp/models/PrivateWhatsApp.js';
@@ -8,7 +10,17 @@ import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from './roleInference.js';
 
 export { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL };
 
-export type ConversationAssistantSessionStatus = 'active' | 'archived';
+export type ConversationAssistantSessionStatus =
+  | 'preparing'
+  | 'ready'
+  | 'failed'
+  | 'active';
+export type ConversationAssistantPreparationStage =
+  | 'queued'
+  | 'loading_messages'
+  | 'building_context'
+  | 'ready'
+  | 'failed';
 export type ConversationAssistantTurnRole = 'user' | 'assistant';
 
 export interface ConversationAssistantSession {
@@ -17,10 +29,16 @@ export interface ConversationAssistantSession {
   chatId: string;
   chatDisplayName?: string;
   status: ConversationAssistantSessionStatus;
+  preparationStage?: ConversationAssistantPreparationStage;
+  preparationAttempt?: number;
+  preparationClaimId?: string;
+  preparationLeaseExpiresAt?: string;
+  preparationError?: { code: string; message: string };
   range: ConversationAssistantDateRange;
   effectiveRange: ConversationAssistantDateRange;
   model: string;
   transcriptSha256: string;
+  contextSnapshotId?: string;
   transcriptMessageCount: number;
   transcriptText: string;
   assistantRoleLabel: string;
@@ -29,11 +47,18 @@ export interface ConversationAssistantSession {
   createdAt: string;
   updatedAt: string;
   lastTurnAt?: string;
+  creationRequestId?: string;
+  maxMessages?: number;
 }
 
 export type PublicConversationAssistantSession = Omit<
   ConversationAssistantSession,
-  'transcriptText'
+  | 'transcriptText'
+  | 'creationRequestId'
+  | 'maxMessages'
+  | 'preparationClaimId'
+  | 'preparationLeaseExpiresAt'
+  | 'contextSnapshotId'
 > & {
   modelDisplayName: string;
 };
@@ -56,7 +81,7 @@ export interface CreateConversationAssistantSessionInput {
   to: string;
   model?: ConversationAssistantModel;
   maxMessages?: number;
-  question?: string;
+  requestId?: string;
 }
 
 export interface CheckConversationAssistantContextInput {
@@ -85,8 +110,43 @@ export interface ExportConversationAssistantPdfInput {
 
 export interface CreateConversationAssistantSessionResult {
   session: ConversationAssistantSession;
-  turns: ConversationAssistantTurn[];
-  context: PrivateConversationContextResponse;
+}
+
+export interface PrepareConversationAssistantSessionInput {
+  userId: string;
+  sessionId: string;
+  attempt?: number;
+  claimId?: string;
+}
+
+export interface GetConversationAssistantSessionByRequestInput {
+  userId: string;
+  requestId: string;
+}
+
+export interface GetConversationAssistantContextInput {
+  userId: string;
+  sessionId: string;
+  messageCursor?: number;
+  omittedCursor?: number;
+}
+
+export interface ConversationAssistantContextResult {
+  sessionId: string;
+  messages: PrivateConversationContextMessage[];
+  omittedMessages: PrivateConversationContextOmittedMessage[];
+  messageCount: number;
+  omittedMessageCount: number;
+  snapshotAvailable: boolean;
+  omitted: PrivateConversationContextOmittedCounts;
+  transcriptSha256: string;
+  nextMessageCursor?: number;
+  nextOmittedCursor?: number;
+}
+
+export interface PrepareConversationAssistantSessionResult {
+  session: ConversationAssistantSession;
+  context?: PrivateConversationContextResponse;
 }
 
 export interface ExportConversationAssistantPdfResult {
@@ -100,6 +160,7 @@ export interface ConversationAssistantError {
     | 'INVALID_REQUEST'
     | 'NOT_FOUND'
     | 'EMPTY_TRANSCRIPT'
+    | 'CONTEXT_NOT_READY'
     | 'LLM_ERROR'
     | 'PERSISTENCE_ERROR'
     | 'INTERNAL_ERROR';
