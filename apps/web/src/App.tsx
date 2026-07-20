@@ -160,9 +160,19 @@ const NotionConnectionPage = React.lazy(() =>
 const PrivateWhatsAppLogPage = React.lazy(() =>
   import('@/pages/PrivateWhatsAppLogPage').then((m) => ({ default: m.PrivateWhatsAppLogPage })),
 );
-const WhatsAppConversationAssistantPage = React.lazy(() =>
-  import('@/pages/WhatsAppConversationAssistantPage').then((m) => ({
-    default: m.WhatsAppConversationAssistantPage,
+const WhatsAppConversationAssistantListPage = React.lazy(() =>
+  import('@/pages/WhatsAppConversationAssistantListPage').then((m) => ({
+    default: m.WhatsAppConversationAssistantListPage,
+  })),
+);
+const WhatsAppConversationAssistantNewPage = React.lazy(() =>
+  import('@/pages/WhatsAppConversationAssistantNewPage').then((m) => ({
+    default: m.WhatsAppConversationAssistantNewPage,
+  })),
+);
+const WhatsAppConversationAssistantSessionPage = React.lazy(() =>
+  import('@/pages/WhatsAppConversationAssistantSessionPage').then((m) => ({
+    default: m.WhatsAppConversationAssistantSessionPage,
   })),
 );
 const GitHubEventLogPage = React.lazy(() =>
@@ -308,7 +318,9 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/share-target" element={<ShareTargetPage />} />
           <Route path="/whatsapp/assistant" element={<WhatsAppNotesPage />} />
           <Route path="/whatsapp/private" element={<PrivateWhatsAppLogPage />} />
-          <Route path="/whatsapp/conversation-assistant" element={<WhatsAppConversationAssistantPage />} />
+          <Route path="/whatsapp/conversation-assistant" element={<WhatsAppConversationAssistantListPage />} />
+          <Route path="/whatsapp/conversation-assistant/new" element={<WhatsAppConversationAssistantNewPage />} />
+          <Route path="/whatsapp/conversation-assistant/:sessionId" element={<WhatsAppConversationAssistantSessionPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />

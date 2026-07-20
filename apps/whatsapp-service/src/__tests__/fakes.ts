@@ -22,6 +22,7 @@ import type {
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   AudioStoredEvent,
+  ConversationAssistantPreparationRequestedEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -88,6 +89,7 @@ import type {
 import type { PrivateConversationContextMessageQueryInput } from '../domain/whatsapp/models/PrivateWhatsApp.js';
 import type { ConversationAssistantRepository } from '../domain/conversation-assistant/ports.js';
 import type {
+  ConversationAssistantContextResult,
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../domain/conversation-assistant/types.js';
@@ -103,11 +105,27 @@ import { randomUUID } from 'node:crypto';
 export class FakeConversationAssistantRepository implements ConversationAssistantRepository {
   private readonly sessions = new Map<string, ConversationAssistantSession>();
   private readonly turns = new Map<string, ConversationAssistantTurn>();
+  private readonly contextSnapshots = new Map<
+    string,
+    Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'> & { userId: string }
+  >();
   readonly snapshotRequests: { sessionId: string; userId: string }[] = [];
 
   saveSession(session: ConversationAssistantSession): Promise<void> {
     this.sessions.set(session.id, { ...session });
     return Promise.resolve();
+  }
+
+  createSessionIfAbsent(session: ConversationAssistantSession): Promise<
+    | { status: 'created'; session: ConversationAssistantSession }
+    | { status: 'existing'; session: ConversationAssistantSession }
+  > {
+    const existing = this.sessions.get(session.id);
+    if (existing !== undefined) {
+      return Promise.resolve({ status: 'existing', session: { ...existing } });
+    }
+    this.sessions.set(session.id, { ...session });
+    return Promise.resolve({ status: 'created', session: { ...session } });
   }
 
   getSessionById(sessionId: string): Promise<ConversationAssistantSession | null> {
@@ -140,6 +158,184 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     return Promise.resolve(sessions);
   }
 
+  claimPreparation(input: {
+    sessionId: string;
+    userId: string;
+    attempt: number;
+    claimId: string;
+    now: string;
+    leaseExpiresAt: string;
+  }): Promise<
+    | { status: 'claimed'; session: ConversationAssistantSession }
+    | { status: 'busy'; session: ConversationAssistantSession }
+    | { status: 'stale'; session: ConversationAssistantSession }
+    | { status: 'not_found' }
+  > {
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || session.userId !== input.userId) {
+      return Promise.resolve({ status: 'not_found' });
+    }
+    if (session.status !== 'preparing' || session.preparationAttempt !== input.attempt) {
+      return Promise.resolve({ status: 'stale', session: { ...session } });
+    }
+    if (
+      session.preparationClaimId !== undefined &&
+      session.preparationLeaseExpiresAt !== undefined &&
+      session.preparationLeaseExpiresAt > input.now
+    ) {
+      return Promise.resolve({ status: 'busy', session: { ...session } });
+    }
+    const claimed: ConversationAssistantSession = {
+      ...session,
+      preparationStage: 'loading_messages',
+      preparationClaimId: input.claimId,
+      preparationLeaseExpiresAt: input.leaseExpiresAt,
+      updatedAt: input.now,
+    };
+    delete claimed.preparationError;
+    this.sessions.set(claimed.id, claimed);
+    return Promise.resolve({ status: 'claimed', session: { ...claimed } });
+  }
+
+  saveClaimedPreparationSession(input: {
+    session: ConversationAssistantSession;
+    attempt: number;
+    claimId: string;
+  }): Promise<boolean> {
+    const current = this.sessions.get(input.session.id);
+    if (
+      current?.preparationAttempt !== input.attempt ||
+      current.preparationClaimId !== input.claimId
+    ) {
+      return Promise.resolve(false);
+    }
+    this.sessions.set(input.session.id, { ...input.session });
+    return Promise.resolve(true);
+  }
+
+  requeueFailedPreparation(input: {
+    sessionId: string;
+    userId: string;
+    expectedAttempt: number;
+    updatedAt: string;
+  }): Promise<
+    | { status: 'queued' | 'stale'; session: ConversationAssistantSession }
+    | { status: 'not_found' }
+  > {
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || session.userId !== input.userId) {
+      return Promise.resolve({ status: 'not_found' });
+    }
+    if (
+      session.status !== 'failed' ||
+      (session.preparationAttempt ?? 0) !== input.expectedAttempt
+    ) {
+      return Promise.resolve({ status: 'stale', session: { ...session } });
+    }
+    const queued: ConversationAssistantSession = {
+      ...session,
+      status: 'preparing',
+      preparationStage: 'queued',
+      preparationAttempt: input.expectedAttempt + 1,
+      updatedAt: input.updatedAt,
+    };
+    delete queued.preparationError;
+    delete queued.preparationClaimId;
+    delete queued.preparationLeaseExpiresAt;
+    this.sessions.set(queued.id, queued);
+    return Promise.resolve({ status: 'queued', session: { ...queued } });
+  }
+
+  failQueuedPreparation(input: {
+    sessionId: string;
+    userId: string;
+    attempt: number;
+    error: { code: string; message: string };
+    updatedAt: string;
+  }): Promise<
+    | { status: 'saved' | 'stale'; session: ConversationAssistantSession }
+    | { status: 'not_found' }
+  > {
+    const session = this.sessions.get(input.sessionId);
+    if (session === undefined || session.userId !== input.userId) {
+      return Promise.resolve({ status: 'not_found' });
+    }
+    if (
+      session.status !== 'preparing' ||
+      session.preparationStage !== 'queued' ||
+      session.preparationAttempt !== input.attempt ||
+      session.preparationClaimId !== undefined
+    ) {
+      return Promise.resolve({ status: 'stale', session: { ...session } });
+    }
+    const failed: ConversationAssistantSession = {
+      ...session,
+      status: 'failed',
+      preparationStage: 'failed',
+      preparationError: { ...input.error },
+      updatedAt: input.updatedAt,
+    };
+    this.sessions.set(failed.id, failed);
+    return Promise.resolve({ status: 'saved', session: { ...failed } });
+  }
+
+  saveContextSnapshot(
+    sessionId: string,
+    userId: string,
+    snapshotId: string,
+    snapshot: Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'>
+  ): Promise<void> {
+    this.contextSnapshots.set(
+      `${sessionId}:${snapshotId}`,
+      {
+        userId,
+        messages: snapshot.messages.map((message) => ({ ...message })),
+        omittedMessages: snapshot.omittedMessages.map((message) => ({ ...message })),
+      }
+    );
+    return Promise.resolve();
+  }
+
+  deleteContextSnapshot(
+    sessionId: string,
+    userId: string,
+    snapshotId: string
+  ): Promise<void> {
+    const key = `${sessionId}:${snapshotId}`;
+    if (this.contextSnapshots.get(key)?.userId === userId) {
+      this.contextSnapshots.delete(key);
+    }
+    return Promise.resolve();
+  }
+
+  getContextPage(
+    sessionId: string,
+    snapshotId: string,
+    input: {
+      messageCursor: number;
+      omittedCursor: number;
+      limit: number;
+      messageCount: number;
+      omittedMessageCount: number;
+    }
+  ): Promise<
+    Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages' | 'snapshotAvailable'>
+  > {
+    const snapshot = this.contextSnapshots.get(`${sessionId}:${snapshotId}`);
+    return Promise.resolve({
+      messages: (snapshot?.messages ?? [])
+        .slice(input.messageCursor, input.messageCursor + input.limit)
+        .map((message) => ({ ...message })),
+      omittedMessages: (snapshot?.omittedMessages ?? [])
+        .slice(input.omittedCursor, input.omittedCursor + input.limit)
+        .map((message) => ({ ...message })),
+      snapshotAvailable:
+        snapshot !== undefined &&
+        snapshot.messages.length === input.messageCount &&
+        snapshot.omittedMessages.length === input.omittedMessageCount,
+    });
+  }
+
   saveTurn(turn: ConversationAssistantTurn): Promise<void> {
     this.turns.set(turn.id, { ...turn });
     return Promise.resolve();
@@ -170,6 +366,15 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
 
   getAllTurns(): ConversationAssistantTurn[] {
     return Array.from(this.turns.values()).map((turn) => ({ ...turn }));
+  }
+
+  getContextMessages(
+    sessionId: string,
+    snapshotId: string
+  ): ConversationAssistantContextResult['messages'] {
+    return (this.contextSnapshots.get(`${sessionId}:${snapshotId}`)?.messages ?? []).map((message) => ({
+      ...message,
+    }));
   }
 }
 
@@ -2075,11 +2280,13 @@ export class FakeEventPublisher implements EventPublisherPort {
   private intexMessageIngestEvents: IntexMessageIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
+  private conversationAssistantPreparationEvents: ConversationAssistantPreparationRequestedEvent[] = [];
   private extractLinkPreviewsFailureMessage: string | null = null;
   private audioStoredFailureMessage: string | null = null;
   private mediaTranscriptionRequestedFailureMessage: string | null = null;
   private intexMessageIngestFailureMessage: string | null = null;
   private webhookProcessFailureMessage: string | null = null;
+  private conversationAssistantPreparationFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -2159,6 +2366,25 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
+  publishConversationAssistantPreparation(
+    event: ConversationAssistantPreparationRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.conversationAssistantPreparationFailureMessage !== null) {
+      return Promise.resolve(
+        err({
+          code: 'INTERNAL_ERROR' as const,
+          message: this.conversationAssistantPreparationFailureMessage,
+        })
+      );
+    }
+    this.conversationAssistantPreparationEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  setConversationAssistantPreparationFailure(message: string | null): void {
+    this.conversationAssistantPreparationFailureMessage = message;
+  }
+
   setExtractLinkPreviewsFailure(message: string): void {
     this.extractLinkPreviewsFailureMessage = message;
   }
@@ -2187,6 +2413,10 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.extractLinkPreviewsEvents];
   }
 
+  getConversationAssistantPreparationEvents(): ConversationAssistantPreparationRequestedEvent[] {
+    return [...this.conversationAssistantPreparationEvents];
+  }
+
   clear(): void {
     this.mediaCleanupEvents = [];
     this.audioStoredEvents = [];
@@ -2194,11 +2424,13 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.intexMessageIngestEvents = [];
     this.webhookProcessEvents = [];
     this.extractLinkPreviewsEvents = [];
+    this.conversationAssistantPreparationEvents = [];
     this.extractLinkPreviewsFailureMessage = null;
     this.audioStoredFailureMessage = null;
     this.mediaTranscriptionRequestedFailureMessage = null;
     this.intexMessageIngestFailureMessage = null;
     this.webhookProcessFailureMessage = null;
+    this.conversationAssistantPreparationFailureMessage = null;
   }
 }
 

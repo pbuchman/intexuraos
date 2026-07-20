@@ -7,6 +7,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
 import type {
   AudioStoredEvent,
+  ConversationAssistantPreparationRequestedEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -119,6 +120,24 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { messageId: event.messageId },
       'extract link previews'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishConversationAssistantPreparation(
+    event: ConversationAssistantPreparationRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.webhookProcessTopic === null) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: 'Conversation Assistant preparation topic is not configured',
+      });
+    }
+    const result = await this.publishToTopic(
+      this.webhookProcessTopic,
+      event,
+      { sessionId: event.sessionId, userId: event.userId, attempt: String(event.attempt) },
+      'conversation assistant preparation'
     );
     return this.mapToWhatsAppError(result);
   }

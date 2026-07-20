@@ -6,6 +6,7 @@ import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from './repositories.js';
 import type {
   AudioStoredEvent,
+  ConversationAssistantPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   MediaCleanupEvent,
@@ -54,4 +55,9 @@ export interface EventPublisherPort {
    * Triggers async Open Graph metadata fetching.
    */
   publishExtractLinkPreviews(event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>>;
+
+  /** Queue durable preparation of a frozen Conversation Assistant context. */
+  publishConversationAssistantPreparation(
+    event: ConversationAssistantPreparationRequestedEvent
+  ): Promise<Result<void, WhatsAppError>>;
 }

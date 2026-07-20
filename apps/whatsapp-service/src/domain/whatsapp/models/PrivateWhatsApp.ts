@@ -303,6 +303,32 @@ export interface PrivateConversationContextMessage {
   messageType: PrivateWhatsAppMessageType;
   contentKind: 'text' | 'transcription';
   content: string;
+  reactions?: PrivateWhatsAppReactionSummary[];
+}
+
+export type PrivateConversationContextOmissionReason =
+  | 'media_only'
+  | 'failed_transcription'
+  | 'pending_transcription'
+  | 'non_text'
+  | 'over_limit';
+
+export interface PrivateConversationContextOmittedMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: PrivateWhatsAppMessageDirection;
+  speakerLabel: string;
+  messageType: PrivateWhatsAppMessageType;
+  omissionReason: PrivateConversationContextOmissionReason;
+  contentKind?: 'text' | 'transcription';
+  content?: string;
+  reactions?: PrivateWhatsAppReactionSummary[];
+  reaction?: {
+    emoji: string;
+    targetMatrixEventId?: string;
+    targetMessageId?: string;
+  };
 }
 
 export interface PrivateConversationContextOmittedCounts {
@@ -327,6 +353,7 @@ export interface PrivateConversationContextResponse {
     to: string;
   };
   messages: PrivateConversationContextMessage[];
+  omittedMessages: PrivateConversationContextOmittedMessage[];
   omitted: PrivateConversationContextOmittedCounts;
   messageCount: number;
   transcriptSha256: string;

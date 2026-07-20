@@ -247,6 +247,52 @@ describe('GcpPubSubPublisher', () => {
     });
   });
 
+  describe('publishConversationAssistantPreparation', () => {
+    it('publishes preparation work to the configured process topic', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
+      });
+      const event = {
+        type: 'whatsapp.conversation-assistant.prepare' as const,
+        sessionId: 'whatsapp-conv-session-123',
+        userId: 'user-456',
+        attempt: 2,
+      };
+
+      const result = await publisherWithTopic.publishConversationAssistantPreparation(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
+        sessionId: 'whatsapp-conv-session-123',
+        userId: 'user-456',
+        attempt: '2',
+      });
+    });
+
+    it('returns an explicit error when the process topic is not configured', async () => {
+      const result = await publisher.publishConversationAssistantPreparation({
+        type: 'whatsapp.conversation-assistant.prepare',
+        sessionId: 'whatsapp-conv-session-123',
+        userId: 'user-456',
+        attempt: 1,
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Conversation Assistant preparation topic is not configured',
+        },
+      });
+      expect(mockPublishToTopic).not.toHaveBeenCalled();
+    });
+  });
+
   describe('publishExtractLinkPreviews', () => {
     it('skips publish when topic is not configured', async () => {
       const event = {

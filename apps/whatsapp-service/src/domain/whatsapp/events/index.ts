@@ -3,6 +3,7 @@
  */
 export type {
   AudioStoredEvent,
+  ConversationAssistantPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   IntexMessageReplyContext,

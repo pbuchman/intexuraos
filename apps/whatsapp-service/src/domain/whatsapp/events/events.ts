@@ -364,6 +364,17 @@ export interface ExtractLinkPreviewsEvent {
 }
 
 /**
+ * Event published after a Conversation Assistant analysis shell is persisted.
+ * The worker freezes the selected WhatsApp range without holding the browser request open.
+ */
+export interface ConversationAssistantPreparationRequestedEvent {
+  type: 'whatsapp.conversation-assistant.prepare';
+  sessionId: string;
+  userId: string;
+  attempt: number;
+}
+
+/**
  * Union of all event types for type safety.
  */
 export type WhatsAppEvent =
@@ -374,4 +385,5 @@ export type WhatsAppEvent =
   | IntexMessageIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent
-  | ExtractLinkPreviewsEvent;
+  | ExtractLinkPreviewsEvent
+  | ConversationAssistantPreparationRequestedEvent;

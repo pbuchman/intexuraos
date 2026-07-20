@@ -54,6 +54,11 @@ export type {
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppIngestResult,
   PrivateWhatsAppConversationContextMessageResult,
+  PrivateConversationContextMessage,
+  PrivateConversationContextOmittedCounts,
+  PrivateConversationContextOmittedMessage,
+  PrivateConversationContextOmissionReason,
+  PrivateConversationContextResponse,
   PrivateWhatsAppMediaInfo,
   PrivateWhatsAppMediaStorageStatus,
   PrivateWhatsAppMessage,
@@ -135,6 +140,7 @@ export {
 // Events
 export type {
   AudioStoredEvent,
+  ConversationAssistantPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   IntexMessageSourceType,

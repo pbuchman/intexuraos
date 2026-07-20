@@ -2,45 +2,13 @@ import { createHash } from 'node:crypto';
 import type { ConversationAssistantDateRange } from '@intexuraos/llm-contract';
 import type {
   PrivateWhatsAppChat,
+  PrivateConversationContextMessage,
+  PrivateConversationContextOmittedMessage,
+  PrivateConversationContextResponse,
   PrivateWhatsAppMessage,
-  PrivateWhatsAppMessageDirection,
   PrivateWhatsAppReactionSummary,
   PrivateWhatsAppMessageType,
 } from '../whatsapp/index.js';
-
-export interface PrivateConversationContextMessage {
-  id: string;
-  eventTimestamp: string;
-  importedAt: string;
-  direction: PrivateWhatsAppMessageDirection;
-  speakerLabel: string;
-  messageType: PrivateWhatsAppMessageType;
-  contentKind: 'text' | 'transcription';
-  content: string;
-  reactions?: PrivateWhatsAppReactionSummary[];
-}
-
-export interface PrivateConversationContextResponse {
-  chat: {
-    id: string;
-    displayName?: string;
-    chatType: 'direct';
-    firstSeenAt: string;
-    lastEventAt: string;
-    messageCount: number;
-  };
-  range: ConversationAssistantDateRange;
-  messages: PrivateConversationContextMessage[];
-  omitted: {
-    mediaOnly: number;
-    failedTranscriptions: number;
-    pendingTranscriptions: number;
-    nonText: number;
-    overLimit: number;
-  };
-  messageCount: number;
-  transcriptSha256: string;
-}
 
 export interface ProjectPrivateConversationContextInput {
   chat: PrivateWhatsAppChat;
@@ -48,6 +16,7 @@ export interface ProjectPrivateConversationContextInput {
   messages: PrivateWhatsAppMessage[];
   maxMessages?: number;
   totalMessageCount?: number;
+  captureOmittedMessages?: boolean;
 }
 
 interface PrivateWhatsAppTranscriptReaction {
@@ -73,6 +42,7 @@ export function projectPrivateConversationContext(
     overLimit: 0,
   };
   const contextMessages: PrivateConversationContextMessage[] = [];
+  const omittedMessages: PrivateConversationContextOmittedMessage[] = [];
   const targetsById = new Map(input.messages.map((message) => [message.id, message]));
   const targetsByMatrixEventId = new Map(
     input.messages
@@ -120,6 +90,11 @@ export function projectPrivateConversationContext(
     if (text !== undefined && text.length > 0) {
       if (hasReachedMaxMessages(contextMessages.length, input.maxMessages)) {
         omitted.overLimit += 1;
+        captureOmittedMessage(
+          omittedMessages,
+          input.captureOmittedMessages,
+          toOmittedMessage(message, 'over_limit', 'text', text, reactionsByTarget.get(message.id))
+        );
         continue;
       }
       contextMessages.push(toContextMessage(message, 'text', text, reactionsByTarget.get(message.id)));
@@ -132,6 +107,17 @@ export function projectPrivateConversationContext(
       if (transcriptionText !== undefined && transcriptionText.length > 0) {
         if (hasReachedMaxMessages(contextMessages.length, input.maxMessages)) {
           omitted.overLimit += 1;
+          captureOmittedMessage(
+            omittedMessages,
+            input.captureOmittedMessages,
+            toOmittedMessage(
+              message,
+              'over_limit',
+              'transcription',
+              transcriptionText,
+              reactionsByTarget.get(message.id)
+            )
+          );
           continue;
         }
         contextMessages.push(
@@ -143,17 +129,62 @@ export function projectPrivateConversationContext(
 
     if (transcription?.status === 'pending' || transcription?.status === 'processing') {
       omitted.pendingTranscriptions += 1;
+      captureOmittedMessage(
+        omittedMessages,
+        input.captureOmittedMessages,
+        toOmittedMessage(
+          message,
+          'pending_transcription',
+          undefined,
+          undefined,
+          reactionsByTarget.get(message.id)
+        )
+      );
       continue;
     }
     if (transcription?.status === 'failed') {
       omitted.failedTranscriptions += 1;
+      captureOmittedMessage(
+        omittedMessages,
+        input.captureOmittedMessages,
+        toOmittedMessage(
+          message,
+          'failed_transcription',
+          undefined,
+          undefined,
+          reactionsByTarget.get(message.id)
+        )
+      );
       continue;
     }
     if (MEDIA_MESSAGE_TYPES.has(message.messageType)) {
       omitted.mediaOnly += 1;
+      captureOmittedMessage(
+        omittedMessages,
+        input.captureOmittedMessages,
+        toOmittedMessage(
+          message,
+          'media_only',
+          undefined,
+          undefined,
+          reactionsByTarget.get(message.id)
+        )
+      );
       continue;
     }
     omitted.nonText += 1;
+    captureOmittedMessage(
+      omittedMessages,
+      input.captureOmittedMessages,
+      toOmittedMessage(
+        message,
+        'non_text',
+        undefined,
+        undefined,
+        reactionsByTarget.get(message.id),
+        reactionReferenceForAudit(message)
+      )
+    );
   }
 
   const transcriptText = buildPrivateConversationTranscriptText(contextMessages);
@@ -161,6 +192,7 @@ export function projectPrivateConversationContext(
     chat: toContextChat(input.chat),
     range: input.range,
     messages: contextMessages,
+    omittedMessages,
     omitted,
     messageCount: contextMessages.length,
     transcriptSha256: createHash('sha256').update(transcriptText).digest('hex'),
@@ -198,14 +230,61 @@ function toContextMessage(
     content,
   };
   if (reactions !== undefined && reactions.length > 0) {
-    Object.defineProperty(contextMessage, 'reactions', {
-      value: reactions,
-      enumerable: false,
-      configurable: true,
-      writable: true,
-    });
+    contextMessage.reactions = reactions;
   }
   return contextMessage;
+}
+
+function toOmittedMessage(
+  message: PrivateWhatsAppMessage,
+  omissionReason: PrivateConversationContextOmittedMessage['omissionReason'],
+  contentKind?: PrivateConversationContextOmittedMessage['contentKind'],
+  content?: string,
+  reactions?: PrivateWhatsAppReactionSummary[],
+  reaction?: PrivateConversationContextOmittedMessage['reaction']
+): PrivateConversationContextOmittedMessage {
+  return {
+    id: message.id,
+    eventTimestamp: message.eventTimestamp,
+    importedAt: message.ingestedAt,
+    direction: message.direction,
+    speakerLabel: speakerLabelFor(message),
+    messageType: message.messageType,
+    omissionReason,
+    ...(contentKind !== undefined ? { contentKind } : {}),
+    ...(content !== undefined ? { content } : {}),
+    ...(reactions !== undefined && reactions.length > 0 ? { reactions } : {}),
+    ...(reaction !== undefined ? { reaction } : {}),
+  };
+}
+
+function reactionReferenceForAudit(
+  message: PrivateWhatsAppMessage
+): PrivateConversationContextOmittedMessage['reaction'] {
+  if (message.messageType !== 'reaction') return undefined;
+  const normalized = (message as PrivateWhatsAppMessageWithReaction).reaction;
+  const emoji = firstNonEmpty(normalized?.emoji);
+  const targetMessageId = firstNonEmpty(normalized?.targetMessageId);
+  const targetMatrixEventId = firstNonEmpty(normalized?.targetMatrixEventId);
+  if (emoji !== undefined && (targetMessageId !== undefined || targetMatrixEventId !== undefined)) {
+    return {
+      emoji,
+      ...(targetMessageId !== undefined ? { targetMessageId } : {}),
+      ...(targetMatrixEventId !== undefined ? { targetMatrixEventId } : {}),
+    };
+  }
+  const legacy = extractLegacyTranscriptReaction(message.rawMatrixEvent);
+  return legacy === undefined
+    ? undefined
+    : { emoji: legacy.emoji, targetMatrixEventId: legacy.targetMatrixEventId };
+}
+
+function captureOmittedMessage(
+  omittedMessages: PrivateConversationContextOmittedMessage[],
+  enabled: boolean | undefined,
+  message: PrivateConversationContextOmittedMessage
+): void {
+  if (enabled === true) omittedMessages.push(message);
 }
 
 function speakerLabelFor(message: PrivateWhatsAppMessage): string {

@@ -5,15 +5,23 @@ export function ConversationAssistantComposer({
   value,
   disabled,
   sending,
+  mode,
   onChange,
   onSend,
 }: {
   value: string;
   disabled: boolean;
   sending: boolean;
+  mode: 'first-question' | 'follow-up';
   onChange: (value: string) => void;
   onSend: () => Promise<void>;
 }): React.JSX.Element {
+  const isFirstQuestion = mode === 'first-question';
+  const label = isFirstQuestion ? 'Ask first question' : 'Ask follow-up';
+  const placeholder = isFirstQuestion
+    ? 'Ask your first question about this conversation'
+    : 'Ask a follow-up question';
+
   return (
     <form
       className="flex flex-col gap-2 border-t border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900 sm:flex-row"
@@ -22,11 +30,11 @@ export function ConversationAssistantComposer({
         void onSend();
       }}
     >
-      <label className="sr-only" htmlFor="conversation-assistant-follow-up">
-        Ask follow-up
+      <label className="sr-only" htmlFor="conversation-assistant-question">
+        {label}
       </label>
       <textarea
-        id="conversation-assistant-follow-up"
+        id="conversation-assistant-question"
         value={value}
         onChange={(event): void => {
           onChange(event.target.value);
@@ -34,7 +42,7 @@ export function ConversationAssistantComposer({
         disabled={disabled || sending}
         rows={2}
         className="min-h-12 flex-1 resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-50 dark:disabled:bg-slate-800"
-        placeholder={disabled ? 'Select or create a session to continue' : 'Ask a follow-up question'}
+        placeholder={placeholder}
       />
       <Button
         type="submit"

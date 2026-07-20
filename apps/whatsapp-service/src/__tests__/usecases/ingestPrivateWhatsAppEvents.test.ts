@@ -270,6 +270,10 @@ class TestEventPublisher implements EventPublisherPort {
   publishExtractLinkPreviews(_event: ExtractLinkPreviewsEvent): Promise<Result<void, WhatsAppError>> {
     return Promise.resolve(ok(undefined));
   }
+
+  publishConversationAssistantPreparation(): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
 }
 
 describe('IngestPrivateWhatsAppEventsUseCase', () => {

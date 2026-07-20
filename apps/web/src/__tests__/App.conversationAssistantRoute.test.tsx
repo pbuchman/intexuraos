@@ -5,11 +5,19 @@ import src from '../App.tsx?raw'; // @allow-missing-js -- vite '?raw' query impo
 describe('App.tsx conversation assistant route registration', () => {
   const source = src as string;
 
-  it('registers the WhatsApp conversation assistant page at /whatsapp/conversation-assistant', () => {
-    expect(source).toContain('WhatsAppConversationAssistantPage');
+  it('registers separate list, creation, and conversation routes', () => {
+    expect(source).toContain('WhatsAppConversationAssistantListPage');
+    expect(source).toContain('WhatsAppConversationAssistantNewPage');
+    expect(source).toContain('WhatsAppConversationAssistantSessionPage');
     expect(source).toContain('path="/whatsapp/conversation-assistant"');
     expect(source).toMatch(
-      /path="\/whatsapp\/conversation-assistant"\s+element={<WhatsAppConversationAssistantPage \/>}/
+      /path="\/whatsapp\/conversation-assistant"\s+element={<WhatsAppConversationAssistantListPage \/>}/
+    );
+    expect(source).toMatch(
+      /path="\/whatsapp\/conversation-assistant\/new"\s+element={<WhatsAppConversationAssistantNewPage \/>}/
+    );
+    expect(source).toMatch(
+      /path="\/whatsapp\/conversation-assistant\/:sessionId"\s+element={<WhatsAppConversationAssistantSessionPage \/>}/
     );
   });
 });
