@@ -293,6 +293,101 @@ describe('GcpPubSubPublisher', () => {
     });
   });
 
+  describe('publishConversationAssistantContextAttachmentPreparation', () => {
+    it('publishes content-free attachment preparation work to the existing process topic', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
+      });
+      const event = {
+        type: 'whatsapp.conversation-assistant.context-attachment.prepare' as const,
+        userId: 'user-456',
+        sessionId: 'whatsapp-conv-session-123',
+        sessionGenerationId: 'generation-789',
+        attachmentId: 'attachment-321',
+        attempt: 2,
+      };
+
+      const result =
+        await publisherWithTopic.publishConversationAssistantContextAttachmentPreparation(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopic).toHaveBeenCalledWith(
+        'webhook-process-topic',
+        event,
+        { attempt: '2' }
+      );
+    });
+
+    it('returns an explicit error when attachment preparation has no process topic', async () => {
+      const result = await publisher.publishConversationAssistantContextAttachmentPreparation({
+        type: 'whatsapp.conversation-assistant.context-attachment.prepare',
+        userId: 'user-456',
+        sessionId: 'whatsapp-conv-session-123',
+        sessionGenerationId: 'generation-789',
+        attachmentId: 'attachment-321',
+        attempt: 1,
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Conversation Assistant context attachment preparation topic is not configured',
+        },
+      });
+      expect(mockPublishToTopic).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('publishPrivateWhatsAppErasure', () => {
+    const event = {
+      type: 'whatsapp.private-account.erasure' as const,
+      sourceAccountId: 'source-secret',
+      userId: 'user-secret',
+      erasureRequestId: 'request-secret',
+      attempt: 3,
+    };
+
+    it('publishes erasure work to the existing process topic with content-free attributes', async () => {
+      const publisherWithTopic = new GcpPubSubPublisher({
+        projectId: 'test-project',
+        mediaCleanupTopic: 'media-cleanup-topic',
+        audioStoredTopic: 'audio-stored-topic',
+        intexMessageIngestTopic: 'intex-message-ingest-topic',
+        webhookProcessTopic: 'webhook-process-topic',
+        logger: pino({ name: 'test', level: 'silent' }),
+      });
+
+      const result = await publisherWithTopic.publishPrivateWhatsAppErasure(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopic).toHaveBeenCalledWith(
+        'webhook-process-topic',
+        event,
+        { attempt: '3' }
+      );
+      expect(JSON.stringify(mockPublishToTopic.mock.calls[0]?.[2])).not.toContain('secret');
+    });
+
+    it('returns an explicit retryable error when the process topic is not configured', async () => {
+      const result = await publisher.publishPrivateWhatsAppErasure(event);
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Private WhatsApp erasure topic is not configured',
+        },
+      });
+      expect(mockPublishToTopic).not.toHaveBeenCalled();
+    });
+  });
+
   describe('publishExtractLinkPreviews', () => {
     it('skips publish when topic is not configured', async () => {
       const event = {

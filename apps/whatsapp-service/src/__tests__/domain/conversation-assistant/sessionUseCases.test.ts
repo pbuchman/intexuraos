@@ -41,6 +41,7 @@ import type {
   PrivateConversationContextMessageQueryInput,
   StorePrivateWhatsAppMessageInput,
 } from '../../../domain/whatsapp/models/PrivateWhatsApp.js';
+import type { PrivateWhatsAppContextChange } from '../../../domain/whatsapp/index.js';
 import { createHash } from 'node:crypto';
 import { createConversationAssistantDeletionToken } from '../../../domain/conversation-assistant/deletionToken.js';
 
@@ -241,6 +242,47 @@ function makeTranscriptMessage(index: number): PrivateWhatsAppMessage {
   };
 }
 
+function makeContextJournalChange(
+  sequence: number,
+  overrides: Partial<PrivateWhatsAppContextChange> = {}
+): PrivateWhatsAppContextChange {
+  return {
+    userId: USER_ID,
+    sourceAccountId: SOURCE_ACCOUNT_ID,
+    chatId: CHAT_ID,
+    sequence,
+    messageId: `message:${SOURCE_ACCOUNT_ID}:$event-1`,
+    messageRevision: sequence,
+    changeType: 'edited',
+    changedAt: '2026-06-30T11:00:00.000Z',
+    eventTimestamp: '2026-06-30T10:00:00.000Z',
+    before: {
+      state: 'included',
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      importedAt: '2026-06-30T10:00:00.000Z',
+      direction: 'incoming',
+      speakerLabel: 'Alice',
+      messageType: 'text',
+      contentKind: 'text',
+      content: 'Before journal update',
+      reactions: [],
+    },
+    after: {
+      state: 'included',
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      importedAt: '2026-06-30T10:00:00.000Z',
+      direction: 'incoming',
+      speakerLabel: 'Alice',
+      messageType: 'text',
+      contentKind: 'text',
+      content: `After journal update ${String(sequence)}`,
+      reactions: [],
+    },
+    schemaVersion: 1,
+    ...overrides,
+  };
+}
+
 async function createConversationAssistantSession(
   input: Parameters<typeof createQueuedConversationAssistantSession>[0],
   deps: ConversationAssistantDeps
@@ -298,6 +340,7 @@ describe('Conversation Assistant session use cases', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+        displayTimeZone: 'Europe/Warsaw',
       },
       deps
     );
@@ -306,6 +349,10 @@ describe('Conversation Assistant session use cases', () => {
     if (!result.ok) return;
     expect(result.value.session.status).toBe('preparing');
     expect(result.value.session.preparationStage).toBe('queued');
+    expect(result.value.session).toMatchObject({
+      sourceAccountId: SOURCE_ACCOUNT_ID,
+      sourceAccountGeneration: SOURCE_ACCOUNT_ID,
+    });
     expect(result.value).not.toHaveProperty('context');
     expect(contextQuery).not.toHaveBeenCalled();
     expect(preparationEvents).toEqual([
@@ -319,6 +366,33 @@ describe('Conversation Assistant session use cases', () => {
     ]);
   });
 
+  it('fails closed when erasure starts between source lookup and atomic session creation', async () => {
+    const { deps, privateRepository, conversationRepository, preparationEvents } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    conversationRepository.fenceNextSessionCreation();
+
+    const result = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-source-fenced',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'NOT_FOUND',
+        message: 'Private WhatsApp mirror is not configured',
+      },
+    });
+    expect(conversationRepository.getAllSessions()).toEqual([]);
+    expect(preparationEvents).toEqual([]);
+  });
+
   it('prepares the frozen context asynchronously and makes the analysis ready', async () => {
     const { deps, privateRepository, conversationRepository, llmFactoryCalls } = makeDeps();
     await seedDirectMessage(privateRepository);
@@ -329,6 +403,7 @@ describe('Conversation Assistant session use cases', () => {
         chatId: CHAT_ID,
         from: '2026-06-30T00:00:00.000Z',
         to: '2026-07-01T00:00:00.000Z',
+        displayTimeZone: 'Europe/Warsaw',
       },
       deps
     );
@@ -350,6 +425,20 @@ describe('Conversation Assistant session use cases', () => {
       prepared.value.session.transcriptSha256
     );
     expect(prepared.value.session.transcriptText).toContain('We agreed to meet at 17:00.');
+    expect(prepared.value.session.continuation).toEqual({
+      sourceAccountId: SOURCE_ACCOUNT_ID,
+      contextVersion: 0,
+      contextEventThrough: '2026-07-01T00:00:00.000Z',
+      contextChangeThrough: 1,
+      contextChainSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+      displayTimeZone: 'Europe/Warsaw',
+      nextTurnSequence: 1,
+      nextConversationRevision: 1,
+      completedConversationRevision: 0,
+      attachmentCount: 0,
+      totalAttachedMessageCount: 0,
+      totalAttachedOmittedCount: 0,
+    });
     expect(prepared.value.context?.messages).toHaveLength(1);
     expect(
       conversationRepository.getContextMessages(
@@ -360,6 +449,218 @@ describe('Conversation Assistant session use cases', () => {
       prepared.value.context?.messages
     );
     expect(llmFactoryCalls).toEqual([]);
+  });
+
+  it('reconciles source changes committed while the initial message range is being scanned', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    vi.spyOn(privateRepository, 'getConversationContextJournalHead')
+      .mockResolvedValueOnce(ok(1))
+      .mockResolvedValueOnce(ok(2));
+    const change: PrivateWhatsAppContextChange = {
+      userId: USER_ID,
+      sourceAccountId: SOURCE_ACCOUNT_ID,
+      chatId: CHAT_ID,
+      sequence: 2,
+      messageId: `message:${SOURCE_ACCOUNT_ID}:$event-1`,
+      messageRevision: 2,
+      changeType: 'edited',
+      changedAt: '2026-06-30T11:00:00.000Z',
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      before: {
+        state: 'included',
+        eventTimestamp: '2026-06-30T10:00:00.000Z',
+        importedAt: '2026-06-30T10:00:00.000Z',
+        direction: 'incoming',
+        speakerLabel: 'Alice',
+        messageType: 'text',
+        contentKind: 'text',
+        content: 'We agreed to meet at 17:00.',
+        reactions: [],
+      },
+      after: {
+        state: 'included',
+        eventTimestamp: '2026-06-30T10:00:00.000Z',
+        importedAt: '2026-06-30T10:00:00.000Z',
+        direction: 'incoming',
+        speakerLabel: 'Alice',
+        messageType: 'text',
+        contentKind: 'text',
+        content: 'We agreed to meet at 18:00.',
+        reactions: [],
+      },
+      schemaVersion: 1,
+    };
+    vi.spyOn(privateRepository, 'findConversationContextJournalEntries').mockResolvedValue(
+      ok({ entries: [change] })
+    );
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-reconciled-prepare',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+        displayTimeZone: 'Europe/Warsaw',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const prepared = await prepareConversationAssistantSession(
+      preparationInput(created.value.session),
+      deps
+    );
+
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) return;
+    expect(prepared.value.session.transcriptText).toContain('We agreed to meet at 18:00.');
+    expect(prepared.value.session.transcriptText).not.toContain('17:00');
+    expect(prepared.value.session.continuation?.contextChangeThrough).toBe(2);
+  });
+
+  it('fails preparation for journal head, page, gap, and cursor consistency errors', async () => {
+    async function createCase(requestId: string): Promise<{
+      deps: ConversationAssistantDeps;
+      privateRepository: FakePrivateWhatsAppRepository;
+      session: { id: string; userId: string; generationId?: string };
+    }> {
+      const scenario = makeDeps();
+      await seedDirectMessage(scenario.privateRepository);
+      const created = await createQueuedConversationAssistantSession(
+        {
+          userId: USER_ID,
+          requestId,
+          chatId: CHAT_ID,
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        scenario.deps
+      );
+      if (!created.ok) throw new Error(created.error.message);
+      return {
+        deps: scenario.deps,
+        privateRepository: scenario.privateRepository,
+        session: created.value.session,
+      };
+    }
+
+    const startHeadFailure = await createCase('request-start-head-failure');
+    vi.spyOn(
+      startHeadFailure.privateRepository,
+      'getConversationContextJournalHead'
+    ).mockResolvedValue(err({ code: 'PERSISTENCE_ERROR', message: 'start head failed' }));
+    await expect(
+      prepareConversationAssistantSession(
+        preparationInput(startHeadFailure.session),
+        startHeadFailure.deps
+      )
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'PERSISTENCE_ERROR', message: 'start head failed' },
+    });
+
+    const cutoffHeadFailure = await createCase('request-cutoff-head-failure');
+    vi.spyOn(cutoffHeadFailure.privateRepository, 'getConversationContextJournalHead')
+      .mockResolvedValueOnce(ok(1))
+      .mockResolvedValueOnce(err({ code: 'PERSISTENCE_ERROR', message: 'cutoff head failed' }));
+    await expect(
+      prepareConversationAssistantSession(
+        preparationInput(cutoffHeadFailure.session),
+        cutoffHeadFailure.deps
+      )
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'PERSISTENCE_ERROR', message: 'cutoff head failed' },
+    });
+
+    const pageFailure = await createCase('request-journal-page-failure');
+    vi.spyOn(pageFailure.privateRepository, 'getConversationContextJournalHead')
+      .mockResolvedValueOnce(ok(1))
+      .mockResolvedValueOnce(ok(2));
+    vi.spyOn(pageFailure.privateRepository, 'findConversationContextJournalEntries').mockResolvedValue(
+      err({ code: 'PERSISTENCE_ERROR', message: 'journal page failed' })
+    );
+    await expect(
+      prepareConversationAssistantSession(preparationInput(pageFailure.session), pageFailure.deps)
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'PERSISTENCE_ERROR', message: 'journal page failed' },
+    });
+
+    const gap = await createCase('request-journal-gap');
+    vi.spyOn(gap.privateRepository, 'getConversationContextJournalHead')
+      .mockResolvedValueOnce(ok(1))
+      .mockResolvedValueOnce(ok(3));
+    vi.spyOn(gap.privateRepository, 'findConversationContextJournalEntries').mockResolvedValue(
+      ok({ entries: [makeContextJournalChange(3)] })
+    );
+    await expect(
+      prepareConversationAssistantSession(preparationInput(gap.session), gap.deps)
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'PERSISTENCE_ERROR',
+        message: 'Private WhatsApp context journal is incomplete at sequence 2',
+      },
+    });
+
+    const nonAdvancing = await createCase('request-journal-cursor-stalled');
+    vi.spyOn(nonAdvancing.privateRepository, 'getConversationContextJournalHead')
+      .mockResolvedValueOnce(ok(1))
+      .mockResolvedValueOnce(ok(2));
+    vi.spyOn(
+      nonAdvancing.privateRepository,
+      'findConversationContextJournalEntries'
+    ).mockResolvedValue(ok({ entries: [], nextAfterSequence: 1 }));
+    await expect(
+      prepareConversationAssistantSession(
+        preparationInput(nonAdvancing.session),
+        nonAdvancing.deps
+      )
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'PERSISTENCE_ERROR',
+        message: 'Private WhatsApp context journal cursor did not advance',
+      },
+    });
+  });
+
+  it('reads a multi-page context journal until the cutoff', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-journal-pages',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    vi.spyOn(privateRepository, 'getConversationContextJournalHead')
+      .mockResolvedValueOnce(ok(1))
+      .mockResolvedValueOnce(ok(3));
+    const journalQuery = vi
+      .spyOn(privateRepository, 'findConversationContextJournalEntries')
+      .mockResolvedValueOnce(
+        ok({ entries: [makeContextJournalChange(2)], nextAfterSequence: 2 })
+      )
+      .mockResolvedValueOnce(ok({ entries: [makeContextJournalChange(3)] }));
+
+    const prepared = await prepareConversationAssistantSession(
+      preparationInput(created.value.session),
+      deps
+    );
+
+    expect(prepared.ok).toBe(true);
+    expect(journalQuery).toHaveBeenCalledTimes(2);
+    expect(journalQuery.mock.calls[1]?.[0].afterSequence).toBe(2);
   });
 
   it('rejects a generation-less preparation event for a generated session', async () => {
@@ -1671,7 +1972,11 @@ describe('Conversation Assistant session use cases', () => {
     expect(llmFactoryCalls).toEqual([
       { userId: USER_ID, model: 'or:google/gemini-3.5-flash' },
     ]);
-    expect(llmClient.chatCalls[0]?.options.sessionId).toBe('whatsapp_conv_session_test');
+    expect(llmClient.chatCalls[0]?.options).not.toHaveProperty('sessionId');
+    expect(llmClient.chatCalls[0]?.options).not.toHaveProperty('correlation');
+    expect(JSON.stringify(llmClient.chatCalls[0]?.options)).not.toContain(
+      'whatsapp_conv_session_test'
+    );
     expect(llmClient.chatCalls[0]?.options.reasoning).toEqual({ enabled: true });
     const firstPrompt = JSON.stringify(llmClient.chatCalls[0]?.messages[1]);
     expect(firstPrompt).toContain('Information range: 30 June 2026 to 1 July 2026');
@@ -1682,7 +1987,8 @@ describe('Conversation Assistant session use cases', () => {
   it('persists assistant error turns when the LLM call fails', async () => {
     const { deps, privateRepository, conversationRepository, llmClient } = makeDeps();
     await seedDirectMessage(privateRepository);
-    llmClient.failNextChat('upstream model error');
+    const privateMarker = 'PRIVATE_LEGACY_SYNC_LLM_MARKER_8e6a11c4';
+    llmClient.failNextChat(privateMarker);
 
     const created = await createConversationAssistantSession(
       {
@@ -1701,12 +2007,19 @@ describe('Conversation Assistant session use cases', () => {
       deps
     );
     expect(result.ok).toBe(true);
-    expect(conversationRepository.getAllTurns()[1]?.error?.code).toBe('LLM_ERROR');
+    expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
+      code: 'LLM_ERROR',
+      message: 'Conversation Assistant request failed',
+    });
+    expect(JSON.stringify({ result, turns: conversationRepository.getAllTurns() })).not.toContain(
+      privateMarker
+    );
   });
 
   it('persists assistant error turns when user LLM key lookup fails before sync generation', async () => {
     const { deps, privateRepository, conversationRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
+    const privateMarker = 'PRIVATE_LEGACY_KEY_LOOKUP_MARKER_9db7879f';
 
     const unavailableDeps = {
       ...deps,
@@ -1714,7 +2027,7 @@ describe('Conversation Assistant session use cases', () => {
         createLlmClientForUser: (): ReturnType<
           ConversationAssistantDeps['llmClientFactory']['createLlmClientForUser']
         > =>
-          Promise.resolve(err({ code: 'LLM_ERROR' as const, message: 'OpenRouter key missing' })),
+          Promise.resolve(err({ code: 'LLM_ERROR' as const, message: privateMarker })),
       },
     };
     const created = await createConversationAssistantSession(
@@ -1736,8 +2049,11 @@ describe('Conversation Assistant session use cases', () => {
     expect(result.ok).toBe(true);
     expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
       code: 'LLM_ERROR',
-      message: 'OpenRouter key missing',
+      message: 'Conversation Assistant request failed',
     });
+    expect(JSON.stringify({ result, turns: conversationRepository.getAllTurns() })).not.toContain(
+      privateMarker
+    );
   });
 
   it('sends follow-up turns with unchanged transcript prefix', async () => {
@@ -1896,6 +2212,11 @@ describe('Conversation Assistant session use cases', () => {
       'done',
     ]);
     expect(llmClient.streamChatCalls[0]?.options.reasoning).toEqual({ enabled: true });
+    expect(llmClient.streamChatCalls[0]?.options).not.toHaveProperty('sessionId');
+    expect(llmClient.streamChatCalls[0]?.options).not.toHaveProperty('correlation');
+    expect(JSON.stringify(llmClient.streamChatCalls[0]?.options)).not.toContain(
+      created.value.session.id
+    );
     expect(result.ok ? result.value.map((turn) => turn.role) : []).toEqual(['user', 'assistant']);
     expect(conversationRepository.getAllTurns().map((turn) => turn.role)).toEqual([
       'user',
@@ -1918,7 +2239,8 @@ describe('Conversation Assistant session use cases', () => {
     );
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    llmClient.failNextStream('stream broke', [{ type: 'delta', text: 'partial' }]);
+    const privateMarker = 'PRIVATE_LEGACY_STREAM_LLM_MARKER_e8d39632';
+    llmClient.failNextStream(privateMarker, [{ type: 'delta', text: 'partial' }]);
     const events: ConversationAssistantStreamEvent[] = [];
 
     const result = await streamConversationAssistantTurn(
@@ -1937,8 +2259,15 @@ describe('Conversation Assistant session use cases', () => {
     ]);
     expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
       code: 'LLM_ERROR',
-      message: 'stream broke',
+      message: 'Conversation Assistant request failed',
     });
+    expect(events.find((event) => event.type === 'error')).toEqual({
+      type: 'error',
+      error: { code: 'LLM_ERROR', message: 'Conversation Assistant request failed' },
+    });
+    expect(JSON.stringify({ result, events, turns: conversationRepository.getAllTurns() })).not.toContain(
+      privateMarker
+    );
   });
 
   it('does not recreate a session when it is deleted during a streamed response', async () => {
@@ -2032,6 +2361,9 @@ describe('Conversation Assistant session use cases', () => {
 
   it('exports an owned session PDF with mapped counts and chronological turns', async () => {
     const { deps, conversationRepository, pdfExporter } = makeDeps();
+    const record = vi.fn(() => {
+      throw new Error('metrics unavailable');
+    });
     await conversationRepository.saveSession({
       id: 'whatsapp_conv_session_test',
       userId: USER_ID,
@@ -2080,7 +2412,7 @@ describe('Conversation Assistant session use cases', () => {
 
     const result = await exportConversationAssistantSessionPdf(
       { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
-      deps
+      { ...deps, telemetry: { record } }
     );
 
     expect(result.ok).toBe(true);
@@ -2104,6 +2436,19 @@ describe('Conversation Assistant session use cases', () => {
           to: '2026-06-30T10:30:00.000Z',
         },
         messageCounts: { included: 7, excluded: 15 },
+        cumulativeContext: {
+          snapshotCount: 1,
+          counts: {
+            included: 7,
+            omitted: 15,
+            completedTranscriptions: 0,
+            edited: 0,
+            redacted: 0,
+            deleted: 0,
+            reactionsChanged: 0,
+            lateIngested: 0,
+          },
+        },
         omittedBreakdown: {
           mediaOnly: 2,
           failedTranscriptions: 1,
@@ -2126,6 +2471,223 @@ describe('Conversation Assistant session use cases', () => {
       },
     ]);
     expect(pdfExporter.calls[0]?.assistantRoleLabel).toBe('Psychologist');
+    expect(record).toHaveBeenCalledOnce();
+  });
+
+  it('exports only the completed revision and maps immutable attachment summaries without bodies', async () => {
+    const { deps, conversationRepository, pdfExporter } = makeDeps();
+    const record = vi.fn().mockRejectedValue(new Error('metrics unavailable'));
+    const sessionId = 'whatsapp_conv_session_revision';
+    await conversationRepository.saveSession({
+      id: sessionId,
+      userId: USER_ID,
+      chatId: CHAT_ID,
+      status: 'active',
+      range: {
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      effectiveRange: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-06-30T10:30:00.000Z',
+      },
+      model: 'or:google/gemini-3.5-flash',
+      transcriptSha256: 'initial-private-hash',
+      transcriptMessageCount: 7,
+      transcriptText: 'frozen transcript body must not be exported',
+      assistantRoleLabel: 'Psychologist',
+      omitted: {
+        mediaOnly: 0,
+        failedTranscriptions: 0,
+        pendingTranscriptions: 0,
+        nonText: 0,
+        overLimit: 0,
+      },
+      title: 'Revision export',
+      createdAt: '2026-06-30T12:00:00.000Z',
+      updatedAt: '2026-07-19T10:16:00.000Z',
+      continuation: {
+        sourceAccountId: 'private-source-account',
+        contextVersion: 1,
+        contextEventThrough: '2026-07-19T10:14:00.000Z',
+        contextChangeThrough: 8,
+        contextChainSha256: 'private-chain-hash',
+        displayTimeZone: 'Europe/Warsaw',
+        nextTurnSequence: 7,
+        nextConversationRevision: 4,
+        completedConversationRevision: 2,
+        attachmentCount: 1,
+        totalAttachedMessageCount: 18,
+        totalAttachedOmittedCount: 2,
+        activeTurnRequestId: 'request-active',
+      },
+    });
+    for (const turn of [
+      {
+        id: 'turn-initial-user',
+        role: 'user' as const,
+        text: 'Initial question',
+        createdAt: '2026-06-30T12:01:00.000Z',
+        sequence: 1,
+        conversationRevision: 1,
+      },
+      {
+        id: 'turn-update-user',
+        role: 'user' as const,
+        text: 'How did the attitude change?',
+        createdAt: '2026-07-19T10:15:00.000Z',
+        sequence: 3,
+        conversationRevision: 2,
+        requestId: 'request-completed',
+        kind: 'context_attachment_question' as const,
+        contextAttachmentId: 'private-attachment-id',
+        contextAttachment: {
+          id: 'private-attachment-id',
+          capturedAt: '2026-07-19T10:14:00.000Z',
+          eventRange: {
+            from: '2026-07-17T18:49:00.000Z',
+            to: '2026-07-19T10:09:00.000Z',
+          },
+          captureRange: {
+            from: '2026-06-30T10:30:00.000Z',
+            to: '2026-07-19T10:14:00.000Z',
+          },
+          counts: {
+            included: 18,
+            excluded: 2,
+            newlyAvailable: 18,
+            completedTranscriptions: 1,
+            edited: 2,
+            redacted: 1,
+            deleted: 2,
+            reactionsChanged: 3,
+            lateIngested: 1,
+          },
+          omitted: {
+            mediaOnly: 1,
+            failedTranscriptions: 0,
+            pendingTranscriptions: 1,
+            nonText: 0,
+            overLimit: 0,
+          },
+        },
+      },
+      {
+        id: 'turn-update-assistant',
+        role: 'assistant' as const,
+        text: 'The tone became more collaborative.',
+        createdAt: '2026-07-19T10:15:04.000Z',
+        sequence: 4,
+        conversationRevision: 2,
+        acknowledgment: 'Added 18 new messages and applied 7 context updates.',
+      },
+      {
+        id: 'turn-active-user',
+        role: 'user' as const,
+        text: 'This active revision must not appear.',
+        createdAt: '2026-07-19T10:16:00.000Z',
+        sequence: 5,
+        conversationRevision: 3,
+      },
+    ]) {
+      await conversationRepository.saveTurn({
+        ...turn,
+        sessionId,
+        userId: USER_ID,
+      });
+    }
+
+    const result = await exportConversationAssistantSessionPdf(
+      { userId: USER_ID, sessionId },
+      { ...deps, telemetry: { record } }
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(pdfExporter.calls[0]).toMatchObject({
+      completedConversationRevision: 2,
+      cumulativeContext: {
+        snapshotCount: 2,
+        counts: {
+          included: 25,
+          omitted: 2,
+          completedTranscriptions: 1,
+          edited: 2,
+          redacted: 3,
+          deleted: 0,
+          reactionsChanged: 3,
+          lateIngested: 1,
+        },
+      },
+      messages: [
+        {
+          text: 'Initial question',
+          conversationRevision: 1,
+        },
+        {
+          text: 'How did the attitude change?',
+          conversationRevision: 2,
+          contextAttachment: {
+            capturedAt: '2026-07-19T10:14:00.000Z',
+            captureRange: {
+              from: '2026-06-30T10:30:00.000Z',
+              to: '2026-07-19T10:14:00.000Z',
+            },
+            counts: {
+              included: 18,
+              excluded: 2,
+              completedTranscriptions: 1,
+              edited: 2,
+              redacted: 3,
+              deleted: 0,
+              reactionsChanged: 3,
+              lateIngested: 1,
+            },
+          },
+        },
+        {
+          text: 'The tone became more collaborative.',
+          conversationRevision: 2,
+          acknowledgment: 'Added 18 new messages and applied 7 context updates.',
+        },
+      ],
+    });
+    expect(pdfExporter.calls[0]?.messages.map((message) => message.text)).not.toContain(
+      'This active revision must not appear.'
+    );
+    expect(JSON.stringify(pdfExporter.calls[0])).not.toContain('private-source-account');
+    expect(JSON.stringify(pdfExporter.calls[0])).not.toContain('private-chain-hash');
+    expect(JSON.stringify(pdfExporter.calls[0])).not.toContain('private-attachment-id');
+    expect(JSON.stringify(pdfExporter.calls[0])).not.toContain('frozen transcript body');
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'pdf_revision',
+        outcome: 'completed',
+        count: 2,
+        durationMs: expect.any(Number),
+      })
+    );
+    expect(JSON.stringify(record.mock.calls)).not.toMatch(
+      /private-source-account|private-chain-hash|private-attachment-id|frozen transcript body/
+    );
+
+    const rejectedRecord = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(pdfExporter, 'exportConversation').mockRejectedValue(
+      new Error('renderer crashed')
+    );
+    await expect(
+      exportConversationAssistantSessionPdf(
+        { userId: USER_ID, sessionId },
+        { ...deps, telemetry: { record: rejectedRecord } }
+      )
+    ).rejects.toThrow('renderer crashed');
+    expect(rejectedRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'pdf_revision',
+        outcome: 'failed',
+        count: 2,
+      })
+    );
   });
 
   it('orders equal-timestamp PDF export turns by conversation role and same-role id', async () => {
@@ -2161,10 +2723,10 @@ describe('Conversation Assistant session use cases', () => {
       updatedAt: '2026-06-30T12:00:00.000Z',
     });
     for (const turn of [
-      { id: 'turn-z', role: 'assistant' as const, text: 'assistant same time' },
-      { id: 'turn-b', role: 'user' as const, text: 'user b' },
-      { id: 'turn-a', role: 'user' as const, text: 'user a' },
-      { id: 'turn-future', role: 'assistant' as const, text: 'assistant future' },
+      { id: 'turn-z', role: 'assistant' as const, text: 'assistant same time', sequence: 1 },
+      { id: 'turn-b', role: 'user' as const, text: 'user b', sequence: 1 },
+      { id: 'turn-a', role: 'user' as const, text: 'user a', sequence: 1 },
+      { id: 'turn-future', role: 'assistant' as const, text: 'assistant future', sequence: 3 },
     ]) {
       await conversationRepository.saveTurn({
         id: turn.id,
@@ -2172,10 +2734,41 @@ describe('Conversation Assistant session use cases', () => {
         userId: USER_ID,
         role: turn.role,
         text: turn.text,
+        sequence: turn.sequence,
         createdAt:
           turn.id === 'turn-future'
             ? '2026-06-30T12:01:00.000Z'
             : '2026-06-30T12:00:00.000Z',
+        ...(turn.id === 'turn-b'
+          ? {
+              contextAttachment: {
+                id: 'attachment-without-event-range',
+                capturedAt: '2026-06-30T11:59:00.000Z',
+                captureRange: {
+                  from: '2026-06-30T10:30:00.000Z',
+                  to: '2026-06-30T11:59:00.000Z',
+                },
+                counts: {
+                  included: 0,
+                  excluded: 0,
+                  newlyAvailable: 0,
+                  completedTranscriptions: 0,
+                  edited: 0,
+                  redacted: 0,
+                  deleted: 0,
+                  reactionsChanged: 0,
+                  lateIngested: 0,
+                },
+                omitted: {
+                  mediaOnly: 0,
+                  failedTranscriptions: 0,
+                  pendingTranscriptions: 0,
+                  nonText: 0,
+                  overLimit: 0,
+                },
+              },
+            }
+          : {}),
       });
     }
 
@@ -2193,6 +2786,11 @@ describe('Conversation Assistant session use cases', () => {
       'assistant same time',
       'assistant future',
     ]);
+    const exportAttachment = pdfExporter.calls[0]?.messages.find(
+      (message) => message.text === 'user b'
+    )?.contextAttachment;
+    expect(exportAttachment).toBeDefined();
+    if (exportAttachment !== undefined) expect(exportAttachment).not.toHaveProperty('eventRange');
     expect(pdfExporter.calls[0]?.sourceRange).toEqual({
       from: '2026-06-30T00:00:00.000Z',
       to: '2026-07-01T00:00:00.000Z',
@@ -2339,6 +2937,7 @@ describe('Conversation Assistant session use cases', () => {
 
   it('maps PDF rendering failures to internal errors', async () => {
     const { deps, conversationRepository, pdfExporter } = makeDeps();
+    const record = vi.fn().mockResolvedValue(undefined);
     pdfExporter.failNext('pdf failed');
     await conversationRepository.saveSession({
       id: 'whatsapp_conv_session_test',
@@ -2380,18 +2979,40 @@ describe('Conversation Assistant session use cases', () => {
 
     const result = await exportConversationAssistantSessionPdf(
       { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
-      deps
+      { ...deps, telemetry: { record } }
     );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toEqual({ code: 'INTERNAL_ERROR', message: 'pdf failed' });
     }
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'pdf_revision',
+        outcome: 'failed',
+        durationMs: expect.any(Number),
+      })
+    );
+
+    const rejectedRecord = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(pdfExporter, 'exportConversation').mockRejectedValue(
+      new Error('renderer crashed')
+    );
+    await expect(
+      exportConversationAssistantSessionPdf(
+        { userId: USER_ID, sessionId: 'whatsapp_conv_session_test' },
+        { ...deps, telemetry: { record: rejectedRecord } }
+      )
+    ).rejects.toThrow('renderer crashed');
+    expect(rejectedRecord).toHaveBeenCalledWith(
+      expect.not.objectContaining({ count: expect.any(Number) })
+    );
   });
 
   it('persists streaming assistant errors when the user LLM key is unavailable', async () => {
     const { deps, privateRepository, conversationRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
+    const privateMarker = 'PRIVATE_LEGACY_STREAM_KEY_MARKER_c76d15aa';
     const created = await createConversationAssistantSession(
       {
         userId: USER_ID,
@@ -2411,7 +3032,7 @@ describe('Conversation Assistant session use cases', () => {
         ...deps,
         llmClientFactory: {
           createLlmClientForUser: () =>
-            Promise.resolve(err({ code: 'LLM_ERROR', message: 'OpenRouter key is missing' })),
+            Promise.resolve(err({ code: 'LLM_ERROR', message: privateMarker })),
         },
       },
       (event) => events.push(event)
@@ -2425,7 +3046,10 @@ describe('Conversation Assistant session use cases', () => {
       'done',
     ]);
     expect(conversationRepository.getAllTurns()[1]?.error?.message).toBe(
-      'OpenRouter key is missing'
+      'Conversation Assistant request failed'
+    );
+    expect(JSON.stringify({ events, turns: conversationRepository.getAllTurns() })).not.toContain(
+      privateMarker
     );
   });
 
@@ -2756,6 +3380,24 @@ describe('Conversation Assistant session use cases', () => {
     expect(nonCanonicalDate.ok).toBe(false);
     if (!nonCanonicalDate.ok) expect(nonCanonicalDate.error.code).toBe('INVALID_REQUEST');
 
+    for (const [index, displayTimeZone] of ['', ' Europe/Warsaw ', 'Mars/Olympus'].entries()) {
+      const invalidTimeZone = await createConversationAssistantSession(
+        {
+          userId: USER_ID,
+          requestId: `request-invalid-timezone-${String(index)}`,
+          chatId: CHAT_ID,
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+          displayTimeZone,
+        },
+        deps
+      );
+      expect(invalidTimeZone).toMatchObject({
+        ok: false,
+        error: { code: 'INVALID_REQUEST' },
+      });
+    }
+
     const ignoredLimit = await createConversationAssistantSession(
       {
         userId: USER_ID,
@@ -2827,6 +3469,10 @@ describe('Conversation Assistant session use cases', () => {
 
   it('deletes an owned session idempotently without deleting a foreign session', async () => {
     const { deps, conversationRepository, privateRepository } = makeDeps();
+    const record = vi.fn(() => {
+      throw new Error('metrics unavailable');
+    });
+    const instrumentedDeps = { ...deps, telemetry: { record } };
     await seedDirectMessage(privateRepository);
     const created = await createConversationAssistantSession(
       {
@@ -2871,7 +3517,7 @@ describe('Conversation Assistant session use cases', () => {
             id: 'foreign-session',
           }),
         },
-        deps
+        instrumentedDeps
       )
     ).resolves.toEqual({ ok: true, value: { deleted: true } });
     expect(await conversationRepository.getSessionById('foreign-session')).not.toBeNull();
@@ -2883,7 +3529,7 @@ describe('Conversation Assistant session use cases', () => {
           sessionId: ownedSession.id,
           deletionToken: createConversationAssistantDeletionToken(ownedSession),
         },
-        deps
+        instrumentedDeps
       )
     ).resolves.toEqual({ ok: true, value: { deleted: true } });
     expect(await conversationRepository.getSessionById(ownedSession.id)).toBeNull();
@@ -2899,9 +3545,43 @@ describe('Conversation Assistant session use cases', () => {
           sessionId: ownedSession.id,
           deletionToken: createConversationAssistantDeletionToken(ownedSession),
         },
-        deps
+        instrumentedDeps
       )
     ).resolves.toEqual({ ok: true, value: { deleted: true } });
+    expect(record).toHaveBeenCalledTimes(3);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'session_cleanup',
+        outcome: 'completed',
+        durationMs: expect.any(Number),
+      })
+    );
+  });
+
+  it('records cleanup failure without replacing the repository error', async () => {
+    const { deps, conversationRepository } = makeDeps();
+    vi.spyOn(conversationRepository, 'deleteSession').mockRejectedValue(
+      new Error('delete cascade failed')
+    );
+    const record = vi.fn().mockRejectedValue(new Error('metrics unavailable'));
+
+    await expect(
+      deleteConversationAssistantSession(
+        {
+          userId: USER_ID,
+          sessionId: 'session-delete-failure',
+          deletionToken: 'delete-token',
+        },
+        { ...deps, telemetry: { record } }
+      )
+    ).rejects.toThrow('delete cascade failed');
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'session_cleanup',
+        outcome: 'failed',
+        durationMs: expect.any(Number),
+      })
+    );
   });
 
   it('derives fallback titles and assistant error turns for unavailable chat generation', async () => {
@@ -2942,7 +3622,10 @@ describe('Conversation Assistant session use cases', () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
     expect(created.value.session.chatDisplayName).toBeUndefined();
-    expect(created.value.session.transcriptText).toContain('Unknown:');
+    expect(JSON.parse(created.value.session.transcriptText) as unknown).toMatchObject({
+      reference: expect.stringMatching(/^wa_msg_[a-f0-9]{64}$/),
+      speakerLabel: 'Unknown',
+    });
     expect(created.value.session.transcriptText).not.toContain('phone:');
     expect(created.value.session.transcriptText).not.toContain('+48');
     const firstTurn = await sendConversationAssistantTurn(
@@ -2953,7 +3636,7 @@ describe('Conversation Assistant session use cases', () => {
     const updatedSession = await conversationRepository.getSessionById(created.value.session.id);
     expect(updatedSession?.title).toBe('WhatsApp chat (2026-06-30 to 2026-07-01)');
     expect(firstTurn.ok ? firstTurn.value[1]?.error?.message : undefined).toBe(
-      'Chat message generation is unavailable'
+      'Conversation Assistant request failed'
     );
 
     const shell = await createConversationAssistantSession(
@@ -2976,6 +3659,7 @@ describe('Conversation Assistant session use cases', () => {
   it('persists assistant error turns when chat generation rejects', async () => {
     const { deps, privateRepository, conversationRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
+    const privateMarker = 'PRIVATE_LEGACY_REJECTION_MARKER_483061bc';
     const rejectingClient: LlmGenerateClient = {
       generate: (): ReturnType<LlmGenerateClient['generate']> =>
         Promise.resolve(
@@ -2984,7 +3668,7 @@ describe('Conversation Assistant session use cases', () => {
             usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
           } satisfies GenerateResult)
         ),
-      generateChat: () => Promise.reject(new Error('network down')),
+      generateChat: () => Promise.reject(new Error(privateMarker)),
     };
 
     const rejectingDeps = {
@@ -3018,7 +3702,10 @@ describe('Conversation Assistant session use cases', () => {
     ]);
     expect(conversationRepository.getAllTurns()[1]?.error).toEqual({
       code: 'LLM_ERROR',
-      message: 'network down',
+      message: 'Conversation Assistant request failed',
     });
+    expect(JSON.stringify({ result, turns: conversationRepository.getAllTurns() })).not.toContain(
+      privateMarker
+    );
   });
 });

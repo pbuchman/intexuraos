@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import type { JSX, ReactNode } from 'react';
+import type { JSX, ReactNode, RefObject } from 'react';
 
 export interface ModalProps {
   open: boolean;
@@ -29,6 +29,7 @@ export interface ModalProps {
    * sit above a local stacking context such as a fixed header.
    */
   overlayClassName?: string;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 const sizeClass: Record<NonNullable<ModalProps['size']>, string> = {
@@ -53,6 +54,7 @@ export function Modal({
   padded = true,
   contentClassName,
   overlayClassName,
+  returnFocusRef,
 }: ModalProps): JSX.Element {
   const defaultClass =
     `fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full ${sizeClass[size]} ` +
@@ -63,7 +65,16 @@ export function Modal({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className={finalOverlayClass} />
-        <Dialog.Content aria-modal="true" className={finalClass}>
+        <Dialog.Content
+          aria-modal="true"
+          className={finalClass}
+          onCloseAutoFocus={(event): void => {
+            const returnTarget = returnFocusRef?.current;
+            if (returnTarget === undefined || returnTarget === null) return;
+            event.preventDefault();
+            returnTarget.focus();
+          }}
+        >
           {hideTitle ? (
             <Dialog.Title className="sr-only">{title}</Dialog.Title>
           ) : (

@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -16,8 +17,16 @@ const pubsubPublishTestPath = resolve(repoRoot, 'scripts/pubsub-publish-test.mjs
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
 const githubActionsDeployPath = resolve(repoRoot, 'scripts/hetzner/github-actions-deploy.sh');
+const deploymentDocumentVerifierPath = resolve(
+  repoRoot,
+  'scripts/hetzner/verify-deployment-document.mjs'
+);
 const installPm2LogrotatePath = resolve(repoRoot, 'scripts/hetzner/install-pm2-logrotate.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
+const contextAttachmentsRunbookPath = resolve(
+  repoRoot,
+  'docs/runbooks/conversation-assistant-context-attachments.md'
+);
 const pubsubDlqRunbookPath = resolve(repoRoot, 'docs/operations/pubsub-dlq-runbook.md');
 const migrationPlanPath = resolve(repoRoot, 'docs/operations/hetzner-prod-migration-plan.md');
 const selfReviewPath = resolve(repoRoot, 'docs/operations/hetzner-prod-self-review.md');
@@ -82,9 +91,9 @@ const pubsubUiIndexPath = resolve(repoRoot, 'tools/pubsub-ui/index.html');
 const pubsubUiReadmePath = resolve(repoRoot, 'tools/pubsub-ui/README.md');
 
 const REMOVED_AGENT_SERVICES = new Set(['todos', 'chat', 'cron'].map((name) => `${name}-agent`));
-const retiredRoute = (resource: string) => `/api/${resource}`;
-const retiredDashed = (...parts: string[]) => parts.join('-');
-const retiredUnderscored = (...parts: string[]) => parts.join('_');
+const retiredRoute = (resource: string): string => `/api/${resource}`;
+const retiredDashed = (...parts: string[]): string => parts.join('-');
+const retiredUnderscored = (...parts: string[]): string => parts.join('_');
 
 interface ManifestService {
   name: string;
@@ -104,6 +113,21 @@ function upstreamName(serviceName: string): string {
 }
 
 describe('Hetzner nginx runtime config', () => {
+  it('serves only the exact deployment attestation path as uncached JSON', () => {
+    const config = readRequired(nginxConfigPath);
+    const deploymentLocationStart = config.indexOf('location = /deployment.json {');
+    const deploymentLocationEnd = config.indexOf('\n    }', deploymentLocationStart);
+    const deploymentLocation = config.slice(deploymentLocationStart, deploymentLocationEnd);
+
+    expect(deploymentLocationStart).toBeGreaterThanOrEqual(0);
+    expect(deploymentLocation).toContain('root /var/www/intexuraos/web/dist;');
+    expect(deploymentLocation).toContain('default_type application/json;');
+    expect(deploymentLocation).toContain('try_files /deployment.json =404;');
+    expect(deploymentLocation).toContain('add_header Cache-Control "no-store" always;');
+    expect(config).not.toContain('location /deployment.json');
+    expect(deploymentLocationStart).toBeLessThan(config.lastIndexOf('location / {'));
+  });
+
   it('defines public API routes that exactly match apps/web/service-manifest.json', () => {
     const config = readRequired(nginxConfigPath);
     const manifest = JSON.parse(readRequired(manifestPath)) as { services: ManifestService[] };
@@ -332,9 +356,275 @@ describe('Hetzner nginx runtime config', () => {
     expect(routePrefixLookupIndex).toBeGreaterThan(routeLookupIndex);
     expect(globalLookupIndex).toBeGreaterThan(routePrefixLookupIndex);
   });
+
+  it('authorizes private WhatsApp erasure routes only for the private-sync caller', () => {
+    const config = readRequired(nginxConfigPath);
+    const verifier = readRequired(jwtVerifierPath);
+    const hetznerMain = readRequired(terraformHetznerMainPath);
+    const privateSyncServiceAccount =
+      'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
+    const erasureRoutePattern = '^/internal/whatsapp/private/accounts/[^/]+/erasure(?:/[^/]+)?$';
+
+    expect(config).toContain('set $edge_internal_caller_role "";');
+    expect(config).toContain('proxy_set_header X-Internal-Caller-Role $edge_internal_caller_role;');
+    expect(verifier).toContain('ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS');
+    expect(verifier).toContain(`pattern = [[${erasureRoutePattern}]]`);
+    expect(verifier).toContain('caller_role = "whatsapp_private_sync"');
+    expect(verifier).toContain('ngx.req.clear_header("X-Internal-Caller-Role")');
+    expect(verifier).toContain('ngx.var.edge_internal_caller_role = caller_role or ""');
+
+    const globalAllowlist = verifier.slice(
+      verifier.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS'),
+      verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS')
+    );
+    const patternAllowlist = verifier.slice(
+      verifier.indexOf('ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS'),
+      verifier.indexOf('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS')
+    );
+    const globalServiceAccounts = Array.from(
+      globalAllowlist.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/g),
+      (match) => match[1]
+    );
+    const patternServiceAccounts = Array.from(
+      patternAllowlist.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/g),
+      (match) => match[1]
+    );
+
+    expect(globalServiceAccounts.length).toBeGreaterThan(0);
+    expect(patternServiceAccounts).toEqual([privateSyncServiceAccount]);
+    for (const serviceAccount of globalServiceAccounts) {
+      expect(patternAllowlist).not.toContain(`["${serviceAccount}"]`);
+    }
+
+    const allowFunction = verifier.slice(
+      verifier.indexOf('local function is_service_account_allowed'),
+      verifier.indexOf('local auth_header')
+    );
+    const exactLookupIndex = allowFunction.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]');
+    const patternLookupIndex = allowFunction.indexOf('ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS');
+    const prefixLookupIndex = allowFunction.indexOf('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS');
+    const globalLookupIndex = allowFunction.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email]');
+    expect(patternLookupIndex).toBeGreaterThan(exactLookupIndex);
+    expect(prefixLookupIndex).toBeGreaterThan(patternLookupIndex);
+    expect(globalLookupIndex).toBeGreaterThan(prefixLookupIndex);
+
+    const routeMatcher = new RegExp(erasureRoutePattern);
+    expect(routeMatcher.test('/internal/whatsapp/private/accounts/source-1/erasure')).toBe(true);
+    expect(
+      routeMatcher.test('/internal/whatsapp/private/accounts/source-1/erasure/request-1')
+    ).toBe(true);
+    expect(routeMatcher.test('/internal/whatsapp/private/accounts/source-1')).toBe(false);
+    expect(
+      routeMatcher.test('/internal/whatsapp/private/accounts/source-1/erasure/request-1/extra')
+    ).toBe(false);
+
+    expect(hetznerMain).toContain('"/internal/whatsapp/private/accounts/:sourceAccountId/erasure"');
+    expect(hetznerMain).toContain(
+      '"/internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId"'
+    );
+  });
+
+  it('authorizes the shared webhook-process push route only for the WhatsApp service caller', () => {
+    const verifier = readRequired(jwtVerifierPath);
+    const pubsubTerraform = readRequired(terraformHetznerPubsubPath);
+    const whatsappServiceAccount =
+      'intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
+    const routeAllowlist = verifier.slice(
+      verifier.indexOf('ROUTE_ALLOWED_SERVICE_ACCOUNTS'),
+      verifier.indexOf('ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS')
+    );
+    const routeStart = routeAllowlist.indexOf('["/internal/whatsapp/pubsub/process-webhook"]');
+    const routeEnd = routeAllowlist.indexOf('\n  },', routeStart);
+    const processWebhookAllowlist = routeAllowlist.slice(routeStart, routeEnd);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(processWebhookAllowlist).toContain(`["${whatsappServiceAccount}"] = true`);
+    const routeServiceAccounts = Array.from(
+      processWebhookAllowlist.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/g),
+      (match) => match[1]
+    );
+    expect(routeServiceAccounts).toEqual([whatsappServiceAccount]);
+
+    const subscriptionStart = pubsubTerraform.indexOf('whatsapp_webhook_process = {');
+    const subscriptionEnd = pubsubTerraform.indexOf(
+      'whatsapp_transcription_completed = {',
+      subscriptionStart
+    );
+    const subscription = pubsubTerraform.slice(subscriptionStart, subscriptionEnd);
+    expect(subscription).toContain(
+      'push_path             = "/internal/whatsapp/pubsub/process-webhook"'
+    );
+    expect(subscription).toContain('service_account_key   = "whatsapp_service"');
+  });
 });
 
 describe('Hetzner web asset deployment', () => {
+  it('validates the exact deployment document, canonical timestamp, and cache headers', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-deployment-document-'));
+    const headersPath = resolve(directory, 'headers.txt');
+    const sha = 'a'.repeat(40);
+    const runId = '12345';
+    const verify = (document: unknown, headers: string) => {
+      writeFileSync(headersPath, headers, 'utf8');
+      return spawnSync('node', [deploymentDocumentVerifierPath, sha, runId, headersPath], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        input: typeof document === 'string' ? document : JSON.stringify(document),
+      });
+    };
+    const validDocument = {
+      commitSha: sha,
+      workflowRunId: runId,
+      deployedAt: '2026-07-21T05:00:00Z',
+    };
+    const validHeaders =
+      'HTTP/2 200\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n';
+
+    try {
+      expect(verify(validDocument, validHeaders).status).toBe(0);
+      for (const [document, headers] of [
+        [{ ...validDocument, extra: true }, validHeaders],
+        [{ ...validDocument, commitSha: 'b'.repeat(40) }, validHeaders],
+        [{ ...validDocument, workflowRunId: '54321' }, validHeaders],
+        [{ ...validDocument, deployedAt: '0' }, validHeaders],
+        [{ ...validDocument, deployedAt: '2026-02-30T05:00:00Z' }, validHeaders],
+        ['{not-json', validHeaders],
+        [[], validHeaders],
+        [validDocument, 'HTTP/2 200\r\nContent-Type: text/html\r\nCache-Control: no-store\r\n'],
+        [validDocument, 'HTTP/2 200\r\nContent-Type: application/json\r\n'],
+      ] as const) {
+        expect(verify(document, headers).status).not.toBe(0);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to attest a dirty checkout before the first remote mutation', () => {
+    const script = readRequired(githubActionsDeployPath);
+    const metadataFlow = script.slice(
+      script.indexOf('resolve_commit_metadata() {'),
+      script.indexOf('\n}\n\nsetup_ssh()')
+    );
+    const mainFlow = script.slice(script.indexOf('main() {'));
+
+    expect(metadataFlow).toContain('git status --porcelain=v1 --untracked-files=all');
+    expect(metadataFlow).toContain('Local checkout contains tracked or untracked changes');
+    expect(script).toContain('git archive "${COMMIT_SHA_VALUE}"');
+    expect(script).toContain('SYNC_SOURCE_DIR');
+    expect(script).toContain('"${SYNC_SOURCE_DIR%/}/"');
+    expect(script).not.toContain('    ./ "${REMOTE_USER}@${HETZNER_PROD_HOST}');
+    expect(mainFlow.indexOf('resolve_commit_metadata')).toBeLessThan(mainFlow.indexOf('setup_ssh'));
+    expect(mainFlow.indexOf('prepare_sync_source')).toBeLessThan(mainFlow.indexOf('setup_ssh'));
+    expect(mainFlow.indexOf('resolve_commit_metadata')).toBeLessThan(
+      mainFlow.indexOf('withdraw_deployment_metadata')
+    );
+  });
+
+  it('pins retained Cloud Build targets to the workflow commit and verifies provenance', () => {
+    const workflow = readRequired(deployWorkflowPath);
+
+    expect(workflow).toContain('--sha="${GITHUB_SHA}"');
+    expect(workflow).not.toContain('--branch="${GITHUB_REF_NAME:-development}"');
+    expect(workflow).toContain('sourceProvenance.resolvedRepoSource.commitSha');
+    expect(workflow).toContain('RESOLVED_COMMIT_SHA');
+    expect(workflow).toContain('[[ "$RESOLVED_COMMIT_SHA" != "$GITHUB_SHA" ]]');
+    expect(workflow).toContain('Cloud Build provenance SHA mismatch');
+  });
+
+  it('publishes and verifies exact-SHA deployment attestation only after readiness', () => {
+    const script = readRequired(githubActionsDeployPath);
+    const mainFlow = script.slice(script.indexOf('main() {'));
+    const cleanupFlow = script.slice(
+      script.indexOf('cleanup() {'),
+      script.indexOf('\n}\n\nrequire_command()')
+    );
+    const readinessFlow = script.slice(
+      script.indexOf('verify_runtime_readiness() {'),
+      script.indexOf('\n}\n\nverify_deployment_attestation()')
+    );
+    const attestationFlow = script.slice(
+      script.indexOf('verify_deployment_attestation() {'),
+      script.indexOf('\n}\n\nmain()')
+    );
+
+    expect(script).toContain('LOCAL_COMMIT_SHA_VALUE');
+    expect(script).toContain('Local checkout SHA does not match GITHUB_SHA');
+    expect(script).toContain('GITHUB_RUN_ID');
+    expect(script).toContain('WORKFLOW_RUN_ID_VALUE="manual"');
+    expect(script).toContain('DEPLOYMENT_METADATA_PUBLISHED="false"');
+    expect(script).toContain('DEPLOYMENT_ATTESTATION_VERIFIED="false"');
+    expect(script).toContain('DEPLOYMENT_JSON_PATH="/var/www/intexuraos/web/dist/deployment.json"');
+    expect(script).toContain('withdraw_deployment_metadata');
+    expect(script).toContain('publish_deployment_metadata');
+    expect(script).toContain('verify_deployment_document');
+    expect(script).toContain('verify-deployment-document.mjs');
+    expect(script).toContain('--dump-header');
+    expect(script).toContain('"commitSha":"%s"');
+    expect(script).toContain('"workflowRunId":"%s"');
+    expect(script).toContain('"deployedAt":"%s"');
+    expect(script).toContain('mktemp "${DEPLOYMENT_JSON_PATH}.XXXXXX"');
+    expect(script).toContain('mv -f -- "${deployment_tmp}"');
+    expect(cleanupFlow).toContain('withdraw_deployment_metadata');
+    expect(readinessFlow.match(/\/api\/whatsapp\/health/g)).toHaveLength(2);
+    expect(readinessFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
+    expect(attestationFlow.match(/\/deployment\.json/g)).toHaveLength(2);
+    expect(attestationFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
+    expect(attestationFlow).toContain('"https://${PUBLIC_DOMAIN}/deployment.json"');
+    expect(mainFlow.indexOf('withdraw_deployment_metadata')).toBeLessThan(
+      mainFlow.indexOf('sync_repo')
+    );
+    expect(mainFlow.indexOf('publish_deployment_metadata')).toBeGreaterThan(
+      mainFlow.indexOf('verify_runtime_readiness')
+    );
+    expect(mainFlow.indexOf('publish_deployment_metadata')).toBeLessThan(
+      mainFlow.indexOf('verify_deployment_attestation')
+    );
+    expect(mainFlow.indexOf('DEPLOYMENT_ATTESTATION_VERIFIED="true"')).toBeGreaterThan(
+      mainFlow.indexOf('verify_deployment_attestation')
+    );
+  });
+
+  it('deploys and verifies the backward-compatible backend before publishing the new web client', () => {
+    const script = readRequired(githubActionsDeployPath);
+    const mainFlow = script.slice(script.indexOf('main() {'));
+    const backendFlow = script.slice(
+      script.indexOf('deploy_runtime() {'),
+      script.indexOf('\n}\n\ndeploy_web_and_edge()')
+    );
+    const webFlow = script.slice(
+      script.indexOf('deploy_web_and_edge() {'),
+      script.indexOf('\n}\n\nverify_backend_readiness()')
+    );
+
+    expect(backendFlow).toContain('scripts/hetzner/reload-pm2.sh');
+    expect(backendFlow).not.toContain('run_remote_deploy_web');
+    expect(webFlow).toContain('run_remote_deploy_web');
+    expect(mainFlow.indexOf('deploy_runtime')).toBeLessThan(
+      mainFlow.indexOf('verify_backend_readiness')
+    );
+    expect(mainFlow.indexOf('verify_backend_readiness')).toBeLessThan(
+      mainFlow.indexOf('deploy_web_and_edge')
+    );
+    expect(mainFlow.indexOf('deploy_web_and_edge')).toBeLessThan(
+      mainFlow.indexOf('verify_runtime_readiness')
+    );
+  });
+
+  it('documents exact-SHA deployment evidence and the manual checkout fallback', () => {
+    const runbook = readRequired(runbookPath);
+    const contextRunbook = readRequired(contextAttachmentsRunbookPath);
+
+    expect(runbook).toContain('sourceProvenance.resolvedRepoSource.commitSha');
+    expect(runbook).toContain('GET /deployment.json');
+    expect(runbook).toContain('workflowRunId');
+    expect(runbook).toContain('manual');
+    expect(runbook).toContain('/api/whatsapp/health');
+    expect(contextRunbook).toContain('sourceProvenance.resolvedRepoSource.commitSha');
+    expect(contextRunbook).toContain('/deployment.json');
+    expect(contextRunbook).toContain('/api/whatsapp/health');
+  });
+
   it('deploys Hetzner production automatically after development receives a merge', () => {
     const workflow = readRequired(deployWorkflowPath);
     const script = readRequired(githubActionsDeployPath);
@@ -484,7 +774,7 @@ describe('Hetzner web asset deployment', () => {
           env: { ...process.env, INTEXURAOS_ENVIRONMENT: 'prod' },
         }
       )
-    ) as { apps: Array<{ env?: { PORT?: string } }> };
+    ) as { apps: { env?: { PORT?: string } }[] };
     const ports = renderedConfig.apps.map((app) => Number(app.env?.PORT));
     expect(ports).toHaveLength(18);
     expect(ports.every((port) => Number.isInteger(port) && port > 0 && port <= 65535)).toBe(true);
@@ -809,7 +1099,7 @@ describe('Hetzner async edge cutover', () => {
     const prodAutoTfvars = JSON.parse(readRequired(terraformHetznerProdAutoTfvarsPath)) as {
       activate_hetzner_async_consumers?: boolean;
     };
-    const retiredSchedulerJobs: Array<[string, string[]]> = [
+    const retiredSchedulerJobs: [string, string[]][] = [
       [
         retiredDashed('intexuraos', 'retry', 'pending', 'actions', 'prod', 'hetzner'),
         ['internal', 'actions', 'retry-pending'],
@@ -823,7 +1113,7 @@ describe('Hetzner async edge cutover', () => {
         ['internal', 'retry-pending'],
       ],
     ];
-    const retiredPubsubSubscriptions: Array<[string, string[]]> = [
+    const retiredPubsubSubscriptions: [string, string[]][] = [
       [
         retiredDashed('intexuraos', 'todos', 'processing', 'prod', 'hetzner'),
         ['internal', 'todos', 'pubsub', retiredDashed('todos', 'processing')],

@@ -15,7 +15,7 @@
  *   });
  */
 
-import { FieldPath, FieldValue } from '@google-cloud/firestore';
+import { FieldPath, FieldValue, Timestamp } from '@google-cloud/firestore';
 import type { CollectionReference, DocumentData, WriteResult } from '@google-cloud/firestore';
 import { IntexuraOSError } from '@intexuraos/common-core';
 
@@ -42,6 +42,10 @@ function isFieldValueDelete(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   if (!(value instanceof FieldValue)) return false;
   return value.constructor.name === 'DeleteTransform';
+}
+
+function isServerTimestamp(value: unknown): boolean {
+  return value instanceof FieldValue && value.constructor.name === 'ServerTimestampTransform';
 }
 
 /**
@@ -71,6 +75,7 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
       !Array.isArray(sourceVal) &&
       extractArrayUnionElements(sourceVal) === null &&
       !isFieldValueDelete(sourceVal) &&
+      !isServerTimestamp(sourceVal) &&
       targetVal !== null &&
       typeof targetVal === 'object' &&
       !Array.isArray(targetVal)
@@ -116,6 +121,11 @@ function processFieldValues(
     // Handle delete
     if (isFieldValueDelete(value)) {
       Reflect.deleteProperty(data, key);
+      continue;
+    }
+
+    if (isServerTimestamp(value)) {
+      data[key] = Timestamp.now();
       continue;
     }
 
@@ -412,6 +422,12 @@ class FakeQuery {
 
     // Apply ordering
     if (this.ordering.length > 0) {
+      docs = docs.filter((doc) =>
+        this.ordering.every(
+          (order) =>
+            isDocumentIdField(order.field) || this.getOrderedValue(doc, order.field) !== undefined
+        )
+      );
       docs.sort((a, b) => {
         for (const order of this.ordering) {
           const aVal = this.getOrderedValue(a, order.field);
@@ -687,6 +703,16 @@ class FakeDocumentReference {
         continue;
       }
 
+      if (isServerTimestamp(value)) {
+        const timestamp = Timestamp.now();
+        if (key.includes('.')) {
+          setNestedField(updated, key, timestamp);
+        } else {
+          updated[key] = timestamp;
+        }
+        continue;
+      }
+
       // Regular value
       if (key.includes('.')) {
         setNestedField(updated, key, value);
@@ -853,6 +879,16 @@ class FakeTransaction {
         continue;
       }
 
+      if (isServerTimestamp(value)) {
+        const timestamp = Timestamp.now();
+        if (key.includes('.')) {
+          setNestedField(updated, key, timestamp);
+        } else {
+          updated[key] = timestamp;
+        }
+        continue;
+      }
+
       if (key.includes('.')) {
         setNestedField(updated, key, value);
       } else {
@@ -868,12 +904,18 @@ class FakeTransaction {
    */
   set(docRef: FakeDocumentReference, data: DocumentData, options?: { merge?: boolean }): void {
     const key = `${docRef._collectionName}/${docRef.id}`;
-    const existing = this.pendingWrites.get(key)?.data;
+    const existing =
+      this.pendingWrites.get(key)?.data ?? this.store.get(docRef._collectionName)?.get(docRef.id);
 
-    let finalData = data;
+    const nextData = { ...data } as Record<string, unknown>;
+    processFieldValues(
+      nextData,
+      existing === undefined ? undefined : (existing as Record<string, unknown>)
+    );
+    let finalData: DocumentData = nextData;
     if (options?.merge === true && existing !== undefined) {
       const merged = { ...existing } as Record<string, unknown>;
-      deepMerge(merged, data as Record<string, unknown>);
+      deepMerge(merged, nextData);
       finalData = merged as DocumentData;
     }
 

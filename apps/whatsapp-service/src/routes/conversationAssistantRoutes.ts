@@ -1,6 +1,7 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
+import { randomUUID } from 'node:crypto';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
-import { getErrorMessage } from '@intexuraos/common-core';
+import { type Logger, type Result } from '@intexuraos/common-core';
 import {
   getConversationAssistantModelDisplayName,
   type ConversationAssistantModel,
@@ -18,9 +19,9 @@ import {
   getConversationAssistantSessionByRequest,
   listConversationAssistantSessions,
   listConversationAssistantTurns,
+  retryConversationAssistantPreparation,
   sendConversationAssistantTurn,
   streamConversationAssistantTurn,
-  retryConversationAssistantPreparation,
 } from '../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
 import type {
@@ -29,11 +30,57 @@ import type {
   ConversationAssistantSession,
   ConversationAssistantStreamEvent,
   CreateConversationAssistantSessionInput,
+  PublicConversationAssistantContextAttachment,
   PublicConversationAssistantSession,
 } from '../domain/conversation-assistant/types.js';
 import { createConversationAssistantDeletionToken } from '../domain/conversation-assistant/deletionToken.js';
+import {
+  deleteConversationAssistantContextAttachmentDraft,
+  getConversationAssistantContextAttachmentPreview,
+  getConversationAssistantContextAttachmentStatus,
+  listConversationAssistantContextHistory,
+  resolveConversationAssistantContinuationState,
+  retryConversationAssistantContextAttachmentForUser,
+  type GetConversationAssistantContextAttachmentStatusResult,
+  type RetryConversationAssistantContextAttachmentForUserResult,
+} from '../domain/conversation-assistant/contextAttachmentAccess.js';
+import {
+  createConversationAssistantContextAttachment,
+  toPublicConversationAssistantContextAttachment,
+} from '../domain/conversation-assistant/contextAttachmentUseCases.js';
+import type {
+  ConversationAssistantContextAttachmentAccessDeps,
+  ConversationAssistantContextAttachmentAccessRepository,
+  ConversationAssistantContextAttachmentCreationDeps,
+  ConversationAssistantContextAttachmentPublicRetryDeps,
+  ConversationAssistantContextAttachmentPreparationPublisher,
+} from '../domain/conversation-assistant/contextAttachmentPorts.js';
+import {
+  getConversationAssistantTurnRequest,
+  conversationAssistantTurnRequestSystemHeartbeat,
+  resumeConversationAssistantTurnRequest,
+  retryConversationAssistantTurnRequestAnswer,
+  startConversationAssistantTurnRequest,
+  type ConversationAssistantTurnRequestDeps,
+  type ConversationAssistantTurnRequestError,
+  type ConversationAssistantTurnRequestStreamEvent,
+} from '../domain/conversation-assistant/turnRequestUseCases.js';
+import {
+  toPublicConversationAssistantAttachmentPreviewDto,
+  toPublicConversationAssistantContextAttachmentDto,
+  toPublicConversationAssistantContextDto,
+  toPublicConversationAssistantContextHistoryDto,
+  toPublicConversationAssistantExecutionRecoveryDto,
+  toPublicConversationAssistantSessionDto,
+  toPublicConversationAssistantSseEvent,
+  toPublicConversationAssistantTurnDto,
+  toPublicConversationAssistantTurnRequestRecoveryDto,
+} from '../domain/conversation-assistant/publicDtos.js';
+import { registerConversationAssistantPublicSchemas } from './conversationAssistantPublicSchemas.js';
 
 type ValidatedRequest = FastifyRequest & { validationError?: unknown };
+
+const CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE = 'Conversation Assistant request failed';
 
 interface CreateSessionBody {
   requestId: string;
@@ -42,6 +89,7 @@ interface CreateSessionBody {
   to: string;
   model?: string;
   maxMessages?: number;
+  displayTimeZone?: string;
 }
 
 interface CheckContextBody {
@@ -68,17 +116,39 @@ interface ContextQuerystring {
 }
 
 interface SendTurnBody {
+  requestId?: string;
   question: string;
+  contextAttachmentId?: string;
+  confirmationToken?: string;
+}
+
+interface TurnRequestParams extends SessionParams {
+  requestId: string;
+}
+
+interface ContextAttachmentParams extends SessionParams {
+  attachmentId: string;
+}
+
+interface CreateContextAttachmentBody {
+  requestId: string;
+  replacesAttachmentId?: string;
+}
+
+interface ContextAttachmentPreviewQuerystring {
+  cursor?: string;
+  limit?: number;
 }
 
 export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  registerConversationAssistantPublicSchemas(fastify);
   fastify.get(
     '/conversation-assistant/sessions',
     {
       schema: {
         operationId: 'listWhatsAppConversationAssistantSessions',
         tags: ['whatsapp'],
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantSessionList'),
       },
     },
     async (request, reply) => {
@@ -96,7 +166,11 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.ok({ sessions: result.value.map(toPublicSession) });
+      return await reply.ok({
+        sessions: await Promise.all(
+          result.value.map((session) => toPublicSession(session, request.log))
+        ),
+      });
     }
   );
 
@@ -117,7 +191,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
           },
           required: ['chatId', 'from', 'to'],
         },
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantContextCheck'),
       },
     },
     async (request, reply) => {
@@ -165,11 +239,12 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
             to: { type: 'string', minLength: 1 },
             model: { type: 'string', minLength: 1 },
             maxMessages: { type: 'integer', minimum: 1 },
+            displayTimeZone: { type: 'string', minLength: 1, maxLength: 128 },
             question: false,
           },
           required: ['requestId', 'chatId', 'from', 'to'],
         },
-        response: routeResponseSchema(202),
+        response: routeResponseSchema('ConversationAssistantSessionResponse', 202),
       },
     },
     async (request, reply) => {
@@ -197,13 +272,16 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
         input.model = request.body.model as ConversationAssistantModel;
       }
       if (request.body.maxMessages !== undefined) input.maxMessages = request.body.maxMessages;
+      if (request.body.displayTimeZone !== undefined) {
+        input.displayTimeZone = request.body.displayTimeZone;
+      }
 
       const result = await safeCall(() => createConversationAssistantSession(input, deps));
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
       return await reply.status(202).ok({
-        session: toPublicSession(result.value.session),
+        session: await toPublicSession(result.value.session, request.log),
       });
     }
   );
@@ -214,7 +292,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       schema: {
         operationId: 'getWhatsAppConversationAssistantSession',
         tags: ['whatsapp'],
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantSessionResponse'),
       },
     },
     async (request, reply) => {
@@ -238,7 +316,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.ok({ session: toPublicSession(result.value) });
+      return await reply.ok({ session: await toPublicSession(result.value, request.log) });
     }
   );
 
@@ -256,7 +334,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
             'x-conversation-assistant-deletion-token': { type: 'string', minLength: 1 },
           },
         },
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantDeleted'),
       },
     },
     async (request, reply) => {
@@ -297,7 +375,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       schema: {
         operationId: 'getWhatsAppConversationAssistantSessionByRequest',
         tags: ['whatsapp'],
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantSessionResponse'),
       },
     },
     async (request, reply) => {
@@ -320,7 +398,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.ok({ session: toPublicSession(result.value) });
+      return await reply.ok({ session: await toPublicSession(result.value, request.log) });
     }
   );
 
@@ -338,7 +416,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
             omittedCursor: { type: 'string' },
           },
         },
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantContext'),
       },
     },
     async (request, reply) => {
@@ -370,7 +448,369 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.ok(result.value);
+      return await reply.ok(toPublicConversationAssistantContextDto(result.value));
+    }
+  );
+
+  fastify.post<{ Params: SessionParams; Body: CreateContextAttachmentBody }>(
+    '/conversation-assistant/sessions/:sessionId/context-attachments',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'createWhatsAppConversationAssistantContextAttachment',
+        tags: ['whatsapp'],
+        params: contextAttachmentSessionParamsSchema(),
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            requestId: { type: 'string', minLength: 1, maxLength: 128 },
+            replacesAttachmentId: { type: 'string', minLength: 1, maxLength: 256 },
+          },
+          required: ['requestId'],
+        },
+        response: routeResponseSchema('ConversationAssistantContextAttachmentResponse', 202),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to create a Conversation Assistant context attachment',
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'whatsapp_conversation_assistant_create_context_attachment',
+        },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if (
+        !contextAttachmentCreateBodyUsesPublicAllowlist(request) ||
+        (request as ValidatedRequest).validationError !== undefined
+      ) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getContextAttachmentCreationDeps(reply);
+      if (deps === null) return;
+      const result = await safeAttachmentCall(() =>
+        createConversationAssistantContextAttachment(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            requestId: request.body.requestId,
+            ...(request.body.replacesAttachmentId === undefined
+              ? {}
+              : { replacesAttachmentId: request.body.replacesAttachmentId }),
+          },
+          deps,
+          request.log
+        )
+      );
+      if (result === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Context attachment request failed');
+      }
+      if (result.kind === 'invalid') {
+        return await reply.fail('INVALID_REQUEST', result.message);
+      }
+      if (result.kind === 'not_found') {
+        return await reply.fail('NOT_FOUND', 'Context attachment was not found');
+      }
+      if (result.kind === 'conflict') {
+        return await reply.fail('CONFLICT', 'Request id was already used');
+      }
+      if (result.kind === 'unsupported') {
+        return await reply.fail(
+          'CONFLICT',
+          result.reason === 'legacy_session'
+            ? 'This analysis cannot include later messages'
+            : 'The source conversation is unavailable'
+        );
+      }
+      if (result.kind === 'stale') {
+        return await reply.fail('CONFLICT', 'The conversation context changed');
+      }
+      return await reply.status(202).ok({
+        attachment: toPublicConversationAssistantContextAttachmentDto(
+          toPublicConversationAssistantContextAttachment(result.attachment, {
+            compatibility: 'current',
+            newerAvailableCount: 0,
+            newerAvailableCorrectionCount: 0,
+          })
+        ),
+      });
+    }
+  );
+
+  fastify.get<{ Params: ContextAttachmentParams }>(
+    '/conversation-assistant/sessions/:sessionId/context-attachments/:attachmentId',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'getWhatsAppConversationAssistantContextAttachment',
+        tags: ['whatsapp'],
+        params: contextAttachmentParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantContextAttachmentResponse'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to get a Conversation Assistant context attachment',
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'whatsapp_conversation_assistant_get_context_attachment',
+        },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getContextAttachmentAccessDeps(reply);
+      if (deps === null) return;
+      const result = await safeAttachmentCall<GetConversationAssistantContextAttachmentStatusResult>(() =>
+        getConversationAssistantContextAttachmentStatus(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            attachmentId: request.params.attachmentId,
+          },
+          deps,
+          request.log
+        )
+      );
+      if (result === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Context attachment request failed');
+      }
+      if (result.kind === 'invalid') {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      if (result.kind === 'not_found') {
+        return await reply.fail('NOT_FOUND', 'Context attachment was not found');
+      }
+      if (result.kind === 'source_unavailable') {
+        return await reply.fail('CONFLICT', 'The source conversation is unavailable');
+      }
+      return await reply.ok(contextAttachmentResponse(result.attachment));
+    }
+  );
+
+  fastify.get<{
+    Params: ContextAttachmentParams;
+    Querystring: ContextAttachmentPreviewQuerystring;
+  }>(
+    '/conversation-assistant/sessions/:sessionId/context-attachments/:attachmentId/messages',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'previewWhatsAppConversationAssistantContextAttachment',
+        tags: ['whatsapp'],
+        params: contextAttachmentParamsSchema(),
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            cursor: { type: 'string', minLength: 1, maxLength: 512 },
+            limit: { type: 'integer', minimum: 1, maximum: 100 },
+          },
+        },
+        response: routeResponseSchema('ConversationAssistantContextAttachmentPreviewPage'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to preview a Conversation Assistant context attachment',
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'whatsapp_conversation_assistant_preview_context_attachment',
+        },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const repository = await getContextAttachmentAccessRepository(reply);
+      if (repository === null) return;
+      const result = await safeAttachmentCall(() =>
+        getConversationAssistantContextAttachmentPreview(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            attachmentId: request.params.attachmentId,
+            ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
+            limit: request.query.limit ?? 50,
+          },
+          { repository, clock: conversationAssistantSystemClock },
+          request.log
+        )
+      );
+      if (result === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Context attachment request failed');
+      }
+      if (result.kind === 'invalid') {
+        return await reply.fail('INVALID_REQUEST', 'Invalid attachment preview cursor');
+      }
+      if (result.kind === 'not_found') {
+        return await reply.fail('NOT_FOUND', 'Context attachment was not found');
+      }
+      if (result.kind === 'not_ready') {
+        return await reply.fail('CONFLICT', 'Context attachment is not ready');
+      }
+      return await reply.ok(toPublicConversationAssistantAttachmentPreviewDto(result.page));
+    }
+  );
+
+  fastify.delete<{ Params: ContextAttachmentParams }>(
+    '/conversation-assistant/sessions/:sessionId/context-attachments/:attachmentId',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'deleteWhatsAppConversationAssistantContextAttachment',
+        tags: ['whatsapp'],
+        params: contextAttachmentParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantDeleted'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to remove a Conversation Assistant context attachment',
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'whatsapp_conversation_assistant_delete_context_attachment',
+        },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const repository = await getContextAttachmentAccessRepository(reply);
+      if (repository === null) return;
+      const result = await safeAttachmentCall(() =>
+        deleteConversationAssistantContextAttachmentDraft(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            attachmentId: request.params.attachmentId,
+          },
+          { repository },
+          request.log
+        )
+      );
+      if (result === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Context attachment request failed');
+      }
+      if (result.kind === 'invalid') {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      if (result.kind === 'not_found') {
+        return await reply.fail('NOT_FOUND', 'Context attachment was not found');
+      }
+      if (result.kind === 'committed') {
+        return await reply.fail('CONFLICT', 'Committed context cannot be removed');
+      }
+      return await reply.ok({ deleted: true });
+    }
+  );
+
+  fastify.post<{ Params: ContextAttachmentParams }>(
+    '/conversation-assistant/sessions/:sessionId/context-attachments/:attachmentId/preparation/retry',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'retryWhatsAppConversationAssistantContextAttachment',
+        tags: ['whatsapp'],
+        params: contextAttachmentParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantContextAttachmentResponse', 202),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to retry a Conversation Assistant context attachment',
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'whatsapp_conversation_assistant_retry_context_attachment',
+        },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getContextAttachmentPublicRetryDeps(reply);
+      if (deps === null) return;
+      const result = await safeAttachmentCall<RetryConversationAssistantContextAttachmentForUserResult>(() =>
+        retryConversationAssistantContextAttachmentForUser(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            attachmentId: request.params.attachmentId,
+          },
+          deps,
+          request.log
+        )
+      );
+      if (result === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Context attachment request failed');
+      }
+      if (result.kind === 'invalid') {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      if (result.kind === 'not_found') {
+        return await reply.fail('NOT_FOUND', 'Context attachment was not found');
+      }
+      if (
+        result.kind === 'stale' ||
+        result.kind === 'expired' ||
+        result.kind === 'invalid_state'
+      ) {
+        return await reply.fail('CONFLICT', 'Context attachment cannot be retried');
+      }
+      return await reply.status(202).ok(contextAttachmentResponse(result.attachment));
+    }
+  );
+
+  fastify.get<{ Params: SessionParams }>(
+    '/conversation-assistant/sessions/:sessionId/context/history',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'listWhatsAppConversationAssistantContextHistory',
+        tags: ['whatsapp'],
+        params: contextAttachmentSessionParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantContextHistory'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to list Conversation Assistant context history',
+        bodyPreviewLength: 0,
+        additionalFields: {
+          route: 'whatsapp_conversation_assistant_list_context_history',
+        },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const repository = await getContextAttachmentAccessRepository(reply);
+      if (repository === null) return;
+      const result = await safeAttachmentCall(() =>
+        listConversationAssistantContextHistory(
+          { userId: user.userId, sessionId: request.params.sessionId },
+          { repository },
+          request.log
+        )
+      );
+      if (result === null) {
+        return await reply.fail('INTERNAL_ERROR', 'Context history request failed');
+      }
+      if (result.kind === 'invalid') {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      if (result.kind === 'not_found') {
+        return await reply.fail('NOT_FOUND', 'Conversation Assistant session was not found');
+      }
+      return await reply.ok(toPublicConversationAssistantContextHistoryDto(result.snapshots));
     }
   );
 
@@ -380,7 +820,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       schema: {
         operationId: 'retryWhatsAppConversationAssistantPreparation',
         tags: ['whatsapp'],
-        response: routeResponseSchema(202),
+        response: routeResponseSchema('ConversationAssistantSessionResponse', 202),
       },
     },
     async (request, reply) => {
@@ -403,7 +843,9 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.status(202).ok({ session: toPublicSession(result.value) });
+      return await reply.status(202).ok({
+        session: await toPublicSession(result.value, request.log),
+      });
     }
   );
 
@@ -453,7 +895,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       schema: {
         operationId: 'listWhatsAppConversationAssistantTurns',
         tags: ['whatsapp'],
-        response: routeResponseSchema(),
+        response: routeResponseSchema('ConversationAssistantTurnList'),
       },
     },
     async (request, reply) => {
@@ -477,7 +919,11 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!result.ok) {
         return await sendConversationAssistantError(reply, result.error);
       }
-      return await reply.ok({ turns: result.value });
+      return await reply.ok({
+        turns: result.value.map(({ turn, canRetryAnswer }) =>
+          toPublicConversationAssistantTurnDto(turn, { canRetryAnswer })
+        ),
+      });
     }
   );
 
@@ -486,15 +932,11 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
     {
       attachValidation: true,
       schema: {
-        operationId: 'sendWhatsAppConversationAssistantTurn',
+        operationId: 'sendWhatsAppConversationAssistantTurnRequest',
         tags: ['whatsapp'],
-        body: {
-          type: 'object',
-          additionalProperties: false,
-          properties: { question: { type: 'string' } },
-          required: ['question'],
-        },
-        response: routeResponseSchema(201),
+        params: contextAttachmentSessionParamsSchema(),
+        body: turnRequestBodySchema(),
+        response: routeResponseSchema('ConversationAssistantSendTurn', 201),
       },
     },
     async (request, reply) => {
@@ -506,26 +948,74 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       });
       const user = await requireAuth(request, reply);
       if (user === null) return;
-      if ((request as ValidatedRequest).validationError !== undefined) {
+      if (
+        !turnRequestBodyUsesPublicAllowlist(request) ||
+        (request as ValidatedRequest).validationError !== undefined ||
+        !turnRequestBodyHasSafeCompatibilityBoundary(request.body)
+      ) {
         return await reply.fail('INVALID_REQUEST', 'Validation failed');
       }
-      const deps = await getConversationAssistantDeps(reply);
+      const legacyMode = await resolveLegacyTurnMode(
+        user.userId,
+        request.params.sessionId
+      );
+      if (!legacyMode.ok) {
+        return await sendConversationAssistantError(reply, legacyMode.error);
+      }
+      if (legacyMode.value) {
+        if (request.body.contextAttachmentId !== undefined) {
+          return await reply.fail(
+            'CONTEXT_STALE',
+            'This analysis cannot include later messages'
+          );
+        }
+        const legacyDeps = await getConversationAssistantDeps(reply);
+        if (legacyDeps === null) return;
+        const legacyResult = await safeCall(() =>
+          sendConversationAssistantTurn(
+            {
+              userId: user.userId,
+              sessionId: request.params.sessionId,
+              question: request.body.question,
+            },
+            legacyDeps
+          )
+        );
+        if (!legacyResult.ok) {
+          return await sendConversationAssistantError(reply, legacyResult.error);
+        }
+        return await reply.status(201).ok({
+          turns: legacyResult.value.map((turn) => toPublicConversationAssistantTurnDto(turn)),
+        });
+      }
+      const deps = await getConversationAssistantTurnRequestDeps(reply);
       if (deps === null) return;
+      const requestId = request.body.requestId ?? `compat-${randomUUID()}`;
 
-      const result = await safeCall(() =>
-        sendConversationAssistantTurn(
+      const result = await safeTurnRequestCall(() =>
+        startConversationAssistantTurnRequest(
           {
             userId: user.userId,
             sessionId: request.params.sessionId,
+            requestId,
             question: request.body.question,
+            ...(request.body.contextAttachmentId === undefined
+              ? {}
+              : { contextAttachmentId: request.body.contextAttachmentId }),
+            ...(request.body.confirmationToken === undefined
+              ? {}
+              : { confirmationToken: request.body.confirmationToken }),
           },
-          deps
+          deps,
+          () => undefined
         )
       );
       if (!result.ok) {
-        return await sendConversationAssistantError(reply, result.error);
+        return await sendConversationAssistantTurnRequestError(reply, result.error);
       }
-      return await reply.status(201).ok({ turns: result.value });
+      return await reply
+        .status(201)
+        .ok(toPublicConversationAssistantExecutionRecoveryDto(result.value));
     }
   );
 
@@ -534,14 +1024,10 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
     {
       attachValidation: true,
       schema: {
-        operationId: 'streamWhatsAppConversationAssistantTurn',
+        operationId: 'streamWhatsAppConversationAssistantTurnRequest',
         tags: ['whatsapp'],
-        body: {
-          type: 'object',
-          additionalProperties: false,
-          properties: { question: { type: 'string' } },
-          required: ['question'],
-        },
+        params: contextAttachmentSessionParamsSchema(),
+        body: turnRequestBodySchema(),
         response: streamResponseSchema(),
       },
     },
@@ -554,38 +1040,219 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       });
       const user = await requireAuth(request, reply);
       if (user === null) return;
-      if ((request as ValidatedRequest).validationError !== undefined) {
+      if (
+        !turnRequestBodyUsesPublicAllowlist(request) ||
+        (request as ValidatedRequest).validationError !== undefined ||
+        !turnRequestBodyHasSafeCompatibilityBoundary(request.body)
+      ) {
         return await reply.fail('INVALID_REQUEST', 'Validation failed');
       }
-      const deps = await getConversationAssistantDeps(reply);
+      const legacyMode = await resolveLegacyTurnMode(
+        user.userId,
+        request.params.sessionId
+      );
+      if (!legacyMode.ok) {
+        return await sendConversationAssistantError(reply, legacyMode.error);
+      }
+      if (legacyMode.value && request.body.contextAttachmentId !== undefined) {
+        return await reply.fail(
+          'CONTEXT_STALE',
+          'This analysis cannot include later messages'
+        );
+      }
+      if (legacyMode.value) {
+        const legacyDeps = await getConversationAssistantDeps(reply);
+        if (legacyDeps === null) return;
+        startConversationAssistantSse(reply);
+        const legacyResult = await safeCall(() =>
+          streamConversationAssistantTurn(
+            {
+              userId: user.userId,
+              sessionId: request.params.sessionId,
+              question: request.body.question,
+            },
+            legacyDeps,
+            (event) => {
+              writeLegacyTurnSseEvent(reply, event);
+            }
+          )
+        );
+        if (!legacyResult.ok && canWriteSse(reply)) {
+          writeLegacyTurnSseEvent(reply, { type: 'error', error: legacyResult.error });
+          writeLegacyTurnSseEvent(reply, { type: 'done' });
+        }
+        endConversationAssistantSse(reply);
+        return;
+      }
+
+      const deps = await getConversationAssistantTurnRequestDeps(reply);
       if (deps === null) return;
+      startConversationAssistantSse(reply);
 
-      reply.hijack();
-      reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      });
-
-      const result = await safeCall(() =>
-        streamConversationAssistantTurn(
+      const requestId = request.body.requestId ?? `compat-${randomUUID()}`;
+      let lastSequence = 0;
+      const result = await safeTurnRequestCall(() =>
+        startConversationAssistantTurnRequest(
           {
             userId: user.userId,
             sessionId: request.params.sessionId,
+            requestId,
             question: request.body.question,
+            ...(request.body.contextAttachmentId === undefined
+              ? {}
+              : { contextAttachmentId: request.body.contextAttachmentId }),
+            ...(request.body.confirmationToken === undefined
+              ? {}
+              : { confirmationToken: request.body.confirmationToken }),
           },
           deps,
           (event) => {
-            writeSseEvent(reply, event);
+            lastSequence = event.streamSequence;
+            writeTurnRequestSseEvent(reply, event);
           }
         )
       );
-      if (!result.ok) {
-        writeSseEvent(reply, { type: 'error', error: result.error });
-        writeSseEvent(reply, { type: 'done' });
+      if (!result.ok && canWriteSse(reply)) {
+        lastSequence += 1;
+        writeTurnRequestSseEvent(reply, {
+          type: 'error',
+          requestId,
+          streamSequence: lastSequence,
+          error: result.error,
+        });
+        lastSequence += 1;
+        writeTurnRequestSseEvent(reply, {
+          type: 'done',
+          requestId,
+          streamSequence: lastSequence,
+        });
       }
-      reply.raw.end();
+      endConversationAssistantSse(reply);
+    }
+  );
+
+  fastify.get<{ Params: TurnRequestParams }>(
+    '/conversation-assistant/sessions/:sessionId/turn-requests/:requestId',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'getWhatsAppConversationAssistantTurnRequest',
+        tags: ['whatsapp'],
+        params: turnRequestParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantTurnRequestRecovery'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to recover a Conversation Assistant answer request',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_get_turn_request' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getConversationAssistantTurnRequestDeps(reply);
+      if (deps === null) return;
+      const result = await safeTurnRequestCall(() =>
+        getConversationAssistantTurnRequest(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            requestId: request.params.requestId,
+          },
+          deps
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantTurnRequestError(reply, result.error);
+      }
+      return await reply.ok(toPublicConversationAssistantTurnRequestRecoveryDto(result.value));
+    }
+  );
+
+  fastify.post<{ Params: TurnRequestParams }>(
+    '/conversation-assistant/sessions/:sessionId/turn-requests/:requestId/resume',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'resumeWhatsAppConversationAssistantTurnRequest',
+        tags: ['whatsapp'],
+        params: turnRequestParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantTurnRequestRecovery'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to resume a Conversation Assistant answer request',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_resume_turn_request' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getConversationAssistantTurnRequestDeps(reply);
+      if (deps === null) return;
+      const result = await safeTurnRequestCall(() =>
+        resumeConversationAssistantTurnRequest(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            requestId: request.params.requestId,
+          },
+          deps,
+          () => undefined
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantTurnRequestError(reply, result.error);
+      }
+      return await reply.ok(toPublicConversationAssistantExecutionRecoveryDto(result.value));
+    }
+  );
+
+  fastify.post<{ Params: TurnRequestParams }>(
+    '/conversation-assistant/sessions/:sessionId/turn-requests/:requestId/answer/retry',
+    {
+      attachValidation: true,
+      schema: {
+        operationId: 'retryWhatsAppConversationAssistantTurnRequestAnswer',
+        tags: ['whatsapp'],
+        params: turnRequestParamsSchema(),
+        response: routeResponseSchema('ConversationAssistantTurnRequestRecovery'),
+      },
+    },
+    async (request, reply) => {
+      logIncomingRequest(request, {
+        message: 'Received request to retry a Conversation Assistant answer',
+        bodyPreviewLength: 0,
+        additionalFields: { route: 'whatsapp_conversation_assistant_retry_answer' },
+      });
+      const user = await requireAuth(request, reply);
+      if (user === null) return;
+      if ((request as ValidatedRequest).validationError !== undefined) {
+        return await reply.fail('INVALID_REQUEST', 'Validation failed');
+      }
+      const deps = await getConversationAssistantTurnRequestDeps(reply);
+      if (deps === null) return;
+      const result = await safeTurnRequestCall(() =>
+        retryConversationAssistantTurnRequestAnswer(
+          {
+            userId: user.userId,
+            sessionId: request.params.sessionId,
+            requestId: request.params.requestId,
+          },
+          deps,
+          () => undefined
+        )
+      );
+      if (!result.ok) {
+        return await sendConversationAssistantTurnRequestError(reply, result.error);
+      }
+      return await reply.ok(toPublicConversationAssistantExecutionRecoveryDto(result.value));
     }
   );
 
@@ -623,10 +1290,130 @@ async function getConversationAssistantDeps(
     clock: conversationAssistantSystemClock,
     ids: conversationAssistantRandomIds,
   };
+  if (services.conversationAssistantOperationalTelemetry !== undefined) {
+    deps.telemetry = services.conversationAssistantOperationalTelemetry;
+  }
   if (services.pdfConversationExporter !== undefined) {
     deps.pdfExporter = services.pdfConversationExporter;
   }
   return deps;
+}
+
+async function getConversationAssistantTurnRequestDeps(
+  reply: FastifyReply
+): Promise<ConversationAssistantTurnRequestDeps | null> {
+  const services = getServices();
+  if (
+    services.conversationAssistantTurnRequestRepository === undefined ||
+    services.conversationAssistantTurnRequestRunner === undefined ||
+    services.conversationAssistantOperationalTelemetry === undefined
+  ) {
+    await reply.fail('INTERNAL_ERROR', 'Conversation Assistant services are not configured');
+    return null;
+  }
+  return {
+    repository: services.conversationAssistantTurnRequestRepository,
+    runner: services.conversationAssistantTurnRequestRunner,
+    telemetry: services.conversationAssistantOperationalTelemetry,
+    clock: conversationAssistantSystemClock,
+    ids: { claimId: conversationAssistantRandomIds.sessionGenerationId },
+    heartbeat: conversationAssistantTurnRequestSystemHeartbeat,
+  };
+}
+
+async function resolveLegacyTurnMode(
+  userId: string,
+  sessionId: string
+): Promise<Result<boolean, ConversationAssistantError>> {
+  const repository = getServices().conversationAssistantRepository;
+  if (repository === undefined) return { ok: true, value: false };
+  try {
+    const session = await repository.getSessionById(sessionId);
+    return {
+      ok: true,
+      value:
+        session !== null &&
+        session.userId === userId &&
+        session.continuation === undefined,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE },
+    };
+  }
+}
+
+function contextAttachmentPreparationPublisher(): ConversationAssistantContextAttachmentPreparationPublisher {
+  return {
+    async publish(
+      event
+    ): ReturnType<ConversationAssistantContextAttachmentPreparationPublisher['publish']> {
+      const result = await getServices().eventPublisher
+        .publishConversationAssistantContextAttachmentPreparation(event);
+      return result.ok
+        ? { ok: true as const, value: undefined }
+        : {
+            ok: false as const,
+            error: { code: result.error.code, message: result.error.message },
+          };
+    },
+  };
+}
+
+async function getContextAttachmentCreationDeps(
+  reply: FastifyReply
+): Promise<ConversationAssistantContextAttachmentCreationDeps | null> {
+  const repository = getServices().conversationAssistantContextAttachmentRepository;
+  if (repository === undefined) {
+    await reply.fail('INTERNAL_ERROR', 'Conversation Assistant services are not configured');
+    return null;
+  }
+  return {
+    repository,
+    preparationPublisher: contextAttachmentPreparationPublisher(),
+    ...(getServices().conversationAssistantOperationalTelemetry === undefined
+      ? {}
+      : { telemetry: getServices().conversationAssistantOperationalTelemetry }),
+  };
+}
+
+async function getContextAttachmentAccessRepository(
+  reply: FastifyReply
+): Promise<ConversationAssistantContextAttachmentAccessRepository | null> {
+  const repository = getServices().conversationAssistantContextAttachmentRepository;
+  if (repository === undefined) {
+    await reply.fail('INTERNAL_ERROR', 'Conversation Assistant services are not configured');
+    return null;
+  }
+  return repository;
+}
+
+async function getContextAttachmentAccessDeps(
+  reply: FastifyReply
+): Promise<ConversationAssistantContextAttachmentAccessDeps | null> {
+  const repository = await getContextAttachmentAccessRepository(reply);
+  if (repository === null) return null;
+  return {
+    repository,
+    privateWhatsAppRepository: getServices().privateWhatsAppRepository,
+    clock: conversationAssistantSystemClock,
+  };
+}
+
+async function getContextAttachmentPublicRetryDeps(
+  reply: FastifyReply
+): Promise<ConversationAssistantContextAttachmentPublicRetryDeps | null> {
+  const repository = getServices().conversationAssistantContextAttachmentRepository;
+  if (repository === undefined) {
+    await reply.fail('INTERNAL_ERROR', 'Conversation Assistant services are not configured');
+    return null;
+  }
+  return {
+    repository,
+    preparationPublisher: contextAttachmentPreparationPublisher(),
+    clock: conversationAssistantSystemClock,
+  };
 }
 
 async function getConversationAssistantExportDeps(
@@ -643,26 +1430,71 @@ async function getConversationAssistantExportDeps(
   return deps;
 }
 
-function toPublicSession(
-  session: ConversationAssistantSession
-): PublicConversationAssistantSession {
-  const {
-    transcriptText: _transcriptText,
-    creationRequestId: _creationRequestId,
-    maxMessages: _maxMessages,
-    preparationClaimId: _preparationClaimId,
-    preparationLeaseExpiresAt: _preparationLeaseExpiresAt,
-    contextSnapshotId: _contextSnapshotId,
-    generationId: _generationId,
-    deletionStartedAt: _deletionStartedAt,
-    ...publicSession
-  } = session;
-  return {
-    ...publicSession,
+async function toPublicSession(
+  session: ConversationAssistantSession,
+  logger: Logger
+): Promise<PublicConversationAssistantSession> {
+  const continuation = session.continuation;
+  const [contextContinuationState, activeTurn] = await Promise.all([
+    resolveConversationAssistantContinuationState(
+      session,
+      getServices().privateWhatsAppRepository,
+      logger
+    ),
+    resolvePublicActiveTurn(session, logger),
+  ]);
+  return toPublicConversationAssistantSessionDto(session, {
     deletionToken: createConversationAssistantDeletionToken(session),
     deletionPending: session.deletionStartedAt !== undefined,
     modelDisplayName: getConversationAssistantModelDisplayName(session.model),
-  };
+    contextSummary: {
+      displayTimeZone:
+        continuation?.displayTimeZone ?? session.preparationDisplayTimeZone ?? 'UTC',
+      availability:
+        contextContinuationState === 'available'
+          ? {
+              state: contextContinuationState,
+              displayTimeZone:
+                continuation?.displayTimeZone ?? session.preparationDisplayTimeZone ?? 'UTC',
+            }
+          : { state: contextContinuationState },
+      contextVersion: continuation?.contextVersion ?? 0,
+      snapshotCount: continuation === undefined ? 0 : continuation.attachmentCount + 1,
+      totalAttachedMessageCount: continuation?.totalAttachedMessageCount ?? 0,
+      totalAttachedOmittedCount: continuation?.totalAttachedOmittedCount ?? 0,
+      completedConversationRevision: continuation?.completedConversationRevision ?? 0,
+      activeTurn,
+    },
+  });
+}
+
+async function resolvePublicActiveTurn(
+  session: ConversationAssistantSession,
+  logger: Logger
+): Promise<null | { requestId: string; stateVersion: number }> {
+  const requestId = session.continuation?.activeTurnRequestId;
+  const repository = getServices().conversationAssistantTurnRequestRepository;
+  if (requestId === undefined || repository === undefined) return null;
+
+  try {
+    const result = await repository.getTurnRequest({
+      userId: session.userId,
+      sessionId: session.id,
+      requestId,
+    });
+    if (result.status !== 'found' || result.request.status !== 'in_progress') return null;
+    return { requestId: result.request.id, stateVersion: result.request.stateVersion };
+  } catch {
+    logger.warn(
+      {
+        operation: 'conversation_assistant_active_turn_summary',
+        outcome: 'unavailable',
+        errorCode: 'TURN_REQUEST_LOOKUP_FAILED',
+      },
+      'Failed to resolve Conversation Assistant active turn summary'
+    );
+    return null;
+  }
 }
 
 async function sendConversationAssistantError(
@@ -678,7 +1510,14 @@ async function sendConversationAssistantError(
   if (error.code === 'INVALID_REQUEST' || error.code === 'EMPTY_TRANSCRIPT') {
     return await reply.fail(error.code, error.message);
   }
-  return await reply.fail('INTERNAL_ERROR', error.message);
+  return await reply.fail('INTERNAL_ERROR', CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE);
+}
+
+async function sendConversationAssistantTurnRequestError(
+  reply: FastifyReply,
+  error: ConversationAssistantTurnRequestError
+): Promise<FastifyReply> {
+  return await reply.fail(error.code, error.message);
 }
 
 async function safeCall<T>(
@@ -686,34 +1525,217 @@ async function safeCall<T>(
 ): Promise<import('../domain/conversation-assistant/types.js').ConversationAssistantResult<T>> {
   try {
     return await fn();
-  } catch (error) {
+  } catch {
     return {
       ok: false,
-      error: { code: 'INTERNAL_ERROR', message: getErrorMessage(error) },
+      error: { code: 'INTERNAL_ERROR', message: CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE },
     };
   }
 }
 
-function writeSseEvent(reply: FastifyReply, event: ConversationAssistantStreamEvent): void {
-  reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+async function safeTurnRequestCall<T>(
+  fn: () => Promise<Result<T, ConversationAssistantTurnRequestError>>
+): Promise<Result<T, ConversationAssistantTurnRequestError>> {
+  try {
+    return await fn();
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Conversation Assistant answer request failed',
+      },
+    };
+  }
 }
 
-function routeResponseSchema(status = 200): Record<number, Record<string, unknown>> {
+async function safeAttachmentCall<T>(fn: () => Promise<T>): Promise<T | null> {
+  try {
+    return await fn();
+  } catch {
+    return null;
+  }
+}
+
+function contextAttachmentResponse(
+  attachment: PublicConversationAssistantContextAttachment
+): { attachment: PublicConversationAssistantContextAttachment } {
+  return { attachment: toPublicConversationAssistantContextAttachmentDto(attachment) };
+}
+
+type TurnRequestHttpStreamEvent =
+  | ConversationAssistantTurnRequestStreamEvent
+  | {
+      type: 'error';
+      requestId: string;
+      streamSequence: number;
+      error: ConversationAssistantTurnRequestError;
+    };
+
+function startConversationAssistantSse(reply: FastifyReply): void {
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+}
+
+export function writeTurnRequestSseEvent(
+  reply: FastifyReply,
+  event: TurnRequestHttpStreamEvent
+): void {
+  if (!canWriteSse(reply)) throw new Error('Conversation Assistant event stream disconnected');
+  const publicEvent = toPublicConversationAssistantSseEvent(event);
+  reply.raw.write(`event: ${publicEvent.type}\ndata: ${JSON.stringify(publicEvent)}\n\n`);
+}
+
+export function writeLegacyTurnSseEvent(
+  reply: FastifyReply,
+  event: ConversationAssistantStreamEvent
+): void {
+  if (!canWriteSse(reply)) throw new Error('Conversation Assistant event stream disconnected');
+  const publicEvent = toPublicConversationAssistantSseEvent(event);
+  reply.raw.write(`event: ${publicEvent.type}\ndata: ${JSON.stringify(publicEvent)}\n\n`);
+}
+
+function canWriteSse(reply: FastifyReply): boolean {
+  return !reply.raw.destroyed && !reply.raw.writableEnded;
+}
+
+export function endConversationAssistantSse(reply: FastifyReply): void {
+  if (canWriteSse(reply)) reply.raw.end();
+}
+
+function routeResponseSchema(
+  dataSchemaId: string,
+  status = 200
+): Record<number, Record<string, unknown>> {
   return {
     [status]: {
       description: 'Conversation Assistant response',
       type: 'object',
+      additionalProperties: false,
       properties: {
         success: { type: 'boolean', const: true },
-        data: { type: 'object', additionalProperties: true },
+        data: { $ref: `${dataSchemaId}#` },
+        diagnostics: { $ref: 'Diagnostics#' },
       },
       required: ['success', 'data'],
     },
     400: errorResponse('Invalid request'),
     401: errorResponse('Unauthorized'),
     404: errorResponse('Not found'),
+    409: errorResponse('Conflict'),
+    422: errorResponse('Context window exceeded'),
     500: errorResponse('Internal error'),
   };
+}
+
+function contextAttachmentSessionParamsSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: { sessionId: { type: 'string', minLength: 1, maxLength: 256 } },
+    required: ['sessionId'],
+  };
+}
+
+function contextAttachmentParamsSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 256 },
+      attachmentId: { type: 'string', minLength: 1, maxLength: 256 },
+    },
+    required: ['sessionId', 'attachmentId'],
+  };
+}
+
+function turnRequestParamsSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 256 },
+      requestId: { type: 'string', minLength: 1, maxLength: 128 },
+    },
+    required: ['sessionId', 'requestId'],
+  };
+}
+
+function turnRequestBodySchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      requestId: {
+        type: 'string',
+        minLength: 1,
+        maxLength: 128,
+        description:
+          'Client idempotency key. New clients always send it; omission is accepted only for a plain question from a pre-release client during rolling deployment.',
+      },
+      question: { type: 'string', minLength: 1 },
+      contextAttachmentId: { type: 'string', minLength: 1, maxLength: 256 },
+      confirmationToken: { type: 'string', minLength: 1, maxLength: 512 },
+    },
+    required: ['question'],
+  };
+}
+
+const TURN_REQUEST_PUBLIC_BODY_KEYS = new Set([
+  'requestId',
+  'question',
+  'contextAttachmentId',
+  'confirmationToken',
+]);
+
+const CONTEXT_ATTACHMENT_CREATE_PUBLIC_BODY_KEYS = new Set([
+  'requestId',
+  'replacesAttachmentId',
+]);
+
+function rawBodyUsesPublicAllowlist(rawBody: unknown, allowedKeys: ReadonlySet<string>): boolean {
+  if (typeof rawBody !== 'string') return false;
+  try {
+    const parsed = JSON.parse(rawBody) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+    return Object.keys(parsed).every((key) => allowedKeys.has(key));
+  } catch {
+    return false;
+  }
+}
+
+export function conversationAssistantTurnBodyUsesPublicAllowlist(rawBody: unknown): boolean {
+  return rawBodyUsesPublicAllowlist(rawBody, TURN_REQUEST_PUBLIC_BODY_KEYS);
+}
+
+function turnRequestBodyUsesPublicAllowlist(request: FastifyRequest): boolean {
+  return conversationAssistantTurnBodyUsesPublicAllowlist(
+    (request as FastifyRequest & { rawBody?: unknown }).rawBody
+  );
+}
+
+function turnRequestBodyHasSafeCompatibilityBoundary(body: SendTurnBody): boolean {
+  return (
+    body.requestId !== undefined ||
+    (body.contextAttachmentId === undefined && body.confirmationToken === undefined)
+  );
+}
+
+export function conversationAssistantContextAttachmentCreateBodyUsesPublicAllowlist(
+  rawBody: unknown
+): boolean {
+  return rawBodyUsesPublicAllowlist(rawBody, CONTEXT_ATTACHMENT_CREATE_PUBLIC_BODY_KEYS);
+}
+
+function contextAttachmentCreateBodyUsesPublicAllowlist(request: FastifyRequest): boolean {
+  return conversationAssistantContextAttachmentCreateBodyUsesPublicAllowlist(
+    (request as FastifyRequest & { rawBody?: unknown }).rawBody
+  );
 }
 
 function streamResponseSchema(): Record<number, Record<string, unknown>> {
@@ -721,9 +1743,18 @@ function streamResponseSchema(): Record<number, Record<string, unknown>> {
     200: {
       description: 'Conversation Assistant event stream',
       type: 'string',
+      content: {
+        'text/event-stream': {
+          schema: { type: 'string' },
+          'x-event-schema': { $ref: 'ConversationAssistantSseEvent#' },
+        },
+      },
     },
     400: errorResponse('Invalid request'),
     401: errorResponse('Unauthorized'),
+    404: errorResponse('Not found'),
+    409: errorResponse('Conflict'),
+    422: errorResponse('Context window exceeded'),
     500: errorResponse('Internal error'),
   };
 }
@@ -749,6 +1780,7 @@ function errorResponse(description: string): Record<string, unknown> {
   return {
     description,
     type: 'object',
+    additionalProperties: false,
     properties: {
       success: { type: 'boolean', const: false },
       error: { $ref: 'ErrorBody#' },

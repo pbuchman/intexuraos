@@ -24,6 +24,19 @@ local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
   ["/internal/whatsapp/private/media/backfill"] = {
     ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   },
+  ["/internal/whatsapp/pubsub/process-webhook"] = {
+    ["intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+  },
+}
+
+local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
+  {
+    pattern = [[^/internal/whatsapp/private/accounts/[^/]+/erasure(?:/[^/]+)?$]],
+    caller_role = "whatsapp_private_sync",
+    allowed_service_accounts = {
+      ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
 }
 
 local ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS = {
@@ -77,16 +90,23 @@ end
 local function is_service_account_allowed(email)
   local route_allowed_service_accounts = ROUTE_ALLOWED_SERVICE_ACCOUNTS[ngx.var.uri]
   if route_allowed_service_accounts ~= nil then
-    return route_allowed_service_accounts[email] == true
+    return route_allowed_service_accounts[email] == true, nil
+  end
+
+  for _, route_pattern in ipairs(ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS) do
+    if ngx.re.match(ngx.var.uri, route_pattern.pattern, "jo") ~= nil then
+      local allowed = route_pattern.allowed_service_accounts[email] == true
+      return allowed, allowed and route_pattern.caller_role or nil
+    end
   end
 
   for prefix, route_prefix_allowed_service_accounts in pairs(ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS) do
     if string.sub(ngx.var.uri, 1, string.len(prefix)) == prefix then
-      return route_prefix_allowed_service_accounts[email] == true
+      return route_prefix_allowed_service_accounts[email] == true, nil
     end
   end
 
-  return GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email] == true
+  return GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email] == true, nil
 end
 
 local auth_header = ngx.var.http_authorization
@@ -127,7 +147,13 @@ if not aud_ok then
   return deny(ngx.HTTP_UNAUTHORIZED, "invalid_audience")
 end
 
-if type(claims.email) ~= "string" or not is_service_account_allowed(claims.email) then
+local service_account_allowed = false
+local caller_role = nil
+if type(claims.email) == "string" then
+  service_account_allowed, caller_role = is_service_account_allowed(claims.email)
+end
+
+if not service_account_allowed then
   ngx.log(ngx.WARN, "Google OIDC service account is not allowed")
   return deny(ngx.HTTP_FORBIDDEN, "forbidden_service_account")
 end
@@ -139,6 +165,8 @@ end
 
 ngx.req.clear_header("Authorization")
 ngx.req.clear_header("X-Internal-Auth")
+ngx.req.clear_header("X-Internal-Caller-Role")
 ngx.req.clear_header("Cookie")
 ngx.req.clear_header("From")
 ngx.var.edge_internal_auth_token = internal_auth_token
+ngx.var.edge_internal_caller_role = caller_role or ""

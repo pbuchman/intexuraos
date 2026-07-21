@@ -114,11 +114,88 @@ function validateInput(input: PdfConversationExportInput): PdfExportError | null
     };
   }
 
+  if (
+    input.cumulativeContext !== undefined &&
+    (!Number.isInteger(input.cumulativeContext.snapshotCount) ||
+      input.cumulativeContext.snapshotCount < 1 ||
+      Object.values(input.cumulativeContext.counts).some(
+        (count) => !Number.isInteger(count) || count < 0
+      ))
+  ) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export cumulative context summary is invalid',
+    };
+  }
+
+  if (
+    input.completedConversationRevision !== undefined &&
+    (!Number.isInteger(input.completedConversationRevision) ||
+      input.completedConversationRevision < 0)
+  ) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export completed revision must be a non-negative integer',
+    };
+  }
+
   const hasEmptyMessage = input.messages.some((message) => message.text.trim().length === 0);
   if (hasEmptyMessage) {
     return {
       code: 'INVALID_INPUT',
       message: 'Conversation export messages cannot contain empty text',
+    };
+  }
+
+  const hasInvalidAcknowledgment = input.messages.some(
+    (message) => message.acknowledgment?.trim().length === 0
+  );
+  if (hasInvalidAcknowledgment) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export acknowledgments cannot be empty',
+    };
+  }
+
+  const hasInvalidRevision = input.messages.some(
+    (message) =>
+      message.conversationRevision !== undefined &&
+      (!Number.isInteger(message.conversationRevision) ||
+        message.conversationRevision < 0 ||
+        (input.completedConversationRevision !== undefined &&
+          message.conversationRevision > input.completedConversationRevision))
+  );
+  if (hasInvalidRevision) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export contains a message outside the completed revision',
+    };
+  }
+
+  const hasInvalidAttachment = input.messages.some((message) => {
+    const attachment = message.contextAttachment;
+    if (attachment === undefined) return false;
+    if (attachment.capturedAt.trim().length === 0) return true;
+    if (
+      attachment.captureRange !== undefined &&
+      (attachment.captureRange.from.trim().length === 0 ||
+        attachment.captureRange.to.trim().length === 0)
+    ) {
+      return true;
+    }
+    if (
+      attachment.eventRange !== undefined &&
+      (attachment.eventRange.from.trim().length === 0 ||
+        attachment.eventRange.to.trim().length === 0)
+    ) {
+      return true;
+    }
+    return Object.values(attachment.counts).some((count) => !Number.isInteger(count) || count < 0);
+  });
+  if (hasInvalidAttachment) {
+    return {
+      code: 'INVALID_INPUT',
+      message: 'Conversation export contains an invalid context attachment summary',
     };
   }
 
@@ -171,6 +248,14 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
   drawMetadataLine(doc, contentWidth, 'LLM model', input.modelName);
   drawMetadataLine(doc, contentWidth, 'Assistant role', input.assistantRoleLabel);
   drawMetadataLine(doc, contentWidth, 'Initial prompt', toPlainPdfText(input.initialPrompt));
+  if (input.completedConversationRevision !== undefined) {
+    drawMetadataLine(
+      doc,
+      contentWidth,
+      'Completed conversation revision',
+      String(input.completedConversationRevision)
+    );
+  }
 
   doc.moveDown(0.5);
   drawSectionHeading(doc, contentWidth, 'Conversation scope');
@@ -195,6 +280,38 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
   );
   drawMetadataLine(doc, contentWidth, 'Messages excluded', String(input.messageCounts.excluded));
 
+  if (input.cumulativeContext !== undefined) {
+    const cumulative = input.cumulativeContext;
+    drawMetadataLine(doc, contentWidth, 'Context snapshots', String(cumulative.snapshotCount));
+    drawMetadataLine(doc, contentWidth, 'Cumulative included', String(cumulative.counts.included));
+    drawMetadataLine(doc, contentWidth, 'Cumulative omitted', String(cumulative.counts.omitted));
+    drawMetadataLine(
+      doc,
+      contentWidth,
+      'Cumulative completed transcriptions',
+      String(cumulative.counts.completedTranscriptions)
+    );
+    drawMetadataLine(doc, contentWidth, 'Cumulative edits', String(cumulative.counts.edited));
+    drawMetadataLine(
+      doc,
+      contentWidth,
+      'Cumulative redactions',
+      String(cumulative.counts.redacted + cumulative.counts.deleted)
+    );
+    drawMetadataLine(
+      doc,
+      contentWidth,
+      'Cumulative reaction changes',
+      String(cumulative.counts.reactionsChanged)
+    );
+    drawMetadataLine(
+      doc,
+      contentWidth,
+      'Cumulative late ingested',
+      String(cumulative.counts.lateIngested)
+    );
+  }
+
   if (input.omittedBreakdown !== undefined) {
     drawMetadataLine(doc, contentWidth, 'Omitted breakdown', '');
     for (const [key, value] of Object.entries(input.omittedBreakdown)) {
@@ -214,7 +331,9 @@ function drawConversation(doc: PDFKit.PDFDocument, input: PdfConversationExportI
       formatTimestamp(message.createdAt),
       message.text,
       input.modelName,
-      input.assistantRoleLabel
+      input.assistantRoleLabel,
+      message.contextAttachment,
+      message.acknowledgment
     );
   }
 
@@ -254,7 +373,7 @@ function drawIndentedMetadataLine(
 ): void {
   const indent = 12;
   const startX = doc.page.margins.left + indent;
-  const lineText = `- ${label}: ${value}`;
+  const lineText = value.length > 0 ? `- ${label}: ${value}` : `- ${label}`;
   doc.font(fontForText(lineText, 'regular')).fontSize(10);
   ensureSpace(doc, doc.heightOfString(lineText, { width: contentWidth - indent }) + BLOCK_GAP);
   doc.fillColor('#4b5563');
@@ -272,7 +391,9 @@ function drawMessage(
   createdAt: string,
   text: string,
   modelName: string,
-  assistantRoleLabel: string
+  assistantRoleLabel: string,
+  contextAttachment: PdfConversationExportInput['messages'][number]['contextAttachment'],
+  acknowledgment: string | undefined
 ): void {
   const roleLabel = getMessageRoleLabel(role, modelName, assistantRoleLabel);
   const headerText = `${roleLabel} ${createdAt}`;
@@ -292,9 +413,71 @@ function drawMessage(
   });
 
   doc.moveDown(0.2);
+  if (contextAttachment !== undefined) {
+    drawContextAttachmentSummary(doc, contentWidth, contextAttachment);
+    doc.moveDown(0.35);
+  }
+  if (acknowledgment !== undefined) {
+    drawAcknowledgment(doc, contentWidth, acknowledgment);
+    doc.moveDown(0.35);
+  }
   drawTextBlocks(doc, contentWidth, blocks);
 
   doc.moveDown(0.8);
+}
+
+function drawContextAttachmentSummary(
+  doc: PDFKit.PDFDocument,
+  contentWidth: number,
+  attachment: NonNullable<PdfConversationExportInput['messages'][number]['contextAttachment']>
+): void {
+  const counts = attachment.counts;
+  const lines = [
+    `Captured: ${formatTimestamp(attachment.capturedAt)}`,
+    ...(attachment.captureRange === undefined
+      ? []
+      : [
+          `Checked range: ${formatDateRange(
+            attachment.captureRange.from,
+            attachment.captureRange.to
+          )}`,
+        ]),
+    ...(attachment.eventRange === undefined
+      ? []
+      : [
+          `Message range: ${formatDateRange(attachment.eventRange.from, attachment.eventRange.to)}`,
+        ]),
+    `Included: ${String(counts.included)}`,
+    `Excluded: ${String(counts.excluded)}`,
+    ...(counts.completedTranscriptions === 0
+      ? []
+      : [`Completed transcriptions: ${String(counts.completedTranscriptions)}`]),
+    ...(counts.edited === 0 ? [] : [`Edits: ${String(counts.edited)}`]),
+    ...(counts.redacted + counts.deleted === 0
+      ? []
+      : [`Redactions: ${String(counts.redacted + counts.deleted)}`]),
+    ...(counts.reactionsChanged === 0
+      ? []
+      : [`Reaction changes: ${String(counts.reactionsChanged)}`]),
+    ...(counts.lateIngested === 0 ? [] : [`Late ingested: ${String(counts.lateIngested)}`]),
+  ];
+  drawSectionHeading(doc, contentWidth, 'WhatsApp context update');
+  for (const line of lines) {
+    drawIndentedMetadataLine(doc, contentWidth, line, '');
+  }
+}
+
+function drawAcknowledgment(
+  doc: PDFKit.PDFDocument,
+  contentWidth: number,
+  acknowledgment: string
+): void {
+  const heading = 'Context acknowledgment';
+  drawSectionHeading(doc, contentWidth, heading);
+  const plainText = toPlainPdfText(acknowledgment);
+  doc.font(fontForText(plainText, 'regular')).fontSize(10).fillColor('#1f2937');
+  ensureSpace(doc, doc.heightOfString(plainText, { width: contentWidth }) + BLOCK_GAP);
+  doc.text(plainText, { width: contentWidth, lineGap: 1.5 });
 }
 
 function getMessageRoleLabel(

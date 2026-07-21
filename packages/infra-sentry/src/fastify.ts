@@ -16,6 +16,10 @@
 import * as Sentry from '@sentry/node';
 import type { FastifyError, FastifyInstance, FastifyReply } from 'fastify';
 
+const COARSE_DIAGNOSTIC_HEADERS = ['content-type', 'content-length'] as const;
+const AUTHENTICATION_HEADERS = ['authorization', 'x-internal-auth'] as const;
+const REDACTED_HEADER_VALUE = '[REDACTED]';
+
 /**
  * Augmented FastifyReply with .fail() method from common-http.
  */
@@ -120,11 +124,12 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
 
     // Try to send to Sentry, but don't let it break error handling
     try {
+      const safeRoute = getSafeRequestRoute(request);
       Sentry.withScope((scope) => {
-        scope.setTag('url', request.url);
+        scope.setTag('url', safeRoute);
         scope.setTag('method', request.method);
         scope.setContext('request', {
-          url: request.url,
+          url: safeRoute,
           method: request.method,
           headers: sanitizeHeaders(request.headers),
         });
@@ -141,23 +146,33 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
   });
 }
 
+function getSafeRequestRoute(request: { routeOptions: { url: string | undefined } }): string {
+  const routeTemplate = request.routeOptions.url;
+  return typeof routeTemplate === 'string' && routeTemplate.length > 0
+    ? routeTemplate
+    : 'unmatched_route';
+}
+
 /**
- * Remove sensitive headers before sending to Sentry.
+ * Select the only request headers safe enough for telemetry.
  */
 function sanitizeHeaders(
   headers: Record<string, string | string[] | undefined>
 ): Record<string, string> {
-  const SENSITIVE_HEADERS = ['authorization', 'x-internal-auth', 'cookie', 'x-api-key', 'apikey'];
+  const safeHeaders: Record<string, string> = {};
 
-  const sanitized: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    const lowerKey = key.toLowerCase();
-    if (SENSITIVE_HEADERS.includes(lowerKey)) {
-      sanitized[key] = '[REDACTED]';
-    } else if (value !== undefined) {
-      // Handle both string and array values (HTTP/2 can have array headers)
-      sanitized[key] = typeof value === 'string' ? value : (value[0] ?? '');
+  for (const header of COARSE_DIAGNOSTIC_HEADERS) {
+    const value = headers[header];
+    if (typeof value === 'string') {
+      safeHeaders[header] = value;
     }
   }
-  return sanitized;
+
+  for (const header of AUTHENTICATION_HEADERS) {
+    if (headers[header] !== undefined) {
+      safeHeaders[header] = REDACTED_HEADER_VALUE;
+    }
+  }
+
+  return safeHeaders;
 }

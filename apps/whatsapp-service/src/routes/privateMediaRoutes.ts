@@ -2,7 +2,13 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth, validateInternalAuth } from '@intexuraos/common-http';
-import { createPrivateWhatsAppMessageId, type PrivateWhatsAppMessage } from '../domain/whatsapp/index.js';
+import {
+  createPrivateWhatsAppMessageId,
+  type MediaStoragePort,
+  type PrivateWhatsAppAccount,
+  type PrivateWhatsAppMessage,
+  type PrivateWhatsAppRepository,
+} from '../domain/whatsapp/index.js';
 import { getExtensionFromMimeType } from '../domain/whatsapp/utils/mimeType.js';
 import { getServices } from '../services.js';
 
@@ -79,6 +85,68 @@ function isVideoMimeType(mimeType: string): boolean {
 
 function isSupportedUploadMimeType(mimeType: string): boolean {
   return isImageMimeType(mimeType) || isAudioMimeType(mimeType) || isVideoMimeType(mimeType);
+}
+
+function privateAccountGeneration(account: PrivateWhatsAppAccount): string {
+  return account.generationId ?? account.sourceAccountId;
+}
+
+async function cleanupPrivateMediaUploads(
+  mediaStorage: Pick<MediaStoragePort, 'delete'>,
+  gcsPaths: string[]
+): Promise<boolean> {
+  const outcomes = await Promise.allSettled(
+    gcsPaths.map(async (gcsPath) => await mediaStorage.delete(gcsPath))
+  );
+  return outcomes.every(
+    (outcome) => outcome.status === 'fulfilled' && outcome.value.ok
+  );
+}
+
+async function verifyPrivateMediaUploadFence(input: {
+  repository: Pick<PrivateWhatsAppRepository, 'getActiveAccountBySourceAccountId'>;
+  mediaStorage: Pick<MediaStoragePort, 'delete'>;
+  admittedAccount: PrivateWhatsAppAccount;
+  gcsPaths: string[];
+}): Promise<'active' | 'fenced' | 'lookup_failed' | 'cleanup_failed'> {
+  const current = await input.repository.getActiveAccountBySourceAccountId(
+    input.admittedAccount.sourceAccountId
+  );
+  if (
+    current.ok &&
+    current.value !== null &&
+    current.value.userId === input.admittedAccount.userId &&
+    current.value.sourceAccountId === input.admittedAccount.sourceAccountId &&
+    privateAccountGeneration(current.value) === privateAccountGeneration(input.admittedAccount)
+  ) {
+    return 'active';
+  }
+
+  const cleaned = await cleanupPrivateMediaUploads(input.mediaStorage, input.gcsPaths);
+  if (!cleaned) return 'cleanup_failed';
+  return current.ok ? 'fenced' : 'lookup_failed';
+}
+
+async function replyForPrivateMediaFence(
+  reply: FastifyReply,
+  result: Exclude<
+    Awaited<ReturnType<typeof verifyPrivateMediaUploadFence>>,
+    'active'
+  >
+): Promise<FastifyReply> {
+  if (result === 'fenced') {
+    return await reply.fail(
+      'CONFLICT',
+      'Private WhatsApp account generation is being erased'
+    );
+  }
+  if (result === 'lookup_failed') {
+    return await reply.fail(
+      'INTERNAL_ERROR',
+      'Private WhatsApp media generation check failed'
+    );
+  }
+  return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp media cleanup failed');
 }
 
 function isPrivateImageMessage(message: PrivateWhatsAppMessage): boolean {
@@ -365,6 +433,7 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             400: privateMediaErrorResponse('Invalid request'),
             401: privateMediaErrorResponse('Unauthorized'),
             404: privateMediaErrorResponse('Private WhatsApp account not found'),
+            409: privateMediaErrorResponse('Private WhatsApp account generation changed'),
             413: privateMediaErrorResponse('Payload too large'),
             500: privateMediaErrorResponse('Internal error'),
             502: privateMediaErrorResponse('Downstream error'),
@@ -440,10 +509,26 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           return await reply.fail('DOWNSTREAM_ERROR', uploadResult.error.message);
         }
 
+        const originalFence = await verifyPrivateMediaUploadFence({
+          repository: services.privateWhatsAppRepository,
+          mediaStorage: services.mediaStorage,
+          admittedAccount: accountResult.value,
+          gcsPaths: [uploadResult.value.gcsPath],
+        });
+        if (originalFence !== 'active') {
+          return await replyForPrivateMediaFence(reply, originalFence);
+        }
+
         let thumbnailGcsPath: string | undefined;
         if (isImageMimeType(mimeType)) {
           const thumbnailResult = await services.thumbnailGenerator.generate(buffer);
           if (!thumbnailResult.ok) {
+            const cleaned = await cleanupPrivateMediaUploads(services.mediaStorage, [
+              uploadResult.value.gcsPath,
+            ]);
+            if (!cleaned) {
+              return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp media cleanup failed');
+            }
             return await reply.fail('DOWNSTREAM_ERROR', thumbnailResult.error.message);
           }
 
@@ -456,9 +541,25 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             thumbnailResult.value.mimeType
           );
           if (!thumbnailUploadResult.ok) {
+            const cleaned = await cleanupPrivateMediaUploads(services.mediaStorage, [
+              uploadResult.value.gcsPath,
+            ]);
+            if (!cleaned) {
+              return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp media cleanup failed');
+            }
             return await reply.fail('DOWNSTREAM_ERROR', thumbnailUploadResult.error.message);
           }
           thumbnailGcsPath = thumbnailUploadResult.value.gcsPath;
+
+          const thumbnailFence = await verifyPrivateMediaUploadFence({
+            repository: services.privateWhatsAppRepository,
+            mediaStorage: services.mediaStorage,
+            admittedAccount: accountResult.value,
+            gcsPaths: [uploadResult.value.gcsPath, thumbnailGcsPath],
+          });
+          if (thumbnailFence !== 'active') {
+            return await replyForPrivateMediaFence(reply, thumbnailFence);
+          }
         }
 
         return await reply.ok({

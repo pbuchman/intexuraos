@@ -61,6 +61,11 @@ export interface IngestPrivateWhatsAppEventInput {
       emoji: string;
       targetMatrixEventId: string;
     };
+    relation?: {
+      kind: 'replacement' | 'redaction';
+      targetMatrixEventId: string;
+      applicationStatus: 'pending';
+    };
   };
   rawMatrixEvent: unknown;
 }
@@ -78,6 +83,9 @@ type ParseMessageResult =
   | RejectedEvent;
 type ParseMediaResult =
   | { ok: true; media?: IngestPrivateWhatsAppEventInput['message']['media'] }
+  | RejectedEvent;
+type ParseRelationResult =
+  | { ok: true; relation?: IngestPrivateWhatsAppEventInput['message']['relation'] }
   | RejectedEvent;
 
 interface RejectedEvent {
@@ -316,7 +324,6 @@ function parseMessage(
   ) {
     return rejectEvent(matrixEventId, 'unsupported_direction');
   }
-
   const message: IngestPrivateWhatsAppEventInput['message'] = {
     direction,
     type: readOptionalString(rawMessage, 'type') ?? 'unknown',
@@ -324,6 +331,12 @@ function parseMessage(
   const text = readOptionalString(rawMessage, 'text');
   if (typeof text === 'string') {
     message.text = text;
+  }
+
+  const relation = parseRelation(rawEvent, rawMessage, matrixEventId);
+  if (!relation.ok) return relation;
+  if (relation.relation !== undefined) {
+    message.relation = relation.relation;
   }
 
   const media = parseMedia(rawMessage, matrixEventId);
@@ -458,6 +471,67 @@ function parseReaction(
   return { emoji: key, targetMatrixEventId };
 }
 
+function parseRelation(
+  rawEvent: Record<string, unknown>,
+  rawMessage: Record<string, unknown>,
+  matrixEventId: string
+): ParseRelationResult {
+  const explicitRelation = rawMessage['relation'];
+  if (explicitRelation !== undefined) {
+    if (!isRecord(explicitRelation)) {
+      return rejectEvent(matrixEventId, 'invalid_context_relation');
+    }
+    const kind = readOptionalString(explicitRelation, 'kind');
+    const targetMatrixEventId = readOptionalString(explicitRelation, 'targetMatrixEventId');
+    if (!isContextRelationKind(kind) || !isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
+      return rejectEvent(matrixEventId, 'invalid_context_relation');
+    }
+    return {
+      ok: true,
+      relation: { kind, targetMatrixEventId, applicationStatus: 'pending' },
+    };
+  }
+
+  const rawMatrixEvent = rawEvent['rawMatrixEvent'] ?? rawEvent;
+  if (!isRecord(rawMatrixEvent)) {
+    return { ok: true };
+  }
+  const eventType = readOptionalString(rawMatrixEvent, 'type');
+  const content = isRecord(rawMatrixEvent['content']) ? rawMatrixEvent['content'] : {};
+  if (eventType === 'm.room.redaction') {
+    const targetMatrixEventId =
+      readOptionalString(rawMatrixEvent, 'redacts') ?? readOptionalString(content, 'redacts');
+    if (!isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
+      return rejectEvent(matrixEventId, 'invalid_context_relation');
+    }
+    return {
+      ok: true,
+      relation: { kind: 'redaction', targetMatrixEventId, applicationStatus: 'pending' },
+    };
+  }
+
+  const relatesTo = isRecord(content['m.relates_to']) ? content['m.relates_to'] : undefined;
+  if (relatesTo === undefined || readOptionalString(relatesTo, 'rel_type') !== 'm.replace') {
+    return { ok: true };
+  }
+  const targetMatrixEventId = readOptionalString(relatesTo, 'event_id');
+  if (!isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
+    return rejectEvent(matrixEventId, 'invalid_context_relation');
+  }
+  return {
+    ok: true,
+    relation: { kind: 'replacement', targetMatrixEventId, applicationStatus: 'pending' },
+  };
+}
+
+function isContextRelationKind(value: unknown): value is 'replacement' | 'redaction' {
+  return value === 'replacement' || value === 'redaction';
+}
+
+function isValidRelationTarget(value: unknown, matrixEventId: string): value is string {
+  return typeof value === 'string' && value.trim() !== '' && value !== matrixEventId;
+}
+
 function rejectEvent(matrixEventId: string, reason: string): RejectedEvent {
   return { ok: false, matrixEventId, reason };
 }
@@ -543,6 +617,9 @@ function toStoreInput(
   }
   if (event.message.reaction !== undefined) {
     storeInput.message.reaction = event.message.reaction;
+  }
+  if (event.message.relation !== undefined) {
+    storeInput.message.relation = event.message.relation;
   }
 
   return storeInput;

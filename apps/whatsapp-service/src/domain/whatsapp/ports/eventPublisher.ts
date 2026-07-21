@@ -7,6 +7,7 @@ import type { WhatsAppError } from './repositories.js';
 import type {
   AudioStoredEvent,
   ConversationAssistantPreparationRequestedEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   MediaCleanupEvent,
@@ -59,5 +60,10 @@ export interface EventPublisherPort {
   /** Queue durable preparation of a frozen Conversation Assistant context. */
   publishConversationAssistantPreparation(
     event: ConversationAssistantPreparationRequestedEvent
+  ): Promise<Result<void, WhatsAppError>>;
+
+  /** Queue preparation of one immutable Conversation Assistant context update. */
+  publishConversationAssistantContextAttachmentPreparation(
+    event: ConversationAssistantContextAttachmentPreparationRequestedEvent
   ): Promise<Result<void, WhatsAppError>>;
 }

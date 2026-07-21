@@ -4,7 +4,13 @@
  */
 import { Storage } from '@google-cloud/storage';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import type { WhatsAppError, MediaStoragePort, UploadResult } from '../../domain/whatsapp/index.js';
+import type {
+  WhatsAppError,
+  MediaStoragePort,
+  PrivateMediaDeletionBatchInput,
+  PrivateMediaDeletionBatchResult,
+  UploadResult,
+} from '../../domain/whatsapp/index.js';
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 900; // 15 minutes
 
@@ -177,6 +183,46 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
       return err({
         code: 'PERSISTENCE_ERROR',
         message: `Failed to delete file: ${getErrorMessage(error, 'Unknown GCS error')}`,
+      });
+    }
+  }
+
+  async deletePrivateMediaBatch(
+    input: PrivateMediaDeletionBatchInput
+  ): Promise<Result<PrivateMediaDeletionBatchResult, WhatsAppError>> {
+    const prefix = `whatsapp/private/${input.userId}/`;
+    try {
+      const options = {
+        autoPaginate: false as const,
+        maxResults: input.limit,
+        prefix,
+        ...(input.cursor === undefined ? {} : { startOffset: input.cursor }),
+      };
+      const [files] = await this.storage.bucket(this.bucketName).getFiles(options);
+      const lastFile = files.at(-1);
+      if (lastFile === undefined) {
+        return ok({ status: 'empty', deletedCount: 0 });
+      }
+
+      const outcomes = await Promise.allSettled(
+        files.map(async (file) => {
+          await file.delete({ ignoreNotFound: true });
+        })
+      );
+      const deletedCount = outcomes.filter((outcome) => outcome.status === 'fulfilled').length;
+      if (deletedCount !== files.length) {
+        return ok({ status: 'retry', deletedCount });
+      }
+
+      return ok({
+        status: 'advanced',
+        deletedCount,
+        nextCursor: lastFile.name,
+      });
+    } catch {
+      return err({
+        code: 'PERSISTENCE_ERROR',
+        message: 'Failed to list private media for erasure',
       });
     }
   }

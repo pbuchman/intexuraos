@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { deflateRawSync } from 'node:zlib';
+import { vi } from 'vitest';
 import { beforeEach, createToken, describe, expect, it, setupTestContext } from './testUtils.js';
 import { FakeThumbnailGeneratorPort } from './fakes.js';
 import { createPrivateWhatsAppMessageId } from '../domain/whatsapp/index.js';
@@ -39,6 +40,7 @@ describe('Private WhatsApp Media Routes', () => {
       id: 'user-123',
       userId: 'user-123',
       sourceAccountId: 'private-source-123',
+      generationId: 'private-generation-1',
       phoneNumberNormalized: '48123456789',
       displayName: '+48123456789',
       status: 'active',
@@ -200,6 +202,210 @@ describe('Private WhatsApp Media Routes', () => {
     );
     expect(body.data.media.thumbnailGcsPath).toBeUndefined();
   });
+
+  it('uses the source account id as the upload fence for legacy accounts without a generation id', async () => {
+    ctx.privateWhatsAppRepository.setAccount({
+      id: 'user-123',
+      userId: 'user-123',
+      sourceAccountId: 'private-source-123',
+      phoneNumberNormalized: '48123456789',
+      displayName: '+48123456789',
+      status: 'active',
+      createdAt: '2026-06-22T00:00:00.000Z',
+      updatedAt: '2026-06-22T00:00:00.000Z',
+      schemaVersion: 1,
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24legacy&mxcUri=mxc%3A%2F%2Fhome-dev%2Flegacy&mimeType=audio%2Fogg&mediaId=legacy',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('legacy-bytes'),
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('removes an in-flight upload when account erasure engages after admission', async () => {
+    const upload = ctx.mediaStorage.uploadPrivateMedia.bind(ctx.mediaStorage);
+    vi.spyOn(ctx.mediaStorage, 'uploadPrivateMedia').mockImplementation(async (...args) => {
+      const result = await upload(...args);
+      ctx.privateWhatsAppRepository.setAccount({
+        id: 'user-123',
+        userId: 'user-123',
+        sourceAccountId: 'private-source-123',
+        generationId: 'private-generation-1',
+        phoneNumberNormalized: '48123456789',
+        displayName: '+48123456789',
+        status: 'disabled',
+        erasureStatus: 'erasing',
+        erasureRequestId: 'erase-1',
+        createdAt: '2026-06-22T00:00:00.000Z',
+        updatedAt: '2026-06-22T00:00:00.000Z',
+        schemaVersion: 1,
+      });
+      return result;
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24race&mxcUri=mxc%3A%2F%2Fhome-dev%2Frace&mimeType=audio%2Fogg&mediaId=race',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('race-bytes'),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(ctx.mediaStorage.getAllFiles().size).toBe(0);
+  });
+
+  it('removes an in-flight upload when the source account is replaced by another generation', async () => {
+    const upload = ctx.mediaStorage.uploadPrivateMedia.bind(ctx.mediaStorage);
+    vi.spyOn(ctx.mediaStorage, 'uploadPrivateMedia').mockImplementation(async (...args) => {
+      const result = await upload(...args);
+      ctx.privateWhatsAppRepository.setAccount({
+        id: 'user-123',
+        userId: 'user-123',
+        sourceAccountId: 'private-source-123',
+        generationId: 'private-generation-2',
+        phoneNumberNormalized: '48123456789',
+        displayName: '+48123456789',
+        status: 'active',
+        createdAt: '2026-06-22T00:00:00.000Z',
+        updatedAt: '2026-06-22T00:01:00.000Z',
+        schemaVersion: 1,
+      });
+      return result;
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24replacement&mxcUri=mxc%3A%2F%2Fhome-dev%2Freplacement&mimeType=video%2Fmp4&mediaId=replacement',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('replacement-bytes'),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(ctx.mediaStorage.getAllFiles().size).toBe(0);
+  });
+
+  it('rechecks the erasure fence after thumbnail upload and removes both objects', async () => {
+    const uploadThumbnail = ctx.mediaStorage.uploadPrivateThumbnail.bind(ctx.mediaStorage);
+    vi.spyOn(ctx.mediaStorage, 'uploadPrivateThumbnail').mockImplementation(async (...args) => {
+      const result = await uploadThumbnail(...args);
+      ctx.privateWhatsAppRepository.setAccount({
+        id: 'user-123',
+        userId: 'user-123',
+        sourceAccountId: 'private-source-123',
+        generationId: 'private-generation-1',
+        phoneNumberNormalized: '48123456789',
+        displayName: '+48123456789',
+        status: 'disabled',
+        erasureStatus: 'erasing',
+        erasureRequestId: 'erase-1',
+        createdAt: '2026-06-22T00:00:00.000Z',
+        updatedAt: '2026-06-22T00:01:00.000Z',
+        schemaVersion: 1,
+      });
+      return result;
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image-race&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage-race&mimeType=image%2Fjpeg&mediaId=image-race',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('image-race-bytes'),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(ctx.mediaStorage.getAllFiles().size).toBe(0);
+  });
+
+  it('removes an uploaded object when the post-upload generation check fails', async () => {
+    const upload = ctx.mediaStorage.uploadPrivateMedia.bind(ctx.mediaStorage);
+    vi.spyOn(ctx.mediaStorage, 'uploadPrivateMedia').mockImplementation(async (...args) => {
+      const result = await upload(...args);
+      ctx.privateWhatsAppRepository.failNext({
+        code: 'PERSISTENCE_ERROR',
+        message: 'sensitive repository detail',
+      });
+      return result;
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24check-failed&mxcUri=mxc%3A%2F%2Fhome-dev%2Fcheck-failed&mimeType=audio%2Fogg&mediaId=check-failed',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('check-failed-bytes'),
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(ctx.mediaStorage.getAllFiles().size).toBe(0);
+    expect(JSON.parse(response.body).error.message).toBe(
+      'Private WhatsApp media generation check failed'
+    );
+    expect(response.body).not.toContain('sensitive repository detail');
+  });
+
+  it.each(['result_error', 'thrown_error'] as const)(
+    'fails closed when fenced upload cleanup ends with $mode',
+    async (mode) => {
+      const upload = ctx.mediaStorage.uploadPrivateMedia.bind(ctx.mediaStorage);
+      vi.spyOn(ctx.mediaStorage, 'uploadPrivateMedia').mockImplementation(async (...args) => {
+        const result = await upload(...args);
+        ctx.privateWhatsAppRepository.setAccount({
+          id: 'user-123',
+          userId: 'user-123',
+          sourceAccountId: 'private-source-123',
+          generationId: 'private-generation-1',
+          phoneNumberNormalized: '48123456789',
+          displayName: '+48123456789',
+          status: 'disabled',
+          erasureStatus: 'erasing',
+          erasureRequestId: 'erase-1',
+          createdAt: '2026-06-22T00:00:00.000Z',
+          updatedAt: '2026-06-22T00:01:00.000Z',
+          schemaVersion: 1,
+        });
+        if (mode === 'result_error') {
+          ctx.mediaStorage.setFailDelete(true);
+        } else {
+          ctx.mediaStorage.setThrowOnDelete(true);
+        }
+        return result;
+      });
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24cleanup-failed&mxcUri=mxc%3A%2F%2Fhome-dev%2Fcleanup-failed&mimeType=audio%2Fogg&mediaId=cleanup-failed',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/octet-stream',
+        },
+        payload: Buffer.from('cleanup-failed-bytes'),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body).error.message).toBe(
+        'Private WhatsApp media cleanup failed'
+      );
+      expect(ctx.mediaStorage.getAllFiles().size).toBe(1);
+    }
+  );
 
   it('rejects uploads for unknown private source accounts', async () => {
     const response = await ctx.app.inject({
@@ -413,6 +619,36 @@ describe('Private WhatsApp Media Routes', () => {
 
     expect(response.statusCode).toBe(502);
   });
+
+  it.each(['generation', 'upload'] as const)(
+    'returns 500 when thumbnail $failure failure is followed by original cleanup failure',
+    async (failure) => {
+      if (failure === 'generation') {
+        const thumbnailGenerator = new FakeThumbnailGeneratorPort();
+        thumbnailGenerator.setFail(true);
+        setServices({ ...getServices(), thumbnailGenerator });
+      } else {
+        ctx.mediaStorage.setFailThumbnailUpload(true);
+      }
+      ctx.mediaStorage.setFailDelete(true);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24cleanup&mxcUri=mxc%3A%2F%2Fhome-dev%2Fcleanup&mimeType=image%2Fjpeg&mediaId=cleanup',
+        headers: {
+          'x-internal-auth': 'test-internal-token',
+          'content-type': 'application/octet-stream',
+        },
+        payload: Buffer.from('image-bytes'),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body).error.message).toBe(
+        'Private WhatsApp media cleanup failed'
+      );
+      expect(ctx.mediaStorage.getAllFiles().size).toBe(1);
+    }
+  );
 
   it('returns owner-checked signed URLs for private image thumbnails', async () => {
     const token = await createToken({ sub: 'user-123' });

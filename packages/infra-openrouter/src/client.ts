@@ -136,6 +136,24 @@ class OpenRouterApiError extends Error {
   }
 }
 
+function toOpenRouterUsageErrorCategory(error: unknown): string {
+  if (error instanceof OpenRouterApiError) {
+    return `OPENROUTER_HTTP_${String(error.status)}`;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return 'OPENROUTER_TIMEOUT';
+  }
+  const message = getErrorMessage(error).toLowerCase();
+  if (
+    message.includes('timeout') ||
+    message.includes('fetch failed') ||
+    message.includes('aborted')
+  ) {
+    return 'OPENROUTER_TIMEOUT';
+  }
+  return 'OPENROUTER_CLIENT_ERROR';
+}
+
 interface OpenRouterStreamChunk {
   choices?: { delta?: { content?: string }; error?: { message?: string } }[];
   usage?: OpenRouterUsage;
@@ -319,7 +337,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const durationMs = Date.now() - start;
           const errorText = await response.text();
           const apiError = new OpenRouterApiError(response.status, errorText);
-          const errorMsg = getErrorMessage(apiError);
           const emptyUsage: NormalizedUsage = {
             inputTokens: 0,
             outputTokens: 0,
@@ -331,7 +348,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             emptyUsage,
             false,
             durationMs,
-            errorMsg,
+            toOpenRouterUsageErrorCategory(apiError),
             undefined,
             options?.promptType ?? RESEARCH_PROMPT_TYPE,
             options?.correlation
@@ -378,7 +395,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         return ok({ content, sources, usage: normalized });
       } catch (error) {
         const durationMs = Date.now() - start;
-        const errorMsg = getErrorMessage(error);
         const emptyUsage: NormalizedUsage = {
           inputTokens: 0,
           outputTokens: 0,
@@ -390,7 +406,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           emptyUsage,
           false,
           durationMs,
-          errorMsg,
+          toOpenRouterUsageErrorCategory(error),
           undefined,
           options?.promptType ?? RESEARCH_PROMPT_TYPE,
           options?.correlation
@@ -577,7 +593,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       return ok({ content: result.content, usage });
     } catch (error) {
       const durationMs = Date.now() - start;
-      const errorMsg = getErrorMessage(error);
       const emptyUsage: NormalizedUsage = {
         inputTokens: 0,
         outputTokens: 0,
@@ -589,7 +604,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         emptyUsage,
         false,
         durationMs,
-        errorMsg,
+        toOpenRouterUsageErrorCategory(error),
         undefined,
         options.promptType,
         options.correlation
@@ -659,7 +674,6 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       });
     } catch (error) {
       const durationMs = Date.now() - start;
-      const errorMsg = getErrorMessage(error);
       const emptyUsage: NormalizedUsage = {
         inputTokens: 0,
         outputTokens: 0,
@@ -671,7 +685,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         emptyUsage,
         false,
         durationMs,
-        errorMsg,
+        toOpenRouterUsageErrorCategory(error),
         undefined,
         options.promptType,
         options.correlation

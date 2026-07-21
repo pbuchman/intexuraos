@@ -518,6 +518,7 @@ describe('Fishing Assistant Firestore knowledge repositories', () => {
         data: {
           userId: 'user-1',
           pageId: 'page-1',
+          index: null,
           createdAt: 'not-a-timestamp',
         },
       },

@@ -320,7 +320,7 @@ function getWhatsAppMatrixEventDirection(event, config) {
   }
 
   const type = readString(event, 'type');
-  if (type === 'm.reaction' || type === 'm.sticker') {
+  if (type === 'm.reaction' || type === 'm.sticker' || type === 'm.room.redaction') {
     return direction;
   }
   if (type !== 'm.room.message') {
@@ -784,12 +784,43 @@ function mergeRoomContext(existing, next) {
 
 function matrixEventToMessage(event, direction) {
   const type = readString(event, 'type');
+  const eventId = readString(event, 'event_id');
   const content = isRecord(event.content) ? event.content : {};
+
+  if (type === 'm.room.redaction') {
+    const targetMatrixEventId = readString(event, 'redacts') ?? readString(content, 'redacts');
+    if (targetMatrixEventId === undefined || targetMatrixEventId === eventId) {
+      return null;
+    }
+    return {
+      direction,
+      type: 'redaction',
+      relation: {
+        kind: 'redaction',
+        targetMatrixEventId,
+        applicationStatus: 'pending',
+      },
+    };
+  }
 
   if (type === 'm.reaction') {
     const relation = isRecord(content['m.relates_to']) ? content['m.relates_to'] : {};
     const reactionText = readString(relation, 'key');
-    return withOptionalText({ direction, type: 'reaction' }, reactionText);
+    const targetMatrixEventId = readString(relation, 'event_id');
+    if (
+      readString(relation, 'rel_type') !== 'm.annotation' ||
+      reactionText === undefined ||
+      targetMatrixEventId === undefined ||
+      targetMatrixEventId === eventId
+    ) {
+      return null;
+    }
+    return {
+      direction,
+      type: 'reaction',
+      text: reactionText,
+      reaction: { emoji: reactionText, targetMatrixEventId },
+    };
   }
 
   if (type === 'm.sticker') {
@@ -801,6 +832,40 @@ function matrixEventToMessage(event, direction) {
 
   if (type !== 'm.room.message') {
     return null;
+  }
+
+  const relatesTo = isRecord(content['m.relates_to']) ? content['m.relates_to'] : {};
+  if (readString(relatesTo, 'rel_type') === 'm.replace') {
+    const targetMatrixEventId = readString(relatesTo, 'event_id');
+    const replacementContent = isRecord(content['m.new_content'])
+      ? content['m.new_content']
+      : undefined;
+    if (
+      targetMatrixEventId === undefined ||
+      targetMatrixEventId === eventId ||
+      replacementContent === undefined
+    ) {
+      return null;
+    }
+    const replacementType = messageTypeFromMatrixMsgtype(readString(replacementContent, 'msgtype'));
+    if (replacementType === undefined) {
+      return null;
+    }
+    const replacement = withOptionalText(
+      {
+        direction,
+        type: replacementType,
+        relation: {
+          kind: 'replacement',
+          targetMatrixEventId,
+          applicationStatus: 'pending',
+        },
+      },
+      readString(replacementContent, 'body')
+    );
+    return replacementType === 'text'
+      ? replacement
+      : withMediaFromContent(replacement, replacementContent);
   }
 
   const msgtype = readString(content, 'msgtype');

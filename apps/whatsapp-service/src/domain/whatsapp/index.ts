@@ -87,8 +87,28 @@ export type {
   UpdatePrivateWhatsAppMessageStoredMediaInput,
   UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionResult,
   UpsertPrivateWhatsAppAccountInput,
 } from './models/PrivateWhatsApp.js';
+
+export type {
+  PrivateWhatsAppContextChange,
+  PrivateWhatsAppContextChangeType,
+  PrivateWhatsAppContextJournalQueryInput,
+  PrivateWhatsAppContextJournalQueryResult,
+  PrivateWhatsAppContextMessagesByIdsInput,
+  PrivateWhatsAppContextProjection,
+  PrivateWhatsAppOwnedChatInput,
+} from './models/PrivateWhatsAppContextJournal.js';
+
+export {
+  emptyPrivateWhatsAppErasureCounts,
+  type PrivateWhatsAppErasureCounts,
+  type PrivateWhatsAppErasureRequest,
+  type PrivateWhatsAppErasureStage,
+  type PrivateWhatsAppErasureStatus,
+  type PrivateWhatsAppErasureWorkItem,
+} from './models/PrivateWhatsAppErasure.js';
 
 // Ports
 export type {
@@ -103,7 +123,12 @@ export type {
   PhoneVerificationRepository,
 } from './ports/repositories.js';
 
-export type { MediaStoragePort, UploadResult } from './ports/mediaStorage.js';
+export type {
+  MediaStoragePort,
+  PrivateMediaDeletionBatchInput,
+  PrivateMediaDeletionBatchResult,
+  UploadResult,
+} from './ports/mediaStorage.js';
 
 export type {
   WhatsAppCloudApiPort,
@@ -130,6 +155,13 @@ export type { NotificationPreferencesRepository } from './ports/notificationPref
 
 export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
 
+export type {
+  AdvancePrivateWhatsAppErasureResult,
+  PrivateWhatsAppErasurePublisher,
+  PrivateWhatsAppErasureRepository,
+  StartPrivateWhatsAppErasureResult,
+} from './ports/privateWhatsAppErasure.js';
+
 export {
   createPrivateWhatsAppChatId,
   createPrivateWhatsAppMessageId,
@@ -140,6 +172,7 @@ export {
 // Events
 export type {
   AudioStoredEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ConversationAssistantPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
@@ -218,6 +251,13 @@ export {
   shouldDeliverMessage,
   type ShouldDeliverMessageInput,
 } from './usecases/shouldDeliverMessage.js';
+
+export {
+  processPrivateWhatsAppErasureBatch,
+  requestPrivateWhatsAppErasure,
+  type PrivateWhatsAppErasureDeps,
+  type RequestPrivateWhatsAppErasureResult,
+} from './usecases/privateWhatsAppErasure.js';
 
 // Utilities
 export { normalizePhoneNumber } from './utils/index.js';

@@ -3,6 +3,36 @@ import type { ConversationAssistantDateRange } from '@intexuraos/llm-contract';
 
 export type PdfConversationMessageRole = 'user' | 'assistant';
 
+export interface PdfConversationContextAttachmentSummary {
+  capturedAt: string;
+  captureRange?: ConversationAssistantDateRange;
+  eventRange?: ConversationAssistantDateRange;
+  counts: {
+    included: number;
+    excluded: number;
+    completedTranscriptions: number;
+    edited: number;
+    redacted: number;
+    deleted: number;
+    reactionsChanged: number;
+    lateIngested: number;
+  };
+}
+
+export interface PdfConversationCumulativeContextSummary {
+  snapshotCount: number;
+  counts: {
+    included: number;
+    omitted: number;
+    completedTranscriptions: number;
+    edited: number;
+    redacted: number;
+    deleted: number;
+    reactionsChanged: number;
+    lateIngested: number;
+  };
+}
+
 export interface PdfConversationExportInput {
   title: string;
   modelName: string;
@@ -13,10 +43,16 @@ export interface PdfConversationExportInput {
   effectiveRange: ConversationAssistantDateRange;
   messageCounts: { included: number; excluded: number };
   omittedBreakdown?: Record<string, number>;
+  cumulativeContext?: PdfConversationCumulativeContextSummary;
+  /** The immutable revision selected by the caller for this export. */
+  completedConversationRevision?: number;
   messages: {
     role: PdfConversationMessageRole;
     createdAt: string;
     text: string;
+    conversationRevision?: number;
+    contextAttachment?: PdfConversationContextAttachmentSummary;
+    acknowledgment?: string;
   }[];
 }
 

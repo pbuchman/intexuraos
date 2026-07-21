@@ -3,6 +3,7 @@
  * POST /internal/whatsapp/pubsub/send-message
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { err, ok } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
@@ -10,7 +11,10 @@ import { buildServer } from '../server.js';
 import { getServices, resetServices, setServices } from '../services.js';
 import {
   FakeEventPublisher,
+  FakeConversationAssistantContextAttachmentDeltaBuilder,
+  FakeConversationAssistantContextAttachmentRepository,
   FakeConversationAssistantRepository,
+  FakeConversationAssistantOperationalTelemetry,
   FakeLlmGenerateClient,
   FakePrivateWhatsAppRepository,
   FakeLinkPreviewFetcherPort,
@@ -27,6 +31,9 @@ import {
   FakeWhatsAppWebhookEventRepository,
 } from './fakes.js';
 import type { Config } from '../config.js';
+import type { PrivateWhatsAppErasureRepository } from '../domain/whatsapp/ports/privateWhatsAppErasure.js';
+import { emptyPrivateWhatsAppErasureCounts } from '../domain/whatsapp/models/PrivateWhatsAppErasure.js';
+import type { ServiceContainer } from '../services.js';
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token-12345';
 
@@ -87,7 +94,11 @@ describe('Pub/Sub Routes', () => {
   let whatsappCloudApi: FakeWhatsAppCloudApiPort;
   let privateWhatsAppRepository: FakePrivateWhatsAppRepository;
   let conversationAssistantRepository: FakeConversationAssistantRepository;
+  let conversationAssistantContextAttachmentRepository: FakeConversationAssistantContextAttachmentRepository;
+  let conversationAssistantContextAttachmentDeltaBuilder: FakeConversationAssistantContextAttachmentDeltaBuilder;
   let llmClient: FakeLlmGenerateClient;
+  let privateWhatsAppErasureRepository: PrivateWhatsAppErasureRepository;
+  let conversationAssistantOperationalTelemetry: FakeConversationAssistantOperationalTelemetry;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -101,7 +112,35 @@ describe('Pub/Sub Routes', () => {
     whatsappCloudApi = new FakeWhatsAppCloudApiPort();
     privateWhatsAppRepository = new FakePrivateWhatsAppRepository();
     conversationAssistantRepository = new FakeConversationAssistantRepository();
+    conversationAssistantContextAttachmentRepository =
+      new FakeConversationAssistantContextAttachmentRepository();
+    conversationAssistantContextAttachmentDeltaBuilder =
+      new FakeConversationAssistantContextAttachmentDeltaBuilder();
     llmClient = new FakeLlmGenerateClient();
+    conversationAssistantOperationalTelemetry =
+      new FakeConversationAssistantOperationalTelemetry();
+    privateWhatsAppErasureRepository = {
+      start: vi.fn(),
+      get: vi.fn(),
+      advanceOneBatch: vi.fn().mockResolvedValue(
+        ok({
+          status: 'advanced',
+          request: {
+            erasureRequestId: 'erase-1',
+            userId: 'user-1',
+            sourceAccountId: 'source-1',
+            accountGeneration: 'generation-1',
+            status: 'running',
+            stage: 'source_messages',
+            counts: { ...emptyPrivateWhatsAppErasureCounts(), sourceMessages: 2 },
+            attempt: 2,
+            createdAt: '2026-07-21T10:00:00.000Z',
+            updatedAt: '2026-07-21T10:01:00.000Z',
+          },
+        })
+      ),
+      commitPrivateMediaBatch: vi.fn(),
+    };
 
     setServices({
       webhookEventRepository: new FakeWhatsAppWebhookEventRepository(),
@@ -119,10 +158,18 @@ describe('Pub/Sub Routes', () => {
       privateWhatsAppRepository,
       matrixOutboundGateway: new FakeMatrixOutboundGateway(),
       conversationAssistantRepository,
+      conversationAssistantContextAttachmentRepository,
+      conversationAssistantContextAttachmentDeltaBuilder,
+      conversationAssistantOperationalTelemetry,
+      privateWhatsAppErasureRepository,
+      privateWhatsAppErasurePublisher: eventPublisher,
       llmClientFactory: {
         createLlmClientForUser: () => Promise.resolve({ ok: true, value: llmClient }),
       },
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+    } as ServiceContainer & {
+      privateWhatsAppErasureRepository: PrivateWhatsAppErasureRepository;
+      privateWhatsAppErasurePublisher: FakeEventPublisher;
     });
 
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
@@ -1260,6 +1307,387 @@ describe('Pub/Sub Routes', () => {
   });
 
   describe('POST /internal/whatsapp/pubsub/process-webhook', () => {
+    const erasureEvent = {
+      type: 'whatsapp.private-account.erasure' as const,
+      sourceAccountId: 'source-1',
+      userId: 'user-1',
+      erasureRequestId: 'erase-1',
+      attempt: 1,
+    };
+
+    it('rejects a spoofable Pub/Sub From header for private erasure work', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: {
+          'content-type': 'application/json',
+          from: 'noreply@google.com',
+        },
+        payload: createPubSubBody(erasureEvent),
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(privateWhatsAppErasureRepository.advanceOneBatch).not.toHaveBeenCalled();
+    });
+
+    it('advances one bounded private erasure batch, republishes, and records partial telemetry', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(erasureEvent),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(privateWhatsAppErasureRepository.advanceOneBatch).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedAttempt: 1, batchSize: 20 })
+      );
+      expect(eventPublisher.getPrivateWhatsAppErasureEvents()).toEqual([
+        { ...erasureEvent, attempt: 2 },
+      ]);
+      expect(conversationAssistantOperationalTelemetry.records).toContainEqual({
+        operation: 'privacy_erasure',
+        outcome: 'partial',
+        durationMs: expect.any(Number),
+        count: 2,
+      });
+    });
+
+    it('acknowledges malformed and stale private erasure work without publishing', async () => {
+      const malformed = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({ ...erasureEvent, sourceAccountId: '', attempt: -1 }),
+      });
+      expect(malformed.statusCode).toBe(200);
+      expect(privateWhatsAppErasureRepository.advanceOneBatch).not.toHaveBeenCalled();
+
+      vi.mocked(privateWhatsAppErasureRepository.advanceOneBatch).mockResolvedValueOnce(
+        ok({ status: 'stale' })
+      );
+      vi.mocked(privateWhatsAppErasureRepository.get).mockResolvedValueOnce(ok(null));
+      const stale = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(erasureEvent),
+      });
+      expect(stale.statusCode).toBe(200);
+      expect(eventPublisher.getPrivateWhatsAppErasureEvents()).toEqual([]);
+    });
+
+    it('returns 500 for retryable private erasure persistence and publish failures', async () => {
+      vi.mocked(privateWhatsAppErasureRepository.advanceOneBatch).mockResolvedValueOnce(
+        err({ code: 'PERSISTENCE_ERROR', message: 'private persistence detail' })
+      );
+      const persistenceFailure = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(erasureEvent),
+      });
+      expect(persistenceFailure.statusCode).toBe(500);
+      expect(persistenceFailure.body).not.toContain('private persistence detail');
+
+      eventPublisher.setPrivateWhatsAppErasureFailure('private publish detail');
+      const publishFailure = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(erasureEvent),
+      });
+      expect(publishFailure.statusCode).toBe(500);
+      expect(publishFailure.body).not.toContain('private publish detail');
+    });
+
+    it('requires both private erasure worker dependencies', async () => {
+      const configured = getServices();
+      for (const missingService of [
+        'privateWhatsAppErasureRepository',
+        'privateWhatsAppErasurePublisher',
+      ] as const) {
+        setServices({ ...configured, [missingService]: undefined });
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/process-webhook',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(erasureEvent),
+        });
+        expect(response.statusCode).toBe(500);
+        expect(JSON.parse(response.body).error).toMatchObject({
+          code: 'INTERNAL_ERROR',
+          message: 'Private WhatsApp erasure is not configured',
+        });
+      }
+      setServices(configured);
+    });
+
+    async function seedQueuedContextAttachment(
+      overrides: { attachmentId?: string; generationId?: string } = {}
+    ): Promise<{ attachmentId: string; generationId: string }> {
+      const attachmentId = overrides.attachmentId ?? 'attachment-worker-1';
+      const generationId = overrides.generationId ?? 'generation-worker-1';
+      conversationAssistantContextAttachmentRepository.setSession({
+        userId: 'user-123',
+        sessionId: 'session-worker-1',
+        generationId,
+      });
+      const captured = await conversationAssistantContextAttachmentRepository.captureContextAttachment({
+        attachmentId,
+        userId: 'user-123',
+        sessionId: 'session-worker-1',
+        expectedSessionGenerationId: generationId,
+        preparationRequestId: 'request-worker-1',
+        preparationRequestFingerprint: 'fingerprint-worker-1',
+      });
+      if (captured.status !== 'created') throw new Error('Expected queued attachment');
+      return { attachmentId, generationId };
+    }
+
+    function contextAttachmentPreparationEvent(input: {
+      attachmentId: string;
+      generationId: string;
+      attempt?: number;
+    }): Record<string, unknown> {
+      return {
+        type: 'whatsapp.conversation-assistant.context-attachment.prepare',
+        userId: 'user-123',
+        sessionId: 'session-worker-1',
+        sessionGenerationId: input.generationId,
+        attachmentId: input.attachmentId,
+        attempt: input.attempt ?? 1,
+      };
+    }
+
+    it('runs all Conversation Assistant workers when operational telemetry is disabled', async () => {
+      const configured = getServices();
+      const {
+        conversationAssistantOperationalTelemetry: _operationalTelemetry,
+        ...withoutOperationalTelemetry
+      } = configured;
+      setServices(withoutOperationalTelemetry);
+
+      const erasure = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(erasureEvent),
+      });
+      const queued = await seedQueuedContextAttachment({ attachmentId: 'attachment-no-telemetry' });
+      const attachmentPreparation = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          contextAttachmentPreparationEvent({
+            attachmentId: queued.attachmentId,
+            generationId: queued.generationId,
+          })
+        ),
+      });
+      const sessionPreparation = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.conversation-assistant.prepare',
+          sessionId: 'missing-no-telemetry',
+          userId: 'user-123',
+          attempt: 1,
+        }),
+      });
+
+      expect(erasure.statusCode).toBe(200);
+      expect(attachmentPreparation.statusCode).toBe(200);
+      expect(sessionPreparation.statusCode).toBe(200);
+    });
+
+    it('claims and completes one content-free context attachment preparation event', async () => {
+      const queued = await seedQueuedContextAttachment();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          contextAttachmentPreparationEvent({
+            attachmentId: queued.attachmentId,
+            generationId: queued.generationId,
+          })
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
+      ).toMatchObject({ status: 'ready', preparationAttempt: 1 });
+      expect(
+        conversationAssistantContextAttachmentRepository.getSnapshot(queued.attachmentId)
+      ).toBeDefined();
+      expect(conversationAssistantOperationalTelemetry.records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            operation: 'attachment_preparation',
+            outcome: 'zero',
+            durationMs: expect.any(Number),
+          }),
+        ])
+      );
+    });
+
+    it.each([
+      { name: 'missing user', event: { userId: undefined } },
+      { name: 'missing session', event: { sessionId: undefined } },
+      { name: 'missing generation', event: { sessionGenerationId: undefined } },
+      { name: 'missing attachment', event: { attachmentId: undefined } },
+      { name: 'invalid attempt', event: { attempt: 0 } },
+    ])('acknowledges invalid attachment preparation with $name without claiming', async ({ event }) => {
+      const queued = await seedQueuedContextAttachment();
+      const completeEvent = contextAttachmentPreparationEvent({
+        attachmentId: queued.attachmentId,
+        generationId: queued.generationId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({ ...completeEvent, ...event }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
+          ?.status
+      ).toBe('queued');
+    });
+
+    it.each([
+      ['busy', 500],
+      ['stale', 200],
+      ['not_found', 200],
+      ['expired', 200],
+    ] as const)(
+      'returns %s attachment preparation claim state with HTTP %s',
+      async (claimState, expectedStatus) => {
+        const queued = await seedQueuedContextAttachment();
+        conversationAssistantContextAttachmentRepository.claimResultOverride = claimState;
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/process-webhook',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(
+            contextAttachmentPreparationEvent({
+              attachmentId: queued.attachmentId,
+              generationId: queued.generationId,
+            })
+          ),
+        });
+
+        expect(response.statusCode).toBe(expectedStatus);
+      }
+    );
+
+    it('acknowledges a lost lease without letting the older worker publish ready state', async () => {
+      const queued = await seedQueuedContextAttachment();
+      conversationAssistantContextAttachmentRepository.persistenceResultOverride = 'stale';
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          contextAttachmentPreparationEvent({
+            attachmentId: queued.attachmentId,
+            generationId: queued.generationId,
+          })
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
+          ?.status
+      ).toBe('preparing');
+    });
+
+    it('persists a safe failed state when exact-cutoff preparation fails', async () => {
+      const queued = await seedQueuedContextAttachment();
+      conversationAssistantContextAttachmentDeltaBuilder.setFailure(
+        'SOURCE_UNAVAILABLE',
+        'provider detail that must not be returned'
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          contextAttachmentPreparationEvent({
+            attachmentId: queued.attachmentId,
+            generationId: queued.generationId,
+          })
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(
+        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
+      ).toMatchObject({
+        status: 'failed',
+        preparationError: {
+          code: 'SOURCE_UNAVAILABLE',
+          message: 'provider detail that must not be returned',
+        },
+      });
+      expect(response.body).not.toContain('provider detail');
+    });
+
+    it('returns 500 on a persistence exception so Pub/Sub retries the same fenced event', async () => {
+      const queued = await seedQueuedContextAttachment();
+      conversationAssistantContextAttachmentRepository.throwOnClaim = true;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          contextAttachmentPreparationEvent({
+            attachmentId: queued.attachmentId,
+            generationId: queued.generationId,
+          })
+        ),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.body).not.toContain('fake claim persistence failure');
+    });
+
+    it('requires both attachment worker dependencies', async () => {
+      const queued = await seedQueuedContextAttachment();
+      const configured = getServices();
+      for (const missingService of [
+        'conversationAssistantContextAttachmentRepository',
+        'conversationAssistantContextAttachmentDeltaBuilder',
+      ] as const) {
+        setServices({ ...configured, [missingService]: undefined });
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/process-webhook',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(
+            contextAttachmentPreparationEvent({
+              attachmentId: queued.attachmentId,
+              generationId: queued.generationId,
+            })
+          ),
+        });
+        expect(response.statusCode).toBe(500);
+      }
+    });
+
     it('prepares a queued Conversation Assistant context', async () => {
       privateWhatsAppRepository.setAccount({
         id: 'user-123',

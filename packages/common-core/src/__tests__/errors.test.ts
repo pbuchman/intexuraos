@@ -53,6 +53,19 @@ describe('Error utilities', () => {
       expect(ERROR_HTTP_STATUS.SERVICE_UNAVAILABLE).toBe(503);
     });
 
+    it.each([
+      ['REQUEST_BODY_CONFLICT', 409],
+      ['TURN_IN_PROGRESS', 409],
+      ['CONTEXT_STALE', 409],
+      ['ATTACHMENT_NOT_READY', 409],
+      ['CONFIRMATION_REQUIRED', 409],
+      ['ANSWER_RETRY_UNAVAILABLE', 409],
+      ['REQUEST_STALE', 409],
+      ['CONTEXT_WINDOW_EXCEEDED', 422],
+    ] as const)('maps durable Conversation Assistant error %s to %i', (code, status) => {
+      expect(ERROR_HTTP_STATUS[code]).toBe(status);
+    });
+
     it('has mapping for all error codes', () => {
       const allCodes: ErrorCode[] = [
         'INVALID_REQUEST',

@@ -50,6 +50,14 @@
       "owner": "whatsapp-service",
       "description": "Read-only private WhatsApp messages synchronized from Matrix/mautrix bridge events. Separate from WhatsApp Business API messages and mobile notifications."
     },
+    "whatsapp_private_context_changes": {
+      "owner": "whatsapp-service",
+      "description": "Immutable sanitized before/after projection journal for exact private WhatsApp conversation context reconstruction."
+    },
+    "whatsapp_private_erasure_requests": {
+      "owner": "whatsapp-service",
+      "description": "Content-free, generation-fenced progress records for idempotent private WhatsApp privacy erasure."
+    },
     "whatsapp_private_senders": {
       "owner": "whatsapp-service",
       "description": "Per-private-WhatsApp-sender profile aggregate keyed by source account and sender identity."
@@ -69,6 +77,14 @@
     "whatsapp_conversation_assistant_context_chunks": {
       "owner": "whatsapp-service",
       "description": "Versioned structured message snapshots used to audit included and omitted private WhatsApp Conversation Assistant context."
+    },
+    "whatsapp_conversation_assistant_context_attachments": {
+      "owner": "whatsapp-service",
+      "description": "Immutable pending and committed WhatsApp context update metadata linked to one Conversation Assistant question."
+    },
+    "whatsapp_conversation_assistant_turn_requests": {
+      "owner": "whatsapp-service",
+      "description": "Durable idempotency, lease, and recovery state for Conversation Assistant turn requests."
     },
     "whatsapp_conversation_assistant_turns": {
       "owner": "whatsapp-service",

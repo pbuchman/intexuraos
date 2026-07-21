@@ -58,7 +58,8 @@ describe('Logger utilities', () => {
       const info = vi.fn();
       const request = {
         method: 'GET',
-        url: '/api/users?active=true',
+        url: '/api/users/secret-user-id?active=true&token=secret-query',
+        routeOptions: { url: '/api/users/:userId' },
         headers: { host: 'api.example.test' },
         ip: '127.0.0.1',
         log: { info },
@@ -74,13 +75,15 @@ describe('Logger utilities', () => {
         {
           req: {
             method: 'GET',
-            url: '/api/users?active=true',
+            url: '/api/users/:userId',
             host: 'api.example.test',
             remoteAddress: '127.0.0.1',
           },
         },
         'incoming request'
       );
+      expect(JSON.stringify(info.mock.calls)).not.toContain('secret-user-id');
+      expect(JSON.stringify(info.mock.calls)).not.toContain('secret-query');
       expect(info).toHaveBeenCalledWith(
         {
           res: { statusCode: 200 },
@@ -88,6 +91,29 @@ describe('Logger utilities', () => {
         },
         'request completed'
       );
+    });
+
+    it('uses a content-free label when no route template is available', () => {
+      const { app, hooks } = makeHookRecorder();
+      registerQuietHealthCheckLogging(app);
+      const info = vi.fn();
+      const request = {
+        method: 'GET',
+        url: '/unknown/private-id?question=private-text',
+        routeOptions: {},
+        headers: { host: 'api.example.test' },
+        ip: '127.0.0.1',
+        log: { info },
+      } as unknown as FastifyRequest;
+
+      hooks.onRequest?.(request, {} as FastifyReply, vi.fn());
+
+      expect(info).toHaveBeenCalledWith(
+        expect.objectContaining({ req: expect.objectContaining({ url: 'unmatched_route' }) }),
+        'incoming request'
+      );
+      expect(JSON.stringify(info.mock.calls)).not.toContain('private-id');
+      expect(JSON.stringify(info.mock.calls)).not.toContain('private-text');
     });
 
     it('skips request and response logs for health checks', () => {
@@ -157,17 +183,51 @@ describe('Logger utilities', () => {
         event: 'incoming_request',
         headers: {
           'content-type': 'application/json',
-          'user-agent': 'test-client',
+          'x-internal-auth': '[REDACTED]',
+          authorization: '[REDACTED]',
         },
       });
 
-      // Sensitive headers redacted
       const payload = logged?.payload as Record<string, unknown>;
       const headers = payload['headers'] as Record<string, unknown>;
-      expect(headers['x-internal-auth']).toContain('...');
-      expect(headers['x-internal-auth']).not.toBe('secret-token-12345');
-      expect(headers['authorization']).toContain('...');
-      expect(headers['authorization']).not.toBe('Bearer user-token-67890');
+      expect(headers['user-agent']).toBeUndefined();
+    });
+
+    it('serializes only coarse diagnostic headers and fixed authentication markers', () => {
+      mockRequest.headers = {
+        'content-type': 'application/json',
+        'content-length': '321',
+        authorization: 'Bearer authorization-canary',
+        'x-internal-auth': 'internal-auth-canary',
+        'x-conversation-assistant-deletion-token': 'deletion-token-canary',
+        'x-request-id': 'request-id-canary',
+        'x-custom-header': 'custom-header-canary',
+        referer: 'https://example.test/referer-canary',
+        'user-agent': 'user-agent-canary',
+      };
+
+      logIncomingRequest(mockRequest as FastifyRequest);
+
+      const serializedPayload = JSON.stringify(loggedPayloads[0]?.payload);
+      const payload = loggedPayloads[0]?.payload as Record<string, unknown>;
+      expect(payload['headers']).toEqual({
+        'content-type': 'application/json',
+        'content-length': '321',
+        authorization: '[REDACTED]',
+        'x-internal-auth': '[REDACTED]',
+      });
+      expect(serializedPayload).not.toContain('x-conversation-assistant-deletion-token');
+      expect(serializedPayload).not.toContain('deletion-token-canary');
+      expect(serializedPayload).not.toContain('x-request-id');
+      expect(serializedPayload).not.toContain('request-id-canary');
+      expect(serializedPayload).not.toContain('x-custom-header');
+      expect(serializedPayload).not.toContain('custom-header-canary');
+      expect(serializedPayload).not.toContain('referer');
+      expect(serializedPayload).not.toContain('referer-canary');
+      expect(serializedPayload).not.toContain('user-agent');
+      expect(serializedPayload).not.toContain('user-agent-canary');
+      expect(serializedPayload).not.toContain('authorization-canary');
+      expect(serializedPayload).not.toContain('internal-auth-canary');
     });
 
     it('includes params when requested', () => {
@@ -287,7 +347,7 @@ describe('Logger utilities', () => {
       expect((payload['bodyPreview'] as string).length).toBeLessThanOrEqual(50);
     });
 
-    it('redacts x-goog-iap-jwt-assertion header', () => {
+    it('omits x-goog-iap-jwt-assertion header', () => {
       mockRequest.headers = {
         'x-goog-iap-jwt-assertion': 'sensitive-jwt-token-value',
       };
@@ -298,8 +358,8 @@ describe('Logger utilities', () => {
       const payload = logged?.payload as Record<string, unknown>;
       const headers = payload['headers'] as Record<string, unknown>;
 
-      expect(headers['x-goog-iap-jwt-assertion']).toContain('...');
-      expect(headers['x-goog-iap-jwt-assertion']).not.toBe('sensitive-jwt-token-value');
+      expect(headers['x-goog-iap-jwt-assertion']).toBeUndefined();
+      expect(JSON.stringify(payload)).not.toContain('sensitive-jwt-token-value');
     });
 
     it('handles undefined body gracefully', () => {
@@ -348,7 +408,7 @@ describe('Logger utilities', () => {
       expect(payload['bodyPreview']).toBe('');
     });
 
-    it('handles very long headers without error', () => {
+    it('omits very long arbitrary headers without error', () => {
       const longValue = 'a'.repeat(10000);
       mockRequest.headers = {
         'x-custom-header': longValue,
@@ -361,8 +421,8 @@ describe('Logger utilities', () => {
       const payload = logged?.payload as Record<string, unknown>;
       const headers = payload['headers'] as Record<string, unknown>;
 
-      // Header should be included (not redacted since it's not sensitive)
-      expect(headers['x-custom-header']).toBe(longValue);
+      expect(headers['x-custom-header']).toBeUndefined();
+      expect(JSON.stringify(payload)).not.toContain(longValue);
     });
   });
 });

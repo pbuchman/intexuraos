@@ -141,12 +141,114 @@ describe('createPdfConversationExporter', () => {
     expect(normalizedPdfText).toContain(normalizePdfText(validInput.messages[0]?.text ?? ''));
   });
 
+  it('renders the latest completed revision with public attachment summaries and acknowledgment', async () => {
+    const exporter = createPdfConversationExporter();
+
+    const result = await exporter.exportConversation({
+      ...validInput,
+      completedConversationRevision: 3,
+      cumulativeContext: {
+        snapshotCount: 2,
+        counts: {
+          included: 65,
+          omitted: 25,
+          completedTranscriptions: 1,
+          edited: 2,
+          redacted: 1,
+          deleted: 4,
+          reactionsChanged: 3,
+          lateIngested: 1,
+        },
+      },
+      messages: [
+        {
+          role: 'user',
+          createdAt: '2026-07-19T10:15:00.000Z',
+          text: 'How did the attitude change?',
+          conversationRevision: 3,
+          contextAttachment: {
+            capturedAt: '2026-07-19T10:14:00.000Z',
+            captureRange: {
+              from: '2026-07-17T18:00:00.000Z',
+              to: '2026-07-19T10:14:00.000Z',
+            },
+            eventRange: {
+              from: '2026-07-17T18:49:00.000Z',
+              to: '2026-07-19T10:09:00.000Z',
+            },
+            counts: {
+              included: 18,
+              excluded: 2,
+              completedTranscriptions: 1,
+              edited: 2,
+              redacted: 1,
+              deleted: 4,
+              reactionsChanged: 3,
+              lateIngested: 1,
+            },
+          },
+        },
+        {
+          role: 'assistant',
+          createdAt: '2026-07-19T10:15:04.000Z',
+          text: 'The tone became more collaborative.',
+          conversationRevision: 3,
+          acknowledgment:
+            'Added 18 new messages. Also applied 1 completed transcription and 6 source corrections.',
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
+    expect(readablePdfText).toContain('Completed conversation revision: 3');
+    expect(readablePdfText).toContain('Context snapshots: 2');
+    expect(readablePdfText).toContain('Cumulative included: 65');
+    expect(readablePdfText).toContain('Cumulative omitted: 25');
+    expect(readablePdfText).toContain('Cumulative edits: 2');
+    expect(readablePdfText).toContain('Cumulative redactions: 5');
+    expect(readablePdfText).not.toContain('Cumulative deletions');
+    expect(readablePdfText).toContain('WhatsApp context update');
+    expect(readablePdfText).toContain('Captured: 2026-07-19 10:14 UTC');
+    expect(readablePdfText).toContain('Checked range: 2026-07-17 18:00 UTC - 2026-07-19 10:14 UTC');
+    expect(readablePdfText).toContain('Message range: 2026-07-17 18:49 UTC - 2026-07-19 10:09 UTC');
+    expect(readablePdfText).toContain('Included: 18');
+    expect(readablePdfText).toContain('Excluded: 2');
+    expect(readablePdfText).toContain('Completed transcriptions: 1');
+    expect(readablePdfText).toContain('Edits: 2');
+    expect(readablePdfText).toContain('Redactions: 5');
+    expect(readablePdfText).not.toContain('Deletions:');
+    expect(readablePdfText).toContain('Reaction changes: 3');
+    expect(readablePdfText).toContain(
+      'Added 18 new messages. Also applied 1 completed transcription and 6 source corrections.'
+    );
+    expect(readablePdfText).toContain('The tone became more collaborative.');
+    expect(readablePdfText).not.toContain('sourceAccountId');
+    expect(readablePdfText).not.toContain('contextChainSha256');
+    expect(readablePdfText).not.toContain('attachment-id');
+  });
+
   it('rejects invalid input before rendering', async () => {
     const exporter = createPdfConversationExporter();
     const firstMessage = validInput.messages[0] ?? {
       role: 'user' as const,
       createdAt: '2026-07-03T16:01:00.000Z',
       text: 'fallback',
+    };
+    const attachmentSummary = {
+      capturedAt: '2026-07-19T10:14:00.000Z',
+      counts: {
+        included: 1,
+        excluded: 0,
+        completedTranscriptions: 0,
+        edited: 0,
+        redacted: 0,
+        deleted: 0,
+        reactionsChanged: 0,
+        lateIngested: 0,
+      },
     };
 
     const invalidInputs: PdfConversationExportInput[] = [
@@ -161,7 +263,159 @@ describe('createPdfConversationExporter', () => {
       { ...validInput, effectiveRange: { from: validInput.effectiveRange.from, to: '' } },
       { ...validInput, messageCounts: { included: -1, excluded: 0 } },
       { ...validInput, messageCounts: { included: 0, excluded: -1 } },
+      {
+        ...validInput,
+        cumulativeContext: {
+          snapshotCount: 0,
+          counts: {
+            included: 0,
+            omitted: 0,
+            completedTranscriptions: 0,
+            edited: 0,
+            redacted: 0,
+            deleted: 0,
+            reactionsChanged: 0,
+            lateIngested: 0,
+          },
+        },
+      },
+      {
+        ...validInput,
+        cumulativeContext: {
+          snapshotCount: 1.5,
+          counts: {
+            included: 0,
+            omitted: 0,
+            completedTranscriptions: 0,
+            edited: 0,
+            redacted: 0,
+            deleted: 0,
+            reactionsChanged: 0,
+            lateIngested: 0,
+          },
+        },
+      },
+      {
+        ...validInput,
+        cumulativeContext: {
+          snapshotCount: 1,
+          counts: {
+            included: -1,
+            omitted: 0,
+            completedTranscriptions: 0,
+            edited: 0,
+            redacted: 0,
+            deleted: 0,
+            reactionsChanged: 0,
+            lateIngested: 0,
+          },
+        },
+      },
+      {
+        ...validInput,
+        cumulativeContext: {
+          snapshotCount: 1,
+          counts: {
+            included: 1.5,
+            omitted: 0,
+            completedTranscriptions: 0,
+            edited: 0,
+            redacted: 0,
+            deleted: 0,
+            reactionsChanged: 0,
+            lateIngested: 0,
+          },
+        },
+      },
       { ...validInput, messages: [{ ...firstMessage, text: '' }] },
+      { ...validInput, completedConversationRevision: -1 },
+      { ...validInput, completedConversationRevision: 1.5 },
+      { ...validInput, messages: [{ ...firstMessage, acknowledgment: '   ' }] },
+      { ...validInput, messages: [{ ...firstMessage, conversationRevision: -1 }] },
+      { ...validInput, messages: [{ ...firstMessage, conversationRevision: 1.5 }] },
+      {
+        ...validInput,
+        completedConversationRevision: 2,
+        messages: [{ ...firstMessage, conversationRevision: 3 }],
+      },
+      {
+        ...validInput,
+        messages: [
+          { ...firstMessage, contextAttachment: { ...attachmentSummary, capturedAt: '   ' } },
+        ],
+      },
+      {
+        ...validInput,
+        messages: [
+          {
+            ...firstMessage,
+            contextAttachment: {
+              ...attachmentSummary,
+              captureRange: { from: '', to: '2026-07-19T10:14:00.000Z' },
+            },
+          },
+        ],
+      },
+      {
+        ...validInput,
+        messages: [
+          {
+            ...firstMessage,
+            contextAttachment: {
+              ...attachmentSummary,
+              captureRange: { from: '2026-07-19T10:00:00.000Z', to: '' },
+            },
+          },
+        ],
+      },
+      {
+        ...validInput,
+        messages: [
+          {
+            ...firstMessage,
+            contextAttachment: {
+              ...attachmentSummary,
+              eventRange: { from: '', to: '2026-07-19T10:09:00.000Z' },
+            },
+          },
+        ],
+      },
+      {
+        ...validInput,
+        messages: [
+          {
+            ...firstMessage,
+            contextAttachment: {
+              ...attachmentSummary,
+              eventRange: { from: '2026-07-19T10:00:00.000Z', to: '' },
+            },
+          },
+        ],
+      },
+      {
+        ...validInput,
+        messages: [
+          {
+            ...firstMessage,
+            contextAttachment: {
+              ...attachmentSummary,
+              counts: { ...attachmentSummary.counts, included: -1 },
+            },
+          },
+        ],
+      },
+      {
+        ...validInput,
+        messages: [
+          {
+            ...firstMessage,
+            contextAttachment: {
+              ...attachmentSummary,
+              counts: { ...attachmentSummary.counts, included: 1.5 },
+            },
+          },
+        ],
+      },
     ];
 
     for (const input of invalidInputs) {
@@ -171,6 +425,42 @@ describe('createPdfConversationExporter', () => {
         expect(result.error.code).toBe('INVALID_INPUT');
       }
     }
+  });
+
+  it('renders a zero-correction attachment summary without inventing a message range', async () => {
+    const exporter = createPdfConversationExporter();
+    const result = await exporter.exportConversation({
+      ...validInput,
+      messages: [
+        {
+          role: 'user',
+          createdAt: '2026-07-19T10:15:00.000Z',
+          text: 'What should I do next?',
+          contextAttachment: {
+            capturedAt: '2026-07-19T10:14:00.000Z',
+            counts: {
+              included: 0,
+              excluded: 0,
+              completedTranscriptions: 0,
+              edited: 0,
+              redacted: 0,
+              deleted: 0,
+              reactionsChanged: 0,
+              lateIngested: 0,
+            },
+          },
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const readablePdfText = toReadablePdfText(extractPdfText(result.value.bytes));
+    expect(readablePdfText).toContain('Included: 0');
+    expect(readablePdfText).toContain('Excluded: 0');
+    expect(readablePdfText).not.toContain('Message range:');
+    expect(readablePdfText).not.toContain('Completed transcriptions:');
+    expect(readablePdfText).not.toContain('Reaction changes:');
   });
 
   it('renders non-Latin titles with a safe fallback filename', async () => {

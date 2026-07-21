@@ -10,12 +10,14 @@ import type {
   ExportConversationAssistantPdfResult,
 } from './types.js';
 import type { ConversationAssistantPreparationRequestedEvent } from '../whatsapp/index.js';
+import type { ConversationAssistantOperationalTelemetry } from './operationalTelemetry.js';
 
 export interface ConversationAssistantRepository {
   saveSession(session: ConversationAssistantSession): Promise<void>;
   createSessionIfAbsent(session: ConversationAssistantSession): Promise<
     | { status: 'created'; session: ConversationAssistantSession }
     | { status: 'existing'; session: ConversationAssistantSession }
+    | { status: 'source_unavailable' }
   >;
   getSessionById(sessionId: string): Promise<ConversationAssistantSession | null>;
   getSessionSnapshotById(
@@ -45,6 +47,7 @@ export interface ConversationAssistantRepository {
     session: ConversationAssistantSession;
     attempt: number;
     claimId: string;
+    now: string;
   }): Promise<boolean>;
   requeueFailedPreparation(input: {
     sessionId: string;
@@ -138,10 +141,41 @@ export interface ConversationAssistantPdfExportInput {
   effectiveRange: ConversationAssistantDateRange;
   messageCounts: { included: number; excluded: number };
   omittedBreakdown?: Record<string, number>;
+  cumulativeContext?: {
+    snapshotCount: number;
+    counts: {
+      included: number;
+      omitted: number;
+      completedTranscriptions: number;
+      edited: number;
+      redacted: number;
+      deleted: number;
+      reactionsChanged: number;
+      lateIngested: number;
+    };
+  };
+  completedConversationRevision?: number;
   messages: {
     role: ConversationAssistantTurnRole;
     createdAt: string;
     text: string;
+    conversationRevision?: number;
+    contextAttachment?: {
+      capturedAt: string;
+      captureRange?: ConversationAssistantDateRange;
+      eventRange?: ConversationAssistantDateRange;
+      counts: {
+        included: number;
+        excluded: number;
+        completedTranscriptions: number;
+        edited: number;
+        redacted: number;
+        deleted: number;
+        reactionsChanged: number;
+        lateIngested: number;
+      };
+    };
+    acknowledgment?: string;
   }[];
 }
 
@@ -164,4 +198,5 @@ export interface ConversationAssistantDeps {
   defaultModel: ConversationAssistantModel;
   clock: ConversationAssistantClock;
   ids: ConversationAssistantIdGenerator;
+  telemetry?: ConversationAssistantOperationalTelemetry;
 }

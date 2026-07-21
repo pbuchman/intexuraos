@@ -49,6 +49,7 @@ export { handleValidationError } from './http/validation.js';
 // Logger utilities
 export {
   shouldLogRequest,
+  getSafeRequestRoute,
   registerQuietHealthCheckLogging,
   logIncomingRequest,
   type LogIncomingRequestOptions,

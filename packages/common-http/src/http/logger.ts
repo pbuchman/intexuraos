@@ -6,7 +6,10 @@
  * - Uses JSON format in production
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { redactObject, SENSITIVE_FIELDS } from '@intexuraos/common-core';
+
+const COARSE_DIAGNOSTIC_HEADERS = ['content-type', 'content-length'] as const;
+const AUTHENTICATION_HEADERS = ['authorization', 'x-internal-auth'] as const;
+const REDACTED_HEADER_VALUE = '[REDACTED]';
 
 /**
  * Paths that should not be logged (e.g., health checks from Cloud Run).
@@ -42,7 +45,7 @@ export function registerQuietHealthCheckLogging(app: FastifyInstance): void {
         {
           req: {
             method: request.method,
-            url: request.url,
+            url: getSafeRequestRoute(request),
             host: request.headers.host,
             remoteAddress: request.ip,
           },
@@ -68,7 +71,18 @@ export function registerQuietHealthCheckLogging(app: FastifyInstance): void {
 }
 
 /**
- * Options for logging incoming requests with sensitive data redaction.
+ * Return only the registered route pattern. Dynamic path values and query
+ * strings can contain user or conversation data and must never enter logs.
+ */
+export function getSafeRequestRoute(request: FastifyRequest): string {
+  const routeTemplate = request.routeOptions.url;
+  return typeof routeTemplate === 'string' && routeTemplate.length > 0
+    ? routeTemplate
+    : 'unmatched_route';
+}
+
+/**
+ * Options for logging incoming requests with a safe header allowlist.
  */
 export interface LogIncomingRequestOptions {
   /**
@@ -98,13 +112,14 @@ export interface LogIncomingRequestOptions {
 }
 
 /**
- * Safely log incoming request with automatic redaction of sensitive headers.
+ * Safely log an incoming request without copying arbitrary headers.
  *
  * Use this at the start of internal endpoints (before auth validation) to capture
  * diagnostic information while protecting secrets in logs.
  *
  * Features:
- * - Redacts sensitive headers (x-internal-auth, authorization, etc.)
+ * - Includes only coarse diagnostic headers (content type and length)
+ * - Replaces authentication values with a fixed marker
  * - Truncates body preview to prevent log bloat
  * - Best-effort error handling (won't crash request on logging failure)
  *
@@ -135,16 +150,12 @@ export function logIncomingRequest(
   } = options;
 
   try {
-    // Clone headers and redact sensitive fields
-    const headersObj = { ...(request.headers as Record<string, unknown>) };
-    const redactedHeaders = redactObject(headersObj, [...SENSITIVE_FIELDS]);
-
     // Build log payload
     // Handle undefined/null bodies (JSON.stringify returns undefined for undefined)
     const bodyString = request.body === undefined ? 'undefined' : JSON.stringify(request.body);
     const logPayload: Record<string, unknown> = {
       event: 'incoming_request',
-      headers: redactedHeaders,
+      headers: selectSafeRequestHeaders(request.headers),
       bodyPreview: bodyString.substring(0, bodyPreviewLength),
       ...additionalFields,
     };
@@ -159,4 +170,25 @@ export function logIncomingRequest(
     // Best-effort logging: don't crash request if logging fails
     request.log.debug({ error: logErr }, 'Failed to log incoming request');
   }
+}
+
+function selectSafeRequestHeaders(
+  headers: Record<string, string | string[] | undefined>
+): Record<string, string> {
+  const safeHeaders: Record<string, string> = {};
+
+  for (const header of COARSE_DIAGNOSTIC_HEADERS) {
+    const value = headers[header];
+    if (typeof value === 'string') {
+      safeHeaders[header] = value;
+    }
+  }
+
+  for (const header of AUTHENTICATION_HEADERS) {
+    if (headers[header] !== undefined) {
+      safeHeaders[header] = REDACTED_HEADER_VALUE;
+    }
+  }
+
+  return safeHeaders;
 }

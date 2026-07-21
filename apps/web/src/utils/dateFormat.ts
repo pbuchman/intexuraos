@@ -22,7 +22,7 @@ export function formatDate(isoDate: string): string {
  * Format date with time as "Jan 15, 2025, 2:30 PM"
  * Use for: Detail views, modals, anywhere precision matters
  */
-export function formatDateTime(isoDate: string): string {
+export function formatDateTime(isoDate: string, timeZone?: string): string {
   const date = new Date(isoDate);
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -30,7 +30,27 @@ export function formatDateTime(isoDate: string): string {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone === undefined ? {} : { timeZone }),
   });
+}
+
+/**
+ * Format a complete date-time label for assistive technology.
+ *
+ * Visible timestamps stay compact, while this label always exposes the full
+ * date and the exact IANA timezone used to render it.
+ */
+export function formatDateTimeAccessible(isoDate: string, timeZone: string): string {
+  const formatted = new Date(isoDate).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+    timeZoneName: 'long',
+  });
+  return `${formatted} (${timeZone})`;
 }
 
 /**
@@ -56,13 +76,14 @@ export function formatAbsoluteDateTime(isoDate: string): string {
  * Format date with time as "Jan 15, 2:30 PM"
  * Use for: Compact mobile metadata rows
  */
-export function formatDateTimeCompact(isoDate: string): string {
+export function formatDateTimeCompact(isoDate: string, timeZone?: string): string {
   const date = new Date(isoDate);
   return date.toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    ...(timeZone === undefined ? {} : { timeZone }),
   });
 }
 

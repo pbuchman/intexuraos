@@ -461,6 +461,32 @@ describe('createOpenRouterClient', () => {
     });
   });
 
+  it('classifies native AbortError failures as timeout usage without leaking details', async () => {
+    const privateMarker = 'PRIVATE_ABORT_MARKER_82db6d41';
+    const abortError = new Error(privateMarker);
+    abortError.name = 'AbortError';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(abortError);
+    const client = createOpenRouterClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+
+    const result = await client.research('Research this safely');
+    fetchSpy.mockRestore();
+
+    expect(result.ok).toBe(false);
+    expect(mockUsageLoggerLog).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        success: false,
+        errorMessage: 'OPENROUTER_TIMEOUT',
+      })
+    );
+    expect(JSON.stringify(mockUsageLoggerLog.mock.calls.at(-1))).not.toContain(privateMarker);
+  });
+
   describe('generate', () => {
     it('does NOT append :online suffix for synthesis', async () => {
       let capturedBody: Record<string, unknown> | undefined;
@@ -1203,11 +1229,18 @@ describe('createOpenRouterClient', () => {
     });
 
     it('maps streaming provider error chunks to API errors', async () => {
+      const privateMarker = 'PRIVATE_WHATSAPP_CONTEXT_MARKER_4f5d57e0';
       nock(API_BASE_URL)
         .post('/chat/completions')
-        .reply(200, openRouterSse([JSON.stringify({ error: { message: 'provider failed' } })]), {
-          'Content-Type': 'text/event-stream',
-        });
+        .reply(
+          200,
+          openRouterSse([
+            JSON.stringify({ error: { message: `provider failed: ${privateMarker}` } }),
+          ]),
+          {
+            'Content-Type': 'text/event-stream',
+          }
+        );
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -1225,8 +1258,16 @@ describe('createOpenRouterClient', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.message).toContain('provider failed');
+        expect(result.error.message).toContain(privateMarker);
       }
+      const usagePayload = mockUsageLoggerLog.mock.calls.at(-1)?.[0];
+      expect(usagePayload).toEqual(
+        expect.objectContaining({
+          success: false,
+          errorMessage: 'OPENROUTER_HTTP_500',
+        })
+      );
+      expect(JSON.stringify(usagePayload)).not.toContain(privateMarker);
     });
 
     it('serializes session_id, response_format, temperature, and cache_control blocks', async () => {

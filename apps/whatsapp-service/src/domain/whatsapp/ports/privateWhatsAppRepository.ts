@@ -1,6 +1,12 @@
 import type { Result } from '@intexuraos/common-core';
 import type { WhatsAppError } from '../models/error.js';
 import type {
+  PrivateWhatsAppContextJournalQueryInput,
+  PrivateWhatsAppContextJournalQueryResult,
+  PrivateWhatsAppContextMessagesByIdsInput,
+  PrivateWhatsAppOwnedChatInput,
+} from '../models/PrivateWhatsAppContextJournal.js';
+import type {
   DisablePrivateWhatsAppAccountInput,
   PrivateWhatsAppAccount,
   PrivateWhatsAppAggregateRebuildInput,
@@ -25,6 +31,7 @@ import type {
   UpdatePrivateWhatsAppMessageStoredMediaInput,
   UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionResult,
   UpsertPrivateWhatsAppAccountInput,
 } from '../models/PrivateWhatsApp.js';
 
@@ -59,7 +66,16 @@ export interface PrivateWhatsAppRepository {
   ): Promise<Result<UpdatePrivateWhatsAppMessageStoredMediaResult, WhatsAppError>>;
   updateMessageTranscription(
     input: UpdatePrivateWhatsAppMessageTranscriptionInput
-  ): Promise<Result<void, WhatsAppError>>;
+  ): Promise<Result<UpdatePrivateWhatsAppMessageTranscriptionResult, WhatsAppError>>;
+  getConversationContextJournalHead(
+    input: PrivateWhatsAppOwnedChatInput
+  ): Promise<Result<number, WhatsAppError>>;
+  findConversationContextJournalEntries(
+    input: PrivateWhatsAppContextJournalQueryInput
+  ): Promise<Result<PrivateWhatsAppContextJournalQueryResult, WhatsAppError>>;
+  findConversationContextMessagesByIds(
+    input: PrivateWhatsAppContextMessagesByIdsInput
+  ): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>>;
   findMessages(
     input: PrivateWhatsAppMessageQueryInput
   ): Promise<Result<PrivateWhatsAppMessageQueryResult, WhatsAppError>>;

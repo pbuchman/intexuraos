@@ -1,5 +1,6 @@
 export type {
   PdfConversationMessageRole,
+  PdfConversationContextAttachmentSummary,
   PdfConversationExportInput,
   PdfConversationExportResult,
   PdfConversationExporter,

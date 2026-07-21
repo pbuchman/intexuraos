@@ -1,11 +1,12 @@
 import { AlertCircle, LoaderCircle, MessageSquareText, X } from 'lucide-react';
+import type { RefObject } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import type {
   ConversationAssistantContextResponse,
   ConversationAssistantOmittedCounts,
 } from '@/types';
-import { formatDateTime } from '@/utils/dateFormat';
+import { formatDateTime, formatDateTimeAccessible } from '@/utils/dateFormat';
 
 interface ConversationAssistantContextModalProps {
   context: ConversationAssistantContextResponse | null;
@@ -17,6 +18,8 @@ interface ConversationAssistantContextModalProps {
   onRetry: () => void;
   onLoadMore: () => void;
   onClose: () => void;
+  displayTimeZone?: string;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
 interface OmissionLabel {
@@ -72,6 +75,8 @@ export function ConversationAssistantContextModal({
   onRetry,
   onLoadMore,
   onClose,
+  displayTimeZone = 'UTC',
+  returnFocusRef,
 }: ConversationAssistantContextModalProps): React.JSX.Element {
   const omittedLabels = omissionLabels(context?.omitted ?? omitted);
 
@@ -83,6 +88,7 @@ export function ConversationAssistantContextModal({
       }}
       title="Frozen context"
       description="Messages captured when this analysis was prepared."
+      {...(returnFocusRef === undefined ? {} : { returnFocusRef })}
       hideTitle
       padded={false}
       contentClassName="fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-900"
@@ -173,8 +179,15 @@ export function ConversationAssistantContextModal({
                     <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                       {message.speakerLabel}
                     </span>
-                    <time className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                      {formatDateTime(message.eventTimestamp)}
+                    <time
+                      className="shrink-0 text-xs text-slate-400 dark:text-slate-500"
+                      dateTime={message.eventTimestamp}
+                      aria-label={formatDateTimeAccessible(
+                        message.eventTimestamp,
+                        displayTimeZone
+                      )}
+                    >
+                      {formatDateTime(message.eventTimestamp, displayTimeZone)}
                     </time>
                   </div>
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700 dark:text-slate-300">
@@ -209,8 +222,15 @@ export function ConversationAssistantContextModal({
                     <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                       {message.speakerLabel}
                     </span>
-                    <time className="shrink-0 text-xs text-slate-400 dark:text-slate-500">
-                      {formatDateTime(message.eventTimestamp)}
+                    <time
+                      className="shrink-0 text-xs text-slate-400 dark:text-slate-500"
+                      dateTime={message.eventTimestamp}
+                      aria-label={formatDateTimeAccessible(
+                        message.eventTimestamp,
+                        displayTimeZone
+                      )}
+                    >
+                      {formatDateTime(message.eventTimestamp, displayTimeZone)}
                     </time>
                   </div>
                   <span className="mt-1.5 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -220,7 +240,7 @@ export function ConversationAssistantContextModal({
                     {message.content ??
                       (message.reaction === undefined
                         ? `${message.messageType} message`
-                        : `Reaction ${message.reaction.emoji} to message ${message.reaction.targetMessageId ?? message.reaction.targetMatrixEventId ?? 'outside this snapshot'}`)}
+                        : `Reaction ${message.reaction.emoji} to message ${message.reaction.targetReference ?? 'outside this snapshot'}`)}
                   </p>
                   {message.reactions !== undefined && message.reactions.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
@@ -228,7 +248,7 @@ export function ConversationAssistantContextModal({
                         <span
                           key={reaction.id}
                           className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800"
-                          title={formatDateTime(reaction.eventTimestamp)}
+                          title={formatDateTime(reaction.eventTimestamp, displayTimeZone)}
                         >
                           {reaction.emoji}{' '}
                           {reaction.direction === 'outgoing'

@@ -64,8 +64,28 @@ operation, not the default path.
 Merging to `development` deploys production to Hetzner through
 `.github/workflows/deploy.yml`. The workflow syncs the checked-out commit to
 `/opt/intexuraos`, refreshes GCP Secret Manager material on the VM, installs
-dependencies, builds and publishes the web bundle, reloads PM2, reloads nginx,
-and verifies the Hetzner origin with `curl --resolve`.
+dependencies, reloads and health-checks the backward-compatible backend, then
+builds and publishes the web bundle, reloads nginx, and verifies the Hetzner
+origin with `curl --resolve`. This backend-first order keeps already-open old
+browser clients usable during rollout; the Conversation Assistant turn routes
+temporarily accept a question-only legacy body and generate the durable request
+id server-side. The deploy fails before
+remote mutation when the local checkout differs from `GITHUB_SHA`.
+
+Retained GCP targets are triggered with `--sha=${GITHUB_SHA}`. A `SUCCESS`
+status is accepted only when
+`sourceProvenance.resolvedRepoSource.commitSha` exactly equals `GITHUB_SHA`;
+an empty or different provenance SHA fails the workflow.
+
+Hetzner deploys expose exact release evidence at `GET /deployment.json` as
+uncached JSON containing `commitSha`, `workflowRunId`, and `deployedAt`. The
+script removes the prior marker before syncing the first runtime change, so an
+interrupted rollout cannot present stale success evidence. After PM2, nginx,
+direct-origin health, and public WhatsApp health are ready, it atomically
+publishes the new marker and verifies its exact commit and workflow run through
+both the direct origin and public DNS. Verification also requires exactly those
+three keys, a canonical UTC timestamp, `Content-Type: application/json`, and a
+`Cache-Control` policy containing `no-store`.
 
 Required GitHub configuration:
 
@@ -79,6 +99,14 @@ dispatch targets `firestore`, `vm-lifecycle`, `transcription`, and
 `code-worker` still trigger only the retained GCP Cloud Build targets. Migrated
 app/web services must not be redeployed through GCP Cloud Run or app Cloud
 Build triggers.
+
+For emergency use outside GitHub Actions, check out the exact intended commit
+and invoke `scripts/hetzner/github-actions-deploy.sh` without `GITHUB_SHA` or
+`GITHUB_RUN_ID`. The script uses `git rev-parse HEAD`, records
+`workflowRunId` as `manual`, and retains the same readiness and attestation
+gates. It refuses a checkout with tracked or untracked changes and syncs a
+temporary `git archive` of that exact commit rather than live worktree bytes.
+Record the local HEAD in the deployment evidence before running it.
 
 ## Provisioning
 
@@ -414,7 +442,21 @@ After DNS resolves to the Hetzner IP, verify public routing:
 curl --fail https://intexuraos.cloud/healthz
 curl --fail https://intexuraos.cloud/api/user/health
 curl --fail https://intexuraos.cloud/api/settings/health
+curl --fail --silent --show-error --max-time 15 \
+  --resolve intexuraos.cloud:443:162.55.210.48 \
+  https://intexuraos.cloud/api/whatsapp/health
+curl --fail --silent --show-error --max-time 15 \
+  https://intexuraos.cloud/api/whatsapp/health
+curl --fail --silent --show-error --max-time 15 \
+  --resolve intexuraos.cloud:443:162.55.210.48 \
+  https://intexuraos.cloud/deployment.json
+curl --fail --silent --show-error --max-time 15 \
+  https://intexuraos.cloud/deployment.json
 ```
+
+Both deployment documents must contain the frozen SHA exactly. A missing
+document during rollout is expected fail-closed behavior; do not treat it as a
+successful deployment.
 
 ## Internal Edge Auth
 

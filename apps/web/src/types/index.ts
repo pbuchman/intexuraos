@@ -366,8 +366,6 @@ export interface ConversationAssistantUsage {
 
 export interface ConversationAssistantSession {
   id: string;
-  userId: string;
-  chatId: string;
   chatDisplayName?: string;
   status: ConversationAssistantSessionStatus;
   preparationStage?: ConversationAssistantPreparationStage;
@@ -378,7 +376,6 @@ export interface ConversationAssistantSession {
   model: ConversationAssistantModel | string;
   modelDisplayName: string;
   assistantRoleLabel: string;
-  transcriptSha256: string;
   transcriptMessageCount: number;
   omitted: ConversationAssistantOmittedCounts;
   title: string;
@@ -387,12 +384,207 @@ export interface ConversationAssistantSession {
   lastTurnAt?: string;
   deletionToken?: string;
   deletionPending?: boolean;
+  contextSummary: ConversationAssistantContextSummary;
+}
+
+export type ConversationAssistantContinuationAvailability =
+  | { state: 'available'; displayTimeZone: string }
+  | { state: 'legacy_session' | 'source_unavailable' };
+
+export interface ConversationAssistantContextSummary {
+  /** Stable presentation timezone, retained even when the source can no longer be continued. */
+  displayTimeZone: string;
+  availability: ConversationAssistantContinuationAvailability;
+  contextVersion: number;
+  snapshotCount: number;
+  totalAttachedMessageCount: number;
+  totalAttachedOmittedCount: number;
+  completedConversationRevision: number;
+  activeTurn: null | { requestId: string; stateVersion: number };
+}
+
+export interface ConversationAssistantContextAttachmentCounts {
+  included: number;
+  excluded: number;
+  completedTranscriptions: number;
+  edited: number;
+  redacted: number;
+  /** @deprecated Wire compatibility only; message removals are reported as redactions. */
+  deleted?: 0;
+  reactionsChanged: number;
+  lateIngested: number;
+}
+
+export interface ConversationAssistantContextAttachmentError {
+  code: 'ATTACHMENT_TOO_LARGE' | 'PREPARATION_FAILED';
+  message: string;
+}
+
+export interface ConversationAssistantContextAttachment {
+  id: string;
+  status: 'preparing' | 'ready' | 'failed' | 'expired' | 'committed';
+  compatibility: 'current' | 'stale';
+  capturedAt: string;
+  expiresAt?: string;
+  captureRange?: ConversationAssistantDateRange;
+  eventRange?: ConversationAssistantDateRange;
+  counts?: ConversationAssistantContextAttachmentCounts;
+  omitted?: ConversationAssistantOmittedCounts;
+  newerAvailableCount: number;
+  newerAvailableCorrectionCount: number;
+  requiresConfirmation: boolean;
+  confirmationToken?: string;
+  error?: ConversationAssistantContextAttachmentError;
+}
+
+export interface CreateConversationAssistantContextAttachmentRequest {
+  requestId: string;
+  replacesAttachmentId?: string;
+}
+
+export type ConversationAssistantContextCorrectionType =
+  | 'created'
+  | 'transcription_changed'
+  | 'edited'
+  | 'redacted'
+  | 'deleted'
+  | 'reaction_changed';
+
+export interface ConversationAssistantContextAttachmentPreviewReaction {
+  emoji: string;
+  direction: 'incoming' | 'outgoing';
+  eventTimestamp: string;
+  senderDisplayName?: string;
+}
+
+export interface ConversationAssistantContextAttachmentIncludedPreviewMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: 'incoming' | 'outgoing';
+  speakerLabel: string;
+  messageType: string;
+  contentKind: 'text' | 'transcription';
+  content: string;
+  reactions?: ConversationAssistantContextAttachmentPreviewReaction[];
+}
+
+export interface ConversationAssistantContextAttachmentExcludedPreviewMessage {
+  id: string;
+  eventTimestamp: string;
+  importedAt: string;
+  direction: 'incoming' | 'outgoing';
+  speakerLabel: string;
+  messageType: string;
+  omissionReason:
+    | 'media_only'
+    | 'failed_transcription'
+    | 'pending_transcription'
+    | 'non_text'
+    | 'over_limit';
+  contentKind?: 'text' | 'transcription';
+  content?: string;
+  reactions?: ConversationAssistantContextAttachmentPreviewReaction[];
+}
+
+export type ConversationAssistantContextCorrectionProjection =
+  | { state: 'missing' | 'unavailable' }
+  | {
+      state: 'included';
+      eventTimestamp: string;
+      importedAt: string;
+      direction: 'incoming' | 'outgoing';
+      speakerLabel: string;
+      messageType: string;
+      contentKind: 'text' | 'transcription';
+      content: string;
+      reactions: ConversationAssistantContextAttachmentPreviewReaction[];
+    }
+  | {
+      state: 'omitted';
+      eventTimestamp: string;
+      importedAt: string;
+      direction: 'incoming' | 'outgoing';
+      speakerLabel: string;
+      messageType: string;
+      omissionReason:
+        | 'media_only'
+        | 'failed_transcription'
+        | 'pending_transcription'
+        | 'non_text'
+        | 'over_limit';
+      reactions: ConversationAssistantContextAttachmentPreviewReaction[];
+    }
+  | {
+      state: 'redacted' | 'deleted';
+      eventTimestamp: string;
+      importedAt: string;
+      direction: 'incoming' | 'outgoing';
+      speakerLabel: string;
+      messageType: string;
+    };
+
+export type ConversationAssistantContextAttachmentPreviewItem =
+  | {
+      kind: 'included';
+      message: ConversationAssistantContextAttachmentIncludedPreviewMessage;
+    }
+  | {
+      kind: 'excluded';
+      message: ConversationAssistantContextAttachmentExcludedPreviewMessage;
+    }
+  | {
+      kind: 'correction';
+      changeKind: ConversationAssistantContextCorrectionType;
+      targetReference: string;
+      before: ConversationAssistantContextCorrectionProjection;
+      after: ConversationAssistantContextCorrectionProjection;
+    };
+
+export interface ConversationAssistantContextAttachmentPreviewResponse {
+  items: ConversationAssistantContextAttachmentPreviewItem[];
+  nextCursor?: string;
+}
+
+export interface ConversationAssistantContextSnapshotSummary {
+  kind: 'initial' | 'update';
+  contextVersion: number;
+  capturedAt: string;
+  messageCount: number;
+  excludedCount: number;
+  correctionCount: number;
+  omitted: ConversationAssistantOmittedCounts;
+  attachmentId?: string;
+  linkedTurnId?: string;
+  captureRange?: ConversationAssistantDateRange;
+  eventRange?: ConversationAssistantDateRange;
+}
+
+export interface ConversationAssistantContextHistoryResponse {
+  snapshots: ConversationAssistantContextSnapshotSummary[];
+}
+
+export interface ConversationAssistantTurnRequest {
+  id: string;
+  sessionId: string;
+  status: 'in_progress' | 'completed' | 'failed';
+  attempt: number;
+  stateVersion: number;
+  conversationRevision: number;
+  contextAttachmentId?: string;
+  completedAt?: string;
+  error?: { code: string; message: string };
+}
+
+export interface ConversationAssistantTurnRequestResponse {
+  request: ConversationAssistantTurnRequest;
+  turns: ConversationAssistantTurn[];
+  canRetryAnswer: boolean;
 }
 
 export interface ConversationAssistantTurn {
   id: string;
   sessionId: string;
-  userId: string;
   role: 'user' | 'assistant';
   text: string;
   createdAt: string;
@@ -401,6 +593,23 @@ export interface ConversationAssistantTurn {
     code: string;
     message: string;
   };
+  sequence?: number;
+  conversationRevision?: number;
+  requestId?: string;
+  canRetryAnswer?: boolean;
+  kind?: 'message' | 'context_attachment_question';
+  contextAttachmentId?: string;
+  contextAttachment?: ConversationAssistantTurnContextAttachmentSummary;
+  acknowledgment?: string;
+}
+
+export interface ConversationAssistantTurnContextAttachmentSummary {
+  id: string;
+  capturedAt: string;
+  captureRange: ConversationAssistantDateRange;
+  eventRange?: ConversationAssistantDateRange;
+  counts: ConversationAssistantContextAttachmentCounts;
+  omitted: ConversationAssistantOmittedCounts;
 }
 
 export interface ConversationAssistantSessionsResponse {
@@ -466,8 +675,7 @@ export interface ConversationAssistantOmittedContextMessage {
   reactions?: ConversationAssistantContextReaction[];
   reaction?: {
     emoji: string;
-    targetMatrixEventId?: string;
-    targetMessageId?: string;
+    targetReference?: string;
   };
 }
 
@@ -479,7 +687,6 @@ export interface ConversationAssistantContextResponse {
   omittedMessageCount: number;
   snapshotAvailable: boolean;
   omitted: ConversationAssistantOmittedCounts;
-  transcriptSha256: string;
   nextMessageCursor?: number;
   nextOmittedCursor?: number;
 }
@@ -490,19 +697,55 @@ export interface CreateConversationAssistantSessionRequest {
   from: string;
   to: string;
   model?: ConversationAssistantModel;
+  displayTimeZone?: string;
 }
 
 export interface SendConversationAssistantTurnRequest {
+  requestId: string;
   question: string;
+  contextAttachmentId?: string;
+  confirmationToken?: string;
 }
 
 export type ConversationAssistantStreamEvent =
-  | { type: 'user_turn'; turn: ConversationAssistantTurn }
-  | { type: 'assistant_delta'; text: string }
-  | { type: 'usage'; usage: ConversationAssistantUsage }
-  | { type: 'error'; error: { code: string; message: string } }
-  | { type: 'assistant_turn'; turn: ConversationAssistantTurn }
-  | { type: 'done' };
+  | {
+      type: 'request_state';
+      requestId: string;
+      streamSequence: number;
+      request: ConversationAssistantTurnRequest;
+    }
+  | {
+      type: 'context_attached';
+      requestId: string;
+      streamSequence: number;
+      attachmentId: string;
+    }
+  | {
+      type: 'user_turn';
+      requestId?: string;
+      streamSequence?: number;
+      turn: ConversationAssistantTurn;
+    }
+  | { type: 'assistant_delta'; requestId?: string; streamSequence?: number; text: string }
+  | {
+      type: 'usage';
+      requestId?: string;
+      streamSequence?: number;
+      usage: ConversationAssistantUsage;
+    }
+  | {
+      type: 'error';
+      requestId?: string;
+      streamSequence?: number;
+      error: { code: string; message: string };
+    }
+  | {
+      type: 'assistant_turn';
+      requestId?: string;
+      streamSequence?: number;
+      turn: ConversationAssistantTurn;
+    }
+  | { type: 'done'; requestId?: string; streamSequence?: number };
 
 export type IntexAgentSessionStatus =
   | 'active'

@@ -22,6 +22,7 @@ import type {
 import { normalizePhoneNumber } from '../routes/shared.js';
 import type {
   AudioStoredEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ConversationAssistantPreparationRequestedEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
@@ -49,16 +50,25 @@ import type {
   PrivateWhatsAppChat,
   PrivateWhatsAppChatQueryInput,
   PrivateWhatsAppChatQueryResult,
+  PrivateWhatsAppContextChange,
+  PrivateWhatsAppContextJournalQueryInput,
+  PrivateWhatsAppContextJournalQueryResult,
+  PrivateWhatsAppContextMessagesByIdsInput,
+  PrivateWhatsAppContextProjection,
   PrivateWhatsAppConversationContextMessageResult,
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessage,
   PrivateWhatsAppMessageQueryInput,
   PrivateWhatsAppMessageQueryResult,
+  PrivateWhatsAppOwnedChatInput,
+  PrivateMediaDeletionBatchInput,
+  PrivateMediaDeletionBatchResult,
   PrivateWhatsAppReactionSummary,
   PrivateWhatsAppSender,
   PrivateWhatsAppSenderQueryInput,
   PrivateWhatsAppSenderQueryResult,
   PrivateWhatsAppRepository,
+  PrivateWhatsAppErasureWorkItem,
   PrivateWhatsAppSenderDay,
   PrivateWhatsAppSenderDayQueryInput,
   PrivateWhatsAppSenderDayQueryResult,
@@ -73,6 +83,7 @@ import type {
   UpdatePrivateWhatsAppMessageStoredMediaInput,
   UpdatePrivateWhatsAppMessageStoredMediaResult,
   UpdatePrivateWhatsAppMessageTranscriptionInput,
+  UpdatePrivateWhatsAppMessageTranscriptionResult,
   UploadResult,
   WebhookProcessEvent,
   WebhookProcessingStatus,
@@ -89,11 +100,23 @@ import type {
 import type { PrivateConversationContextMessageQueryInput } from '../domain/whatsapp/models/PrivateWhatsApp.js';
 import type { ConversationAssistantRepository } from '../domain/conversation-assistant/ports.js';
 import type {
+  ConversationAssistantTurnRequest,
+  ConversationAssistantTurnRequestRepository,
+  TurnRequestConversationTurn,
+} from '../domain/conversation-assistant/turnRequestPorts.js';
+import type {
+  ConversationAssistantOperationalTelemetry,
+  ConversationAssistantTelemetryInput,
+} from '../domain/conversation-assistant/operationalTelemetry.js';
+import type {
+  ConversationAssistantContextAttachment,
+  ConversationAssistantContextAttachmentPreparedSnapshot,
   ConversationAssistantContextResult,
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../domain/conversation-assistant/types.js';
 import { createConversationAssistantDeletionToken } from '../domain/conversation-assistant/deletionToken.js';
+import { isLatestRetryableConversationAssistantAnswer } from '../domain/conversation-assistant/answerRetryCapability.js';
 import type {
   MatrixOutboundGateway,
   MatrixOutboundReadinessInput,
@@ -102,6 +125,544 @@ import type {
   MatrixOutboundSendResult,
 } from '../domain/whatsapp/ports/matrixOutboundGateway.js';
 import { randomUUID } from 'node:crypto';
+
+export class FakeConversationAssistantContextAttachmentRepository {
+  private readonly sessions = new Map<
+    string,
+    { userId: string; generationId: string; contextVersion: number }
+  >();
+  private readonly attachments = new Map<string, ConversationAssistantContextAttachment>();
+  private readonly snapshots = new Map<
+    string,
+    ConversationAssistantContextAttachmentPreparedSnapshot
+  >();
+  claimResultOverride?: 'busy' | 'stale' | 'not_found' | 'expired';
+  persistenceResultOverride?: 'stale' | 'not_found' | 'expired';
+  throwOnClaim = false;
+
+  setSession(input: {
+    userId: string;
+    sessionId: string;
+    generationId?: string;
+    contextVersion?: number;
+  }): void {
+    this.sessions.set(input.sessionId, {
+      userId: input.userId,
+      generationId: input.generationId ?? 'generation-1',
+      contextVersion: input.contextVersion ?? 0,
+    });
+  }
+
+  seedAttachment(
+    attachment: ConversationAssistantContextAttachment,
+    snapshot?: ConversationAssistantContextAttachmentPreparedSnapshot
+  ): void {
+    this.attachments.set(attachment.id, structuredClone(attachment));
+    if (snapshot !== undefined) this.snapshots.set(attachment.id, structuredClone(snapshot));
+  }
+
+  getAttachment(attachmentId: string): ConversationAssistantContextAttachment | undefined {
+    const attachment = this.attachments.get(attachmentId);
+    return attachment === undefined ? undefined : structuredClone(attachment);
+  }
+
+  getSnapshot(
+    attachmentId: string
+  ): ConversationAssistantContextAttachmentPreparedSnapshot | undefined {
+    const snapshot = this.snapshots.get(attachmentId);
+    return snapshot === undefined ? undefined : structuredClone(snapshot);
+  }
+
+  resolveContextAttachmentSession(input: { userId: string; sessionId: string }): Promise<
+    | { status: 'found'; sessionGenerationId: string }
+    | { status: 'not_found' }
+  > {
+    const session = this.sessions.get(input.sessionId);
+    if (session?.userId !== input.userId) return Promise.resolve({ status: 'not_found' });
+    return Promise.resolve({ status: 'found', sessionGenerationId: session.generationId });
+  }
+
+  captureContextAttachment(input: {
+    attachmentId: string;
+    userId: string;
+    sessionId: string;
+    expectedSessionGenerationId: string;
+    preparationRequestId: string;
+    preparationRequestFingerprint: string;
+    replacesAttachmentId?: string;
+  }): Promise<
+    | { status: 'created' | 'replay'; attachment: ConversationAssistantContextAttachment }
+    | { status: 'conflict' | 'not_found' | 'stale' }
+  > {
+    const session = this.sessions.get(input.sessionId);
+    if (session?.userId !== input.userId) return Promise.resolve({ status: 'not_found' });
+    if (session.generationId !== input.expectedSessionGenerationId) {
+      return Promise.resolve({ status: 'stale' });
+    }
+    const existing = this.attachments.get(input.attachmentId);
+    if (existing !== undefined) {
+      if (existing.preparationRequestFingerprint !== input.preparationRequestFingerprint) {
+        return Promise.resolve({ status: 'conflict' });
+      }
+      return Promise.resolve({ status: 'replay', attachment: structuredClone(existing) });
+    }
+    if (input.replacesAttachmentId !== undefined) {
+      const replaced = this.attachments.get(input.replacesAttachmentId);
+      if (replaced === undefined || replaced.status === 'committed') {
+        return Promise.resolve({ status: 'stale' });
+      }
+      this.attachments.set(replaced.id, { ...replaced, status: 'expired' });
+    }
+    const attachment: ConversationAssistantContextAttachment = {
+      id: input.attachmentId,
+      userId: input.userId,
+      sessionId: input.sessionId,
+      sessionGenerationId: input.expectedSessionGenerationId,
+      sourceAccountId: 'source-123',
+      sourceAccountGeneration: 'source-123',
+      chatId: 'chat:source-123:!direct',
+      preparationRequestId: input.preparationRequestId,
+      preparationRequestFingerprint: input.preparationRequestFingerprint,
+      ...(input.replacesAttachmentId === undefined
+        ? {}
+        : { replacesAttachmentId: input.replacesAttachmentId }),
+      status: 'queued',
+      initialContextFrom: '2026-06-30T00:00:00.000Z',
+      baseContextVersion: session.contextVersion,
+      baseEventThrough: '2026-07-01T00:00:00.000Z',
+      capturedAt: '2026-07-02T12:00:00.000Z',
+      baseChangeSeq: 1,
+      cutoffChangeSeq: 1,
+      captureRange: {
+        from: '2026-07-01T00:00:00.000Z',
+        to: '2026-07-02T12:00:00.000Z',
+      },
+      counts: fakeEmptyContextAttachmentCounts(),
+      omitted: fakeEmptyConversationContextOmittedCounts(),
+      requiresConfirmation: false,
+      preparationAttempt: 1,
+      expiresAt: '2099-07-02T12:30:00.000Z',
+    };
+    this.attachments.set(attachment.id, attachment);
+    return Promise.resolve({ status: 'created', attachment: structuredClone(attachment) });
+  }
+
+  failQueuedContextAttachmentPreparation(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+    attempt: number;
+    error: { code: string; message: string };
+  }): Promise<
+    | { status: 'failed' | 'stale'; attachment: ConversationAssistantContextAttachment }
+    | { status: 'not_found' }
+  > {
+    const attachment = this.ownedAttachment(input);
+    if (attachment === undefined) return Promise.resolve({ status: 'not_found' });
+    if (
+      attachment.status !== 'queued' ||
+      attachment.preparationAttempt !== input.attempt
+    ) {
+      return Promise.resolve({ status: 'stale', attachment: structuredClone(attachment) });
+    }
+    const failed = { ...attachment, status: 'failed' as const, preparationError: input.error };
+    this.attachments.set(failed.id, failed);
+    return Promise.resolve({ status: 'failed', attachment: structuredClone(failed) });
+  }
+
+  claimContextAttachmentPreparation(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+    attempt: number;
+    claimId: string;
+    now: string;
+    leaseExpiresAt: string;
+  }): Promise<
+    | { status: 'claimed'; attachment: ConversationAssistantContextAttachment }
+    | { status: 'busy' | 'stale' | 'not_found' | 'expired' }
+  > {
+    if (this.throwOnClaim) throw new Error('fake claim persistence failure');
+    if (this.claimResultOverride !== undefined) {
+      return Promise.resolve({ status: this.claimResultOverride });
+    }
+    const attachment = this.ownedAttachment(input);
+    if (attachment === undefined) return Promise.resolve({ status: 'not_found' });
+    if (attachment.preparationAttempt !== input.attempt) {
+      return Promise.resolve({ status: 'stale' });
+    }
+    if (
+      attachment.status === 'preparing' &&
+      attachment.preparationClaimId !== input.claimId &&
+      (attachment.preparationLeaseExpiresAt ?? '') > input.now
+    ) {
+      return Promise.resolve({ status: 'busy' });
+    }
+    if (attachment.status !== 'queued' && attachment.status !== 'preparing') {
+      return Promise.resolve({ status: 'stale' });
+    }
+    const claimed = {
+      ...attachment,
+      status: 'preparing' as const,
+      preparationClaimId: input.claimId,
+      preparationLeaseExpiresAt: input.leaseExpiresAt,
+    };
+    this.attachments.set(claimed.id, claimed);
+    return Promise.resolve({ status: 'claimed', attachment: structuredClone(claimed) });
+  }
+
+  persistContextAttachmentPreparedSnapshot(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+    attempt: number;
+    claimId: string;
+    snapshotId: string;
+    prepared: ConversationAssistantContextAttachmentPreparedSnapshot;
+  }): Promise<
+    | { status: 'saved'; manifest: { chunkIds: string[]; chunkCount: number } }
+    | { status: 'stale' | 'not_found' | 'expired' }
+  > {
+    if (this.persistenceResultOverride !== undefined) {
+      return Promise.resolve({ status: this.persistenceResultOverride });
+    }
+    const attachment = this.ownedAttachment(input);
+    if (
+      attachment === undefined ||
+      attachment.preparationClaimId !== input.claimId ||
+      attachment.preparationAttempt !== input.attempt
+    ) {
+      return Promise.resolve({ status: attachment === undefined ? 'not_found' : 'stale' });
+    }
+    this.snapshots.set(input.attachmentId, structuredClone(input.prepared));
+    return Promise.resolve({
+      status: 'saved',
+      manifest: { chunkIds: [`${input.snapshotId}:0`], chunkCount: 1 },
+    });
+  }
+
+  completeContextAttachmentPreparation(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+    attempt: number;
+    claimId: string;
+    snapshotId: string;
+    manifest: { chunkIds: string[]; chunkCount: number };
+    prepared: ConversationAssistantContextAttachmentPreparedSnapshot;
+  }): Promise<
+    | { status: 'ready'; attachment: ConversationAssistantContextAttachment }
+    | { status: 'missing_chunks' | 'stale' | 'not_found' | 'expired' }
+  > {
+    const attachment = this.ownedAttachment(input);
+    if (attachment === undefined) return Promise.resolve({ status: 'not_found' });
+    if (
+      attachment.preparationClaimId !== input.claimId ||
+      attachment.preparationAttempt !== input.attempt
+    ) {
+      return Promise.resolve({ status: 'stale' });
+    }
+    const ready: ConversationAssistantContextAttachment = {
+      ...attachment,
+      status: 'ready',
+      snapshotId: input.snapshotId,
+      chunkManifest: structuredClone(input.manifest),
+      ...(input.prepared.eventRange === undefined
+        ? {}
+        : { eventRange: structuredClone(input.prepared.eventRange) }),
+      counts: structuredClone(input.prepared.counts),
+      omitted: structuredClone(input.prepared.omitted),
+      deltaTranscriptSha256: input.prepared.deltaTranscriptSha256,
+      previousContextChainSha256: input.prepared.previousContextChainSha256,
+      resultingContextChainSha256: input.prepared.resultingContextChainSha256,
+      estimatedInputTokens: input.prepared.estimatedInputTokens,
+      requiresConfirmation: input.prepared.requiresConfirmation,
+      ...(input.prepared.confirmationToken === undefined
+        ? {}
+        : { confirmationToken: input.prepared.confirmationToken }),
+    };
+    delete ready.preparationClaimId;
+    delete ready.preparationLeaseExpiresAt;
+    this.attachments.set(ready.id, ready);
+    return Promise.resolve({ status: 'ready', attachment: structuredClone(ready) });
+  }
+
+  failContextAttachmentPreparation(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+    attempt: number;
+    claimId: string;
+    error: { code: string; message: string };
+  }): Promise<
+    | { status: 'failed'; attachment: ConversationAssistantContextAttachment }
+    | { status: 'stale' | 'not_found' | 'expired' }
+  > {
+    const attachment = this.ownedAttachment(input);
+    if (attachment === undefined) return Promise.resolve({ status: 'not_found' });
+    if (
+      attachment.preparationClaimId !== input.claimId ||
+      attachment.preparationAttempt !== input.attempt
+    ) {
+      return Promise.resolve({ status: 'stale' });
+    }
+    const failed = {
+      ...attachment,
+      status: 'failed' as const,
+      preparationError: structuredClone(input.error),
+    };
+    delete failed.preparationClaimId;
+    delete failed.preparationLeaseExpiresAt;
+    this.attachments.set(failed.id, failed);
+    return Promise.resolve({ status: 'failed', attachment: structuredClone(failed) });
+  }
+
+  deleteContextAttachmentPreparedSnapshot(input: { attachmentId: string }): Promise<void> {
+    this.snapshots.delete(input.attachmentId);
+    return Promise.resolve();
+  }
+
+  requeueContextAttachmentPreparation(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+  }): Promise<
+    | { status: 'queued'; attachment: ConversationAssistantContextAttachment }
+    | { status: 'stale' | 'not_found' | 'expired' | 'invalid_state' }
+  > {
+    const attachment = this.ownedAttachment(input);
+    if (attachment === undefined) return Promise.resolve({ status: 'not_found' });
+    if (attachment.status !== 'failed') return Promise.resolve({ status: 'invalid_state' });
+    const queued = {
+      ...attachment,
+      status: 'queued' as const,
+      preparationAttempt: attachment.preparationAttempt + 1,
+    };
+    delete queued.preparationError;
+    this.attachments.set(queued.id, queued);
+    return Promise.resolve({ status: 'queued', attachment: structuredClone(queued) });
+  }
+
+  getOwnedContextAttachment(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<
+    | {
+        status: 'found';
+        attachment: ConversationAssistantContextAttachment;
+        currentContextVersion: number;
+      }
+    | { status: 'not_found' }
+  > {
+    const attachment = this.attachments.get(input.attachmentId);
+    const session = this.sessions.get(input.sessionId);
+    if (
+      attachment?.userId !== input.userId ||
+      attachment.sessionId !== input.sessionId ||
+      session?.userId !== input.userId ||
+      attachment.sessionGenerationId !== session.generationId
+    ) {
+      return Promise.resolve({ status: 'not_found' });
+    }
+    return Promise.resolve({
+      status: 'found',
+      attachment: structuredClone(attachment),
+      currentContextVersion: session.contextVersion,
+    });
+  }
+
+  async loadOwnedContextAttachmentPreparedSnapshot(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    now: string;
+  }): Promise<
+    | {
+        status: 'found';
+        attachment: ConversationAssistantContextAttachment;
+        snapshot: ConversationAssistantContextAttachmentPreparedSnapshot;
+        currentContextVersion: number;
+      }
+    | { status: 'not_found' | 'snapshot_unavailable' }
+  > {
+    const owned = await this.getOwnedContextAttachment(input);
+    if (owned.status !== 'found') return owned;
+    if (
+      owned.attachment.status === 'expired' ||
+      (owned.attachment.status !== 'committed' &&
+        owned.attachment.expiresAt !== undefined &&
+        owned.attachment.expiresAt <= input.now)
+    ) {
+      return { status: 'not_found' };
+    }
+    const snapshot = this.snapshots.get(input.attachmentId);
+    if (snapshot === undefined) return { status: 'snapshot_unavailable' };
+    return { ...owned, snapshot: structuredClone(snapshot) };
+  }
+
+  async deleteOwnedContextAttachmentDraft(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+  }): Promise<{ status: 'deleted' | 'committed' | 'not_found' }> {
+    const owned = await this.getOwnedContextAttachment(input);
+    if (owned.status !== 'found') return owned;
+    if (owned.attachment.status === 'committed') return { status: 'committed' };
+    if (owned.attachment.status !== 'expired') {
+      this.attachments.set(owned.attachment.id, {
+        ...owned.attachment,
+        status: 'expired',
+      });
+    }
+    this.snapshots.delete(owned.attachment.id);
+    return { status: 'deleted' };
+  }
+
+  listOwnedContextHistory(input: { userId: string; sessionId: string }): Promise<
+    | {
+        status: 'found';
+        snapshots: import('../domain/conversation-assistant/types.js').ConversationAssistantContextSnapshotSummary[];
+      }
+    | { status: 'not_found' }
+  > {
+    const session = this.sessions.get(input.sessionId);
+    if (session?.userId !== input.userId) return Promise.resolve({ status: 'not_found' });
+    const committed = Array.from(this.attachments.values())
+      .filter(
+        (attachment) =>
+          attachment.userId === input.userId &&
+          attachment.sessionId === input.sessionId &&
+          attachment.status === 'committed'
+      )
+      .sort((left, right) => left.baseContextVersion - right.baseContextVersion)
+      .map((attachment) => ({
+        kind: 'update' as const,
+        contextVersion: attachment.baseContextVersion + 1,
+        capturedAt: attachment.committedAt ?? attachment.capturedAt,
+        messageCount: attachment.counts.included,
+        excludedCount: attachment.counts.omitted,
+        correctionCount:
+          attachment.counts.completedTranscriptions +
+          attachment.counts.edited +
+          attachment.counts.redacted +
+          attachment.counts.deleted +
+          attachment.counts.reactionsChanged,
+        omitted: structuredClone(attachment.omitted),
+        attachmentId: attachment.id,
+        captureRange: structuredClone(attachment.captureRange),
+        ...(attachment.committedTurnId === undefined
+          ? {}
+          : { linkedTurnId: attachment.committedTurnId }),
+        ...(attachment.eventRange === undefined
+          ? {}
+          : { eventRange: structuredClone(attachment.eventRange) }),
+      }));
+    return Promise.resolve({
+      status: 'found',
+      snapshots: [
+        {
+          kind: 'initial',
+          contextVersion: 0,
+          capturedAt: '2026-07-01T00:00:00.000Z',
+          messageCount: 1,
+          excludedCount: 0,
+          correctionCount: 0,
+          omitted: {
+            mediaOnly: 0,
+            failedTranscriptions: 0,
+            pendingTranscriptions: 0,
+            nonText: 0,
+            overLimit: 0,
+          },
+        },
+        ...committed,
+      ],
+    });
+  }
+
+  private ownedAttachment(input: {
+    userId: string;
+    sessionId: string;
+    attachmentId: string;
+    expectedSessionGenerationId: string;
+  }): ConversationAssistantContextAttachment | undefined {
+    const attachment = this.attachments.get(input.attachmentId);
+    if (
+      attachment?.userId !== input.userId ||
+      attachment.sessionId !== input.sessionId ||
+      attachment.sessionGenerationId !== input.expectedSessionGenerationId
+    ) {
+      return undefined;
+    }
+    return attachment;
+  }
+}
+
+export class FakeConversationAssistantContextAttachmentDeltaBuilder {
+  result: Result<
+    ConversationAssistantContextAttachmentPreparedSnapshot,
+    { code: string; message: string }
+  > = ok(fakePreparedContextAttachmentSnapshot());
+
+  buildExactCutoffDelta(): Promise<typeof this.result> {
+    return Promise.resolve(structuredClone(this.result));
+  }
+
+  setSnapshot(snapshot: ConversationAssistantContextAttachmentPreparedSnapshot): void {
+    this.result = ok(structuredClone(snapshot));
+  }
+
+  setFailure(code: string, message: string): void {
+    this.result = err({ code, message });
+  }
+}
+
+function fakeEmptyContextAttachmentCounts(): ConversationAssistantContextAttachment['counts'] {
+  return {
+    included: 0,
+    omitted: 0,
+    newlyAvailable: 0,
+    edited: 0,
+    redacted: 0,
+    deleted: 0,
+    reactionsChanged: 0,
+    lateIngested: 0,
+    completedTranscriptions: 0,
+  };
+}
+
+function fakeEmptyConversationContextOmittedCounts(): ConversationAssistantContextAttachment['omitted'] {
+  return {
+    mediaOnly: 0,
+    failedTranscriptions: 0,
+    pendingTranscriptions: 0,
+    nonText: 0,
+    overLimit: 0,
+  };
+}
+
+export function fakePreparedContextAttachmentSnapshot(): ConversationAssistantContextAttachmentPreparedSnapshot {
+  return {
+    transcriptText: '',
+    messages: [],
+    omittedMessages: [],
+    corrections: [],
+    counts: fakeEmptyContextAttachmentCounts(),
+    omitted: fakeEmptyConversationContextOmittedCounts(),
+    deltaTranscriptSha256: 'b'.repeat(64),
+    previousContextChainSha256: 'a'.repeat(64),
+    resultingContextChainSha256: 'c'.repeat(64),
+    estimatedInputTokens: 0,
+    requiresConfirmation: false,
+  };
+}
 
 export class FakeConversationAssistantRepository implements ConversationAssistantRepository {
   private readonly sessions = new Map<string, ConversationAssistantSession>();
@@ -114,6 +675,11 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     }
   >();
   readonly snapshotRequests: { sessionId: string; userId: string }[] = [];
+  private rejectNextSessionCreationForSourceFence = false;
+
+  fenceNextSessionCreation(): void {
+    this.rejectNextSessionCreationForSourceFence = true;
+  }
 
   saveSession(session: ConversationAssistantSession): Promise<void> {
     this.sessions.set(session.id, { ...session });
@@ -123,7 +689,12 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   createSessionIfAbsent(session: ConversationAssistantSession): Promise<
     | { status: 'created'; session: ConversationAssistantSession }
     | { status: 'existing'; session: ConversationAssistantSession }
+    | { status: 'source_unavailable' }
   > {
+    if (this.rejectNextSessionCreationForSourceFence) {
+      this.rejectNextSessionCreationForSourceFence = false;
+      return Promise.resolve({ status: 'source_unavailable' });
+    }
     const existing = this.sessions.get(session.id);
     if (existing !== undefined) {
       return Promise.resolve({ status: 'existing', session: { ...existing } });
@@ -243,11 +814,14 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     session: ConversationAssistantSession;
     attempt: number;
     claimId: string;
+    now: string;
   }): Promise<boolean> {
     const current = this.sessions.get(input.session.id);
     if (
       current?.preparationAttempt !== input.attempt ||
       current.preparationClaimId !== input.claimId ||
+      current.preparationLeaseExpiresAt === undefined ||
+      current.preparationLeaseExpiresAt <= input.now ||
       current.deletionStartedAt !== undefined ||
       current.generationId !== input.session.generationId
     ) {
@@ -491,6 +1065,564 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   }
 }
 
+export class FakeConversationAssistantTurnRequestRepository
+  implements ConversationAssistantTurnRequestRepository
+{
+  private readonly requests = new Map<
+    string,
+    {
+      request: ConversationAssistantTurnRequest;
+      userTurn: TurnRequestConversationTurn;
+      assistantTurn?: TurnRequestConversationTurn;
+    }
+  >();
+  private nextStartStatus?:
+    | 'conflict'
+    | 'active_request'
+    | 'attachment_stale'
+    | 'attachment_not_ready'
+    | 'confirmation_required'
+    | 'context_window_exceeded'
+    | 'not_found';
+  private nextRetryStatus?: 'not_found' | 'invalid_state' | 'busy';
+  private throwStart = false;
+
+  constructor(
+    private readonly sessionRepository: FakeConversationAssistantRepository,
+    private readonly attachmentRepository: FakeConversationAssistantContextAttachmentRepository
+  ) {}
+
+  failNextStartWith(status: NonNullable<typeof this.nextStartStatus>): void {
+    this.nextStartStatus = status;
+  }
+
+  failNextRetryWith(status: NonNullable<typeof this.nextRetryStatus>): void {
+    this.nextRetryStatus = status;
+  }
+
+  throwOnNextStart(): void {
+    this.throwStart = true;
+  }
+
+  getStoredRequest(requestId: string): ConversationAssistantTurnRequest | undefined {
+    const stored = this.requests.get(requestId)?.request;
+    return stored === undefined ? undefined : structuredClone(stored);
+  }
+
+  async startTurnRequest(
+    input: Parameters<ConversationAssistantTurnRequestRepository['startTurnRequest']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['startTurnRequest']> {
+    if (this.throwStart) {
+      this.throwStart = false;
+      throw new Error('fake turn request persistence failure');
+    }
+    const session = await this.sessionRepository.getSessionById(input.sessionId);
+    if (
+      session?.userId !== input.userId ||
+      session.generationId === undefined ||
+      (session.status !== 'ready' && session.status !== 'active')
+    ) {
+      return { status: 'not_found' };
+    }
+    const forced = this.nextStartStatus;
+    delete this.nextStartStatus;
+    if (forced !== undefined) return { status: forced };
+
+    const existing = this.requests.get(input.requestId);
+    if (existing !== undefined) {
+      if (
+        existing.request.userId !== input.userId ||
+        existing.request.sessionId !== input.sessionId
+      ) {
+        return { status: 'not_found' };
+      }
+      if (existing.request.requestFingerprint !== input.requestFingerprint) {
+        return { status: 'conflict' };
+      }
+      return {
+        status: 'replay',
+        request: structuredClone(existing.request),
+        userTurn: structuredClone(existing.userTurn),
+        ...(existing.assistantTurn === undefined
+          ? {}
+          : { assistantTurn: structuredClone(existing.assistantTurn) }),
+      };
+    }
+    if (
+      Array.from(this.requests.values()).some(
+        (stored) =>
+          stored.request.userId === input.userId &&
+          stored.request.sessionId === input.sessionId &&
+          stored.request.status === 'in_progress'
+      )
+    ) {
+      return { status: 'active_request' };
+    }
+
+    const attachment =
+      input.contextAttachmentId === undefined
+        ? undefined
+        : this.attachmentRepository.getAttachment(input.contextAttachmentId);
+    if (input.contextAttachmentId !== undefined) {
+      if (
+        attachment === undefined ||
+        attachment.userId !== input.userId ||
+        attachment.sessionId !== input.sessionId
+      ) {
+        return { status: 'not_found' };
+      }
+      if (attachment.status !== 'ready') return { status: 'attachment_not_ready' };
+      if (
+        attachment.requiresConfirmation &&
+        input.confirmationToken !== attachment.confirmationToken
+      ) {
+        return { status: 'confirmation_required' };
+      }
+    }
+
+    const sequence = this.requests.size * 2 + 1;
+    const conversationRevision = this.requests.size + 1;
+    const acknowledgment = attachment === undefined ? '' : 'Added the selected WhatsApp context.';
+    const request: ConversationAssistantTurnRequest = {
+      id: input.requestId,
+      requestFingerprint: input.requestFingerprint,
+      sessionId: input.sessionId,
+      userId: input.userId,
+      sessionGenerationId: session.generationId,
+      status: 'in_progress',
+      attempt: 1,
+      stateVersion: 1,
+      conversationRevision,
+      userTurnId: `${input.requestId}_user`,
+      assistantTurnId: `${input.requestId}_assistant`,
+      question: input.question,
+      acknowledgment,
+      claimId: input.claimId,
+      leaseExpiresAt: input.leaseExpiresAt,
+      createdAt: input.now,
+      updatedAt: input.now,
+      ...(input.contextAttachmentId === undefined
+        ? {}
+        : { contextAttachmentId: input.contextAttachmentId }),
+    };
+    const userTurn: TurnRequestConversationTurn = {
+      id: request.userTurnId,
+      sessionId: input.sessionId,
+      userId: input.userId,
+      role: 'user',
+      text: input.question,
+      createdAt: input.now,
+      sequence,
+      conversationRevision,
+      requestId: input.requestId,
+      kind: attachment === undefined ? 'message' : 'context_attachment_question',
+      ...(attachment === undefined
+        ? {}
+        : {
+            contextAttachmentId: attachment.id,
+            contextAttachment: {
+              id: attachment.id,
+              capturedAt: attachment.capturedAt,
+              captureRange: { ...attachment.captureRange },
+              ...(attachment.eventRange === undefined
+                ? {}
+                : { eventRange: { ...attachment.eventRange } }),
+              counts: {
+                included: attachment.counts.included,
+                excluded: attachment.counts.omitted,
+                newlyAvailable: attachment.counts.newlyAvailable,
+                edited: attachment.counts.edited,
+                redacted: attachment.counts.redacted,
+                deleted: attachment.counts.deleted,
+                reactionsChanged: attachment.counts.reactionsChanged,
+                lateIngested: attachment.counts.lateIngested,
+                completedTranscriptions: attachment.counts.completedTranscriptions,
+              },
+              omitted: { ...attachment.omitted },
+            },
+          }),
+    };
+    this.requests.set(input.requestId, { request, userTurn });
+    await this.sessionRepository.saveTurn(userTurn);
+    if (session.continuation !== undefined) {
+      await this.sessionRepository.saveSession({
+        ...session,
+        status: 'active',
+        updatedAt: input.now,
+        continuation: {
+          ...session.continuation,
+          activeTurnRequestId: input.requestId,
+          activeTurnLeaseExpiresAt: input.leaseExpiresAt,
+        },
+      });
+    }
+    if (attachment !== undefined) {
+      this.attachmentRepository.seedAttachment({
+        ...attachment,
+        status: 'committed',
+        committedTurnId: userTurn.id,
+        committedAt: input.now,
+      });
+    }
+    return {
+      status: 'claimed',
+      request: structuredClone(request),
+      userTurn: structuredClone(userTurn),
+    };
+  }
+
+  async loadPromptSnapshot(
+    input: Parameters<ConversationAssistantTurnRequestRepository['loadPromptSnapshot']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['loadPromptSnapshot']> {
+    const session = await this.sessionRepository.getSessionById(input.sessionId);
+    const stored = this.requests.get(input.requestId);
+    if (session?.userId !== input.userId || stored === undefined) return { status: 'not_found' };
+    if (
+      stored.request.sessionGenerationId !== input.expectedSessionGenerationId ||
+      stored.request.status !== 'in_progress' ||
+      stored.request.attempt !== input.attempt ||
+      stored.request.claimId !== input.claimId ||
+      stored.request.leaseExpiresAt <= input.now ||
+      session.continuation?.activeTurnRequestId !== stored.request.id ||
+      session.continuation.activeTurnLeaseExpiresAt !== stored.request.leaseExpiresAt
+    ) {
+      return { status: 'stale' };
+    }
+    return {
+      status: 'found',
+      snapshot: {
+        userId: input.userId,
+        sessionId: input.sessionId,
+        model: session.model,
+        transcriptText: session.transcriptText ?? 'Immutable test transcript',
+        ...(session.chatDisplayName === undefined
+          ? {}
+          : { chatDisplayName: session.chatDisplayName }),
+        range: { ...session.range },
+        effectiveRange: { ...session.effectiveRange },
+        history: [],
+        currentQuestion: stored.request.question,
+      },
+    };
+  }
+
+  async completeTurnRequest(
+    input: Parameters<ConversationAssistantTurnRequestRepository['completeTurnRequest']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['completeTurnRequest']> {
+    const stored = this.ownedClaimedRequest(input);
+    if (stored === undefined) return { status: 'stale' };
+    const assistantTurn = this.assistantTurn(stored.request, input.answerText, input.completedAt, {
+      ...(input.usage === undefined ? {} : { usage: input.usage }),
+    });
+    const completed: ConversationAssistantTurnRequest = {
+      ...stored.request,
+      status: 'completed',
+      stateVersion: stored.request.stateVersion + 1,
+      completedAt: input.completedAt,
+      updatedAt: input.completedAt,
+    };
+    delete completed.error;
+    this.requests.set(input.requestId, {
+      request: completed,
+      userTurn: stored.userTurn,
+      assistantTurn,
+    });
+    await this.sessionRepository.saveTurn(assistantTurn);
+    await this.completeSessionRevision(completed, input.completedAt);
+    return { status: 'completed', request: completed, assistantTurn };
+  }
+
+  async failTurnRequest(
+    input: Parameters<ConversationAssistantTurnRequestRepository['failTurnRequest']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['failTurnRequest']> {
+    const stored = this.ownedClaimedRequest(input);
+    if (stored === undefined) return { status: 'stale' };
+    const error = { code: input.error.code, message: input.publicErrorMessage };
+    const assistantTurn = this.assistantTurn(
+      stored.request,
+      input.errorBodyText,
+      input.completedAt,
+      { error }
+    );
+    const failed: ConversationAssistantTurnRequest = {
+      ...stored.request,
+      status: 'failed',
+      stateVersion: stored.request.stateVersion + 1,
+      completedAt: input.completedAt,
+      updatedAt: input.completedAt,
+      error,
+    };
+    this.requests.set(input.requestId, {
+      request: failed,
+      userTurn: stored.userTurn,
+      assistantTurn,
+    });
+    await this.sessionRepository.saveTurn(assistantTurn);
+    await this.completeSessionRevision(failed, input.completedAt);
+    return { status: 'failed', request: failed, assistantTurn };
+  }
+
+  async getTurnRequest(
+    input: Parameters<ConversationAssistantTurnRequestRepository['getTurnRequest']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['getTurnRequest']> {
+    const session = await this.sessionRepository.getSessionById(input.sessionId);
+    const stored = this.requests.get(input.requestId);
+    if (
+      session?.userId !== input.userId ||
+      stored?.request.userId !== input.userId ||
+      stored.request.sessionId !== input.sessionId ||
+      stored.request.sessionGenerationId !== session.generationId
+    ) {
+      return { status: 'not_found' };
+    }
+    return {
+      status: 'found',
+      request: structuredClone(stored.request),
+      userTurn: structuredClone(stored.userTurn),
+      ...(session.continuation === undefined
+        ? {}
+        : {
+            completedConversationRevision:
+              session.continuation.completedConversationRevision,
+          }),
+      ...(session.continuation?.activeTurnRequestId === undefined
+        ? {}
+        : { activeTurnRequestId: session.continuation.activeTurnRequestId }),
+      ...(session.continuation?.activeTurnLeaseExpiresAt === undefined
+        ? {}
+        : { activeTurnLeaseExpiresAt: session.continuation.activeTurnLeaseExpiresAt }),
+      ...(stored.assistantTurn === undefined
+        ? {}
+        : { assistantTurn: structuredClone(stored.assistantTurn) }),
+    };
+  }
+
+  async claimAnswerRetry(
+    input: Parameters<ConversationAssistantTurnRequestRepository['claimAnswerRetry']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['claimAnswerRetry']> {
+    const forced = this.nextRetryStatus;
+    delete this.nextRetryStatus;
+    if (forced !== undefined) return { status: forced };
+    const loaded = await this.getTurnRequest(input);
+    if (loaded.status !== 'found') return { status: 'not_found' };
+    if (loaded.request.status === 'completed') {
+      const { status: _status, ...replay } = loaded;
+      return { status: 'replay', ...replay };
+    }
+    if (loaded.request.status !== 'failed' || loaded.request.error?.code !== 'LLM_ERROR') {
+      return { status: 'invalid_state' };
+    }
+    if (
+      loaded.activeTurnRequestId !== undefined &&
+      loaded.activeTurnLeaseExpiresAt !== undefined &&
+      loaded.activeTurnLeaseExpiresAt > input.now
+    ) {
+      return { status: 'busy' };
+    }
+    if (
+      !isLatestRetryableConversationAssistantAnswer({
+        failed: true,
+        errorCode: loaded.request.error.code,
+        conversationRevision: loaded.request.conversationRevision,
+        completedConversationRevision: loaded.completedConversationRevision,
+        activeTurnRequestId: loaded.activeTurnRequestId,
+        activeTurnLeaseExpiresAt: loaded.activeTurnLeaseExpiresAt,
+        now: input.now,
+      })
+    ) {
+      return { status: 'invalid_state' };
+    }
+    const claimed: ConversationAssistantTurnRequest = {
+      ...loaded.request,
+      status: 'in_progress',
+      attempt: loaded.request.attempt + 1,
+      stateVersion: loaded.request.stateVersion + 1,
+      claimId: input.claimId,
+      leaseExpiresAt: input.leaseExpiresAt,
+      updatedAt: input.now,
+    };
+    delete claimed.completedAt;
+    delete claimed.error;
+    this.requests.set(input.requestId, {
+      request: claimed,
+      userTurn: loaded.userTurn,
+      ...(loaded.assistantTurn === undefined ? {} : { assistantTurn: loaded.assistantTurn }),
+    });
+    const session = await this.sessionRepository.getSessionById(input.sessionId);
+    if (session?.continuation !== undefined) {
+      await this.sessionRepository.saveSession({
+        ...session,
+        updatedAt: input.now,
+        continuation: {
+          ...session.continuation,
+          activeTurnRequestId: input.requestId,
+          activeTurnLeaseExpiresAt: input.leaseExpiresAt,
+        },
+      });
+    }
+    return { status: 'claimed', request: claimed, userTurn: loaded.userTurn };
+  }
+
+  async claimTurnRequestRecovery(
+    input: Parameters<ConversationAssistantTurnRequestRepository['claimTurnRequestRecovery']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['claimTurnRequestRecovery']> {
+    const loaded = await this.getTurnRequest(input);
+    if (loaded.status !== 'found') return { status: 'not_found' };
+    if (loaded.request.status !== 'in_progress' || loaded.request.leaseExpiresAt > input.now) {
+      const { status: _status, ...replay } = loaded;
+      return { status: 'replay', ...replay };
+    }
+    const session = await this.sessionRepository.getSessionById(input.sessionId);
+    if (
+      session?.continuation?.activeTurnRequestId !== input.requestId ||
+      session.continuation.activeTurnLeaseExpiresAt !== loaded.request.leaseExpiresAt
+    ) {
+      return { status: 'busy' };
+    }
+    const claimed: ConversationAssistantTurnRequest = {
+      ...loaded.request,
+      attempt: loaded.request.attempt + 1,
+      stateVersion: loaded.request.stateVersion + 1,
+      claimId: input.claimId,
+      leaseExpiresAt: input.leaseExpiresAt,
+      updatedAt: input.now,
+    };
+    this.requests.set(input.requestId, {
+      request: claimed,
+      userTurn: loaded.userTurn,
+      ...(loaded.assistantTurn === undefined ? {} : { assistantTurn: loaded.assistantTurn }),
+    });
+    await this.sessionRepository.saveSession({
+      ...session,
+      updatedAt: input.now,
+      continuation: {
+        ...session.continuation,
+        activeTurnRequestId: input.requestId,
+        activeTurnLeaseExpiresAt: input.leaseExpiresAt,
+      },
+    });
+    return { status: 'claimed', request: claimed, userTurn: loaded.userTurn };
+  }
+
+  async renewTurnRequestLease(
+    input: Parameters<ConversationAssistantTurnRequestRepository['renewTurnRequestLease']>[0]
+  ): ReturnType<ConversationAssistantTurnRequestRepository['renewTurnRequestLease']> {
+    const loaded = await this.getTurnRequest(input);
+    if (loaded.status !== 'found') return { status: 'not_found' };
+    const session = await this.sessionRepository.getSessionById(input.sessionId);
+    if (
+      loaded.request.sessionGenerationId !== input.expectedSessionGenerationId ||
+      loaded.request.status !== 'in_progress' ||
+      loaded.request.attempt !== input.attempt ||
+      loaded.request.claimId !== input.claimId ||
+      loaded.request.leaseExpiresAt <= input.now ||
+      input.leaseExpiresAt <= input.now ||
+      session?.continuation?.activeTurnRequestId !== input.requestId ||
+      session.continuation.activeTurnLeaseExpiresAt !== loaded.request.leaseExpiresAt
+    ) {
+      return { status: 'stale' };
+    }
+    const renewed: ConversationAssistantTurnRequest = {
+      ...loaded.request,
+      leaseExpiresAt: input.leaseExpiresAt,
+      updatedAt: input.now,
+    };
+    this.requests.set(input.requestId, {
+      request: renewed,
+      userTurn: loaded.userTurn,
+      ...(loaded.assistantTurn === undefined ? {} : { assistantTurn: loaded.assistantTurn }),
+    });
+    await this.sessionRepository.saveSession({
+      ...session,
+      updatedAt: input.now,
+      continuation: {
+        ...session.continuation,
+        activeTurnRequestId: input.requestId,
+        activeTurnLeaseExpiresAt: input.leaseExpiresAt,
+      },
+    });
+    return { status: 'renewed', request: renewed };
+  }
+
+  private ownedClaimedRequest(input: {
+    userId: string;
+    sessionId: string;
+    requestId: string;
+    expectedSessionGenerationId: string;
+    attempt: number;
+    claimId: string;
+  }):
+    | {
+        request: ConversationAssistantTurnRequest;
+        userTurn: TurnRequestConversationTurn;
+        assistantTurn?: TurnRequestConversationTurn;
+      }
+    | undefined {
+    const stored = this.requests.get(input.requestId);
+    return stored?.request.userId === input.userId &&
+      stored.request.sessionId === input.sessionId &&
+      stored.request.sessionGenerationId === input.expectedSessionGenerationId &&
+      stored.request.attempt === input.attempt &&
+      stored.request.claimId === input.claimId
+      ? stored
+      : undefined;
+  }
+
+  private assistantTurn(
+    request: ConversationAssistantTurnRequest,
+    text: string,
+    createdAt: string,
+    optional: Pick<TurnRequestConversationTurn, 'usage' | 'error'>
+  ): TurnRequestConversationTurn {
+    return {
+      id: request.assistantTurnId,
+      sessionId: request.sessionId,
+      userId: request.userId,
+      role: 'assistant',
+      text,
+      createdAt,
+      sequence: request.conversationRevision * 2,
+      conversationRevision: request.conversationRevision,
+      requestId: request.id,
+      kind: 'message',
+      acknowledgment: request.acknowledgment,
+      ...(optional.usage === undefined ? {} : { usage: optional.usage }),
+      ...(optional.error === undefined ? {} : { error: optional.error }),
+    };
+  }
+
+  private async completeSessionRevision(
+    request: ConversationAssistantTurnRequest,
+    completedAt: string
+  ): Promise<void> {
+    const session = await this.sessionRepository.getSessionById(request.sessionId);
+    if (session?.continuation === undefined) return;
+    const continuation = {
+      ...session.continuation,
+      completedConversationRevision: request.conversationRevision,
+    };
+    delete continuation.activeTurnRequestId;
+    delete continuation.activeTurnLeaseExpiresAt;
+    await this.sessionRepository.saveSession({
+      ...session,
+      status: 'active',
+      updatedAt: completedAt,
+      continuation,
+    });
+  }
+}
+
+export class FakeConversationAssistantOperationalTelemetry
+  implements ConversationAssistantOperationalTelemetry
+{
+  readonly records: ConversationAssistantTelemetryInput[] = [];
+
+  record(input: ConversationAssistantTelemetryInput): Promise<void> {
+    this.records.push(structuredClone(input));
+    return Promise.resolve();
+  }
+}
+
 export class FakeMatrixOutboundGateway implements MatrixOutboundGateway {
   readonly readinessCalls: MatrixOutboundReadinessInput[] = [];
   readonly sendCalls: MatrixOutboundSendInput[] = [];
@@ -620,6 +1752,17 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
   failNextStream(message = 'stream failed', events: GenerateChatStreamEvent[] = []): void {
     this.nextStreamEvents = events;
     this.nextStreamResult = err({ code: 'API_ERROR', message });
+  }
+
+  succeedNextStream(
+    content = 'assistant answer',
+    events: GenerateChatStreamEvent[] = []
+  ): void {
+    this.nextStreamEvents = events;
+    this.nextStreamResult = ok({
+      content,
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
+    });
   }
 }
 
@@ -1148,9 +2291,12 @@ interface FakePrivateWhatsAppAccount {
   id: string;
   userId: string;
   sourceAccountId: string;
+  generationId?: string;
   phoneNumberNormalized: string;
   displayName: string;
   status: 'active' | 'disabled';
+  erasureStatus?: 'erasing';
+  erasureRequestId?: string;
   createdAt: string;
   updatedAt: string;
   lastIngestAt?: string;
@@ -1180,6 +2326,11 @@ interface FakePrivateWhatsAppChatTranscriptionSetting {
 
 export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository {
   private readonly stored = new Map<string, StorePrivateWhatsAppMessageInput>();
+  private readonly contextChangesByChat = new Map<string, PrivateWhatsAppContextChange[]>();
+  private readonly contextMetadataByMessageId = new Map<
+    string,
+    { revision: number; sequence: number }
+  >();
   private readonly accounts = new Map<string, FakePrivateWhatsAppAccount>();
   private readonly chatTranscriptionSettings = new Map<
     string,
@@ -1333,6 +2484,27 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
 
     this.stored.set(input.message.matrixEventId, input);
+    if (input.message.relation === undefined && input.message.type !== 'reaction' && input.message.type !== 'redaction') {
+      const message = this.toMessage(input);
+      const entries = this.contextChangesByChat.get(chatId) ?? [];
+      const sequence = entries.length + 1;
+      this.contextMetadataByMessageId.set(messageId, { revision: 1, sequence });
+      entries.push({
+        userId: input.userId,
+        sourceAccountId: input.sourceAccountId,
+        chatId,
+        sequence,
+        messageId,
+        messageRevision: 1,
+        changeType: 'created',
+        changedAt: input.receivedAt,
+        eventTimestamp: input.message.eventTimestamp,
+        before: { state: 'missing' },
+        after: this.toContextProjection(message),
+        schemaVersion: 1,
+      });
+      this.contextChangesByChat.set(chatId, entries);
+    }
     return Promise.resolve(
       ok({
         outcome: 'created',
@@ -1503,7 +2675,7 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   updateMessageTranscription(
     input: UpdatePrivateWhatsAppMessageTranscriptionInput
-  ): Promise<Result<void, WhatsAppError>> {
+  ): Promise<Result<UpdatePrivateWhatsAppMessageTranscriptionResult, WhatsAppError>> {
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -1518,8 +2690,96 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       );
     }
 
+    const before = this.toContextProjection(this.toMessage(stored));
+    const unchanged = JSON.stringify(this.messageTranscriptions.get(input.messageId)) === JSON.stringify(input.transcription);
     this.messageTranscriptions.set(input.messageId, input.transcription);
-    return Promise.resolve(ok(undefined));
+    const after = this.toContextProjection(this.toMessage(stored));
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      const chatId = `chat:${stored.sourceAccountId}:${stored.chat.matrixRoomId}`;
+      const entries = this.contextChangesByChat.get(chatId) ?? [];
+      const current = this.contextMetadataByMessageId.get(input.messageId) ?? {
+        revision: 1,
+        sequence: entries.length,
+      };
+      const sequence = entries.length + 1;
+      const revision = current.revision + 1;
+      this.contextMetadataByMessageId.set(input.messageId, { revision, sequence });
+      entries.push({
+        userId: stored.userId,
+        sourceAccountId: stored.sourceAccountId,
+        chatId,
+        sequence,
+        messageId: input.messageId,
+        messageRevision: revision,
+        changeType: 'transcription_changed',
+        changedAt: input.transcription.completedAt ?? stored.receivedAt,
+        eventTimestamp: stored.message.eventTimestamp,
+        before,
+        after,
+        schemaVersion: 1,
+      });
+      this.contextChangesByChat.set(chatId, entries);
+    }
+    return Promise.resolve(
+      ok({
+        status: unchanged ? 'unchanged' : 'updated',
+        messageId: input.messageId,
+      })
+    );
+  }
+
+  async getConversationContextJournalHead(
+    input: PrivateWhatsAppOwnedChatInput
+  ): Promise<Result<number, WhatsAppError>> {
+    const chat = await this.getChatById(input);
+    if (!chat.ok) return chat;
+    if (chat.value === null || chat.value.userId !== input.userId) {
+      return err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' });
+    }
+    return ok(this.contextChangesByChat.get(input.chatId)?.length ?? 0);
+  }
+
+  findConversationContextJournalEntries(
+    input: PrivateWhatsAppContextJournalQueryInput
+  ): Promise<Result<PrivateWhatsAppContextJournalQueryResult, WhatsAppError>> {
+    const chat = this.buildChats().get(input.chatId);
+    if (
+      chat === undefined ||
+      chat.userId !== input.userId ||
+      chat.sourceAccountId !== input.sourceAccountId
+    ) {
+      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' }));
+    }
+    const matching = (this.contextChangesByChat.get(input.chatId) ?? []).filter(
+      (entry) =>
+        entry.sequence > input.afterSequence && entry.sequence <= input.throughSequence
+    );
+    const entries = matching.slice(0, input.limit);
+    const result: PrivateWhatsAppContextJournalQueryResult = { entries };
+    if (matching.length > entries.length) {
+      const lastEntry = entries.at(-1);
+      if (lastEntry !== undefined) result.nextAfterSequence = lastEntry.sequence;
+    }
+    return Promise.resolve(ok(result));
+  }
+
+  findConversationContextMessagesByIds(
+    input: PrivateWhatsAppContextMessagesByIdsInput
+  ): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>> {
+    const ids = new Set(input.messageIds);
+    const messages = [...this.stored.values()]
+      .map((stored) => this.toMessage(stored))
+      .filter(
+        (message) =>
+          ids.has(message.id) &&
+          message.sourceAccountId === input.sourceAccountId &&
+          message.chatId === input.chatId
+      )
+      .sort((left, right) => {
+        const timestampComparison = left.eventTimestamp.localeCompare(right.eventTimestamp);
+        return timestampComparison === 0 ? left.id.localeCompare(right.id) : timestampComparison;
+      });
+    return Promise.resolve(ok(messages));
   }
 
   findMessages(
@@ -1856,6 +3116,8 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
   clear(): void {
     this.stored.clear();
+    this.contextChangesByChat.clear();
+    this.contextMetadataByMessageId.clear();
     this.accounts.clear();
     this.chatTranscriptionSettings.clear();
     this.messageTranscriptions.clear();
@@ -1984,11 +3246,73 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         targetMessageId: `message:${input.sourceAccountId}:${input.message.reaction.targetMatrixEventId}`,
       };
     }
+    if (input.message.relation !== undefined) {
+      message.relation = { ...input.message.relation };
+    }
     const transcription = this.messageTranscriptions.get(message.id);
     if (transcription !== undefined) {
       message.transcription = transcription;
     }
+    const contextMetadata = this.contextMetadataByMessageId.get(message.id);
+    if (contextMetadata !== undefined) {
+      message.contextRevision = contextMetadata.revision;
+      message.contextChangeSequence = contextMetadata.sequence;
+      message.contextState = 'visible';
+    }
     return message;
+  }
+
+  private toContextProjection(message: PrivateWhatsAppMessage): PrivateWhatsAppContextProjection {
+    const base = {
+      eventTimestamp: message.eventTimestamp,
+      importedAt: message.receivedAt,
+      direction: message.direction,
+      speakerLabel:
+        message.direction === 'outgoing'
+          ? 'You'
+          : message.senderDisplayName?.trim() || 'Participant',
+      messageType: message.messageType,
+    };
+    const text = message.text?.trim();
+    if (text !== undefined && text.length > 0) {
+      return {
+        state: 'included',
+        ...base,
+        contentKind: 'text',
+        content: text,
+        reactions: [],
+      };
+    }
+    const transcription = message.transcription?.text?.trim();
+    if (
+      message.transcription?.status === 'completed' &&
+      transcription !== undefined &&
+      transcription.length > 0
+    ) {
+      return {
+        state: 'included',
+        ...base,
+        contentKind: 'transcription',
+        content: transcription,
+        reactions: [],
+      };
+    }
+    return {
+      state: 'omitted',
+      ...base,
+      omissionReason:
+        message.transcription?.status === 'pending' ||
+        message.transcription?.status === 'processing'
+          ? 'pending_transcription'
+          : message.messageType === 'image' ||
+              message.messageType === 'audio' ||
+              message.messageType === 'video' ||
+              message.messageType === 'file' ||
+              message.messageType === 'sticker'
+            ? 'media_only'
+            : 'non_text',
+      reactions: [],
+    };
   }
 
   private buildSenderDays(): Map<string, PrivateWhatsAppSenderDay> {
@@ -2129,6 +3453,14 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
         if (message.chatDisplayName !== undefined) {
           chat.displayName = message.chatDisplayName;
         }
+        const contextHead = this.contextChangesByChat.get(message.chatId)?.length;
+        if (contextHead !== undefined && contextHead > 0) {
+          chat.contextChangeSequence = contextHead;
+          const latestContextChange = this.contextChangesByChat.get(message.chatId)?.at(-1);
+          if (latestContextChange !== undefined) {
+            chat.contextChangedAt = latestContextChange.changedAt;
+          }
+        }
         chats.set(message.chatId, chat);
         continue;
       }
@@ -2149,6 +3481,12 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       }
     }
     for (const chat of chats.values()) {
+      const contextEntries = this.contextChangesByChat.get(chat.id) ?? [];
+      const contextHead = contextEntries.at(-1);
+      if (contextHead !== undefined) {
+        chat.contextChangeSequence = contextHead.sequence;
+        chat.contextChangedAt = contextHead.changedAt;
+      }
       const setting = this.chatTranscriptionSettings.get(chat.id);
       if (setting !== undefined) {
         chat.transcriptionEnabled = setting.transcriptionEnabled;
@@ -2355,6 +3693,37 @@ export class FakeMediaStorage implements MediaStoragePort {
     return Promise.resolve(ok(undefined));
   }
 
+  deletePrivateMediaBatch(
+    input: PrivateMediaDeletionBatchInput
+  ): Promise<Result<PrivateMediaDeletionBatchResult, WhatsAppError>> {
+    const prefix = `whatsapp/private/${input.userId}/`;
+    const paths = Array.from(this.files.keys())
+      .filter(
+        (path) =>
+          path.startsWith(prefix) && (input.cursor === undefined || path >= input.cursor)
+      )
+      .sort()
+      .slice(0, input.limit);
+    const nextCursor = paths.at(-1);
+    if (nextCursor === undefined) {
+      return Promise.resolve(ok({ status: 'empty', deletedCount: 0 }));
+    }
+    if (this.shouldFailDelete) {
+      return Promise.resolve(ok({ status: 'retry', deletedCount: 0 }));
+    }
+    for (const path of paths) {
+      this.deletedPaths.push(path);
+      this.files.delete(path);
+    }
+    return Promise.resolve(
+      ok({
+        status: 'advanced',
+        deletedCount: paths.length,
+        nextCursor,
+      })
+    );
+  }
+
   getSignedUrl(gcsPath: string, _ttlSeconds?: number): Promise<Result<string, WhatsAppError>> {
     if (this.shouldFailGetSignedUrl) {
       return Promise.resolve(
@@ -2394,12 +3763,15 @@ export class FakeEventPublisher implements EventPublisherPort {
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
   private conversationAssistantPreparationEvents: ConversationAssistantPreparationRequestedEvent[] = [];
+  private conversationAssistantContextAttachmentPreparationEvents: ConversationAssistantContextAttachmentPreparationRequestedEvent[] = [];
+  private privateWhatsAppErasureEvents: PrivateWhatsAppErasureWorkItem[] = [];
   private extractLinkPreviewsFailureMessage: string | null = null;
   private audioStoredFailureMessage: string | null = null;
   private mediaTranscriptionRequestedFailureMessage: string | null = null;
   private intexMessageIngestFailureMessage: string | null = null;
   private webhookProcessFailureMessage: string | null = null;
   private conversationAssistantPreparationFailureMessage: string | null = null;
+  private privateWhatsAppErasureFailureMessage: string | null = null;
 
   publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
     this.mediaCleanupEvents.push(event);
@@ -2494,6 +3866,29 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
+  publishConversationAssistantContextAttachmentPreparation(
+    event: ConversationAssistantContextAttachmentPreparationRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    this.conversationAssistantContextAttachmentPreparationEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishPrivateWhatsAppErasure(
+    event: PrivateWhatsAppErasureWorkItem
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.privateWhatsAppErasureFailureMessage !== null) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: this.privateWhatsAppErasureFailureMessage })
+      );
+    }
+    this.privateWhatsAppErasureEvents.push(event);
+    return Promise.resolve(ok(undefined));
+  }
+
+  setPrivateWhatsAppErasureFailure(message: string | null): void {
+    this.privateWhatsAppErasureFailureMessage = message;
+  }
+
   setConversationAssistantPreparationFailure(message: string | null): void {
     this.conversationAssistantPreparationFailureMessage = message;
   }
@@ -2530,6 +3925,14 @@ export class FakeEventPublisher implements EventPublisherPort {
     return [...this.conversationAssistantPreparationEvents];
   }
 
+  getConversationAssistantContextAttachmentPreparationEvents(): ConversationAssistantContextAttachmentPreparationRequestedEvent[] {
+    return [...this.conversationAssistantContextAttachmentPreparationEvents];
+  }
+
+  getPrivateWhatsAppErasureEvents(): PrivateWhatsAppErasureWorkItem[] {
+    return [...this.privateWhatsAppErasureEvents];
+  }
+
   clear(): void {
     this.mediaCleanupEvents = [];
     this.audioStoredEvents = [];
@@ -2538,12 +3941,15 @@ export class FakeEventPublisher implements EventPublisherPort {
     this.webhookProcessEvents = [];
     this.extractLinkPreviewsEvents = [];
     this.conversationAssistantPreparationEvents = [];
+    this.conversationAssistantContextAttachmentPreparationEvents = [];
+    this.privateWhatsAppErasureEvents = [];
     this.extractLinkPreviewsFailureMessage = null;
     this.audioStoredFailureMessage = null;
     this.mediaTranscriptionRequestedFailureMessage = null;
     this.intexMessageIngestFailureMessage = null;
     this.webhookProcessFailureMessage = null;
     this.conversationAssistantPreparationFailureMessage = null;
+    this.privateWhatsAppErasureFailureMessage = null;
   }
 }
 

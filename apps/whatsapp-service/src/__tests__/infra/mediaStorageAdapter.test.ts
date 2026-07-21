@@ -8,6 +8,7 @@ import { GcsMediaStorageAdapter } from '../../infra/gcs/index.js';
 const mockSave = vi.fn();
 const mockDelete = vi.fn();
 const mockGetSignedUrl = vi.fn();
+const mockGetFiles = vi.fn();
 const mockFile = vi.fn(() => ({
   save: mockSave,
   delete: mockDelete,
@@ -15,6 +16,7 @@ const mockFile = vi.fn(() => ({
 }));
 const mockBucket = vi.fn(() => ({
   file: mockFile,
+  getFiles: mockGetFiles,
 }));
 
 vi.mock('@google-cloud/storage', () => {
@@ -32,6 +34,7 @@ describe('GcsMediaStorageAdapter', () => {
   beforeEach(() => {
     adapter = new GcsMediaStorageAdapter(testBucketName);
     vi.clearAllMocks();
+    mockGetFiles.mockReset();
   });
 
   describe('upload', () => {
@@ -236,6 +239,128 @@ describe('GcsMediaStorageAdapter', () => {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('Unknown GCS error');
       }
+    });
+  });
+
+  describe('deletePrivateMediaBatch', () => {
+    type BatchDelete = (input: {
+      userId: string;
+      cursor?: string;
+      limit: number;
+    }) => Promise<unknown>;
+
+    function batchDelete(): BatchDelete | undefined {
+      return (adapter as unknown as { deletePrivateMediaBatch?: BatchDelete })
+        .deletePrivateMediaBatch;
+    }
+
+    it('deletes one bounded private-prefix page and returns a durable name cursor', async () => {
+      const deleteFirst = vi.fn().mockResolvedValue(undefined);
+      const deleteSecond = vi.fn().mockResolvedValue(undefined);
+      mockGetFiles.mockResolvedValue([
+        [
+          { name: 'whatsapp/private/user-123/message-a/thumb.jpg', delete: deleteFirst },
+          { name: 'whatsapp/private/user-123/message-b/original.jpg', delete: deleteSecond },
+        ],
+      ]);
+
+      const operation = batchDelete();
+      expect(operation).toBeDefined();
+      if (operation === undefined) return;
+      const result = await operation.call(adapter, {
+        userId: 'user-123',
+        cursor: 'whatsapp/private/user-123/message-a/original.jpg',
+        limit: 2,
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          status: 'advanced',
+          deletedCount: 2,
+          nextCursor: 'whatsapp/private/user-123/message-b/original.jpg',
+        },
+      });
+      expect(mockGetFiles).toHaveBeenCalledWith({
+        autoPaginate: false,
+        maxResults: 2,
+        prefix: 'whatsapp/private/user-123/',
+        startOffset: 'whatsapp/private/user-123/message-a/original.jpg',
+      });
+      expect(deleteFirst).toHaveBeenCalledWith({ ignoreNotFound: true });
+      expect(deleteSecond).toHaveBeenCalledWith({ ignoreNotFound: true });
+    });
+
+    it('returns retry progress without advancing the cursor after a partial delete failure', async () => {
+      const deleted = vi.fn().mockResolvedValue(undefined);
+      const failed = vi.fn().mockRejectedValue(new Error('private object name'));
+      mockGetFiles.mockResolvedValue([
+        [
+          { name: 'whatsapp/private/user-secret/message-a/original.jpg', delete: deleted },
+          { name: 'whatsapp/private/user-secret/message-b/thumb.jpg', delete: failed },
+        ],
+      ]);
+
+      const operation = batchDelete();
+      expect(operation).toBeDefined();
+      if (operation === undefined) return;
+      const result = await operation.call(adapter, {
+        userId: 'user-secret',
+        limit: 20,
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        value: { status: 'retry', deletedCount: 1 },
+      });
+      expect(JSON.stringify(result)).not.toContain('user-secret');
+      expect(JSON.stringify(result)).not.toContain('message-b');
+    });
+
+    it('requires a zero-object page before reporting the prefix empty', async () => {
+      mockGetFiles.mockResolvedValue([[]]);
+
+      const operation = batchDelete();
+      expect(operation).toBeDefined();
+      if (operation === undefined) return;
+      const result = await operation.call(adapter, {
+        userId: 'user-123',
+        limit: 20,
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        value: { status: 'empty', deletedCount: 0 },
+      });
+      expect(mockGetFiles).toHaveBeenCalledWith({
+        autoPaginate: false,
+        maxResults: 20,
+        prefix: 'whatsapp/private/user-123/',
+      });
+    });
+
+    it('returns a content-free retryable error when listing the prefix fails', async () => {
+      mockGetFiles.mockRejectedValue(
+        new Error('whatsapp/private/user-secret/message-secret/original.jpg')
+      );
+
+      const operation = batchDelete();
+      expect(operation).toBeDefined();
+      if (operation === undefined) return;
+      const result = await operation.call(adapter, {
+        userId: 'user-secret',
+        limit: 20,
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'PERSISTENCE_ERROR',
+          message: 'Failed to list private media for erasure',
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('user-secret');
+      expect(JSON.stringify(result)).not.toContain('message-secret');
     });
   });
 

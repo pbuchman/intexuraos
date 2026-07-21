@@ -24,6 +24,25 @@ Sender-day aggregates group private messages by sender and Warsaw day key. They 
 
 Group classification is preserved during ingest. If an existing chat is already classified as `group`, a later `direct` or `unknown` event does not downgrade it.
 
+## Conversation Assistant
+
+Conversation Assistant lets an authenticated user discuss a frozen slice of one private WhatsApp conversation with an AI model. The original slice never changes after preparation, so earlier answers remain reproducible.
+
+During a longer analysis, the user can choose **Include new messages** and write the next question in the same composer. The service freezes everything available after the last committed boundary, prepares it as a visible context update, and attaches that immutable update to the question only when the user sends. The AI answer begins with a server-produced receipt that states exactly how many messages were included, the captured range, and any omissions or corrections.
+
+Important behavior:
+
+- preparing an update does not silently change the analysis
+- sending the question and committing the prepared update is one atomic operation
+- messages arriving after the frozen cutoff remain available for an explicit refresh
+- zero included messages is a valid update
+- edits, Matrix redactions (including WhatsApp message removal as represented by the bridge), reactions, late imports, and completed transcriptions are reported as corrections rather than disguised as new messages; no unsupported separate deletion category is inferred
+- hard size limits fail visibly and never truncate context
+- a browser reload recovers an unfinished request without appending the question twice
+- the context history and PDF show immutable summaries, not raw hidden attachment bodies
+
+Legacy analyses that do not have reliable continuation boundaries fail closed and offer a new analysis instead of guessing which messages are new.
+
 ## Unsupported Voice Handling
 
 Voice messages are intentionally unsupported for now. The service replies with a clear text-only message and does not start transcription for Intex conversations.

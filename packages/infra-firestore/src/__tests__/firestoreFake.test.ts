@@ -138,6 +138,20 @@ describe('FakeFirestore', () => {
         const snapshot = await docRef.get();
         expect(snapshot.data()?.['tags']).toEqual(['first', 'second']);
       });
+
+      it('resolves serverTimestamp transforms to native Firestore Timestamps', async () => {
+        const docRef = db.collection('users').doc('user-server-time');
+        const before = Timestamp.now().toMillis();
+
+        await docRef.set({ capturedAt: FieldValue.serverTimestamp() });
+
+        const capturedAt = (await docRef.get()).data()?.['capturedAt'];
+        expect(capturedAt).toBeInstanceOf(Timestamp);
+        expect((capturedAt as Timestamp).toMillis()).toBeGreaterThanOrEqual(before);
+        expect((capturedAt as Timestamp).toMillis()).toBeLessThanOrEqual(
+          Timestamp.now().toMillis()
+        );
+      });
     });
 
     describe('get', () => {
@@ -493,6 +507,26 @@ describe('FakeFirestore', () => {
         const ages = snapshot.docs.map((d) => d.data()?.['age']);
         expect(ages).toEqual([35, 30, 25, 25]);
       });
+
+      it('excludes documents that do not contain every ordered field', async () => {
+        await db
+          .collection('ordered-items')
+          .doc('complete')
+          .set({ rank: 1, nested: { tie: 2 } });
+        await db
+          .collection('ordered-items')
+          .doc('missing-primary')
+          .set({ nested: { tie: 1 } });
+        await db.collection('ordered-items').doc('missing-secondary').set({ rank: 2 });
+
+        const snapshot = await db
+          .collection('ordered-items')
+          .orderBy('rank', 'asc')
+          .orderBy('nested.tie', 'asc')
+          .get();
+
+        expect(snapshot.docs.map((document) => document.id)).toEqual(['complete']);
+      });
     });
 
     describe('limit', () => {
@@ -614,6 +648,22 @@ describe('FakeFirestore', () => {
 
       const snapshot = await db.collection('users').get();
       expect(snapshot.size).toBe(2);
+    });
+  });
+
+  describe('transactions', () => {
+    it('resolves serverTimestamp transforms when a transaction commits', async () => {
+      const docRef = db.collection('captures').doc('capture-1');
+
+      await db.runTransaction(async (transaction) => {
+        transaction.set(docRef, {
+          status: 'queued',
+          capturedAt: FieldValue.serverTimestamp(),
+        });
+      });
+
+      const capturedAt = (await docRef.get()).data()?.['capturedAt'];
+      expect(capturedAt).toBeInstanceOf(Timestamp);
     });
   });
 
