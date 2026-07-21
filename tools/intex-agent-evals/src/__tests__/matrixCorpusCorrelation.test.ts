@@ -58,7 +58,7 @@ describe('Matrix corpus reply correlation', () => {
     expect(result).toEqual({ ok: false, code: 'outbound_event_mismatch' });
   });
 
-  it('captures a clean cursor and rejects a limited capture', async () => {
+  it('captures the current cursor even when the initial timeline is limited', async () => {
     const clean = matrixWith([{ ok: true, nextBatch: 'cursor-1', limited: false, events: [] }]);
     const limited = matrixWith([{ ok: true, nextBatch: 'cursor-2', limited: true, events: [] }]);
 
@@ -67,7 +67,41 @@ describe('Matrix corpus reply correlation', () => {
     ).resolves.toEqual({ ok: true, cursor: 'cursor-1' });
     await expect(
       captureMatrixCorpusCursor({ matrix: limited, context: CONTEXT, signal: signal() })
+    ).resolves.toEqual({ ok: true, cursor: 'cursor-2' });
+  });
+
+  it('keeps the incremental outbound proof fail-closed after a limited initial capture', async () => {
+    const messageText = 'exact outbound message';
+    const matrix = matrixWith([
+      { ok: true, nextBatch: 'cursor-1', limited: true, events: [] },
+      {
+        ok: true,
+        nextBatch: 'cursor-2',
+        limited: true,
+        events: [reply('$sent-1', messageText, '@operator:home-dev')],
+      },
+    ]);
+    const captured = await captureMatrixCorpusCursor({
+      matrix,
+      context: CONTEXT,
+      signal: signal(),
+    });
+    if (!captured.ok) throw new Error('expected initial cursor');
+
+    await expect(
+      proveMatrixCorpusOutboundEvent({
+        matrix,
+        context: CONTEXT,
+        cursor: captured.cursor,
+        matrixUserId: '@operator:home-dev',
+        matrixEventId: '$sent-1',
+        messageText,
+        signal: signal(),
+      })
     ).resolves.toEqual({ ok: false, code: 'matrix_timeline_limited' });
+    expect(matrix.syncTargetRoom).toHaveBeenLastCalledWith(
+      expect.objectContaining({ since: 'cursor-1', timeoutMs: 30_000 })
+    );
   });
 
   it('deduplicates events, ignores edits/redactions, and returns the exact durable reply set', async () => {

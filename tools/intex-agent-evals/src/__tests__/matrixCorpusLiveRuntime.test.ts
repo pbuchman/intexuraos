@@ -20,6 +20,7 @@ import {
   inspectArtifactRoot,
   inspectHomeDevRuntime,
   MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS,
+  resolveMatrixCorpusPuppetBinding,
   type HomeDevRuntimeInspectionDeps,
   type MatrixCorpusPreparedContext,
 } from '../matrixCorpus/liveRuntime.js';
@@ -101,6 +102,29 @@ describe('Matrix corpus live runtime handoff', () => {
 });
 
 describe('production Home Dev runtime inspection', () => {
+  it('resolves the current WhatsApp puppet from a limited initial Matrix timeline', () => {
+    expect(
+      resolveMatrixCorpusPuppetBinding(
+        {
+          ok: true,
+          nextBatch: 'current-cursor',
+          limited: true,
+          events: [
+            {
+              type: 'm.room.message',
+              sender: '@whatsapp_1:example.test',
+              content: { msgtype: 'm.text', body: 'historical reply' },
+            },
+          ],
+        },
+        true
+      )
+    ).toEqual({
+      expectedPuppetSender: '@whatsapp_1:example.test',
+      accountTupleCount: 1,
+    });
+  });
+
   it('accepts only the exact Home Dev host, canonical repository, clean critical paths, and commit', async () => {
     const deps = runtimeInspectionDeps();
 

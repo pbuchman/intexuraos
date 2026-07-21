@@ -80,6 +80,29 @@ export interface MatrixCorpusLiveRuntime {
   }>;
 }
 
+export function resolveMatrixCorpusPuppetBinding(
+  sync: Awaited<ReturnType<MatrixClient['syncTargetRoom']>>,
+  evaluatorUserMatches: boolean
+):
+  | {
+      readonly expectedPuppetSender: string | undefined;
+      readonly accountTupleCount: number;
+    }
+  | undefined {
+  if (!sync.ok) return undefined;
+  // A limited initial timeline is normal once the room has more than 100 events.
+  // We only use this tail to resolve the current puppet; later incremental reads
+  // continue to reject limited results before correlating any test evidence.
+  const puppetSenders = [
+    ...new Set(sync.events.map((event) => event.sender).filter(isWhatsAppPuppetSender)),
+  ];
+  return {
+    expectedPuppetSender: puppetSenders[0],
+    accountTupleCount:
+      evaluatorUserMatches && puppetSenders.length === 1 ? 1 : puppetSenders.length,
+  };
+}
+
 export function createMatrixCorpusLiveRuntime(input: {
   readonly loadCatalog: () => Promise<CanonicalMatrixCorpus>;
   readonly read: MatrixCorpusLiveReadPort;
@@ -227,14 +250,13 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
       } finally {
         clearTimeout(cursorTimeout);
       }
-      if (!sync.ok || sync.limited) throw new Error('matrix_not_ready');
-      const puppetSenders = [
-        ...new Set(sync.events.map((event) => event.sender).filter(isWhatsAppPuppetSender)),
-      ];
-      const expectedPuppetSender = puppetSenders[0];
       const evaluatorUserId = env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
-      const accountTupleCount =
-        evaluatorUserId === account.userId && puppetSenders.length === 1 ? 1 : puppetSenders.length;
+      const puppetBinding = resolveMatrixCorpusPuppetBinding(
+        sync,
+        evaluatorUserId === account.userId
+      );
+      if (puppetBinding === undefined) throw new Error('matrix_not_ready');
+      const { expectedPuppetSender, accountTupleCount } = puppetBinding;
       const modelBoundaryReady =
         liveCatalog !== null &&
         liveCatalog.models.some((model) => model.id === catalog.agentModel) &&
