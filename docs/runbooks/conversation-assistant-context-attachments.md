@@ -28,6 +28,10 @@ This runbook covers rollout, verification, recovery, and rollback for immutable 
    FROZEN_SHA='<reviewed-40-character-commit-sha>'
    TTL_PLAN_DIR="$(mktemp -d "${TMPDIR:-/tmp}/intexuraos-ttl-plan.XXXXXX")"
    TTL_PLAN_PATH="${TTL_PLAN_DIR}/conversation-assistant.tfplan"
+   export GOOGLE_APPLICATION_CREDENTIALS='/secrets/gcp-sa.json'
+   export STORAGE_EMULATOR_HOST=
+   export FIRESTORE_EMULATOR_HOST=
+   export PUBSUB_EMULATOR_HOST=
    test "$(git rev-parse HEAD)" = "${FROZEN_SHA}"
    test -z "$(git status --porcelain=v1 --untracked-files=all)"
    terraform -chdir=terraform/environments/dev init
@@ -41,7 +45,7 @@ This runbook covers rollout, verification, recovery, and rollback for immutable 
    operator-controlled temporary directory. Stop if the plan contains anything
    beyond the reviewed TTL resources or if HEAD/worktree changes. Apply that
    exact saved plan with
-   `terraform -chdir=terraform/environments/dev apply "${TTL_PLAN_PATH}"`, then
+   `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= terraform -chdir=terraform/environments/dev apply "${TTL_PLAN_PATH}"`, then
    re-check the frozen HEAD and record the plan hash.
 2. Dispatch migrations 124/125 from the same ref and wait until all indexes report ready.
 3. Trigger the supported Hetzner production deployment workflow for that exact SHA/ref.

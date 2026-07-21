@@ -52,6 +52,7 @@ Routes are listed by their service-relative Fastify paths.
 | `POST` | `/conversation-assistant/sessions/:sessionId/turns` | Atomically commit a question, optional context update, and durable request |
 | `POST` | `/conversation-assistant/sessions/:sessionId/turns/stream` | Stream a durable turn while preserving replay semantics |
 | `GET` | `/conversation-assistant/sessions/:sessionId/turn-requests/:requestId` | Recover one durable turn request after disconnect |
+| `POST` | `/conversation-assistant/sessions/:sessionId/turn-requests/:requestId/resume` | Reclaim an expired durable turn lease after an ambiguous disconnect |
 | `POST` | `/conversation-assistant/sessions/:sessionId/turn-requests/:requestId/answer/retry` | Retry only a failed model answer without appending another user turn |
 
 Account responses expose `sourceAccountId` so the authenticated user can identify the active mirror account. Other private read responses omit owner-only storage fields such as `userId`, `sourceAccountId`, Matrix room IDs, raw Matrix events, and Matrix sender identifiers.

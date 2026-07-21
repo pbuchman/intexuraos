@@ -1,5 +1,5 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { type Logger, type Result } from '@intexuraos/common-core';
 import {
@@ -962,13 +962,22 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       if (!legacyMode.ok) {
         return await sendConversationAssistantError(reply, legacyMode.error);
       }
-      if (legacyMode.value) {
-        if (request.body.contextAttachmentId !== undefined) {
-          return await reply.fail(
-            'CONTEXT_STALE',
-            'This analysis cannot include later messages'
-          );
+      if (legacyMode.value && request.body.contextAttachmentId !== undefined) {
+        return await reply.fail(
+          'CONTEXT_STALE',
+          'This analysis cannot include later messages'
+        );
+      }
+      if (legacyMode.value && request.body.requestId !== undefined) {
+        const initialized = await initializeLegacyDurableTurnState(
+          user.userId,
+          request.params.sessionId
+        );
+        if (!initialized.ok) {
+          return await sendConversationAssistantError(reply, initialized.error);
         }
+      }
+      if (legacyMode.value && request.body.requestId === undefined) {
         const legacyDeps = await getConversationAssistantDeps(reply);
         if (legacyDeps === null) return;
         const legacyResult = await safeCall(() =>
@@ -1060,7 +1069,16 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
           'This analysis cannot include later messages'
         );
       }
-      if (legacyMode.value) {
+      if (legacyMode.value && request.body.requestId !== undefined) {
+        const initialized = await initializeLegacyDurableTurnState(
+          user.userId,
+          request.params.sessionId
+        );
+        if (!initialized.ok) {
+          return await sendConversationAssistantError(reply, initialized.error);
+        }
+      }
+      if (legacyMode.value && request.body.requestId === undefined) {
         const legacyDeps = await getConversationAssistantDeps(reply);
         if (legacyDeps === null) return;
         startConversationAssistantSse(reply);
@@ -1341,6 +1359,68 @@ async function resolveLegacyTurnMode(
       ok: false,
       error: { code: 'INTERNAL_ERROR', message: CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE },
     };
+  }
+}
+
+export async function initializeLegacyDurableTurnState(
+  userId: string,
+  sessionId: string
+): Promise<Result<void, ConversationAssistantError>> {
+  const repository = getServices().conversationAssistantRepository;
+  if (repository === undefined) {
+    return { ok: false, error: { code: 'INTERNAL_ERROR', message: CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE } };
+  }
+  try {
+    const session = await repository.getSessionById(sessionId);
+    if (session?.userId !== userId) {
+      return { ok: false, error: { code: 'NOT_FOUND', message: 'Conversation Assistant session not found' } };
+    }
+    if (session.continuation !== undefined) return { ok: true, value: undefined };
+    if (
+      session.sourceAccountId === undefined ||
+      session.generationId === undefined
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE,
+        },
+      };
+    }
+    const turns = await repository.listTurnsBySessionId(sessionId);
+    for (const [index, turn] of turns.entries()) {
+      await repository.saveTurn({
+        ...turn,
+        sequence: index + 1,
+        conversationRevision: Math.floor(index / 2) + 1,
+        requestId: turn.requestId ?? `legacy-${turn.id}`,
+        kind: turn.kind ?? 'message',
+      });
+    }
+    const completedConversationRevision = Math.ceil(turns.length / 2);
+    await repository.saveSession({
+      ...session,
+      continuation: {
+        sourceAccountId: session.sourceAccountId,
+        contextVersion: 0,
+        contextEventThrough: session.effectiveRange.to,
+        contextChangeThrough: 0,
+        contextChainSha256: createHash('sha256')
+          .update(`conversation-assistant-context-chain:v1\0initial\0${session.transcriptSha256}`)
+          .digest('hex'),
+        displayTimeZone: 'UTC',
+        nextTurnSequence: turns.length + 1,
+        nextConversationRevision: completedConversationRevision + 1,
+        completedConversationRevision,
+        attachmentCount: 0,
+        totalAttachedMessageCount: 0,
+        totalAttachedOmittedCount: 0,
+      },
+    });
+    return { ok: true, value: undefined };
+  } catch {
+    return { ok: false, error: { code: 'INTERNAL_ERROR', message: CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE } };
   }
 }
 

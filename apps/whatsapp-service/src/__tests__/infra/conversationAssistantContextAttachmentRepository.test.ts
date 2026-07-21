@@ -17,6 +17,8 @@ import {
   CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENT_CHUNK_MAX_BYTES,
   WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION,
   createConversationAssistantContextAttachmentRepository,
+  hasSnapshotChunkData,
+  validAttachmentPreparationSource,
 } from '../../infra/firestore/conversationAssistantContextAttachmentRepository.js';
 import type { ConversationAssistantContextAttachmentPreparedSnapshot } from '../../domain/conversation-assistant/types.js';
 import type { CaptureConversationAssistantContextAttachmentInput } from '../../domain/conversation-assistant/contextAttachmentPorts.js';
@@ -27,6 +29,34 @@ const GENERATION_ID = 'generation-1';
 const SOURCE_ACCOUNT_ID = 'source-1';
 const SOURCE_ACCOUNT_GENERATION = 'source-generation-1';
 const CHAT_ID = 'chat-1';
+
+describe('context attachment repository guards', () => {
+  it('rejects absent chunk data and accepts a stored chunk record', () => {
+    expect(hasSnapshotChunkData(undefined)).toBe(false);
+    expect(hasSnapshotChunkData({ payload: 'stored' })).toBe(true);
+  });
+
+  it('requires matching non-empty preparation source fences', () => {
+    const session = {
+      sourceAccountId: SOURCE_ACCOUNT_ID,
+      sourceAccountGeneration: SOURCE_ACCOUNT_GENERATION,
+    };
+    const attachment = { ...session };
+    expect(validAttachmentPreparationSource(session, attachment)).toBe(true);
+    expect(validAttachmentPreparationSource(undefined, attachment)).toBe(false);
+    expect(validAttachmentPreparationSource({}, attachment)).toBe(false);
+    expect(validAttachmentPreparationSource({ ...session, sourceAccountId: '' }, attachment)).toBe(false);
+    expect(validAttachmentPreparationSource({ ...session, sourceAccountGeneration: '' }, attachment)).toBe(false);
+    expect(validAttachmentPreparationSource(session, undefined)).toBe(false);
+    expect(validAttachmentPreparationSource(session, { ...attachment, sourceAccountId: 'other' })).toBe(false);
+    expect(
+      validAttachmentPreparationSource(session, {
+        ...attachment,
+        sourceAccountGeneration: 'other',
+      })
+    ).toBe(false);
+  });
+});
 
 function modernSession(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

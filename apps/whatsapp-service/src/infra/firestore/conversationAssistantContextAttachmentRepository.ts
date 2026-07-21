@@ -1082,9 +1082,7 @@ function validOwnedSnapshotChunk(input: {
   chunkCount: number;
 }): boolean {
   const data = input.data;
-  /* v8 ignore start -- upstream: data() is guaranteed defined by the prior DocumentSnapshot.exists check @preserve */
-  if (data === undefined) return false;
-  /* v8 ignore stop @preserve */
+  if (!hasSnapshotChunkData(data)) return false;
   return (
     chunkBelongsToOwnedAttachment(data, input.attachment) &&
     data['snapshotId'] === input.attachment.snapshotId &&
@@ -1269,20 +1267,11 @@ async function sourceAccountAllowsAttachmentPreparation(
   attachmentData: Record<string, unknown> | undefined,
   userId: string
 ): Promise<boolean> {
-  const sourceAccountId = sessionData?.['sourceAccountId'];
-  const sourceAccountGeneration = sessionData?.['sourceAccountGeneration'];
-  /* v8 ignore start -- upstream: non-empty matching source account fields are guaranteed by the prior validatePreparationOwnership check @preserve */
-  if (
-    typeof sourceAccountId !== 'string' ||
-    sourceAccountId.length === 0 ||
-    typeof sourceAccountGeneration !== 'string' ||
-    sourceAccountGeneration.length === 0 ||
-    attachmentData?.['sourceAccountId'] !== sourceAccountId ||
-    attachmentData['sourceAccountGeneration'] !== sourceAccountGeneration
-  ) {
+  if (!validAttachmentPreparationSource(sessionData, attachmentData)) {
     return false;
   }
-  /* v8 ignore stop @preserve */
+  const sourceAccountId = sessionData?.['sourceAccountId'] as string;
+  const sourceAccountGeneration = sessionData?.['sourceAccountGeneration'] as string;
   const accountSnapshot = await transaction.get(
     db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(userId)
   );
@@ -1559,9 +1548,7 @@ function validPreparedChunk(input: {
   chunkCount: number;
 }): boolean {
   const data = input.data;
-  /* v8 ignore start -- upstream: data() is guaranteed defined by the prior DocumentSnapshot.exists check @preserve */
-  if (data === undefined) return false;
-  /* v8 ignore stop @preserve */
+  if (!hasSnapshotChunkData(data)) return false;
   return (
     chunkBelongsToFence(data, input.input) &&
     data['sourceAccountId'] === input.sourceAccountId &&
@@ -1570,6 +1557,28 @@ function validPreparedChunk(input: {
     data['chunkCount'] === input.chunkCount &&
     data['encoding'] === 'base64-json' &&
     typeof data['payload'] === 'string'
+  );
+}
+
+export function hasSnapshotChunkData(
+  data: Record<string, unknown> | undefined
+): data is Record<string, unknown> {
+  return data !== undefined;
+}
+
+export function validAttachmentPreparationSource(
+  sessionData: Record<string, unknown> | undefined,
+  attachmentData: Record<string, unknown> | undefined
+): boolean {
+  const sourceAccountId = sessionData?.['sourceAccountId'];
+  const sourceAccountGeneration = sessionData?.['sourceAccountGeneration'];
+  return (
+    typeof sourceAccountId === 'string' &&
+    sourceAccountId.length > 0 &&
+    typeof sourceAccountGeneration === 'string' &&
+    sourceAccountGeneration.length > 0 &&
+    attachmentData?.['sourceAccountId'] === sourceAccountId &&
+    attachmentData['sourceAccountGeneration'] === sourceAccountGeneration
   );
 }
 

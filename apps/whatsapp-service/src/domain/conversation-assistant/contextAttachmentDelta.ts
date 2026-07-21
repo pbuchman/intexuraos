@@ -141,7 +141,9 @@ export function buildConversationAssistantContextAttachmentDelta(
       candidateMessages.delete(entry.messageId);
       continue;
     }
-    if (newMessageIds.has(entry.messageId) || isCompletedTranscription(entry)) {
+    const becameIncluded =
+      entry.before.state === 'omitted' && entry.after.state === 'included';
+    if (newMessageIds.has(entry.messageId) || isCompletedTranscription(entry) || becameIncluded) {
       const projected = messageFromProjection({
         attachment: input.attachment,
         messageId: entry.messageId,

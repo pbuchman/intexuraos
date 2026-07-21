@@ -36,7 +36,7 @@ The context update is part of the new user turn. It is never a silent mutation o
 10. Late backfill earlier than the initial `range.from` is excluded unless a future feature explicitly expands the lower bound.
 11. Normal source edits, Matrix redactions (including WhatsApp message removal as bridged by the production adapter), and reaction changes are represented as later correction records. A privacy-erasure operation physically removes affected assistant snapshots and source journal projections.
 12. PDF exports the latest completed conversation revision and attachment summaries, not raw attachment transcripts.
-13. No Linear issue or Linear issue id is required for the branch or pull request.
+13. The branch and pull request are linked to Linear issue `INT-1887`; the pull request body includes `Fixes INT-1887`.
 14. One attachment may reference at most 400 persisted chunks. Exceeding that limit fails preparation with `ATTACHMENT_TOO_LARGE`; it never truncates data or attempts an unbounded Firestore transaction.
 
 ## Core Invariants
@@ -517,6 +517,10 @@ Requeues a failed attachment with the same immutable boundaries.
 
 Returns the public durable request status and any persisted turns for disconnect recovery.
 
+`POST /conversation-assistant/sessions/:sessionId/turn-requests/:requestId/resume`
+
+Reclaims an expired durable request lease and resumes the same request without appending another turn.
+
 `POST /internal/whatsapp/private/accounts/:sourceAccountId/erasure`
 
 Internal-authenticated, idempotent privacy workflow entry point. Body `{ userId, erasureRequestId }` creates a generation-fenced erasure request and publishes its bounded cascade on the existing webhook-process topic. It is deliberately separate from public `DELETE /private/account`, which remains a reversible mirror disconnect/disable operation.
@@ -684,7 +688,7 @@ After the same SHA is deployed to Hetzner, repeat the critical happy path, recov
 - Independent subagents review UX, architecture, security/concurrency, tests, and the complete diff. Evidence-backed findings are fixed test-first and reviewed again.
 - Full CI must pass before commit.
 - Fetch and integrate the latest `origin/development`, rerun full CI, then commit and push the feature branch.
-- Create a ready pull request targeting `development` without a Linear issue id. The body includes decisions, Endpoint Changes, automated evidence, Chrome evidence, risks, rollout, and deployment notes.
+- Create a ready pull request targeting `development` linked to `INT-1887`, with `Fixes INT-1887` in the body. The body includes decisions, Endpoint Changes, automated evidence, Chrome evidence, risks, rollout, and deployment notes.
 - From one frozen verified ref/SHA, apply and verify the approved Terraform TTL change, dispatch the Firestore migration/index target for migrations 124/125, wait until every required index is ready, and only then trigger the supported Hetzner application deployment without silently merging the PR. If any infrastructure path cannot prove the same source SHA/ref, stop before application rollout and surface the exact workflow constraint.
 - Verify GitHub workflow status, deployed SHA, PM2/nginx/direct-origin health, and Chrome smoke behavior.
 

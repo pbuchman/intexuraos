@@ -16,6 +16,7 @@ import {
   conversationAssistantContextAttachmentCreateBodyUsesPublicAllowlist,
   conversationAssistantTurnBodyUsesPublicAllowlist,
   endConversationAssistantSse,
+  initializeLegacyDurableTurnState,
   writeLegacyTurnSseEvent,
   writeTurnRequestSseEvent,
 } from '../routes/conversationAssistantRoutes.js';
@@ -1400,7 +1401,7 @@ describe('Conversation Assistant routes', () => {
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-plain-turn', question: 'What was agreed?' },
+      payload: { question: 'What was agreed?' },
     });
 
     expect(sent.statusCode).toBe(201);
@@ -1418,7 +1419,7 @@ describe('Conversation Assistant routes', () => {
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-stream-turn', question: 'Stream this.' },
+      payload: { question: 'Stream this.' },
     });
 
     expect(streamed.statusCode).toBe(200);
@@ -1458,6 +1459,128 @@ describe('Conversation Assistant routes', () => {
     expect(JSON.parse(streamedAttachmentAttempt.body).error.code).toBe('CONTEXT_STALE');
   });
 
+  it('uses durable request replay for legacy sessions when a request id is supplied', async () => {
+    const token = await seed();
+    const sessionId = await createPreparedSession(token, 'request-legacy-durable-session');
+    const stored = await ctx.conversationAssistantRepository.getSessionById(sessionId);
+    expect(stored).not.toBeNull();
+    if (stored === null) return;
+    const { continuation: _continuation, ...legacySession } = stored;
+    await ctx.conversationAssistantRepository.saveSession(legacySession);
+
+    const payload = { requestId: 'legacy-durable-turn', question: 'What was agreed?' };
+    const first = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${sessionId}/turns`,
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+    const replay = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${sessionId}/turns`,
+      headers: { authorization: `Bearer ${token}` },
+      payload,
+    });
+
+    expect(first.statusCode).toBe(201);
+    expect(replay.statusCode).toBe(201);
+    expect(JSON.parse(replay.body).data).toEqual(JSON.parse(first.body).data);
+    const recovered = await ctx.app.inject({
+      method: 'GET',
+      url: `/conversation-assistant/sessions/${sessionId}/turn-requests/${payload.requestId}`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(recovered.statusCode).toBe(200);
+    expect(JSON.parse(recovered.body).data.request.id).toBe(payload.requestId);
+  });
+
+  it('fails closed while initializing legacy durable turn state', async () => {
+    const configured = getServices();
+    const { conversationAssistantRepository: _repository, ...withoutRepository } = configured;
+    setServices(withoutRepository);
+    expect(await initializeLegacyDurableTurnState(USER_ID, 'missing')).toMatchObject({
+      ok: false,
+      error: { code: 'INTERNAL_ERROR' },
+    });
+    setServices(configured);
+
+    expect(await initializeLegacyDurableTurnState(USER_ID, 'missing')).toMatchObject({
+      ok: false,
+      error: { code: 'NOT_FOUND' },
+    });
+
+    const token = await seed();
+    const sessionId = await createPreparedSession(token, 'request-legacy-init-guards');
+    expect(await initializeLegacyDurableTurnState(USER_ID, sessionId)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const stored = await ctx.conversationAssistantRepository.getSessionById(sessionId);
+    expect(stored).not.toBeNull();
+    if (stored === null) return;
+    const {
+      continuation: _continuation,
+      sourceAccountId: _sourceAccountId,
+      ...missingSource
+    } = stored;
+    await ctx.conversationAssistantRepository.saveSession(missingSource);
+    expect(await initializeLegacyDurableTurnState(USER_ID, sessionId)).toMatchObject({
+      ok: false,
+      error: { code: 'INTERNAL_ERROR' },
+    });
+    const failedJson = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${sessionId}/turns`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { requestId: 'legacy-init-json-failure', question: 'Hello' },
+    });
+    const failedStream = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { requestId: 'legacy-init-stream-failure', question: 'Hello' },
+    });
+    expect(failedJson.statusCode).toBe(500);
+    expect(failedStream.statusCode).toBe(500);
+
+    vi.spyOn(ctx.conversationAssistantRepository, 'getSessionById').mockRejectedValueOnce(
+      new Error('private initialization failure')
+    );
+    expect(await initializeLegacyDurableTurnState(USER_ID, sessionId)).toMatchObject({
+      ok: false,
+      error: { code: 'INTERNAL_ERROR' },
+    });
+  });
+
+  it('preserves existing durable fields while initializing legacy turn history', async () => {
+    const token = await seed();
+    const sessionId = await createPreparedSession(token, 'request-legacy-history-init');
+    const stored = await ctx.conversationAssistantRepository.getSessionById(sessionId);
+    expect(stored).not.toBeNull();
+    if (stored === null) return;
+    const { continuation: _continuation, ...legacySession } = stored;
+    await ctx.conversationAssistantRepository.saveSession(legacySession);
+    await ctx.conversationAssistantRepository.saveTurn({
+      id: 'legacy-existing-turn',
+      sessionId,
+      userId: USER_ID,
+      role: 'user',
+      text: 'Existing question',
+      createdAt: '2026-07-20T00:00:00.000Z',
+      sequence: 10,
+      conversationRevision: 5,
+      requestId: 'existing-request',
+      kind: 'message',
+    });
+
+    expect(await initializeLegacyDurableTurnState(USER_ID, sessionId)).toEqual({
+      ok: true,
+      value: undefined,
+    });
+    const turns = await ctx.conversationAssistantRepository.listTurnsBySessionId(sessionId);
+    expect(turns[0]).toMatchObject({ requestId: 'existing-request', kind: 'message' });
+  });
+
   it('sanitizes new legacy LLM failures across JSON, SSE, persistence, logs, and telemetry', async () => {
     const token = await seed();
     const sessionId = await createPreparedSession(token, 'request-legacy-private-llm-errors');
@@ -1480,7 +1603,7 @@ describe('Conversation Assistant routes', () => {
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-private-sync', question: 'Fail safely.' },
+      payload: { question: 'Fail safely.' },
     });
     expect(syncResponse.statusCode).toBe(201);
     expect(JSON.parse(syncResponse.body).data.turns.at(-1).error).toEqual({
@@ -1494,7 +1617,7 @@ describe('Conversation Assistant routes', () => {
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-private-stream', question: 'Stream safely.' },
+      payload: { question: 'Stream safely.' },
     });
     expect(streamResponse.statusCode).toBe(200);
     const streamEvents = parseSseEvents(streamResponse.body);
@@ -2347,13 +2470,13 @@ describe('Conversation Assistant routes', () => {
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-sync-deps', question: 'Hello' },
+      payload: { question: 'Hello' },
     });
     const streamDependencyFailure = await ctx.app.inject({
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-stream-deps', question: 'Hello' },
+      payload: { question: 'Hello' },
     });
     setServices(configured);
 
@@ -2363,21 +2486,21 @@ describe('Conversation Assistant routes', () => {
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-sync-lookup', question: 'Hello' },
+      payload: { question: 'Hello' },
     });
     getSessionSpy.mockResolvedValueOnce(legacySession).mockResolvedValueOnce(null);
     const streamLookupFailure = await ctx.app.inject({
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-stream-lookup', question: 'Hello' },
+      payload: { question: 'Hello' },
     });
     getSessionSpy.mockRejectedValueOnce(new Error('private legacy lookup failure'));
     const streamModeFailure = await ctx.app.inject({
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-stream-mode', question: 'Hello' },
+      payload: { question: 'Hello' },
     });
 
     expect(syncDependencyFailure.statusCode).toBe(500);

@@ -20,7 +20,7 @@
 - One model operation may be active per session. Durable request ids, fingerprints, leases, deterministic turn ids, explicit sequence numbers, and completed revisions provide retry and disconnect recovery.
 - Legacy sessions without reliable watermarks cannot attach context and offer `Start a new analysis`.
 - Pending attachment metadata and chunks share a native Firestore TTL. A manifest hard-capped at 400 chunks lets atomic send verify every chunk and clear its TTL inside the commit transaction. Compact turn-request fingerprints and deterministic ids live until session deletion. Committed snapshots live until session deletion or privacy erasure.
-- The pull request targets `development`, does not require a Linear issue id, is not implicitly merged, and the exact verified feature SHA is manually deployed through the supported Hetzner workflow.
+- The pull request targets `development`, links `INT-1887` with `Fixes INT-1887`, is not implicitly merged, and the exact verified feature SHA is manually deployed through the supported Hetzner workflow.
 
 ## Global Engineering Gates
 
@@ -44,6 +44,7 @@
 | DELETE | `/api/whatsapp/conversation-assistant/sessions/:sessionId/context-attachments/:attachmentId` | Idempotently removes only an uncommitted draft and its chunks. |
 | POST | `/api/whatsapp/conversation-assistant/sessions/:sessionId/context-attachments/:attachmentId/preparation/retry` | Requeues a failed attachment with the same cutoff and watermarks. |
 | GET | `/api/whatsapp/conversation-assistant/sessions/:sessionId/turn-requests/:requestId` | Returns durable public request state and persisted turns for stream-disconnect recovery. |
+| POST | `/api/whatsapp/conversation-assistant/sessions/:sessionId/turn-requests/:requestId/resume` | Reclaims an expired durable lease and resumes the same request without appending another turn. |
 | POST | `/api/whatsapp/conversation-assistant/sessions/:sessionId/turn-requests/:requestId/answer/retry` | Reclaims only a terminal failed answer and atomically replaces its deterministic error turn; never appends the question or attachment again. |
 | POST | `/internal/whatsapp/private/accounts/:sourceAccountId/erasure` | Internal-authenticated idempotent start for a generation-fenced physical privacy cascade using `erasureRequestId`; separate from public disconnect. |
 | GET | `/internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId` | Internal-authenticated status/recovery for the bounded cascade; returns no deleted content. |
@@ -444,7 +445,7 @@ type PendingContextAttachmentState =
 - [ ] Fetch `origin/development`, inspect divergence, integrate it without discarding user work, resolve conflicts test-first, and rerun the complete `pnpm run ci:tracked`.
 - [ ] Confirm `git diff --check`, migration/prompt verification, clean intended scope, no credentials/private messages, and no untracked generated artifacts.
 - [ ] Stage only intended files and create one descriptive feature commit. Record the verified commit SHA.
-- [ ] Push `codex/conversation-assistant-include-new-messages` and create a ready pull request to `development` with product decisions, Endpoint Changes, data/TTL/privacy model, automated evidence, Chrome matrix, risks, rollout, rollback, and deployment notes. Explicitly note that no Linear id is required.
+- [ ] Push `codex/conversation-assistant-include-new-messages` and create a ready pull request to `development` with `Fixes INT-1887`, product decisions, Endpoint Changes, data/TTL/privacy model, automated evidence, Chrome matrix, risks, rollout, rollback, and deployment notes.
 - [ ] Watch required GitHub checks to successful completion. If a check changes the commit or reveals a defect, correct it test-first, rerun all gates, push, and use the new verified SHA.
 - [ ] Freeze the verified ref/SHA. From that same ref, run the approved Terraform plan/apply for attachment/chunk TTL and verify the resulting policy. Stop before application rollout if the Terraform path cannot prove the frozen source ref or requires missing authority.
 - [ ] Dispatch `.github/workflows/deploy.yml` for its Firestore target from the frozen ref, applying registered migrations 124/125 and indexes; verify actual workflow head/source SHA and wait until every required index reports ready.

@@ -298,6 +298,33 @@ describe('buildConversationAssistantContextAttachmentDelta', () => {
     });
   });
 
+  it('includes a historical omitted message when an edit makes it analyzable', () => {
+    const result = buildConversationAssistantContextAttachmentDelta(
+      input({
+        observedChangeSeq: 11,
+        attachment: attachment({ cutoffChangeSeq: 11 }),
+        journalChanges: [
+          change(11, {
+            messageId: 'edited-into-context',
+            changeType: 'edited',
+            before: omittedProjection({ omissionReason: 'media_only' }),
+            after: includedProjection({ content: 'Caption added later' }),
+          }),
+        ],
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value.messages).toHaveLength(1);
+    expect(result.value.messages[0]).toMatchObject({
+      id: 'edited-into-context',
+      content: 'Caption added later',
+    });
+    expect(result.value.transcriptText).toContain('Caption added later');
+    expect(result.value.counts).toMatchObject({ included: 1, edited: 1 });
+  });
+
   it('retains earlier-context corrections in source sequence with typed counts', () => {
     const edited = change(11, { changeType: 'edited', messageId: 'edited-1' });
     const redacted = change(12, {
