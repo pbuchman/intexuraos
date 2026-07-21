@@ -17,6 +17,7 @@ import {
   createOpenRouterCatalogClient,
   type OpenRouterCatalogClient,
 } from '@intexuraos/infra-openrouter';
+import { applicationDefault } from 'firebase-admin/app';
 
 import {
   CONFIG_MAX_BYTES,
@@ -38,6 +39,13 @@ import type { CanonicalMatrixCorpus } from './types.js';
 const INTEX_AGENT_BASE_URL = 'http://127.0.0.1:8134';
 const WHATSAPP_BASE_URL = 'http://127.0.0.1:8113';
 const MIN_ARTIFACT_FREE_BYTES = 128 * 1024 * 1024;
+const FIRESTORE_INDEX_LIST_MAX_BYTES = 5 * 1024 * 1024;
+const FIRESTORE_INDEX_LIST_TIMEOUT_MS = 10_000;
+// The Firestore wildcard collection-group listing accepts only zero and returns all indexes.
+const FIRESTORE_INDEX_LIST_PAGE_SIZE = 0;
+const FIRESTORE_INDEX_LIST_MAX_COUNT = 10_000;
+const FIRESTORE_INDEX_LIST_MAX_PAGES = 100;
+const FIRESTORE_ADMIN_BASE_URL = 'https://firestore.googleapis.com/v1';
 const execFileAsync = promisify(execFile);
 export const MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS = [
   'apps/intex-agent/src/',
@@ -54,6 +62,48 @@ const NO_OP_LOGGER: InternalHttpClientLogger = {
   error: () => undefined,
   debug: () => undefined,
 };
+
+const MATRIX_CORPUS_REQUIRED_FIRESTORE_INDEXES = [
+  [
+    'matrix_corpus_ingest_outbox',
+    ['status:ASCENDING', 'createdAt:ASCENDING', '__name__:ASCENDING'],
+  ],
+  [
+    'matrix_corpus_ingest_outbox',
+    ['status:ASCENDING', 'claim.expiresAt:ASCENDING', '__name__:ASCENDING'],
+  ],
+  [
+    'matrix_corpus_terminal_control_outbox',
+    ['status:ASCENDING', 'createdAt:ASCENDING', '__name__:ASCENDING'],
+  ],
+  [
+    'matrix_corpus_terminal_control_outbox',
+    ['status:ASCENDING', 'claim.expiresAt:ASCENDING', '__name__:ASCENDING'],
+  ],
+  ['matrix_corpus_run_leases', ['phase:ASCENDING', 'expiresAt:ASCENDING', '__name__:ASCENDING']],
+  [
+    'intex_agent_session_events',
+    ['sessionId:ASCENDING', 'eventSequence:ASCENDING', '__name__:ASCENDING'],
+  ],
+  [
+    'intex_agent_test_runs',
+    [
+      'userId:ASCENDING',
+      'runtimeAudience:ASCENDING',
+      'startedAt:DESCENDING',
+      '__name__:DESCENDING',
+    ],
+  ],
+  [
+    'intex_agent_test_runs',
+    ['artifactDelivery.status:ASCENDING', 'finishedAt:ASCENDING', '__name__:ASCENDING'],
+  ],
+] as const;
+const MATRIX_CORPUS_REQUIRED_FIRESTORE_INDEX_SIGNATURES = new Set(
+  MATRIX_CORPUS_REQUIRED_FIRESTORE_INDEXES.map(([collectionGroup, fields]) =>
+    firestoreIndexSignature(collectionGroup, fields)
+  )
+);
 
 export interface MatrixCorpusPreparedContext {
   readonly account: ValidatedAccountContext;
@@ -179,6 +229,7 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
   readonly intex?: IntexAgentServiceClient;
   readonly whatsapp?: WhatsAppServiceClient;
   readonly catalog?: OpenRouterCatalogClient;
+  readonly inspectFirestoreIndexes?: () => Promise<boolean>;
   readonly inspectRuntime?: () => Promise<{
     readonly ready: boolean;
     readonly deployedRevision: string;
@@ -233,17 +284,23 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
       const cursorTimeout = setTimeout((): void => {
         cursorController.abort();
       }, 10_000);
-      const [acceptance, liveCatalog, artifact, whatsappReadiness, runtime] = await Promise.all([
-        intex.getMatrixCorpusCurrentAcceptance(account.userId),
-        modelCatalog.getIntexAgentCatalogEvidence(),
-        inspectArtifactRoot(join(options.repositoryRoot, '.artifacts', 'intex-agent-evals')),
-        whatsapp.getMatrixCorpusReadiness(),
-        (
-          options.inspectRuntime ??
-          ((): ReturnType<typeof inspectHomeDevRuntime> =>
-            inspectHomeDevRuntime(options.repositoryRoot))
-        )(),
-      ]);
+      const [acceptance, liveCatalog, artifact, whatsappReadiness, runtime, firestoreIndexesReady] =
+        await Promise.all([
+          intex.getMatrixCorpusCurrentAcceptance(account.userId),
+          modelCatalog.getIntexAgentCatalogEvidence(),
+          inspectArtifactRoot(join(options.repositoryRoot, '.artifacts', 'intex-agent-evals')),
+          whatsapp.getMatrixCorpusReadiness(),
+          (
+            options.inspectRuntime ??
+            ((): ReturnType<typeof inspectHomeDevRuntime> =>
+              inspectHomeDevRuntime(options.repositoryRoot))
+          )(),
+          (
+            options.inspectFirestoreIndexes ??
+            ((): ReturnType<typeof inspectHomeDevFirestoreIndexes> =>
+              inspectHomeDevFirestoreIndexes(env['INTEXURAOS_GCP_PROJECT_ID'] ?? ''))
+          )(),
+        ]);
       let sync: Awaited<ReturnType<MatrixClient['syncTargetRoom']>>;
       try {
         sync = await options.matrix.syncTargetRoom({
@@ -286,7 +343,7 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
             : 'invalid',
           environmentAlias: env['INTEXURAOS_ENVIRONMENT'] ?? 'invalid',
           protectedConfigReady: true,
-          servicesReady: true,
+          servicesReady: firestoreIndexesReady,
           clocksReady,
           userReady: evaluatorUserId === account.userId,
           accountTupleCount,
@@ -314,6 +371,189 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
       };
     },
   };
+}
+
+export interface HomeDevFirestoreIndexInspectionDeps {
+  listCompositeIndexes(projectId: string): Promise<string>;
+}
+
+const PRODUCTION_FIRESTORE_INDEX_INSPECTION_DEPS: HomeDevFirestoreIndexInspectionDeps = {
+  async listCompositeIndexes(projectId): Promise<string> {
+    const credential = applicationDefault();
+    return await listHomeDevFirestoreCompositeIndexes(projectId, {
+      async getAccessToken(): Promise<string> {
+        return (await credential.getAccessToken()).access_token;
+      },
+      fetch: async (input, init) => await fetch(input, init),
+    });
+  },
+};
+
+export interface FirestoreAdminIndexListDeps {
+  getAccessToken(): Promise<string>;
+  fetch(input: string, init: RequestInit): Promise<Response>;
+}
+
+/** List composite indexes through the read-only Firestore Admin REST API. */
+export async function listHomeDevFirestoreCompositeIndexes(
+  projectId: string,
+  deps: FirestoreAdminIndexListDeps
+): Promise<string> {
+  if (!/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/u.test(projectId)) {
+    throw new Error('firestore_index_project_invalid');
+  }
+  const accessToken = await deps.getAccessToken();
+  if (accessToken.length === 0 || accessToken.length > 16_384) {
+    throw new Error('firestore_index_access_token_invalid');
+  }
+
+  const signal = AbortSignal.timeout(FIRESTORE_INDEX_LIST_TIMEOUT_MS);
+  const indexes: unknown[] = [];
+  const seenPageTokens = new Set<string>();
+  let pageToken: string | undefined;
+  let totalBytes = 0;
+
+  for (let pageNumber = 0; pageNumber < FIRESTORE_INDEX_LIST_MAX_PAGES; pageNumber += 1) {
+    const url = new URL(
+      `${FIRESTORE_ADMIN_BASE_URL}/projects/${projectId}/databases/(default)/collectionGroups/-/indexes`
+    );
+    url.searchParams.set('pageSize', String(FIRESTORE_INDEX_LIST_PAGE_SIZE));
+    if (pageToken !== undefined) url.searchParams.set('pageToken', pageToken);
+    const response = await deps.fetch(url.toString(), {
+      method: 'GET',
+      headers: { authorization: `Bearer ${accessToken}` },
+      signal,
+    });
+    if (!response.ok) throw new Error('firestore_index_list_failed');
+
+    const body = await readBoundedResponseBody(
+      response,
+      FIRESTORE_INDEX_LIST_MAX_BYTES - totalBytes
+    );
+    totalBytes += body.byteLength;
+    const page = JSON.parse(body.text) as unknown;
+    if (!isRecord(page)) throw new Error('firestore_index_list_invalid');
+    const rawPageIndexes = page['indexes'];
+    if (rawPageIndexes !== undefined && !Array.isArray(rawPageIndexes)) {
+      throw new Error('firestore_index_list_invalid');
+    }
+    const pageIndexes: unknown[] =
+      rawPageIndexes === undefined ? [] : (rawPageIndexes as unknown[]);
+    indexes.push(...pageIndexes);
+    if (indexes.length > FIRESTORE_INDEX_LIST_MAX_COUNT) {
+      throw new Error('firestore_index_list_too_large');
+    }
+
+    const nextPageToken = page['nextPageToken'];
+    if (nextPageToken === undefined || nextPageToken === '') return JSON.stringify(indexes);
+    if (
+      typeof nextPageToken !== 'string' ||
+      nextPageToken.length > 4096 ||
+      seenPageTokens.has(nextPageToken)
+    ) {
+      throw new Error('firestore_index_page_token_invalid');
+    }
+    seenPageTokens.add(nextPageToken);
+    pageToken = nextPageToken;
+  }
+  throw new Error('firestore_index_page_limit_exceeded');
+}
+
+async function readBoundedResponseBody(
+  response: Response,
+  maxBytes: number
+): Promise<{ readonly text: string; readonly byteLength: number }> {
+  if (maxBytes < 1 || response.body === null) {
+    throw new Error('firestore_index_list_too_large');
+  }
+  const contentLength = response.headers.get('content-length');
+  if (contentLength !== null) {
+    const advertisedBytes = Number(contentLength);
+    if (
+      !Number.isSafeInteger(advertisedBytes) ||
+      advertisedBytes < 0 ||
+      advertisedBytes > maxBytes
+    ) {
+      throw new Error('firestore_index_list_too_large');
+    }
+  }
+
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  for (;;) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    byteLength += chunk.value.byteLength;
+    if (byteLength > maxBytes) {
+      await reader.cancel();
+      throw new Error('firestore_index_list_too_large');
+    }
+    chunks.push(chunk.value);
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder('utf-8', { fatal: true }).decode(bytes), byteLength };
+}
+
+/** Read the live index control plane without creating a Firestore probe document. */
+export async function inspectHomeDevFirestoreIndexes(
+  projectId: string,
+  deps: HomeDevFirestoreIndexInspectionDeps = PRODUCTION_FIRESTORE_INDEX_INSPECTION_DEPS
+): Promise<boolean> {
+  if (!/^[a-z][a-z0-9-]{4,61}[a-z0-9]$/u.test(projectId)) return false;
+  try {
+    const output = await deps.listCompositeIndexes(projectId);
+    if (output.length > FIRESTORE_INDEX_LIST_MAX_BYTES) return false;
+    const parsed = JSON.parse(output) as unknown;
+    if (!Array.isArray(parsed) || parsed.length > 10_000) return false;
+    const readySignatures = new Set<string>();
+    for (const value of parsed) {
+      const signature = readyFirestoreIndexSignature(value);
+      if (signature !== undefined) readySignatures.add(signature);
+    }
+    return [...MATRIX_CORPUS_REQUIRED_FIRESTORE_INDEX_SIGNATURES].every((signature) =>
+      readySignatures.has(signature)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function readyFirestoreIndexSignature(value: unknown): string | undefined {
+  if (
+    !isRecord(value) ||
+    value['state'] !== 'READY' ||
+    value['queryScope'] !== 'COLLECTION' ||
+    (value['apiScope'] !== undefined && value['apiScope'] !== 'ANY_API')
+  ) {
+    return undefined;
+  }
+  const name = value['name'];
+  const fields = value['fields'];
+  if (typeof name !== 'string' || !Array.isArray(fields) || fields.length > 64) return undefined;
+  const collectionMatch = /\/collectionGroups\/([^/]+)\/indexes\//u.exec(name);
+  const collectionGroup = collectionMatch?.[1];
+  if (collectionGroup === undefined) return undefined;
+  const normalizedFields: string[] = [];
+  for (const field of fields) {
+    if (!isRecord(field) || typeof field['fieldPath'] !== 'string') return undefined;
+    if (field['order'] !== 'ASCENDING' && field['order'] !== 'DESCENDING') return undefined;
+    normalizedFields.push(`${field['fieldPath']}:${field['order']}`);
+  }
+  return firestoreIndexSignature(collectionGroup, normalizedFields);
+}
+
+function firestoreIndexSignature(collectionGroup: string, fields: readonly string[]): string {
+  return `${collectionGroup}|${fields.join('|')}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export interface HomeDevRuntimeInspectionDeps {

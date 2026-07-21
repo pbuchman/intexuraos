@@ -19,6 +19,9 @@ transport, or production tool execution.
 The preflight embedded in `matrix-corpus` is read-only: it sends no message, calls no LLM,
 creates no run or artifact, and performs no Firestore, Pub/Sub, or filesystem write. Only
 after preflight passes may the command provision the run and send the first Matrix message.
+It also reads the live Firestore index control plane through the authenticated, read-only
+Firestore Admin REST API and requires all eight Matrix-corpus composite indexes to report
+`READY`; a missing, incompatible, or still-building index closes admission.
 
 `endpoint`, `scenario`, `matrix-smoke`, and `full` remain diagnostics for the legacy
 evaluator path. They are not substitutes for the 20-scenario Matrix corpus and are not

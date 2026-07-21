@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('firebase-admin/app', () => ({
+  applicationDefault: vi.fn(),
   getApp: vi.fn(),
   getApps: vi.fn(() => []),
   initializeApp: vi.fn(),
@@ -19,8 +20,10 @@ import {
   createMatrixCorpusLiveRuntime,
   inspectArtifactRoot,
   inspectHomeDevRuntime,
+  listHomeDevFirestoreCompositeIndexes,
   MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS,
   resolveMatrixCorpusPuppetBinding,
+  type FirestoreAdminIndexListDeps,
   type HomeDevRuntimeInspectionDeps,
   type MatrixCorpusPreparedContext,
 } from '../matrixCorpus/liveRuntime.js';
@@ -102,6 +105,170 @@ describe('Matrix corpus live runtime handoff', () => {
 });
 
 describe('production Home Dev runtime inspection', () => {
+  it('lists paginated Firestore indexes through the bounded read-only Admin API', async () => {
+    const firstIndex = requiredFirestoreIndexes()[0];
+    const secondIndex = requiredFirestoreIndexes()[1];
+    const request = vi
+      .fn<FirestoreAdminIndexListDeps['fetch']>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ indexes: [firstIndex], nextPageToken: 'next page' }))
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ indexes: [secondIndex] })));
+
+    const output = await listHomeDevFirestoreCompositeIndexes('intexuraos-dev-test', {
+      getAccessToken: async () => 'private-access-token',
+      fetch: request,
+    });
+
+    expect(JSON.parse(output)).toEqual([firstIndex, secondIndex]);
+    expect(request).toHaveBeenCalledTimes(2);
+    const firstUrl = new URL(request.mock.calls[0]?.[0] ?? '');
+    const secondUrl = new URL(request.mock.calls[1]?.[0] ?? '');
+    expect(firstUrl.origin).toBe('https://firestore.googleapis.com');
+    expect(firstUrl.pathname).toBe(
+      '/v1/projects/intexuraos-dev-test/databases/(default)/collectionGroups/-/indexes'
+    );
+    expect(firstUrl.searchParams.get('pageSize')).toBe('0');
+    expect(secondUrl.searchParams.get('pageToken')).toBe('next page');
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      method: 'GET',
+      headers: { authorization: 'Bearer private-access-token' },
+    });
+  });
+
+  it('rejects failed Admin API reads and repeated pagination tokens', async () => {
+    const getAccessToken = vi.fn(async () => 'private-access-token');
+    await expect(
+      listHomeDevFirestoreCompositeIndexes('../unsafe', {
+        getAccessToken,
+        fetch: async () => new Response('{}'),
+      })
+    ).rejects.toThrow('firestore_index_project_invalid');
+    expect(getAccessToken).not.toHaveBeenCalled();
+
+    await expect(
+      listHomeDevFirestoreCompositeIndexes('intexuraos-dev-test', {
+        getAccessToken: async () => 'private-access-token',
+        fetch: async () => new Response('', { status: 403 }),
+      })
+    ).rejects.toThrow('firestore_index_list_failed');
+
+    await expect(
+      listHomeDevFirestoreCompositeIndexes('intexuraos-dev-test', {
+        getAccessToken: async () => 'private-access-token',
+        fetch: async () => new Response(JSON.stringify({ nextPageToken: 'repeat' })),
+      })
+    ).rejects.toThrow('firestore_index_page_token_invalid');
+  });
+
+  it('requires every Matrix corpus Firestore index to be READY', async () => {
+    const runtimeModule = (await import('../matrixCorpus/liveRuntime.js')) as unknown as {
+      inspectHomeDevFirestoreIndexes?: (
+        projectId: string,
+        dependencies: { listCompositeIndexes(projectId: string): Promise<string> }
+      ) => Promise<boolean>;
+    };
+    const inspect = runtimeModule.inspectHomeDevFirestoreIndexes;
+    expect(inspect).toBeTypeOf('function');
+    if (inspect === undefined) return;
+
+    const readyIndexes = requiredFirestoreIndexes();
+    const listCompositeIndexes = vi.fn(async () => JSON.stringify(readyIndexes));
+
+    await expect(inspect('intexuraos-dev-test', { listCompositeIndexes })).resolves.toBe(true);
+    expect(listCompositeIndexes).toHaveBeenCalledWith('intexuraos-dev-test');
+
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () =>
+          JSON.stringify(
+            readyIndexes.map((index, position) =>
+              position === 0 ? { ...index, state: 'CREATING' } : index
+            )
+          ),
+      })
+    ).resolves.toBe(false);
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () => JSON.stringify(readyIndexes.slice(1)),
+      })
+    ).resolves.toBe(false);
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () =>
+          JSON.stringify([
+            { ...readyIndexes[0], apiScope: 'MONGODB_COMPATIBLE_API' },
+            ...readyIndexes.slice(1),
+          ]),
+      })
+    ).resolves.toBe(false);
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () =>
+          JSON.stringify(
+            readyIndexes.map((index, position) =>
+              position === 0
+                ? {
+                    ...index,
+                    fields: (index['fields'] as Record<string, unknown>[]).map(
+                      (field, fieldPosition, fields) =>
+                        fieldPosition === fields.length - 1
+                          ? { ...field, order: 'DESCENDING' }
+                          : field
+                    ),
+                  }
+                : index
+            )
+          ),
+      })
+    ).resolves.toBe(false);
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () => 'not-json',
+      })
+    ).resolves.toBe(false);
+  });
+
+  it('fails closed for an unsafe project, unavailable control plane, or oversized response', async () => {
+    const { inspectHomeDevFirestoreIndexes: inspect } =
+      await import('../matrixCorpus/liveRuntime.js');
+    const listCompositeIndexes = vi.fn(async () => JSON.stringify(requiredFirestoreIndexes()));
+
+    await expect(inspect('../unsafe', { listCompositeIndexes })).resolves.toBe(false);
+    expect(listCompositeIndexes).not.toHaveBeenCalled();
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () => {
+          throw new Error('control plane unavailable');
+        },
+      })
+    ).resolves.toBe(false);
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () => ' '.repeat(5 * 1024 * 1024 + 1),
+      })
+    ).resolves.toBe(false);
+  });
+
+  it('ignores unrelated composite indexes while checking the exact required set', async () => {
+    const { inspectHomeDevFirestoreIndexes: inspect } =
+      await import('../matrixCorpus/liveRuntime.js');
+    const indexes = [
+      ...requiredFirestoreIndexes(),
+      firestoreIndex('unrelated_collection', [['value', 'ASCENDING']]),
+      {
+        ...firestoreIndex('vector_collection', [['value', 'ASCENDING']]),
+        fields: [{ fieldPath: 'embedding', vectorConfig: { dimension: 768 } }],
+      },
+    ];
+
+    await expect(
+      inspect('intexuraos-dev-test', {
+        listCompositeIndexes: async () => JSON.stringify(indexes),
+      })
+    ).resolves.toBe(true);
+  });
+
   it('resolves the current WhatsApp puppet from a limited initial Matrix timeline', () => {
     expect(
       resolveMatrixCorpusPuppetBinding(
@@ -249,6 +416,59 @@ function runtimeInspectionDeps(
       stdout: args[0] === 'rev-parse' ? `${'a'.repeat(40)}\n` : '',
     })),
     ...overrides,
+  };
+}
+
+function requiredFirestoreIndexes(): Record<string, unknown>[] {
+  return [
+    firestoreIndex('matrix_corpus_ingest_outbox', [
+      ['status', 'ASCENDING'],
+      ['createdAt', 'ASCENDING'],
+    ]),
+    firestoreIndex('matrix_corpus_ingest_outbox', [
+      ['status', 'ASCENDING'],
+      ['claim.expiresAt', 'ASCENDING'],
+    ]),
+    firestoreIndex('matrix_corpus_terminal_control_outbox', [
+      ['status', 'ASCENDING'],
+      ['createdAt', 'ASCENDING'],
+    ]),
+    firestoreIndex('matrix_corpus_terminal_control_outbox', [
+      ['status', 'ASCENDING'],
+      ['claim.expiresAt', 'ASCENDING'],
+    ]),
+    firestoreIndex('matrix_corpus_run_leases', [
+      ['phase', 'ASCENDING'],
+      ['expiresAt', 'ASCENDING'],
+    ]),
+    firestoreIndex('intex_agent_session_events', [
+      ['sessionId', 'ASCENDING'],
+      ['eventSequence', 'ASCENDING'],
+    ]),
+    firestoreIndex('intex_agent_test_runs', [
+      ['userId', 'ASCENDING'],
+      ['runtimeAudience', 'ASCENDING'],
+      ['startedAt', 'DESCENDING'],
+    ]),
+    firestoreIndex('intex_agent_test_runs', [
+      ['artifactDelivery.status', 'ASCENDING'],
+      ['finishedAt', 'ASCENDING'],
+    ]),
+  ];
+}
+
+function firestoreIndex(
+  collectionGroup: string,
+  fields: readonly (readonly [string, 'ASCENDING' | 'DESCENDING'])[]
+): Record<string, unknown> {
+  return {
+    name: `projects/test/databases/(default)/collectionGroups/${collectionGroup}/indexes/index`,
+    queryScope: 'COLLECTION',
+    state: 'READY',
+    fields: [
+      ...fields.map(([fieldPath, order]) => ({ fieldPath, order })),
+      { fieldPath: '__name__', order: fields.at(-1)?.[1] ?? 'ASCENDING' },
+    ],
   };
 }
 
