@@ -272,6 +272,7 @@ describe('Matrix corpus shared contract', () => {
       expect(matrixCorpusDecimalFenceSchema.safeParse(invalid).success).toBe(false);
     }
     expect(matrixCorpusSafeIdSchema.safeParse('run_1').success).toBe(true);
+    expect(matrixCorpusSafeIdSchema.safeParse('auth0|operator_1').success).toBe(true);
     for (const invalid of ['', 'has space', 'mail@example.com', '🧪']) {
       expect(matrixCorpusSafeIdSchema.safeParse(invalid).success).toBe(false);
     }

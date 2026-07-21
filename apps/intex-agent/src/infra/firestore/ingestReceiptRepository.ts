@@ -42,7 +42,7 @@ const receiptKeys = [
   'updatedAt',
   'version',
 ] as const;
-const safeIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const safeIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/;
 const digestPattern = /^[0-9a-f]{64}$/;
 type FirestoreDocumentReference = ReturnType<ReturnType<Firestore['collection']>['doc']>;
 const fencePattern = /^[1-9][0-9]{0,19}$/;

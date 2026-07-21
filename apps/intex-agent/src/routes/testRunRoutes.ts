@@ -35,7 +35,7 @@ const safeIdJsonSchema = {
   type: 'string',
   minLength: 1,
   maxLength: 128,
-  pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$',
+  pattern: '^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$',
 } as const;
 const TEST_RUN_REQUEST_LOG_OPTIONS = {
   message: 'Received protected Test Runs request',

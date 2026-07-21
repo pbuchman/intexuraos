@@ -50,7 +50,7 @@ type SessionEventDocument = IntexAgentSessionEvent;
 
 const OPEN_STATUSES = new Set(['active', 'waiting_for_user', 'executing_tool']);
 const MAX_MATRIX_CORPUS_EVENT_SEQUENCE = 10_000;
-const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/u;
 const SHA_256_PATTERN = /^[0-9a-f]{64}$/u;
 const FENCE_PATTERN = /^[1-9][0-9]{0,19}$/u;
 const profileKeys = [

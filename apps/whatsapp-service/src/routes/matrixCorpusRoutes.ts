@@ -30,7 +30,7 @@ const MATRIX_CORPUS_REQUEST_LOG_OPTIONS = {
   includeHeaders: false,
   includeParams: false,
 } as const;
-const safeId = { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' } as const;
+const safeId = { type: 'string', pattern: '^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$' } as const;
 const fence = { type: 'string', pattern: '^[1-9][0-9]{0,19}$' } as const;
 const sensitiveFence = { ...fence, writeOnly: true } as const;
 const digest = { type: 'string', pattern: '^[0-9a-f]{64}$' } as const;

@@ -32,7 +32,7 @@ export const INTEX_AGENT_MATRIX_CORPUS_RECOVERY_RECEIPTS_COLLECTION =
 
 const MAX_SCENARIO_CONTEXTS = 20;
 const CONTEXT_TTL_MS = 24 * 60 * 60 * 1000;
-const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/u;
 const SHA_256_PATTERN = /^[0-9a-f]{64}$/u;
 const FENCE_PATTERN = /^[1-9][0-9]{0,19}$/u;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/u;

@@ -126,7 +126,7 @@ const cleanupRequestSchema = z
 
 const safeIdJsonSchema = {
   type: 'string',
-  pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$',
+  pattern: '^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$',
 } as const;
 const MATRIX_CORPUS_REQUEST_LOG_OPTIONS = {
   message: 'Received protected Matrix corpus request',

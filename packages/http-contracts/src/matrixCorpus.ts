@@ -16,7 +16,7 @@ export const MATRIX_CORPUS_MAX_COMPACT_JWS_CODE_UNITS =
   MATRIX_CORPUS_MAX_JWS_PAYLOAD_SEGMENT_CODE_UNITS + 2_050;
 
 const SHA_256_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
-const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/;
 const MOCK_ID_PATTERN = /^mock_[A-Za-z0-9_-]{1,120}$/;
 const MOCK_PREFERENCE_ID_PATTERN = /^mock_pref_[A-Za-z0-9_-]{1,112}$/;
 const BASE64URL_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
