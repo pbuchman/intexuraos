@@ -60,7 +60,7 @@ import type {
 
 const NOW = '2026-07-21T10:00:00.000Z';
 const RUN_ID = 'eval-123e4567-e89b-42d3-a456-426614174000';
-const USER_ID = 'private-user-sentinel';
+const USER_ID = 'auth0|private-user-sentinel';
 const INTERNAL_AUTH_TOKEN = 'matrix-corpus-composition-internal-auth';
 const MATRIX_USER_ID = '@private_user_sentinel:example.test';
 const MATRIX_ROOM_ID = '!private-room-sentinel:example.test';

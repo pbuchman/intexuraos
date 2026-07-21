@@ -17,7 +17,7 @@ export const INTEX_AGENT_MATRIX_CORPUS_RUN_MANIFESTS_COLLECTION =
   'intex_agent_matrix_corpus_run_manifests';
 
 const MAX_SCENARIO_BINDINGS = 20;
-const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/u;
 const SHA_256_PATTERN = /^[0-9a-f]{64}$/u;
 const FENCE_PATTERN = /^[1-9][0-9]{0,19}$/u;
 const manifestKeys = [

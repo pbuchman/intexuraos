@@ -349,6 +349,20 @@ describe('parseWhatsAppMatrixCorpusConfig', () => {
     });
   });
 
+  it('accepts a canonical Auth0 Firebase subject for the Home Dev evaluator', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'auth0|operator_1',
+      })
+    ).toMatchObject({
+      enabled: true,
+      configuredEvaluatorUserId: 'auth0|operator_1',
+    });
+  });
+
   it.each([
     'INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME',
     'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',

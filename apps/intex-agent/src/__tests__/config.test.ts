@@ -118,6 +118,16 @@ describe('loadConfig', () => {
     });
   });
 
+  it('accepts a canonical Auth0 Firebase subject for the Home Dev evaluator', () => {
+    setEnabledMatrixCorpusEnv();
+    process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'] = 'auth0|operator_1';
+
+    expect(loadConfig().matrixCorpus).toMatchObject({
+      enabled: true,
+      evaluatorUserId: 'auth0|operator_1',
+    });
+  });
+
   it.each([undefined, '', 'TRUE', '1', 'yes'])('rejects a non-canonical Test Runs read flag: %s', (value) => {
     if (value === undefined) delete process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'];
     else process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = value;

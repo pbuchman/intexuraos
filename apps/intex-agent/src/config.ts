@@ -79,7 +79,7 @@ export function parseIntexMatrixCorpusConfig(
     env,
     'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
     128,
-    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u
+    /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/u
   );
   const contextEncryptionKeyVersion = requireCanonicalValue(
     env,
