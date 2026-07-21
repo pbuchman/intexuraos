@@ -146,7 +146,8 @@ export interface MatrixClientOptions {
 }
 
 const MATRIX_WHOAMI_TIMEOUT_MS = 10_000;
-const MATRIX_JSON_MAX_BYTES = 64 * 1024;
+const MATRIX_WHOAMI_JSON_MAX_BYTES = 64 * 1024;
+const MATRIX_SYNC_JSON_MAX_BYTES = 1024 * 1024;
 
 function isJsonResponse(response: Response): boolean {
   const contentType = response.headers.get('content-type');
@@ -362,7 +363,8 @@ export function isWhatsAppPuppetSender(value: string): boolean {
 export function createMatrixClient(options: MatrixClientOptions = {}): MatrixClient {
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? MATRIX_WHOAMI_TIMEOUT_MS;
-  const maxBytes = options.maxBytes ?? MATRIX_JSON_MAX_BYTES;
+  const whoAmIMaxBytes = options.maxBytes ?? MATRIX_WHOAMI_JSON_MAX_BYTES;
+  const syncMaxBytes = options.maxBytes ?? MATRIX_SYNC_JSON_MAX_BYTES;
 
   return {
     async whoAmI(input): Promise<MatrixWhoAmIResult> {
@@ -395,7 +397,7 @@ export function createMatrixClient(options: MatrixClientOptions = {}): MatrixCli
           return { ok: false, reason: 'invalid_response' };
         }
 
-        const body = await readBoundedBody(response, maxBytes);
+        const body = await readBoundedBody(response, whoAmIMaxBytes);
         if (body === undefined) {
           return { ok: false, reason: 'invalid_response' };
         }
@@ -447,7 +449,7 @@ export function createMatrixClient(options: MatrixClientOptions = {}): MatrixCli
           return { ok: false, reason: 'invalid_response' };
         }
 
-        const body = await readBoundedBody(response, maxBytes);
+        const body = await readBoundedBody(response, syncMaxBytes);
         if (body === undefined) {
           return { ok: false, reason: 'invalid_response' };
         }

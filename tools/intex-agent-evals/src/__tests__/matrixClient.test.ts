@@ -330,6 +330,75 @@ describe('createMatrixClient', () => {
     ]);
   });
 
+  it('accepts a bounded 100-event sync response larger than the whoami body limit', async () => {
+    const events = Array.from({ length: 100 }, (_, index) => ({
+      event_id: `$event-${String(index)}:home-dev`,
+      origin_server_ts: 1_721_466_000_000 + index,
+      type: 'm.room.message',
+      sender: '@whatsapp_48123123123:home-dev',
+      content: { msgtype: 'm.text', body: 'x'.repeat(700) },
+    }));
+    const body = targetSyncBody(events, { limited: true });
+    expect(JSON.stringify(body).length).toBeGreaterThan(64 * 1024);
+    const client = createMatrixClient({
+      fetchImpl: vi.fn<typeof fetch>(async () => jsonResponse(body)),
+      timeoutMs: 50,
+    });
+
+    const result = await client.syncTargetRoom({
+      homeserverUrl: 'https://matrix.synthetic.test',
+      accessToken: 'private-token-sentinel',
+      targetRoomId: TARGET_ROOM_ID,
+      timeoutMs: 0,
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toMatchObject({ ok: true, limited: true });
+    if (!result.ok) throw new Error('expected valid sync');
+    expect(result.events).toHaveLength(100);
+  });
+
+  it('keeps the default whoami and sync response limits independently fail-closed', async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { user_id: '@operator:home-dev' },
+          {
+            headers: {
+              'content-type': 'application/json',
+              'content-length': String(64 * 1024 + 1),
+            },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(targetSyncBody(), {
+          headers: {
+            'content-type': 'application/json',
+            'content-length': String(1024 * 1024 + 1),
+          },
+        })
+      );
+    const client = createMatrixClient({ fetchImpl, timeoutMs: 50 });
+
+    await expect(
+      client.whoAmI({
+        homeserverUrl: 'https://matrix.synthetic.test',
+        accessToken: 'private-token-sentinel',
+      })
+    ).resolves.toEqual({ ok: false, reason: 'invalid_response' });
+    await expect(
+      client.syncTargetRoom({
+        homeserverUrl: 'https://matrix.synthetic.test',
+        accessToken: 'private-token-sentinel',
+        targetRoomId: TARGET_ROOM_ID,
+        timeoutMs: 0,
+        signal: new AbortController().signal,
+      })
+    ).resolves.toEqual({ ok: false, reason: 'invalid_response' });
+  });
+
   it('ignores unrelated top-level sections and joined rooms without inspecting their events', async () => {
     const body = targetSyncBody([
       {
