@@ -73,9 +73,10 @@ id server-side. The deploy fails before
 remote mutation when the local checkout differs from `GITHUB_SHA`.
 
 Retained GCP targets are triggered with `--sha=${GITHUB_SHA}`. A `SUCCESS`
-status is accepted only when
-`sourceProvenance.resolvedRepoSource.commitSha` exactly equals `GITHUB_SHA`;
-an empty or different provenance SHA fails the workflow.
+status is accepted only when the GitHub trigger provenance in
+`sourceProvenance.resolvedGitSource.revision` (or the legacy
+`sourceProvenance.resolvedRepoSource.commitSha` fallback) exactly equals
+`GITHUB_SHA`; an empty or different provenance SHA fails the workflow.
 
 Hetzner deploys expose exact release evidence at `GET /deployment.json` as
 uncached JSON containing `commitSha`, `workflowRunId`, and `deployedAt`. The

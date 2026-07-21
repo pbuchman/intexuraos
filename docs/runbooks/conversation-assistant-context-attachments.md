@@ -52,7 +52,7 @@ This runbook covers rollout, verification, recovery, and rollback for immutable 
    publishing the new Web bundle. Do not reverse this order: already-open old
    clients rely on the server accepting the legacy question-only turn body,
    while the new Web client requires the new public contract.
-4. For every retained Cloud Build target, verify `sourceProvenance.resolvedRepoSource.commitSha` exactly matches the reviewed SHA.
+4. For every retained Cloud Build target, verify `sourceProvenance.resolvedGitSource.revision` (or the legacy `sourceProvenance.resolvedRepoSource.commitSha` fallback) exactly matches the reviewed SHA.
 5. Verify PM2 processes are online, `nginx -t` succeeds, and `/api/whatsapp/health` succeeds through both direct-origin `--resolve` and public DNS.
 6. Fetch `/deployment.json` through both direct-origin `--resolve` and public DNS. Require an uncached `application/json` response with exactly `commitSha`, `workflowRunId`, and canonical UTC `deployedAt`; both `commitSha` values must equal the reviewed SHA. Record the run id and timestamp. A missing marker is a failed or still-running deployment, never evidence for the previous release.
 7. Repeat the critical Chrome happy path, recovery, context-history, and PDF checks at `https://intexuraos.cloud`.

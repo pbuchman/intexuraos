@@ -104,7 +104,12 @@ jobs:
               SUCCESS)
                 RESOLVED_COMMIT_SHA="$(gcloud builds describe "$BUILD_ID" \
                   --region="$REGION" \
-                  --format="value(sourceProvenance.resolvedRepoSource.commitSha)")"
+                  --format="value(sourceProvenance.resolvedGitSource.revision)")"
+                if [[ -z "$RESOLVED_COMMIT_SHA" ]]; then
+                  RESOLVED_COMMIT_SHA="$(gcloud builds describe "$BUILD_ID" \
+                    --region="$REGION" \
+                    --format="value(sourceProvenance.resolvedRepoSource.commitSha)")"
+                fi
                 if [[ "$RESOLVED_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
                   echo "Cloud Build provenance SHA mismatch: expected $GITHUB_SHA, resolved ${RESOLVED_COMMIT_SHA:-<empty>}" >&2
                   exit 1

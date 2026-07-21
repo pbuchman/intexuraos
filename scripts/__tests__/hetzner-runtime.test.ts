@@ -526,6 +526,7 @@ describe('Hetzner web asset deployment', () => {
 
     expect(workflow).toContain('--sha="${GITHUB_SHA}"');
     expect(workflow).not.toContain('--branch="${GITHUB_REF_NAME:-development}"');
+    expect(workflow).toContain('sourceProvenance.resolvedGitSource.revision');
     expect(workflow).toContain('sourceProvenance.resolvedRepoSource.commitSha');
     expect(workflow).toContain('RESOLVED_COMMIT_SHA');
     expect(workflow).toContain('[[ "$RESOLVED_COMMIT_SHA" != "$GITHUB_SHA" ]]');
@@ -615,11 +616,13 @@ describe('Hetzner web asset deployment', () => {
     const runbook = readRequired(runbookPath);
     const contextRunbook = readRequired(contextAttachmentsRunbookPath);
 
+    expect(runbook).toContain('sourceProvenance.resolvedGitSource.revision');
     expect(runbook).toContain('sourceProvenance.resolvedRepoSource.commitSha');
     expect(runbook).toContain('GET /deployment.json');
     expect(runbook).toContain('workflowRunId');
     expect(runbook).toContain('manual');
     expect(runbook).toContain('/api/whatsapp/health');
+    expect(contextRunbook).toContain('sourceProvenance.resolvedGitSource.revision');
     expect(contextRunbook).toContain('sourceProvenance.resolvedRepoSource.commitSha');
     expect(contextRunbook).toContain('/deployment.json');
     expect(contextRunbook).toContain('/api/whatsapp/health');
