@@ -10,8 +10,9 @@
 import { startFastifyService } from '@intexuraos/http-server';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
+import { loadConfig } from './config.js';
 
-const REQUIRED_ENV = [
+const REQUIRED_ENV: string[] = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH0_DOMAIN',
   'INTEXURAOS_AUTH0_CLIENT_ID',
@@ -27,14 +28,26 @@ const REQUIRED_ENV = [
   'INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_ID',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
-] as const;
+  'INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID',
+  'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED',
+];
 
+if (process.env['INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID'] !== 'disabled') {
+  REQUIRED_ENV.push('INTEXURAOS_OPENROUTER_APP_API_KEY');
+}
+
+if (process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] === 'true') {
+  REQUIRED_ENV.push(
+    'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'
+  );
+}
 
 await startFastifyService({
   serviceName: 'user-service',
   requiredEnv: REQUIRED_ENV,
-  initServices: () => {
-    initServices();
+  initServices: async () => {
+    await initServices(loadConfig());
   },
   buildServer,
 });

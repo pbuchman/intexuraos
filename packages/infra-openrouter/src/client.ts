@@ -109,6 +109,10 @@ const APP_TITLE = 'IntexuraOS';
 const RESEARCH_PROMPT_TYPE = 'research-web-search';
 const INVALID_COMPLETION_RESPONSE_MESSAGE = 'OpenRouter returned an invalid completion response';
 
+function nonNegativeProviderCost(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
@@ -193,6 +197,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     usageSink,
     ownerType,
     providerRouting,
+    evidenceModelId = model,
   } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
@@ -247,7 +252,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         providerReportedUsd: null,
       };
     }
-    const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
+    const providerReportedUsd = nonNegativeProviderCost(usage.cost);
     const cachedTokens =
       typeof usage.prompt_tokens_details?.cached_tokens === 'number'
         ? usage.prompt_tokens_details.cached_tokens
@@ -489,17 +494,35 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       return chatResult;
     }
 
+    const usage = {
+      inputTokens: chatResult.value.usage.inputTokens,
+      outputTokens: chatResult.value.usage.outputTokens,
+      totalTokens: chatResult.value.usage.totalTokens,
+      costUsd: chatResult.value.usage.costUsd,
+      ...(chatResult.value.usage.providerReportedUsd !== undefined && {
+        providerReportedUsd: chatResult.value.usage.providerReportedUsd,
+      }),
+      ...(chatResult.value.usage.cachedTokens !== undefined && {
+        cacheTokens: chatResult.value.usage.cachedTokens,
+      }),
+    };
     return ok({
       content: chatResult.value.content,
-      usage: {
-        inputTokens: chatResult.value.usage.inputTokens,
-        outputTokens: chatResult.value.usage.outputTokens,
-        totalTokens: chatResult.value.usage.totalTokens,
-        costUsd: chatResult.value.usage.costUsd,
-        ...(chatResult.value.usage.cachedTokens !== undefined && {
-          cacheTokens: chatResult.value.usage.cachedTokens,
-        }),
-      },
+      usage,
+      ...(options.matrixCorpusContext === undefined
+        ? {}
+        : {
+            providerCall: {
+              context: options.matrixCorpusContext,
+              modelId: evidenceModelId,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+              ...(usage.providerReportedUsd === undefined
+                ? {}
+                : { providerReportedUsd: usage.providerReportedUsd }),
+            },
+          }),
     });
   }
 

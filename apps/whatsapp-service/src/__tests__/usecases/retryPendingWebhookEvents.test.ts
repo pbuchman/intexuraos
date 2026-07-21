@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import {
   RetryPendingWebhookEventsUseCase,
@@ -10,6 +10,18 @@ import {
   type WhatsAppWebhookEventRepository,
 } from '../../domain/whatsapp/index.js';
 import type { Logger } from '../../domain/whatsapp/utils/logger.js';
+import { ProcessWebhookEventUseCase as RealProcessWebhookEventUseCase } from '../../domain/whatsapp/usecases/processWebhookEventUseCase.js';
+import {
+  FakeEventPublisher,
+  FakeMediaStorage,
+  FakeOutboundMessageRepository,
+  FakeThumbnailGeneratorPort,
+  FakeWhatsAppCloudApiPort,
+  FakeWhatsAppMessageRepository,
+  FakeWhatsAppUserMappingRepository,
+  FakeWhatsAppWebhookEventRepository,
+} from '../fakes.js';
+import { createWebhookPayload } from '../testUtils.js';
 
 const logger: Logger = {
   info: (): void => {
@@ -30,6 +42,18 @@ function createEvent(overrides: Partial<WhatsAppWebhookEvent> = {}): WhatsAppWeb
     status: 'pending',
     ...overrides,
   };
+}
+
+function createReservedTextPayload(): object {
+  const payload = createWebhookPayload() as {
+    entry: { changes: { value: { messages: { text: { body: string } }[] } }[] }[];
+  };
+  const message = payload.entry[0]?.changes[0]?.value.messages[0];
+  if (message === undefined) {
+    throw new Error('Test payload is missing its text message');
+  }
+  message.text.body = `new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · imc1_${'A'.repeat(43)}\n\nbody`;
+  return payload;
 }
 
 class TestWebhookEventRepository implements WhatsAppWebhookEventRepository {
@@ -402,5 +426,58 @@ describe('RetryPendingWebhookEventsUseCase', () => {
         },
       ],
     });
+  });
+
+  it('runs a persisted reserved webhook through the real shared processor and stops before ordinary side effects', async () => {
+    const webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
+    const userMappingRepository = new FakeWhatsAppUserMappingRepository();
+    const messageRepository = new FakeWhatsAppMessageRepository();
+    const eventPublisher = new FakeEventPublisher();
+    const whatsappCloudApi = new FakeWhatsAppCloudApiPort();
+    const matrixCorpusIngress = {
+      consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
+    };
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    const savedEvent = await webhookEventRepository.saveEvent({
+      payload: createReservedTextPayload(),
+      signatureValid: true,
+      phoneNumberId: null,
+      status: 'pending',
+      receivedAt: '2020-01-01T00:00:00.000Z',
+    });
+    if (!savedEvent.ok) {
+      throw new Error(savedEvent.error.message);
+    }
+    const processWebhookEventUseCase = new RealProcessWebhookEventUseCase({
+      webhookEventRepository,
+      userMappingRepository,
+      messageRepository,
+      outboundMessageRepository: new FakeOutboundMessageRepository(),
+      mediaStorage: new FakeMediaStorage(),
+      whatsappCloudApi,
+      thumbnailGenerator: new FakeThumbnailGeneratorPort(),
+      eventPublisher,
+      matrixCorpusIngress,
+    });
+    const useCase = new RetryPendingWebhookEventsUseCase({
+      webhookEventRepository,
+      processWebhookEventUseCase,
+    });
+
+    const result = await useCase.execute({ eventIds: [savedEvent.value.id] }, logger);
+
+    expect(result).toMatchObject({
+      processed: 1,
+      skipped: 0,
+      failed: 0,
+      events: [{ outcome: 'processed', status: 'completed' }],
+    });
+    const updated = await webhookEventRepository.getEvent(savedEvent.value.id);
+    expect(updated.ok && updated.value?.status).toBe('completed');
+    expect(matrixCorpusIngress.consumeReservedMessage).toHaveBeenCalledTimes(1);
+    expect(messageRepository.getAll()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
   });
 });

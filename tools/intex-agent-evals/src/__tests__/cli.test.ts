@@ -23,6 +23,8 @@ import type { EndpointConversationResponse, SyntheticRunIdentity } from '../endp
 import * as matrixClientModule from '../live/matrixClient.js';
 import * as matrixSmokeModule from '../live/runMatrixSmoke.js';
 import type { MatrixSmokeResult } from '../live/runMatrixSmoke.js';
+import type { MatrixCorpusPreflightResult } from '../matrixCorpus/preflight.js';
+import type { MatrixCorpusRunResult } from '../matrixCorpus/runMatrixCorpus.js';
 import * as miniMaxModule from '../minimaxJudge.js';
 import * as preflightModule from '../preflight.js';
 import type { PreflightCheckId, PreflightResult, SetupResult } from '../preflight.js';
@@ -95,6 +97,7 @@ describe('parseCliArgs', () => {
       command: { kind: 'scenario', scenarioId: 'intex-eval-003' },
     },
     { argv: ['matrix-smoke'] as const, command: { kind: 'matrix-smoke' } },
+    { argv: ['matrix-corpus'] as const, command: { kind: 'matrix-corpus' } },
   ])('accepts only the closed row $argv', ({ argv, command }) => {
     expect(parseCliArgs(argv)).toEqual({ ok: true, command });
   });
@@ -476,6 +479,130 @@ describe('runCli setup and preflight', () => {
 });
 
 describe('runCli evaluation orchestration and projection', () => {
+  it('keeps matrix-corpus preflight before run identity and every mutating execution port', async () => {
+    const order: string[] = [];
+    const matrixCorpusPreflight = vi.fn(async () => {
+      order.push('preflight');
+      return {
+        ok: true,
+        exitCode: 0,
+        checks: [],
+        snapshot: {},
+        catalog: {},
+      } as unknown as Extract<MatrixCorpusPreflightResult, { ok: true }>;
+    });
+    const createReportRunId = vi.fn(() => {
+      order.push('run-id');
+      return 'eval-123e4567-e89b-12d3-a456-426614174000';
+    });
+    const runMatrixCorpus = vi.fn(async ({ runId }: { runId: string }) => {
+      order.push('execute');
+      return {
+        run: {
+          runId,
+          effectiveKind: 'passed' as const,
+          exitCode: 0 as const,
+          failureCodes: [],
+          scenarios: [
+            { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
+          ],
+          totals: {
+            completedTurns: 59,
+            judgedReplies: 59,
+            agentCostNanoUsd: 1,
+            evaluatorCostNanoUsd: 1,
+          },
+          terminalAcknowledged: true,
+          cleanupCompleted: true,
+        },
+        reportReady: true,
+        relativeReportDirectory: `.artifacts/intex-agent-evals/${runId}`,
+      };
+    });
+    const harness = createHarness({ matrixCorpusPreflight, createReportRunId, runMatrixCorpus });
+
+    await expect(runCli(['matrix-corpus'], harness.dependencies)).resolves.toBe(0);
+
+    expect(order).toEqual(['preflight', 'run-id', 'execute']);
+    expect(harness.loadScenarios).not.toHaveBeenCalled();
+    expect(harness.stdout.mock.calls).toEqual([
+      ['preflight result PASS'],
+      ['evaluation run eval-123e4567-e89b-12d3-a456-426614174000 command matrix-corpus'],
+      ['scenario intex-eval-001 PASS'],
+      ['evaluation result PASS exit 0'],
+      ['evaluation report .artifacts/intex-agent-evals/eval-123e4567-e89b-12d3-a456-426614174000'],
+    ]);
+  });
+
+  it('returns infrastructure exit two and suppresses the report path when publication is not ready', async () => {
+    const runId = 'eval-123e4567-e89b-12d3-a456-426614174000';
+    const harness = createHarness({
+      matrixCorpusPreflight: vi.fn(
+        async () =>
+          ({
+            ok: true,
+            exitCode: 0,
+            checks: [],
+            snapshot: {},
+            catalog: {},
+          }) as unknown as Extract<MatrixCorpusPreflightResult, { ok: true }>
+      ),
+      runMatrixCorpus: vi.fn(async () => ({
+        run: {
+          runId,
+          effectiveKind: 'infrastructure_failure' as const,
+          exitCode: 2 as const,
+          failureCodes: ['REPORT_PUBLICATION_FAILED'],
+          scenarios: [
+            { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
+          ],
+          totals: {
+            completedTurns: 59,
+            judgedReplies: 59,
+            agentCostNanoUsd: 1,
+            evaluatorCostNanoUsd: 1,
+          },
+          terminalAcknowledged: true,
+          cleanupCompleted: true,
+        },
+        reportReady: false,
+        relativeReportDirectory: `.artifacts/intex-agent-evals/${runId}`,
+      })),
+    });
+
+    await expect(runCli(['matrix-corpus'], harness.dependencies)).resolves.toBe(2);
+
+    expect(harness.stdout.mock.calls).toEqual([
+      ['preflight result PASS'],
+      [`evaluation run ${runId} command matrix-corpus`],
+      ['scenario intex-eval-001 PASS'],
+    ]);
+    expect(harness.stderr.mock.calls).toEqual([
+      ['evaluation result INFRASTRUCTURE_FAILURE exit 2'],
+    ]);
+    expect(harness.outputText()).not.toContain('evaluation report');
+    expect(harness.outputText()).not.toContain(`.artifacts/intex-agent-evals/${runId}`);
+  });
+
+  it('emits only one closed stderr line and touches no run port on matrix-corpus preflight failure', async () => {
+    const harness = createHarness({
+      matrixCorpusPreflight: vi.fn(
+        async (): Promise<MatrixCorpusPreflightResult> => ({
+          ok: false,
+          exitCode: 2,
+          code: 'RUN_CONFLICT',
+        })
+      ),
+    });
+
+    await expect(runCli(['matrix-corpus'], harness.dependencies)).resolves.toBe(2);
+
+    expect(harness.stdout).not.toHaveBeenCalled();
+    expect(harness.stderr.mock.calls).toEqual([['preflight result FAIL RUN_CONFLICT']]);
+    expect(harness.createReportRunId).not.toHaveBeenCalled();
+    expect(harness.runMatrixCorpus).not.toHaveBeenCalled();
+  });
+
   it('runs the endpoint catalog in order and writes one strict privacy-safe report', async () => {
     const lifecycleResults = SCENARIOS.map((scenario) => lifecycleFor(scenario, 'passed'));
     const reports: EvaluationReportV1[] = [];
@@ -1294,7 +1421,7 @@ describe('createProductionCliDependencies', () => {
     expect(createReportWriter).not.toHaveBeenCalled();
   });
 
-  it('shares one MiniMax evaluator across preflight, endpoint judges, and the exact Task 8 runner', async () => {
+  it('keeps preflight LLM-free and shares one MiniMax evaluator across endpoint and smoke judges', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-16T10:00:00.000Z'));
     vi.stubEnv('INTEXURAOS_OPENROUTER_APP_API_KEY', 'openrouter-key-sentinel');
@@ -1360,7 +1487,6 @@ describe('createProductionCliDependencies', () => {
     expect(createPreflightPorts).toHaveBeenCalledOnce();
     expect(createPreflightPorts).toHaveBeenCalledWith({
       matrix,
-      miniMaxProbe: evaluator,
     });
     expect(runPreflight).toHaveBeenCalledWith(preflightPorts);
     expect(createEndpointClient).toHaveBeenCalledOnce();
@@ -1659,6 +1785,7 @@ function endpointResponseFor(
   return {
     contractVersion: '2026-07-01',
     mode: 'live_llm_mock_tools',
+    agentModel: 'or:deepseek/deepseek-v4-flash',
     runId: identity.runId,
     scenarioId: scenario.id,
     userId: identity.userId,
@@ -1976,6 +2103,8 @@ interface CliHarness {
   preflight: CliDependencies['preflight'];
   runEndpoint: CliDependencies['runEndpoint'];
   runMatrixSmoke: CliDependencies['runMatrixSmoke'];
+  matrixCorpusPreflight: CliDependencies['matrixCorpusPreflight'];
+  runMatrixCorpus: CliDependencies['runMatrixCorpus'];
   writeReport: CliDependencies['writeReport'];
   outputText(): string;
 }
@@ -1992,6 +2121,33 @@ function createHarness(overrides: Partial<CliDependencies> = {}): CliHarness {
     passingEndpointCorpus()
   );
   const runMatrixSmoke = vi.fn(async (): Promise<MatrixSmokeResult> => passingMatrixSmoke());
+  const matrixCorpusPreflight = vi.fn(
+    async (): Promise<MatrixCorpusPreflightResult> => ({
+      ok: false,
+      exitCode: 2,
+      code: 'PREFLIGHT_UNEXPECTED_FAILURE',
+    })
+  );
+  const runMatrixCorpus = vi.fn(
+    async (): Promise<{ run: MatrixCorpusRunResult; reportReady: boolean }> => ({
+      run: {
+        runId: 'eval-123e4567-e89b-12d3-a456-426614174000',
+        effectiveKind: 'infrastructure_failure',
+        exitCode: 2,
+        failureCodes: ['not_configured'],
+        scenarios: [],
+        totals: {
+          completedTurns: 0,
+          judgedReplies: 0,
+          agentCostNanoUsd: 0,
+          evaluatorCostNanoUsd: 0,
+        },
+        terminalAcknowledged: false,
+        cleanupCompleted: false,
+      },
+      reportReady: false,
+    })
+  );
   const writeReport = vi.fn(async () => ({
     ok: true as const,
     relativeDirectory: '.artifacts/intex-agent-evals/eval-123e4567-e89b-12d3-a456-426614174000',
@@ -2006,6 +2162,8 @@ function createHarness(overrides: Partial<CliDependencies> = {}): CliHarness {
     preflight,
     runEndpoint,
     runMatrixSmoke,
+    matrixCorpusPreflight,
+    runMatrixCorpus,
     writeReport,
     ...overrides,
   };
@@ -2020,6 +2178,8 @@ function createHarness(overrides: Partial<CliDependencies> = {}): CliHarness {
     preflight: dependencies.preflight,
     runEndpoint: dependencies.runEndpoint,
     runMatrixSmoke: dependencies.runMatrixSmoke,
+    matrixCorpusPreflight: dependencies.matrixCorpusPreflight,
+    runMatrixCorpus: dependencies.runMatrixCorpus,
     writeReport: dependencies.writeReport,
     outputText: (): string =>
       JSON.stringify({ stdout: stdout.mock.calls, stderr: stderr.mock.calls }),

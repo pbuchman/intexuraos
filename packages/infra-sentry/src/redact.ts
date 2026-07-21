@@ -34,9 +34,29 @@ export const SENTRY_REDACT_KEYS = [
   'githubToken',
   'anthropicApiKey',
   'openaiApiKey',
+  'x-matrix-corpus-user-id',
+  'x-matrix-corpus-session-id',
+  'x-matrix-corpus-lease-fence',
+  'x-matrix-corpus-event-revision',
+  'x-matrix-corpus-runtime-audience',
 ] as const;
 
 const REDACT_KEY_SET = new Set<string>(SENTRY_REDACT_KEYS.map((k) => k.toLowerCase()));
+const PRIVATE_URL_PATH_PREFIXES = [
+  '/internal/intex-agent/messages',
+  '/internal/matrix-corpus/',
+  '/internal/test-runs/',
+] as const;
+
+function redactPrivateUrl(value: string): string {
+  for (const prefix of PRIVATE_URL_PATH_PREFIXES) {
+    const index = value.indexOf(prefix);
+    if (index >= 0) {
+      return `${value.slice(0, index)}${prefix}[REDACTED]`;
+    }
+  }
+  return value;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -76,6 +96,10 @@ function walk(value: unknown, seen: WeakSet<object>): unknown {
       }
     }
     return out;
+  }
+
+  if (typeof value === 'string') {
+    return redactPrivateUrl(value);
   }
 
   return value;

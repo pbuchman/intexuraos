@@ -7,6 +7,7 @@ import {
   IngestPrivateWhatsAppEventsUseCase,
   type DisablePrivateWhatsAppAccountInput,
   type IntexMessageIngestEvent,
+  type MatrixCorpusSignedIngestEvent,
   type IngestPrivateWhatsAppEventInput,
   type IngestPrivateWhatsAppEventsInput,
   type MediaCleanupEvent,
@@ -285,6 +286,12 @@ class TestEventPublisher implements EventPublisherPort {
 
   publishIntexMessageIngest(_event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>> {
     return Promise.resolve(ok(undefined));
+  }
+
+  publishMatrixCorpusIngest(
+    _event: MatrixCorpusSignedIngestEvent
+  ): Promise<Result<{ publisherReceiptDigest: string }, WhatsAppError>> {
+    return Promise.resolve(ok({ publisherReceiptDigest: '1'.repeat(64) }));
   }
 
   publishWebhookProcess(_event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {

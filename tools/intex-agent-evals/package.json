@@ -15,6 +15,7 @@
     "lint:local": "eslint src --max-warnings 0"
   },
   "dependencies": {
+    "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",

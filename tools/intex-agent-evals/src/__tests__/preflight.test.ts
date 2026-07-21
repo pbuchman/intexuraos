@@ -57,7 +57,6 @@ import {
   withValidatedAccountContext,
   type EvaluatorConfig,
   type FirebaseAdminDependencies,
-  type MiniMaxProbePort,
   type PreflightPorts,
   type ProtectedFilePort,
   type RuntimeIdentityPort,
@@ -222,9 +221,6 @@ function createPreflightPorts(config: EvaluatorConfig = VALID_CONFIG): Preflight
     ...createSetupPorts(config, createPreflightProtectedFiles(config)),
     scenarioCatalog: {
       count: vi.fn(async () => ({ ok: true as const, count: 20 })),
-    },
-    miniMaxProbe: {
-      probe: vi.fn(async () => ({ ok: true as const })),
     },
   };
 }
@@ -1063,12 +1059,6 @@ describe('runPreflight', () => {
     expect(ports.healthHttp.get).toHaveBeenNthCalledWith(1, INTEX_AGENT_HEALTH_URL);
     expect(ports.healthHttp.get).toHaveBeenNthCalledWith(2, WHATSAPP_HEALTH_URL);
     expect(ports.healthHttp.get).toHaveBeenNthCalledWith(3, MATRIX_ADAPTER_HEALTH_URL);
-    expect(ports.miniMaxProbe.probe).toHaveBeenCalledTimes(1);
-
-    const probeOrder = vi.mocked(ports.miniMaxProbe.probe).mock.invocationCallOrder[0];
-    const catalogOrder = vi.mocked(ports.scenarioCatalog.count).mock.invocationCallOrder[0];
-    expect(probeOrder).toBeGreaterThan(catalogOrder ?? Number.MAX_SAFE_INTEGER);
-
     const serialized = JSON.stringify(result);
     for (const secret of [
       VALID_CONFIG.userId,
@@ -1105,7 +1095,6 @@ describe('runPreflight', () => {
     expect(result).toMatchObject({ ok: false, exitCode: 2, code });
     expect(ports.protectedFiles.validatePrivateDirectory).not.toHaveBeenCalled();
     expect(ports.healthHttp.get).not.toHaveBeenCalled();
-    expect(ports.miniMaxProbe.probe).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1123,7 +1112,6 @@ describe('runPreflight', () => {
 
     expect(result).toMatchObject({ ok: false, exitCode: 2, code });
     expect(ports.protectedFiles.validatePrivateDirectory).not.toHaveBeenCalled();
-    expect(ports.miniMaxProbe.probe).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -1348,7 +1336,6 @@ describe('preflight readiness mappings', () => {
         code: 'MATRIX_TARGETS_INVALID',
       });
       expect(ports.firebaseIdentity.getUserState).not.toHaveBeenCalled();
-      expect(ports.miniMaxProbe.probe).not.toHaveBeenCalled();
     }
   );
 
@@ -1441,10 +1428,9 @@ describe('preflight readiness mappings', () => {
     expect(ports.matrix.whoAmI).not.toHaveBeenCalled();
     expect(ports.whatsapp.getDeliveryStatus).not.toHaveBeenCalled();
     expect(ports.scenarioCatalog.count).not.toHaveBeenCalled();
-    expect(ports.miniMaxProbe.probe).not.toHaveBeenCalled();
   });
 
-  it('prevents the MiniMax probe when catalog loading fails', async () => {
+  it('fails when catalog loading fails without needing an LLM probe', async () => {
     const ports = createPreflightPorts();
     vi.mocked(ports.scenarioCatalog.count).mockResolvedValue({ ok: false });
 
@@ -1455,23 +1441,6 @@ describe('preflight readiness mappings', () => {
       exitCode: 2,
       code: 'SCENARIO_CATALOG_FAILED',
     });
-    expect(ports.miniMaxProbe.probe).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['missing_key', 'MINIMAX_KEY_MISSING'],
-    ['timeout', 'MINIMAX_PROBE_TIMEOUT'],
-    ['invalid_json', 'MINIMAX_PROBE_INVALID'],
-    ['invalid_schema', 'MINIMAX_PROBE_INVALID'],
-    ['provider', 'MINIMAX_PROBE_FAILED'],
-  ] as const)('maps MiniMax probe reason %s to %s', async (reason, code) => {
-    const ports = createPreflightPorts();
-    vi.mocked(ports.miniMaxProbe.probe).mockResolvedValue({ ok: false, reason });
-
-    const result = await runPreflight(ports);
-
-    expect(result).toMatchObject({ ok: false, exitCode: 2, code });
-    expect(ports.miniMaxProbe.probe).toHaveBeenCalledTimes(1);
   });
 
   it('redacts an unexpected exception and never returns behavioral exit one', async () => {
@@ -1749,12 +1718,8 @@ describe('production preflight adapters', () => {
     const matrix = {
       whoAmI: vi.fn(async () => ({ ok: true as const, userId: VALID_CONFIG.matrixUserId })),
     };
-    const miniMaxProbe: MiniMaxProbePort = {
-      probe: vi.fn(async () => ({ ok: true as const })),
-    };
-
     const setupPorts = createProductionSetupPorts({ matrix });
-    const preflightPorts = createProductionPreflightPorts({ matrix, miniMaxProbe });
+    const preflightPorts = createProductionPreflightPorts({ matrix });
 
     expect(setupPorts.configPath).toBe(
       join(homedir(), '.config', 'intexuraos', 'intex-agent-evals.json')
@@ -1762,8 +1727,6 @@ describe('production preflight adapters', () => {
     expect(preflightPorts.configPath).toBe(setupPorts.configPath);
     expect(setupPorts.matrix).toBe(matrix);
     expect(preflightPorts.matrix).toBe(matrix);
-    expect(preflightPorts.miniMaxProbe).toBe(miniMaxProbe);
     expect(matrix.whoAmI).not.toHaveBeenCalled();
-    expect(miniMaxProbe.probe).not.toHaveBeenCalled();
   });
 });

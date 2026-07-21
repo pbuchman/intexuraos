@@ -10,6 +10,7 @@ export type {
   IntexMessageReplyContext,
   IntexMessageReplyContextSource,
   IntexMessageSourceType,
+  MatrixCorpusSignedIngestEvent,
   MediaCleanupEvent,
   MediaTranscriptionRequestedEvent,
   SendMessageEvent,

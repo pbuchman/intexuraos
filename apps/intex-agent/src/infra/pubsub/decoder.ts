@@ -3,6 +3,10 @@ import type {
   IntexIncomingMessageButtonResponse,
   IntexIncomingMessageReplyContext,
 } from '../../domain/ports/incomingMessageHandler.js';
+import {
+  matrixCorpusSignedIngestV1Schema,
+  type MatrixCorpusSignedIngestV1,
+} from '@intexuraos/http-contracts';
 
 interface PubSubPushBody {
   message?: {
@@ -12,14 +16,34 @@ interface PubSubPushBody {
 }
 
 export function decodeIntexMessageIngestPush(body: unknown): IntexIncomingMessage {
+  const decoded = decodeIntexMessageIngestPushEnvelope(body);
+  if (decoded.kind !== 'ordinary') throw new Error('Expected intex.message.ingest event');
+  return decoded.message;
+}
+
+export type DecodedIntexMessageIngestPush =
+  | Readonly<{ kind: 'ordinary'; message: IntexIncomingMessage }>
+  | Readonly<{ kind: 'matrix_corpus'; envelope: MatrixCorpusSignedIngestV1 }>;
+
+export function decodeIntexMessageIngestPushEnvelope(
+  body: unknown
+): DecodedIntexMessageIngestPush {
   const data = extractData(body);
   const decoded = decodeJson(data);
+  const matrix = matrixCorpusSignedIngestV1Schema.safeParse(decoded);
+  if (matrix.success) return { kind: 'matrix_corpus', envelope: matrix.data };
+  if (
+    decoded !== null &&
+    typeof decoded === 'object' &&
+    (decoded as Record<string, unknown>)['kind'] === 'matrix_corpus_ingest'
+  )
+    throw new Error('Invalid Matrix corpus ingest event');
   const eventType = extractEventType(decoded);
   if (eventType !== 'intex.message.ingest') {
     throw new Error('Expected intex.message.ingest event');
   }
 
-  return toIntexIncomingMessage(decoded);
+  return { kind: 'ordinary', message: toIntexIncomingMessage(decoded) };
 }
 
 function extractData(body: unknown): string {

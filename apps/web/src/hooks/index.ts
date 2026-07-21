@@ -15,6 +15,12 @@ export { useGitHubEventLog, type GitHubEventLogListRow, type UseGitHubEventLogRe
 export { useGitHubPRSummaries } from './useGitHubPRSummaries.js';
 export { useLinearIssueOptions } from './useLinearIssueOptions.js';
 export { useLlmKeys } from './useLlmKeys.js';
+export {
+  useIntexAgentModel,
+  type IntexAgentModelMutationOutcome,
+  type IntexAgentModelSelectorAvailable,
+  type UseIntexAgentModelResult,
+} from './useIntexAgentModel.js';
 export { useNotes } from './useNotes.js';
 export { useOpenRouterModels } from './useOpenRouterModels.js';
 export {

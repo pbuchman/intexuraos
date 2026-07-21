@@ -18,6 +18,7 @@ import {
   createWebhookPayload,
 } from '../testUtils.js';
 import { ProcessWebhookEventUseCase } from '../../domain/whatsapp/usecases/processWebhookEventUseCase.js';
+import type { MatrixCorpusIngressPort } from '../../domain/matrixCorpus/ports/matrixCorpusIngress.js';
 import type { WhatsAppWebhookEvent } from '../../domain/whatsapp/ports/repositories.js';
 import type { WebhookPayload } from '../../routes/schemas.js';
 import type { OutboundMessage } from '../../domain/whatsapp/index.js';
@@ -43,6 +44,22 @@ function asWebhookPayload(payload: object): WebhookPayload {
   return payload as WebhookPayload;
 }
 
+function createTextPayload(body: string): WebhookPayload {
+  const payload = createWebhookPayload() as {
+    entry: { changes: { value: { messages: { text: { body: string } }[] } }[] }[];
+  };
+  const message = payload.entry[0]?.changes[0]?.value.messages[0];
+  if (message === undefined) {
+    throw new Error('Test payload is missing its text message');
+  }
+  message.text.body = body;
+  return payload as unknown as WebhookPayload;
+}
+
+function matrixCorpusText(): string {
+  return `new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · imc1_${'A'.repeat(43)}\n\nbody`;
+}
+
 function logger(): Logger {
   return {
     info: vi.fn(),
@@ -52,7 +69,7 @@ function logger(): Logger {
   } as unknown as Logger;
 }
 
-async function createHarness(): Promise<Harness> {
+async function createHarness(matrixCorpusIngress?: MatrixCorpusIngressPort): Promise<Harness> {
   const webhookEventRepository = new FakeWhatsAppWebhookEventRepository();
   const userMappingRepository = new FakeWhatsAppUserMappingRepository();
   const messageRepository = new FakeWhatsAppMessageRepository();
@@ -81,6 +98,7 @@ async function createHarness(): Promise<Harness> {
     whatsappCloudApi,
     thumbnailGenerator: new FakeThumbnailGeneratorPort(),
     eventPublisher,
+    ...(matrixCorpusIngress === undefined ? {} : { matrixCorpusIngress }),
   });
 
   return {
@@ -121,6 +139,232 @@ function prepareVideoMedia(whatsappCloudApi: FakeWhatsAppCloudApiPort, mediaId: 
 }
 
 describe('ProcessWebhookEventUseCase text-only branches', () => {
+  it('consumes a mapped valid Matrix corpus header before ordinary side effects', async () => {
+    const matrixCorpusIngress = {
+      consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
+    };
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness(matrixCorpusIngress);
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    const capability = `imc1_${'A'.repeat(43)}`;
+    const capturedLogger = logger();
+
+    await useCase.execute(
+      createTextPayload(`new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · ${capability}\n\nbody`),
+      savedEvent,
+      capturedLogger
+    );
+
+    const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
+    expect(eventResult.ok && eventResult.value).toMatchObject({
+      status: 'completed',
+    });
+    expect(matrixCorpusIngress.consumeReservedMessage).toHaveBeenCalledTimes(1);
+    expect(matrixCorpusIngress.consumeReservedMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        transportMessageId: expect.any(String),
+        webhookEventId: savedEvent.id,
+        message: expect.objectContaining({ kind: 'matrix_corpus', phase: 'start' }),
+      })
+    );
+    expect(messageRepository.getAll()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+    const logBytes = JSON.stringify([
+      vi.mocked(capturedLogger.info).mock.calls,
+      vi.mocked(capturedLogger.warn).mock.calls,
+      vi.mocked(capturedLogger.error).mock.calls,
+      vi.mocked(capturedLogger.debug).mock.calls,
+    ]);
+    expect(logBytes).not.toContain(capability);
+    expect(logBytes).not.toContain('15551234567');
+    expect(logBytes).not.toContain('user-1');
+  });
+
+  it('records closed Matrix mapping failures without leaking transport identity', async () => {
+    const cases = [
+      {
+        configure: (repository: FakeWhatsAppUserMappingRepository): void => {
+          repository.setFailFindUserByPhoneNumber(true);
+        },
+        status: 'failed',
+        expected: 'Matrix corpus user mapping lookup failed',
+      },
+      {
+        configure: (): void => undefined,
+        status: 'user_unmapped',
+        expected: 'No user mapping found for Matrix corpus transport',
+      },
+      {
+        configure: (repository: FakeWhatsAppUserMappingRepository): void => {
+          repository.setMappingForPhone('15551234567', 'user-1', { connected: false });
+        },
+        status: 'user_unmapped',
+        expected: 'User mapping exists but is disconnected',
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const current = await createHarness({
+        consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
+      });
+      testCase.configure(current.userMappingRepository);
+      const capturedLogger = logger();
+
+      await current.useCase.execute(createTextPayload(matrixCorpusText()), current.savedEvent, capturedLogger);
+
+      const eventResult = await current.webhookEventRepository.getEvent(current.savedEvent.id);
+      expect(eventResult.ok && eventResult.value?.status).toBe(testCase.status);
+      expect(JSON.stringify(eventResult.ok && eventResult.value)).toContain(testCase.expected);
+      expect(JSON.stringify(vi.mocked(capturedLogger.info).mock.calls)).not.toContain(
+        '15551234567'
+      );
+    }
+  });
+
+  it('returns a static failure when reserved Matrix processing throws unexpectedly', async () => {
+    const current = await createHarness({
+      consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
+    });
+    current.userMappingRepository.setMappingForPhone('15551234567', 'user-1');
+    current.userMappingRepository.setThrowOnGetMapping(true);
+
+    await expect(
+      current.useCase.execute(createTextPayload(matrixCorpusText()), current.savedEvent, logger())
+    ).resolves.toEqual({
+      ok: false,
+      retryable: false,
+      failureDetails: 'Unexpected Matrix corpus webhook processing failure',
+    });
+  });
+
+  it('rejects malformed and closed-rejection Matrix ingress results without ordinary side effects', async () => {
+    for (const [ingressResult, expected] of [
+      [{ invalid: true }, 'Matrix corpus ingress returned invalid state'],
+      [{ code: 'NOT_READY' }, 'MATRIX_CORPUS_CONTROL_PLANE_NOT_READY'],
+      [{ code: 'CAPABILITY_REPLAY' }, 'MATRIX_CORPUS_INGRESS_REJECTED'],
+    ] as const) {
+      const current = await createHarness({
+        consumeReservedMessage: vi.fn().mockResolvedValue(ingressResult),
+      } as unknown as MatrixCorpusIngressPort);
+      await current.userMappingRepository.saveMapping('user-1', ['15551234567']);
+
+      const result = await current.useCase.execute(
+        createTextPayload(matrixCorpusText()),
+        current.savedEvent,
+        logger()
+      );
+      const eventResult = await current.webhookEventRepository.getEvent(current.savedEvent.id);
+      if ('invalid' in ingressResult) {
+        expect(result).toEqual({
+          ok: false,
+          retryable: true,
+          failureDetails: expected,
+        });
+      } else {
+        expect(result).toBeUndefined();
+        expect(JSON.stringify(eventResult.ok && eventResult.value?.ignoredReason)).toContain(
+          expected
+        );
+      }
+      expect(current.messageRepository.getAll()).toHaveLength(0);
+      expect(current.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    }
+  });
+
+  it('rejects a mapped malformed reserved Matrix corpus header before ordinary side effects', async () => {
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    const capturedLogger = logger();
+
+    await useCase.execute(
+      createTextPayload('🧪 Scenario 001/020 · step 0/5 · imc1_short\n\nbody'),
+      savedEvent,
+      capturedLogger
+    );
+
+    const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
+    expect(eventResult.ok && eventResult.value?.ignoredReason).toEqual({
+      code: 'MATRIX_CORPUS_RESERVED_HEADER_REJECTED', message: 'Reserved Matrix corpus header rejected',
+    });
+    expect(messageRepository.getAll()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+    const logBytes = JSON.stringify([
+      vi.mocked(capturedLogger.info).mock.calls,
+      vi.mocked(capturedLogger.warn).mock.calls,
+      vi.mocked(capturedLogger.error).mock.calls,
+      vi.mocked(capturedLogger.debug).mock.calls,
+    ]);
+    expect(logBytes).not.toContain('15551234567');
+    expect(logBytes).not.toContain('user-1');
+  });
+
+  it('returns a retryable static failure when recording a valid reserved terminal state fails', async () => {
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    const capability = `imc1_${'A'.repeat(43)}`;
+    vi.spyOn(webhookEventRepository, 'updateEventStatus').mockResolvedValueOnce(
+      err({ code: 'INTERNAL_ERROR', message: 'storage failure' })
+    );
+
+    const result = await useCase.execute(
+      createTextPayload(`new session: 🧪 Scenario 001/020 · Matrix corpus · tools mocked · ${capability}\n\nbody`),
+      savedEvent,
+      logger()
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      retryable: true,
+      failureDetails: 'Failed to record Matrix corpus terminal status',
+    });
+    expect(messageRepository.getAll()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+  });
+
+  it('returns a retryable static failure when recording a malformed reserved terminal state fails', async () => {
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    vi.spyOn(webhookEventRepository, 'updateEventStatus').mockResolvedValueOnce(
+      err({ code: 'INTERNAL_ERROR', message: 'storage failure' })
+    );
+
+    const result = await useCase.execute(
+      createTextPayload('🧪 Scenario 001/020 · step 0/5 · imc1_short\n\nbody'),
+      savedEvent,
+      logger()
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      retryable: true,
+      failureDetails: 'Failed to record Matrix corpus terminal status',
+    });
+    expect(messageRepository.getAll()).toHaveLength(0);
+    expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+    expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+  });
+
+  it('keeps an ordinary new-session text message byte-compatible', async () => {
+    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
+    await userMappingRepository.saveMapping('user-1', ['15551234567']);
+
+    await useCase.execute(createTextPayload('new session: normal message'), savedEvent, logger());
+
+    expect(messageRepository.getAll()[0]?.text).toBe('new session: normal message');
+    expect(eventPublisher.getIntexMessageIngestEvents()[0]).toMatchObject({ text: 'new session: normal message', sourceType: 'whatsapp_text' });
+    expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(1);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(1);
+    const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
+    expect(eventResult.ok && eventResult.value?.status).toBe('completed');
+  });
+
   it('completes audio messages without sending a response when phoneNumberId is missing', async () => {
     const {
       savedEvent,

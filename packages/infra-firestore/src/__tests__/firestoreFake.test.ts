@@ -22,6 +22,23 @@ describe('FakeFirestore', () => {
     });
   });
 
+  describe('transactions', () => {
+    it('commits parent and nested subcollection documents to their exact paths', async () => {
+      const parent = db.collection('parents').doc('parent-1');
+      const child = parent.collection('children').doc('child-1');
+
+      await db.runTransaction(async (transaction) => {
+        transaction.set(parent, { kind: 'parent' });
+        transaction.set(child, { kind: 'child' });
+      });
+
+      await expect(parent.get()).resolves.toMatchObject({ exists: true });
+      expect((await parent.get()).data()).toEqual({ kind: 'parent' });
+      await expect(child.get()).resolves.toMatchObject({ exists: true });
+      expect((await child.get()).data()).toEqual({ kind: 'child' });
+    });
+  });
+
   describe('collection operations', () => {
     it('creates collection reference', () => {
       const col = db.collection('users');

@@ -565,6 +565,89 @@ describe('createOpenRouterClient', () => {
       }
     });
 
+    it('returns exact Matrix context and provider-reported cost for a structured call', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: '{"outcome":"conversation"}', role: 'assistant' } }],
+          usage: { prompt_tokens: 8, completion_tokens: 5, total_tokens: 13, cost: 0.00031 },
+        });
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        evidenceModelId: 'or:deepseek/deepseek-v4-flash',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      const context = {
+        version: 1 as const,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'intent_classification' as const,
+        callOrdinal: 1,
+      };
+
+      const result = await client.generate('Classify', {
+        promptType: 'intex-agent-intent-classifier',
+        matrixCorpusContext: context,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.providerCall).toEqual({
+        context,
+        modelId: 'or:deepseek/deepseek-v4-flash',
+        inputTokens: 8,
+        outputTokens: 5,
+        totalTokens: 13,
+        providerReportedUsd: 0.00031,
+      });
+    });
+
+    it('omits Matrix provider-reported cost when OpenRouter does not report it', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          choices: [{ message: { content: '{"outcome":"conversation"}', role: 'assistant' } }],
+          usage: { prompt_tokens: 8, completion_tokens: 5, total_tokens: 13 },
+        });
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        evidenceModelId: 'or:deepseek/deepseek-v4-flash',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      const context = {
+        version: 1 as const,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'intent_classification' as const,
+        callOrdinal: 1,
+      };
+
+      const result = await client.generate('Classify', {
+        promptType: 'intex-agent-intent-classifier',
+        matrixCorpusContext: context,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.providerCall).toEqual({
+        context,
+        modelId: 'or:deepseek/deepseek-v4-flash',
+        inputTokens: 8,
+        outputTokens: 5,
+        totalTokens: 13,
+      });
+    });
+
     it('logs usage with generate callType', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
@@ -1010,7 +1093,7 @@ describe('createOpenRouterClient', () => {
           inputTokens: 100,
           outputTokens: 50,
           totalTokens: 150,
-          costUsd: 0,
+          costUsd: 0.0042,
           providerReportedUsd: 0.0042,
         });
       }
@@ -1150,7 +1233,7 @@ describe('createOpenRouterClient', () => {
           inputTokens: 3,
           outputTokens: 2,
           totalTokens: 5,
-          costUsd: 0,
+          costUsd: 0.001,
           providerReportedUsd: 0.001,
         }),
       });
@@ -1620,8 +1703,8 @@ describe('createOpenRouterClient', () => {
       const result = await client.generate('hello', { promptType: 'test-prompt' });
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.usage.costUsd).toBe(0);
-        expect(result.value.usage).not.toHaveProperty('providerReportedUsd');
+        expect(result.value.usage.costUsd).toBe(0.0042);
+        expect(result.value.usage.providerReportedUsd).toBe(0.0042);
       }
 
       expect(mockUsageLoggerLog).toHaveBeenCalledWith(
@@ -1660,6 +1743,43 @@ describe('createOpenRouterClient', () => {
       const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
       expect(callArg['providerReportedUsd']).toBeUndefined();
       expect((callArg['usage'] as { costUsd: number }).costUsd).toBe(0);
+    });
+
+    it('preserves an explicitly reported zero provider cost', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: 'Generated text.', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150, cost: 0 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.generate('hello', { promptType: 'test-prompt' });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.usage.costUsd).toBe(0);
+        expect(result.value.usage.providerReportedUsd).toBe(0);
+      }
+      const callArg = mockUsageLoggerLog.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(callArg['providerReportedUsd']).toBe(0);
     });
 
     it('forwards providerReportedUsd on the research callType too', async () => {

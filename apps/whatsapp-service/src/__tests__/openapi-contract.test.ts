@@ -46,6 +46,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     port: 8080,
     host: '0.0.0.0',
+    matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
   };
 
   beforeAll(async () => {

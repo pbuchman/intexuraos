@@ -27,6 +27,23 @@ const REMOVED_AGENT_ENV_KEYS = ['TODOS', 'CHAT', 'CRON'].flatMap((name) => [
   `INTEXURAOS_${name}_AGENT_OPENAPI_URL`,
 ]);
 const REMOVED_TOPIC_ENV_KEY = ['INTEXURAOS', 'TODOS', 'PROCESSING', 'TOPIC'].join('_');
+const MATRIX_CORPUS_ENV_NAMES = [
+  'INTEXURAOS_MATRIX_CORPUS_ENABLED',
+  'INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME',
+  'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
+  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+] as const;
+const TEST_RUNS_READ_FLAG = 'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED' as const;
+const TERRAFORM_DEV_MAIN = readFileSync('terraform/environments/dev/main.tf', 'utf8');
 
 function loadDevConfig(extraEnv: Record<string, string> = {}): DevConfigSummary {
   const stdout = execFileSync(
@@ -185,6 +202,118 @@ function loadInheritedEmulatorEnv(): Record<string, Record<string, string | unde
 }
 
 describe('ecosystem.config.cjs', () => {
+  it('declares only the service-owned Matrix corpus variable names in Terraform', () => {
+    const matrixCorpusSection =
+      TERRAFORM_DEV_MAIN.split('matrix_corpus_home_dev_env_names = {')[1]?.split('\n  }')[0] ?? '';
+
+    expect(matrixCorpusSection).not.toBe('');
+    expect(matrixCorpusSection).not.toMatch(/synthetic-|home-dev|BEGIN PRIVATE|contact@/);
+    for (const name of MATRIX_CORPUS_ENV_NAMES) {
+      expect(matrixCorpusSection.match(new RegExp(`"${name}"`, 'g'))?.length, name).toBe(1);
+    }
+
+    const whatsappSection = matrixCorpusSection
+      .split('whatsapp_service = toset([')[1]
+      ?.split('])')[0];
+    const intexSection = matrixCorpusSection.split('intex_agent = toset([')[1]?.split('])')[0];
+    expect(whatsappSection).toBeDefined();
+    expect(intexSection).toBeDefined();
+    expect(whatsappSection).toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"');
+    expect(whatsappSection).not.toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY"');
+    expect(intexSection).toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY"');
+    expect(intexSection).not.toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"');
+    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(3, 8)) {
+      expect(intexSection, name).not.toContain(`"${name}"`);
+    }
+  });
+
+  it('passes the closed Matrix corpus tuples only to WhatsApp and Intex in Home Dev', () => {
+    const seeded = Object.fromEntries(
+      MATRIX_CORPUS_ENV_NAMES.map((name, index) => [name, `synthetic-${String(index)}`])
+    );
+    seeded['INTEXURAOS_MATRIX_CORPUS_ENABLED'] = 'true';
+    seeded['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] = 'home-dev';
+    seeded['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'home-dev';
+    const config = loadDevConfig(seeded);
+    const byName = new Map(config.apps.map((app) => [app.name, app.env]));
+    const whatsapp = byName.get('whatsapp-service');
+    const intex = byName.get('intex-agent');
+
+    expect(whatsapp).toMatchObject(
+      Object.fromEntries(MATRIX_CORPUS_ENV_NAMES.slice(0, 10).map((name) => [name, seeded[name]]))
+    );
+    expect(whatsapp?.INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY).toBeUndefined();
+    expect(intex).toMatchObject({
+      INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+      INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'home-dev',
+      INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'home-dev',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID:
+        seeded['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'],
+      INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION:
+        seeded['INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION'],
+      INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY:
+        seeded['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY'],
+      INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION:
+        seeded['INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION'],
+      INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY:
+        seeded['INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY'],
+    });
+    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(4, 8)) {
+      expect(intex?.[name], name).toBeUndefined();
+    }
+    expect(intex?.INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY).toBeUndefined();
+
+    for (const app of config.apps) {
+      if (app.name === 'whatsapp-service' || app.name === 'intex-agent') continue;
+      for (const name of MATRIX_CORPUS_ENV_NAMES) {
+        if (
+          app.name === 'user-service' &&
+          (name === 'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE' ||
+            name === 'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID')
+        )
+          continue;
+        expect(app.env[name], `${app.name} ${name}`).toBeUndefined();
+      }
+    }
+  });
+
+  it('enables owner-only Test Runs reads for User Service and Intex Agent in Home Dev', () => {
+    const config = loadDevConfig({
+      INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+      INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'home-dev',
+      INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'home-dev',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'auth0:evaluator',
+      [TEST_RUNS_READ_FLAG]: 'ambient-false-must-not-win',
+    });
+    const byName = new Map(config.apps.map((app) => [app.name, app.env]));
+
+    for (const service of ['user-service', 'intex-agent']) {
+      expect(byName.get(service)?.[TEST_RUNS_READ_FLAG], service).toBe('true');
+      expect(byName.get(service)?.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE, service).toBe(
+        'home-dev'
+      );
+      expect(byName.get(service)?.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID, service).toBe(
+        'auth0:evaluator'
+      );
+    }
+    for (const app of config.apps) {
+      if (app.name === 'user-service' || app.name === 'intex-agent') continue;
+      expect(app.env[TEST_RUNS_READ_FLAG], app.name).toBeUndefined();
+    }
+  });
+
+  it('keeps Test Runs reads disabled unless the complete trusted Home Dev tuple is explicit', () => {
+    const config = loadDevConfig({
+      INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'home-dev',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'auth0:evaluator',
+      [TEST_RUNS_READ_FLAG]: 'true',
+    });
+    const byName = new Map(config.apps.map((app) => [app.name, app.env]));
+
+    expect(byName.get('user-service')?.[TEST_RUNS_READ_FLAG]).toBe('false');
+    expect(byName.get('intex-agent')?.[TEST_RUNS_READ_FLAG]).toBe('false');
+  });
+
   it('omits removed agents and their shared runtime URLs from dev PM2 config', () => {
     const config = loadDevConfig();
     const names = config.apps.map((app) => app.name);
@@ -247,6 +376,58 @@ describe('ecosystem.config.cjs', () => {
       expect(app.env.INTEXURAOS_ENVIRONMENT, app.name).toBe('dev');
       expect(app.env.INTEXURAOS_RUNTIME, app.name).toBe('dev');
     }
+  });
+
+  it('passes the untracked selector subject and platform key to User Service only while enabled', () => {
+    const absent = loadDevConfig();
+    const absentUserService = absent.apps.find((app) => app.name === 'user-service');
+
+    expect(absentUserService?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('disabled');
+    expect(absentUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+
+    const empty = loadDevConfig({
+      INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID: '',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'platform-openrouter-key',
+    });
+    const emptyUserService = empty.apps.find((app) => app.name === 'user-service');
+
+    expect(emptyUserService?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('disabled');
+    expect(emptyUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+
+    const enabled = loadDevConfig({
+      INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID: 'machine-local-subject',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'platform-openrouter-key',
+    });
+    const enabledUserService = enabled.apps.find((app) => app.name === 'user-service');
+
+    expect(enabledUserService?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe(
+      'machine-local-subject'
+    );
+    expect(enabledUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'platform-openrouter-key'
+    );
+    for (const app of enabled.apps) {
+      if (app.name !== 'user-service') {
+        expect(app.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID, app.name).toBeUndefined();
+      }
+    }
+
+    const disabled = loadDevConfig({
+      INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID: 'disabled',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'platform-openrouter-key',
+    });
+    const disabledUserService = disabled.apps.find((app) => app.name === 'user-service');
+
+    expect(disabledUserService?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('disabled');
+    expect(disabledUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+  });
+
+  it('keeps the production Terraform selector fail-closed without a tracked subject or User Service key grant', () => {
+    const terraform = readFileSync('terraform/environments/dev/main.tf', 'utf8');
+
+    expect(terraform).toContain('INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID = "disabled"');
+    expect(terraform).not.toMatch(/auth0\|/u);
+    expect(terraform).toContain('INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED = "false"');
   });
 
   it('documents home-dev Sentry DSNs with the canonical dev environment label', () => {

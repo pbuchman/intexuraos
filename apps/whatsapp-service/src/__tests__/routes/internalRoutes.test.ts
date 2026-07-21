@@ -4,6 +4,8 @@ import {
   it,
   setupTestContext,
 } from '../testUtils.js';
+import { notReadyMatrixCorpusIngress } from '../../domain/matrixCorpus/ports/matrixCorpusIngress.js';
+import { getServices, setServices } from '../../services.js';
 
 describe('WhatsApp internal routes', () => {
   const ctx = setupTestContext();
@@ -55,5 +57,27 @@ describe('WhatsApp internal routes', () => {
         events: [],
       },
     });
+  });
+
+  it('wires the Matrix corpus ingress into retry processing when enabled', async () => {
+    setServices({
+      ...getServices(),
+      matrixCorpus: {
+        routes: null as never,
+        ingress: notReadyMatrixCorpusIngress,
+        recoveryController: null as never,
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/webhooks/retry-pending',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ success: true });
   });
 });

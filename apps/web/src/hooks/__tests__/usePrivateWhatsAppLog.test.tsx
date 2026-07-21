@@ -154,10 +154,10 @@ describe('usePrivateWhatsAppLog', () => {
 
     await waitFor(() => {
       expect(result.current.selectedChat?.id).toBe(groupChat.id);
+      expect(result.current.messages).toEqual([groupIncomingMessage, groupOutgoingMessage]);
     });
 
     expect(result.current.chats).toEqual([groupChat, directChat]);
-    expect(result.current.messages).toEqual([groupIncomingMessage, groupOutgoingMessage]);
     expect(result.current.availableDays).toEqual(['2026-06-22']);
     expect(mocks.listPrivateWhatsAppChats).toHaveBeenCalledWith('tok', { limit: 50 });
     expect(mocks.listPrivateWhatsAppChatMessages).toHaveBeenCalledWith('tok', {

@@ -13,8 +13,8 @@ const LEGACY_MIMO_MODEL_ID = 'xiaomi/mimo-' + 'v2-pro';
 
 describe('allowlist', () => {
   describe('OPENROUTER_ALLOWED_MODELS', () => {
-    it('has exactly 15 entries', () => {
-      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(15);
+    it('has exactly 16 entries', () => {
+      expect(OPENROUTER_ALLOWED_MODELS).toHaveLength(16);
     });
 
     it('contains all expected providers', () => {
@@ -55,6 +55,21 @@ describe('allowlist', () => {
       expect(byId('moonshotai/kimi-k2.5')?.contextLength).toBe(262_000);
     });
 
+    it('admits raw DeepSeek V4 Flash with its reviewed fallback metadata', () => {
+      const entry = OPENROUTER_ALLOWED_MODELS.find(
+        (model) => model.id === 'deepseek/deepseek-v4-flash'
+      );
+
+      expect(entry).toEqual({
+        id: 'deepseek/deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        provider: 'DeepSeek',
+        contextLength: 1_048_576,
+        promptPerToken: '0.000000098',
+        completionPerToken: '0.000000196',
+      });
+    });
+
     it('all model IDs are in provider/model format', () => {
       for (const model of OPENROUTER_ALLOWED_MODELS) {
         expect(model.id).toMatch(/^[a-z0-9-]+\/[a-z0-9._-]+$/);
@@ -64,6 +79,7 @@ describe('allowlist', () => {
 
   describe('isAllowedModel', () => {
     it('returns true for known model IDs', () => {
+      expect(isAllowedModel('deepseek/deepseek-v4-flash')).toBe(true);
       expect(isAllowedModel('qwen/qwen3.5-plus-02-15')).toBe(true);
       expect(isAllowedModel('anthropic/claude-sonnet-4.6')).toBe(true);
       expect(isAllowedModel('x-ai/grok-4.1-fast')).toBe(true);
@@ -96,7 +112,8 @@ describe('allowlist', () => {
   describe('allowlistModelIds', () => {
     it('returns comma-separated list of all model IDs', () => {
       const ids = allowlistModelIds();
-      expect(ids.split(', ')).toHaveLength(15);
+      expect(ids.split(', ')).toHaveLength(16);
+      expect(ids).toContain('deepseek/deepseek-v4-flash');
       expect(ids).toContain('anthropic/claude-sonnet-4.6');
       expect(ids).toContain('x-ai/grok-4.1-fast');
       expect(ids).toContain('xiaomi/mimo-v2.5-pro');

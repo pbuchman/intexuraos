@@ -1,7 +1,7 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
 import type { LLMError } from '@intexuraos/llm-contract';
 import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE,
   createLlmIntexAgentIntentClassifier,
@@ -928,6 +928,24 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     ]);
   });
 
+  it('throws instead of returning an untracked fallback when Matrix corpus classification fails', async () => {
+    const client = new FakeStructuredClient([
+      err({ code: 'API_ERROR', message: 'provider failed' }),
+    ]);
+
+    await expect(
+      createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() }).classify({
+        message: 'make it happen',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        matrixCorpusLlm: {
+          nextContext: (stage) => matrixContext(stage, 1),
+          recordProviderCall: vi.fn(async () => undefined),
+        },
+      })
+    ).rejects.toThrowError('Matrix corpus intent classification failed');
+  });
+
   it('retries transient classifier provider errors before falling back', async () => {
     const client = new FakeStructuredClient([
       err({ code: 'RATE_LIMITED', message: 'slow down', retryAfterMs: 0 } as LLMError & {
@@ -954,7 +972,83 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls).toHaveLength(2);
     expect(logger.warnCalls).toEqual([]);
   });
+
+  it('correlates classifier and schema-repair provider calls with distinct durable stages', async () => {
+    const classificationContext = matrixContext('intent_classification', 1);
+    const repairContext = matrixContext('response_schema_repair', 1);
+    const client = new FakeStructuredClient([
+      ok({
+        ...generateResult('not-json'),
+        providerCall: providerCall(classificationContext),
+      }),
+      ok({
+        ...generateResult({
+          outcome: 'tool',
+          allowedToolNames: ['create_note'],
+          confidence: 0.9,
+        }),
+        providerCall: providerCall(repairContext),
+      }),
+    ]);
+    const recordProviderCall = vi.fn(
+      async (_call: import('@intexuraos/llm-contract').MatrixCorpusProviderCallUsageV1) => undefined
+    );
+    const ordinals = new Map<string, number>();
+
+    await expect(
+      createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() }).classify({
+        message: 'Create a note for me.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        matrixCorpusLlm: {
+          nextContext(stage) {
+            const ordinal = (ordinals.get(stage) ?? 0) + 1;
+            ordinals.set(stage, ordinal);
+            return matrixContext(stage, ordinal);
+          },
+          recordProviderCall,
+        },
+      })
+    ).resolves.toEqual({ kind: 'tool', allowedToolNames: ['create_note'] });
+
+    expect(client.calls.map((call) => call.options['matrixCorpusContext'])).toEqual([
+      classificationContext,
+      repairContext,
+    ]);
+    expect(recordProviderCall.mock.calls.map(([call]) => call.context.stage)).toEqual([
+      'intent_classification',
+      'response_schema_repair',
+    ]);
+  });
 });
+
+function matrixContext(
+  stage: import('@intexuraos/llm-contract').MatrixCorpusLlmStageV1,
+  callOrdinal: number
+): import('@intexuraos/llm-contract').MatrixCorpusLlmCallContextV1 {
+  return {
+    version: 1,
+    runId: 'run_1',
+    scenarioId: 'scenario_001',
+    sessionId: 'session_1',
+    turnIndex: 0,
+    stage,
+    callOrdinal,
+  };
+}
+
+function providerCall(
+  context: import('@intexuraos/llm-contract').MatrixCorpusLlmCallContextV1
+): import('@intexuraos/llm-contract').MatrixCorpusProviderCallUsageV1 {
+  return {
+    context,
+    modelId: 'or:deepseek/deepseek-v4-flash',
+    inputTokens: 10,
+    outputTokens: 20,
+    totalTokens: 30,
+    providerReportedUsd: 0.001,
+  };
+}
 
 function event(type: IntexAgentSessionEvent['type'], payload: Record<string, unknown>): IntexAgentSessionEvent {
   return {

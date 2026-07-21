@@ -138,7 +138,10 @@ export type {
 
 export type { ThumbnailGeneratorPort, ThumbnailResult } from './ports/thumbnailGenerator.js';
 
-export type { EventPublisherPort } from './ports/eventPublisher.js';
+export type {
+  EventPublisherPort,
+  MatrixCorpusPublishReceipt,
+} from './ports/eventPublisher.js';
 
 export type { WhatsAppMessageSender } from './ports/messageSender.js';
 
@@ -177,6 +180,7 @@ export type {
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   IntexMessageSourceType,
+  MatrixCorpusSignedIngestEvent,
   MediaCleanupEvent,
   MediaTranscriptionRequestedEvent,
   SendMessageEvent,

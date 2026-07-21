@@ -92,6 +92,8 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result.value.content).toBe('No review needed.');
     expect(result.value.toolCallsMade).toBe(0);
     expect(result.value.usage.inputTokens).toBe(11);
+    expect(result.value.usage.costUsd).toBe(0.00012);
+    expect(result.value.usage.providerReportedUsd).toBe(0.00012);
     expect(capturedBody?.['model']).toBe(TEST_MODEL);
     expect(capturedBody?.['messages']).toEqual([
       { role: 'system', content: 'You are a PR triage agent.' },
@@ -105,6 +107,280 @@ describe('createOpenRouterToolCallingClient', () => {
         promptType: 'github-agent-pr-triage',
         providerReportedUsd: 0.00012,
       })
+    );
+  });
+
+  it('preserves an explicitly reported zero provider cost', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+        usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18, cost: 0 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usage.providerReportedUsd).toBe(0);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ providerReportedUsd: 0 })
+    );
+  });
+
+  it('returns one exact Matrix usage record per provider iteration', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'call_1', type: 'function', function: { name: 'note', arguments: '{}' } },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15, cost: 0.0002 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.providerCalls).toEqual([
+      {
+        context: expect.objectContaining({ stage: 'agent_generation', callOrdinal: 1 }),
+        modelId: TEST_MODEL,
+        inputTokens: 10,
+        outputTokens: 2,
+        totalTokens: 12,
+        providerReportedUsd: 0.0001,
+      },
+      {
+        context: expect.objectContaining({ stage: 'agent_generation', callOrdinal: 2 }),
+        modelId: TEST_MODEL,
+        inputTokens: 12,
+        outputTokens: 3,
+        totalTokens: 15,
+        providerReportedUsd: 0.0002,
+      },
+    ]);
+  });
+
+  it('never logs or sends to Sentry Matrix tool arguments, results, or thrown errors', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_private',
+                  type: 'function',
+                  function: {
+                    name: 'note',
+                    arguments: JSON.stringify({ content: 'PRIVATE_ARGUMENT_SENTINEL' }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { content: 'Done.' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0.0001 },
+      });
+
+    await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn(async () => {
+            throw new Error('PRIVATE_THROWN_ERROR_SENTINEL');
+          }),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    const logs = JSON.stringify([
+      vi.mocked(mockLogger.info).mock.calls,
+      vi.mocked(mockLogger.warn).mock.calls,
+      vi.mocked(mockLogger.error).mock.calls,
+    ]);
+    expect(logs).not.toMatch(/PRIVATE_ARGUMENT_SENTINEL|PRIVATE_THROWN_ERROR_SENTINEL/u);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'TOOL_CALLBACK_REJECTED', _skipSentry: true }),
+      expect.any(String)
+    );
+  });
+
+  it('persists completed Matrix usage before a later provider failure without exposing its error', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                { id: 'call_1', type: 'function', function: { name: 'note', arguments: '{}' } },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(500, 'PRIVATE_PROVIDER_ERROR_SENTINEL');
+    const onProviderCall = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+      onMatrixCorpusProviderCall: onProviderCall,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Matrix provider call failed' },
+    });
+    expect(onProviderCall).toHaveBeenCalledTimes(1);
+    expect(onProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ inputTokens: 10, outputTokens: 2, totalTokens: 12 })
+    );
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ errorMessage: 'MATRIX_PROVIDER_CALL_FAILED' })
+    );
+    expect(
+      JSON.stringify([
+        result,
+        vi.mocked(mockLogger.info).mock.calls,
+        vi.mocked(mockLogger.warn).mock.calls,
+        vi.mocked(mockLogger.error).mock.calls,
+        mockUsageLoggerLog.mock.calls,
+      ])
+    ).not.toContain('PRIVATE_PROVIDER_ERROR_SENTINEL');
+  });
+
+  it('does not log a hallucinated Matrix tool name', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'PRIVATE_TOOL_NAME_SENTINEL', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Recovered.' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0 },
+      });
+
+    await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    const logs = JSON.stringify([
+      vi.mocked(mockLogger.info).mock.calls,
+      vi.mocked(mockLogger.warn).mock.calls,
+      vi.mocked(mockLogger.error).mock.calls,
+    ]);
+    expect(logs).not.toContain('PRIVATE_TOOL_NAME_SENTINEL');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'UNKNOWN_TOOL_SELECTION', _skipSentry: true }),
+      'OpenRouter tool calling: hallucinated tool name'
     );
   });
 
@@ -286,7 +562,8 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result.value.toolCallsMade).toBe(1);
     expect(result.value.usage.inputTokens).toBe(55);
     expect(result.value.usage.outputTokens).toBe(13);
-    expect(result.value.usage.costUsd).toBe(0);
+    expect(result.value.usage.costUsd).toBe(0.0005);
+    expect(result.value.usage.providerReportedUsd).toBe(0.0005);
     expect(capturedBodies[0]?.['tools']).toEqual([
       {
         type: 'function',
@@ -349,6 +626,108 @@ describe('createOpenRouterToolCallingClient', () => {
 
     expect(result.ok).toBe(true);
     expect(capturedBody?.['tool_choice']).toBe('auto');
+  });
+
+  it('keeps aggregate provider cost unknown when any tool iteration omits it', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'note', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'Done.' } }],
+        usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.usage.costUsd).toBe(0);
+    expect(result.value.usage).not.toHaveProperty('providerReportedUsd');
+    expect(result.value.providerCalls?.[1]).not.toHaveProperty('providerReportedUsd');
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.not.objectContaining({ providerReportedUsd: expect.anything() })
+    );
+  });
+
+  it('keeps aggregate provider cost unknown when a priced tool call is followed by a failed request', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_1',
+                  type: 'function',
+                  function: { name: 'note', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .replyWithError(new Error('follow-up failed'));
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'note',
+          description: 'Note.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.not.objectContaining({ providerReportedUsd: expect.anything() })
+    );
   });
 
   it('sends tool error responses for unknown tools and thrown callbacks', async () => {

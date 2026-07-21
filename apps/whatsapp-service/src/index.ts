@@ -7,8 +7,9 @@ import { validateRequiredEnv } from '@intexuraos/http-server';
 import { getErrorMessage } from '@intexuraos/common-core';
 import { buildServer } from './server.js';
 import { loadConfig } from './config.js';
+import { getServices } from './services.js';
 
-const REQUIRED_ENV = [
+const REQUIRED_ENV: string[] = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
@@ -33,6 +34,22 @@ const REQUIRED_ENV = [
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
 ];
 
+if (process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED']?.trim() === 'true') {
+  REQUIRED_ENV.push(
+    'INTEXURAOS_ENVIRONMENT',
+    'INTEXURAOS_INTEX_AGENT_URL',
+    'INTEXURAOS_MATRIX_CORPUS_ENABLED',
+    'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+    'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY'
+  );
+}
+
 validateRequiredEnv(REQUIRED_ENV);
 
 const sentryConfig: Parameters<typeof initSentry>[0] = {
@@ -52,6 +69,24 @@ async function main(): Promise<void> {
   const host = config.host;
 
   await app.listen({ port, host });
+  if (config.matrixCorpus.enabled) {
+    const recoveryController = getServices().matrixCorpus?.recoveryController;
+    if (recoveryController === undefined) {
+      throw new Error('Matrix corpus recovery composition is unavailable');
+    }
+    await recoveryController.start();
+  }
+
+  let shutdown: Promise<void> | null = null;
+  const close = (): void => {
+    shutdown ??= app.close();
+    void shutdown.then(
+      () => process.exit(0),
+      () => process.exit(1)
+    );
+  };
+  process.once('SIGTERM', close);
+  process.once('SIGINT', close);
   app.log.info(`WhatsApp Service listening on ${host}:${String(port)}`);
 }
 

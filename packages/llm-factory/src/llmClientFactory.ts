@@ -43,6 +43,8 @@ import {
   type GenerateChatOptions,
   type GenerateChatResult,
   type GenerateChatStreamEvent,
+  type MatrixCorpusLlmCallContextV1,
+  type MatrixCorpusProviderCallUsageV1,
   type Gemini25Flash,
   type LLMError,
   type LLMModel,
@@ -101,7 +103,9 @@ export interface GenerateResult {
     outputTokens: number;
     totalTokens: number;
     costUsd: number;
+    providerReportedUsd?: number;
   };
+  providerCall?: MatrixCorpusProviderCallUsageV1;
 }
 
 /**
@@ -122,6 +126,7 @@ export interface GenerateOptions {
     taskId?: string | null;
     requestId?: string | null;
   };
+  matrixCorpusContext?: MatrixCorpusLlmCallContextV1;
 }
 
 /**
@@ -278,6 +283,7 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
       logger: config.logger,
       usageSink: config.usageSink,
       ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
+      evidenceModelId: model,
     });
   }
 
@@ -305,6 +311,7 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
     userId: config.userId,
     logger: config.logger,
     usageSink: config.usageSink,
+    evidenceModelId: model,
   });
 }
 

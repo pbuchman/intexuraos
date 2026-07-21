@@ -11,4 +11,5 @@ export * from './web-agent/index.js';
 export * from './image-service/index.js';
 export * from './notion-service/index.js';
 export * from './whatsapp-service/index.js';
+export * from './intex-agent/index.js';
 export * from './shared/index.js';

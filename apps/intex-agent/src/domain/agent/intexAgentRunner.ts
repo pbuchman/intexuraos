@@ -1,5 +1,9 @@
 import { getErrorMessage } from '@intexuraos/common-core';
-import type { ToolCallingClient, ToolCallingMessage } from '@intexuraos/llm-contract';
+import type {
+  MatrixCorpusProviderCallUsageV1,
+  ToolCallingClient,
+  ToolCallingMessage,
+} from '@intexuraos/llm-contract';
 import {
   IntexAgentRunnerOutputSchema,
   intexAgentRunnerOutputRepairPrompt,
@@ -16,6 +20,7 @@ import type {
   IntexAgentFallbackReason,
   IntexAgentRunner,
   IntexAgentRunnerResult,
+  IntexAgentToolSelectionMetadata,
 } from '../messages/handleIncomingMessage.js';
 import {
   formatUserMessageWithReplyContext,
@@ -47,6 +52,7 @@ import {
 import type {
   IntexAgentIntentClassification,
   IntexAgentIntentClassifier,
+  MatrixCorpusLlmRecorder,
 } from './intentClassifier.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
@@ -241,6 +247,19 @@ export interface IntexAgentRunnerConfig {
   intentClassifier?: IntexAgentIntentClassifier;
   webAppUrl?: string;
   userPreferences?: string | null;
+  toolSelectionGate?: (input: Readonly<{
+    toolName: IntexAgentToolName;
+    args: Record<string, unknown>;
+  }>) => Promise<
+    | Readonly<{ decision: 'allow'; metadata: IntexAgentToolSelectionMetadata }>
+    | Readonly<{
+        decision: 'reject';
+        category: 'behavioral_failure' | 'safety_stop';
+        code: string;
+        metadata: IntexAgentToolSelectionMetadata;
+      }>
+  >;
+  matrixCorpusLlm?: MatrixCorpusLlmRecorder;
 }
 
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
@@ -341,9 +360,12 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           : await config.intentClassifier.classify({
               message: input.message,
               events: input.events,
-              currentDateTime: input.currentDateTime,
-              ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
-            });
+            currentDateTime: input.currentDateTime,
+            ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
+            ...(config.matrixCorpusLlm !== undefined
+              ? { matrixCorpusLlm: config.matrixCorpusLlm }
+              : {}),
+          });
       const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
         return normalizeClassifierUnsupportedIntent(intent, replyLanguage);
@@ -404,7 +426,11 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
 
       const toolExecutions: IntexAgentToolExecution[] = [];
       const tools = createIntexAgentToolDefinitions(
-        createTrackingToolExecutor(createConfirmationPreviewExecutor(config.toolExecutor), toolExecutions)
+        createTrackingToolExecutor(
+          createConfirmationPreviewExecutor(config.toolExecutor),
+          toolExecutions,
+          config.toolSelectionGate
+        )
       ).filter(
         (tool) =>
           intent.kind === 'tool' && intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
@@ -416,6 +442,25 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         userPreferences: config.userPreferences ?? null,
       });
       const messages = buildMessages(input.events, input.message, input.replyContext);
+      const matrixCorpusLlm = config.matrixCorpusLlm;
+      const recordedProviderCalls = new Map<string, string>();
+      const recordProviderCallOnce = async (
+        providerCall: MatrixCorpusProviderCallUsageV1
+      ): Promise<void> => {
+        /* v8 ignore start -- upstream: this callback is attached to the client only when matrixCorpusLlm is defined; the closure guard cannot be false through the caller contract @preserve */
+        if (matrixCorpusLlm === undefined) return;
+        /* v8 ignore stop @preserve */
+        const key = matrixProviderCallKey(providerCall);
+        const serialized = JSON.stringify(providerCall);
+        const existing = recordedProviderCalls.get(key);
+        if (existing !== undefined) {
+          if (existing !== serialized)
+            throw new Error('Matrix corpus provider usage replay conflict');
+          return;
+        }
+        await matrixCorpusLlm.recordProviderCall(providerCall);
+        recordedProviderCalls.set(key, serialized);
+      };
       const result = await config.client.run({
         systemPrompt,
         messages,
@@ -423,10 +468,27 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         toolChoice: exposedToolNames.length > 0 ? 'required' : 'auto',
         promptType: INTEX_AGENT_RUNNER_PROMPT_TYPE,
         maxIterations: 5,
+        ...(matrixCorpusLlm === undefined
+          ? {}
+          : {
+              matrixCorpusContext: matrixCorpusLlm.nextContext('agent_generation'),
+              onMatrixCorpusProviderCall: recordProviderCallOnce,
+            }),
       });
 
       if (!result.ok) {
+        if (matrixCorpusLlm !== undefined) {
+          throw new Error('Matrix corpus agent generation failed');
+        }
         return fallbackClarificationResult(replyLanguage, 'llm_call_failed');
+      }
+      if (matrixCorpusLlm !== undefined) {
+        if (result.value.providerCalls?.length !== result.value.iterationCount) {
+          throw new Error('Matrix corpus provider usage is incomplete');
+        }
+        for (const providerCall of result.value.providerCalls) {
+          await recordProviderCallOnce(providerCall);
+        }
       }
 
       return await parseRunnerContent(
@@ -438,6 +500,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           intent,
           exposedToolNames,
           currentMessage: input.message,
+          ...(config.matrixCorpusLlm === undefined
+            ? {}
+            : { matrixCorpusLlm: config.matrixCorpusLlm }),
         },
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
@@ -446,6 +511,17 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       );
     },
   };
+}
+
+function matrixProviderCallKey(call: MatrixCorpusProviderCallUsageV1): string {
+  return `${call.context.runId}:${call.context.scenarioId}:${call.context.sessionId}:${String(call.context.turnIndex)}:${call.context.stage}:${String(call.context.callOrdinal)}`;
+}
+
+export function isWhatsAppImageWithSourceUrl(input: {
+  sourceType?: string;
+  sourceUrl?: string;
+}): boolean {
+  return input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined;
 }
 
 function hasCalendarDateSignal(
@@ -683,6 +759,12 @@ interface IntexAgentToolExecution {
   args: Record<string, unknown>;
   result?: Record<string, unknown>;
   error?: string;
+  errorCategory?: string;
+  selectionMetadata?: IntexAgentToolSelectionMetadata;
+  selectionRejection?: Readonly<{
+    category: 'behavioral_failure' | 'safety_stop';
+    code: string;
+  }>;
 }
 
 interface CompletedReply {
@@ -764,6 +846,7 @@ interface RunnerOutputValidationInput {
   intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
   exposedToolNames: IntexAgentToolName[];
   currentMessage: string;
+  matrixCorpusLlm?: MatrixCorpusLlmRecorder;
 }
 
 async function parseRunnerContent(
@@ -773,8 +856,41 @@ async function parseRunnerContent(
   userPreferences: string | null,
   replyLanguage: IntexAgentReplyLanguage
 ): Promise<IntexAgentRunnerResult> {
+  const rejectedSelection = toolExecutions.find(
+    (execution) => execution.selectionRejection !== undefined
+  );
+  if (
+    rejectedSelection?.selectionRejection !== undefined &&
+    rejectedSelection.selectionMetadata !== undefined
+  ) {
+    return {
+      outcome: 'tool_selection_rejected',
+      toolName: rejectedSelection.toolName,
+      category: rejectedSelection.selectionRejection.category,
+      code: rejectedSelection.selectionRejection.code,
+      toolSelection: rejectedSelection.selectionMetadata,
+      reply: '',
+    };
+  }
   const parsed = await validateRunnerOutput(input);
   const toolExecution = getCompletedToolExecution(toolExecutions);
+  if (toolExecution?.error !== undefined) {
+    const failureMetadata = toolFailureMetadata(toolExecution.toolName, toolExecution.error);
+    return {
+      outcome: 'tool_failed',
+      reply:
+        parsed?.reply ??
+        `${GENERIC_EXECUTION_FAILURE_PREFIX[replyLanguage]}${toolExecution.error}${GENERIC_EXECUTION_FAILURE_SUFFIX[replyLanguage]}`,
+      toolName: toolExecution.toolName,
+      error: toolExecution.error,
+      errorCategory: toolExecution.errorCategory ?? failureMetadata.errorCategory,
+      isRetryable: failureMetadata.isRetryable,
+      attemptedAction: toolExecution.toolName,
+      ...(toolExecution.selectionMetadata !== undefined
+        ? { toolSelection: toolExecution.selectionMetadata }
+        : {}),
+    };
+  }
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
     const confirmationArgs = preserveCurrentTurnOpaqueReferences(
       toolExecution.toolName,
@@ -791,6 +907,9 @@ async function parseRunnerContent(
       ),
       toolName: toolExecution.toolName,
       toolArgs: confirmationArgs,
+      ...(toolExecution.selectionMetadata !== undefined
+        ? { toolSelection: toolExecution.selectionMetadata }
+        : {}),
       ...(parsed?.summary !== undefined ? { summary: parsed.summary } : {}),
     };
   }
@@ -804,7 +923,6 @@ async function parseRunnerContent(
 
   if (
     toolExecution !== undefined &&
-    toolExecution.error === undefined &&
     parsed.outcome !== 'completed'
   ) {
     return buildCompletedToolExecutionResult(
@@ -813,7 +931,8 @@ async function parseRunnerContent(
       parsed.reply,
       parsed.summary,
       webAppUrl,
-      replyLanguage
+      replyLanguage,
+      toolExecution.selectionMetadata
     );
   }
 
@@ -869,7 +988,8 @@ async function parseRunnerContent(
         parsed.reply,
         parsed.summary,
         webAppUrl,
-        replyLanguage
+        replyLanguage,
+        toolExecution.selectionMetadata
       );
     }
   }
@@ -921,7 +1041,8 @@ function buildCompletedToolExecutionResult(
   fallbackReply: string,
   summary: string | undefined,
   webAppUrl: string,
-  replyLanguage: IntexAgentReplyLanguage
+  replyLanguage: IntexAgentReplyLanguage,
+  toolSelection?: IntexAgentToolSelectionMetadata
 ): IntexAgentRunnerResult {
   const completedReply = buildCompletedReply(
     toolName,
@@ -936,6 +1057,7 @@ function buildCompletedToolExecutionResult(
     ...(summary !== undefined ? { summary } : {}),
     toolName,
     ...(result !== undefined ? { toolResult: result } : {}),
+    ...(toolSelection !== undefined ? { toolSelection } : {}),
     /* v8 ignore start -- schema: read-only tool results cannot produce CTA URLs because CTA-capable tools require confirmation @preserve */
     ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
     /* v8 ignore stop @preserve */
@@ -951,6 +1073,7 @@ function isConversationIntent(
 async function validateRunnerOutput(
   input: RunnerOutputValidationInput
 ): Promise<IntexAgentRunnerOutput | null> {
+  const matrixCorpusLlm = input.matrixCorpusLlm;
   const firstResponseClient = createFirstResponseThenRepairClient(
     input.content,
     input.repairClient
@@ -972,6 +1095,19 @@ async function validateRunnerOutput(
           maxRepairAttempts: 1,
         }
       : { maxRepairAttempts: 0 }),
+    ...(matrixCorpusLlm === undefined
+      ? {}
+      : {
+          optionsForAttempt: (attempt: number): Record<string, unknown> =>
+            attempt === 0
+              ? {}
+              : {
+                  matrixCorpusContext: matrixCorpusLlm.nextContext('response_schema_repair'),
+                },
+          onProviderCall: async (call: MatrixCorpusProviderCallUsageV1): Promise<void> => {
+            await matrixCorpusLlm.recordProviderCall(call);
+          },
+        }),
   });
 
   return result.ok ? result.value.data : null;
@@ -1068,27 +1204,52 @@ function isMutatingToolName(toolName: IntexAgentToolName): toolName is MutatingI
 
 function createTrackingToolExecutor(
   executor: IntexAgentToolExecutor,
-  toolExecutions: IntexAgentToolExecution[]
+  toolExecutions: IntexAgentToolExecution[],
+  toolSelectionGate?: IntexAgentRunnerConfig['toolSelectionGate']
 ): IntexAgentToolExecutor {
   async function track(
     toolName: IntexAgentToolName,
     args: Record<string, unknown>,
     run: () => Promise<string>
   ): Promise<string> {
+    let selection:
+      | Awaited<ReturnType<NonNullable<IntexAgentRunnerConfig['toolSelectionGate']>>>
+      | undefined;
     try {
+      selection = await toolSelectionGate?.({ toolName, args });
+      if (selection?.decision === 'reject') {
+        toolExecutions.push({
+          toolName,
+          args,
+          selectionMetadata: selection.metadata,
+          selectionRejection: {
+            category: selection.category,
+            code: selection.code,
+          },
+        });
+        return JSON.stringify({ error: 'Tool selection rejected by execution policy' });
+      }
       const rawResult = await run();
       const parsedResult = parseToolResult(rawResult);
       toolExecutions.push({
         toolName,
         args,
+        ...(selection?.metadata !== undefined
+          ? { selectionMetadata: selection.metadata }
+          : {}),
         ...(parsedResult !== undefined ? { result: parsedResult } : {}),
       });
       return rawResult;
     } catch (error) {
+      const typedCategory = errorCategory(error);
       toolExecutions.push({
         toolName,
         args,
         error: getErrorMessage(error, 'Unknown external save error'),
+        ...(typedCategory !== undefined ? { errorCategory: typedCategory } : {}),
+        ...(selection?.metadata !== undefined
+          ? { selectionMetadata: selection.metadata }
+          : {}),
       });
       throw error;
     }
@@ -1149,6 +1310,11 @@ function createTrackingToolExecutor(
       );
     },
   };
+}
+
+function errorCategory(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('category' in error)) return undefined;
+  return typeof error.category === 'string' ? error.category : undefined;
 }
 
 function buildExternalSaveFailureReply(

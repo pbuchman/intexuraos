@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient, providerToKeyField } from '../client.js';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { apiFail, apiOk } from '@intexuraos/common-http';
+import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { createFakeUsageSink } from '@intexuraos/llm-pricing';
+import type { UserServiceClient } from '../types.js';
 
 describe('providerToKeyField', () => {
   it('returns google for Google provider', () => {
@@ -1288,6 +1290,417 @@ describe('createUserServiceClient', () => {
       const result = await client.getUserTimezone(userId);
 
       expect(result).toBe('America/New_York');
+    });
+  });
+
+  describe('resolveIntexAgentRuntimeSettings', () => {
+    const availableRuntimeSettings = {
+      status: 'available',
+      effectiveModel: IntexAgentModels.MiniMaxM3,
+      explicitModel: IntexAgentModels.MiniMaxM3,
+      source: 'explicit',
+      revision: 7,
+      timeZone: 'Europe/Warsaw',
+    };
+
+    const unavailableRuntimeSettings = {
+      status: 'unavailable',
+      effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+      source: 'platform_default',
+      timeZone: 'UTC',
+    };
+
+    function expectNoRuntimeTransportLogs(): void {
+      expect(mockLogger.info).not.toHaveBeenCalled();
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLogger.debug).not.toHaveBeenCalled();
+    }
+
+    it('keeps a base-only fake assignable while exposing the narrow runtime client on factory output', async () => {
+      const baseOnlyFake: UserServiceClient = {
+        getApiKeys: async () => ({ ok: true, value: {} }),
+        getLlmClient: async () => ({ ok: false, error: { code: 'NO_API_KEY', message: 'unused' } }),
+        reportLlmSuccess: async () => undefined,
+        getOAuthToken: async () => ({
+          ok: false,
+          error: { code: 'OAUTH_NOT_CONFIGURED', message: 'unused' },
+        }),
+        resolveGitHubUsername: async () => ({ ok: true, value: null }),
+        getUserTimezone: async () => undefined,
+      };
+
+      expect(baseOnlyFake.getApiKeys).toBeTypeOf('function');
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: unavailableRuntimeSettings });
+
+      const result =
+        await createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+      expect(result).toEqual({ ok: true, value: unavailableRuntimeSettings });
+    });
+
+    it('sends the encoded runtime endpoint request with internal auth and decodes both closed DTO arms', async () => {
+      const userId = 'auth0|user name+test';
+
+      nock('http://localhost:3000')
+        .get(`/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`)
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: availableRuntimeSettings });
+      nock('http://localhost:3000')
+        .get('/internal/users/unavailable/settings/intex-agent-runtime')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: unavailableRuntimeSettings });
+
+      const client = createUserServiceClient(config);
+      await expect(client.resolveIntexAgentRuntimeSettings(userId)).resolves.toEqual({
+        ok: true,
+        value: availableRuntimeSettings,
+      });
+      await expect(client.resolveIntexAgentRuntimeSettings('unavailable')).resolves.toEqual({
+        ok: true,
+        value: unavailableRuntimeSettings,
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it('decodes the standard success envelope emitted by reply.ok', async () => {
+      const response = apiOk(availableRuntimeSettings, {
+        requestId: 'runtime-request-123',
+        durationMs: 12,
+      });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, response);
+
+      await expect(
+        createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123')
+      ).resolves.toEqual({ ok: true, value: availableRuntimeSettings });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it('accepts an unsafe integer downstream status allowed by the standard diagnostics schema', async () => {
+      const response = apiOk(availableRuntimeSettings, {
+        requestId: 'runtime-request-unsafe-status',
+        downstreamStatus: Number.MAX_SAFE_INTEGER + 1,
+      });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, response);
+
+      await expect(
+        createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123')
+      ).resolves.toEqual({ ok: true, value: availableRuntimeSettings });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it('maps the standard failure envelope with diagnostics and details to a static API error', async () => {
+      const response = apiFail(
+        'INTERNAL_ERROR',
+        'raw upstream message',
+        {
+          requestId: 'runtime-request-456',
+          durationMs: 18,
+          downstreamStatus: 503,
+          downstreamRequestId: 'downstream-request-789',
+          endpointCalled: 'internal runtime endpoint',
+        },
+        { retryable: false }
+      );
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, response);
+
+      await expect(
+        createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123')
+      ).resolves.toEqual({
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: 'User Service runtime settings request failed',
+        },
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it.each([
+      ['non-object data', null],
+      ['unknown status', { ...availableRuntimeSettings, status: 'unknown' }],
+      ['available extra field', { ...availableRuntimeSettings, unexpected: true }],
+      ['unavailable extra field', { ...unavailableRuntimeSettings, unexpected: true }],
+      ['available missing revision', { ...availableRuntimeSettings, revision: undefined }],
+      [
+        'unavailable wrong default',
+        { ...unavailableRuntimeSettings, effectiveModel: IntexAgentModels.MiniMaxM3 },
+      ],
+      [
+        'noncanonical available model',
+        { ...availableRuntimeSettings, effectiveModel: 'or:not/canonical' },
+      ],
+      ['invalid available source', { ...availableRuntimeSettings, source: 'platform_default' }],
+      ['invalid unavailable source', { ...unavailableRuntimeSettings, source: 'explicit' }],
+      ['invalid revision', { ...availableRuntimeSettings, revision: -1 }],
+      ['fractional revision', { ...availableRuntimeSettings, revision: 1.5 }],
+      ['unsafe revision', { ...availableRuntimeSettings, revision: Number.MAX_SAFE_INTEGER + 1 }],
+      ['non-string timezone', { ...availableRuntimeSettings, timeZone: 42 }],
+    ])('maps %s to the closed malformed response error without logging', async (_name, data) => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, { success: true, data });
+
+      const result =
+        await createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'MALFORMED_RESPONSE',
+          message: 'User Service runtime settings response was malformed',
+        },
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it.each([
+      [
+        'explicit source with a null explicit model',
+        { ...availableRuntimeSettings, explicitModel: null },
+      ],
+      [
+        'explicit source with a different effective model',
+        { ...availableRuntimeSettings, effectiveModel: IntexAgentModels.Gemini3FlashPreview },
+      ],
+      [
+        'default-absent source with an explicit model',
+        {
+          ...availableRuntimeSettings,
+          effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+          source: 'default_absent',
+        },
+      ],
+      [
+        'default-absent source with a non-default effective model',
+        {
+          ...availableRuntimeSettings,
+          explicitModel: null,
+          source: 'default_absent',
+        },
+      ],
+    ])('rejects %s as a malformed response without logging', async (_name, data) => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, { success: true, data });
+
+      const result =
+        await createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'MALFORMED_RESPONSE',
+          message: 'User Service runtime settings response was malformed',
+        },
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it('accepts the maximum safe selector revision', async () => {
+      const data = { ...availableRuntimeSettings, revision: Number.MAX_SAFE_INTEGER };
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, { success: true, data });
+
+      await expect(
+        createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123')
+      ).resolves.toEqual({ ok: true, value: data });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it.each([
+      ['null envelope', null],
+      ['array envelope', []],
+      ['malformed envelope', { data: availableRuntimeSettings }],
+      ['success envelope without data', { success: true }],
+      ['string success discriminator', { success: 'yes', data: availableRuntimeSettings }],
+      ['numeric success discriminator', { success: 1, data: availableRuntimeSettings }],
+      ['null success discriminator', { success: null, data: availableRuntimeSettings }],
+      [
+        'success envelope with an extra field',
+        { success: true, data: availableRuntimeSettings, unexpected: true },
+      ],
+      [
+        'success envelope with an unknown diagnostics field',
+        {
+          success: true,
+          data: availableRuntimeSettings,
+          diagnostics: { requestId: 'request-123', unexpected: true },
+        },
+      ],
+      [
+        'success envelope with non-object diagnostics',
+        { success: true, data: availableRuntimeSettings, diagnostics: 'request-123' },
+      ],
+      [
+        'success envelope with diagnostics missing requestId',
+        { success: true, data: availableRuntimeSettings, diagnostics: { durationMs: 12 } },
+      ],
+      [
+        'success envelope with non-string diagnostics requestId',
+        { success: true, data: availableRuntimeSettings, diagnostics: { requestId: 123 } },
+      ],
+      [
+        'success envelope with non-finite diagnostics duration',
+        {
+          success: true,
+          data: availableRuntimeSettings,
+          diagnostics: { requestId: 'request-123', durationMs: Number.POSITIVE_INFINITY },
+        },
+      ],
+      [
+        'success envelope with fractional diagnostics downstream status',
+        {
+          success: true,
+          data: availableRuntimeSettings,
+          diagnostics: { requestId: 'request-123', downstreamStatus: 200.5 },
+        },
+      ],
+      [
+        'success envelope with non-string diagnostics downstream request ID',
+        {
+          success: true,
+          data: availableRuntimeSettings,
+          diagnostics: { requestId: 'request-123', downstreamRequestId: 123 },
+        },
+      ],
+      [
+        'success envelope with non-string diagnostics endpoint',
+        {
+          success: true,
+          data: availableRuntimeSettings,
+          diagnostics: { requestId: 'request-123', endpointCalled: 123 },
+        },
+      ],
+      ['failure envelope without an error', { success: false }],
+      [
+        'failure envelope with a malformed error',
+        { success: false, error: { code: 'INTERNAL_ERROR', message: 42 } },
+      ],
+      [
+        'failure envelope with an unknown error field',
+        {
+          success: false,
+          error: { code: 'INTERNAL_ERROR', message: 'raw', unexpected: true },
+        },
+      ],
+      [
+        'failure envelope with an unknown error code',
+        { success: false, error: { code: 'NOT_A_COMMON_ERROR_CODE', message: 'raw' } },
+      ],
+    ])('maps %s to the closed malformed response error without logging', async (_name, body) => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(200, JSON.stringify(body), { 'Content-Type': 'application/json' });
+
+      const result =
+        await createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'MALFORMED_RESPONSE',
+          message: 'User Service runtime settings response was malformed',
+        },
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it.each([
+      [
+        'non-2xx response',
+        503,
+        { success: false, error: { code: 'INTERNAL_ERROR', message: 'raw' } },
+      ],
+      [
+        'API envelope failure',
+        200,
+        { success: false, error: { code: 'INTERNAL_ERROR', message: 'raw' } },
+      ],
+    ])('maps %s to the static API error without logging', async (_name, status, body) => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .reply(status, body);
+
+      const result =
+        await createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'API_ERROR',
+          message: 'User Service runtime settings request failed',
+        },
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it('maps network errors to the static network error without leaking transport details to logs', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings/intex-agent-runtime')
+        .replyWithError('runtime transport sentinel');
+
+      const result =
+        await createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: 'User Service runtime settings request failed',
+        },
+      });
+      expectNoRuntimeTransportLogs();
+    });
+
+    it('uses the shared 30-second abort timeout and maps it silently to the static timeout error', async () => {
+      vi.useFakeTimers();
+      const fetchMock = vi.fn(
+        (_input: unknown, init?: RequestInit): Promise<Response> =>
+          new Promise((_resolve, reject: (reason: unknown) => void) => {
+            init?.signal?.addEventListener('abort', () => {
+              const abortError = new Error('runtime timeout sentinel');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
+          })
+      );
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const resultPromise =
+          createUserServiceClient(config).resolveIntexAgentRuntimeSettings('user123');
+
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        await expect(resultPromise).resolves.toEqual({
+          ok: false,
+          error: {
+            code: 'TIMEOUT',
+            message: 'User Service runtime settings request timed out',
+          },
+        });
+        expect(fetchMock).toHaveBeenCalledOnce();
+        expectNoRuntimeTransportLogs();
+      } finally {
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+      }
     });
   });
 });

@@ -61,4 +61,9 @@ export const SENSITIVE_FIELDS = [
   'clientSecret',
   'x-internal-auth',
   'x-goog-iap-jwt-assertion',
+  'x-matrix-corpus-user-id',
+  'x-matrix-corpus-session-id',
+  'x-matrix-corpus-lease-fence',
+  'x-matrix-corpus-event-revision',
+  'x-matrix-corpus-runtime-audience',
 ] as const;

@@ -350,10 +350,10 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(body.data.models).toHaveLength(OPENROUTER_ALLOWED_MODELS.length);
   });
 
-  it('uses parseFloat fallback when prompt is null', async () => {
+  it('uses reviewed fallback pricing when catalog prompt price is missing', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    // Catalog has a model with null prompt — parseFloat fallback should use 0
+    // Catalog has a model with null prompt — it must not invent a zero live price.
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m, i) => ({
       id: m.id,
       pricing: i === 0 ? { prompt: null, completion: '0.000005' } : { prompt: '0.000001', completion: '0.000005' },
@@ -377,15 +377,17 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; pricing: { inputPricePerMillion: number } }[] };
     };
     expect(body.success).toBe(true);
-    // First model uses fallback pricing (0) since prompt was null
+    // First model uses its reviewed fallback pricing since live prompt price is missing.
     const firstModel = body.data.models.find((m) => m.id === OPENROUTER_ALLOWED_MODELS[0]?.id);
-    expect(firstModel?.pricing.inputPricePerMillion).toBe(0);
+    expect(firstModel?.pricing.inputPricePerMillion).toBe(
+      Number(OPENROUTER_ALLOWED_MODELS[0]?.promptPerToken) * 1_000_000
+    );
   });
 
-  it('uses parseFloat fallback when completion is null', async () => {
+  it('uses reviewed fallback pricing when catalog completion price is missing', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    // Catalog has a model with null completion — parseFloat fallback should use 0
+    // Catalog has a model with null completion — it must not invent a zero live price.
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m, i) => ({
       id: m.id,
       pricing: i === 0 ? { prompt: '0.000001', completion: null } : { prompt: '0.000001', completion: '0.000005' },
@@ -409,15 +411,17 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; pricing: { outputPricePerMillion: number } }[] };
     };
     expect(body.success).toBe(true);
-    // First model uses fallback pricing (0) since completion was null
+    // First model uses its reviewed fallback pricing since live completion price is missing.
     const firstModel = body.data.models.find((m) => m.id === OPENROUTER_ALLOWED_MODELS[0]?.id);
-    expect(firstModel?.pricing.outputPricePerMillion).toBe(0);
+    expect(firstModel?.pricing.outputPricePerMillion).toBe(
+      Number(OPENROUTER_ALLOWED_MODELS[0]?.completionPerToken) * 1_000_000
+    );
   });
 
-  it('uses context_length fallback when catalog entry has no context_length', async () => {
+  it('uses reviewed context fallback when catalog context is missing', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
-    // Catalog returns models without context_length — fallback to 102400
+    // Catalog returns models without context_length — fall back to reviewed metadata.
     const catalogData = OPENROUTER_ALLOWED_MODELS.map((m) => ({
       id: m.id,
       pricing: { prompt: '0.000001', completion: '0.000005' },
@@ -441,9 +445,9 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
       data: { models: { id: string; contextLength: number }[] };
     };
     expect(body.success).toBe(true);
-    // All models should use fallback context length of 102400
-    for (const model of body.data.models) {
-      expect(model.contextLength).toBe(102400);
+    // All models use their entry-specific reviewed context length.
+    for (const [index, model] of body.data.models.entries()) {
+      expect(model.contextLength).toBe(OPENROUTER_ALLOWED_MODELS[index]?.contextLength);
     }
   });
 });

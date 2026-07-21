@@ -37,6 +37,7 @@
     "@intexuraos/llm-prompts": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "fastify": "catalog:",
+    "jose": "^5.9.6",
     "libphonenumber-js": "^1.12.33",
     "pino": "catalog:",
     "sharp": "^0.33.5",

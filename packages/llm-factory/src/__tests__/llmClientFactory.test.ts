@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { OpenRouterToolCallingModels, LlmProviders, LlmModels } from '@intexuraos/llm-contract';
+import {
+  IntexAgentModels,
+  OpenRouterToolCallingModels,
+  LlmProviders,
+  LlmModels,
+} from '@intexuraos/llm-contract';
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
@@ -329,6 +334,25 @@ describe('llmClientFactory', () => {
       expect(client.generate).toBeDefined();
       expect(client).toBeInstanceOf(MockOpenRouterGenerateClient);
     });
+
+    it.each(Object.values(IntexAgentModels))(
+      'keeps canonical Intex ID %s through the generation factory boundary',
+      async (model) => {
+        const { createOpenRouterGenerateClient } = await import('../openRouterGenerateClient.js');
+        const client = createLlmClient({
+          apiKey: 'test-key',
+          model,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        expect(client).toBeInstanceOf(MockOpenRouterGenerateClient);
+        expect(createOpenRouterGenerateClient).toHaveBeenCalledWith(
+          expect.objectContaining({ model })
+        );
+      }
+    );
   });
 
   describe('createToolCallingClient', () => {
@@ -369,6 +393,29 @@ describe('llmClientFactory', () => {
         })
       );
     });
+
+    it.each([
+      [OpenRouterToolCallingModels.DeepSeekV4Flash, 'deepseek/deepseek-v4-flash'],
+      [OpenRouterToolCallingModels.MiniMaxM3, 'minimax/minimax-m3'],
+      [OpenRouterToolCallingModels.Gemini3FlashPreview, 'google/gemini-3-flash-preview'],
+    ] as const)(
+      'admits Intex tool model %s at the OpenRouter adapter boundary',
+      async (model, rawModel) => {
+        const { createOpenRouterToolCallingClient } = await import('@intexuraos/infra-openrouter');
+
+        createToolCallingClient({
+          apiKey: 'test-key',
+          model,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        });
+
+        expect(createOpenRouterToolCallingClient).toHaveBeenCalledWith(
+          expect.objectContaining({ model: rawModel, evidenceModelId: model })
+        );
+      }
+    );
 
     it('throws for invalid model', () => {
       expect(() =>

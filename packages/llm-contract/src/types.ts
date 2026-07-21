@@ -78,6 +78,8 @@ export interface NormalizedUsage {
   totalTokens: number;
   /** Calculated cost in USD based on pricing configuration */
   costUsd: number;
+  /** Positive finite USD cost reported directly by the provider, when available. */
+  providerReportedUsd?: number;
   /** Prompt cache tokens (lower billing rate) */
   cacheTokens?: number;
   /** Tokens used for extended reasoning (o1 models) */
@@ -92,6 +94,73 @@ export interface NormalizedUsage {
   imageCount?: number;
   /** Generated image dimensions when the provider/request exposes them */
   imageSize?: ImageSize;
+}
+
+export type MatrixCorpusLlmStageV1 =
+  | 'intent_classification'
+  | 'agent_generation'
+  | 'response_schema_repair';
+
+export interface MatrixCorpusLlmCallContextV1 {
+  version: 1;
+  runId: string;
+  scenarioId: string;
+  sessionId: string;
+  turnIndex: number;
+  stage: MatrixCorpusLlmStageV1;
+  callOrdinal: number;
+}
+
+export interface MatrixCorpusProviderCallUsageV1 {
+  context: MatrixCorpusLlmCallContextV1;
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  providerReportedUsd?: number;
+}
+
+const MATRIX_CORPUS_CONTEXT_KEYS = [
+  'version',
+  'runId',
+  'scenarioId',
+  'sessionId',
+  'turnIndex',
+  'stage',
+  'callOrdinal',
+] as const;
+const MATRIX_CORPUS_SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
+const MATRIX_CORPUS_LLM_STAGES = new Set<MatrixCorpusLlmStageV1>([
+  'intent_classification',
+  'agent_generation',
+  'response_schema_repair',
+]);
+
+export function isMatrixCorpusLlmCallContextV1(
+  value: unknown
+): value is MatrixCorpusLlmCallContextV1 {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  const expectedKeys = [...MATRIX_CORPUS_CONTEXT_KEYS].sort();
+  return (
+    keys.length === expectedKeys.length &&
+    keys.every((key, index) => key === expectedKeys[index]) &&
+    record['version'] === 1 &&
+    typeof record['runId'] === 'string' &&
+    MATRIX_CORPUS_SAFE_ID.test(record['runId']) &&
+    typeof record['scenarioId'] === 'string' &&
+    MATRIX_CORPUS_SAFE_ID.test(record['scenarioId']) &&
+    typeof record['sessionId'] === 'string' &&
+    MATRIX_CORPUS_SAFE_ID.test(record['sessionId']) &&
+    Number.isInteger(record['turnIndex']) &&
+    (record['turnIndex'] as number) >= 0 &&
+    (record['turnIndex'] as number) <= 19 &&
+    MATRIX_CORPUS_LLM_STAGES.has(record['stage'] as MatrixCorpusLlmStageV1) &&
+    Number.isInteger(record['callOrdinal']) &&
+    (record['callOrdinal'] as number) >= 1 &&
+    (record['callOrdinal'] as number) <= 60
+  );
 }
 
 /**
@@ -120,6 +189,8 @@ export interface GenerateResult {
   content: string;
   /** Token usage and cost information */
   usage: NormalizedUsage;
+  /** Exact per-provider-call evidence when Matrix corpus context was supplied. */
+  providerCall?: MatrixCorpusProviderCallUsageV1;
 }
 
 export type LlmChatRole = 'system' | 'developer' | 'user' | 'assistant';

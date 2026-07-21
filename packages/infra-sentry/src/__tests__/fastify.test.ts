@@ -144,6 +144,107 @@ describe('setupSentryErrorHandler', () => {
     expect(response.statusCode).toBe(500);
   });
 
+  it('captures only sanitized context and error details for configured private routes', async () => {
+    const logChunks: string[] = [];
+    const privateApp = Fastify({
+      logger: {
+        stream: {
+          write(chunk: string): void {
+            logChunks.push(chunk);
+          },
+        },
+      },
+      disableRequestLogging: true,
+    });
+    addMockFailMethod(privateApp);
+    setupSentryErrorHandler(privateApp, {
+      privatePathPrefixes: ['/internal/matrix-corpus/', '/internal/test-runs/'],
+    });
+    privateApp.get('/internal/matrix-corpus/runs/:runId/fail', async () => {
+      throw new Error('RAW_MATRIX_ERROR_SENTINEL');
+    });
+
+    const response = await privateApp.inject({
+      method: 'GET',
+      url: '/internal/matrix-corpus/runs/RUN_SENTRY_SENTINEL/fail?secret=QUERY_SENTRY_SENTINEL',
+      headers: {
+        'x-matrix-corpus-user-id': 'USER_HEADER_SENTINEL',
+        'x-matrix-corpus-session-id': 'SESSION_HEADER_SENTINEL',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const capturedError = vi.mocked(Sentry.captureException).mock.calls[0]?.[0] as Error;
+    expect(capturedError.message).toBe('Private request failed');
+
+    const scopeCallback = vi.mocked(Sentry.withScope).mock.calls[0]?.[0] as unknown as (
+      scope: Readonly<{ setTag: ReturnType<typeof vi.fn>; setContext: ReturnType<typeof vi.fn> }>
+    ) => void;
+    const scope = { setTag: vi.fn(), setContext: vi.fn() };
+    scopeCallback(scope);
+    const serializedSentryContext = JSON.stringify({
+      tags: scope.setTag.mock.calls,
+      contexts: scope.setContext.mock.calls,
+    });
+    const serializedLogs = logChunks.join('');
+
+    expect(serializedSentryContext).toContain('/internal/matrix-corpus/[REDACTED]');
+    expect(serializedSentryContext).toContain('[REDACTED]');
+    for (const sentinel of [
+      'RUN_SENTRY_SENTINEL',
+      'QUERY_SENTRY_SENTINEL',
+      'USER_HEADER_SENTINEL',
+      'SESSION_HEADER_SENTINEL',
+      'RAW_MATRIX_ERROR_SENTINEL',
+    ]) {
+      expect(serializedSentryContext).not.toContain(sentinel);
+      expect(serializedLogs).not.toContain(sentinel);
+    }
+    await privateApp.close();
+  });
+
+  it('keeps private request details redacted when Sentry capture fails', async () => {
+    const logChunks: string[] = [];
+    const privateApp = Fastify({
+      logger: {
+        stream: {
+          write(chunk: string): void {
+            logChunks.push(chunk);
+          },
+        },
+      },
+      disableRequestLogging: true,
+    });
+    addMockFailMethod(privateApp);
+    vi.mocked(Sentry.withScope).mockImplementationOnce(() => {
+      throw new Error('PRIVATE_SENTRY_FAILURE_SENTINEL');
+    });
+    setupSentryErrorHandler(privateApp, {
+      privatePathPrefixes: ['/internal/matrix-corpus/'],
+    });
+    privateApp.get('/internal/matrix-corpus/runs/:runId/fail', async () => {
+      throw new Error('PRIVATE_ROUTE_FAILURE_SENTINEL');
+    });
+
+    const response = await privateApp.inject({
+      method: 'GET',
+      url: '/internal/matrix-corpus/runs/PRIVATE_RUN_SENTINEL/fail',
+    });
+
+    expect(response.statusCode).toBe(500);
+    const serializedLogs = logChunks.join('');
+    expect(serializedLogs).toContain('SENTRY_CAPTURE_FAILED');
+    expect(serializedLogs).toContain('privateRequest');
+    for (const sentinel of [
+      'PRIVATE_SENTRY_FAILURE_SENTINEL',
+      'PRIVATE_ROUTE_FAILURE_SENTINEL',
+      'PRIVATE_RUN_SENTINEL',
+    ]) {
+      expect(serializedLogs).not.toContain(sentinel);
+    }
+    await privateApp.close();
+  });
+
   it('responds with RATE_LIMITED for 429 errors without capturing to Sentry', async () => {
     setupSentryErrorHandler(app);
 

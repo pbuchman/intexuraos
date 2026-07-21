@@ -4,8 +4,8 @@
  * - PATCH /users/:uid/settings/llm-keys
  * - DELETE /users/:uid/settings/llm-keys/:provider
  */
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import * as jose from 'jose';
@@ -106,6 +106,192 @@ describe('LLM Keys Routes', () => {
   });
 
   describe('GET /users/:uid/settings/llm-keys', () => {
+    it('does not reveal selector availability or read selector state before auth or self ownership', { timeout: 20000 }, async () => {
+      const available = vi.fn(async () => false);
+      const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: available,
+        },
+      });
+      app = await buildServer();
+
+      const unauthenticated = await app.inject({ method: 'GET', url: '/users/auth0%7Csubject/settings/llm-keys' });
+      expect(unauthenticated.statusCode).toBe(401);
+      const token = await createToken({ sub: 'auth0|subject' });
+      const foreign = await app.inject({
+        method: 'GET',
+        url: '/users/auth0%7Cforeign/settings/llm-keys',
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(foreign.statusCode).toBe(403);
+      expect(available).not.toHaveBeenCalled();
+      expect(selectorRead).not.toHaveBeenCalled();
+    });
+
+    it('strictly reads clean unavailable selector state before returning the closed unavailable arm', { timeout: 20000 }, async () => {
+      const userId = 'auth0|unavailable-clean-user';
+      const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => false,
+        },
+      });
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(selectorRead).toHaveBeenCalledWith(userId);
+      expect((JSON.parse(response.body) as { data: { intexAgentModelSelector: unknown } }).data.intexAgentModelSelector).toEqual({
+        status: 'unavailable',
+      });
+    });
+
+    it('projects the exact available Intex Agent selector after self authorization', { timeout: 20000 }, async () => {
+      const userId = 'auth0|selector-user';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          intexAgentModel: IntexAgentModels.MiniMaxM3,
+          intexAgentModelRevision: 7,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async (candidate) => candidate === userId,
+        },
+      });
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { data: { intexAgentModelSelector: unknown } };
+      expect(body.data.intexAgentModelSelector).toEqual({
+        status: 'available',
+        explicitModel: IntexAgentModels.MiniMaxM3,
+        effectiveModel: IntexAgentModels.MiniMaxM3,
+        source: 'explicit',
+        revision: 7,
+        options: [
+          { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
+          { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
+          { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+        ],
+      });
+    });
+
+    it('returns a static selector-state error before unavailable projection for corrupt stored selector state', { timeout: 20000 }, async () => {
+      const userId = 'auth0|corrupt-selector-user';
+      fakeSettingsRepo.setRawIntexAgentModelState(userId, { intexAgentModel: 'forged' });
+      app = await buildServer();
+
+      const token = await createToken({ sub: userId });
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body) as { error: { code: string; message: string } };
+      expect(body.error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Intex Agent model selector state is invalid',
+      });
+    });
+
+    it.each([
+      [{}, IntexAgentModels.DeepSeekV4Flash, 'default_absent', 0],
+      [{ intexAgentModel: IntexAgentModels.DeepSeekV4Flash, intexAgentModelRevision: 2 }, IntexAgentModels.DeepSeekV4Flash, 'explicit', 2],
+      [{ intexAgentModel: IntexAgentModels.Gemini3FlashPreview, intexAgentModelRevision: 3 }, IntexAgentModels.Gemini3FlashPreview, 'explicit', 3],
+    ])('projects exact available effective selector state %#', async (preferences, effectiveModel, source, revision) => {
+      const userId = `auth0|selector-state-${String(revision)}`;
+      fakeSettingsRepo.setRawIntexAgentModelState(userId, preferences);
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => true,
+        },
+      });
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const selector = (JSON.parse(response.body) as { data: { intexAgentModelSelector: Record<string, unknown> } }).data.intexAgentModelSelector;
+      expect(selector).toMatchObject({ status: 'available', effectiveModel, source, revision });
+    });
+
+    it.each([{ intexAgentModel: 'forged' }, { intexAgentModelRevision: -1 }, [] as unknown])(
+      'returns the same static corrupt selector error for available and unavailable reads: %j',
+      async (rawPreferences) => {
+        for (const available of [false, true]) {
+          const userId = `auth0|corrupt-${String(available)}-${JSON.stringify(rawPreferences)}`;
+          fakeSettingsRepo.setRawIntexAgentModelState(userId, rawPreferences);
+          setServices({
+            intexAgentModelAvailability: {
+              start: () => Promise.resolve(),
+              isAvailableForUser: async () => available,
+            },
+          });
+          app = await buildServer();
+          const token = await createToken({ sub: userId });
+          const response = await app.inject({
+            method: 'GET',
+            url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+            headers: { authorization: `Bearer ${token}` },
+          });
+          expect(response.statusCode).toBe(500);
+          expect((JSON.parse(response.body) as { error: unknown }).error).toEqual({
+            code: 'INTERNAL_ERROR',
+            message: 'Intex Agent model selector state is invalid',
+          });
+          await app.close();
+        }
+      }
+    );
+
+    it('maps selector repository failures to a static public error', { timeout: 20000 }, async () => {
+      const userId = 'auth0|selector-read-failure';
+      fakeSettingsRepo.setFailNextGetIntexAgentModelState(true);
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect((JSON.parse(response.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to load Intex Agent model selector',
+      });
+    });
+
     it('returns 401 when no auth token', async () => {
       app = await buildServer();
 
@@ -761,9 +947,9 @@ describe('LLM Keys Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // Verify llmPreferences was cleared
+      // The field-safe clear preserves the preferences map for Intex selector siblings.
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmPreferences).toBeUndefined();
+      expect(stored?.llmPreferences).toEqual({});
     });
 
     it('cascade clears fallbackModel when provider key is deleted and fallback uses that provider', { timeout: 20000 }, async () => {

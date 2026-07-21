@@ -79,7 +79,7 @@ const REMOVED_PATTERNS = [
   /\/internal\/actions/g,
   /\/internal\/retry-pending/g,
   /\/internal\/code\/process/g,
-  /command\.ingest/g,
+  /command\.ingest(?:\b|_)/g,
   /approval\.reply/g,
   /commands-ingest/g,
   /approval-reply/g,

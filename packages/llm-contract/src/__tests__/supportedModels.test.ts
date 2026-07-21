@@ -14,6 +14,7 @@ import {
   getOpenRouterRawId,
   isToolCallingModel,
   OpenRouterToolCallingModels,
+  ALL_TOOL_CALLING_MODELS,
   DEFAULT_OPENROUTER_MODELS,
   isDefaultEligibleModel,
   DEFAULT_MODEL_DISPLAY_NAMES,
@@ -23,6 +24,10 @@ import {
   CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES,
   isConversationAssistantModel,
   getConversationAssistantModelDisplayName,
+  IntexAgentModels,
+  DEFAULT_INTEX_AGENT_MODEL,
+  INTEX_AGENT_MODEL_OPTIONS,
+  isIntexAgentModel,
   type LLMModel,
   type ResearchModel,
   type ImageModel,
@@ -31,6 +36,7 @@ import {
   type DefaultEligibleModel,
   type DefaultOpenRouterModel,
   type ConversationAssistantModelOption,
+  type IntexAgentModel,
 } from '../supportedModels.js';
 
 describe('OpenRouter model helpers', () => {
@@ -77,6 +83,81 @@ describe('Tool calling model helpers', () => {
     expect(isToolCallingModel('or:some/unknown-model')).toBe(false);
     expect(isToolCallingModel('or:')).toBe(false);
     expect(isToolCallingModel('not-a-model')).toBe(false);
+  });
+});
+
+describe('IntexAgentModel', () => {
+  it('exposes exactly the canonical model IDs in order', () => {
+    expect(Object.values(IntexAgentModels)).toEqual([
+      'or:deepseek/deepseek-v4-flash',
+      'or:minimax/minimax-m3',
+      'or:google/gemini-3-flash-preview',
+    ]);
+  });
+
+  it('exposes the exact ordered options with labels and providers', () => {
+    expect(INTEX_AGENT_MODEL_OPTIONS).toEqual([
+      {
+        id: IntexAgentModels.DeepSeekV4Flash,
+        label: 'DeepSeek V4 Flash',
+        provider: 'DeepSeek',
+      },
+      {
+        id: IntexAgentModels.MiniMaxM3,
+        label: 'MiniMax M3',
+        provider: 'MiniMax',
+      },
+      {
+        id: IntexAgentModels.Gemini3FlashPreview,
+        label: 'Gemini 3 Flash Preview',
+        provider: 'Google',
+      },
+    ]);
+  });
+
+  it('defaults to DeepSeek V4 Flash', () => {
+    expect(DEFAULT_INTEX_AGENT_MODEL).toBe(IntexAgentModels.DeepSeekV4Flash);
+  });
+
+  it('accepts exactly the three canonical model IDs', () => {
+    for (const model of Object.values(IntexAgentModels)) {
+      expect(isIntexAgentModel(model)).toBe(true);
+    }
+  });
+
+  it('rejects unsafe and non-canonical values without throwing', () => {
+    const unsafeValues: unknown[] = [
+      undefined,
+      null,
+      '',
+      'deepseek/deepseek-v4-flash',
+      'or:deepseek/deepseek-v4-flash:free',
+      'or:unknown/model',
+      42,
+      {},
+      [],
+      Symbol('model'),
+    ];
+
+    for (const value of unsafeValues) {
+      expect(() => isIntexAgentModel(value)).not.toThrow();
+      expect(isIntexAgentModel(value)).toBe(false);
+    }
+  });
+
+  it('narrows accepted values to IntexAgentModel', () => {
+    const value: unknown = IntexAgentModels.DeepSeekV4Flash;
+    if (isIntexAgentModel(value)) {
+      const typed: IntexAgentModel = value;
+      expect(typed).toBe(IntexAgentModels.DeepSeekV4Flash);
+    }
+  });
+
+  it('makes every canonical Intex Agent model eligible for tool calling', () => {
+    for (const model of Object.values(IntexAgentModels)) {
+      expect(ALL_TOOL_CALLING_MODELS).toContain(model);
+      expect(isToolCallingModel(model)).toBe(true);
+    }
   });
 });
 

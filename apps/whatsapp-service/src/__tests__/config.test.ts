@@ -134,6 +134,17 @@ describe('config validation', () => {
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
   });
 
+  it('adds Matrix corpus variables to the required environment set only when enabled', async () => {
+    const { validateConfigEnv } = await import('../config.js');
+    process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED'] = 'true';
+    delete process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
+
+    expect(validateConfigEnv()).toContain('INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID');
+
+    delete process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED'];
+    delete process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
+  });
+
   it('returns empty array when all required vars present', async () => {
     const { validateConfigEnv } = await import('../config.js');
 
@@ -283,5 +294,207 @@ describe('config validation', () => {
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] = 'or:unknown/model';
 
     expect(() => loadConfig()).toThrow('Unsupported Conversation Assistant model configured');
+  });
+});
+
+describe('parseWhatsAppMatrixCorpusConfig', () => {
+  const privateKey = JSON.stringify({
+    kty: 'OKP',
+    crv: 'Ed25519',
+    kid: 'matrix-test-v1',
+    x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    d: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  });
+  const enabledEnv = {
+    INTEXURAOS_ENVIRONMENT: 'dev',
+    INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+    INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'home-dev',
+    INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'home-dev',
+    INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'synthetic-user',
+    INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING: 'synthetic-room',
+    INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING: 'synthetic-account',
+    INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING: 'synthetic-sender',
+    INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY: 'h'.repeat(32),
+    INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION: 'matrix-test-v1',
+    INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY: privateKey,
+  } as const;
+
+  it.each([undefined, '', '   ', 'false'])(
+    'returns the closed disabled object for enable flag %s',
+    async (enabled) => {
+      const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+      expect(
+        parseWhatsAppMatrixCorpusConfig({
+          ...enabledEnv,
+          INTEXURAOS_MATRIX_CORPUS_ENABLED: enabled,
+        })
+      ).toEqual({ enabled: false, runtimeAudience: 'disabled' });
+    }
+  );
+
+  it('parses the complete Home Dev configuration without widening its shape', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(parseWhatsAppMatrixCorpusConfig(enabledEnv)).toEqual({
+      enabled: true,
+      runtimeAudience: 'home-dev',
+      evaluatorBindingHmacKey: 'h'.repeat(32),
+      configuredEvaluatorUserId: 'synthetic-user',
+      matrixRoomBinding: 'synthetic-room',
+      whatsappAccountBinding: 'synthetic-account',
+      whatsappSenderBinding: 'synthetic-sender',
+      signingKeyVersion: 'matrix-test-v1',
+      signingKeyMaterial: privateKey,
+    });
+  });
+
+  it.each([
+    'INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME',
+    'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+    'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+    'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+  ] as const)('rejects enabled mode when %s is missing or blank', async (name) => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+    const missing = { ...enabledEnv, [name]: '   ' };
+
+    expect(() => parseWhatsAppMatrixCorpusConfig(missing)).toThrow(name);
+  });
+
+  it.each(['dev', 'prod', 'production', 'staging', 'unknown'])(
+    'rejects feature audience %s',
+    async (runtimeAudience) => {
+      const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+      expect(() =>
+        parseWhatsAppMatrixCorpusConfig({
+          ...enabledEnv,
+          INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: runtimeAudience,
+        })
+      ).toThrow('INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE');
+    }
+  );
+
+  it.each(['prod', 'production', 'staging', 'unknown'])(
+    'rejects environment %s even with the Home Dev audience',
+    async (environment) => {
+      const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+      expect(() =>
+        parseWhatsAppMatrixCorpusConfig({
+          ...enabledEnv,
+          INTEXURAOS_ENVIRONMENT: environment,
+        })
+      ).toThrow('INTEXURAOS_ENVIRONMENT');
+    }
+  );
+
+  it.each([
+    ['invalid JSON', 'not-json'],
+    ['JSON array', '[]'],
+    [
+      'wrong key version',
+      JSON.stringify({
+        kty: 'OKP',
+        crv: 'Ed25519',
+        kid: 'other-v1',
+        x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        d: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      }),
+    ],
+    [
+      'public key instead of private key',
+      JSON.stringify({
+        kty: 'OKP',
+        crv: 'Ed25519',
+        kid: 'matrix-test-v1',
+        x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      }),
+    ],
+    [
+      'non-string public component',
+      JSON.stringify({
+        kty: 'OKP',
+        crv: 'Ed25519',
+        kid: 'matrix-test-v1',
+        x: 3,
+        d: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      }),
+    ],
+    [
+      'non-canonical private component',
+      JSON.stringify({
+        kty: 'OKP',
+        crv: 'Ed25519',
+        kid: 'matrix-test-v1',
+        x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        d: 'short',
+      }),
+    ],
+  ])('rejects %s without echoing key material', async (_name, keyMaterial) => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(() =>
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY: keyMaterial,
+      })
+    ).toThrow('INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY');
+    try {
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY: keyMaterial,
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(keyMaterial);
+      expect(String(error)).not.toContain('synthetic-user');
+    }
+  });
+
+  it('rejects oversized and trim-changing sensitive values without echoing them', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+    const sensitive = ` ${'s'.repeat(513)}`;
+
+    expect(() =>
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: sensitive,
+      })
+    ).toThrow('INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID');
+    try {
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: sensitive,
+      });
+    } catch (error) {
+      expect(String(error)).not.toContain(sensitive);
+    }
+  });
+
+  it('rejects an evaluator identifier that cannot pass the route authority schema', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(() =>
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'unsafe/user',
+      })
+    ).toThrow('INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID');
+  });
+
+  it('rejects an unknown enable value rather than silently disabling', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(() =>
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_MATRIX_CORPUS_ENABLED: 'yes',
+      })
+    ).toThrow('INTEXURAOS_MATRIX_CORPUS_ENABLED');
   });
 });

@@ -4,17 +4,21 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { isIntexAgentModel, type IntexAgentModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../encryption.js';
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
-import type {
-  LlmPreferences,
-  LlmProvider,
-  LlmTestResult,
-  SettingsError,
-  TranscriptionPreferences,
-  TranscriptionProvider,
-  UserSettings,
-  UserSettingsRepository,
+import {
+  isValidTimezone,
+  type IntexAgentModelReadResult,
+  type IntexAgentModelUpdateResult,
+  type LlmPreferences,
+  type LlmProvider,
+  type LlmTestResult,
+  type SettingsError,
+  type TranscriptionPreferences,
+  type TranscriptionProvider,
+  type UserSettings,
+  type UserSettingsRepository,
 } from '../../domain/settings/index.js';
 
 const COLLECTION_NAME = 'user_settings';
@@ -38,17 +42,117 @@ interface UserSettingsDoc {
     perplexity?: LlmTestResult;
     openrouter?: LlmTestResult;
   };
-  llmPreferences?: LlmPreferences;
+  llmPreferences?: unknown;
   transcriptionPreferences?: TranscriptionPreferences;
   timezone?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+function isFirestoreMap(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  return prototype === Object.prototype || prototype === null;
+}
+
+function readIntexAgentModelState(
+  preferences: unknown
+):
+  | { ok: true; explicitModel: IntexAgentModel | null; revision: number }
+  | { ok: false } {
+  if (preferences === undefined) {
+    return { ok: true, explicitModel: null, revision: 0 };
+  }
+  if (!isFirestoreMap(preferences)) {
+    return { ok: false };
+  }
+
+  const hasModel = Object.hasOwn(preferences, 'intexAgentModel');
+  let explicitModel: IntexAgentModel | null = null;
+  if (hasModel) {
+    const model = preferences['intexAgentModel'];
+    if (!isIntexAgentModel(model)) {
+      return { ok: false };
+    }
+    explicitModel = model;
+  }
+
+  const hasRevision = Object.hasOwn(preferences, 'intexAgentModelRevision');
+  let revision = 0;
+  if (hasRevision) {
+    const storedRevision = preferences['intexAgentModelRevision'];
+    if (
+      typeof storedRevision !== 'number' ||
+      !Number.isSafeInteger(storedRevision) ||
+      storedRevision < 0
+    ) {
+      return { ok: false };
+    }
+    revision = storedRevision;
+  }
+
+  return { ok: true, explicitModel, revision };
+}
+
 /**
  * Firestore-backed User settings repository.
  */
 export class FirestoreUserSettingsRepository implements UserSettingsRepository {
+  async getIntexAgentModelState(
+    userId: string
+  ): Promise<Result<IntexAgentModelReadResult, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
+      const data = doc.exists ? (doc.data() as UserSettingsDoc) : undefined;
+      const state = readIntexAgentModelState(data?.llmPreferences);
+      if (!state.ok) {
+        return ok({ status: 'invalid_stored_value' });
+      }
+      return ok({
+        status: 'valid',
+        explicitModel: state.explicitModel,
+        revision: state.revision,
+      });
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to get Intex Agent model state: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async getTimezonePreference(userId: string): Promise<Result<string | undefined, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const doc = await db.collection(COLLECTION_NAME).doc(userId).get();
+      if (!doc.exists) {
+        return ok(undefined);
+      }
+      const data: unknown = doc.data();
+      /* v8 ignore start -- upstream: an existing Firestore DocumentSnapshot cannot expose a non-map document payload @preserve */
+      if (!isFirestoreMap(data)) {
+        return err({ code: 'INTERNAL_ERROR', message: 'Stored timezone preference is invalid' });
+      }
+      /* v8 ignore stop @preserve */
+      if (!Object.hasOwn(data, 'timezone')) {
+        return ok(undefined);
+      }
+      const timezone = data['timezone'];
+      if (typeof timezone !== 'string' || !isValidTimezone(timezone)) {
+        return err({ code: 'INTERNAL_ERROR', message: 'Stored timezone preference is invalid' });
+      }
+      return ok(timezone);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to get timezone preference: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
   async getSettings(userId: string): Promise<Result<UserSettings | null, SettingsError>> {
     try {
       const db = getFirestore();
@@ -60,6 +164,12 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
       }
 
       const data = doc.data() as UserSettingsDoc;
+      if (!readIntexAgentModelState(data.llmPreferences).ok) {
+        return err({
+          code: 'INTERNAL_ERROR',
+          message: 'Invalid stored Intex Agent model state',
+        });
+      }
       const settings: UserSettings = {
         userId: data.userId,
         createdAt: data.createdAt,
@@ -72,7 +182,7 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         settings.llmTestResults = data.llmTestResults;
       }
       if (data.llmPreferences !== undefined) {
-        settings.llmPreferences = data.llmPreferences;
+        settings.llmPreferences = data.llmPreferences as LlmPreferences;
       }
       if (data.transcriptionPreferences !== undefined) {
         settings.transcriptionPreferences = data.transcriptionPreferences;
@@ -134,22 +244,23 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(docRef);
         const now = new Date().toISOString();
-        await docRef.set({
-          userId,
-          llmApiKeys: { [provider]: encryptedKey },
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        await docRef.update({
-          [`llmApiKeys.${provider}`]: encryptedKey,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+        if (!doc.exists) {
+          transaction.set(docRef, {
+            userId,
+            llmApiKeys: { [provider]: encryptedKey },
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          transaction.update(docRef, {
+            [`llmApiKeys.${provider}`]: encryptedKey,
+            updatedAt: now,
+          });
+        }
+      });
 
       return ok(undefined);
     } catch (error) {
@@ -191,22 +302,23 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(docRef);
         const now = new Date().toISOString();
-        await docRef.set({
-          userId,
-          llmTestResults: { [provider]: testResult },
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        await docRef.update({
-          [`llmTestResults.${provider}`]: testResult,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+        if (!doc.exists) {
+          transaction.set(docRef, {
+            userId,
+            llmTestResults: { [provider]: testResult },
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          transaction.update(docRef, {
+            [`llmTestResults.${provider}`]: testResult,
+            updatedAt: now,
+          });
+        }
+      });
 
       return ok(undefined);
     } catch (error) {
@@ -224,31 +336,31 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
-      const doc = await docRef.get();
-      const now = new Date().toISOString();
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(docRef);
+        const now = new Date().toISOString();
+        if (!doc.exists) {
+          transaction.set(docRef, {
+            userId,
+            llmTestResults: { [provider]: { status: 'success', message: '', testedAt: now } },
+            createdAt: now,
+            updatedAt: now,
+          });
+          return;
+        }
 
-      if (!doc.exists) {
-        await docRef.set({
-          userId,
-          llmTestResults: { [provider]: { status: 'success', message: '', testedAt: now } },
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
         const data = doc.data() as UserSettingsDoc;
         const existingTestResult = data.llmTestResults?.[provider];
-
         const completeTestResult: LlmTestResult = {
           status: existingTestResult?.status ?? 'success',
           message: existingTestResult?.message ?? '',
           testedAt: now,
         };
-
-        await docRef.update({
+        transaction.update(docRef, {
           [`llmTestResults.${provider}`]: completeTestResult,
           updatedAt: now,
         });
-      }
+      });
 
       return ok(undefined);
     } catch (error) {
@@ -259,15 +371,13 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     }
   }
 
-  // Note: Deletes the entire `llmPreferences` field, clearing both `defaultModel`
-  // and `fallbackModel` (and any future preference fields). Used when a provider's
-  // API key is deleted and the default model belongs to that provider.
   async clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>> {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
       await docRef.update({
-        llmPreferences: FieldValue.delete(),
+        'llmPreferences.defaultModel': FieldValue.delete(),
+        'llmPreferences.fallbackModel': FieldValue.delete(),
         updatedAt: new Date().toISOString(),
       });
       return ok(undefined);
@@ -287,32 +397,34 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(docRef);
         const now = new Date().toISOString();
-        const preferences: Record<string, unknown> = { defaultModel };
-        if (fallbackModel !== undefined && fallbackModel !== null) {
-          preferences['fallbackModel'] = fallbackModel;
+        if (!doc.exists) {
+          const preferences: Record<string, unknown> = { defaultModel };
+          if (fallbackModel !== undefined && fallbackModel !== null) {
+            preferences['fallbackModel'] = fallbackModel;
+          }
+          transaction.set(docRef, {
+            userId,
+            llmPreferences: preferences,
+            createdAt: now,
+            updatedAt: now,
+          });
+          return;
         }
-        await docRef.set({
-          userId,
-          llmPreferences: preferences,
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
+
         const updates: Record<string, unknown> = {
           'llmPreferences.defaultModel': defaultModel,
-          updatedAt: new Date().toISOString(),
+          updatedAt: now,
         };
         if (fallbackModel === null) {
           updates['llmPreferences.fallbackModel'] = FieldValue.delete();
         } else if (fallbackModel !== undefined) {
           updates['llmPreferences.fallbackModel'] = fallbackModel;
         }
-        await docRef.update(updates);
-      }
+        transaction.update(docRef, updates);
+      });
 
       return ok(undefined);
     } catch (error) {
@@ -330,22 +442,23 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(docRef);
         const now = new Date().toISOString();
-        await docRef.set({
-          userId,
-          transcriptionPreferences: { provider },
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        await docRef.update({
-          'transcriptionPreferences.provider': provider,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+        if (!doc.exists) {
+          transaction.set(docRef, {
+            userId,
+            transcriptionPreferences: { provider },
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          transaction.update(docRef, {
+            'transcriptionPreferences.provider': provider,
+            updatedAt: now,
+          });
+        }
+      });
 
       return ok(undefined);
     } catch (error) {
@@ -360,28 +473,88 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
     try {
       const db = getFirestore();
       const docRef = db.collection(COLLECTION_NAME).doc(userId);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
+      await db.runTransaction(async (transaction) => {
+        const doc = await transaction.get(docRef);
         const now = new Date().toISOString();
-        await docRef.set({
-          userId,
-          timezone,
-          createdAt: now,
-          updatedAt: now,
-        });
-      } else {
-        await docRef.update({
-          timezone,
-          updatedAt: new Date().toISOString(),
-        });
-      }
+        if (!doc.exists) {
+          transaction.set(docRef, {
+            userId,
+            timezone,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          transaction.update(docRef, {
+            timezone,
+            updatedAt: now,
+          });
+        }
+      });
 
       return ok(undefined);
     } catch (error) {
       return err({
         code: 'INTERNAL_ERROR',
         message: `Failed to update timezone: ${getErrorMessage(error, 'Unknown Firestore error')}`,
+      });
+    }
+  }
+
+  async updateIntexAgentModel(
+    userId: string,
+    intexAgentModel: IntexAgentModel | null,
+    expectedRevision: number
+  ): Promise<Result<IntexAgentModelUpdateResult, SettingsError>> {
+    try {
+      const db = getFirestore();
+      const docRef = db.collection(COLLECTION_NAME).doc(userId);
+      const result = await db.runTransaction<IntexAgentModelUpdateResult>(async (transaction) => {
+        const doc = await transaction.get(docRef);
+        const data = doc.exists ? (doc.data() as UserSettingsDoc) : undefined;
+        const state = readIntexAgentModelState(data?.llmPreferences);
+        if (!state.ok) {
+          return { status: 'invalid_stored_value' };
+        }
+        if (state.revision !== expectedRevision) {
+          return { status: 'conflict', explicitModel: state.explicitModel, revision: state.revision };
+        }
+        if (state.explicitModel === intexAgentModel) {
+          return { status: 'unchanged', explicitModel: state.explicitModel, revision: state.revision };
+        }
+        if (state.revision === Number.MAX_SAFE_INTEGER) {
+          return {
+            status: 'revision_exhausted',
+            explicitModel: state.explicitModel,
+            revision: state.revision,
+          };
+        }
+
+        const now = new Date().toISOString();
+        const revision = state.revision + 1;
+        if (!doc.exists) {
+          transaction.set(docRef, {
+            userId,
+            llmPreferences: {
+              intexAgentModel,
+              intexAgentModelRevision: revision,
+            },
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else {
+          transaction.update(docRef, {
+            'llmPreferences.intexAgentModel': intexAgentModel ?? FieldValue.delete(),
+            'llmPreferences.intexAgentModelRevision': revision,
+            updatedAt: now,
+          });
+        }
+        return { status: 'updated', explicitModel: intexAgentModel, revision };
+      });
+      return ok(result);
+    } catch (error) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: `Failed to update Intex Agent model: ${getErrorMessage(error, 'Unknown Firestore error')}`,
       });
     }
   }

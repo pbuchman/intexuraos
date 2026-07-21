@@ -2,6 +2,8 @@
  * GCP Pub/Sub Publisher Adapter.
  * Implements EventPublisherPort for publishing events to Pub/Sub topics.
  */
+import { createHash } from 'node:crypto';
+
 import type { Logger } from 'pino';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub';
@@ -12,6 +14,8 @@ import type {
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
+  MatrixCorpusSignedIngestEvent,
+  MatrixCorpusPublishReceipt,
   WhatsAppError,
   MediaCleanupEvent,
   MediaTranscriptionRequestedEvent,
@@ -106,6 +110,25 @@ export class GcpPubSubPublisher
       'intex message ingest'
     );
     return this.mapToWhatsAppError(result);
+  }
+
+  async publishMatrixCorpusIngest(
+    event: MatrixCorpusSignedIngestEvent
+  ): Promise<Result<MatrixCorpusPublishReceipt, WhatsAppError>> {
+    const result = await this.publishToTopicWithSafeReceipt(
+      this.intexMessageIngestTopic,
+      event,
+      { eventKind: 'matrix_corpus_ingest' },
+      'Matrix corpus ingest'
+    );
+    if (!result.ok)
+      return err({
+        code: 'INTERNAL_ERROR' as const,
+        message: 'Matrix corpus ingest publication failed',
+      });
+    return ok({
+      publisherReceiptDigest: createHash('sha256').update(result.value, 'utf8').digest('hex'),
+    });
   }
 
   async publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {

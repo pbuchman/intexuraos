@@ -1,9 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '@intexuraos/common-http';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import { buildServer } from '../../server.js';
-import { resetServices, setServices, type ServiceContainer } from '../../services.js';
-import { INTEX_AGENT_MODEL } from '../../domain/agent/systemPrompt.js';
+import {
+  resetServices,
+  resolveRuntimeSettingsWithDeadline,
+  setServices,
+  type ServiceContainer,
+} from '../../services.js';
+import type {
+  IntexAgentRuntimeSettingsClient,
+  IntexAgentRuntimeSettingsClientError,
+  IntexAgentRuntimeSettingsV1,
+} from '@intexuraos/internal-clients';
+import { IntexAgentModels } from '@intexuraos/llm-contract';
 import {
   emptyPromptPreferences,
   type IntexAgentPromptPreferenceVersion,
@@ -14,6 +25,31 @@ import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
 } from '../../domain/sessions/types.js';
+import {
+  handleIncomingMessage,
+  type IntexAgentRunner,
+} from '../../domain/messages/handleIncomingMessage.js';
+import type {
+  IncomingMessageHandler,
+  IntexIncomingMessage,
+} from '../../domain/ports/incomingMessageHandler.js';
+
+const sentryCaptures = vi.hoisted((): unknown[] => []);
+
+vi.mock('@intexuraos/infra-sentry', async () => {
+  const actual = await vi.importActual<typeof import('@intexuraos/infra-sentry')>(
+    '@intexuraos/infra-sentry'
+  );
+  return {
+    ...actual,
+    setupSentryErrorHandler(app: FastifyInstance): void {
+      app.addHook('onError', async (_request, _reply, error) => {
+        sentryCaptures.push(error);
+      });
+      actual.setupSentryErrorHandler(app);
+    },
+  };
+});
 
 vi.mock('@intexuraos/common-http', async () => {
   const actual = await vi.importActual('@intexuraos/common-http');
@@ -103,9 +139,13 @@ class FakeSessionRepository {
 
 class FakeIncomingMessageHandler {
   calls: unknown[] = [];
+  implementation?: IncomingMessageHandler['handle'];
 
-  async handle(input: unknown): Promise<{ sessionId: string }> {
+  async handle(input: IntexIncomingMessage): Promise<{ sessionId: string }> {
     this.calls.push(input);
+    if (this.implementation !== undefined) {
+      return await this.implementation(input);
+    }
     return { sessionId: 'session-1' };
   }
 }
@@ -139,6 +179,7 @@ describe('intex-agent routes', () => {
   let incomingMessageHandler: FakeIncomingMessageHandler;
 
   beforeEach(async () => {
+    sentryCaptures.length = 0;
     vi.mocked(requireAuth).mockResolvedValue({ userId: 'user-1', claims: {} });
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = INTERNAL_AUTH_TOKEN;
     sessionRepository = new FakeSessionRepository();
@@ -160,8 +201,9 @@ describe('intex-agent routes', () => {
         llmUsageServiceUrl: 'http://llm-usage.test',
         openRouterAppApiKey: 'openrouter-key',
         whatsappSendTopic: 'whatsapp-send',
-        sessionTimeoutMs: 30 * 60 * 1000,
-        model: INTEX_AGENT_MODEL,
+      sessionTimeoutMs: 30 * 60 * 1000,
+      matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
+      testRunsRead: { enabled: false },
       },
       sessionRepository,
       preferencesRepository: {
@@ -407,6 +449,60 @@ describe('intex-agent routes', () => {
       data: [{ id: 'event-1', sessionId: 'session-1', type: 'assistant_message' }],
     });
     expect(sessionRepository.listEventsCalls).toEqual([{ sessionId: 'session-1', userId: 'user-1' }]);
+    expect(sessionRepository.getSessionCalls).toEqual([{ sessionId: 'session-1', userId: 'user-1' }]);
+  });
+
+  it('returns the static 404 before event reads for a missing or foreign session', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/sessions/missing/events',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(sessionRepository.getSessionCalls).toEqual([
+      { sessionId: 'missing', userId: 'user-1' },
+    ]);
+    expect(sessionRepository.listEventsCalls).toEqual([]);
+  });
+
+  it('hides Matrix corpus sessions from list, detail, and events with the ordinary static 404', async () => {
+    const matrixSession: IntexAgentSession = {
+      ...session,
+      id: 'private-matrix-session',
+      matrixCorpusProfile: {} as NonNullable<IntexAgentSession['matrixCorpusProfile']>,
+      lastEventSequence: 0,
+    };
+    sessionRepository.sessions = [session, matrixSession];
+    sessionRepository.events = [
+      event,
+      { ...event, id: 'private-event', sessionId: 'private-matrix-session' },
+    ];
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/sessions',
+      headers: { authorization: 'Bearer test-token' },
+    });
+    const detail = await app.inject({
+      method: 'GET',
+      url: '/sessions/private-matrix-session',
+      headers: { authorization: 'Bearer test-token' },
+    });
+    const eventsResponse = await app.inject({
+      method: 'GET',
+      url: '/sessions/private-matrix-session/events',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(list.statusCode).toBe(200);
+    expect(list.json().data).toHaveLength(1);
+    expect(detail.statusCode).toBe(404);
+    expect(eventsResponse.statusCode).toBe(404);
+    expect(sessionRepository.listEventsCalls).not.toContainEqual({
+      sessionId: 'private-matrix-session',
+      userId: 'user-1',
+    });
   });
 
   it('does not return events when authentication fails', async () => {
@@ -463,6 +559,236 @@ describe('intex-agent routes', () => {
     });
     expect(incomingMessageHandler.calls).toEqual([payload]);
   });
+
+  it('returns normal 202 when runtime resolution is handled as a local fallback', async () => {
+    const published: string[] = [];
+    const run = vi.fn<IntexAgentRunner['run']>();
+    const logger = { warn: vi.fn() };
+    incomingMessageHandler.implementation = async (
+      input
+    ): ReturnType<IncomingMessageHandler['handle']> =>
+      await handleIncomingMessage(input, {
+        sessionRepository,
+        runner: {
+          run,
+          async executeConfirmed(): Promise<never> {
+            throw new Error('not used');
+          },
+        },
+        replyPublisher: {
+          async publishReply(reply): Promise<void> {
+            published.push(reply.message);
+          },
+        },
+        clock: { now: () => '2026-06-24T10:00:00.000Z' },
+        resolveRuntimeSettings: async () =>
+          err({ code: 'MALFORMED_RESPONSE', message: 'private-runtime-body-sentinel' }),
+        logger,
+        ids: {
+          sessionId: () => 'session-runtime-failure',
+          eventId: () => `event-runtime-${String(sessionRepository.events.length + 1)}`,
+          confirmationId: () => 'confirmation-unused',
+        },
+        sessionTimeoutMs: 30 * 60 * 1_000,
+      });
+    const payload = {
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-runtime-failure',
+      text: 'Create a note',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-06-24T10:00:00.000Z',
+    };
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/intex-agent/messages',
+      headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      payload,
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(JSON.parse(response.body)).toMatchObject({
+      success: true,
+      data: { accepted: true, sessionId: 'session-runtime-failure' },
+    });
+    expect(run).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(published).toEqual([
+      'I could not process that request right now. Please restate what you want me to do.',
+    ]);
+    expect(JSON.stringify({ events: sessionRepository.events, published, logs: logger.warn.mock.calls }))
+      .not.toContain('private-runtime-body-sentinel');
+  });
+
+  it.each(['late_resolve', 'late_reject'] as const)(
+    'keeps one private 202 timeout outcome after $s',
+    async (lateOutcome) => {
+        let fireDeadline: (() => void) | undefined;
+        const clearedDeadlineHandles: unknown[] = [];
+        const deadlineHandle = { id: 'runtime-deadline' };
+        const scheduler = {
+          setTimeout(callback: () => void, delayMs: number): unknown {
+            expect(delayMs).toBe(2_000);
+            fireDeadline = callback;
+            return deadlineHandle;
+          },
+          clearTimeout(handle: unknown): void {
+            clearedDeadlineHandles.push(handle);
+          },
+        };
+        type RuntimeResult = Result<
+          IntexAgentRuntimeSettingsV1,
+          IntexAgentRuntimeSettingsClientError
+        >;
+        let resolveLate: ((value: RuntimeResult) => void) | undefined;
+        let rejectLate: ((reason: unknown) => void) | undefined;
+        let markLookupStarted: (() => void) | undefined;
+        const lookupStarted = new Promise<void>((resolve) => {
+          markLookupStarted = resolve;
+        });
+        const client: Pick<
+          IntexAgentRuntimeSettingsClient,
+          'resolveIntexAgentRuntimeSettings'
+        > = {
+          resolveIntexAgentRuntimeSettings: vi.fn(
+            async () =>
+              await new Promise<RuntimeResult>((resolve, reject) => {
+                resolveLate = resolve;
+                rejectLate = reject;
+                markLookupStarted?.();
+              })
+          ),
+        };
+        const published: string[] = [];
+        const run = vi.fn<IntexAgentRunner['run']>();
+        const logger = { warn: vi.fn() };
+        incomingMessageHandler.implementation = async (
+          input
+        ): ReturnType<IncomingMessageHandler['handle']> =>
+          await handleIncomingMessage(input, {
+            sessionRepository,
+            runner: {
+              run,
+              async executeConfirmed(): Promise<never> {
+                throw new Error('not used');
+              },
+            },
+            replyPublisher: {
+              async publishReply(reply): Promise<void> {
+                published.push(reply.message);
+              },
+            },
+            clock: { now: () => '2026-06-24T10:00:00.000Z' },
+            resolveRuntimeSettings: async (userId) =>
+              await resolveRuntimeSettingsWithDeadline(userId, client, scheduler),
+            logger,
+            ids: {
+              sessionId: () => `session-timeout-${lateOutcome}`,
+              eventId: () => `event-timeout-${String(sessionRepository.events.length + 1)}`,
+              confirmationId: () => 'confirmation-unused',
+            },
+            sessionTimeoutMs: 30 * 60 * 1_000,
+          });
+        const payload = {
+          type: 'intex.message.ingest',
+          userId: 'user-1',
+          messageId: `wamid-timeout-${lateOutcome}`,
+          text: 'Create a note',
+          sourceType: 'whatsapp_text',
+          timestamp: '2026-06-24T10:00:00.000Z',
+        };
+
+        const responsePromise = app.inject({
+          method: 'POST',
+          url: '/internal/intex-agent/messages',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload,
+        });
+        await lookupStarted;
+        if (fireDeadline === undefined) throw new Error('runtime deadline was not scheduled');
+        fireDeadline();
+        const response = await responsePromise;
+
+        expect(response.statusCode).toBe(202);
+        expect(JSON.parse(response.body)).toMatchObject({
+          success: true,
+          data: { accepted: true, sessionId: `session-timeout-${lateOutcome}` },
+        });
+        expect(run).not.toHaveBeenCalled();
+        expect(client.resolveIntexAgentRuntimeSettings).toHaveBeenCalledTimes(1);
+        expect(logger.warn.mock.calls).toEqual([
+          [
+            { reason: 'runtime_settings_resolution_failed' },
+            'Intex Agent runtime settings resolution failed',
+          ],
+        ]);
+        expect(published).toEqual([
+          'I could not process that request right now. Please restate what you want me to do.',
+        ]);
+        const timeoutEvents = sessionRepository.events.filter(
+          (candidate) => candidate.sessionId === `session-timeout-${lateOutcome}`
+        );
+        expect(timeoutEvents.map((candidate) => candidate.type)).toEqual([
+          'session_started',
+          'user_message',
+          'agent_fallback',
+          'clarification_requested',
+          'assistant_message',
+        ]);
+        expect(timeoutEvents.every((candidate) => candidate.userId === 'user-1')).toBe(true);
+        expect(
+          sessionRepository.sessions.find(
+            (candidate) => candidate.id === `session-timeout-${lateOutcome}`
+          )
+        ).toMatchObject({ status: 'waiting_for_user' });
+        expect(sentryCaptures).toEqual([]);
+        expect(clearedDeadlineHandles).toEqual([deadlineHandle]);
+
+        const stableOutcome = JSON.stringify({
+          timeoutEvents,
+          published,
+          warnings: logger.warn.mock.calls,
+          sessions: sessionRepository.sessions,
+          sentryCaptures,
+        });
+        if (lateOutcome === 'late_resolve') {
+          resolveLate?.(
+            ok({
+              status: 'available',
+              effectiveModel: IntexAgentModels.Gemini3FlashPreview,
+              explicitModel: IntexAgentModels.Gemini3FlashPreview,
+              source: 'explicit',
+              revision: 77,
+              timeZone: 'Raw/late-resolve-timezone-sentinel',
+            })
+          );
+        } else {
+          rejectLate?.(
+            new Error(
+              'raw-resolver-user-sentinel https://private.invalid/raw provider-sentinel model-sentinel late-reject-cause'
+            )
+          );
+        }
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(
+          JSON.stringify({
+            timeoutEvents: sessionRepository.events.filter(
+              (candidate) => candidate.sessionId === `session-timeout-${lateOutcome}`
+            ),
+            published,
+            warnings: logger.warn.mock.calls,
+            sessions: sessionRepository.sessions,
+            sentryCaptures,
+          })
+        ).toBe(stableOutcome);
+        expect(stableOutcome).not.toMatch(
+          /raw-resolver-user-sentinel|private\.invalid|provider-sentinel|model-sentinel|late-reject-cause|late-resolve-timezone-sentinel/iu
+        );
+    }
+  );
 
   it('accepts Pub/Sub push payloads for inbound WhatsApp Assistant messages', async () => {
     const eventPayload = {

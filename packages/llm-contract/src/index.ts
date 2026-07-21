@@ -28,7 +28,12 @@ export type {
   LLMError,
   LLMClient,
   OwnerType,
+  MatrixCorpusLlmStageV1,
+  MatrixCorpusLlmCallContextV1,
+  MatrixCorpusProviderCallUsageV1,
 } from './types.js';
+
+export { isMatrixCorpusLlmCallContextV1 } from './types.js';
 
 export {
   ALL_LLM_MODELS,
@@ -52,6 +57,10 @@ export {
   CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES,
   isConversationAssistantModel,
   getConversationAssistantModelDisplayName,
+  IntexAgentModels,
+  DEFAULT_INTEX_AGENT_MODEL,
+  INTEX_AGENT_MODEL_OPTIONS,
+  isIntexAgentModel,
   OpenRouterToolCallingModels,
 } from './supportedModels.js';
 
@@ -67,6 +76,8 @@ export type {
   DefaultOpenRouterModel,
   ConversationAssistantModel,
   ConversationAssistantModelOption,
+  IntexAgentModel,
+  OpenRouterDeepSeekV4Flash,
   OpenRouterGemini3FlashPreview,
   OpenRouterMiniMaxM3,
   OpenRouterClaudeSonnet5,

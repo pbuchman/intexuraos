@@ -58,6 +58,7 @@ describe('endpoint client identity and request materialization', () => {
     expect(request).toEqual({
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       userId: identity.userId,
       runId: identity.runId,
       scenarioId: scenario.id,
@@ -540,6 +541,12 @@ describe('endpoint client correlation', () => {
       },
     ],
     [
+      'agent model',
+      (data: Record<string, unknown>): void => {
+        data['agentModel'] = 'or:google/gemini-3-flash-preview';
+      },
+    ],
+    [
       'run id',
       (data: Record<string, unknown>): void => {
         data['runId'] = 'private-run-sentinel';
@@ -838,6 +845,7 @@ function validResponse(
   return {
     contractVersion: '2026-07-01',
     mode: 'live_llm_mock_tools',
+    agentModel: 'or:deepseek/deepseek-v4-flash',
     runId: identity.runId,
     scenarioId: scenario.id,
     userId: identity.userId,

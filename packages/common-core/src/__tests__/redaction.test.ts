@@ -143,6 +143,11 @@ describe('Redaction utilities', () => {
       expect(SENSITIVE_FIELDS).toContain('apiKey');
       expect(SENSITIVE_FIELDS).toContain('client_secret');
       expect(SENSITIVE_FIELDS).toContain('clientSecret');
+      expect(SENSITIVE_FIELDS).toContain('x-matrix-corpus-user-id');
+      expect(SENSITIVE_FIELDS).toContain('x-matrix-corpus-session-id');
+      expect(SENSITIVE_FIELDS).toContain('x-matrix-corpus-lease-fence');
+      expect(SENSITIVE_FIELDS).toContain('x-matrix-corpus-event-revision');
+      expect(SENSITIVE_FIELDS).toContain('x-matrix-corpus-runtime-audience');
     });
 
     it('is a readonly array', () => {

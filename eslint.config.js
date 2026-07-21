@@ -848,6 +848,7 @@ export default tseslint.config(
       '**/*.test.ts',
       '**/*.test.tsx',
       '**/*.spec.ts',
+      'integration-tests/**/*.ts',
     ],
     languageOptions: {
       parserOptions: {

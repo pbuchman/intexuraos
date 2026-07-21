@@ -1,4 +1,9 @@
-import { getErrorMessage } from '@intexuraos/common-core';
+import { getErrorMessage, type Result } from '@intexuraos/common-core';
+import type {
+  IntexAgentRuntimeSettingsClientError,
+  IntexAgentRuntimeSettingsV1,
+} from '@intexuraos/internal-clients';
+import { isIntexAgentModel, type IntexAgentModel } from '@intexuraos/llm-contract';
 import type { WhatsAppInteractiveButton } from '@intexuraos/whatsapp-pubsub-client';
 import type { IntexIncomingMessage, IncomingMessageHandlerResult } from '../ports/incomingMessageHandler.js';
 import type { SessionRepository } from '../ports/sessionRepository.js';
@@ -19,6 +24,7 @@ import {
   type IntexAgentLanguageMessage,
   type IntexAgentReplyLanguage,
 } from '../agent/capabilities.js';
+import { isWhatsAppImageWithSourceUrl } from '../agent/intexAgentRunner.js';
 
 const CONFIRMATION_BUTTON_LABELS: Record<
   IntexAgentReplyLanguage,
@@ -37,7 +43,30 @@ export type IntexAgentFallbackReason =
   | 'runner_declared_unsupported'
   | 'runner_output_malformed'
   | 'tool_result_mismatch'
-  | 'llm_call_failed';
+  | 'llm_call_failed'
+  | 'runtime_resolution_failed';
+
+export type IntexAgentRuntimeSnapshot = Readonly<
+  | {
+      status: 'available';
+      effectiveModel: IntexAgentModel;
+      timeZone: string;
+      source: 'explicit' | 'default_absent';
+      explicitModel: IntexAgentModel | null;
+      revision: number;
+    }
+  | {
+      status: 'unavailable';
+      effectiveModel: IntexAgentModel;
+      timeZone: string;
+      source: 'platform_default';
+    }
+>;
+
+export interface IntexAgentToolSelectionMetadata {
+  turnIndex: number;
+  ordinal: number;
+}
 
 export type IntexAgentRunnerResult =
   | {
@@ -46,6 +75,7 @@ export type IntexAgentRunnerResult =
       summary?: string;
       toolName?: IntexAgentToolName;
       toolResult?: Record<string, unknown>;
+      toolSelection?: IntexAgentToolSelectionMetadata;
       ctaUrl?: {
         displayText: string;
         url: string;
@@ -57,6 +87,7 @@ export type IntexAgentRunnerResult =
       toolName: IntexAgentToolName;
       toolArgs: Record<string, unknown>;
       summary?: string;
+      toolSelection?: IntexAgentToolSelectionMetadata;
     }
   | {
       outcome: 'tool_failed';
@@ -66,6 +97,15 @@ export type IntexAgentRunnerResult =
       errorCategory?: string;
       isRetryable?: boolean;
       attemptedAction?: string;
+      toolSelection?: IntexAgentToolSelectionMetadata;
+    }
+  | {
+      outcome: 'tool_selection_rejected';
+      toolName: IntexAgentToolName;
+      category: 'behavioral_failure' | 'safety_stop';
+      code: string;
+      toolSelection: IntexAgentToolSelectionMetadata;
+      reply: string;
     }
   | {
       outcome: 'needs_clarification';
@@ -114,6 +154,7 @@ export interface IntexAgentRunner {
     sourceUrl?: string;
     currentDateTime: string;
     timeZone: string;
+    runtimeSettings?: IntexAgentRuntimeSnapshot;
     messageId?: string;
   }): Promise<IntexAgentRunnerResult>;
 }
@@ -132,6 +173,16 @@ export interface WhatsAppReplyPublisher {
   }): Promise<void>;
 }
 
+export interface MatrixCorpusWhatsAppReplyPublisher {
+  publishReplyWithReceipt(input: {
+    userId: string;
+    message: string;
+    replyToMessageId: string;
+    idempotencyKey: string;
+    buttons?: WhatsAppInteractiveButton[];
+  }): Promise<Readonly<{ publicationReceiptId: string }>>;
+}
+
 export interface Clock {
   now(): string;
 }
@@ -147,7 +198,10 @@ export interface HandleIncomingMessageDeps {
   runner: IntexAgentRunner;
   replyPublisher: WhatsAppReplyPublisher;
   clock: Clock;
-  resolveTimeZone(userId: string): Promise<string>;
+  resolveRuntimeSettings(
+    userId: string
+  ): Promise<Result<IntexAgentRuntimeSettingsV1, IntexAgentRuntimeSettingsClientError>>;
+  logger: { warn(value: Record<string, unknown>, message?: string): void };
   ids: IdGenerator;
   sessionTimeoutMs: number;
 }
@@ -258,7 +312,13 @@ export async function handleIncomingMessage(
     return { sessionId: session.id };
   }
 
-  const timeZone = await deps.resolveTimeZone(input.userId);
+  const runtimeSettings = isWhatsAppImageWithSourceUrl(input)
+    ? undefined
+    : await resolveRuntimeSettings(input.userId, deps);
+  if (runtimeSettings === null) {
+    await applyRuntimeResolutionFailure(input, deps, session, events);
+    return { sessionId: session.id };
+  }
   const runnerResult = await deps.runner.run({
     session,
     events: excludeCurrentUserMessage(events, input.messageId),
@@ -267,12 +327,84 @@ export async function handleIncomingMessage(
     sourceType: input.sourceType,
     ...(input.sourceUrl !== undefined ? { sourceUrl: input.sourceUrl } : {}),
     currentDateTime: now,
-    timeZone,
+    timeZone: runtimeSettings?.timeZone ?? 'UTC',
+    ...(runtimeSettings !== undefined ? { runtimeSettings } : {}),
     messageId: input.messageId,
   });
   await applyRunnerResult(input, deps, session, runnerResult, events);
 
   return { sessionId: session.id };
+}
+
+async function resolveRuntimeSettings(
+  userId: string,
+  deps: HandleIncomingMessageDeps
+): Promise<IntexAgentRuntimeSnapshot | null> {
+  try {
+    const result = await deps.resolveRuntimeSettings(userId);
+    if (!result.ok) {
+      deps.logger.warn(
+        { reason: 'runtime_settings_resolution_failed' },
+        'Intex Agent runtime settings resolution failed'
+      );
+      return null;
+    }
+    return freezeRuntimeSnapshot(result.value);
+  } catch {
+    deps.logger.warn(
+      { reason: 'runtime_settings_resolution_failed' },
+      'Intex Agent runtime settings resolution failed'
+    );
+    return null;
+  }
+}
+
+function freezeRuntimeSnapshot(value: IntexAgentRuntimeSettingsV1): IntexAgentRuntimeSnapshot {
+  if (value.status === 'available') {
+    return Object.freeze({
+      status: value.status,
+      effectiveModel: value.effectiveModel,
+      timeZone: value.timeZone,
+      source: value.source,
+      explicitModel: value.explicitModel,
+      revision: value.revision,
+    });
+  }
+  if (!isIntexAgentModel(value.effectiveModel)) {
+    throw new Error('Validated runtime model is not canonical');
+  }
+  return Object.freeze({
+    status: value.status,
+    effectiveModel: value.effectiveModel,
+    timeZone: value.timeZone,
+    source: value.source,
+  });
+}
+
+async function applyRuntimeResolutionFailure(
+  input: IntexIncomingMessage,
+  deps: HandleIncomingMessageDeps,
+  session: IntexAgentSession,
+  events: readonly IntexAgentSessionEvent[]
+): Promise<void> {
+  const language = selectReplyLanguage(input, events);
+  const reply = RUNTIME_RESOLUTION_FAILURE_REPLIES[language];
+  await appendEvent(deps, session, 'agent_fallback', {
+    reason: 'runtime_resolution_failed',
+    sourceOutcome: 'runtime_resolution',
+  });
+  await appendEvent(deps, session, 'clarification_requested', {
+    message: reply,
+    blockerReason: 'not_enough_context',
+    suggestedNextStep: FALLBACK_CLARIFICATION_NEXT_STEPS[language],
+    fallbackReason: 'runtime_resolution_failed',
+  });
+  const assistantAt = await appendAssistantMessage(session, deps, reply);
+  await deps.sessionRepository.updateSession(session.id, {
+    status: 'waiting_for_user',
+    lastAssistantMessageAt: assistantAt,
+  });
+  await publishReply(input, deps, session.id, reply);
 }
 
 async function handleConfirmationButton(
@@ -461,6 +593,9 @@ async function applyRunnerResult(
       toolArgs: runnerResult.toolArgs,
       message: reply,
       sourceMessageId: input.messageId,
+      ...(runnerResult.toolSelection !== undefined
+        ? { toolSelection: runnerResult.toolSelection }
+        : {}),
       ...(runnerResult.summary !== undefined ? { summary: runnerResult.summary } : {}),
     });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
@@ -493,6 +628,9 @@ async function applyRunnerResult(
       ...(runnerResult.attemptedAction !== undefined
         ? { attemptedAction: runnerResult.attemptedAction }
         : {}),
+      ...(runnerResult.toolSelection !== undefined
+        ? { toolSelection: runnerResult.toolSelection }
+        : {}),
     });
     const assistantAt = await appendAssistantMessage(session, deps, reply);
     await deps.sessionRepository.updateSession(session.id, {
@@ -521,6 +659,10 @@ async function applyRunnerResult(
     return;
   }
 
+  if (runnerResult.outcome === 'tool_selection_rejected') {
+    throw new Error('Matrix corpus tool-selection results require the isolated test handler');
+  }
+
   if (runnerResult.toolName === undefined) {
     await applyRunnerResult(
       input,
@@ -540,6 +682,9 @@ async function applyRunnerResult(
   await appendEvent(deps, session, 'tool_call_completed', {
     toolName: runnerResult.toolName,
     ...(runnerResult.toolResult !== undefined ? { result: runnerResult.toolResult } : {}),
+    ...(runnerResult.toolSelection !== undefined
+      ? { toolSelection: runnerResult.toolSelection }
+      : {}),
   });
   const assistantAt = await appendAssistantMessage(session, deps, reply);
   await deps.sessionRepository.updateSession(session.id, {
@@ -711,6 +856,11 @@ function fallbackClarificationResult(
 const FALLBACK_CLARIFICATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
   en: 'What would you like me to do with this?',
   pl: 'Co mam z tym zrobić?',
+};
+
+const RUNTIME_RESOLUTION_FAILURE_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'I could not process that request right now. Please restate what you want me to do.',
+  pl: 'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.',
 };
 
 const FALLBACK_CLARIFICATION_NEXT_STEPS: Record<IntexAgentReplyLanguage, string> = {

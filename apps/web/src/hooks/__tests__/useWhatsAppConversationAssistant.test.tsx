@@ -326,6 +326,7 @@ describe('useWhatsAppConversationAssistant', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-21T10:00:00.000Z'));
     mocks.user = { sub: 'user-1' };
     window.sessionStorage.clear();
     mocks.getAccessToken.mockResolvedValue('tok');

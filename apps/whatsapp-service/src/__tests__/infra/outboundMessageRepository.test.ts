@@ -2,20 +2,58 @@
  * Tests for outbound message Firestore repository.
  * Uses FakeFirestore for in-memory testing.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import {
   createOutboundMessage,
   createOutboundMessageRepository,
+  OUTBOUND_DELIVERY_RECEIPTS_COLLECTION,
 } from '../../infra/firestore/outboundMessageRepository.js';
 import type { OutboundMessage } from '../../domain/whatsapp/index.js';
+
+interface IdempotentDeliveryRepository {
+  reserveIdempotentDelivery(
+    input: Readonly<{
+      idempotencyKey: string;
+      payloadDigest: string;
+      now: string;
+      expiresAt: number;
+    }>
+  ): Promise<
+    | Readonly<{
+        ok: true;
+        disposition: 'acquired' | 'duplicate_in_flight' | 'duplicate_sent' | 'duplicate_ambiguous';
+      }>
+    | Readonly<{ ok: false; code: string }>
+  >;
+  completeIdempotentDelivery(
+    input: Readonly<{
+      idempotencyKey: string;
+      payloadDigest: string;
+      outboundMessage: OutboundMessage;
+    }>
+  ): Promise<
+    | Readonly<{ ok: true; disposition: 'applied' | 'already_applied' }>
+    | Readonly<{ ok: false; code: string }>
+  >;
+  markIdempotentDeliveryAmbiguous(
+    input: Readonly<{
+      idempotencyKey: string;
+      payloadDigest: string;
+      now: string;
+    }>
+  ): Promise<
+    | Readonly<{ ok: true; disposition: 'applied' | 'already_applied' }>
+    | Readonly<{ ok: false; code: string }>
+  >;
+}
 
 /**
  * Helper to create test outbound message data.
  */
-function createTestOutboundMessage(
-  overrides: Partial<OutboundMessage> = {}
-): OutboundMessage {
+function createTestOutboundMessage(overrides: Partial<OutboundMessage> = {}): OutboundMessage {
   const now = new Date();
   return {
     wamid: 'wamid.test123',
@@ -165,6 +203,338 @@ describe('outboundMessageRepository', () => {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('Failed to delete outbound message');
       }
+    });
+  });
+
+  describe('Matrix corpus idempotent delivery', () => {
+    const idempotencyKey = 'imc_reply_publish_1';
+    const payloadDigest = 'a'.repeat(64);
+    const now = '2026-07-20T10:00:00.000Z';
+
+    function deliveryRepository(): IdempotentDeliveryRepository {
+      return repository as unknown as IdempotentDeliveryRepository;
+    }
+
+    function keyDigest(): string {
+      return createHash('sha256').update(idempotencyKey, 'utf8').digest('hex');
+    }
+
+    function validReceipt(
+      overrides: Readonly<Record<string, unknown>> = {}
+    ): Readonly<Record<string, unknown>> {
+      return {
+        version: 1,
+        idempotencyKeyDigest: keyDigest(),
+        payloadDigest,
+        state: 'sending',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: 1_800_000_000,
+        ...overrides,
+      };
+    }
+
+    async function seedReceipt(value: unknown): Promise<void> {
+      fakeFirestore.seedCollection(OUTBOUND_DELIVERY_RECEIPTS_COLLECTION, [
+        { id: keyDigest(), data: value as never },
+      ]);
+    }
+
+    it('atomically acquires one sender and keeps the raw key out of Firestore', async () => {
+      const delivery = deliveryRepository();
+      expect(delivery.reserveIdempotentDelivery).toEqual(expect.any(Function));
+      if (typeof delivery.reserveIdempotentDelivery !== 'function') return;
+
+      const results = await Promise.all([
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        }),
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        }),
+      ]);
+
+      expect(results).toContainEqual({ ok: true, disposition: 'acquired' });
+      expect(results).toContainEqual({ ok: true, disposition: 'duplicate_in_flight' });
+      const keyDigest = createHash('sha256').update(idempotencyKey, 'utf8').digest('hex');
+      const snapshot = await fakeFirestore
+        .collection('whatsapp_outbound_delivery_receipts')
+        .doc(keyDigest)
+        .get();
+      expect(snapshot.data()).toEqual({
+        version: 1,
+        idempotencyKeyDigest: keyDigest,
+        payloadDigest,
+        state: 'sending',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: 1_800_000_000,
+      });
+      expect(JSON.stringify(snapshot.data())).not.toContain(idempotencyKey);
+    });
+
+    it('rejects a changed payload replay for the same key', async () => {
+      const delivery = deliveryRepository();
+      if (typeof delivery.reserveIdempotentDelivery !== 'function') return;
+      await delivery.reserveIdempotentDelivery({
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+
+      await expect(
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest: 'b'.repeat(64),
+          now,
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+    });
+
+    it('atomically marks delivery sent and saves reply-correlation metadata', async () => {
+      const delivery = deliveryRepository();
+      if (
+        typeof delivery.reserveIdempotentDelivery !== 'function' ||
+        typeof delivery.completeIdempotentDelivery !== 'function'
+      )
+        return;
+      await delivery.reserveIdempotentDelivery({
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      const outboundMessage = createTestOutboundMessage({
+        wamid: 'wamid.matrix-1',
+        correlationId: 'imc_reply_digest',
+        messageText: 'Synthetic reply',
+      });
+
+      await expect(
+        delivery.completeIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          outboundMessage,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+      await expect(
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'duplicate_sent' });
+      await expect(repository.findByWamid('wamid.matrix-1')).resolves.toEqual({
+        ok: true,
+        value: outboundMessage,
+      });
+    });
+
+    it('closes an uncertain external send without permitting a blind resend', async () => {
+      const delivery = deliveryRepository();
+      if (
+        typeof delivery.reserveIdempotentDelivery !== 'function' ||
+        typeof delivery.markIdempotentDeliveryAmbiguous !== 'function'
+      )
+        return;
+      await delivery.reserveIdempotentDelivery({
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+      await expect(
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'duplicate_ambiguous' });
+    });
+
+    it('terminalizes a stale sending receipt as ambiguous without reacquiring the sender', async () => {
+      const delivery = deliveryRepository();
+      await delivery.reserveIdempotentDelivery({
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+
+      await expect(
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:16:00.000Z',
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'duplicate_ambiguous' });
+    });
+
+    it('fails closed for invalid reservations, corrupt receipts, and persistence errors', async () => {
+      const delivery = deliveryRepository();
+      await expect(
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey: '',
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
+
+      const corruptReceipts: unknown[] = [
+        null,
+        [],
+        'invalid',
+        {},
+        validReceipt({ extra: true }),
+        validReceipt({ version: 2 }),
+        validReceipt({ idempotencyKeyDigest: 1 }),
+        validReceipt({ idempotencyKeyDigest: 'invalid' }),
+        validReceipt({ payloadDigest: 1 }),
+        validReceipt({ payloadDigest: 'invalid' }),
+        validReceipt({ state: 'unknown' }),
+        validReceipt({ createdAt: 1 }),
+        validReceipt({ createdAt: 'invalid' }),
+        validReceipt({ updatedAt: 1 }),
+        validReceipt({ updatedAt: 'invalid' }),
+        validReceipt({ expiresAt: 1.5 }),
+        validReceipt({ expiresAt: 0 }),
+        validReceipt({ state: 'sent', outboundMessageDigest: 1 }),
+        validReceipt({ state: 'sent', outboundMessageDigest: 'invalid' }),
+      ];
+      for (const corruptReceipt of corruptReceipts) {
+        await seedReceipt(corruptReceipt);
+        await expect(
+          delivery.reserveIdempotentDelivery({
+            idempotencyKey,
+            payloadDigest,
+            now,
+            expiresAt: 1_800_000_000,
+          })
+        ).resolves.toEqual({ ok: false, code: 'CORRUPT_RECEIPT' });
+      }
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('transaction failed')
+      );
+      await expect(
+        delivery.reserveIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: false, code: 'PERSISTENCE_ERROR' });
+    });
+
+    it('fails closed for every completion replay state', async () => {
+      const delivery = deliveryRepository();
+      const outboundMessage = createTestOutboundMessage({ wamid: 'wamid.matrix-complete' });
+      await expect(
+        delivery.completeIdempotentDelivery({
+          idempotencyKey: '',
+          payloadDigest,
+          outboundMessage,
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
+      await expect(
+        delivery.completeIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          outboundMessage,
+        })
+      ).resolves.toEqual({ ok: false, code: 'NOT_FOUND' });
+
+      await seedReceipt({ corrupt: true });
+      await expect(
+        delivery.completeIdempotentDelivery({ idempotencyKey, payloadDigest, outboundMessage })
+      ).resolves.toEqual({ ok: false, code: 'CORRUPT_RECEIPT' });
+
+      await seedReceipt(validReceipt({ payloadDigest: 'b'.repeat(64) }));
+      await expect(
+        delivery.completeIdempotentDelivery({ idempotencyKey, payloadDigest, outboundMessage })
+      ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+
+      await seedReceipt(validReceipt({ state: 'ambiguous' }));
+      await expect(
+        delivery.completeIdempotentDelivery({ idempotencyKey, payloadDigest, outboundMessage })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_STATE' });
+
+      await seedReceipt(validReceipt());
+      await expect(
+        delivery.completeIdempotentDelivery({ idempotencyKey, payloadDigest, outboundMessage })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+      await expect(
+        delivery.completeIdempotentDelivery({ idempotencyKey, payloadDigest, outboundMessage })
+      ).resolves.toEqual({ ok: true, disposition: 'already_applied' });
+      await expect(
+        delivery.completeIdempotentDelivery({
+          idempotencyKey,
+          payloadDigest,
+          outboundMessage: { ...outboundMessage, messageText: 'changed' },
+        })
+      ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('transaction failed')
+      );
+      await expect(
+        delivery.completeIdempotentDelivery({ idempotencyKey, payloadDigest, outboundMessage })
+      ).resolves.toEqual({ ok: false, code: 'PERSISTENCE_ERROR' });
+    });
+
+    it('fails closed for every ambiguous-delivery replay state', async () => {
+      const delivery = deliveryRepository();
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey: '', payloadDigest, now })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: false, code: 'NOT_FOUND' });
+
+      await seedReceipt({ corrupt: true });
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: false, code: 'CORRUPT_RECEIPT' });
+
+      await seedReceipt(validReceipt({ payloadDigest: 'b'.repeat(64) }));
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+
+      await seedReceipt(
+        validReceipt({ state: 'sent', outboundMessageDigest: 'c'.repeat(64) })
+      );
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_STATE' });
+
+      await seedReceipt(validReceipt({ state: 'ambiguous' }));
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: true, disposition: 'already_applied' });
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('transaction failed')
+      );
+      await expect(
+        delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
+      ).resolves.toEqual({ ok: false, code: 'PERSISTENCE_ERROR' });
     });
   });
 });

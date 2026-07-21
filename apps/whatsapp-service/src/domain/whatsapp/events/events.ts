@@ -1,6 +1,7 @@
 /**
  * Event definitions for Pub/Sub messaging.
  */
+import type { MatrixCorpusSignedIngestV1 } from '@intexuraos/http-contracts';
 
 /**
  * Event published when media needs cleanup (message deleted).
@@ -238,6 +239,9 @@ export interface SendMessageEvent {
    */
   important?: boolean;
 
+  /** Optional consumer-side key for durable delivery deduplication. */
+  idempotencyKey?: string;
+
   /**
    * Correlation ID for tracing across services.
    */
@@ -341,6 +345,9 @@ export interface IntexMessageIngestEvent {
   timestamp: string;
 }
 
+/** A signed Home Dev Matrix-corpus ingest carried only inside the existing Pub/Sub seam. */
+export type MatrixCorpusSignedIngestEvent = MatrixCorpusSignedIngestV1;
+
 /**
  * Event published when a webhook needs async processing.
  * Decouples webhook response from processing to avoid CPU throttling.
@@ -394,6 +401,7 @@ export type WhatsAppEvent =
   | MediaTranscriptionRequestedEvent
   | TranscriptionCompletedEvent
   | IntexMessageIngestEvent
+  | MatrixCorpusSignedIngestEvent
   | SendMessageEvent
   | WebhookProcessEvent
   | ExtractLinkPreviewsEvent

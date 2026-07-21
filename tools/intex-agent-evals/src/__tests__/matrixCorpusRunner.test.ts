@@ -1,0 +1,778 @@
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it, vi } from 'vitest';
+import type { ReplyEvaluationInput } from '../deterministicEvaluator.js';
+import { loadCanonicalMatrixCorpus } from '../matrixCorpus/catalog.js';
+import {
+  MATRIX_CORPUS_EXTRA_REPLY_SEMANTIC_CRITERIA,
+  runMatrixCorpus,
+  type MatrixCorpusRunPorts,
+  type MatrixCorpusTurnExecutionResult,
+  type MatrixCorpusTurnObservation,
+} from '../matrixCorpus/runMatrixCorpus.js';
+import { digestMatrixReply } from '../matrixCorpus/correlation.js';
+
+const scenariosDirectory = fileURLToPath(new URL('../../scenarios/', import.meta.url));
+
+describe('sequential Matrix corpus state machine', () => {
+  it('runs all 20 scenarios and 59 turns with concurrency one before terminal release', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    let activeTurns = 0;
+    let maxActiveTurns = 0;
+    const ports = passingPorts(trace);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      activeTurns += 1;
+      maxActiveTurns = Math.max(maxActiveTurns, activeTurns);
+      trace.push(`turn:${input.scenario.id}:${String(input.turnIndex)}`);
+      activeTurns -= 1;
+      return { ok: true, observation: observation(input.scenario, input.turnIndex) };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_1', catalog }, ports);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.scenarios).toHaveLength(20);
+    expect(result.scenarios.every(({ status }) => status === 'passed')).toBe(true);
+    expect(result.totals.completedTurns).toBe(59);
+    expect(maxActiveTurns).toBe(1);
+    expect(ports.projectScenario).toHaveBeenCalledTimes(79);
+    expect(
+      vi
+        .mocked(ports.projectScenario)
+        .mock.calls.map(([call]) => call)
+        .filter(({ scenarioId }) => scenarioId === 'intex-eval-001')
+        .map(({ lifecycle, verdict }) => ({ lifecycle, verdict }))
+    ).toEqual([
+      { lifecycle: 'running', verdict: 'pending' },
+      { lifecycle: 'running', verdict: 'pending' },
+      { lifecycle: 'completed', verdict: 'passed' },
+    ]);
+    expect(trace.filter((item) => item.startsWith('renew:'))).toEqual(
+      catalog.scenarios.map(({ scenario }) => `renew:${scenario.id}`)
+    );
+    expect(trace.indexOf('retention')).toBeLessThan(trace.indexOf('activate'));
+    expect(trace.slice(-7)).toEqual([
+      'quiesce',
+      'drain',
+      'stage',
+      'finalize',
+      'project-finalizing',
+      'release',
+      'terminal-ack',
+    ]);
+    expect(result.terminalAcknowledged).toBe(true);
+    expect(result.cleanupCompleted).toBe(true);
+  });
+
+  it('continues behavioral failures through scenario 20 and returns exit 1', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    const ports = passingPorts(trace);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => ({
+      ok: true,
+      observation: {
+        ...observation(input.scenario, input.turnIndex),
+        deterministicPassed: input.scenario.id !== 'intex-eval-002',
+      },
+    }));
+
+    const result = await runMatrixCorpus({ runId: 'run_1', catalog }, ports);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.scenarios[1]?.status).toBe('failed');
+    expect(result.scenarios[19]?.status).toBe('passed');
+    expect(result.totals.completedTurns).toBe(59);
+  });
+
+  it('stops immediately on safety failure, marks later scenarios not run, and still terminalizes', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    const ports = passingPorts(trace);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) =>
+      input.scenario.id === 'intex-eval-003'
+        ? { ok: false, kind: 'safety_failure', code: 'wrong_puppet' }
+        : { ok: true, observation: observation(input.scenario, input.turnIndex) }
+    );
+
+    const result = await runMatrixCorpus({ runId: 'run_1', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('wrong_puppet');
+    expect(result.scenarios[2]?.status).toBe('stopped');
+    expect(result.scenarios[3]?.status).toBe('not_run');
+    expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it('refetches once after a projection CAS conflict and never releases before staging/finalization', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    const ports = passingPorts(trace);
+    vi.mocked(ports.projectScenario)
+      .mockResolvedValueOnce({ ok: false, kind: 'revision_conflict', code: 'revision_conflict' })
+      .mockImplementation(async (input) => ({ ok: true, revision: input.expectedRevision + 1 }));
+
+    const result = await runMatrixCorpus({ runId: 'run_1', catalog }, ports);
+
+    expect(result.exitCode).toBe(0);
+    expect(ports.getProjectionRevision).toHaveBeenCalledTimes(1);
+    expect(trace.indexOf('stage')).toBeLessThan(trace.indexOf('finalize'));
+    expect(trace.indexOf('finalize')).toBeLessThan(trace.indexOf('release'));
+  });
+
+  it('fails closed when first-turn creation or strict evidence reconciliation is missing', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const firstPorts = passingPorts([]);
+    vi.mocked(firstPorts.executeTurn).mockImplementation(async (input) => ({
+      ok: true,
+      observation: {
+        ...observation(input.scenario, input.turnIndex),
+        sessionEvidence: {
+          kind: 'continued',
+          scenarioLabel: input.scenario.title,
+        },
+      },
+    }));
+
+    const reused = await runMatrixCorpus({ runId: 'run_reused', catalog }, firstPorts);
+    expect(reused.exitCode).toBe(2);
+    expect(reused.failureCodes).toContain('turn_evidence_mismatch');
+
+    const mockPorts = passingPorts([]);
+    vi.mocked(mockPorts.executeTurn).mockImplementation(async (input) => ({
+      ok: true,
+      observation: {
+        ...observation(input.scenario, input.turnIndex),
+        toolEvidence: {
+          ...observation(input.scenario, input.turnIndex).toolEvidence,
+          strictMockBoundary: false,
+        },
+      },
+    }));
+
+    const unsafeMock = await runMatrixCorpus({ runId: 'run_mock', catalog }, mockPorts);
+    expect(unsafeMock.exitCode).toBe(2);
+    expect(unsafeMock.failureCodes).toContain('turn_evidence_mismatch');
+  });
+
+  it('rejects reply evidence from another turn before invoking MiniMax', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          replyEvaluations: valid.replyEvaluations.map((reply) => ({
+            ...reply,
+            scenarioId: 'intex-eval-020',
+          })),
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_cross_turn', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('turn_evidence_mismatch');
+    expect(ports.judgeReply).not.toHaveBeenCalled();
+  });
+
+  it('judges correlated replies even when the execution port reports a behavioral failure', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const result = {
+        ok: false,
+        kind: 'behavioral_failure',
+        code: 'deterministic_failure',
+        observation: observation(input.scenario, input.turnIndex),
+      } as const;
+      return result as unknown as MatrixCorpusTurnExecutionResult;
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_behavioral', catalog }, ports);
+
+    expect(result.exitCode).toBe(1);
+    expect(ports.judgeReply).toHaveBeenCalled();
+    expect(result.totals.completedTurns).toBe(59);
+  });
+
+  it('judges a bounded extra correlated reply and classifies it as behavioral', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      if (input.scenario.id !== 'intex-eval-001' || input.turnIndex !== 0) {
+        return { ok: true, observation: valid };
+      }
+      const extraText = 'Unexpected but fully correlated extra reply';
+      const extraReply = replyInput(
+        input.scenario.id,
+        input.turnIndex,
+        valid.replyEvaluations.length,
+        MATRIX_CORPUS_EXTRA_REPLY_SEMANTIC_CRITERIA
+      );
+      extraReply.assistantText = extraText;
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          observedReplyCount: valid.observedReplyCount + 1,
+          replyEvaluations: [...valid.replyEvaluations, extraReply],
+          transportEvidence: {
+            ...valid.transportEvidence,
+            replyDigests: [
+              ...valid.transportEvidence.replyDigests,
+              digestMatrixReply(extraText, valid.replyEvaluations.length),
+            ],
+          },
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_extra_reply', catalog }, ports);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.scenarios[0]?.status).toBe('failed');
+    expect(ports.judgeReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reply: expect.objectContaining({
+          semanticCriteria: MATRIX_CORPUS_EXTRA_REPLY_SEMANTIC_CRITERIA,
+        }),
+      })
+    );
+    expect(result.scenarios[19]?.status).toBe('passed');
+  });
+
+  it('binds every judge call to MiniMax M3 and retries one terminal CAS conflict', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.projectFinalizing)
+      .mockResolvedValueOnce({
+        ok: false,
+        kind: 'revision_conflict',
+        code: 'revision_conflict',
+      })
+      .mockImplementation(async (input) => ({ ok: true, revision: input.expectedRevision + 1 }));
+
+    const result = await runMatrixCorpus({ runId: 'run_terminal_cas', catalog }, ports);
+
+    expect(result.exitCode).toBe(0);
+    expect(ports.getProjectionRevision).toHaveBeenCalledTimes(1);
+    expect(ports.judgeReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'or:minimax/minimax-m3',
+        reply: expect.objectContaining({ scenarioId: 'intex-eval-001' }),
+      })
+    );
+  });
+
+  it('cleans a failed pre-activation run without quiescing or releasing it', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.activateRun).mockResolvedValue({ ok: false, code: 'activation_failed' });
+
+    const result = await runMatrixCorpus({ runId: 'run_activation', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('activation_failed');
+    expect(ports.cleanup).toHaveBeenCalledOnce();
+    expect(ports.quiesceRun).not.toHaveBeenCalled();
+    expect(ports.releaseRun).not.toHaveBeenCalled();
+  });
+
+  it.each(['register', 'projection'] as const)(
+    'cleans a %s failure before activation',
+    async (phase) => {
+      const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+      const ports = passingPorts([]);
+      if (phase === 'register') {
+        vi.mocked(ports.registerContext).mockResolvedValue({
+          ok: false,
+          code: 'context_registration_failed',
+        });
+      } else {
+        vi.mocked(ports.createProjection).mockResolvedValue({
+          ok: false,
+          code: 'projection_creation_failed',
+        });
+      }
+
+      const result = await runMatrixCorpus({ runId: `run_${phase}`, catalog }, ports);
+
+      expect(result.exitCode).toBe(2);
+      expect(ports.cleanup).toHaveBeenCalledOnce();
+      expect(ports.activateRun).not.toHaveBeenCalled();
+      expect(ports.releaseRun).not.toHaveBeenCalled();
+    }
+  );
+
+  it('stops on lease-renewal failure before executing the scenario', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.renewLease).mockResolvedValue({ ok: false, code: 'lease_renewal_failed' });
+
+    const result = await runMatrixCorpus({ runId: 'run_lease', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('lease_renewal_failed');
+    expect(ports.executeTurn).not.toHaveBeenCalled();
+    expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it.each([
+    ['ambiguous outbound send', 'safety_failure', 'ambiguous_outbound_send'],
+    ['Matrix infrastructure failure', 'infrastructure_failure', 'matrix_sync_failed'],
+  ] as const)('stops immediately on %s', async (_label, kind, code) => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockResolvedValue({ ok: false, kind, code });
+
+    const result = await runMatrixCorpus({ runId: `run_${code}`, catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain(code);
+    expect(ports.executeTurn).toHaveBeenCalledOnce();
+    expect(ports.judgeReply).not.toHaveBeenCalled();
+    expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it('rejects a changed continuation session and invalid judge usage evidence', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const sessionPorts = passingPorts([]);
+    vi.mocked(sessionPorts.executeTurn).mockImplementation(async (input) => ({
+      ok: true,
+      observation: {
+        ...observation(input.scenario, input.turnIndex),
+        sessionId:
+          input.scenario.id === 'intex-eval-001' && input.turnIndex === 1
+            ? 'session_reused_elsewhere'
+            : `session_${input.scenario.id}`,
+      },
+    }));
+
+    const sessionResult = await runMatrixCorpus(
+      { runId: 'run_session_drift', catalog },
+      sessionPorts
+    );
+    expect(sessionResult.exitCode).toBe(2);
+    expect(sessionResult.failureCodes).toContain('turn_evidence_mismatch');
+
+    const judgePorts = passingPorts([]);
+    vi.mocked(judgePorts.judgeReply).mockResolvedValue({
+      ok: true,
+      pass: true,
+      model: 'or:minimax/minimax-m3',
+      usage: {
+        logicalCalls: 2,
+        repairCount: 0,
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+        costNanoUsd: 1,
+      },
+    });
+    const judgeResult = await runMatrixCorpus({ runId: 'run_judge_drift', catalog }, judgePorts);
+    expect(judgeResult.exitCode).toBe(2);
+    expect(judgeResult.failureCodes).toContain('judge_evidence_mismatch');
+
+    const modelPorts = passingPorts([]);
+    vi.mocked(modelPorts.judgeReply).mockResolvedValue({
+      ok: true,
+      pass: true,
+      model: 'or:google/gemini-2.5-flash',
+      usage: {
+        logicalCalls: 1,
+        repairCount: 0,
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+        costNanoUsd: 1,
+      },
+    });
+    const modelResult = await runMatrixCorpus(
+      { runId: 'run_judge_model_drift', catalog },
+      modelPorts
+    );
+    expect(modelResult.exitCode).toBe(2);
+    expect(modelResult.failureCodes).toContain('judge_evidence_mismatch');
+  });
+
+  it('rejects reuse of one created session across two scenarios before judging the second', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          sessionId:
+            input.scenario.id === 'intex-eval-002' ? 'session_intex-eval-001' : valid.sessionId,
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_cross_scenario_session', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('duplicate_scenario_session');
+    expect(result.scenarios[0]?.status).toBe('passed');
+    expect(result.scenarios[1]?.status).toBe('stopped');
+    expect(vi.mocked(ports.judgeReply).mock.calls).not.toContainEqual([
+      expect.objectContaining({
+        reply: expect.objectContaining({ scenarioId: 'intex-eval-002' }),
+      }),
+    ]);
+  });
+
+  it('gives infrastructure and cleanup failures precedence over earlier behavioral failures', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      if (input.scenario.id === 'intex-eval-002') {
+        return { ok: false, kind: 'infrastructure_failure', code: 'matrix_sync_failed' };
+      }
+      return {
+        ok: true,
+        observation: {
+          ...observation(input.scenario, input.turnIndex),
+          deterministicPassed: input.scenario.id !== 'intex-eval-001',
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_precedence', catalog }, ports);
+    expect(result.exitCode).toBe(2);
+    expect(result.scenarios[0]?.status).toBe('failed');
+    expect(result.scenarios[1]?.status).toBe('stopped');
+
+    const cleanupPorts = passingPorts([]);
+    vi.mocked(cleanupPorts.cleanup).mockResolvedValue({ ok: false, code: 'cleanup_failed' });
+    const cleanupResult = await runMatrixCorpus({ runId: 'run_cleanup', catalog }, cleanupPorts);
+    expect(cleanupResult.exitCode).toBe(2);
+    expect(cleanupResult.terminalAcknowledged).toBe(true);
+    expect(cleanupResult.cleanupCompleted).toBe(false);
+  });
+
+  it.each(['quiesce', 'drain', 'stage', 'finalize'] as const)(
+    'does not release when the %s terminal barrier fails',
+    async (phase) => {
+      const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+      const ports = passingPorts([]);
+      if (phase === 'quiesce')
+        vi.mocked(ports.quiesceRun).mockResolvedValue({ ok: false, code: 'quiesce_failed' });
+      if (phase === 'drain')
+        vi.mocked(ports.waitForDrain).mockResolvedValue({ ok: false, code: 'drain_failed' });
+      if (phase === 'stage')
+        vi.mocked(ports.stageArtifacts).mockResolvedValue({ ok: false, code: 'stage_failed' });
+      if (phase === 'finalize')
+        vi.mocked(ports.finalizeContext).mockResolvedValue({
+          ok: false,
+          code: 'finalize_failed',
+        });
+
+      const result = await runMatrixCorpus({ runId: `run_${phase}_barrier`, catalog }, ports);
+
+      expect(result.exitCode).toBe(2);
+      expect(ports.releaseRun).not.toHaveBeenCalled();
+      expect(result.terminalAcknowledged).toBe(false);
+    }
+  );
+
+  it('does not release after final projection retry exhaustion', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.projectFinalizing).mockResolvedValue({
+      ok: false,
+      kind: 'revision_conflict',
+      code: 'revision_conflict',
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_final_projection_barrier', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('revision_conflict');
+    expect(ports.projectFinalizing).toHaveBeenCalledTimes(2);
+    expect(ports.getProjectionRevision).toHaveBeenCalledOnce();
+    expect(ports.releaseRun).not.toHaveBeenCalled();
+    expect(ports.waitForTerminalAcknowledgement).not.toHaveBeenCalled();
+    expect(ports.cleanup).not.toHaveBeenCalled();
+  });
+
+  it('does not acknowledge or clean up when release fails', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.releaseRun).mockResolvedValue({ ok: false, code: 'release_failed' });
+
+    const result = await runMatrixCorpus({ runId: 'run_release_barrier', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('release_failed');
+    expect(ports.waitForTerminalAcknowledgement).not.toHaveBeenCalled();
+    expect(ports.cleanup).not.toHaveBeenCalled();
+    expect(result.terminalAcknowledged).toBe(false);
+  });
+
+  it('fails closed on terminal acknowledgement after release and does not clean early', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.waitForTerminalAcknowledgement).mockResolvedValue({
+      ok: false,
+      code: 'terminal_ack_failed',
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_terminal_ack', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(ports.releaseRun).toHaveBeenCalledOnce();
+    expect(ports.cleanup).not.toHaveBeenCalled();
+    expect(result.terminalAcknowledged).toBe(false);
+  });
+
+  it('distinguishes invalid evidence from a reconciled behavioral tool mismatch', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const invalidPorts = passingPorts([]);
+    vi.mocked(invalidPorts.executeTurn).mockImplementation(async (input) => ({
+      ok: true,
+      observation: {
+        ...observation(input.scenario, input.turnIndex),
+        transportEvidence: { turnTerminal: 'failed', replyDigests: [] },
+      },
+    }));
+    const terminalFailure = await runMatrixCorpus(
+      { runId: 'run_terminal_evidence', catalog },
+      invalidPorts
+    );
+    expect(terminalFailure.exitCode).toBe(2);
+
+    const confirmationPorts = passingPorts([]);
+    vi.mocked(confirmationPorts.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      return {
+        ok: true,
+        observation:
+          input.scenario.id === 'intex-eval-001' && input.turnIndex === 1
+            ? { ...valid, confirmationEvidence: { kind: 'not_applicable' } }
+            : valid,
+      };
+    });
+    const confirmationFailure = await runMatrixCorpus(
+      { runId: 'run_confirmation_evidence', catalog },
+      confirmationPorts
+    );
+    expect(confirmationFailure.exitCode).toBe(2);
+
+    const usagePorts = passingPorts([]);
+    vi.mocked(usagePorts.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          agentUsage: { ...valid.agentUsage, providerCostReconciled: false },
+        },
+      };
+    });
+    const usageFailure = await runMatrixCorpus(
+      { runId: 'run_usage_evidence', catalog },
+      usagePorts
+    );
+    expect(usageFailure.exitCode).toBe(2);
+
+    const toolPorts = passingPorts([]);
+    vi.mocked(toolPorts.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      if (input.scenario.id !== 'intex-eval-001' || input.turnIndex !== 1) {
+        return { ok: true, observation: valid };
+      }
+      const wrongTool = [{ toolName: 'create_link', ordinal: 1 }];
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          toolEvidence: {
+            strictMockBoundary: true,
+            selectedScheduled: wrongTool,
+            mockOutcomes: wrongTool.map((tool) => ({ ...tool, status: 'completed' as const })),
+            unexpectedKnownToolCount: 0,
+          },
+        },
+      };
+    });
+    const toolFailure = await runMatrixCorpus({ runId: 'run_tool_behavior', catalog }, toolPorts);
+    expect(toolFailure.exitCode).toBe(1);
+    expect(toolFailure.scenarios[0]?.status).toBe('failed');
+    expect(toolFailure.scenarios[19]?.status).toBe('passed');
+  });
+});
+
+function passingPorts(trace: string[]): MatrixCorpusRunPorts {
+  let revision = 0;
+  return {
+    provisionRun: vi.fn(async () => ({ ok: true, value: { leaseFence: '7' } }) as const),
+    registerContext: vi.fn(async () => ({ ok: true, value: undefined }) as const),
+    createProjection: vi.fn(async () => ({ ok: true, value: { revision } }) as const),
+    reconcileRetention: vi.fn(async () => {
+      trace.push('retention');
+      return { ok: true, value: { revision } } as const;
+    }),
+    activateRun: vi.fn(async () => {
+      trace.push('activate');
+      return { ok: true, value: undefined } as const;
+    }),
+    renewLease: vi.fn(async ({ scenarioId }) => {
+      trace.push(`renew:${scenarioId}`);
+      return { ok: true, value: undefined } as const;
+    }),
+    executeTurn: vi.fn(
+      async (input) =>
+        ({ ok: true, observation: observation(input.scenario, input.turnIndex) }) as const
+    ),
+    judgeReply: vi.fn(
+      async () =>
+        ({
+          ok: true,
+          pass: true,
+          model: 'or:minimax/minimax-m3',
+          usage: {
+            logicalCalls: 1,
+            repairCount: 0,
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            costNanoUsd: 1,
+          },
+        }) as const
+    ),
+    projectScenario: vi.fn(async (input) => {
+      revision = input.expectedRevision + 1;
+      return { ok: true, revision } as const;
+    }),
+    getProjectionRevision: vi.fn(async () => ({ ok: true, value: { revision } }) as const),
+    quiesceRun: vi.fn(async () => {
+      trace.push('quiesce');
+      return { ok: true, value: undefined } as const;
+    }),
+    waitForDrain: vi.fn(async () => {
+      trace.push('drain');
+      return { ok: true, value: undefined } as const;
+    }),
+    stageArtifacts: vi.fn(async () => {
+      trace.push('stage');
+      revision += 1;
+      return { ok: true, value: { artifactStageDigest: 'a'.repeat(64), revision } } as const;
+    }),
+    finalizeContext: vi.fn(async () => {
+      trace.push('finalize');
+      return { ok: true, value: { tombstoneDigest: 'b'.repeat(64) } } as const;
+    }),
+    projectFinalizing: vi.fn(async (input) => {
+      trace.push('project-finalizing');
+      return { ok: true, revision: input.expectedRevision + 1 } as const;
+    }),
+    releaseRun: vi.fn(async () => {
+      trace.push('release');
+      return { ok: true, value: undefined } as const;
+    }),
+    waitForTerminalAcknowledgement: vi.fn(async () => {
+      trace.push('terminal-ack');
+      return { ok: true, value: undefined } as const;
+    }),
+    cleanup: vi.fn(async () => ({ ok: true, value: undefined }) as const),
+  };
+}
+
+function observation(
+  scenario: {
+    id: string;
+    title: string;
+    turns: readonly unknown[];
+    expected: {
+      turns: readonly {
+        replies: readonly { semanticCriteria: readonly string[] }[];
+        requiredToolCalls: readonly { toolName: string; count: number }[];
+      }[];
+    };
+  },
+  turnIndex: number
+): MatrixCorpusTurnObservation {
+  const turn = scenario.turns[turnIndex] as { kind?: string } | undefined;
+  const replies = scenario.expected.turns[turnIndex]?.replies ?? [];
+  const requiredTools = scenario.expected.turns[turnIndex]?.requiredToolCalls ?? [];
+  const expectedTools = requiredTools.flatMap((requirement) =>
+    Array.from({ length: requirement.count }, (_, index) => ({
+      toolName: requirement.toolName,
+      ordinal: index + 1,
+    }))
+  );
+  const assistantTexts = replies.map(() => 'Synthetic reply');
+  const confirmationTurn = turn as
+    | { kind?: string; previousTurnIndex?: number; decision?: 'accept' | 'reject' }
+    | undefined;
+  return {
+    sessionId: `session_${scenario.id}`,
+    sessionEvidence: {
+      kind: turnIndex === 0 ? 'created' : 'continued',
+      scenarioLabel: scenario.title,
+    },
+    agentModel: 'or:deepseek/deepseek-v4-flash',
+    observedReplyCount: replies.length,
+    replyEvaluations: replies.map((reply, replyIndex) =>
+      replyInput(scenario.id, turnIndex, replyIndex, reply.semanticCriteria)
+    ),
+    deterministicPassed: true,
+    transportEvidence: {
+      turnTerminal: 'completed',
+      replyDigests: assistantTexts.map(digestMatrixReply),
+    },
+    toolEvidence: {
+      strictMockBoundary: true,
+      selectedScheduled: expectedTools,
+      mockOutcomes: expectedTools.map((tool) => ({ ...tool, status: 'completed' as const })),
+      unexpectedKnownToolCount: 0,
+    },
+    confirmationEvidence:
+      confirmationTurn?.kind === 'confirmation_button'
+        ? {
+            kind: 'resolved',
+            previousTurnIndex: confirmationTurn.previousTurnIndex ?? -1,
+            decision: confirmationTurn.decision ?? 'reject',
+          }
+        : { kind: 'not_applicable' },
+    agentUsage: {
+      logicalCalls: turn?.kind === 'confirmation_button' ? 0 : 1,
+      inputTokens: turn?.kind === 'confirmation_button' ? 0 : 1,
+      outputTokens: turn?.kind === 'confirmation_button' ? 0 : 1,
+      totalTokens: turn?.kind === 'confirmation_button' ? 0 : 2,
+      costNanoUsd: turn?.kind === 'confirmation_button' ? 0 : 1,
+      providerCostReconciled: true,
+    },
+  };
+}
+
+function replyInput(
+  scenarioId: string,
+  turnIndex: number,
+  replyIndex: number,
+  semanticCriteria: readonly string[]
+): ReplyEvaluationInput {
+  return {
+    scenarioId,
+    turnIndex,
+    replyIndex,
+    assistantText: 'Synthetic reply',
+    semanticCriteria: [...semanticCriteria],
+    technicalFacts: {
+      turnPassed: true,
+      failureCodes: [],
+      tools: [],
+      transition: { expectedAction: 'continued', outcome: 'passed' },
+      session: { allowedStatuses: ['waiting_for_user'], outcome: 'passed' },
+      timeline: { required: [], forbidden: [], payloadGroups: [] },
+      confirmationAction: 'none',
+      toolOutcome: null,
+    },
+  };
+}

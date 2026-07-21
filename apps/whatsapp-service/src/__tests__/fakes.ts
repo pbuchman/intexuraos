@@ -27,6 +27,7 @@ import type {
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
+  MatrixCorpusSignedIngestEvent,
   IgnoredReason,
   WhatsAppError,
   LinkPreview,
@@ -710,9 +711,10 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     );
   }
 
-  getSessionSnapshotById(
-    input: { sessionId: string; userId: string }
-  ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
+  getSessionSnapshotById(input: { sessionId: string; userId: string }): Promise<{
+    session: ConversationAssistantSession;
+    turns: ConversationAssistantTurn[];
+  } | null> {
     this.snapshotRequests.push(input);
     const session = this.sessions.get(input.sessionId);
     if (
@@ -1032,10 +1034,7 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     return Promise.resolve(this.listTurnsForSnapshot(sessionId));
   }
 
-  private listTurnsForSnapshot(
-    sessionId: string,
-    userId?: string
-  ): ConversationAssistantTurn[] {
+  private listTurnsForSnapshot(sessionId: string, userId?: string): ConversationAssistantTurn[] {
     const turns = Array.from(this.turns.values())
       .filter((turn) => turn.sessionId === sessionId)
       .filter((turn) => userId === undefined || turn.userId === userId)
@@ -1715,9 +1714,7 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     this.nextStreamEvents = events;
   }
 
-  queueGenerateResponse(
-    response: Partial<GenerateResult> & Pick<GenerateResult, 'content'>
-  ): void {
+  queueGenerateResponse(response: Partial<GenerateResult> & Pick<GenerateResult, 'content'>): void {
     this.generateResponses.push(
       ok({
         content: response.content,
@@ -2032,11 +2029,7 @@ export class FakeWhatsAppUserMappingRepository implements WhatsAppUserMappingRep
    * Set a mapping for a phone number for testing.
    * Convenience method to set up user mappings in tests.
    */
-  setMappingForPhone(
-    phoneNumber: string,
-    userId: string,
-    options?: { connected?: boolean }
-  ): void {
+  setMappingForPhone(phoneNumber: string, userId: string, options?: { connected?: boolean }): void {
     const normalizedPhone = normalizePhoneNumber(phoneNumber);
     const mapping = {
       userId,
@@ -2198,7 +2191,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
     messageId: string
   ): Promise<Result<WhatsAppMessage | null, WhatsAppError>> {
     if (this.shouldFailFindById) {
-      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated findById failure' }));
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated findById failure' })
+      );
     }
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
@@ -2232,7 +2227,9 @@ export class FakeWhatsAppMessageRepository implements WhatsAppMessageRepository 
       return Promise.reject(new Error('Simulated unexpected updateTranscription exception'));
     }
     if (this.shouldFailUpdateTranscription) {
-      return Promise.resolve(err({ code: 'INTERNAL_ERROR', message: 'Simulated updateTranscription failure' }));
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated updateTranscription failure' })
+      );
     }
     const message = this.messages.get(messageId);
     if (message?.userId !== userId) {
@@ -2395,13 +2392,14 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       return Promise.resolve(err(failure));
     }
     const account = Array.from(this.accounts.values()).find(
-      (candidate) =>
-        candidate.sourceAccountId === sourceAccountId && candidate.status === 'active'
+      (candidate) => candidate.sourceAccountId === sourceAccountId && candidate.status === 'active'
     );
     return Promise.resolve(ok(account ?? null));
   }
 
-  upsertAccount(input: FakeUpsertPrivateWhatsAppAccountInput): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
+  upsertAccount(
+    input: FakeUpsertPrivateWhatsAppAccountInput
+  ): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
@@ -2435,14 +2433,18 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     return Promise.resolve(ok(account));
   }
 
-  disableAccount(input: FakeDisablePrivateWhatsAppAccountInput): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
+  disableAccount(
+    input: FakeDisablePrivateWhatsAppAccountInput
+  ): Promise<Result<FakePrivateWhatsAppAccount, WhatsAppError>> {
     const failure = this.consumeFailure();
     if (failure !== null) {
       return Promise.resolve(err(failure));
     }
     const existing = this.accounts.get(input.userId);
     if (existing === undefined) {
-      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp account not found' }));
+      return Promise.resolve(
+        err({ code: 'NOT_FOUND', message: 'Private WhatsApp account not found' })
+      );
     }
     const account: FakePrivateWhatsAppAccount = {
       ...existing,
@@ -2567,7 +2569,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
     const existing = this.buildChats().get(input.chatId);
     if (existing === undefined || existing.sourceAccountId !== input.sourceAccountId) {
-      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' }));
+      return Promise.resolve(
+        err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' })
+      );
     }
 
     const updated: PrivateWhatsAppChat = {
@@ -2634,7 +2638,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       );
     }
 
-    const chat = this.buildChats().get(`chat:${stored.sourceAccountId}:${stored.chat.matrixRoomId}`);
+    const chat = this.buildChats().get(
+      `chat:${stored.sourceAccountId}:${stored.chat.matrixRoomId}`
+    );
     if (chat === undefined) {
       return Promise.resolve(
         err({ code: 'NOT_FOUND', message: 'Private WhatsApp message not found' })
@@ -2870,7 +2876,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
       const normalizedReaction = message.reaction;
       const legacyReaction =
-        normalizedReaction === undefined ? extractFakeLegacyReaction(message.rawMatrixEvent) : undefined;
+        normalizedReaction === undefined
+          ? extractFakeLegacyReaction(message.rawMatrixEvent)
+          : undefined;
       const targetMessageId =
         normalizedReaction?.targetMessageId ??
         (legacyReaction === undefined
@@ -2959,7 +2967,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     if (messages.length > safeStartIndex + input.limit) {
       const lastMessage = page[page.length - 1];
       if (lastMessage !== undefined) {
-        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastMessage.eventTimestamp, lastMessage.id);
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(
+          lastMessage.eventTimestamp,
+          lastMessage.id
+        );
       }
     }
     return Promise.resolve(ok(result));
@@ -3080,7 +3091,10 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     if (senderDays.length > safeStartIndex + input.limit) {
       const lastSenderDay = page[page.length - 1];
       if (lastSenderDay !== undefined) {
-        result.nextCursor = encodeFakePrivateWhatsAppCursor(lastSenderDay.eventDayKey, lastSenderDay.senderKey);
+        result.nextCursor = encodeFakePrivateWhatsAppCursor(
+          lastSenderDay.eventDayKey,
+          lastSenderDay.senderKey
+        );
       }
     }
     return Promise.resolve(ok(result));
@@ -3354,9 +3368,13 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
       existing.messageCount += 1;
       existing.firstEventAt =
-        message.eventTimestamp < existing.firstEventAt ? message.eventTimestamp : existing.firstEventAt;
+        message.eventTimestamp < existing.firstEventAt
+          ? message.eventTimestamp
+          : existing.firstEventAt;
       existing.lastEventAt =
-        message.eventTimestamp > existing.lastEventAt ? message.eventTimestamp : existing.lastEventAt;
+        message.eventTimestamp > existing.lastEventAt
+          ? message.eventTimestamp
+          : existing.lastEventAt;
       if (!existing.chatIds.includes(message.chatId)) {
         existing.chatIds.push(message.chatId);
       }
@@ -3404,14 +3422,21 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
 
       existing.messageCount += 1;
       existing.firstEventAt =
-        message.eventTimestamp < existing.firstEventAt ? message.eventTimestamp : existing.firstEventAt;
+        message.eventTimestamp < existing.firstEventAt
+          ? message.eventTimestamp
+          : existing.firstEventAt;
       existing.lastEventAt =
-        message.eventTimestamp > existing.lastEventAt ? message.eventTimestamp : existing.lastEventAt;
+        message.eventTimestamp > existing.lastEventAt
+          ? message.eventTimestamp
+          : existing.lastEventAt;
       if (!existing.chatIds.includes(message.chatId)) {
         existing.chatIds.push(message.chatId);
       }
       existing.updatedAt = message.receivedAt;
-      if (message.senderDisplayName !== undefined && message.eventTimestamp >= existing.lastEventAt) {
+      if (
+        message.senderDisplayName !== undefined &&
+        message.eventTimestamp >= existing.lastEventAt
+      ) {
         existing.senderDisplayName = message.senderDisplayName;
       }
       if (message.senderPhoneNumber !== undefined) {
@@ -3469,9 +3494,13 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       existing.participantKeys = nextParticipantKeys;
       existing.participantCount = nextParticipantKeys.length;
       existing.firstSeenAt =
-        message.eventTimestamp < existing.firstSeenAt ? message.eventTimestamp : existing.firstSeenAt;
+        message.eventTimestamp < existing.firstSeenAt
+          ? message.eventTimestamp
+          : existing.firstSeenAt;
       existing.lastEventAt =
-        message.eventTimestamp > existing.lastEventAt ? message.eventTimestamp : existing.lastEventAt;
+        message.eventTimestamp > existing.lastEventAt
+          ? message.eventTimestamp
+          : existing.lastEventAt;
       existing.updatedAt = message.receivedAt;
       if (message.chatDisplayName !== undefined && message.eventTimestamp >= existing.lastEventAt) {
         existing.displayName = message.chatDisplayName;
@@ -3821,6 +3850,12 @@ export class FakeEventPublisher implements EventPublisherPort {
     return Promise.resolve(ok(undefined));
   }
 
+  publishMatrixCorpusIngest(
+    _event: MatrixCorpusSignedIngestEvent
+  ): Promise<Result<{ publisherReceiptDigest: string }, WhatsAppError>> {
+    return Promise.resolve(ok({ publisherReceiptDigest: '1'.repeat(64) }));
+  }
+
   setIntexMessageIngestFailure(message: string): void {
     this.intexMessageIngestFailureMessage = message;
   }
@@ -3957,7 +3992,12 @@ export class FakeEventPublisher implements EventPublisherPort {
  * Fake message sender for testing.
  */
 export class FakeMessageSender implements WhatsAppMessageSender {
-  private sentMessages: { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[]; ctaUrl?: { displayText: string; url: string } }[] = [];
+  private sentMessages: {
+    phoneNumber: string;
+    message: string;
+    buttons?: WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
+  }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
   private failError: WhatsAppError = { code: 'INTERNAL_ERROR', message: 'Simulated send failure' };
@@ -4020,7 +4060,12 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     return Promise.resolve(ok({ wamid }));
   }
 
-  getSentMessages(): { phoneNumber: string; message: string; buttons?: WhatsAppInteractiveButton[]; ctaUrl?: { displayText: string; url: string } }[] {
+  getSentMessages(): {
+    phoneNumber: string;
+    message: string;
+    buttons?: WhatsAppInteractiveButton[];
+    ctaUrl?: { displayText: string; url: string };
+  }[] {
     return [...this.sentMessages];
   }
 
@@ -4288,7 +4333,12 @@ export class FakeLinkPreviewFetcherPort implements LinkPreviewFetcherPort {
  */
 export class FakeOutboundMessageRepository implements OutboundMessageRepository {
   private messages = new Map<string, OutboundMessage>();
+  private idempotentDeliveries = new Map<
+    string,
+    { payloadDigest: string; state: 'sending' | 'sent' | 'ambiguous'; updatedAt: string }
+  >();
   private shouldFail = false;
+  private shouldFailIdempotentCompletion = false;
   private failureError: WhatsAppError = {
     code: 'PERSISTENCE_ERROR',
     message: 'Simulated failure',
@@ -4302,6 +4352,10 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
     if (error !== undefined) {
       this.failureError = error;
     }
+  }
+
+  setFailIdempotentCompletion(fail: boolean): void {
+    this.shouldFailIdempotentCompletion = fail;
   }
 
   async save(message: OutboundMessage): Promise<Result<void, WhatsAppError>> {
@@ -4327,6 +4381,81 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
     return ok(undefined);
   }
 
+  async reserveIdempotentDelivery(
+    input: Parameters<OutboundMessageRepository['reserveIdempotentDelivery']>[0]
+  ): ReturnType<OutboundMessageRepository['reserveIdempotentDelivery']> {
+    if (this.shouldFail) return { ok: false, code: 'PERSISTENCE_ERROR' };
+    const existing = this.idempotentDeliveries.get(input.idempotencyKey);
+    if (existing !== undefined) {
+      if (existing.payloadDigest !== input.payloadDigest)
+        return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+      if (
+        existing.state === 'sending' &&
+        Date.parse(input.now) - Date.parse(existing.updatedAt) >= 15 * 60 * 1000
+      ) {
+        this.idempotentDeliveries.set(input.idempotencyKey, {
+          ...existing,
+          state: 'ambiguous',
+          updatedAt: input.now,
+        });
+        return { ok: true, disposition: 'duplicate_ambiguous' };
+      }
+      return {
+        ok: true,
+        disposition:
+          existing.state === 'sent'
+            ? 'duplicate_sent'
+            : existing.state === 'ambiguous'
+              ? 'duplicate_ambiguous'
+              : 'duplicate_in_flight',
+      };
+    }
+    this.idempotentDeliveries.set(input.idempotencyKey, {
+      payloadDigest: input.payloadDigest,
+      state: 'sending',
+      updatedAt: input.now,
+    });
+    return { ok: true, disposition: 'acquired' };
+  }
+
+  async completeIdempotentDelivery(
+    input: Parameters<OutboundMessageRepository['completeIdempotentDelivery']>[0]
+  ): ReturnType<OutboundMessageRepository['completeIdempotentDelivery']> {
+    if (this.shouldFail || this.shouldFailIdempotentCompletion)
+      return { ok: false, code: 'PERSISTENCE_ERROR' };
+    const existing = this.idempotentDeliveries.get(input.idempotencyKey);
+    if (existing === undefined) return { ok: false, code: 'NOT_FOUND' };
+    if (existing.payloadDigest !== input.payloadDigest)
+      return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+    if (existing.state === 'ambiguous') return { ok: false, code: 'INVALID_STATE' };
+    if (existing.state === 'sent') return { ok: true, disposition: 'already_applied' };
+    this.messages.set(input.outboundMessage.wamid, input.outboundMessage);
+    this.idempotentDeliveries.set(input.idempotencyKey, {
+      ...existing,
+      state: 'sent',
+      updatedAt: input.outboundMessage.sentAt,
+    });
+    return { ok: true, disposition: 'applied' };
+  }
+
+  async markIdempotentDeliveryAmbiguous(
+    input: Parameters<OutboundMessageRepository['markIdempotentDeliveryAmbiguous']>[0]
+  ): ReturnType<OutboundMessageRepository['markIdempotentDeliveryAmbiguous']> {
+    if (this.shouldFail) return { ok: false, code: 'PERSISTENCE_ERROR' };
+    const existing = this.idempotentDeliveries.get(input.idempotencyKey);
+    if (existing === undefined) return { ok: false, code: 'NOT_FOUND' };
+    if (existing.payloadDigest !== input.payloadDigest)
+      return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+    if (existing.state === 'sent') return { ok: false, code: 'INVALID_STATE' };
+    if (existing.state === 'ambiguous') return { ok: true, disposition: 'already_applied' };
+    this.idempotentDeliveries.set(input.idempotencyKey, {
+      ...existing,
+      state: 'ambiguous',
+      updatedAt: input.now,
+    });
+    return { ok: true, disposition: 'applied' };
+  }
+
   /**
    * Get all stored messages (for test assertions).
    */
@@ -4339,7 +4468,9 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
    */
   clear(): void {
     this.messages.clear();
+    this.idempotentDeliveries.clear();
     this.shouldFail = false;
+    this.shouldFailIdempotentCompletion = false;
     this.failureError = { code: 'PERSISTENCE_ERROR', message: 'Simulated failure' };
   }
 }
@@ -4495,21 +4626,24 @@ export class FakePhoneVerificationRepository implements PhoneVerificationReposit
     return ok(count);
   }
 
-  async createWithChecks(
-    params: {
-      userId: string;
-      phoneNumber: string;
-      code: string;
-      expiresAt: number;
-      cooldownSeconds: number;
-      maxRequestsPerHour: number;
-      windowStartTime: string;
-    }
-  ): Promise<Result<{
-    verification: PhoneVerification;
-    cooldownUntil: number;
-    existingPendingId?: string;
-  }, WhatsAppError>> {
+  async createWithChecks(params: {
+    userId: string;
+    phoneNumber: string;
+    code: string;
+    expiresAt: number;
+    cooldownSeconds: number;
+    maxRequestsPerHour: number;
+    windowStartTime: string;
+  }): Promise<
+    Result<
+      {
+        verification: PhoneVerification;
+        cooldownUntil: number;
+        existingPendingId?: string;
+      },
+      WhatsAppError
+    >
+  > {
     if (this.shouldFail || this.shouldFailCreate) {
       return err(this.failureError);
     }
@@ -4617,9 +4751,7 @@ export class FakePhoneVerificationRepository implements PhoneVerificationReposit
 /**
  * Fake NotificationPreferencesRepository for testing.
  */
-export class FakeNotificationPreferencesRepository
-  implements NotificationPreferencesRepository
-{
+export class FakeNotificationPreferencesRepository implements NotificationPreferencesRepository {
   private levels = new Map<string, NotificationLevel>();
   private failNextError: WhatsAppError | null = null;
 
@@ -4631,9 +4763,7 @@ export class FakeNotificationPreferencesRepository
     this.failNextError = error;
   }
 
-  async getPreferences(
-    userId: string
-  ): Promise<Result<NotificationPreferences, WhatsAppError>> {
+  async getPreferences(userId: string): Promise<Result<NotificationPreferences, WhatsAppError>> {
     if (this.failNextError !== null) {
       const error = this.failNextError;
       this.failNextError = null;

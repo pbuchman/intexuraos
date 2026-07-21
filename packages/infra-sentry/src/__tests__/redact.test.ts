@@ -19,6 +19,8 @@ describe('SENTRY_REDACT_KEYS', () => {
     expect(SENTRY_REDACT_KEYS).toContain('githubToken');
     expect(SENTRY_REDACT_KEYS).toContain('anthropicApiKey');
     expect(SENTRY_REDACT_KEYS).toContain('openaiApiKey');
+    expect(SENTRY_REDACT_KEYS).toContain('x-matrix-corpus-user-id');
+    expect(SENTRY_REDACT_KEYS).toContain('x-matrix-corpus-session-id');
   });
 });
 
@@ -144,5 +146,28 @@ describe('redactObject', () => {
         { data: { password: '[REDACTED]' } },
       ],
     });
+  });
+
+  it('redacts Matrix corpus identifiers embedded in request URLs', () => {
+    const result = redactObject({
+      request: {
+        url: 'https://intex.test/internal/matrix-corpus/runs/RUN_URL_SENTINEL/scenarios/SCENARIO_URL_SENTINEL/evidence?token=QUERY_URL_SENTINEL',
+      },
+      testRunUrl: '/internal/test-runs/RUN_TEST_PROJECTION_SENTINEL/projection',
+      ingestUrl:
+        '/internal/intex-agent/messages?prompt=RAW_PROMPT_SENTINEL&capability=CAPABILITY_SENTINEL',
+      ordinaryUrl: '/api/users/user-safe',
+    });
+
+    expect(result).toEqual({
+      request: { url: 'https://intex.test/internal/matrix-corpus/[REDACTED]' },
+      testRunUrl: '/internal/test-runs/[REDACTED]',
+      ingestUrl: '/internal/intex-agent/messages[REDACTED]',
+      ordinaryUrl: '/api/users/user-safe',
+    });
+    expect(JSON.stringify(result)).not.toContain('RUN_URL_SENTINEL');
+    expect(JSON.stringify(result)).not.toContain('RUN_TEST_PROJECTION_SENTINEL');
+    expect(JSON.stringify(result)).not.toContain('RAW_PROMPT_SENTINEL');
+    expect(JSON.stringify(result)).not.toContain('CAPABILITY_SENTINEL');
   });
 });

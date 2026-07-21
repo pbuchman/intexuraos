@@ -1,6 +1,8 @@
-import { ok } from '@intexuraos/common-core';
+import { err, ok } from '@intexuraos/common-core';
+import { IntexAgentModels } from '@intexuraos/llm-contract';
+import type { IntexAgentRuntimeSettingsV1 } from '@intexuraos/internal-clients';
 import type { ToolCallingClient, ToolCallingResult } from '@intexuraos/llm-contract';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
 import type { IntexIncomingMessage } from '../../domain/ports/incomingMessageHandler.js';
@@ -58,6 +60,260 @@ function message(overrides: Partial<IntexIncomingMessage> = {}): IntexIncomingMe
 }
 
 describe('handleIncomingMessage', () => {
+  it('resolves one immutable runtime snapshot before an ordinary runner turn', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runtimeDto: IntexAgentRuntimeSettingsV1 = {
+      status: 'available' as const,
+      effectiveModel: IntexAgentModels.MiniMaxM3,
+      explicitModel: IntexAgentModels.MiniMaxM3,
+      source: 'explicit' as const,
+      revision: 4,
+      timeZone: 'Europe/Warsaw',
+    };
+    const resolveRuntimeSettings = vi.fn(async () => ok(runtimeDto));
+    const runner: IntexAgentRunner = {
+      async executeConfirmed(): Promise<IntexAgentRunnerResult> {
+        throw new Error('not used');
+      },
+      async run(input): Promise<IntexAgentRunnerResult> {
+        expect(input.runtimeSettings).toEqual(runtimeDto);
+        expect(input.runtimeSettings).toBeDefined();
+        if (input.runtimeSettings === undefined) throw new Error('runtime snapshot missing');
+        expect(Object.isFrozen(input.runtimeSettings)).toBe(true);
+        runtimeDto.effectiveModel = IntexAgentModels.Gemini3FlashPreview;
+        expect(input.runtimeSettings.effectiveModel).toBe(IntexAgentModels.MiniMaxM3);
+        return { outcome: 'no_action', reply: 'Okay.' };
+      },
+    };
+
+    await handleIncomingMessage(
+      message(),
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
+    );
+
+    expect(resolveRuntimeSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<{
+    name: string;
+    dto: IntexAgentRuntimeSettingsV1;
+  }>([
+    {
+      name: 'explicit Gemini',
+      dto: {
+        status: 'available',
+        effectiveModel: IntexAgentModels.Gemini3FlashPreview,
+        explicitModel: IntexAgentModels.Gemini3FlashPreview,
+        source: 'explicit',
+        revision: 8,
+        timeZone: 'Europe/Warsaw',
+      },
+    },
+    {
+      name: 'default-absent DeepSeek',
+      dto: {
+        status: 'available',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        explicitModel: null,
+        source: 'default_absent',
+        revision: 0,
+        timeZone: 'UTC',
+      },
+    },
+    {
+      name: 'unavailable platform-default DeepSeek',
+      dto: {
+        status: 'unavailable',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        source: 'platform_default',
+        timeZone: 'America/New_York',
+      },
+    },
+  ])('uses the exact $name runtime DTO for the ordinary turn', async ({ dto }) => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = vi.fn(async () => ok(dto));
+    const runner: IntexAgentRunner = {
+      async executeConfirmed(): Promise<IntexAgentRunnerResult> {
+        throw new Error('not used');
+      },
+      async run(input): Promise<IntexAgentRunnerResult> {
+        expect(input.runtimeSettings?.effectiveModel).toBe(dto.effectiveModel);
+        expect(input.timeZone).toBe(dto.timeZone);
+        return { outcome: 'no_action', reply: 'Okay.' };
+      },
+    };
+
+    await handleIncomingMessage(
+      message(),
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
+    );
+
+    expect(resolveRuntimeSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a non-canonical model in an unavailable runtime snapshot', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([{ outcome: 'no_action', reply: 'must not run' }]);
+    const invalid = {
+      status: 'unavailable',
+      effectiveModel: 'or:invalid/model',
+      source: 'platform_default',
+      timeZone: 'UTC',
+    } as unknown as IntexAgentRuntimeSettingsV1;
+
+    await expect(
+      handleIncomingMessage(
+        message(),
+        deps(repo, runner, replies, { now: () => NOW }, async () => ok(invalid))
+      )
+    ).resolves.toEqual({ sessionId: 'session-1' });
+    expect(runner.calls).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'I could not process that request right now. Please restate what you want me to do.'
+    );
+  });
+
+  it('keeps the image-with-source-url shortcut outside runtime resolution', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = vi.fn(async () => {
+      throw new Error('must not resolve');
+    });
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_confirmation',
+        reply: 'Send image?',
+        toolName: 'save_external',
+        toolArgs: { message: 'Image', sourceUrl: 'https://example.test/image' },
+      },
+    ]);
+
+    await handleIncomingMessage(
+      message({ sourceType: 'whatsapp_image', sourceUrl: 'https://example.test/image' }),
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
+    );
+
+    expect(resolveRuntimeSettings).not.toHaveBeenCalled();
+    expect(runner.calls).toHaveLength(1);
+  });
+
+  it('turns runtime resolution failure into one localized fallback without running the provider', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([{ outcome: 'no_action', reply: 'must not run' }]);
+    const logger = { warn: vi.fn() };
+    const dependencies = deps(
+      repo,
+      runner,
+      replies,
+      { now: () => NOW },
+      async () =>
+        err({
+          code: 'API_ERROR',
+          message:
+            'resolver-cause-sentinel raw-resolver-user-sentinel https://private.invalid/raw provider-sentinel model-sentinel',
+        })
+    );
+    dependencies.logger = logger;
+
+    await expect(handleIncomingMessage(message(), dependencies)).resolves.toEqual({
+      sessionId: 'session-1',
+    });
+
+    expect(runner.calls).toEqual([]);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      { reason: 'runtime_settings_resolution_failed' },
+      'Intex Agent runtime settings resolution failed'
+    );
+    expect(eventPayloads(repo, 'agent_fallback')).toEqual([
+      { reason: 'runtime_resolution_failed', sourceOutcome: 'runtime_resolution' },
+    ]);
+    expect(eventPayloads(repo, 'clarification_requested')).toEqual([
+      {
+        message: 'I could not process that request right now. Please restate what you want me to do.',
+        blockerReason: 'not_enough_context',
+        suggestedNextStep: 'Ask the user to restate the action.',
+        fallbackReason: 'runtime_resolution_failed',
+      },
+    ]);
+    expect(replies.messages[0]?.message).toBe(
+      'I could not process that request right now. Please restate what you want me to do.'
+    );
+    expect(repo.events.every((event) => event.userId === 'user-1')).toBe(true);
+    expect(repo.events.every((event) => event.sessionId === 'session-1')).toBe(true);
+    const privateOutput = JSON.stringify({
+      payloads: repo.events.map((event) => event.payload),
+      replies: replies.messages,
+      logs: logger.warn.mock.calls,
+    });
+    expect(privateOutput).not.toMatch(
+      /resolver-cause-sentinel|raw-resolver-user-sentinel|private\.invalid|provider-sentinel|model-sentinel/iu
+    );
+  });
+
+  it.each(['NETWORK_ERROR', 'MALFORMED_RESPONSE', 'TIMEOUT'] as const)(
+    'handles %s as the same private runtime-resolution outcome',
+    async (code) => {
+      const repo = new FakeSessionRepository();
+      const replies = new FakeReplyPublisher();
+      const runner = new FakeRunner([{ outcome: 'no_action', reply: 'must not run' }]);
+      const logger = { warn: vi.fn() };
+      const dependencies = deps(
+        repo,
+        runner,
+        replies,
+        { now: () => NOW },
+        async () => err({ code, message: `private-${code}-cause` })
+      );
+      dependencies.logger = logger;
+
+      await handleIncomingMessage(message(), dependencies);
+
+      expect(runner.calls).toEqual([]);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify({ events: repo.events, replies: replies.messages, logs: logger.warn.mock.calls }))
+        .not.toContain(`private-${code}-cause`);
+    }
+  );
+
+  it('uses the exact Polish runtime-resolution fallback from prior language context', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-06-24T09:50:00.000Z',
+      lastUserMessageAt: '2026-06-24T09:50:00.000Z',
+      startReason: 'no_active_session',
+    });
+    repo.seedEvent('session-existing', 'user_message', {
+      messageId: 'wamid-prior',
+      text: 'Zapisz notatkę.',
+      sourceType: 'whatsapp_text',
+    });
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([{ outcome: 'no_action', reply: 'must not run' }]);
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-current', text: 'i jeszcze jedną' }),
+      deps(repo, runner, replies, { now: () => NOW }, async () =>
+        err({ code: 'API_ERROR', message: 'private' })
+      )
+    );
+
+    expect(replies.messages[0]?.message).toBe(
+      'Nie mogłem teraz przetworzyć tej prośby. Napisz proszę jeszcze raz, co mam zrobić.'
+    );
+    expect(eventPayloads(repo, 'clarification_requested')[0]?.['suggestedNextStep']).toBe(
+      'Poproś użytkownika o doprecyzowanie akcji.'
+    );
+  });
+
   it('creates a confirmation request for a note mutation and sends Yes/No buttons for English requests', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -132,7 +388,14 @@ describe('handleIncomingMessage', () => {
       message(),
       deps(repo, runner, replies, { now: () => NOW }, async (userId) => {
         resolvedUserIds.push(userId);
-        return 'Europe/Warsaw';
+        return ok({
+          status: 'available',
+          effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+          explicitModel: null,
+          source: 'default_absent',
+          revision: 0,
+          timeZone: 'Europe/Warsaw',
+        });
       })
     );
 
@@ -236,6 +499,7 @@ describe('handleIncomingMessage', () => {
       },
     ]);
     const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = runtimeResolverSpy();
 
     const result = await handleIncomingMessage(
       message({
@@ -248,10 +512,11 @@ describe('handleIncomingMessage', () => {
           replyToWamid: 'wamid-confirmation-message',
         },
       }),
-      deps(repo, runner, replies)
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
     );
 
     expect(result).toEqual({ sessionId: 'session-existing' });
+    expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(runner.calls).toEqual([]);
     expect(runner.executeConfirmedCalls).toHaveLength(1);
     expect(runner.executeConfirmedCalls[0]).toMatchObject({
@@ -358,6 +623,7 @@ describe('handleIncomingMessage', () => {
         errorCategory: 'business',
         isRetryable: false,
         attemptedAction: 'create_note',
+        toolSelection: { turnIndex: 1, ordinal: 1 },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -388,6 +654,7 @@ describe('handleIncomingMessage', () => {
       errorCategory: 'business',
       isRetryable: false,
       attemptedAction: 'create_note',
+      toolSelection: { turnIndex: 1, ordinal: 1 },
     });
     expect(replies.messages[0]?.message).toBe(
       'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.'
@@ -441,6 +708,7 @@ describe('handleIncomingMessage', () => {
     });
     const runner = new FakeRunner([]);
     const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = runtimeResolverSpy();
 
     await handleIncomingMessage(
       message({
@@ -453,10 +721,11 @@ describe('handleIncomingMessage', () => {
           replyToWamid: 'wamid-confirmation-message',
         },
       }),
-      deps(repo, runner, replies)
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
     );
 
     expect(runner.calls).toEqual([]);
+    expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(runner.executeConfirmedCalls).toEqual([]);
     expect(eventPayloads(repo, 'confirmation_resolved')[0]).toMatchObject({
       confirmationId: 'confirm-1',
@@ -470,6 +739,7 @@ describe('handleIncomingMessage', () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([]);
     const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = runtimeResolverSpy();
 
     const result = await handleIncomingMessage(
       message({
@@ -482,10 +752,11 @@ describe('handleIncomingMessage', () => {
           replyToWamid: 'wamid-confirmation-message',
         },
       }),
-      deps(repo, runner, replies)
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
     );
 
     expect(result).toEqual({ sessionId: 'wamid-button-without-session' });
+    expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(runner.calls).toEqual([]);
     expect(runner.executeConfirmedCalls).toEqual([]);
     expect(repo.events).toEqual([]);
@@ -1196,6 +1467,7 @@ describe('handleIncomingMessage', () => {
         reply: 'Scheduled it for tomorrow.',
         summary: 'Created dentist appointment.',
         toolName: 'create_calendar_event',
+        toolSelection: { turnIndex: 0, ordinal: 1 },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1209,6 +1481,9 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[0]?.status).toBe('waiting_for_user');
     expect(repo.createdSessions).toHaveLength(0);
     expect(runner.calls[0]?.session.id).toBe('session-existing');
+    expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
+      toolSelection: { turnIndex: 0, ordinal: 1 },
+    });
     expect(replies.messages).toEqual([
       {
         userId: 'user-1',
@@ -1337,10 +1612,11 @@ describe('handleIncomingMessage', () => {
     });
     const runner = new FakeRunner([]);
     const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = runtimeResolverSpy();
 
     const result = await handleIncomingMessage(
       message({ messageId: 'wamid-2', text: 'new session' }),
-      deps(repo, runner, replies)
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
     );
 
     expect(result).toEqual({ sessionId: 'session-1' });
@@ -1362,6 +1638,7 @@ describe('handleIncomingMessage', () => {
       'assistant_message',
     ]);
     expect(runner.calls).toEqual([]);
+    expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(replies.messages[0]?.message).toBe(NEW_SESSION_READY_REPLY);
   });
 
@@ -1465,14 +1742,16 @@ describe('handleIncomingMessage', () => {
     });
     const runner = new FakeRunner([]);
     const replies = new FakeReplyPublisher();
+    const resolveRuntimeSettings = runtimeResolverSpy();
 
     const result = await handleIncomingMessage(
       message({ messageId: 'wamid-2', text: 'Nie dostałam żadnego linku' }),
-      deps(repo, runner, replies)
+      deps(repo, runner, replies, { now: () => NOW }, resolveRuntimeSettings)
     );
 
     expect(result).toEqual({ sessionId: 'session-existing' });
     expect(runner.calls).toEqual([]);
+    expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(repo.createdSessions).toHaveLength(0);
     expect(replies.messages[0]?.message).toContain(
       'https://intexuraos.cloud/#/research/research-1'
@@ -1742,6 +2021,7 @@ describe('handleIncomingMessage', () => {
           taskMode: 'execution',
           workerType: 'codex-xhigh',
         },
+        toolSelection: { turnIndex: 1, ordinal: 1 },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1763,9 +2043,32 @@ describe('handleIncomingMessage', () => {
         taskMode: 'execution',
         workerType: 'codex-xhigh',
       },
+      toolSelection: { turnIndex: 1, ordinal: 1 },
     });
     expect(replies.messages[0]?.message).toContain('Czy utworzyć zadanie programistyczne?');
     expect(replies.messages[0]?.message).not.toBe('Co mam z tym zrobić?');
+  });
+
+  it('rejects an isolated Matrix tool-selection result on the ordinary handler', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const runner = new FakeRunner([
+      {
+        outcome: 'tool_selection_rejected',
+        reply: '',
+        toolName: 'create_note',
+        category: 'behavioral_failure',
+        code: 'UNEXPECTED_TOOL_SELECTION',
+        toolSelection: { turnIndex: 0, ordinal: 1 },
+      },
+    ]);
+
+    await expect(
+      handleIncomingMessage(message(), deps(repo, runner, replies))
+    ).rejects.toThrowError(
+      'Matrix corpus tool-selection results require the isolated test handler'
+    );
+    expect(replies.messages).toEqual([]);
   });
 
   it('keeps a prompt-preference session clarifiable on an ordinary correction without generic unsupported', async () => {
@@ -1869,14 +2172,24 @@ function deps(
   runner: IntexAgentRunner,
   replies: FakeReplyPublisher,
   clock: { now: () => string } = { now: () => NOW },
-  resolveTimeZone: (userId: string) => Promise<string> = async () => 'UTC'
+  resolveRuntimeSettings: Parameters<typeof handleIncomingMessage>[1]['resolveRuntimeSettings'] =
+    async () =>
+      ok({
+        status: 'available',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        explicitModel: null,
+        source: 'default_absent',
+        revision: 0,
+        timeZone: 'UTC',
+      })
 ): Parameters<typeof handleIncomingMessage>[1] {
   return {
     sessionRepository,
     runner,
     replyPublisher: replies,
     clock,
-    resolveTimeZone,
+    resolveRuntimeSettings,
+    logger: { warn: () => undefined },
     ids: {
       sessionId: () => `session-${String(sessionRepository.createdSessions.length + 1)}`,
       eventId: () => `event-${String(sessionRepository.events.length + 1)}`,
@@ -1884,6 +2197,21 @@ function deps(
     },
     sessionTimeoutMs: 30 * 60 * 1000,
   };
+}
+
+function runtimeResolverSpy(): ReturnType<typeof vi.fn<
+  Parameters<typeof handleIncomingMessage>[1]['resolveRuntimeSettings']
+>> {
+  return vi.fn(async () =>
+    ok({
+      status: 'available',
+      effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+      explicitModel: null,
+      source: 'default_absent',
+      revision: 0,
+      timeZone: 'UTC',
+    })
+  );
 }
 
 function forcedCodeTaskToolClient(args: Record<string, unknown>): ToolCallingClient {

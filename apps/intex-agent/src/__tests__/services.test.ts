@@ -1,13 +1,34 @@
-import { createHash } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
+  composeIntexMatrixCorpusFeature,
+  composeIntexAgentExecutionServices,
+  createIntexMatrixCorpusRuntime,
+  createMatrixCorpusRunner,
   createTestConversationRunnerService,
-  resolveUserTimeZone,
+  createRuntimeBoundModelClients,
+  resolveRuntimeSettingsWithDeadline,
+  startCatalogNonBlocking,
   type AgentRunnerFactory,
+  type CreateRuntimeBoundModelClientsInput,
   type CreateTestConversationRunnerServiceInput,
 } from '../services.js';
+import {
+  canonicalMatrixCorpusIngestPayloadV1,
+  canonicalMatrixCorpusStrictToolMockProfileV1,
+  type StrictToolMockProfileV1,
+} from '@intexuraos/http-contracts';
 import { createIntexAgentRunner } from '../domain/agent/intexAgentRunner.js';
-import { INTEX_AGENT_MODEL } from '../domain/agent/systemPrompt.js';
+import type { IntexAgentToolExecutor } from '../domain/agent/toolDefinitions.js';
+import {
+  DEFAULT_INTEX_AGENT_MODEL,
+  IntexAgentModels,
+  type MatrixCorpusLlmCallContextV1,
+} from '@intexuraos/llm-contract';
+import { err, ok } from '@intexuraos/common-core';
+import { createOpenRouterCatalogClient } from '@intexuraos/infra-openrouter';
+import { createFakeFirestore } from '@intexuraos/infra-firestore';
 import {
   addPromptPreferenceItem,
   deletePromptPreferenceItem,
@@ -17,6 +38,8 @@ import type {
   IntexAgentRunner,
   IntexAgentRunnerResult,
 } from '../domain/messages/handleIncomingMessage.js';
+import { handleIncomingMessage } from '../domain/messages/handleIncomingMessage.js';
+import type { IntexAgentRuntimeSettingsV1 } from '@intexuraos/internal-clients';
 import type {
   SessionRepository,
   SessionRepositorySessionUpdate,
@@ -25,144 +48,1430 @@ import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
 } from '../domain/sessions/types.js';
+import type { TestConversationRunner } from '../domain/testConversation/runTestConversation.js';
+import { FirestoreSessionRepository } from '../infra/firestore/sessionRepository.js';
 
-describe('resolveUserTimeZone', () => {
-  it('returns the IANA time zone loaded for the production user', async () => {
-    const getUserTimezone = vi.fn(async () => 'Europe/Warsaw');
-
-    const result = await resolveUserTimeZone(
-      'user-123',
-      { getUserTimezone },
-      silentLogger()
+describe('resolveRuntimeSettingsWithDeadline', () => {
+  it('retains the successful closed User Service runtime DTO', async () => {
+    const resolveIntexAgentRuntimeSettings = vi.fn(async () =>
+      ok({
+        status: 'available' as const,
+        effectiveModel: DEFAULT_INTEX_AGENT_MODEL,
+        explicitModel: null,
+        source: 'default_absent' as const,
+        revision: 0,
+        timeZone: 'Europe/Warsaw',
+      })
     );
 
-    expect(result).toBe('Europe/Warsaw');
-    expect(getUserTimezone).toHaveBeenCalledWith(
-      'user-123',
-      expect.objectContaining({ signal: expect.any(AbortSignal), throwOnError: true })
-    );
+    await expect(
+      resolveRuntimeSettingsWithDeadline('user-123', { resolveIntexAgentRuntimeSettings })
+    ).resolves.toMatchObject({ ok: true, value: { timeZone: 'Europe/Warsaw' } });
+    expect(resolveIntexAgentRuntimeSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to UTC without warning when the user has no configured time zone', async () => {
-    const logger = silentLogger();
-    const warn = vi.spyOn(logger, 'warn');
-
-    const result = await resolveUserTimeZone(
-      'private-user-123',
-      { getUserTimezone: async () => undefined },
-      logger
-    );
-
-    expect(result).toBe('UTC');
-    expect(warn).not.toHaveBeenCalled();
-  });
-
-  it('logs only a privacy-safe reason when the configured time zone is invalid', async () => {
-    const logger = silentLogger();
-    const warn = vi.spyOn(logger, 'warn');
-
-    const result = await resolveUserTimeZone(
-      'private-user-123',
-      { getUserTimezone: async () => 'Private/Invalid-Zone' },
-      logger
-    );
-
-    expect(result).toBe('UTC');
-    expect(warn).toHaveBeenCalledWith(
-      { reason: 'invalid_time_zone' },
-      'Falling back to UTC for Intex Agent user time zone'
-    );
-  });
-
-  it('falls back to UTC when loading the user time zone rejects', async () => {
-    const logger = silentLogger();
-    const warn = vi.spyOn(logger, 'warn');
-
-    const result = await resolveUserTimeZone(
-      'user-123',
-      {
-        getUserTimezone: async () => {
-          throw new Error('user-service unavailable');
-        },
-      },
-      logger
-    );
-
-    expect(result).toBe('UTC');
-    expect(warn).toHaveBeenCalledWith(
-      { reason: 'time_zone_lookup_failed' },
-      'Falling back to UTC for Intex Agent user time zone'
-    );
-  });
-
-  it('bounds a pending user time-zone lookup and falls back to UTC', async () => {
+  it('returns a closed timeout error and clears the outer timer', async () => {
     vi.useFakeTimers();
     try {
-      const logger = silentLogger();
-      const warn = vi.spyOn(logger, 'warn');
-      let transportAborted = false;
-      let resolvedValue: string | undefined;
-      const resultPromise = resolveUserTimeZone(
-        'private-user-123',
-        {
-          getUserTimezone: (_userId, options) =>
-            new Promise((_resolve, reject) => {
-              options?.signal?.addEventListener(
-                'abort',
-                () => {
-                  transportAborted = true;
-                  reject(new DOMException('Aborted', 'AbortError'));
-                },
-                { once: true }
-              );
-            }),
-        },
-        logger
-      );
-      void resultPromise.then((value) => {
-        resolvedValue = value;
+      const result = resolveRuntimeSettingsWithDeadline('user-123', {
+        resolveIntexAgentRuntimeSettings: async () => await new Promise(() => undefined),
       });
-
-      await vi.advanceTimersByTimeAsync(999);
-      expect(resolvedValue).toBeUndefined();
-      await vi.advanceTimersByTimeAsync(1);
-
-      expect(resolvedValue).toBe('UTC');
-      expect(transportAborted).toBe(true);
-      expect(vi.getTimerCount()).toBe(0);
-      expect(warn).toHaveBeenCalledWith(
-        { reason: 'time_zone_lookup_timeout' },
-        'Falling back to UTC for Intex Agent user time zone'
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(result).resolves.toEqual(
+        err({ code: 'TIMEOUT', message: 'User Service runtime settings request timed out' })
       );
+      expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('clears the lookup timeout after user-service resolves', async () => {
+  it('observes a late client rejection after the timeout without changing the outcome', async () => {
     vi.useFakeTimers();
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', listener);
     try {
-      await expect(
-        resolveUserTimeZone(
-          'user-123',
-          { getUserTimezone: async () => 'Europe/Warsaw' },
-          silentLogger()
-        )
-      ).resolves.toBe('Europe/Warsaw');
-
+      let rejectLate: ((reason: unknown) => void) | undefined;
+      const resultPromise = resolveRuntimeSettingsWithDeadline('user-123', {
+        resolveIntexAgentRuntimeSettings: async () =>
+          await new Promise((_resolve, reject) => {
+            rejectLate = reject;
+          }),
+      });
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(resultPromise).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'TIMEOUT' },
+      });
+      rejectLate?.(new Error('late-private-rejection'));
+      await vi.runAllTimersAsync();
+      await Promise.resolve();
+      expect(unhandled).toEqual([]);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
+      process.off('unhandledRejection', listener);
       vi.useRealTimers();
     }
   });
 });
 
+describe('Intex Matrix corpus composition gate', () => {
+  it('does not construct a key, verifier, or receipt service while disabled', () => {
+    const createEnabled = vi.fn(() => ({ enabled: true as const }));
+
+    expect(
+      composeIntexMatrixCorpusFeature(
+        { enabled: false, runtimeAudience: 'disabled' },
+        createEnabled
+      )
+    ).toBeNull();
+    expect(createEnabled).not.toHaveBeenCalled();
+  });
+
+  it('constructs the Home Dev verification arm exactly once', () => {
+    const runtime = { enabled: true as const };
+    const createEnabled = vi.fn(() => runtime);
+    const config = {
+      enabled: true as const,
+      runtimeAudience: 'home-dev' as const,
+      signingKeyVersion: 'matrix-test-v1',
+      signingKeyMaterial: 'synthetic-public-jwk',
+      evaluatorUserId: 'auth0:user_1',
+      contextEncryptionKeyVersion: 'context-key-v1',
+      contextEncryptionKeyMaterial: Buffer.alloc(32, 7).toString('base64url'),
+    };
+
+    expect(composeIntexMatrixCorpusFeature(config, createEnabled)).toBe(runtime);
+    expect(createEnabled).toHaveBeenCalledTimes(1);
+    expect(createEnabled).toHaveBeenCalledWith(config);
+  });
+
+  it('composes the real verifier and receipt arm without a Firestore write', async () => {
+    const firestore = createFakeFirestore();
+    firestore.clear();
+    const { publicKey } = generateKeyPairSync('ed25519');
+    const runtime = createIntexMatrixCorpusRuntime(
+      {
+        enabled: true,
+        runtimeAudience: 'home-dev',
+        signingKeyVersion: 'matrix-test-v1',
+        signingKeyMaterial: 'injected-in-this-test',
+        evaluatorUserId: 'auth0:user_1',
+        contextEncryptionKeyVersion: 'context-key-v1',
+        contextEncryptionKeyMaterial: Buffer.alloc(32, 7).toString('base64url'),
+      },
+      {
+        firestore: firestore as never,
+        verificationKey: publicKey,
+        promptPreferencesRepository: promptPreferencesRepository([]),
+        runtimeSettingsClient: {
+          resolveIntexAgentRuntimeSettings: vi.fn(async () =>
+            ok({
+              status: 'available' as const,
+              effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+              explicitModel: null,
+              source: 'default_absent' as const,
+              revision: 0,
+              timeZone: 'Europe/Warsaw',
+            })
+          ),
+        },
+        sessionRepository: new FirestoreSessionRepository({ firestore: firestore as never }),
+        createRunner: vi.fn(() => ({
+          run: vi.fn(),
+          executeConfirmed: vi.fn(),
+        }) as unknown as IntexAgentRunner),
+        replyPublisher: {
+          publishReplyWithReceipt: vi.fn(async () => ({
+            publicationReceiptId: 'pubsub_message_1',
+          })),
+        },
+        now: () => '2026-07-20T10:00:00.000Z',
+      }
+    );
+
+    await expect(runtime.verifyAttestation({ invalid: true })).resolves.toEqual({
+      ok: false,
+      code: 'INVALID_ENVELOPE',
+    });
+    expect(firestore.getAllData().size).toBe(0);
+  });
+
+  it('executes a registered signed-lane ingest through the composed strict runtime', async () => {
+    const firestore = createFakeFirestore();
+    const { publicKey } = generateKeyPairSync('ed25519');
+    const createRunner = vi.fn(() => ({
+      run: vi.fn(async () => ({ outcome: 'no_action' as const, reply: 'Synthetic reply.' })),
+      executeConfirmed: vi.fn(),
+    }) as unknown as IntexAgentRunner);
+    const publishReplyWithReceipt = vi.fn(async () => ({
+      publicationReceiptId: 'pubsub_message_1',
+    }));
+    const runtime = createIntexMatrixCorpusRuntime(
+      {
+        enabled: true,
+        runtimeAudience: 'home-dev',
+        signingKeyVersion: 'matrix-test-v1',
+        signingKeyMaterial: 'injected-in-this-test',
+        evaluatorUserId: 'auth0:user_1',
+        contextEncryptionKeyVersion: 'context-key-v1',
+        contextEncryptionKeyMaterial: Buffer.alloc(32, 7).toString('base64url'),
+      },
+      {
+        firestore: firestore as never,
+        verificationKey: publicKey,
+        promptPreferencesRepository: promptPreferencesRepository([]),
+        runtimeSettingsClient: {
+          resolveIntexAgentRuntimeSettings: vi.fn(async () =>
+            ok({
+              status: 'available' as const,
+              effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+              explicitModel: IntexAgentModels.DeepSeekV4Flash,
+              source: 'explicit' as const,
+              revision: 1,
+              timeZone: 'Europe/Warsaw',
+            })
+          ),
+        },
+        sessionRepository: new FirestoreSessionRepository({ firestore: firestore as never }),
+        createRunner,
+        replyPublisher: { publishReplyWithReceipt },
+        now: () => '2026-07-20T10:00:00.000Z',
+      }
+    );
+    await expect(
+      runtime.contextService.registerRun({
+        runtimeAudience: 'home-dev',
+        runId: 'run_1',
+        userId: 'auth0:user_1',
+        leaseFence: '7',
+        catalogDigest: 'a'.repeat(64),
+        agentModel: 'or:deepseek/deepseek-v4-flash',
+        evaluatorModel: 'or:minimax/minimax-m3',
+        expectedTimeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ ok: true });
+    const profile: StrictToolMockProfileV1 = {
+      version: 1,
+      calls: [],
+      forbiddenSelections: [],
+      unexpectedKnownToolPolicy: 'behavioral_failure_no_execution',
+    };
+    const payload = {
+      version: 1 as const,
+      kind: 'matrix_corpus_ingest_payload' as const,
+      ordinaryIngest: {
+        type: 'intex.message.ingest' as const,
+        userId: 'auth0:user_1',
+        messageId: 'transport_message_1',
+        text: 'Synthetic request.',
+        sourceType: 'whatsapp_text' as const,
+        timestamp: '2026-07-20T10:00:00.000Z',
+      },
+      context: {
+        version: 1 as const,
+        kind: 'matrix_corpus' as const,
+        runtimeAudience: 'home-dev' as const,
+        leaseFence: '7',
+        ingestReceiptId: 'receipt_1',
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        scenarioNumber: 1,
+        scenarioLabel: 'Scenario 001/020',
+        turnIndex: 0,
+        phase: 'start' as const,
+        startNewSession: true,
+        promptNormalizationVersion: 1 as const,
+        promptDigest: 'b'.repeat(64),
+        expectedSessionId: null,
+        pendingConfirmationId: null,
+        expectedDecision: null,
+        mockProfile: profile,
+        mockProfileDigest: createHash('sha256')
+          .update(canonicalMatrixCorpusStrictToolMockProfileV1(profile), 'utf8')
+          .digest('hex'),
+        expectedToolSchedule: [],
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      },
+    };
+    const payloadDigest = createHash('sha256')
+      .update(canonicalMatrixCorpusIngestPayloadV1(payload), 'utf8')
+      .digest('hex');
+
+    const acceptance = await runtime.acceptVerifiedIngest({
+        version: 1,
+        kind: 'matrix_corpus_ingest',
+        issuer: 'whatsapp-service',
+        audience: 'intex-agent',
+        runtimeAudience: 'home-dev',
+        keyVersion: 'key_v1',
+        eventId: 'receipt_1',
+        leaseFence: '7',
+        payloadDigest,
+        issuedAt: '2026-07-20T10:00:00.000Z',
+        expiresAt: '2026-07-20T10:05:00.000Z',
+        payload,
+      });
+    const persistedReceipt = await firestore
+      .collection('intex_agent_matrix_corpus_ingest_receipts')
+      .doc('receipt_1')
+      .get();
+    expect({ acceptance, persistedReceipt: persistedReceipt.data() }).toMatchObject({
+      acceptance: { accepted: true, state: 'completed', correlationCount: 1 },
+      persistedReceipt: {
+        state: 'completed',
+        failureCode: null,
+        publication: {
+          phase: 'closed',
+          expectedReplyDigests: [expect.stringMatching(/^[0-9a-f]{64}$/u)],
+          replies: [{ state: 'accepted' }],
+          terminal: { kind: 'completed' },
+        },
+      },
+    });
+    expect(createRunner).toHaveBeenCalledOnce();
+    expect(publishReplyWithReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Synthetic reply.', idempotencyKey: expect.any(String) })
+    );
+  });
+});
+
+describe('Matrix corpus runner composition', () => {
+  it('fails closed when Matrix corpus generation fails or omits provider usage', async () => {
+    const profile = strictProfile();
+    const failed = normalMatrixRunner({
+      run: vi.fn(async () => err({ code: 'API_ERROR' as const, message: 'provider failed' })),
+    });
+    const incomplete = normalMatrixRunner({
+      run: vi.fn(async () =>
+        ok({
+          content: JSON.stringify({ outcome: 'no_action', reply: 'No action.' }),
+          toolCallsMade: 0,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+        })
+      ),
+    });
+    const input: Parameters<typeof failed.runner.run>[0] = {
+      session: matrixCorpusSession(profile),
+      events: [],
+      message: 'No action.',
+      currentDateTime: '2026-07-20T10:00:00.000Z',
+      timeZone: 'Europe/Warsaw',
+    };
+
+    await expect(failed.runner.run(input)).rejects.toThrowError(
+      'Matrix corpus agent generation failed'
+    );
+    await expect(incomplete.runner.run(input)).rejects.toThrowError(
+      'Matrix corpus provider usage is incomplete'
+    );
+  });
+
+  it('deduplicates identical provider callbacks and rejects conflicting replay', async () => {
+    const profile = strictProfile();
+    const runWithReplay = (conflicting: boolean): ReturnType<typeof normalMatrixRunner> => {
+      const fixture = normalMatrixRunner({
+        run: vi.fn(async (params) => {
+          if (
+            params.matrixCorpusContext === undefined ||
+            params.onMatrixCorpusProviderCall === undefined
+          )
+            throw new Error('missing Matrix corpus provider hooks');
+          const call = {
+            context: params.matrixCorpusContext,
+            modelId: 'or:deepseek/deepseek-v4-flash',
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            providerReportedUsd: 0.0001,
+          };
+          await params.onMatrixCorpusProviderCall(call);
+          await params.onMatrixCorpusProviderCall(
+            conflicting ? { ...call, inputTokens: 2, totalTokens: 3 } : call
+          );
+          return ok({
+            content: JSON.stringify({ outcome: 'no_action', reply: 'No action.' }),
+            toolCallsMade: 0,
+            iterationCount: 1,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+            providerCalls: [call],
+          });
+        }),
+      });
+      return fixture;
+    };
+    const input: Parameters<typeof identical.runner.run>[0] = {
+      session: matrixCorpusSession(profile),
+      events: [],
+      message: 'No action.',
+      currentDateTime: '2026-07-20T10:00:00.000Z',
+      timeZone: 'Europe/Warsaw',
+    };
+    const identical = runWithReplay(false);
+
+    await expect(identical.runner.run(input)).resolves.toMatchObject({ outcome: 'no_action' });
+    expect(identical.recordProviderCall).toHaveBeenCalledTimes(1);
+    await expect(runWithReplay(true).runner.run(input)).rejects.toThrowError(
+      'Matrix corpus provider usage replay conflict'
+    );
+  });
+
+  it('returns the strict mock failure reply with recorded selection metadata and category', async () => {
+    const profile = strictProfile({
+      calls: [
+        {
+          turnIndex: 0,
+          toolName: 'query_calendar_events',
+          ordinal: 1,
+          outcome: { kind: 'failure', code: 'MOCK_TOOL_FAILURE' },
+        },
+      ],
+    });
+    const client = {
+      run: vi.fn(async (params: Parameters<import('@intexuraos/llm-contract').ToolCallingClient['run']>[0]) => {
+        const tool = params.tools.find((candidate) => candidate.name === 'query_calendar_events');
+        if (tool === undefined || params.matrixCorpusContext === undefined)
+          throw new Error('missing strict tool or provider context');
+        await expect(
+          tool.run({
+            mode: 'count',
+            timeMin: '2026-07-20T00:00:00Z',
+            timeMax: '2026-07-21T00:00:00Z',
+          })
+        ).rejects.toMatchObject({ category: 'configured_failure' });
+        const providerCall = {
+          context: params.matrixCorpusContext,
+          modelId: 'or:deepseek/deepseek-v4-flash',
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          providerReportedUsd: 0.0001,
+        };
+        return ok({
+          content: JSON.stringify({
+            outcome: 'completed',
+            reply: 'Synthetic configured failure.',
+            toolName: 'query_calendar_events',
+          }),
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+          providerCalls: [providerCall],
+        });
+      }),
+    };
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_configured_failure',
+        expectedSchedule: [
+          { turnIndex: 0, toolName: 'query_calendar_events', ordinal: 1 },
+        ],
+        recordExecutionBoundary: vi.fn(async () => undefined),
+        recordToolCallStarted: vi.fn(async () => undefined),
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall: vi.fn(async () => undefined),
+      },
+      client,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool' as const, allowedToolNames: ['query_calendar_events'] };
+        },
+      },
+      userPreferences: null,
+    });
+
+    await expect(
+      runner.run({
+        session: matrixCorpusSession(profile),
+        events: [],
+        message: 'Create a synthetic note.',
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'tool_failed',
+      reply: 'Synthetic configured failure.',
+      errorCategory: 'configured_failure',
+      toolSelection: { turnIndex: 0, ordinal: 1 },
+    });
+  });
+
+  it('uses deterministic fallback metadata when an ordinary read-only tool throws an untyped error', async () => {
+    const error = Object.assign(new Error('Synthetic ordinary failure'), { category: 7 });
+    const client = {
+      run: vi.fn(async (params: Parameters<import('@intexuraos/llm-contract').ToolCallingClient['run']>[0]) => {
+        const tool = params.tools.find((candidate) => candidate.name === 'query_calendar_events');
+        if (tool === undefined) throw new Error('missing ordinary query tool');
+        await expect(
+          tool.run({
+            mode: 'count',
+            timeMin: '2026-07-20T00:00:00Z',
+            timeMax: '2026-07-21T00:00:00Z',
+          })
+        ).rejects.toBe(error);
+        return ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        });
+      }),
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: {
+        ...emptyToolExecutor(),
+        async queryCalendarEvents() {
+          throw error;
+        },
+      },
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool' as const, allowedToolNames: ['query_calendar_events'] };
+        },
+      },
+    });
+
+    await expect(
+      runner.run({
+        session: matrixCorpusSession(strictProfile()),
+        events: [],
+        message: 'Count calendar events.',
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_failed',
+      reply:
+        'I could not execute this action: Synthetic ordinary failure. Please try again later.',
+      toolName: 'query_calendar_events',
+      error: 'Synthetic ordinary failure',
+      errorCategory: 'unknown',
+      isRetryable: false,
+      attemptedAction: 'query_calendar_events',
+    });
+  });
+
+  it('correlates a Matrix corpus response-schema repair as a separate provider call', async () => {
+    const profile = strictProfile();
+    const registerExpectedProviderCall = vi.fn();
+    const recordProviderCall = vi.fn(async () => undefined);
+    const client = {
+      run: vi.fn(async (params: Parameters<import('@intexuraos/llm-contract').ToolCallingClient['run']>[0]) => {
+        if (params.matrixCorpusContext === undefined)
+          throw new Error('missing generation context');
+        return ok({
+          content: 'malformed runner output',
+          toolCallsMade: 0,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+          providerCalls: [
+            {
+              context: params.matrixCorpusContext,
+              modelId: 'or:deepseek/deepseek-v4-flash',
+              inputTokens: 1,
+              outputTokens: 1,
+              totalTokens: 2,
+              providerReportedUsd: 0.0001,
+            },
+          ],
+        });
+      }),
+    };
+    const responseRepairClient = {
+      generate: vi.fn(async (_prompt, options: Parameters<import('@intexuraos/llm-utils').StructuredClient['generate']>[1]) => {
+        const context = options['matrixCorpusContext'] as
+          | MatrixCorpusLlmCallContextV1
+          | undefined;
+        if (context === undefined) throw new Error('missing repair context');
+        return ok({
+          content: JSON.stringify({ outcome: 'no_action', reply: 'Repaired response.' }),
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+          providerCall: {
+            context,
+            modelId: 'or:deepseek/deepseek-v4-flash',
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            providerReportedUsd: 0.0001,
+          },
+        });
+      }),
+    };
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_response_repair',
+        expectedSchedule: [],
+        recordExecutionBoundary: vi.fn(async () => undefined),
+        recordToolCallStarted: vi.fn(async () => undefined),
+        registerExpectedProviderCall,
+        recordProviderCall,
+      },
+      client,
+      responseRepairClient,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'no_action' as const, reason: 'conversation' as const };
+        },
+      },
+      userPreferences: null,
+    });
+
+    await expect(
+      runner.run({
+        session: matrixCorpusSession(profile),
+        events: [],
+        message: 'Repair this.',
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({ outcome: 'no_action', reply: 'Repaired response.' });
+    expect(registerExpectedProviderCall.mock.calls.map(([context]) => context.stage)).toEqual([
+      'agent_generation',
+      'response_schema_repair',
+    ]);
+    expect(recordProviderCall).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs a normal turn through the strict boundary without any production executor', async () => {
+    const recordExecutionBoundary = vi.fn(async () => undefined);
+    const recordToolCallStarted = vi.fn(async () => undefined);
+    const registerExpectedProviderCall = vi.fn();
+    const recordProviderCall = vi.fn(async () => undefined);
+    const profile = strictProfile({
+      calls: [
+        {
+          turnIndex: 0,
+          toolName: 'query_calendar_events',
+          ordinal: 1,
+          outcome: {
+            kind: 'success',
+            result: {
+              toolName: 'query_calendar_events',
+              status: 'completed',
+              mode: 'count',
+              count: 0,
+            },
+          },
+        },
+      ],
+    });
+    const client = {
+      run: vi.fn(async (params: Parameters<import('@intexuraos/llm-contract').ToolCallingClient['run']>[0]) => {
+        const tool = params.tools.find((candidate) => candidate.name === 'query_calendar_events');
+        if (tool === undefined) throw new Error('strict tool missing');
+        await tool.run({
+          mode: 'count',
+          timeMin: '2026-07-20T00:00:00Z',
+          timeMax: '2026-07-21T00:00:00Z',
+        });
+        if (params.matrixCorpusContext === undefined) throw new Error('missing usage context');
+        return ok({
+          content: JSON.stringify({
+            outcome: 'completed',
+            reply: 'No events.',
+            toolName: 'query_calendar_events',
+          }),
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+          providerCalls: [
+            {
+              context: params.matrixCorpusContext,
+              modelId: 'or:deepseek/deepseek-v4-flash',
+              inputTokens: 1,
+              outputTokens: 0,
+              totalTokens: 1,
+              providerReportedUsd: 0.00004,
+            },
+            {
+              context: {
+                ...params.matrixCorpusContext,
+                callOrdinal: (params.matrixCorpusContext?.callOrdinal ?? 0) + 1,
+              },
+              modelId: 'or:deepseek/deepseek-v4-flash',
+              inputTokens: 0,
+              outputTokens: 1,
+              totalTokens: 1,
+              providerReportedUsd: 0.00006,
+            },
+          ],
+        });
+      }),
+    };
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_normal',
+        expectedSchedule: profile.calls.map(({ turnIndex, toolName, ordinal }) => ({
+          turnIndex,
+          toolName,
+          ordinal,
+        })),
+        recordExecutionBoundary,
+        recordToolCallStarted,
+        registerExpectedProviderCall,
+        recordProviderCall,
+      },
+      client,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool' as const, allowedToolNames: ['query_calendar_events'] };
+        },
+      },
+      userPreferences: null,
+    });
+
+    await expect(
+      runner.run({
+        session: matrixCorpusSession(profile),
+        events: [],
+        message: 'Ile mam wydarzeń dzisiaj?',
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      toolName: 'query_calendar_events',
+      toolSelection: { turnIndex: 0, ordinal: 1 },
+    });
+    expect(recordToolCallStarted).toHaveBeenCalledOnce();
+    expect(recordExecutionBoundary).toHaveBeenCalledOnce();
+    expect(recordExecutionBoundary).toHaveBeenCalledWith('strict_mock_executor_resolved');
+    expect(recordProviderCall).toHaveBeenCalledTimes(2);
+    expect(client.run).toHaveBeenCalledOnce();
+  });
+
+  it('executes an accepted confirmation with the exact preauthorized mock and zero LLM calls', async () => {
+    const profile = strictProfile({
+      calls: [
+        {
+          turnIndex: 0,
+          toolName: 'create_note',
+          ordinal: 1,
+          outcome: {
+            kind: 'success',
+            result: {
+              toolName: 'create_note',
+              status: 'completed',
+              message: 'Synthetic note saved',
+            },
+          },
+        },
+      ],
+    });
+    const recordToolCallStarted = vi.fn(async () => undefined);
+    const recordExecutionBoundary = vi.fn(async () => undefined);
+    const registerExpectedProviderCall = vi.fn();
+    const recordProviderCall = vi.fn(async () => undefined);
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'confirmation',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_confirmation',
+        expectedSchedule: profile.calls.map(({ turnIndex, toolName, ordinal }) => ({
+          turnIndex,
+          toolName,
+          ordinal,
+        })),
+        recordExecutionBoundary,
+        recordToolCallStarted,
+        registerExpectedProviderCall,
+        recordProviderCall,
+        preauthorizedSelection: {
+          toolName: 'create_note',
+          turnIndex: 0,
+          ordinal: 1,
+        },
+      },
+      userPreferences: null,
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: matrixCorpusSession(profile),
+        events: [],
+        toolName: 'create_note',
+        toolArgs: { content: 'Synthetic note' },
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      toolName: 'create_note',
+      toolResult: { toolName: 'create_note', status: 'completed' },
+    });
+    expect(recordToolCallStarted).toHaveBeenCalledWith({
+      toolName: 'create_note',
+      turnIndex: 0,
+      ordinal: 1,
+      facts: expect.any(Array),
+    });
+    expect(recordExecutionBoundary).toHaveBeenCalledWith('strict_mock_executor_resolved');
+  });
+
+  it('carries a mutating preview into the following strict confirmation turn without executing it early', async () => {
+    const profile = strictProfile({
+      calls: [
+        {
+          turnIndex: 1,
+          toolName: 'create_note',
+          ordinal: 1,
+          outcome: {
+            kind: 'success',
+            result: {
+              toolName: 'create_note',
+              status: 'completed',
+              message: 'Synthetic note saved',
+            },
+          },
+        },
+      ],
+      forbiddenSelections: [{ turnIndex: 0, toolName: 'create_note' }],
+    });
+    const recordPreviewExecution = vi.fn(async () => undefined);
+    const previewClient = {
+      run: vi.fn(async (params: Parameters<import('@intexuraos/llm-contract').ToolCallingClient['run']>[0]) => {
+        const tool = params.tools.find((candidate) => candidate.name === 'create_note');
+        if (tool === undefined) throw new Error('strict preview tool missing');
+        await tool.run({ content: 'Synthetic note' });
+        if (params.matrixCorpusContext === undefined) throw new Error('missing usage context');
+        return ok({
+          content: JSON.stringify({
+            outcome: 'needs_confirmation',
+            reply: 'Confirm synthetic note creation.',
+            toolName: 'create_note',
+            toolArgs: { content: 'Synthetic note' },
+          }),
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+          providerCalls: [
+            {
+              context: params.matrixCorpusContext,
+              modelId: 'or:deepseek/deepseek-v4-flash',
+              inputTokens: 1,
+              outputTokens: 1,
+              totalTokens: 2,
+              providerReportedUsd: 0.0001,
+            },
+          ],
+        });
+      }),
+    };
+    const previewRunner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_preview',
+        expectedSchedule: [{ turnIndex: 1, toolName: 'create_note', ordinal: 1 }],
+        recordExecutionBoundary: vi.fn(async () => undefined),
+        recordToolCallStarted: recordPreviewExecution,
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall: vi.fn(async () => undefined),
+      },
+      client: previewClient,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool' as const, allowedToolNames: ['create_note'] };
+        },
+      },
+      userPreferences: null,
+    });
+
+    const preview = await previewRunner.run({
+      session: matrixCorpusSession(profile),
+      events: [],
+      message: 'Create a synthetic note.',
+      currentDateTime: '2026-07-20T10:00:00.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+    expect(preview).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolSelection: { turnIndex: 1, ordinal: 1 },
+    });
+    expect(recordPreviewExecution).not.toHaveBeenCalled();
+
+    const recordConfirmedExecution = vi.fn(async () => undefined);
+    const recordConfirmedBoundary = vi.fn(async () => undefined);
+    const confirmedRunner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'confirmation',
+        turnIndex: 1,
+        ingestReceiptId: 'receipt_confirmation',
+        expectedSchedule: [{ turnIndex: 1, toolName: 'create_note', ordinal: 1 }],
+        recordExecutionBoundary: recordConfirmedBoundary,
+        recordToolCallStarted: recordConfirmedExecution,
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall: vi.fn(async () => undefined),
+        preauthorizedSelection: { toolName: 'create_note', turnIndex: 1, ordinal: 1 },
+      },
+      userPreferences: null,
+    });
+    await expect(
+      confirmedRunner.executeConfirmed({
+        session: matrixCorpusSession(profile),
+        events: [],
+        toolName: 'create_note',
+        toolArgs: { content: 'Synthetic note' },
+        currentDateTime: '2026-07-20T10:00:01.000Z',
+      })
+    ).resolves.toMatchObject({ outcome: 'completed', toolName: 'create_note' });
+    expect(recordConfirmedExecution).toHaveBeenCalledWith({
+      toolName: 'create_note',
+      turnIndex: 1,
+      ordinal: 1,
+      facts: expect.any(Array),
+    });
+    expect(recordConfirmedBoundary).toHaveBeenCalledWith('strict_mock_executor_resolved');
+  });
+
+  it('fails before executor construction for a cross-lane ordinary session', async () => {
+    const profile = strictProfile();
+    const recordExecutionBoundary = vi.fn(async () => undefined);
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_cross_lane',
+        expectedSchedule: profile.calls.map(({ turnIndex, toolName, ordinal }) => ({
+          turnIndex,
+          toolName,
+          ordinal,
+        })),
+        recordExecutionBoundary,
+        recordToolCallStarted: vi.fn(async () => undefined),
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall: vi.fn(async () => undefined),
+      },
+      client: fakeToolCallingClient(),
+      userPreferences: null,
+    });
+
+    await expect(
+      runner.run({
+        session: {
+          id: 'ordinary_session',
+          userId: 'auth0:user_1',
+          channel: 'whatsapp',
+          status: 'active',
+          startedAt: '2026-07-20T10:00:00.000Z',
+          lastUserMessageAt: '2026-07-20T10:00:00.000Z',
+          startReason: 'no_active_session',
+        },
+        events: [],
+        message: 'hello',
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).rejects.toMatchObject({ code: 'CROSS_LANE_EXECUTION_CONTEXT' });
+    expect(recordExecutionBoundary).not.toHaveBeenCalled();
+  });
+});
+
+describe('catalog startup and evaluator admission', () => {
+  it('awaits one successful catalog startup without warning', async () => {
+    const start = vi.fn(async () => ({ catalog: {}, fetchedAt: '2026-07-19T12:00:00.000Z' }));
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
+
+    await startCatalogNonBlocking({ start }, logger);
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('does not block startup when the catalog client unexpectedly rejects', async () => {
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
+
+    await expect(
+      startCatalogNonBlocking(
+        { start: async () => Promise.reject(new Error('catalog-start-private-cause')) },
+        logger
+      )
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      { reason: 'catalog_start_failed' },
+      'Intex Agent OpenRouter catalog startup failed'
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('catalog-start-private-cause');
+  });
+
+  it('admits with the exact startup catalog instance and fails closed before factories', async () => {
+    const evidence = admittedCatalog();
+    const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
+    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+    const createAgentRunnerFn: AgentRunnerFactory = vi.fn(() => {
+      throw new Error('must not construct runner');
+    });
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: new MemorySessionRepository(),
+      promptPreferencesRepository: promptPreferencesRepository([]),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient: evidence,
+      createToolCallingClientFn,
+      createLlmClientFn,
+      createAgentRunnerFn,
+      ids: fixedTestIds(),
+    });
+    vi.mocked(evidence.getIntexAgentCatalogEvidence).mockResolvedValueOnce(null);
+
+    await expect(runner.run(testConversationRequest('catalog-denied'))).rejects.toThrow(
+      'Intex Agent evaluator catalog admission unavailable'
+    );
+    expect(evidence.getIntexAgentCatalogEvidence).toHaveBeenCalledTimes(1);
+    expect(createToolCallingClientFn).not.toHaveBeenCalled();
+    expect(createLlmClientFn).not.toHaveBeenCalled();
+    expect(createAgentRunnerFn).not.toHaveBeenCalled();
+  });
+
+  it('recovers on later fresh evidence without replacing the admission instance', async () => {
+    const catalogClient = admittedCatalog();
+    vi.mocked(catalogClient.getIntexAgentCatalogEvidence)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(catalogEvidence());
+    const createAgentRunnerFn: AgentRunnerFactory = vi.fn((): IntexAgentRunner => ({
+      async run(): Promise<IntexAgentRunnerResult> {
+        return { outcome: 'no_action', reply: 'Recovered.' };
+      },
+      async executeConfirmed(): Promise<IntexAgentRunnerResult> {
+        throw new Error('not used');
+      },
+    }));
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: new MemorySessionRepository(),
+      promptPreferencesRepository: promptPreferencesRepository([]),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient,
+      createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
+      createLlmClientFn: vi.fn(() => fakeStructuredClient()),
+      createAgentRunnerFn,
+      ids: fixedTestIds(),
+    });
+
+    await expect(runner.run(testConversationRequest('catalog-stale'))).rejects.toThrow();
+    await expect(runner.run(testConversationRequest('catalog-recovered'))).resolves.toMatchObject({
+      runId: 'catalog-recovered',
+    });
+    expect(catalogClient.getIntexAgentCatalogEvidence).toHaveBeenCalledTimes(2);
+    expect(createAgentRunnerFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('single-flights concurrent stale evaluator admissions through the startup client', async () => {
+    let nowMs = Date.parse('2026-07-19T12:00:00.000Z');
+    let resolveRefresh: ((response: Response) => void) | undefined;
+    const fetchImpl = vi
+      .fn<(_: string | URL | Request, _init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(catalogResponse())
+      .mockImplementationOnce(
+        async () =>
+          await new Promise<Response>((resolve) => {
+            resolveRefresh = resolve;
+          })
+      );
+    const catalogClient = createOpenRouterCatalogClient({
+      apiKey: 'platform-key',
+      logger: silentLogger(),
+      fetchImpl,
+      now: () => new Date(nowMs),
+    });
+    await catalogClient.start();
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: new MemorySessionRepository(),
+      promptPreferencesRepository: promptPreferencesRepository([]),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient,
+      createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
+      createLlmClientFn: vi.fn(() => fakeStructuredClient()),
+      createAgentRunnerFn: noActionAgentFactory(),
+      ids: fixedTestIds(),
+    });
+    nowMs += 5 * 60 * 1_000;
+
+    const first = runner.run(testConversationRequest('stale-concurrent-a'));
+    const second = runner.run(testConversationRequest('stale-concurrent-b'));
+    await Promise.resolve();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    if (resolveRefresh === undefined) throw new Error('refresh did not start');
+    resolveRefresh(catalogResponse());
+
+    await expect(Promise.all([first, second])).resolves.toHaveLength(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed on stale refresh failure before every evaluator provider factory', async () => {
+    let nowMs = Date.parse('2026-07-19T12:00:00.000Z');
+    const fetchImpl = vi
+      .fn<(_: string | URL | Request, _init?: RequestInit) => Promise<Response>>()
+      .mockResolvedValueOnce(catalogResponse())
+      .mockRejectedValueOnce(new Error('stale-refresh-private-cause'));
+    const catalogClient = createOpenRouterCatalogClient({
+      apiKey: 'platform-key',
+      logger: silentLogger(),
+      fetchImpl,
+      now: () => new Date(nowMs),
+    });
+    await catalogClient.start();
+    nowMs += 5 * 60 * 1_000;
+    const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
+    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+    const createAgentRunnerFn = noActionAgentFactory();
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: new MemorySessionRepository(),
+      promptPreferencesRepository: promptPreferencesRepository([]),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient,
+      createToolCallingClientFn,
+      createLlmClientFn,
+      createAgentRunnerFn,
+      ids: fixedTestIds(),
+    });
+
+    await expect(runner.run(testConversationRequest('stale-refresh-failed'))).rejects.toThrow(
+      'Intex Agent evaluator catalog admission unavailable'
+    );
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(createToolCallingClientFn).not.toHaveBeenCalled();
+    expect(createLlmClientFn).not.toHaveBeenCalled();
+    expect(createAgentRunnerFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('createRuntimeBoundModelClients', () => {
+  it.each([
+    IntexAgentModels.DeepSeekV4Flash,
+    IntexAgentModels.MiniMaxM3,
+    IntexAgentModels.Gemini3FlashPreview,
+  ])('binds both product clients to the exact frozen snapshot model %s', (model) => {
+    const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
+    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+    const runtimeSettings = Object.freeze({
+      status: 'available' as const,
+      effectiveModel: model,
+      explicitModel: model,
+      source: 'explicit' as const,
+      revision: 1,
+      timeZone: 'UTC',
+    });
+
+    createRuntimeBoundModelClients({
+      runtimeSettings,
+      apiKey: 'platform-key',
+      userId: 'user-1',
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      createToolCallingClientFn,
+      createLlmClientFn,
+    });
+
+    expect(createToolCallingClientFn).toHaveBeenCalledTimes(1);
+    expect(createLlmClientFn).toHaveBeenCalledTimes(1);
+    expect(createToolCallingClientFn).toHaveBeenCalledWith(
+      expect.objectContaining({ model, apiKey: 'platform-key' })
+    );
+    expect(createLlmClientFn).toHaveBeenCalledWith(
+      expect.objectContaining({ model, apiKey: 'platform-key' })
+    );
+  });
+
+  it('does not retry or substitute a model when product client construction fails', () => {
+    const createToolCallingClientFn = vi.fn(() => {
+      throw new Error('provider-construction-failed');
+    });
+    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+
+    expect(() =>
+      createRuntimeBoundModelClients({
+        runtimeSettings: Object.freeze({
+          status: 'unavailable',
+          effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+          source: 'platform_default',
+          timeZone: 'UTC',
+        }),
+        apiKey: 'platform-key',
+        userId: 'user-1',
+        logger: silentLogger(),
+        usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+        createToolCallingClientFn,
+        createLlmClientFn,
+      })
+    ).toThrow('provider-construction-failed');
+    expect(createToolCallingClientFn).toHaveBeenCalledTimes(1);
+    expect(createLlmClientFn).not.toHaveBeenCalled();
+  });
+});
+
+describe('composeIntexAgentExecutionServices ordinary product isolation', () => {
+  it.each<{
+    name: string;
+    catalogState: 'failed' | 'stale';
+    runtime: IntexAgentRuntimeSettingsV1;
+  }>([
+    {
+      name: 'failed catalog with explicit Gemini',
+      catalogState: 'failed',
+      runtime: {
+        status: 'available',
+        effectiveModel: IntexAgentModels.Gemini3FlashPreview,
+        explicitModel: IntexAgentModels.Gemini3FlashPreview,
+        source: 'explicit',
+        revision: 3,
+        timeZone: 'Europe/Warsaw',
+      },
+    },
+    {
+      name: 'stale catalog with default-absent DeepSeek',
+      catalogState: 'stale',
+      runtime: {
+        status: 'available',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        explicitModel: null,
+        source: 'default_absent',
+        revision: 0,
+        timeZone: 'UTC',
+      },
+    },
+    {
+      name: 'failed catalog with unavailable DeepSeek',
+      catalogState: 'failed',
+      runtime: {
+        status: 'unavailable',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        source: 'platform_default',
+        timeZone: 'America/New_York',
+      },
+    },
+  ])(
+    'keeps the actually composed app catalog out of ordinary turn: $name',
+    async ({ catalogState, runtime }) => {
+    const catalogClient = {
+      getIntexAgentCatalogEvidence: vi.fn(async () => {
+        if (catalogState === 'failed') throw new Error('catalog-failure-sentinel');
+        return null;
+      }),
+    };
+    const resolveRuntimeSettings = vi.fn(async () => ok(runtime));
+    const toolFactory: NonNullable<
+      CreateRuntimeBoundModelClientsInput['createToolCallingClientFn']
+    > = vi.fn(() => ({ run: vi.fn() }) as never);
+    const structuredFactory: NonNullable<
+      CreateRuntimeBoundModelClientsInput['createLlmClientFn']
+    > = vi.fn(() => ({ generate: vi.fn() }) as never);
+    const runnerRun = vi.fn(
+      async (input: Parameters<IntexAgentRunner['run']>[0]): Promise<IntexAgentRunnerResult> => {
+        if (input.runtimeSettings === undefined) throw new Error('runtime snapshot missing');
+        createRuntimeBoundModelClients({
+          runtimeSettings: input.runtimeSettings,
+          apiKey: 'platform-key',
+          userId: input.session.userId,
+          logger: silentLogger(),
+          usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+          createToolCallingClientFn: toolFactory,
+          createLlmClientFn: structuredFactory,
+        });
+        return { outcome: 'no_action', reply: 'Okay.' };
+      }
+    );
+    const repository = new MemorySessionRepository();
+    const appLogger = silentLogger();
+    const createOrdinaryIncomingMessageHandler = vi.fn((_handlerLogger) => ({
+      async handle(
+        input: Parameters<typeof handleIncomingMessage>[0]
+      ): ReturnType<typeof handleIncomingMessage> {
+        return await handleIncomingMessage(input, {
+          sessionRepository: repository,
+          runner: {
+            run: runnerRun,
+            async executeConfirmed(): Promise<never> {
+              throw new Error('not used');
+            },
+          },
+          replyPublisher: { publishReply: () => Promise.resolve() },
+          clock: { now: () => '2026-07-19T12:00:00.000Z' },
+          resolveRuntimeSettings,
+          logger: silentLogger(),
+          ids: {
+            sessionId: () => 'session-ordinary',
+            eventId: () => `event-${String(repository.events.length + 1)}`,
+            confirmationId: () => 'confirmation-unused',
+          },
+          sessionTimeoutMs: 30 * 60 * 1_000,
+        });
+      },
+    }));
+    const createTestConversationRunner = vi.fn(
+      (_catalogClient: typeof catalogClient): TestConversationRunner => ({
+        async run(): Promise<never> {
+          throw new Error('evaluator not invoked');
+        },
+      })
+    );
+    const executionServices = composeIntexAgentExecutionServices({
+      catalogClient,
+      logger: appLogger,
+      createOrdinaryIncomingMessageHandler,
+      createTestConversationRunner,
+    });
+
+    await executionServices.incomingMessageHandler.handle({
+      type: 'intex.message.ingest',
+      userId: 'user-1',
+      messageId: 'wamid-ordinary',
+      text: 'hello',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-07-19T12:00:00.000Z',
+    });
+
+    expect(createOrdinaryIncomingMessageHandler).toHaveBeenCalledTimes(1);
+    expect(createOrdinaryIncomingMessageHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ warn: expect.any(Function) })
+    );
+    expect(createOrdinaryIncomingMessageHandler.mock.calls[0]?.[0]).not.toBe(catalogClient);
+    expect(createTestConversationRunner).toHaveBeenCalledWith(catalogClient);
+    expect(resolveRuntimeSettings).toHaveBeenCalledTimes(1);
+    expect(runnerRun).toHaveBeenCalledTimes(1);
+    expect(toolFactory).toHaveBeenCalledTimes(1);
+    expect(structuredFactory).toHaveBeenCalledTimes(1);
+    expect(toolFactory).toHaveBeenCalledWith(
+      expect.objectContaining({ model: runtime.effectiveModel })
+    );
+    expect(structuredFactory).toHaveBeenCalledWith(
+      expect.objectContaining({ model: runtime.effectiveModel })
+    );
+    expect(catalogClient.getIntexAgentCatalogEvidence).not.toHaveBeenCalled();
+    }
+  );
+
+  it('marks only the production handler delegate warning and leaks no runtime sentinel', async () => {
+    const delegateWarn = vi.fn();
+    const repository = new MemorySessionRepository();
+    const rawSentinels = [
+      'raw-resolver-user-sentinel',
+      'https://private.invalid/runtime',
+      'provider-sentinel',
+      'model-sentinel',
+      'resolver-cause-sentinel',
+    ];
+    const createOrdinaryIncomingMessageHandler = vi.fn((handlerLogger) => ({
+      async handle(
+        input: Parameters<typeof handleIncomingMessage>[0]
+      ): ReturnType<typeof handleIncomingMessage> {
+        return await handleIncomingMessage(input, {
+          sessionRepository: repository,
+          runner: {
+            async run(): Promise<never> {
+              throw new Error('runner must not execute');
+            },
+            async executeConfirmed(): Promise<never> {
+              throw new Error('confirmed runner must not execute');
+            },
+          },
+          replyPublisher: { publishReply: () => Promise.resolve() },
+          clock: { now: () => '2026-07-19T12:00:00.000Z' },
+          resolveRuntimeSettings: async () =>
+            err({ code: 'API_ERROR', message: rawSentinels.join(' ') }),
+          logger: handlerLogger,
+          ids: {
+            sessionId: () => 'session-sentry-boundary',
+            eventId: () => `event-${String(repository.events.length + 1)}`,
+            confirmationId: () => 'confirmation-unused',
+          },
+          sessionTimeoutMs: 30 * 60 * 1_000,
+        });
+      },
+    }));
+    const executionServices = composeIntexAgentExecutionServices({
+      catalogClient: { getIntexAgentCatalogEvidence: vi.fn(async () => null) },
+      logger: { warn: delegateWarn },
+      createOrdinaryIncomingMessageHandler,
+      createTestConversationRunner: () => ({
+        async run(): Promise<never> {
+          throw new Error('evaluator must not execute');
+        },
+      }),
+    });
+
+    await executionServices.incomingMessageHandler.handle({
+      type: 'intex.message.ingest',
+      userId: 'expected-owner-user',
+      messageId: 'wamid-sentry-boundary',
+      text: 'hello',
+      sourceType: 'whatsapp_text',
+      timestamp: '2026-07-19T12:00:00.000Z',
+    });
+
+    expect(delegateWarn).toHaveBeenCalledTimes(1);
+    expect(delegateWarn).toHaveBeenCalledWith(
+      {
+        reason: 'runtime_settings_resolution_failed',
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'Intex Agent runtime settings resolution failed'
+    );
+    expect(JSON.stringify(delegateWarn.mock.calls)).not.toMatch(
+      /expected-owner-user|raw-resolver-user-sentinel|private\.invalid|provider-sentinel|model-sentinel|resolver-cause-sentinel/iu
+    );
+  });
+});
+
 describe('createTestConversationRunnerService', () => {
+  it('rejects omitted or mismatched models before catalog and provider access', async () => {
+    const catalogClient = admittedCatalog();
+    const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
+    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+    const createAgentRunnerFn = noActionAgentFactory();
+    const runner = createTestConversationRunnerService({
+      config: testConfig(),
+      sessionRepository: new MemorySessionRepository(),
+      promptPreferencesRepository: promptPreferencesRepository([]),
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient,
+      createToolCallingClientFn,
+      createLlmClientFn,
+      createAgentRunnerFn,
+      ids: fixedTestIds(),
+    });
+    const base = testConversationRequest('model-boundary');
+
+    for (const agentModel of [undefined, 'or:google/gemini-2.5-flash']) {
+      await expect(
+        runner.run({ ...base, agentModel } as unknown as Parameters<typeof runner.run>[0])
+      ).rejects.toThrow('Intex Agent test conversation model mismatch');
+    }
+
+    expect(catalogClient.getIntexAgentCatalogEvidence).not.toHaveBeenCalled();
+    expect(createToolCallingClientFn).not.toHaveBeenCalled();
+    expect(createLlmClientFn).not.toHaveBeenCalled();
+    expect(createAgentRunnerFn).not.toHaveBeenCalled();
+  });
+
   it('wires real conversation flow with mocked tools and no downstream clients', async () => {
     const repository = new MemorySessionRepository();
     const promptPreferenceCalls: string[] = [];
-    const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
-    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+    const toolCallingClient = fakeToolCallingClient();
+    const structuredClient = fakeStructuredClient();
+    const createToolCallingClientFn = vi.fn(() => toolCallingClient);
+    const createLlmClientFn = vi.fn(() => structuredClient);
     const createAgentRunnerFn: AgentRunnerFactory = vi.fn((config): IntexAgentRunner => ({
       async run(): Promise<IntexAgentRunnerResult> {
         const rawResult = await config.toolExecutor.queryCalendarEvents({
@@ -189,6 +1498,7 @@ describe('createTestConversationRunnerService', () => {
       promptPreferencesRepository: promptPreferencesRepository(promptPreferenceCalls),
       logger: silentLogger(),
       usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient: admittedCatalog(),
       createToolCallingClientFn,
       createLlmClientFn,
       createAgentRunnerFn,
@@ -198,6 +1508,7 @@ describe('createTestConversationRunnerService', () => {
     const result = await runner.run({
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       userId: 'test-intex-agent-intex-e2e-services',
       runId: 'intex-e2e-services',
       currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -225,15 +1536,21 @@ describe('createTestConversationRunnerService', () => {
     expect(createToolCallingClientFn).toHaveBeenCalledWith(
       expect.objectContaining({
         apiKey: 'openrouter-key',
-        model: INTEX_AGENT_MODEL,
+        model: DEFAULT_INTEX_AGENT_MODEL,
         userId: 'test-intex-agent-intex-e2e-services',
       })
     );
     expect(createLlmClientFn).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'test-intex-agent-intex-e2e-services' })
+      expect.objectContaining({
+        model: DEFAULT_INTEX_AGENT_MODEL,
+        userId: 'test-intex-agent-intex-e2e-services',
+      })
     );
     expect(createAgentRunnerFn).toHaveBeenCalledWith(
       expect.objectContaining({
+        client: toolCallingClient,
+        responseRepairClient: structuredClient,
+        intentClassifier: expect.anything(),
         toolExecutor: expect.anything(),
         userPreferences: [
           'rendered test preferences',
@@ -256,6 +1573,7 @@ describe('createTestConversationRunnerService', () => {
       },
     ]);
     expect(result.turns[0]?.assistantReplies[0]?.message).toBe('Calendar mock count: 2');
+    expect(result.agentModel).toBe('or:deepseek/deepseek-v4-flash');
     expect(JSON.stringify(result)).not.toContain('private event');
   });
 
@@ -284,6 +1602,7 @@ describe('createTestConversationRunnerService', () => {
       promptPreferencesRepository: promptPreferencesRepository([]),
       logger: silentLogger(),
       usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient: admittedCatalog(),
       createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
       createLlmClientFn: vi.fn(() => fakeStructuredClient()),
       createAgentRunnerFn,
@@ -293,6 +1612,7 @@ describe('createTestConversationRunnerService', () => {
     const result = await runner.run({
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       userId: 'test-intex-agent-private-tool-failure',
       runId: 'private-tool-failure',
       currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -365,6 +1685,7 @@ describe('createTestConversationRunnerService', () => {
       promptPreferencesRepository: promptPreferencesRepository([]),
       logger: silentLogger(),
       usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient: admittedCatalog(),
       createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
       createLlmClientFn: vi.fn(() => fakeStructuredClient()),
       createAgentRunnerFn,
@@ -374,6 +1695,7 @@ describe('createTestConversationRunnerService', () => {
     const result = await runner.run({
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       userId: 'test-intex-agent-intex-e2e-confirm-service',
       runId: 'intex-e2e-confirm-service',
       currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -435,6 +1757,7 @@ describe('createTestConversationRunnerService', () => {
       promptPreferencesRepository: promptPreferencesRepository([]),
       logger: silentLogger(),
       usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient: admittedCatalog(),
       createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
       createLlmClientFn: vi.fn(() => fakeStructuredClient()),
       createAgentRunnerFn: vi.fn((): IntexAgentRunner => ({
@@ -485,6 +1808,7 @@ describe('createTestConversationRunnerService', () => {
       promptPreferencesRepository: promptPreferencesRepositoryWithCurrent(deleted.current),
       logger: silentLogger(),
       usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      catalogClient: admittedCatalog(),
       createToolCallingClientFn: vi.fn(() => fakeToolCallingClient()),
       createLlmClientFn: vi.fn(() => fakeStructuredClient()),
       createAgentRunnerFn,
@@ -512,6 +1836,7 @@ function testRequest(runId: string): Parameters<ReturnType<typeof createTestConv
   return {
     contractVersion: '2026-07-01',
     mode: 'live_llm_mock_tools',
+    agentModel: 'or:deepseek/deepseek-v4-flash',
     userId: `test-intex-agent-${runId}`,
     runId,
     currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -543,8 +1868,84 @@ function testConfig(): CreateTestConversationRunnerServiceInput['config'] {
     openRouterAppApiKey: 'openrouter-key',
     whatsappSendTopic: 'whatsapp-send',
     sessionTimeoutMs: 30 * 60 * 1000,
-    model: INTEX_AGENT_MODEL,
+    matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
+    testRunsRead: { enabled: false },
   };
+}
+
+function catalogEvidence(): Awaited<
+  ReturnType<CreateTestConversationRunnerServiceInput['catalogClient']['getIntexAgentCatalogEvidence']>
+> {
+  return {
+    snapshotVersion: '2026-07-19',
+    fetchedAt: '2026-07-19T12:00:00.000Z',
+    models: [],
+  };
+}
+
+function admittedCatalog(): CreateTestConversationRunnerServiceInput['catalogClient'] {
+  return { getIntexAgentCatalogEvidence: vi.fn(async () => catalogEvidence()) };
+}
+
+function testConversationRequest(runId: string): Parameters<TestConversationRunner['run']>[0] {
+  return {
+    contractVersion: '2026-07-01',
+    mode: 'live_llm_mock_tools',
+    agentModel: 'or:deepseek/deepseek-v4-flash',
+    userId: `test-intex-agent-${runId}`,
+    runId,
+    currentDateTime: '2026-07-01T10:00:00.000Z',
+    timeZone: 'UTC',
+    turns: [{ kind: 'message', text: 'hello' }],
+    toolMocks: {},
+  };
+}
+
+function noActionAgentFactory(): AgentRunnerFactory {
+  return vi.fn((): IntexAgentRunner => ({
+    async run(): Promise<IntexAgentRunnerResult> {
+      return { outcome: 'no_action', reply: 'Ready.' };
+    },
+    async executeConfirmed(): Promise<IntexAgentRunnerResult> {
+      throw new Error('not used');
+    },
+  }));
+}
+
+function catalogResponse(): Response {
+  const supportedParameters = ['tools', 'tool_choice', 'response_format', 'structured_outputs'];
+  return new Response(
+    JSON.stringify({
+      data: [
+        {
+          id: 'deepseek/deepseek-v4-flash',
+          context_length: 1_048_576,
+          pricing: {
+            prompt: '0.000000098',
+            completion: '0.000000196',
+            input_cache_read: '0.0000000196',
+          },
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: supportedParameters,
+        },
+        {
+          id: 'minimax/minimax-m3',
+          context_length: 205_000,
+          pricing: { prompt: '0.0000003', completion: '0.0000012' },
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: supportedParameters,
+        },
+        {
+          id: 'google/gemini-3-flash-preview',
+          context_length: 1_000_000,
+          pricing: { prompt: '0.0000003', completion: '0.0000025' },
+          architecture: { input_modalities: ['text'], output_modalities: ['text'] },
+          supported_parameters: supportedParameters,
+        },
+      ],
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } }
+  );
 }
 
 function promptPreferencesRepository(
@@ -606,12 +2007,112 @@ function fakeToolCallingClient(): ReturnType<
   >;
 }
 
+function emptyToolExecutor(
+  overrides: Partial<IntexAgentToolExecutor> = {}
+): IntexAgentToolExecutor {
+  return {
+    createNote: async () => 'note-1',
+    createCalendarEvent: async () => 'event-1',
+    queryCalendarEvents: async () => 'calendar-query-1',
+    createResearch: async () => 'research-1',
+    createLink: async () => 'bookmark-1',
+    createCodeTask: async () => 'code-task-1',
+    saveExternal: async () => 'external-save-1',
+    getUserPreferences: async () => '{}',
+    addUserPreference: async () => '{}',
+    updateUserPreference: async () => '{}',
+    deleteUserPreference: async () => '{}',
+    ...overrides,
+  };
+}
+
+function normalMatrixRunner(
+  client: NonNullable<Parameters<typeof createMatrixCorpusRunner>[0]['client']>
+): Readonly<{
+  runner: ReturnType<typeof createMatrixCorpusRunner>;
+  recordProviderCall: ReturnType<typeof vi.fn>;
+}> {
+  const recordProviderCall = vi.fn(async () => undefined);
+  return {
+    runner: createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_provider_usage',
+        expectedSchedule: [],
+        recordExecutionBoundary: vi.fn(async () => undefined),
+        recordToolCallStarted: vi.fn(async () => undefined),
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall,
+      },
+      client,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'no_action' as const, reason: 'conversation' as const };
+        },
+      },
+      userPreferences: null,
+    }),
+    recordProviderCall,
+  };
+}
+
 function fakeStructuredClient(): ReturnType<
   NonNullable<CreateTestConversationRunnerServiceInput['createLlmClientFn']>
 > {
   return { generate: vi.fn() } as ReturnType<
     NonNullable<CreateTestConversationRunnerServiceInput['createLlmClientFn']>
   >;
+}
+
+function strictProfile(
+  overrides: Partial<StrictToolMockProfileV1> = {}
+): StrictToolMockProfileV1 {
+  return {
+    version: 1,
+    calls: [],
+    forbiddenSelections: [],
+    unexpectedKnownToolPolicy: 'behavioral_failure_no_execution',
+    ...overrides,
+  };
+}
+
+function matrixCorpusSession(profile: StrictToolMockProfileV1): IntexAgentSession {
+  return {
+    id: 'matrix_session_1',
+    userId: 'auth0:user_1',
+    channel: 'whatsapp',
+    status: 'active',
+    startedAt: '2026-07-20T10:00:00.000Z',
+    lastUserMessageAt: '2026-07-20T10:00:00.000Z',
+    startReason: 'no_active_session',
+    matrixCorpusProfile: {
+      version: 1,
+      kind: 'matrix_corpus',
+      runtimeAudience: 'home-dev',
+      leaseFence: '7',
+      runId: 'run_1',
+      scenarioId: 'scenario_001',
+      scenarioNumber: 1,
+      scenarioLabel: 'Scenario 001/020',
+      executionMode: 'strict_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
+      evaluatorModel: 'or:minimax/minimax-m3',
+      promptPreferencesVersion: 0,
+      promptPreferencesDigest: 'a'.repeat(64),
+      userTimeZone: 'Europe/Warsaw',
+      mockProfile: profile,
+      mockProfileDigest: createHash('sha256')
+        .update(canonicalMatrixCorpusStrictToolMockProfileV1(profile), 'utf8')
+        .digest('hex'),
+      expectedToolSchedule: profile.calls.map(({ turnIndex, toolName, ordinal }) => ({
+        turnIndex,
+        toolName,
+        ordinal,
+      })),
+    },
+    lastEventSequence: 0,
+  };
 }
 
 class MemorySessionRepository implements SessionRepository {

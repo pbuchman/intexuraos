@@ -39,7 +39,8 @@ describe('createOpenRouterGenerateClient', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an object with a generate method', () => {
+  it('returns an object with a generate method', async () => {
+    const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
     const client = createOpenRouterGenerateClient(baseConfig);
     expect(client.generate).toBeDefined();
     expect(typeof client.generate).toBe('function');
@@ -47,6 +48,12 @@ describe('createOpenRouterGenerateClient', () => {
     expect(typeof client.generateChat).toBe('function');
     expect(client.generateChatStream).toBeDefined();
     expect(typeof client.generateChatStream).toBe('function');
+    expect(createOpenRouterClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'google/gemma-4-31b-it:free',
+        evidenceModelId: 'or:google/gemma-4-31b-it:free',
+      })
+    );
   });
 
   it('satisfies the LlmGenerateClient interface by generating successfully', async () => {

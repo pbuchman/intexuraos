@@ -14,6 +14,8 @@ import {
   type UsageSink,
 } from '@intexuraos/llm-pricing';
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createOpenRouterCatalogClient } from '@intexuraos/infra-openrouter';
+import type { UserServiceConfig } from './config.js';
 import type { Auth0Client, AuthTokenRepository } from './domain/identity/index.js';
 import type { LlmValidator, UserSettingsRepository } from './domain/settings/index.js';
 import type {
@@ -33,6 +35,10 @@ import {
 import { LlmValidatorImpl } from './infra/llm/index.js';
 import { GoogleOAuthClientImpl } from './infra/google/index.js';
 import { GitHubOAuthClientImpl } from './infra/github/index.js';
+import {
+  createIntexAgentModelAvailability,
+  type IntexAgentModelAvailability,
+} from './domain/settings/intexAgentModelAvailability.js';
 
 export interface ServiceContainer {
   authTokenRepository: AuthTokenRepository;
@@ -43,11 +49,16 @@ export interface ServiceContainer {
   gitHubOAuthClient: GitHubOAuthClient | null;
   encryptor: Encryptor | null;
   llmValidator: LlmValidator | null;
+  intexAgentModelAvailability: IntexAgentModelAvailability;
+  intexAgentTestRunsReadCapability: {
+    isAvailableForUser(userId: string): Promise<boolean>;
+  };
 }
 
 /** Optional bootstrap logger; defaults to the app logger when unset. */
 export interface ServiceContainerConfig {
   logger?: Logger;
+  userServiceConfig?: UserServiceConfig;
 }
 
 function loadEncryptor(): Encryptor | null {
@@ -108,6 +119,25 @@ function buildContainer(config?: ServiceContainerConfig): ServiceContainer {
     llmValidator = new LlmValidatorImpl(logger, validatorUsageSink);
   }
 
+  const selectorConfig = config?.userServiceConfig?.intexAgentModelSelector;
+  const catalogClient =
+    selectorConfig?.status === 'enabled'
+      ? createOpenRouterCatalogClient({ apiKey: selectorConfig.openRouterAppApiKey, logger })
+      : null;
+  const intexAgentModelAvailability = createIntexAgentModelAvailability({
+    userId: selectorConfig?.status === 'enabled' ? selectorConfig.userId : null,
+    catalogClient,
+  });
+  const testRunsReadConfig = config?.userServiceConfig?.intexAgentTestRunsRead;
+  const intexAgentTestRunsReadCapability = {
+    isAvailableForUser(userId: string): Promise<boolean> {
+      return Promise.resolve(
+        testRunsReadConfig?.status === 'enabled' &&
+        testRunsReadConfig.userId === userId
+      );
+    },
+  };
+
   return {
     authTokenRepository: new FirestoreAuthTokenRepository(),
     userSettingsRepository: new FirestoreUserSettingsRepository(),
@@ -117,6 +147,8 @@ function buildContainer(config?: ServiceContainerConfig): ServiceContainer {
     gitHubOAuthClient: loadGitHubOAuthClient(),
     encryptor: loadEncryptor(),
     llmValidator,
+    intexAgentModelAvailability,
+    intexAgentTestRunsReadCapability,
   };
 }
 
@@ -125,8 +157,11 @@ const handle = createServiceContainer<ServiceContainer, ServiceContainerConfig |
 );
 
 /** Initialize the service container with all dependencies. */
-export const initServices = (config?: ServiceContainerConfig): void => {
-  handle.init(config);
+export const initServices = async (config?: UserServiceConfig): Promise<void> => {
+  handle.init(config === undefined ? undefined : { userServiceConfig: config });
+  if (config?.intexAgentModelSelector.status === 'enabled') {
+    await handle.get().intexAgentModelAvailability.start();
+  }
 };
 
 /** Get the initialized container. Throws if `initServices` was not called. */

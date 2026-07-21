@@ -21,6 +21,7 @@
 import { z } from 'zod';
 import type { Result } from '@intexuraos/common-core';
 import type { LLMError } from '@intexuraos/llm-contract';
+import type { MatrixCorpusProviderCallUsageV1 } from '@intexuraos/llm-contract';
 
 /**
  * Subset of the `GenerateResult` shape from `@intexuraos/llm-factory` that
@@ -34,7 +35,9 @@ export interface StructuredGenerateResult {
     outputTokens: number;
     totalTokens: number;
     costUsd: number;
+    providerReportedUsd?: number;
   };
+  providerCall?: MatrixCorpusProviderCallUsageV1;
 }
 
 /**
@@ -75,6 +78,10 @@ export interface GenerateStructuredParams<T> {
    * always supplied by the helper itself and is therefore omitted here.
    */
   options?: Record<string, unknown>;
+  /** Per-attempt options, used when repair calls need a distinct provider context. */
+  optionsForAttempt?: (attempt: number) => Record<string, unknown>;
+  /** Durable per-call evidence hook; called before parsing provider output. */
+  onProviderCall?: (call: MatrixCorpusProviderCallUsageV1) => Promise<void>;
 }
 
 /**
@@ -136,10 +143,14 @@ export async function generateStructured<T>(
   for (;;) {
     const gen = await params.client.generate(currentPrompt, {
       ...(params.options ?? {}),
+      ...(params.optionsForAttempt?.(attempt) ?? {}),
       promptType: params.promptType,
     });
     if (!gen.ok) {
       return { ok: false, error: { kind: 'llm', error: gen.error } };
+    }
+    if (gen.value.providerCall !== undefined && params.onProviderCall !== undefined) {
+      await params.onProviderCall(gen.value.providerCall);
     }
     const raw = gen.value.content;
     const stripped = stripFences(raw);

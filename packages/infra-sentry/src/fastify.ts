@@ -27,6 +27,34 @@ interface IntexuraFastifyReply extends FastifyReply {
   fail: (code: string, message: string, diagnostics?: unknown, details?: unknown) => FastifyReply;
 }
 
+export interface SentryErrorHandlerOptions {
+  /** URL path prefixes whose identifiers, query, headers, and raw errors are private. */
+  privatePathPrefixes?: readonly string[];
+}
+
+const PRIVATE_REQUEST_FAILED_MESSAGE = 'Private request failed';
+
+function privatePathPrefix(
+  url: string,
+  privatePathPrefixes: readonly string[]
+): string | undefined {
+  return privatePathPrefixes.find((prefix) => url.startsWith(prefix));
+}
+
+function safeRequestUrl(matchedPrivatePrefix: string): string {
+  return `${matchedPrivatePrefix}[REDACTED]`;
+}
+
+function errorLogContext(
+  error: FastifyError,
+  matchedPrivatePrefix: string | undefined,
+  code: string
+): Readonly<Record<string, unknown>> {
+  return matchedPrivatePrefix === undefined
+    ? { err: error }
+    : { code, privateRequest: true, _skipSentry: true };
+}
+
 /**
  * Set up Fastify error handler that sends errors to Sentry.
  *
@@ -37,10 +65,15 @@ interface IntexuraFastifyReply extends FastifyReply {
  *
  * @param app - Fastify instance to configure
  */
-export function setupSentryErrorHandler(app: FastifyInstance): void {
+export function setupSentryErrorHandler(
+  app: FastifyInstance,
+  options: SentryErrorHandlerOptions = {}
+): void {
+  const privatePathPrefixes = options.privatePathPrefixes ?? [];
   app.setErrorHandler(async (error: FastifyError, request, reply) => {
     const fastifyReply = reply as IntexuraFastifyReply;
     const fastifyError = error as { code?: string; statusCode?: number };
+    const matchedPrivatePrefix = privatePathPrefix(request.url, privatePathPrefixes);
 
     // Rate-limit short-circuit: respond with RATE_LIMITED before logging to
     // Sentry. 429s are expected operational events (e.g. @fastify/rate-limit),
@@ -58,14 +91,20 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
       fastifyError.code === 'FST_ERR_CTP_INVALID_JSON_BODY' ||
       fastifyError.code === 'FST_ERR_CTP_EMPTY_JSON_BODY'
     ) {
-      request.log.info({ err: error }, 'Invalid JSON request body');
+      request.log.info(
+        errorLogContext(error, matchedPrivatePrefix, 'INVALID_JSON_BODY'),
+        'Invalid JSON request body'
+      );
       reply.status(400);
       await fastifyReply.fail('INVALID_REQUEST', 'Invalid JSON body');
       return;
     }
 
     if (fastifyError.code === 'FST_ERR_CTP_INVALID_MEDIA_TYPE') {
-      request.log.info({ err: error }, 'Unsupported request media type');
+      request.log.info(
+        errorLogContext(error, matchedPrivatePrefix, 'INVALID_MEDIA_TYPE'),
+        'Unsupported request media type'
+      );
       reply.status(400);
       await fastifyReply.fail('INVALID_REQUEST', error.message);
       return;
@@ -112,7 +151,10 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
           };
         });
 
-        request.log.info({ err: error }, 'Request validation failed');
+        request.log.info(
+          errorLogContext(error, matchedPrivatePrefix, 'VALIDATION_FAILED'),
+          'Request validation failed'
+        );
         reply.status(400);
         await fastifyReply.fail('INVALID_REQUEST', 'Validation failed', undefined, { errors });
         return;
@@ -120,24 +162,36 @@ export function setupSentryErrorHandler(app: FastifyInstance): void {
     }
 
     // Log to Pino FIRST - this is our reliable error log
-    request.log.error({ err: error }, 'Unhandled error');
+    request.log.error(
+      errorLogContext(error, matchedPrivatePrefix, 'UNHANDLED_PRIVATE_REQUEST_ERROR'),
+      matchedPrivatePrefix === undefined ? 'Unhandled error' : 'Unhandled private request error'
+    );
 
     // Try to send to Sentry, but don't let it break error handling
     try {
       const safeRoute = getSafeRequestRoute(request);
       Sentry.withScope((scope) => {
-        scope.setTag('url', safeRoute);
+        const requestUrl =
+          matchedPrivatePrefix === undefined ? safeRoute : safeRequestUrl(matchedPrivatePrefix);
+        scope.setTag('url', requestUrl);
         scope.setTag('method', request.method);
         scope.setContext('request', {
-          url: safeRoute,
+          url: requestUrl,
           method: request.method,
           headers: sanitizeHeaders(request.headers),
         });
-        Sentry.captureException(error);
+        Sentry.captureException(
+          matchedPrivatePrefix === undefined ? error : new Error(PRIVATE_REQUEST_FAILED_MESSAGE)
+        );
       });
     } catch (sentryError) {
       // Log that Sentry failed but don't crash the error handler
-      request.log.warn({ err: sentryError }, 'Failed to send error to Sentry');
+      request.log.warn(
+        matchedPrivatePrefix === undefined
+          ? { err: sentryError }
+          : { code: 'SENTRY_CAPTURE_FAILED', privateRequest: true, _skipSentry: true },
+        'Failed to send error to Sentry'
+      );
     }
 
     // Return error response

@@ -12,6 +12,7 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest, type InternalAuthResult } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import { DEFAULT_INTEX_AGENT_MODEL, INTEX_AGENT_MODEL_OPTIONS } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import type { LlmProvider } from '../domain/settings/index.js';
 import { getValidAccessToken, OAuthProviders } from '../domain/oauth/index.js';
@@ -23,7 +24,176 @@ function internalAuthFailureLogContext(reason: InternalAuthResult['reason']): Re
   };
 }
 
+const INTEG_AGENT_MODEL_IDS = INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => id);
+
+function intexAgentProjectionConsistencySchema(): Readonly<Record<string, unknown>> {
+  return {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          explicitModel: { const: null },
+          effectiveModel: { const: DEFAULT_INTEX_AGENT_MODEL },
+          source: { const: 'default_absent' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      },
+      ...INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => ({
+        type: 'object',
+        properties: {
+          explicitModel: { const: id },
+          effectiveModel: { const: id },
+          source: { const: 'explicit' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      })),
+    ],
+  };
+}
+
 export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
+  fastify.get(
+    '/internal/users/:uid/settings/intex-agent-runtime',
+    {
+      schema: {
+        operationId: 'getIntexAgentRuntimeSettings',
+        summary: 'Get Intex Agent runtime settings (internal)',
+        description: 'Returns the narrow, platform-key-backed Intex Agent runtime projection.',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          properties: { uid: { type: 'string', description: 'User ID' } },
+          required: ['uid'],
+        },
+        response: {
+          200: {
+            description: 'Intex Agent runtime settings',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: true },
+              data: {
+                oneOf: [
+                  {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      status: { const: 'available' },
+                      effectiveModel: {
+                        type: 'string',
+                        enum: INTEG_AGENT_MODEL_IDS,
+                      },
+                      explicitModel: {
+                        type: ['string', 'null'],
+                        enum: [...INTEG_AGENT_MODEL_IDS, null],
+                      },
+                      source: { type: 'string', enum: ['explicit', 'default_absent'] },
+                      revision: { type: 'integer', minimum: 0 },
+                      timeZone: { type: 'string' },
+                    },
+                    allOf: [intexAgentProjectionConsistencySchema()],
+                    required: ['status', 'effectiveModel', 'explicitModel', 'source', 'revision', 'timeZone'],
+                  },
+                  {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      status: { const: 'unavailable' },
+                      effectiveModel: { const: DEFAULT_INTEX_AGENT_MODEL },
+                      source: { const: 'platform_default' },
+                      timeZone: { type: 'string' },
+                    },
+                    required: ['status', 'effectiveModel', 'source', 'timeZone'],
+                  },
+                ],
+              },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'data'],
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', const: false },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      logIncomingRequest(request, {
+        message: 'GET /internal/users/:uid/settings/intex-agent-runtime',
+        bodyPreviewLength: 0,
+        includeParams: false,
+        includeHeaders: false,
+      });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        request.log.warn(
+          internalAuthFailureLogContext(authResult.reason),
+          'Internal auth failed for users/:uid/settings/intex-agent-runtime endpoint'
+        );
+        return await reply.fail(
+          'UNAUTHORIZED',
+          'Internal auth failed for users/:uid/settings/intex-agent-runtime endpoint'
+        );
+      }
+
+      const params = request.params as { uid: string };
+      const { userSettingsRepository, intexAgentModelAvailability } = getServices();
+      const available = await intexAgentModelAvailability.isAvailableForUser(params.uid);
+      const timezoneResult = await userSettingsRepository.getTimezonePreference(params.uid);
+      if (!timezoneResult.ok) {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to load Intex Agent runtime settings');
+      }
+      const timeZone = timezoneResult.value ?? 'UTC';
+
+      if (!available) {
+        return await reply.ok({
+          status: 'unavailable',
+          effectiveModel: DEFAULT_INTEX_AGENT_MODEL,
+          source: 'platform_default',
+          timeZone,
+        });
+      }
+
+      try {
+        const selectorResult = await userSettingsRepository.getIntexAgentModelState(params.uid);
+        if (!selectorResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to load Intex Agent runtime settings');
+        }
+        if (selectorResult.value.status === 'invalid_stored_value') {
+          return await reply.fail('INTERNAL_ERROR', 'Intex Agent model selector state is invalid');
+        }
+        const explicitModel = selectorResult.value.explicitModel;
+        return await reply.ok({
+          status: 'available',
+          effectiveModel: explicitModel ?? DEFAULT_INTEX_AGENT_MODEL,
+          explicitModel,
+          source: explicitModel === null ? ('default_absent' as const) : ('explicit' as const),
+          revision: selectorResult.value.revision,
+          timeZone,
+        });
+      } catch {
+        return await reply.fail('INTERNAL_ERROR', 'Failed to load Intex Agent runtime settings');
+      }
+    }
+  );
+
   // GET /internal/users/:uid/llm-keys
   fastify.get(
     '/internal/users/:uid/llm-keys',

@@ -8,7 +8,12 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { LLMError, NormalizedUsage } from './types.js';
+import type {
+  LLMError,
+  MatrixCorpusLlmCallContextV1,
+  MatrixCorpusProviderCallUsageV1,
+  NormalizedUsage,
+} from './types.js';
 
 /**
  * A message in the tool calling conversation.
@@ -78,6 +83,10 @@ export interface ToolCallingClient {
     }) => string | undefined;
     /** Max extra iterations after repair message injection (default: 2) */
     repairIterations?: number;
+    /** Exact context for the first provider iteration; clients increment its ordinal. */
+    matrixCorpusContext?: MatrixCorpusLlmCallContextV1;
+    /** Durable Matrix-only callback invoked after each provider response exposes usage. */
+    onMatrixCorpusProviderCall?: (call: MatrixCorpusProviderCallUsageV1) => Promise<void>;
   }): Promise<Result<ToolCallingResult, LLMError>>;
 }
 
@@ -93,4 +102,6 @@ export interface ToolCallingResult {
   iterationCount: number;
   /** Aggregated token usage and cost across all iterations */
   usage: NormalizedUsage;
+  /** One record per provider iteration; present only for Matrix corpus calls. */
+  providerCalls?: MatrixCorpusProviderCallUsageV1[];
 }

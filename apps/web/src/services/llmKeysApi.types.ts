@@ -1,8 +1,40 @@
-import type { LlmProvider } from '@intexuraos/llm-contract';
+import type { IntexAgentModel, LlmProvider } from '@intexuraos/llm-contract';
 /**
  * LLM Provider types for API key management.
  */
 export type { LlmProvider };
+
+export type IntexAgentModelSelectorOption =
+  | { id: 'or:deepseek/deepseek-v4-flash'; label: 'DeepSeek V4 Flash' }
+  | { id: 'or:minimax/minimax-m3'; label: 'MiniMax M3' }
+  | { id: 'or:google/gemini-3-flash-preview'; label: 'Gemini 3 Flash Preview' };
+
+export type IntexAgentModelSelectorV1 =
+  | {
+      status: 'available';
+      explicitModel: IntexAgentModel | null;
+      effectiveModel: IntexAgentModel;
+      source: 'explicit' | 'default_absent';
+      revision: number;
+      options: readonly [
+        Extract<IntexAgentModelSelectorOption, { id: 'or:deepseek/deepseek-v4-flash' }>,
+        Extract<IntexAgentModelSelectorOption, { id: 'or:minimax/minimax-m3' }>,
+        Extract<IntexAgentModelSelectorOption, { id: 'or:google/gemini-3-flash-preview' }>,
+      ];
+    }
+  | { status: 'unavailable' };
+
+export interface IntexAgentModelPatchRequest {
+  intexAgentModel: IntexAgentModel | null;
+  expectedRevision: number;
+}
+
+export interface IntexAgentModelPatchResponse {
+  explicitModel: IntexAgentModel | null;
+  effectiveModel: IntexAgentModel;
+  source: 'explicit' | 'default_absent';
+  revision: number;
+}
 
 /**
  * Test result for an LLM API key.
@@ -32,6 +64,7 @@ export interface LlmKeysResponse {
     perplexity: LlmTestResult | null;
     openrouter: LlmTestResult | null;
   };
+  intexAgentModelSelector: IntexAgentModelSelectorV1;
 }
 
 /**

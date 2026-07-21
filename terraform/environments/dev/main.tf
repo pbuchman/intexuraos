@@ -267,11 +267,38 @@ locals {
   retired_cloud_run_push_audience = local.retired_cloud_run_push_endpoint
 
   hetzner_runtime_env_vars = {
-    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL  = "${local.public_origin}/api/code"
-    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL = "or:minimax/minimax-m3"
-    INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"
-    INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"
-    INTEXURAOS_WEB_APP_URL                  = local.public_origin
+    INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL        = "${local.public_origin}/api/code"
+    INTEXURAOS_CONVERSATION_ASSISTANT_MODEL       = "or:minimax/minimax-m3"
+    INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID = "disabled"
+    INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED = "false"
+    INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH       = "development"
+    INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY        = "pbuchman/intexuraos"
+    INTEXURAOS_WEB_APP_URL                        = local.public_origin
+  }
+
+  # Schema-only inventory for the protected Home Dev Matrix-corpus runtime.
+  # Actual evaluator, transport, HMAC, and signing values are supplied outside
+  # Terraform and are intentionally absent from Secret Manager/production wiring.
+  matrix_corpus_home_dev_env_names = {
+    shared_whatsapp_intex = toset([
+      "INTEXURAOS_MATRIX_CORPUS_ENABLED",
+      "INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME",
+      "INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE",
+      "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
+      "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION",
+    ])
+    whatsapp_service = toset([
+      "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
+      "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
+      "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
+      "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
+      "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
+    ])
+    intex_agent = toset([
+      "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY",
+      "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION",
+      "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
+    ])
   }
 
   hetzner_runtime_secret_names = toset([

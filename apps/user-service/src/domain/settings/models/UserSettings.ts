@@ -3,7 +3,7 @@
  * Represents user preferences and configuration.
  */
 
-import type { LlmProvider, LLMModel } from '@intexuraos/llm-contract';
+import type { IntexAgentModel, LlmProvider, LLMModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../ports/Encryptor.js';
 
 /**
@@ -52,8 +52,10 @@ export interface LlmTestResults {
  * LLM preferences for user-selected models.
  */
 export interface LlmPreferences {
-  defaultModel: string; // User's preferred default LLM model (LLMModel or OpenRouterModelId)
+  defaultModel?: string; // User's preferred default LLM model (LLMModel or OpenRouterModelId)
   fallbackModel?: string; // Optional fallback model (LLMModel or OpenRouterModelId)
+  intexAgentModel?: IntexAgentModel;
+  intexAgentModelRevision?: number;
 }
 
 /**

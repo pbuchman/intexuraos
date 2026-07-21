@@ -52,6 +52,7 @@ export {
   getSafeRequestRoute,
   registerQuietHealthCheckLogging,
   logIncomingRequest,
+  type RequestLoggingOptions,
   type LogIncomingRequestOptions,
 } from './http/logger.js';
 

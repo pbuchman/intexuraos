@@ -3,6 +3,8 @@ import {
   type IdGenerator,
   type IntexAgentRunner,
 } from '../messages/handleIncomingMessage.js';
+import { ok } from '@intexuraos/common-core';
+import { IntexAgentModels } from '@intexuraos/llm-contract';
 import type { IntexIncomingMessage } from '../ports/incomingMessageHandler.js';
 import type { SessionRepository } from '../ports/sessionRepository.js';
 import type { IntexAgentSession, IntexAgentSessionEvent } from '../sessions/types.js';
@@ -19,6 +21,7 @@ import {
 import { createCapturedReplyPublisher } from './testToolMocks.js';
 import {
   TEST_CONVERSATION_CONTRACT_VERSION,
+  TEST_CONVERSATION_AGENT_MODEL,
   TEST_CONVERSATION_SIDE_EFFECT_BOUNDARY,
   type CapturedAssistantReply,
   type CapturedToolCall,
@@ -50,6 +53,10 @@ export async function runTestConversation(
   input: RunTestConversationInput,
   deps: RunTestConversationDeps
 ): Promise<TestConversationResponse> {
+  if (input.agentModel !== TEST_CONVERSATION_AGENT_MODEL) {
+    throw new Error('Intex Agent test conversation model mismatch');
+  }
+
   deps.logger.info(
     { runId: input.runId, userId: input.userId, turnCount: input.turns.length },
     'Running Intex Agent test conversation'
@@ -84,7 +91,18 @@ export async function runTestConversation(
       runner: deps.runner,
       replyPublisher,
       clock: { now: () => turnNow },
-      resolveTimeZone: () => Promise.resolve(input.timeZone ?? 'UTC'),
+      resolveRuntimeSettings: () =>
+        Promise.resolve(
+          ok({
+            status: 'available' as const,
+            effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+            explicitModel: IntexAgentModels.DeepSeekV4Flash,
+            source: 'explicit' as const,
+            revision: 0,
+            timeZone: input.timeZone ?? 'UTC',
+          })
+        ),
+      logger: deps.logger,
       ids: deps.ids,
       sessionTimeoutMs: deps.sessionTimeoutMs,
     });
@@ -136,6 +154,7 @@ export async function runTestConversation(
   return {
     contractVersion: TEST_CONVERSATION_CONTRACT_VERSION,
     mode: 'live_llm_mock_tools',
+    agentModel: TEST_CONVERSATION_AGENT_MODEL,
     runId: input.runId,
     ...(input.scenarioId !== undefined ? { scenarioId: input.scenarioId } : {}),
     userId: input.userId,

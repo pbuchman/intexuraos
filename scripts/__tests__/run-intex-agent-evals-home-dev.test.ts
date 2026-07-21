@@ -29,16 +29,17 @@ const SECRET_SENTINEL = 'wrapper-secret-sentinel-2d56179a';
 const GENERIC_PATH_SENTINEL = '/private/wrapper-path-sentinel-9f4f55a1';
 const GENERIC_TOKEN_SENTINEL = 'generic-wrapper-token-sentinel-9867d198';
 const USAGE_LINE =
-  'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke}\n';
+  'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke|matrix-corpus}\n';
 const FRAME_PLACEHOLDER = '0123456789abcdef0123456789abcdef0123456789abcdef';
 const FRAME_PATTERN = /[a-f0-9]{48}/u;
 
 const IMPLEMENTATION_PATHS = [
-  'apps/intex-agent/src/routes/testConversationRoutes.ts',
-  'apps/intex-agent/src/domain/testConversation/',
+  'apps/intex-agent/src/',
+  'apps/whatsapp-service/src/',
+  'apps/user-service/src/',
+  'packages/',
   'tools/intex-agent-evals/',
   'scripts/run-intex-agent-evals-home-dev.sh',
-  'scripts/cleanup-intex-agent-test-conversations.mjs',
   'package.json',
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
@@ -49,8 +50,6 @@ const IMPLEMENTATION_PATHS = [
   'scripts/typecheck-parallel.mjs',
   'scripts/verify-workspace-deps.mjs',
   'scripts/lib/workspace-discovery.mjs',
-  'packages/llm-contract/src/types.ts',
-  'packages/infra-openrouter/src/client.ts',
 ] as const;
 
 const REMOTE_PROGRAM = `set -eu
@@ -76,8 +75,27 @@ if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
 fi
 required_sha=$1
 shift
-if ! git merge-base --is-ancestor "$required_sha" HEAD >/dev/null 2>&1; then
+if ! deployed_sha=$(git rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
   emit 'revision_mismatch'
+  finish 2
+fi
+if [ "$deployed_sha" != "$required_sha" ]; then
+  emit 'revision_mismatch'
+  finish 2
+fi
+if [ \${#deployed_sha} -ne 40 ]; then
+  emit 'revision_mismatch'
+  finish 2
+fi
+if ! remote_status=$(git status --porcelain=v1 --untracked-files=all -- \\
+  apps/intex-agent/src/ apps/whatsapp-service/src/ apps/user-service/src/ \\
+  packages/ \\
+  tools/intex-agent-evals/ scripts/run-intex-agent-evals-home-dev.sh package.json 2>/dev/null); then
+  emit 'remote_implementation_paths_dirty'
+  finish 2
+fi
+if [ -n "$remote_status" ]; then
+  emit 'remote_implementation_paths_dirty'
   finish 2
 fi
 if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || ! direnv exec . true >/dev/null 2>&1; then
@@ -85,7 +103,13 @@ if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || !
   finish 2
 fi
 set +e
-direnv exec . node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+direnv exec . env \\
+  INTEXURAOS_EVAL_REQUESTED_REVISION="$required_sha" \\
+  INTEXURAOS_EVAL_DEPLOYED_REVISION="$deployed_sha" \\
+  INTEXURAOS_EVAL_WRAPPER_ATTESTED=true \\
+  INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN=true \\
+  INTEXURAOS_EVAL_REMOTE_CRITICAL_PATHS_CLEAN=true \\
+  node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
 cli_status=$?
 set -e
 finish "$cli_status"`;
@@ -207,6 +231,26 @@ function evaluationPayload(
         ? 'evaluation result BEHAVIORAL_FAILURE exit 1\n'
         : 'evaluation result INFRASTRUCTURE_FAILURE exit 2\n';
   return `${run}${scenario}${matrix}${result}evaluation report .artifacts/intex-agent-evals/eval-run-123\n`;
+}
+
+function matrixCorpusPayload(status: 0 | 1 | 2): string {
+  const runId = 'eval-run-123';
+  const scenarios = Array.from(
+    { length: 20 },
+    (_, offset) =>
+      `scenario intex-eval-${String(offset + 1).padStart(3, '0')} ${
+        status === 0 ? 'PASS' : status === 1 ? 'BEHAVIORAL_FAILURE' : 'INFRASTRUCTURE_FAILURE'
+      }\n`
+  ).join('');
+  const result =
+    status === 0
+      ? 'evaluation result PASS exit 0\n'
+      : status === 1
+        ? 'evaluation result BEHAVIORAL_FAILURE exit 1\n'
+        : 'evaluation result INFRASTRUCTURE_FAILURE exit 2\n';
+  const reportLine =
+    status === 2 ? '' : `evaluation report .artifacts/intex-agent-evals/${runId}\n`;
+  return `preflight result PASS\nevaluation run ${runId} command matrix-corpus\n${scenarios}${result}${reportLine}`;
 }
 
 function runWrapper(
@@ -417,6 +461,7 @@ describe('Intex Agent evaluator command wiring', () => {
       endpoint: rootPackage.scripts?.['eval:intex-agent:endpoint'],
       full: rootPackage.scripts?.['eval:intex-agent'],
       matrixSmoke: rootPackage.scripts?.['eval:intex-agent:matrix-smoke'],
+      matrixCorpus: rootPackage.scripts?.['eval:intex-agent:matrix-corpus'],
     }).toEqual({
       setup: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts setup',
       preflight: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts preflight',
@@ -424,6 +469,7 @@ describe('Intex Agent evaluator command wiring', () => {
       full: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts',
       matrixSmoke:
         'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts matrix-smoke',
+      matrixCorpus: 'scripts/run-intex-agent-evals-home-dev.sh matrix-corpus',
     });
   });
 
@@ -544,6 +590,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     { label: 'endpoint extra', arguments_: ['endpoint', 'extra-sentinel'] },
     { label: 'full extra', arguments_: ['full', 'extra-sentinel'] },
     { label: 'matrix smoke extra', arguments_: ['matrix-smoke', 'extra-sentinel'] },
+    { label: 'matrix corpus extra', arguments_: ['matrix-corpus', 'extra-sentinel'] },
     { label: 'scenario missing id', arguments_: ['scenario'] },
     { label: 'scenario empty id', arguments_: ['scenario', ''] },
     { label: 'scenario short id', arguments_: ['scenario', 'intex-eval-01'] },
@@ -621,6 +668,13 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       cliArguments: ['matrix-smoke'],
       tty: '-T',
       payload: evaluationPayload('matrix-smoke', 0),
+    },
+    {
+      selector: 'matrix-corpus',
+      arguments_: ['matrix-corpus'],
+      cliArguments: ['matrix-corpus'],
+      tty: '-T',
+      payload: matrixCorpusPayload(0),
     },
   ])(
     'accepts the exact $selector selector',
@@ -768,15 +822,14 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       expect(remoteCommand).toContain("'\\''remote_environment_unavailable'\\''");
       expect(remoteCommand).toContain('$HOME/deploy/intexuraos');
       expect(remoteCommand).not.toContain(run.localHome);
-      expect(remoteCommand).toContain(
-        'git merge-base --is-ancestor "$required_sha" HEAD >/dev/null 2>&1'
-      );
+      expect(remoteCommand).toContain('git rev-parse --verify');
+      expect(remoteCommand).toContain('[ "$deployed_sha" != "$required_sha" ]');
+      expect(remoteCommand).toContain('git status --porcelain=v1 --untracked-files=all');
       expect(remoteCommand).toContain('command -v direnv >/dev/null 2>&1');
       expect(remoteCommand).toContain('command -v node >/dev/null 2>&1');
       expect(remoteCommand).toContain('direnv exec . true >/dev/null 2>&1');
-      expect(remoteCommand).toContain(
-        'direnv exec . node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null'
-      );
+      expect(remoteCommand).toContain('INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN=true');
+      expect(remoteCommand).toContain('INTEXURAOS_EVAL_REMOTE_CRITICAL_PATHS_CLEAN=true');
       expect(remoteCommand).toContain('>/dev/null 2>&1');
       expect(parseResult.error).toBeUndefined();
       expect(parseResult.status).toBe(0);
@@ -810,7 +863,43 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     30_000
   );
 
-  it.each(['revision_mismatch', 'remote_environment_unavailable'])(
+  it.each([
+    {
+      label: 'duplicate scenario ordinal',
+      payload: matrixCorpusPayload(0).replace(
+        'scenario intex-eval-002 PASS',
+        'scenario intex-eval-001 PASS'
+      ),
+    },
+    {
+      label: 'out-of-order scenario ordinal',
+      payload: matrixCorpusPayload(0).replace(
+        'scenario intex-eval-002 PASS',
+        'scenario intex-eval-003 PASS'
+      ),
+    },
+    {
+      label: 'duplicate terminal result',
+      payload: matrixCorpusPayload(0).replace(
+        'evaluation result PASS exit 0\n',
+        'evaluation result PASS exit 0\nevaluation result PASS exit 0\n'
+      ),
+    },
+  ])('rejects a matrix-corpus payload with $label', ({ payload }) => {
+    const run = runWrapper(['matrix-corpus'], {
+      sshStdout: framedOutput(payload, 0),
+    });
+
+    expect(run.result.status).toBe(2);
+    expect(run.result.stdout).toBe('');
+    expect(run.result.stderr).toBe('remote_execution_failed\n');
+  });
+
+  it.each([
+    'revision_mismatch',
+    'remote_environment_unavailable',
+    'remote_implementation_paths_dirty',
+  ])(
     'preserves the safe remote precheck code %s',
     (code) => {
       const run = runWrapper(['endpoint'], {

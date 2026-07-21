@@ -36,7 +36,10 @@ export const sessionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { sessionRepository } = getServices();
       const sessions = await sessionRepository.listSessions(user.userId);
-      const enrichedSessions = await enrichSessionsWithSummary(sessions, user.userId);
+      const enrichedSessions = await enrichSessionsWithSummary(
+        sessions.filter((session) => session.matrixCorpusProfile === undefined),
+        user.userId
+      );
       return await reply.ok(enrichedSessions);
     }
   );
@@ -60,10 +63,14 @@ export const sessionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const events = await getServices().sessionRepository.listEvents(
+      const { sessionRepository } = getServices();
+      const session = await sessionRepository.getSession(
         request.params.sessionId,
         user.userId
       );
+      if (session === null || session.matrixCorpusProfile !== undefined)
+        return await reply.fail('NOT_FOUND', 'Session not found');
+      const events = await sessionRepository.listEvents(request.params.sessionId, user.userId);
       return await reply.ok(events);
     }
   );
@@ -92,7 +99,7 @@ export const sessionRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         request.params.sessionId,
         user.userId
       );
-      if (session === null) {
+      if (session === null || session.matrixCorpusProfile !== undefined) {
         return await reply.fail('NOT_FOUND', 'Session not found');
       }
 
