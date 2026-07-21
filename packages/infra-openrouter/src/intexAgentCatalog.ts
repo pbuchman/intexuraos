@@ -33,7 +33,7 @@ interface ReviewedModel {
   id: IntexAgentModel;
   rawId: string;
   minimumContextLength: number;
-  cacheReadPerToken?: number;
+  requiresCacheReadPricing?: boolean;
 }
 
 const REVIEWED_MODELS: readonly ReviewedModel[] = [
@@ -41,7 +41,7 @@ const REVIEWED_MODELS: readonly ReviewedModel[] = [
     id: IntexAgentModels.DeepSeekV4Flash,
     rawId: 'deepseek/deepseek-v4-flash',
     minimumContextLength: 1_000_000,
-    cacheReadPerToken: 0.0000000196,
+    requiresCacheReadPricing: true,
   },
   {
     id: IntexAgentModels.MiniMaxM3,
@@ -167,14 +167,9 @@ export function assertIntexAgentCatalogConformance(
     }
 
     const cacheReadPerToken =
-      reviewed.cacheReadPerToken === undefined
+      reviewed.requiresCacheReadPricing !== true
         ? undefined
         : positiveFinite(pricing['input_cache_read'], `${reviewed.rawId} cache-read pricing`);
-    if (cacheReadPerToken !== undefined && cacheReadPerToken !== reviewed.cacheReadPerToken) {
-      throw new Error(
-        `OpenRouter catalog ${reviewed.rawId} cache-read pricing does not match review`
-      );
-    }
 
     const evidence: IntexAgentCatalogModelEvidence = {
       id: reviewed.id,

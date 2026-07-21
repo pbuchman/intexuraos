@@ -112,15 +112,70 @@ describe('production Home Dev runtime inspection', () => {
           events: [
             {
               type: 'm.room.message',
-              sender: '@whatsapp_1:example.test',
+              sender: '@whatsapp_999:example.test',
               content: { msgtype: 'm.text', body: 'historical reply' },
+            },
+            {
+              type: 'm.room.message',
+              sender: '@whatsapp_1:example.test',
+              content: { msgtype: 'm.text', body: 'current reply' },
             },
           ],
         },
-        true
+        true,
+        '@whatsapp_1:example.test'
       )
     ).toEqual({
       expectedPuppetSender: '@whatsapp_1:example.test',
+      accountTupleCount: 1,
+    });
+  });
+
+  it.each([
+    ['configured puppet is absent', true, '@whatsapp_2:example.test'],
+    ['evaluator user does not match', false, '@whatsapp_1:example.test'],
+    ['puppet binding is malformed', true, '1'],
+  ] as const)('fails the account tuple when %s', (_name, userMatches, expectedPuppet) => {
+    expect(
+      resolveMatrixCorpusPuppetBinding(
+        {
+          ok: true,
+          nextBatch: 'current-cursor',
+          limited: true,
+          events: [
+            {
+              type: 'm.room.message',
+              sender: '@whatsapp_1:example.test',
+              content: { msgtype: 'm.text', body: 'reply' },
+            },
+          ],
+        },
+        userMatches,
+        expectedPuppet
+      )
+    ).toEqual({ expectedPuppetSender: undefined, accountTupleCount: 0 });
+  });
+
+  it('accepts an exact configured LID puppet binding', () => {
+    expect(
+      resolveMatrixCorpusPuppetBinding(
+        {
+          ok: true,
+          nextBatch: 'current-cursor',
+          limited: false,
+          events: [
+            {
+              type: 'm.room.message',
+              sender: '@whatsapp_lid-current:example.test',
+              content: { msgtype: 'm.text', body: 'reply' },
+            },
+          ],
+        },
+        true,
+        '@whatsapp_lid-current:example.test'
+      )
+    ).toEqual({
+      expectedPuppetSender: '@whatsapp_lid-current:example.test',
       accountTupleCount: 1,
     });
   });

@@ -233,13 +233,27 @@ describe('assertIntexAgentCatalogConformance', () => {
     );
   });
 
-  it('fails closed when reviewed DeepSeek cache-read pricing changes', () => {
+  it('uses changed positive provider-reported DeepSeek cache-read pricing', () => {
     const catalog = reviewedCatalog() as {
       data: { pricing: { input_cache_read?: string } }[];
     };
     const entry = catalog.data[0];
     if (entry === undefined) throw new Error('Test setup failed');
     entry.pricing.input_cache_read = '0.00000002';
+
+    expect(
+      assertIntexAgentCatalogConformance(catalog, '2026-07-19T12:00:00.000Z').models[0]
+        ?.cacheReadPerToken
+    ).toBe(0.00000002);
+  });
+
+  it('fails closed when provider-reported DeepSeek cache-read pricing is non-positive', () => {
+    const catalog = reviewedCatalog() as {
+      data: { pricing: { input_cache_read?: string } }[];
+    };
+    const entry = catalog.data[0];
+    if (entry === undefined) throw new Error('Test setup failed');
+    entry.pricing.input_cache_read = '0';
 
     expect(() => assertIntexAgentCatalogConformance(catalog, '2026-07-19T12:00:00.000Z')).toThrow(
       'cache-read pricing'

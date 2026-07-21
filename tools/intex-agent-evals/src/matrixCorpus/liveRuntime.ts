@@ -25,7 +25,7 @@ import {
   withValidatedAccountContext,
   type ValidatedAccountContext,
 } from '../preflight.js';
-import { isWhatsAppPuppetSender, type MatrixClient } from '../live/matrixClient.js';
+import type { MatrixClient } from '../live/matrixClient.js';
 import { loadCanonicalMatrixCorpus } from './catalog.js';
 import {
   runMatrixCorpusPreflight,
@@ -82,7 +82,8 @@ export interface MatrixCorpusLiveRuntime {
 
 export function resolveMatrixCorpusPuppetBinding(
   sync: Awaited<ReturnType<MatrixClient['syncTargetRoom']>>,
-  evaluatorUserMatches: boolean
+  evaluatorUserMatches: boolean,
+  configuredPuppetSender: string | undefined
 ):
   | {
       readonly expectedPuppetSender: string | undefined;
@@ -93,13 +94,18 @@ export function resolveMatrixCorpusPuppetBinding(
   // A limited initial timeline is normal once the room has more than 100 events.
   // We only use this tail to resolve the current puppet; later incremental reads
   // continue to reject limited results before correlating any test evidence.
-  const puppetSenders = [
-    ...new Set(sync.events.map((event) => event.sender).filter(isWhatsAppPuppetSender)),
-  ];
+  const expectedPuppetSender =
+    configuredPuppetSender !== undefined &&
+    /^@whatsapp_(?:[0-9]+|lid-[A-Za-z0-9_-]+):[^\s]+$/u.test(configuredPuppetSender)
+      ? configuredPuppetSender
+      : undefined;
+  const bindingObserved =
+    expectedPuppetSender !== undefined &&
+    sync.events.some((event) => event.sender === expectedPuppetSender);
+  const accountReady = evaluatorUserMatches && bindingObserved;
   return {
-    expectedPuppetSender: puppetSenders[0],
-    accountTupleCount:
-      evaluatorUserMatches && puppetSenders.length === 1 ? 1 : puppetSenders.length,
+    expectedPuppetSender: accountReady ? expectedPuppetSender : undefined,
+    accountTupleCount: accountReady ? 1 : 0,
   };
 }
 
@@ -253,7 +259,8 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
       const evaluatorUserId = env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
       const puppetBinding = resolveMatrixCorpusPuppetBinding(
         sync,
-        evaluatorUserId === account.userId
+        evaluatorUserId === account.userId,
+        env['INTEXURAOS_MATRIX_CORPUS_MATRIX_PUPPET_USER_ID']
       );
       if (puppetBinding === undefined) throw new Error('matrix_not_ready');
       const { expectedPuppetSender, accountTupleCount } = puppetBinding;
@@ -377,6 +384,7 @@ function hasCapabilityBoundary(env: NodeJS.ProcessEnv): boolean {
     'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
     'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
     'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_MATRIX_PUPPET_USER_ID',
   ] as const;
   return (
     env['INTEXURAOS_MATRIX_CORPUS_ENABLED'] === 'true' &&
