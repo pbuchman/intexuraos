@@ -78,7 +78,9 @@ export async function captureMatrixCorpusCursor(input: {
     signal: input.signal,
   });
   if (!result.ok) return { ok: false, code: mapSyncFailure(result.reason, input.signal) };
-  if (result.limited) return { ok: false, code: 'matrix_timeline_limited' };
+  // An initial /sync may legitimately truncate historical events in an active room.
+  // Its next_batch still represents the current cursor. Incremental polls below keep
+  // rejecting limited timelines because missing new events there would be unsafe.
   return { ok: true, cursor: result.nextBatch };
 }
 
