@@ -22,6 +22,7 @@
     "@google-cloud/storage": "^7.14.0",
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/common-http": "workspace:*",
+    "@intexuraos/common-metrics": "workspace:*",
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",

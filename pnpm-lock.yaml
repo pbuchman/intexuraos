@@ -1304,6 +1304,9 @@ importers:
       '@intexuraos/common-http':
         specifier: workspace:*
         version: link:../../packages/common-http
+      '@intexuraos/common-metrics':
+        specifier: workspace:*
+        version: link:../../packages/common-metrics
       '@intexuraos/http-contracts':
         specifier: workspace:*
         version: link:../../packages/http-contracts

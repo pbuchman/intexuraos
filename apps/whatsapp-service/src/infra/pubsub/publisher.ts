@@ -8,12 +8,15 @@ import { BasePubSubPublisher, type PublishError } from '@intexuraos/infra-pubsub
 import type {
   AudioStoredEvent,
   ConversationAssistantPreparationRequestedEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
   EventPublisherPort,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   WhatsAppError,
   MediaCleanupEvent,
   MediaTranscriptionRequestedEvent,
+  PrivateWhatsAppErasurePublisher,
+  PrivateWhatsAppErasureWorkItem,
   WebhookProcessEvent,
 } from '../../domain/whatsapp/index.js';
 
@@ -36,7 +39,10 @@ export interface GcpPubSubPublisherConfig {
 /**
  * GCP Pub/Sub implementation of EventPublisherPort.
  */
-export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPublisherPort {
+export class GcpPubSubPublisher
+  extends BasePubSubPublisher
+  implements EventPublisherPort, PrivateWhatsAppErasurePublisher
+{
   private readonly mediaCleanupTopic: string;
   private readonly audioStoredTopic: string;
   private readonly intexMessageIngestTopic: string;
@@ -138,6 +144,43 @@ export class GcpPubSubPublisher extends BasePubSubPublisher implements EventPubl
       event,
       { sessionId: event.sessionId, userId: event.userId, attempt: String(event.attempt) },
       'conversation assistant preparation'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishConversationAssistantContextAttachmentPreparation(
+    event: ConversationAssistantContextAttachmentPreparationRequestedEvent
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.webhookProcessTopic === null) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message:
+          'Conversation Assistant context attachment preparation topic is not configured',
+      });
+    }
+    const result = await this.publishToTopic(
+      this.webhookProcessTopic,
+      event,
+      { attempt: String(event.attempt) },
+      'conversation assistant context attachment preparation'
+    );
+    return this.mapToWhatsAppError(result);
+  }
+
+  async publishPrivateWhatsAppErasure(
+    event: PrivateWhatsAppErasureWorkItem
+  ): Promise<Result<void, WhatsAppError>> {
+    if (this.webhookProcessTopic === null) {
+      return err({
+        code: 'INTERNAL_ERROR',
+        message: 'Private WhatsApp erasure topic is not configured',
+      });
+    }
+    const result = await this.publishToTopic(
+      this.webhookProcessTopic,
+      event,
+      { attempt: String(event.attempt) },
+      'private WhatsApp erasure'
     );
     return this.mapToWhatsAppError(result);
   }

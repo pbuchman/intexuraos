@@ -9,16 +9,17 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { MarkdownContent } from '@/components/MarkdownContent';
 import { Button } from '@/components/ui/Button';
 import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { ConversationAssistantComposer } from '@/components/whatsapp/ConversationAssistantComposer';
 import { ConversationAssistantActionsMenu } from '@/components/whatsapp/ConversationAssistantActionsMenu';
 import { ConversationAssistantContextModal } from '@/components/whatsapp/ConversationAssistantContextModal';
+import { ConversationAssistantContextViewerModal } from '@/components/whatsapp/ConversationAssistantContextViewerModal';
 import { ConversationAssistantDeleteDialog } from '@/components/whatsapp/ConversationAssistantDeleteDialog';
+import { ConversationAssistantTurnBubble } from '@/components/whatsapp/ConversationAssistantTurnBubble';
 import { useWhatsAppConversationAssistant } from '@/hooks/useWhatsAppConversationAssistant';
 import type { ConversationAssistantOmittedCounts, ConversationAssistantSession } from '@/types';
-import { formatDateTime, formatDateTimeCompact } from '@/utils/dateFormat';
+import { formatDateTime } from '@/utils/dateFormat';
 
 function sumOmitted(omitted: ConversationAssistantOmittedCounts): number {
   return (
@@ -55,7 +56,12 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   const turnsScrollRef = useRef<HTMLDivElement | null>(null);
   const followTurnsRef = useRef(true);
   const deleteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const contextReturnFocusRef = useRef<HTMLElement | null>(null);
+  const restoreContextFocusOnCloseRef = useRef(false);
   const [contextOpen, setContextOpen] = useState(false);
+  const [contextViewerMode, setContextViewerMode] = useState<
+    { kind: 'history' } | { kind: 'attachment'; attachmentId: string } | undefined
+  >(undefined);
   const [deleteTarget, setDeleteTarget] = useState<ConversationAssistantSession | undefined>(
     undefined
   );
@@ -70,11 +76,24 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   useEffect(() => {
     followTurnsRef.current = true;
     setContextOpen(false);
+    setContextViewerMode(undefined);
     const element = turnsScrollRef.current;
     if (element !== null) {
       element.scrollTop = element.scrollHeight;
     }
   }, [sessionId]);
+
+  useEffect(() => {
+    if (
+      contextOpen ||
+      contextViewerMode !== undefined ||
+      !restoreContextFocusOnCloseRef.current
+    ) {
+      return;
+    }
+    restoreContextFocusOnCloseRef.current = false;
+    contextReturnFocusRef.current?.focus();
+  }, [contextOpen, contextViewerMode]);
 
   useEffect(() => {
     const element = turnsScrollRef.current;
@@ -93,6 +112,9 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   }, [assistant.turnPhase]);
 
   const session = assistant.selectedSession;
+  const displayTimeZone = session?.contextSummary.displayTimeZone ?? 'UTC';
+  const completedConversationRevision =
+    session?.contextSummary.completedConversationRevision ?? 0;
   const deletionPending = session?.deletionPending === true;
   const contextReady =
     !deletionPending && (session?.status === 'ready' || session?.status === 'active');
@@ -102,12 +124,26 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
   const canExport =
     contextReady &&
     assistant.turns.length > 0 &&
-    assistant.turnPhase === 'idle' &&
+    (assistant.turnPhase === 'idle' || completedConversationRevision > 0) &&
     !assistant.exporting;
+  const hasContextUpdates = (session?.contextSummary.snapshotCount ?? 0) > 1;
+  const exportingLastCompletedRevision =
+    assistant.turnPhase !== 'idle' && completedConversationRevision > 0;
+  const rememberContextTrigger = useCallback((trigger?: HTMLElement): void => {
+    const target = trigger ?? document.activeElement;
+    if (target instanceof HTMLElement) contextReturnFocusRef.current = target;
+  }, []);
+  const openNewAnalysis = useCallback((): void => {
+    window.open(
+      '/#/whatsapp/conversation-assistant/new',
+      '_blank',
+      'noopener,noreferrer'
+    );
+  }, []);
 
   return (
     <Layout>
-      <div className="flex min-h-[calc(100vh-8rem)] w-full min-w-0 flex-col gap-4">
+      <div className="flex min-h-[calc(100dvh-8rem)] w-full min-w-0 flex-col gap-4">
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-4 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <Link
@@ -123,8 +159,9 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
             {session !== undefined ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                 <span>
-                  {session.chatDisplayName ?? session.chatId} · {formatDateTime(session.range.from)}{' '}
-                  – {formatDateTime(session.range.to)}
+                  {session.chatDisplayName ?? session.title} ·{' '}
+                  {formatDateTime(session.range.from, displayTimeZone)} –{' '}
+                  {formatDateTime(session.range.to, displayTimeZone)}
                 </span>
                 <span
                   aria-label="Model used"
@@ -145,9 +182,14 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               isLoading={assistant.exporting}
               loadingText="Exporting"
               disabled={!canExport}
+              aria-label={
+                exportingLastCompletedRevision
+                  ? `Export last completed PDF, revision ${String(completedConversationRevision)}`
+                  : 'Export PDF'
+              }
             >
               <Download className="mr-2 h-4 w-4" />
-              Export PDF
+              {exportingLastCompletedRevision ? 'Export last completed PDF' : 'Export PDF'}
             </Button>
             {session !== undefined ? (
               <ConversationAssistantActionsMenu
@@ -196,19 +238,27 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
         {session !== undefined && contextReady ? (
           <button
             type="button"
-            aria-label="View frozen context"
-            onClick={(): void => {
-              setContextOpen(true);
-              void assistant.loadContext();
+            aria-label={hasContextUpdates ? 'View conversation context' : 'View frozen context'}
+            onClick={(event): void => {
+              rememberContextTrigger(event.currentTarget);
+              if (hasContextUpdates) {
+                setContextViewerMode({ kind: 'history' });
+              } else {
+                setContextOpen(true);
+                void assistant.loadContext();
+              }
             }}
-            className="group flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950/20"
+            className="group flex min-h-11 w-full min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:border-blue-300 hover:bg-blue-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-800 dark:hover:bg-blue-950/20"
           >
             <MessageSquareText className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-            <span className="min-w-0 flex-1">
-              {session.transcriptMessageCount.toLocaleString()} messages used ·{' '}
-              {sumOmitted(session.omitted).toLocaleString()} omitted
+            <span className="min-w-0 flex-1 break-words">
+              {hasContextUpdates
+                ? `${session.transcriptMessageCount.toLocaleString()} initial · ${session.contextSummary.totalAttachedMessageCount.toLocaleString()} added · ${(sumOmitted(session.omitted) + session.contextSummary.totalAttachedOmittedCount).toLocaleString()} excluded`
+                : `${session.transcriptMessageCount.toLocaleString()} messages used · ${sumOmitted(session.omitted).toLocaleString()} omitted`}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">View context</span>
+            <span className="hidden text-xs text-slate-500 dark:text-slate-400 sm:inline">
+              {hasContextUpdates ? 'Conversation context' : 'View context'}
+            </span>
             <ChevronRight className="h-4 w-4 text-slate-400 transition-transform group-hover:translate-x-0.5" />
           </button>
         ) : null}
@@ -273,49 +323,25 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               </div>
             ) : null}
             {assistant.turns.map((turn, index) => {
-              const isUser = turn.role === 'user';
               const isStreamingAnswer =
                 assistant.turnPhase === 'streaming' &&
-                !isUser &&
+                turn.role !== 'user' &&
                 index === assistant.turns.length - 1;
               return (
-                <article
+                <ConversationAssistantTurnBubble
                   key={turn.id}
-                  className={`max-w-[min(46rem,100%)] rounded-lg border px-4 py-3 ${
-                    isUser
-                      ? 'ml-auto border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/40'
-                      : 'mr-auto border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900'
-                  }`}
-                >
-                  <div className="mb-1 flex items-start justify-between gap-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                    <span className="flex items-center gap-2">
-                      {isUser ? 'You' : (session?.assistantRoleLabel ?? 'Assistant')}
-                      {isStreamingAnswer ? (
-                        <span
-                          aria-hidden="true"
-                          className="normal-case text-blue-600 dark:text-blue-400"
-                        >
-                          Responding…
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="shrink-0">{formatDateTimeCompact(turn.createdAt)}</span>
-                  </div>
-                  {isUser ? (
-                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-slate-950 dark:text-slate-50">
-                      {turn.text}
-                    </p>
-                  ) : (
-                    <div className="break-words text-sm leading-6 text-slate-950 dark:text-slate-50">
-                      <MarkdownContent content={turn.text} />
-                    </div>
-                  )}
-                  {turn.error !== undefined ? (
-                    <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-                      {turn.error.code}: {turn.error.message}
-                    </p>
-                  ) : null}
-                </article>
+                  turn={turn}
+                  assistantRoleLabel={session?.assistantRoleLabel ?? 'Assistant'}
+                  displayTimeZone={displayTimeZone}
+                  isStreaming={isStreamingAnswer}
+                  onViewContextAttachment={(attachmentId): void => {
+                    rememberContextTrigger();
+                    setContextViewerMode({ kind: 'attachment', attachmentId });
+                  }}
+                  onRetryAnswer={(requestId): void => {
+                    void assistant.retryTurnAnswer(requestId);
+                  }}
+                />
               );
             })}
             {assistant.turnPhase === 'waiting' ? (
@@ -341,8 +367,34 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               disabled={assistant.retryingPreparation}
               turnPhase={assistant.turnPhase}
               mode={hasUserQuestion ? 'follow-up' : 'first-question'}
+              attachmentState={assistant.pendingContextAttachment}
+              attachmentRequestPhase={assistant.contextAttachmentRequestPhase}
+              warningAcknowledged={assistant.contextAttachmentWarningAcknowledged}
+              continuationState={assistant.contextContinuationState}
+              displayTimeZone={displayTimeZone}
               onChange={assistant.setFollowUpQuestion}
               onSend={assistant.sendFollowUp}
+              onInclude={assistant.includeNewMessages}
+              onViewAttachment={(): void => {
+                const state = assistant.pendingContextAttachment;
+                if (
+                  state.phase === 'idle' ||
+                  state.phase === 'preparing_intent' ||
+                  state.phase === 'restoring' ||
+                  state.phase === 'restore_failed' ||
+                  state.phase === 'missing'
+                ) {
+                  return;
+                }
+                rememberContextTrigger();
+                setContextViewerMode({ kind: 'attachment', attachmentId: state.attachment.id });
+              }}
+              onRemoveAttachment={assistant.removeContextAttachment}
+              onRetryAttachment={assistant.retryContextAttachment}
+              onRefreshAttachment={assistant.refreshContextAttachment}
+              onKeepCurrentAttachment={assistant.keepCurrentContextAttachment}
+              onAcknowledgeWarning={assistant.acknowledgeContextAttachmentWarning}
+              onStartNewAnalysis={openNewAnalysis}
             />
           ) : null}
           </section>
@@ -356,6 +408,8 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
             error={assistant.contextError}
             expectedMessageCount={session.transcriptMessageCount}
             omitted={session.omitted}
+            displayTimeZone={displayTimeZone}
+            returnFocusRef={contextReturnFocusRef}
             onRetry={(): void => {
               if (assistant.context === null) {
                 void assistant.loadContext();
@@ -367,7 +421,34 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               void assistant.loadMoreContext();
             }}
             onClose={(): void => {
+              restoreContextFocusOnCloseRef.current = true;
               setContextOpen(false);
+            }}
+          />
+        ) : null}
+        {contextViewerMode !== undefined && session !== undefined && !deletionPending ? (
+          <ConversationAssistantContextViewerModal
+            mode={contextViewerMode}
+            displayTimeZone={displayTimeZone}
+            returnFocusRef={contextReturnFocusRef}
+            loadHistory={assistant.loadContextHistory}
+            loadPreview={assistant.loadContextSnapshotPreview}
+            onViewInitial={(): void => {
+              setContextViewerMode(undefined);
+              setContextOpen(true);
+              void assistant.loadContext();
+            }}
+            onJumpToTurn={(turnId): void => {
+              setContextViewerMode(undefined);
+              window.requestAnimationFrame(() => {
+                const turn = document.getElementById(`conversation-assistant-turn-${turnId}`);
+                turn?.scrollIntoView({ block: 'center' });
+                turn?.focus();
+              });
+            }}
+            onClose={(): void => {
+              restoreContextFocusOnCloseRef.current = true;
+              setContextViewerMode(undefined);
             }}
           />
         ) : null}

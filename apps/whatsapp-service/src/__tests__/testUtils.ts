@@ -18,7 +18,11 @@ import type {
 import type { ExportConversationAssistantPdfResult } from '../domain/conversation-assistant/types.js';
 import {
   FakeConversationAssistantRepository,
+  FakeConversationAssistantContextAttachmentDeltaBuilder,
+  FakeConversationAssistantContextAttachmentRepository,
+  FakeConversationAssistantOperationalTelemetry,
   FakeEventPublisher,
+  FakeConversationAssistantTurnRequestRepository,
   FakeLlmGenerateClient,
   FakeMatrixOutboundGateway,
   FakePrivateWhatsAppRepository,
@@ -35,6 +39,8 @@ import {
   FakeWhatsAppWebhookEventRepository,
 } from './fakes.js';
 import type { Config } from '../config.js';
+import type { ConversationAssistantTurnRequestRunner } from '../domain/conversation-assistant/turnRequestPorts.js';
+import { createConversationAssistantTurnRunner } from '../infra/llm/conversationAssistantTurnRunner.js';
 
 export const issuer = 'https://test-issuer.example.com/';
 export const audience = 'test-audience';
@@ -576,6 +582,11 @@ export interface TestContext {
   messageSender: FakeMessageSender;
   linkPreviewFetcher: FakeLinkPreviewFetcherPort;
   conversationAssistantRepository: FakeConversationAssistantRepository;
+  conversationAssistantContextAttachmentRepository: FakeConversationAssistantContextAttachmentRepository;
+  conversationAssistantContextAttachmentDeltaBuilder: FakeConversationAssistantContextAttachmentDeltaBuilder;
+  conversationAssistantTurnRequestRepository: FakeConversationAssistantTurnRequestRepository;
+  conversationAssistantTurnRequestRunner: ConversationAssistantTurnRequestRunner;
+  conversationAssistantOperationalTelemetry: FakeConversationAssistantOperationalTelemetry;
   llmClient: FakeLlmGenerateClient;
   pdfConversationExporter: FakePdfConversationExporter;
 }
@@ -601,6 +612,16 @@ export function setupTestContext(): TestContext {
     messageSender: null as unknown as FakeMessageSender,
     linkPreviewFetcher: null as unknown as FakeLinkPreviewFetcherPort,
     conversationAssistantRepository: null as unknown as FakeConversationAssistantRepository,
+    conversationAssistantContextAttachmentRepository:
+      null as unknown as FakeConversationAssistantContextAttachmentRepository,
+    conversationAssistantContextAttachmentDeltaBuilder:
+      null as unknown as FakeConversationAssistantContextAttachmentDeltaBuilder,
+    conversationAssistantTurnRequestRepository:
+      null as unknown as FakeConversationAssistantTurnRequestRepository,
+    conversationAssistantTurnRequestRunner:
+      null as unknown as ConversationAssistantTurnRequestRunner,
+    conversationAssistantOperationalTelemetry:
+      null as unknown as FakeConversationAssistantOperationalTelemetry,
     llmClient: null as unknown as FakeLlmGenerateClient,
     pdfConversationExporter: null as unknown as FakePdfConversationExporter,
   };
@@ -628,7 +649,23 @@ export function setupTestContext(): TestContext {
     context.messageSender = new FakeMessageSender();
     context.linkPreviewFetcher = new FakeLinkPreviewFetcherPort();
     context.conversationAssistantRepository = new FakeConversationAssistantRepository();
+    context.conversationAssistantContextAttachmentRepository =
+      new FakeConversationAssistantContextAttachmentRepository();
+    context.conversationAssistantContextAttachmentDeltaBuilder =
+      new FakeConversationAssistantContextAttachmentDeltaBuilder();
     context.llmClient = new FakeLlmGenerateClient();
+    context.conversationAssistantTurnRequestRepository =
+      new FakeConversationAssistantTurnRequestRepository(
+        context.conversationAssistantRepository,
+        context.conversationAssistantContextAttachmentRepository
+      );
+    context.conversationAssistantTurnRequestRunner = createConversationAssistantTurnRunner({
+      llmClientFactory: {
+        createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
+      },
+    });
+    context.conversationAssistantOperationalTelemetry =
+      new FakeConversationAssistantOperationalTelemetry();
     context.pdfConversationExporter = new FakePdfConversationExporter();
 
     setServices({
@@ -647,6 +684,15 @@ export function setupTestContext(): TestContext {
       privateWhatsAppRepository: context.privateWhatsAppRepository,
       matrixOutboundGateway: context.matrixOutboundGateway,
       conversationAssistantRepository: context.conversationAssistantRepository,
+      conversationAssistantContextAttachmentRepository:
+        context.conversationAssistantContextAttachmentRepository,
+      conversationAssistantContextAttachmentDeltaBuilder:
+        context.conversationAssistantContextAttachmentDeltaBuilder,
+      conversationAssistantTurnRequestRepository:
+        context.conversationAssistantTurnRequestRepository,
+      conversationAssistantTurnRequestRunner: context.conversationAssistantTurnRequestRunner,
+      conversationAssistantOperationalTelemetry:
+        context.conversationAssistantOperationalTelemetry,
       llmClientFactory: {
         createLlmClientForUser: () => Promise.resolve(ok(context.llmClient)),
       },

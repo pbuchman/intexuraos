@@ -4,6 +4,7 @@
 export type {
   AudioStoredEvent,
   ConversationAssistantPreparationRequestedEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
   IntexMessageReplyContext,

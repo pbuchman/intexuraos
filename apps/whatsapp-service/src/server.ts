@@ -48,6 +48,12 @@ function buildOpenApiOptions(): FastifyDynamicSwaggerOptions {
   ];
 
   return {
+    refResolver: {
+      buildLocalReference(json, _baseUri, _fragment, index): string {
+        const schemaId = json['$id'];
+        return typeof schemaId === 'string' ? schemaId : `def-${String(index)}`;
+      },
+    },
     openapi: {
       openapi: '3.1.1',
       info: {
@@ -130,6 +136,10 @@ export async function buildServer(config: Config): Promise<FastifyInstance> {
   initServices(serviceConfig);
 
   const app = Fastify({
+    // Keep router matching above the largest public path-parameter bound so
+    // route schemas, rather than find-my-way's default 100-character limit,
+    // produce the documented validation response.
+    routerOptions: { maxParamLength: 512 },
     logger:
       process.env['NODE_ENV'] === 'test'
         ? false

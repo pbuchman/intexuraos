@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type { GenerateChatResult, LLMError } from '@intexuraos/llm-factory';
 import {
@@ -14,6 +15,12 @@ import {
   buildPrivateConversationTranscriptText,
   projectPrivateConversationContext,
 } from './transcriptFormatting.js';
+import { reconcileConversationContextAtCutoff } from './contextReconciliation.js';
+import { isLatestRetryableConversationAssistantAnswer } from './answerRetryCapability.js';
+import {
+  recordConversationAssistantTelemetry,
+  type ConversationAssistantTelemetryInput,
+} from './operationalTelemetry.js';
 import type { ConversationAssistantDeps } from './ports.js';
 import type {
   CheckConversationAssistantContextInput,
@@ -36,9 +43,14 @@ import type {
   PrepareConversationAssistantSessionResult,
 } from './types.js';
 import {
+  CONVERSATION_ASSISTANT_PUBLIC_LLM_ERROR_MESSAGE,
   CONVERSATION_ASSISTANT_LARGE_CONTEXT_WARNING_THRESHOLD,
 } from './types.js';
-import type { PrivateWhatsAppChat, PrivateWhatsAppMessage } from '../whatsapp/index.js';
+import type {
+  PrivateWhatsAppChat,
+  PrivateWhatsAppContextChange,
+  PrivateWhatsAppMessage,
+} from '../whatsapp/index.js';
 
 export const conversationAssistantSystemClock = {
   now: (): string => new Date().toISOString(),
@@ -93,16 +105,6 @@ export async function createConversationAssistantSession(
   const creationRequestId =
     trimmedRequestId === undefined || trimmedRequestId === '' ? randomUUID() : trimmedRequestId;
   const sessionId = deps.ids.sessionId({ userId: input.userId, requestId: creationRequestId });
-  const existing = await deps.repository.getSessionById(sessionId);
-  if (existing !== null) {
-    return await reuseOrRequeueConversationAssistantSession(
-      existing,
-      input.userId,
-      creationRequestId,
-      deps
-    );
-  }
-
   const chatLoadResult = await loadOwnedDirectChat(input, deps);
   if (!chatLoadResult.ok) {
     return chatLoadResult;
@@ -113,6 +115,8 @@ export async function createConversationAssistantSession(
     id: sessionId,
     userId: input.userId,
     chatId: input.chatId,
+    sourceAccountId: chatLoadResult.value.sourceAccountId,
+    sourceAccountGeneration: chatLoadResult.value.accountGeneration,
     status: 'preparing',
     preparationStage: 'queued',
     preparationAttempt: 1,
@@ -129,6 +133,7 @@ export async function createConversationAssistantSession(
     updatedAt: now,
     creationRequestId,
     generationId: deps.ids.sessionGenerationId(),
+    preparationDisplayTimeZone: input.displayTimeZone ?? 'UTC',
   };
   if (chatLoadResult.value.chat.displayName !== undefined) {
     session.chatDisplayName = chatLoadResult.value.chat.displayName;
@@ -138,6 +143,9 @@ export async function createConversationAssistantSession(
   }
 
   const creation = await deps.repository.createSessionIfAbsent(session);
+  if (creation.status === 'source_unavailable') {
+    return err({ code: 'NOT_FOUND', message: 'Private WhatsApp mirror is not configured' });
+  }
   if (creation.status === 'existing') {
     return await reuseOrRequeueConversationAssistantSession(
       creation.session,
@@ -153,8 +161,23 @@ export async function deleteConversationAssistantSession(
   input: DeleteConversationAssistantSessionInput,
   deps: ConversationAssistantDeps
 ): Promise<ConversationAssistantResult<{ deleted: true }>> {
-  await deps.repository.deleteSession(input);
-  return ok({ deleted: true });
+  const startedAt = performance.now();
+  try {
+    await deps.repository.deleteSession(input);
+    await recordConversationAssistantTelemetry(deps.telemetry, {
+      operation: 'session_cleanup',
+      outcome: 'completed',
+      durationMs: performance.now() - startedAt,
+    });
+    return ok({ deleted: true });
+  } catch (error) {
+    await recordConversationAssistantTelemetry(deps.telemetry, {
+      operation: 'session_cleanup',
+      outcome: 'failed',
+      durationMs: performance.now() - startedAt,
+    });
+    throw error;
+  }
 }
 
 export async function prepareConversationAssistantSession(
@@ -218,7 +241,7 @@ export async function prepareConversationAssistantSession(
     return chatLoadResult;
   }
 
-  const messagesResult = await loadConversationAssistantMessages(
+  const messagesResult = await loadReconciledConversationAssistantMessages(
     workingSession,
     chatLoadResult.value.sourceAccountId,
     deps
@@ -244,6 +267,7 @@ export async function prepareConversationAssistantSession(
     session: workingSession,
     attempt,
     claimId,
+    now: deps.clock.now(),
   });
   if (!savedBuildingStage) {
     return await currentPreparationResult(session.id, input.userId, deps);
@@ -252,8 +276,16 @@ export async function prepareConversationAssistantSession(
   const context = projectPrivateConversationContext({
     chat: chatLoadResult.value.chat,
     range: workingSession.range,
-    messages: messagesResult.value,
+    messages: messagesResult.value.messages,
     captureOmittedMessages: true,
+    ...(workingSession.generationId === undefined
+      ? {}
+      : {
+          referenceScope: {
+            sessionId: workingSession.id,
+            sessionGenerationId: workingSession.generationId,
+          },
+        }),
     ...(workingSession.maxMessages !== undefined
       ? { maxMessages: workingSession.maxMessages }
       : {}),
@@ -304,19 +336,43 @@ export async function prepareConversationAssistantSession(
     transcriptSha256: context.transcriptSha256,
     contextSnapshotId,
     transcriptMessageCount: context.messageCount,
-    transcriptText: buildPrivateConversationTranscriptText(context.messages),
+    transcriptText: buildPrivateConversationTranscriptText(
+      context.messages,
+      workingSession.generationId === undefined
+        ? undefined
+        : {
+            sessionId: workingSession.id,
+            sessionGenerationId: workingSession.generationId,
+          }
+    ),
     omitted: context.omitted,
+    continuation: {
+      sourceAccountId: chatLoadResult.value.sourceAccountId,
+      contextVersion: 0,
+      contextEventThrough: workingSession.range.to,
+      contextChangeThrough: messagesResult.value.cutoffSequence,
+      contextChainSha256: createInitialContextChainSha256(context.transcriptSha256),
+      displayTimeZone: workingSession.preparationDisplayTimeZone ?? 'UTC',
+      nextTurnSequence: 1,
+      nextConversationRevision: 1,
+      completedConversationRevision: 0,
+      attachmentCount: 0,
+      totalAttachedMessageCount: 0,
+      totalAttachedOmittedCount: 0,
+    },
     updatedAt: deps.clock.now(),
   };
   delete readySession.preparationError;
   delete readySession.preparationClaimId;
   delete readySession.preparationLeaseExpiresAt;
+  delete readySession.preparationDisplayTimeZone;
   let savedReadySession: boolean;
   try {
     savedReadySession = await deps.repository.saveClaimedPreparationSession({
       session: readySession,
       attempt,
       claimId,
+      now: deps.clock.now(),
     });
   } catch (error) {
     await deps.repository.deleteContextSnapshot(
@@ -470,12 +526,7 @@ export async function streamConversationAssistantTurn(
     deps,
     onEvent
   );
-  const assistantTurn = createAssistantTurnFromModelResult(
-    session,
-    llmResult,
-    deps,
-    'Chat message streaming is unavailable'
-  );
+  const assistantTurn = createAssistantTurnFromModelResult(session, llmResult, deps);
 
   if (assistantTurn.error !== undefined) {
     onEvent({
@@ -572,20 +623,74 @@ export async function getConversationAssistantContext(
   return ok(result);
 }
 
+export interface ConversationAssistantTurnHistoryItem {
+  turn: ConversationAssistantTurn;
+  canRetryAnswer: boolean;
+}
+
 export async function listConversationAssistantTurns(
   input: { userId: string; sessionId: string },
   deps: ConversationAssistantDeps
-): Promise<ConversationAssistantResult<ConversationAssistantTurn[]>> {
+): Promise<ConversationAssistantResult<ConversationAssistantTurnHistoryItem[]>> {
   const session = await deps.repository.getSessionById(input.sessionId);
   if (!isOwnedSession(session, input.userId)) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
   }
-  return ok(await deps.repository.listTurnsBySessionId(input.sessionId));
+  const completedConversationRevision = session.continuation?.completedConversationRevision;
+  const turns = await deps.repository.listTurnsBySessionId(input.sessionId);
+  return ok(
+    turns.map((turn) => ({
+      turn,
+      canRetryAnswer: isLatestRetryableConversationAssistantAnswer({
+        failed:
+          turn.role === 'assistant' &&
+          turn.requestId !== undefined &&
+          turn.error !== undefined,
+        errorCode: turn.error?.code,
+        conversationRevision: turn.conversationRevision,
+        completedConversationRevision,
+        activeTurnRequestId: session.continuation?.activeTurnRequestId,
+        activeTurnLeaseExpiresAt: session.continuation?.activeTurnLeaseExpiresAt,
+        now: deps.clock.now(),
+      }),
+    }))
+  );
 }
 
 export async function exportConversationAssistantSessionPdf(
   input: ExportConversationAssistantPdfInput,
   deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<ExportConversationAssistantPdfResult>> {
+  const startedAt = performance.now();
+  const telemetryState: { completedConversationRevision?: number } = {};
+  try {
+    const result = await exportConversationAssistantSessionPdfWithoutTelemetry(
+      input,
+      deps,
+      telemetryState
+    );
+    await recordConversationAssistantTelemetry(
+      deps.telemetry,
+      pdfRevisionTelemetryInput(result, telemetryState, performance.now() - startedAt)
+    );
+    return result;
+  } catch (error) {
+    await recordConversationAssistantTelemetry(deps.telemetry, {
+      operation: 'pdf_revision',
+      outcome: 'failed',
+      durationMs: performance.now() - startedAt,
+      ...(telemetryState.completedConversationRevision === undefined
+        ? {}
+        : { count: telemetryState.completedConversationRevision }),
+    });
+    throw error;
+  }
+}
+
+async function exportConversationAssistantSessionPdfWithoutTelemetry(
+  input: ExportConversationAssistantPdfInput,
+  deps: ConversationAssistantDeps,
+  telemetryState: { completedConversationRevision?: number }
 ): Promise<ConversationAssistantResult<ExportConversationAssistantPdfResult>> {
   if (deps.pdfExporter === undefined) {
     return err({
@@ -603,8 +708,21 @@ export async function exportConversationAssistantSessionPdf(
   }
   const session = snapshot.session;
 
-  const turns = snapshot.turns;
-  const orderedTurns = [...turns].sort((a, b) => {
+  const completedConversationRevision = session.continuation?.completedConversationRevision;
+  if (completedConversationRevision !== undefined) {
+    telemetryState.completedConversationRevision = completedConversationRevision;
+  }
+  const completedTurns = snapshot.turns.filter(
+    (turn) =>
+      completedConversationRevision === undefined ||
+      turn.conversationRevision === undefined ||
+      turn.conversationRevision <= completedConversationRevision
+  );
+  const orderedTurns = [...completedTurns].sort((a, b) => {
+    if (a.sequence !== undefined && b.sequence !== undefined) {
+      const sequenceComparison = a.sequence - b.sequence;
+      if (sequenceComparison !== 0) return sequenceComparison;
+    }
     const createdComparison = a.createdAt.localeCompare(b.createdAt);
     if (createdComparison !== 0) {
       return createdComparison;
@@ -627,6 +745,39 @@ export async function exportConversationAssistantSessionPdf(
     });
   }
 
+  const completedAttachments = orderedTurns.flatMap((turn) =>
+    turn.contextAttachment === undefined ? [] : [turn.contextAttachment]
+  );
+  const cumulativeContext = completedAttachments.reduce(
+    (summary, attachment) => ({
+      snapshotCount: summary.snapshotCount + 1,
+      counts: {
+        included: summary.counts.included + attachment.counts.included,
+        omitted: summary.counts.omitted + attachment.counts.excluded,
+        completedTranscriptions:
+          summary.counts.completedTranscriptions + attachment.counts.completedTranscriptions,
+        edited: summary.counts.edited + attachment.counts.edited,
+        redacted: summary.counts.redacted + normalizedRedactionCount(attachment.counts),
+        deleted: 0,
+        reactionsChanged: summary.counts.reactionsChanged + attachment.counts.reactionsChanged,
+        lateIngested: summary.counts.lateIngested + attachment.counts.lateIngested,
+      },
+    }),
+    {
+      snapshotCount: 1,
+      counts: {
+        included: session.transcriptMessageCount,
+        omitted: excluded,
+        completedTranscriptions: 0,
+        edited: 0,
+        redacted: 0,
+        deleted: 0,
+        reactionsChanged: 0,
+        lateIngested: 0,
+      },
+    }
+  );
+
   const exportResult = await deps.pdfExporter.exportConversation({
     title: session.title,
     modelName: getConversationAssistantModelDisplayName(session.model),
@@ -639,12 +790,46 @@ export async function exportConversationAssistantSessionPdf(
       included: session.transcriptMessageCount,
       excluded,
     },
+    cumulativeContext,
     omittedBreakdown: { ...omittedBreakdown },
-    messages: orderedTurns.map((turn) => ({
-      role: turn.role,
-      createdAt: turn.createdAt,
-      text: turn.text,
-    })),
+    ...(completedConversationRevision === undefined
+      ? {}
+      : { completedConversationRevision }),
+    messages: orderedTurns.map((turn) => {
+      const attachment = turn.contextAttachment;
+      return {
+        role: turn.role,
+        createdAt: turn.createdAt,
+        text: turn.text,
+        ...(turn.conversationRevision === undefined
+          ? {}
+          : { conversationRevision: turn.conversationRevision }),
+        ...(attachment === undefined
+          ? {}
+          : {
+              contextAttachment: {
+                capturedAt: attachment.capturedAt,
+                captureRange: attachment.captureRange,
+                ...(attachment.eventRange === undefined
+                  ? {}
+                  : { eventRange: attachment.eventRange }),
+                counts: {
+                  included: attachment.counts.included,
+                  excluded: attachment.counts.excluded,
+                  completedTranscriptions: attachment.counts.completedTranscriptions,
+                  edited: attachment.counts.edited,
+                  redacted: normalizedRedactionCount(attachment.counts),
+                  deleted: 0,
+                  reactionsChanged: attachment.counts.reactionsChanged,
+                  lateIngested: attachment.counts.lateIngested,
+                },
+              },
+            }),
+        ...(turn.acknowledgment === undefined
+          ? {}
+          : { acknowledgment: turn.acknowledgment }),
+      };
+    }),
   });
 
   if (!exportResult.ok) {
@@ -655,6 +840,29 @@ export async function exportConversationAssistantSessionPdf(
     ...exportResult.value,
     fileName: appendSessionIdToPdfFileName(exportResult.value.fileName, session.id),
   });
+}
+
+function normalizedRedactionCount(counts: { redacted: number; deleted: number }): number {
+  return counts.redacted + counts.deleted;
+}
+
+function pdfRevisionTelemetryInput(
+  result: ConversationAssistantResult<ExportConversationAssistantPdfResult>,
+  state: { completedConversationRevision?: number },
+  durationMs: number
+): ConversationAssistantTelemetryInput {
+  return {
+    operation: 'pdf_revision',
+    outcome: result.ok
+      ? 'completed'
+      : result.error.code === 'INTERNAL_ERROR'
+        ? 'failed'
+        : 'rejected',
+    durationMs,
+    ...(state.completedConversationRevision === undefined
+      ? {}
+      : { count: state.completedConversationRevision }),
+  };
 }
 
 async function appendQuestionAndAssistantTurn(
@@ -668,12 +876,7 @@ async function appendQuestionAndAssistantTurn(
 
   const promptInput = await buildPromptInputAfterUserTurn(input, deps);
   const llmResult = await callConversationAssistantModel(input.session, promptInput, deps);
-  const assistantTurn = createAssistantTurnFromModelResult(
-    input.session,
-    llmResult,
-    deps,
-    'Chat message generation is unavailable'
-  );
+  const assistantTurn = createAssistantTurnFromModelResult(input.session, llmResult, deps);
 
   if (!(await persistAssistantTurnAndTouchSession(input.session, assistantTurn, deps))) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
@@ -776,13 +979,103 @@ async function loadConversationAssistantMessages(
     cursor = messagesResult.value.nextCursor;
   } while (cursor !== undefined);
 
-  if (messages.length === 0) {
+  return ok(messages);
+}
+
+async function loadReconciledConversationAssistantMessages(
+  session: ConversationAssistantSession,
+  sourceAccountId: string,
+  deps: ConversationAssistantDeps
+): Promise<
+  ConversationAssistantResult<{ messages: PrivateWhatsAppMessage[]; cutoffSequence: number }>
+> {
+  const ownedChat = {
+    userId: session.userId,
+    sourceAccountId,
+    chatId: session.chatId,
+  };
+  const startHead = await deps.privateWhatsAppRepository.getConversationContextJournalHead(
+    ownedChat
+  );
+  if (!startHead.ok) {
+    return err(toPersistenceError(startHead.error.message));
+  }
+  const scanned = await loadConversationAssistantMessages(session, sourceAccountId, deps);
+  if (!scanned.ok) return scanned;
+  const cutoffHead = await deps.privateWhatsAppRepository.getConversationContextJournalHead(
+    ownedChat
+  );
+  if (!cutoffHead.ok) {
+    return err(toPersistenceError(cutoffHead.error.message));
+  }
+  const changesResult = await loadConversationContextJournalRange(
+    {
+      ...ownedChat,
+      afterSequence: startHead.value,
+      throughSequence: cutoffHead.value,
+    },
+    deps
+  );
+  if (!changesResult.ok) return changesResult;
+  const reconciled = reconcileConversationContextAtCutoff({
+    ...ownedChat,
+    range: session.range,
+    startSequence: startHead.value,
+    cutoffSequence: cutoffHead.value,
+    scannedMessages: scanned.value,
+    changes: changesResult.value,
+  });
+  if (!reconciled.ok) {
     return err({
-      code: 'EMPTY_TRANSCRIPT',
-      message: 'Selected range contains no textual messages',
+      code: 'PERSISTENCE_ERROR',
+      message: `Private WhatsApp context journal is incomplete at sequence ${String(reconciled.expectedSequence)}`,
     });
   }
-  return ok(messages);
+  return ok({ messages: reconciled.messages, cutoffSequence: cutoffHead.value });
+}
+
+async function loadConversationContextJournalRange(
+  input: {
+    userId: string;
+    sourceAccountId: string;
+    chatId: string;
+    afterSequence: number;
+    throughSequence: number;
+  },
+  deps: ConversationAssistantDeps
+): Promise<ConversationAssistantResult<PrivateWhatsAppContextChange[]>> {
+  const changes: PrivateWhatsAppContextChange[] = [];
+  let afterSequence = input.afterSequence;
+  while (afterSequence < input.throughSequence) {
+    const page = await deps.privateWhatsAppRepository.findConversationContextJournalEntries({
+      userId: input.userId,
+      sourceAccountId: input.sourceAccountId,
+      chatId: input.chatId,
+      afterSequence,
+      throughSequence: input.throughSequence,
+      limit: 400,
+    });
+    if (!page.ok) {
+      return err(toPersistenceError(page.error.message));
+    }
+    changes.push(...page.value.entries);
+    const next = page.value.nextAfterSequence;
+    if (next === undefined) break;
+    if (next <= afterSequence) {
+      return err({
+        code: 'PERSISTENCE_ERROR',
+        message: 'Private WhatsApp context journal cursor did not advance',
+      });
+    }
+    afterSequence = next;
+  }
+  return ok(changes);
+}
+
+function createInitialContextChainSha256(transcriptSha256: string): string {
+  return createHash('sha256')
+    .update(`conversation-assistant-context-chain:v1\0initial\0${transcriptSha256}`)
+    .digest('hex');
 }
 
 async function markClaimedConversationAssistantPreparationFailed(
@@ -805,6 +1098,7 @@ async function markClaimedConversationAssistantPreparationFailed(
     session: failedSession,
     attempt,
     claimId,
+    now: deps.clock.now(),
   });
 }
 
@@ -857,7 +1151,13 @@ function isSessionReady(session: ConversationAssistantSession): boolean {
 async function loadOwnedDirectChat(
   input: { userId: string; chatId: string },
   deps: ConversationAssistantDeps
-): Promise<ConversationAssistantResult<{ sourceAccountId: string; chat: PrivateWhatsAppChat }>> {
+): Promise<
+  ConversationAssistantResult<{
+    sourceAccountId: string;
+    accountGeneration: string;
+    chat: PrivateWhatsAppChat;
+  }>
+> {
   const accountResult = await deps.privateWhatsAppRepository.getAccountByUserId(input.userId);
   if (!accountResult.ok) {
     return err(toPersistenceError(accountResult.error.message));
@@ -883,7 +1183,12 @@ async function loadOwnedDirectChat(
     });
   }
 
-  return ok({ sourceAccountId: accountResult.value.sourceAccountId, chat: chatResult.value });
+  return ok({
+    sourceAccountId: accountResult.value.sourceAccountId,
+    accountGeneration:
+      accountResult.value.generationId ?? accountResult.value.sourceAccountId,
+    chat: chatResult.value,
+  });
 }
 
 async function buildPromptInputAfterUserTurn(
@@ -910,8 +1215,7 @@ async function buildPromptInputAfterUserTurn(
 function createAssistantTurnFromModelResult(
   session: ConversationAssistantSession,
   llmResult: Result<GenerateChatResult, LLMError> | undefined,
-  deps: ConversationAssistantDeps,
-  fallbackMessage: string
+  deps: ConversationAssistantDeps
 ): ConversationAssistantTurn {
   const now = deps.clock.now();
   if (llmResult?.ok === true) {
@@ -935,7 +1239,7 @@ function createAssistantTurnFromModelResult(
     createdAt: now,
     error: {
       code: 'LLM_ERROR',
-      message: llmResult?.error.message ?? fallbackMessage,
+      message: CONVERSATION_ASSISTANT_PUBLIC_LLM_ERROR_MESSAGE,
     },
   };
 }
@@ -978,7 +1282,20 @@ function validateCreateInput(
   if (fromTime >= toTime) {
     return { code: 'INVALID_REQUEST', message: 'from must be before to' };
   }
+  if (input.displayTimeZone !== undefined && !isValidIanaTimeZone(input.displayTimeZone)) {
+    return { code: 'INVALID_REQUEST', message: 'displayTimeZone must be a valid IANA time zone' };
+  }
   return null;
+}
+
+function isValidIanaTimeZone(value: string): boolean {
+  if (value.trim() === '' || value !== value.trim()) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function callConversationAssistantModel(
@@ -999,10 +1316,8 @@ async function callConversationAssistantModel(
       buildWhatsAppConversationAssistantMessages(promptInput),
       {
         promptType: WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.promptType,
-        sessionId: session.id,
         temperature: 0.2,
         reasoning: { enabled: true },
-        correlation: { sessionId: session.id },
       }
     );
   } catch (error) {
@@ -1029,10 +1344,8 @@ async function callConversationAssistantModelStream(
       buildWhatsAppConversationAssistantMessages(promptInput),
       {
         promptType: WHATSAPP_CONVERSATION_ASSISTANT_PROMPT.promptType,
-        sessionId: session.id,
         temperature: 0.2,
         reasoning: { enabled: true },
-        correlation: { sessionId: session.id },
       },
       (event) => {
         if (event.type === 'delta') {

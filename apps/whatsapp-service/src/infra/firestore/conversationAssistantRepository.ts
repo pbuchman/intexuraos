@@ -1,14 +1,29 @@
 import { getErrorMessage } from '@intexuraos/common-core';
-import { FieldPath, getFirestore } from '@intexuraos/infra-firestore';
+import {
+  FieldPath,
+  FieldValue,
+  Timestamp,
+  computeExpireAt,
+  getFirestore,
+} from '@intexuraos/infra-firestore';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import type { ConversationAssistantRepository } from '../../domain/conversation-assistant/ports.js';
 import type {
   ConversationAssistantContextResult,
   ConversationAssistantSession,
+  ConversationAssistantSessionContinuation,
   ConversationAssistantTurn,
 } from '../../domain/conversation-assistant/types.js';
 import { DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL } from '../../domain/conversation-assistant/roleInference.js';
 import { createConversationAssistantDeletionToken } from '../../domain/conversation-assistant/deletionToken.js';
+import {
+  PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION,
+  PRIVATE_WHATSAPP_CHATS_COLLECTION,
+} from './privateWhatsAppRepository.js';
+import {
+  conversationAssistantSessionReadFenceAllows,
+  conversationAssistantSessionReadFenceAllowsWithAccount,
+} from './conversationAssistantReadFence.js';
 
 export const WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION =
   'whatsapp_conversation_assistant_sessions';
@@ -18,9 +33,26 @@ export const WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION =
   'whatsapp_conversation_assistant_context_chunks';
 export const WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION =
   'whatsapp_conversation_assistant_turns';
+const WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENTS_CASCADE_COLLECTION =
+  'whatsapp_conversation_assistant_context_attachments';
+const WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_CASCADE_COLLECTION =
+  'whatsapp_conversation_assistant_turn_requests';
 export const TRANSCRIPT_CHUNK_MAX_BYTES = 200_000;
 export const CONTEXT_CHUNK_MAX_BYTES = 200_000;
 export const CASCADE_DELETE_BATCH_SIZE = 20;
+export const CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS = 499;
+export const CONVERSATION_ASSISTANT_INITIAL_PREPARATION_CHUNK_TTL_MS = 30 * 60 * 1000;
+
+export function resolveConversationAssistantInitialPreparationChunkLimit<T>(input: {
+  chunkCounts: readonly number[];
+  withinLimit: () => T;
+  overLimit: () => T;
+}): T {
+  const chunkCount = input.chunkCounts.reduce((total, count) => total + count, 0);
+  return chunkCount <= CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS
+    ? input.withinLimit()
+    : input.overLimit();
+}
 
 interface TranscriptChunkStorage {
   type: 'chunks';
@@ -28,6 +60,18 @@ interface TranscriptChunkStorage {
   chunkSizeBytes: number;
   byteLength: number;
   snapshotId?: string;
+}
+
+interface PendingContextChunkStorage {
+  type: 'chunks';
+  snapshotId: string;
+  chunkIds: string[];
+  chunkCount: number;
+  sessionGenerationId?: string;
+  sourceAccountId: string;
+  sourceAccountGeneration: string;
+  preparationAttempt: number;
+  preparationClaimId: string;
 }
 
 type PreparationClaimResult = Awaited<
@@ -54,9 +98,7 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         const transcriptStorage = await saveTranscriptChunks(db, session);
         await sessionRef.set(toSessionDocument(session, transcriptStorage));
       } catch (error) {
-        throw new Error(
-          `Failed to save Conversation Assistant session: ${getErrorMessage(error)}`
-        );
+        throw new Error(`Failed to save Conversation Assistant session: ${getErrorMessage(error)}`);
       }
     },
 
@@ -68,14 +110,42 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         const sessionRef = db
           .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
           .doc(session.id);
+        const accountRef = db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(session.userId);
         const result = await db.runTransaction(async (transaction) => {
           const snapshot = await transaction.get(sessionRef);
+          const accountSnapshot = await transaction.get(accountRef);
+          if (!sourceAccountFenceMatches(accountSnapshot.data(), session)) {
+            return { status: 'source_unavailable' as const };
+          }
           if (snapshot.exists) {
-            return { status: 'existing' as const, data: snapshot.data() };
+            const data = snapshot.data() as Record<string, unknown>;
+            if (
+              (typeof data['sourceAccountId'] === 'string' &&
+                data['sourceAccountId'] !== session.sourceAccountId) ||
+              (typeof data['sourceAccountGeneration'] === 'string' &&
+                data['sourceAccountGeneration'] !== session.sourceAccountGeneration)
+            ) {
+              return { status: 'source_unavailable' as const };
+            }
+            const fencedData = {
+              ...data,
+              sourceAccountId: session.sourceAccountId,
+              sourceAccountGeneration: session.sourceAccountGeneration,
+            };
+            if (
+              data['sourceAccountId'] !== session.sourceAccountId ||
+              data['sourceAccountGeneration'] !== session.sourceAccountGeneration
+            ) {
+              transaction.set(sessionRef, fencedData);
+            }
+            return { status: 'existing' as const, data: fencedData };
           }
           transaction.set(sessionRef, toSessionDocument(session, emptyTranscriptStorage()));
           return { status: 'created' as const };
         });
+        if (result.status === 'source_unavailable') {
+          return { status: 'source_unavailable' };
+        }
         if (result.status === 'created') {
           return { status: 'created', session };
         }
@@ -104,20 +174,27 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         if (!doc.exists) {
           return null;
         }
-        if (toSession(doc.id, doc.data()).deletionStartedAt !== undefined) {
+        if (
+          !(await conversationAssistantSessionReadFenceAllows({
+            db,
+            sessionData: doc.data(),
+          }))
+        ) {
           return null;
         }
         return await toHydratedSession(db, doc.id, doc.data());
       } catch (error) {
-        throw new Error(
-          `Failed to load Conversation Assistant session: ${getErrorMessage(error)}`
-        );
+        throw new Error(`Failed to load Conversation Assistant session: ${getErrorMessage(error)}`);
       }
     },
 
-    async getSessionSnapshotById(
-      input: { sessionId: string; userId: string }
-    ): Promise<{ session: ConversationAssistantSession; turns: ConversationAssistantTurn[] } | null> {
+    async getSessionSnapshotById(input: {
+      sessionId: string;
+      userId: string;
+    }): Promise<{
+      session: ConversationAssistantSession;
+      turns: ConversationAssistantTurn[];
+    } | null> {
       try {
         const db = getFirestore();
         const sessionDoc = await db
@@ -130,7 +207,11 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         const sessionWithoutTranscript = toSession(sessionDoc.id, sessionDoc.data());
         if (
           sessionWithoutTranscript.userId !== input.userId ||
-          sessionWithoutTranscript.deletionStartedAt !== undefined
+          !(await conversationAssistantSessionReadFenceAllows({
+            db,
+            sessionData: sessionDoc.data(),
+            expectedUserId: input.userId,
+          }))
         ) {
           return null;
         }
@@ -144,7 +225,9 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           .get();
         return {
           session,
-          turns: turnsSnapshot.docs.map((doc) => toTurn(doc.id, doc.data())),
+          turns: turnsSnapshot.docs
+            .map((doc) => toTurn(doc.id, doc.data()))
+            .sort(compareConversationAssistantTurns),
         };
       } catch (error) {
         throw new Error(
@@ -155,13 +238,31 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
 
     async listSessionsByUserId(userId: string): Promise<ConversationAssistantSession[]> {
       try {
-        const snapshot = await getFirestore()
+        const db = getFirestore();
+        const [snapshot, accountSnapshot] = await Promise.all([
+          db
           .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
           .where('userId', '==', userId)
           .orderBy('updatedAt', 'desc')
           .orderBy(FieldPath.documentId(), 'desc')
-          .get();
-        return snapshot.docs.map((doc) => toSession(doc.id, doc.data()));
+            .get(),
+          db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(userId).get(),
+        ]);
+        const accountData = accountSnapshot.exists ? accountSnapshot.data() : undefined;
+        const readable = await Promise.all(
+          snapshot.docs.map(
+            async (doc) =>
+              await conversationAssistantSessionReadFenceAllowsWithAccount({
+                db,
+                sessionData: doc.data(),
+                expectedUserId: userId,
+                accountData,
+              })
+          )
+        );
+        return snapshot.docs
+          .filter((_doc, index) => readable[index] === true)
+          .map((doc) => toSession(doc.id, doc.data()));
       } catch (error) {
         throw new Error(
           `Failed to list Conversation Assistant sessions: ${getErrorMessage(error)}`
@@ -203,6 +304,8 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
           WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION,
           WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION,
+          WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENTS_CASCADE_COLLECTION,
+          WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_CASCADE_COLLECTION,
         ]) {
           await deleteGenerationDocuments(
             db,
@@ -249,10 +352,10 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           ) {
             return { status: 'not_found' as const };
           }
-          if (
-            session.status !== 'preparing' ||
-            session.preparationAttempt !== input.attempt
-          ) {
+          if (!(await sourceAccountAllowsPrivatePreparation(transaction, db, session))) {
+            return { status: 'not_found' as const };
+          }
+          if (session.status !== 'preparing' || session.preparationAttempt !== input.attempt) {
             return { status: 'stale' as const, session };
           }
           if (
@@ -271,7 +374,8 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             updatedAt: input.now,
           };
           delete claimed.preparationError;
-          const storage = parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
+          const storage =
+            parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
             emptyTranscriptStorage();
           transaction.set(sessionRef, toSessionDocument(claimed, storage));
           return { status: 'claimed' as const, session: claimed };
@@ -289,7 +393,9 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
         const transcriptStorage = await saveTranscriptChunks(db, input.session, {
           attempt: input.attempt,
           claimId: input.claimId,
+          now: input.now,
         });
+        if (transcriptStorage === null) return false;
         const sessionRef = db
           .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
           .doc(input.session.id);
@@ -303,9 +409,31 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             current.deletionStartedAt !== undefined ||
             current.generationId !== input.session.generationId ||
             current.preparationAttempt !== input.attempt ||
-            current.preparationClaimId !== input.claimId
+            current.preparationClaimId !== input.claimId ||
+            !preparationLeaseIsActive(current, input.now)
           ) {
             return false;
+          }
+          if (!(await sourceAccountAllowsPrivatePreparation(transaction, db, current))) {
+            return false;
+          }
+          const finalizedChunkRefs =
+            input.session.status === 'ready'
+              ? await loadPendingInitialPreparationChunksForFinalization({
+                  transaction,
+                  db,
+                  sessionData: snapshot.data(),
+                  current,
+                  readySession: input.session,
+                  transcriptStorage,
+                  attempt: input.attempt,
+                  claimId: input.claimId,
+                  now: input.now,
+                })
+              : [];
+          if (finalizedChunkRefs === null) return false;
+          for (const chunkRef of finalizedChunkRefs) {
+            transaction.update(chunkRef, { expireAt: FieldValue.delete() });
           }
           transaction.set(sessionRef, toSessionDocument(input.session, transcriptStorage));
           return true;
@@ -352,6 +480,9 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           ) {
             return { status: 'not_found' as const };
           }
+          if (!(await sourceAccountAllowsPrivatePreparation(transaction, db, session))) {
+            return { status: 'not_found' as const };
+          }
           if (
             session.status !== 'failed' ||
             (session.preparationAttempt ?? 0) !== input.expectedAttempt
@@ -368,7 +499,8 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           delete queued.preparationError;
           delete queued.preparationClaimId;
           delete queued.preparationLeaseExpiresAt;
-          const storage = parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
+          const storage =
+            parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
             emptyTranscriptStorage();
           transaction.set(sessionRef, toSessionDocument(queued, storage));
           return { status: 'queued' as const, session: queued };
@@ -414,7 +546,8 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             preparationError: { ...input.error },
             updatedAt: input.updatedAt,
           };
-          const storage = parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
+          const storage =
+            parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
             emptyTranscriptStorage();
           transaction.set(sessionRef, toSessionDocument(failed, storage));
           return { status: 'saved' as const, session: failed };
@@ -430,45 +563,65 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
       sessionId: string,
       userId: string,
       snapshotId: string,
-      contextSnapshot: Pick<
-        ConversationAssistantContextResult,
-        'messages' | 'omittedMessages'
-      >,
+      contextSnapshot: Pick<ConversationAssistantContextResult, 'messages' | 'omittedMessages'>,
       expectedGenerationId?: string
     ): Promise<boolean> {
       try {
         const db = getFirestore();
-        const collection = db.collection(
-          WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION
-        );
-        const canWrite = await db.runTransaction(async (transaction) => {
-          const sessionRef = db
-            .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
-            .doc(sessionId);
+        const collection = db.collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION);
+        const sessionRef = db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(sessionId);
+        const writeFence = await db.runTransaction(async (transaction) => {
           const sessionSnapshot = await transaction.get(sessionRef);
-          if (!sessionSnapshot.exists) return false;
+          if (!sessionSnapshot.exists) return null;
           const session = toSession(sessionSnapshot.id, sessionSnapshot.data());
-          return (
-            session.userId === userId &&
-            session.deletionStartedAt === undefined &&
-            session.generationId === expectedGenerationId
-          );
+          if (
+            session.userId !== userId ||
+            session.deletionStartedAt !== undefined ||
+            session.generationId !== expectedGenerationId
+          ) {
+            return null;
+          }
+          if (!(await sourceAccountAllowsPrivatePreparation(transaction, db, session))) {
+            return null;
+          }
+          const isPendingPreparation =
+            session.status === 'preparing' &&
+            typeof session.preparationAttempt === 'number' &&
+            typeof session.preparationClaimId === 'string' &&
+            session.preparationClaimId.length > 0;
+          return {
+            sourceAccountId: session.sourceAccountId as string,
+            sourceAccountGeneration: session.sourceAccountGeneration as string,
+            ...(isPendingPreparation
+              ? {
+                  preparationAttempt: session.preparationAttempt as number,
+                  preparationClaimId: session.preparationClaimId as string,
+                }
+              : {}),
+          };
         });
-        if (!canWrite) return false;
+        if (writeFence === null) return false;
         const existing = await collection
           .where('sessionId', '==', sessionId)
           .where('snapshotId', '==', snapshotId)
           .get();
         const chunks = splitContextSnapshot(contextSnapshot);
+        return await resolveConversationAssistantInitialPreparationChunkLimit({
+          chunkCounts: [chunks.length],
+          overLimit: () => Promise.resolve(false),
+          withinLimit: async () => {
+            const pendingExpireAt =
+          writeFence.preparationClaimId === undefined
+            ? undefined
+            : computeExpireAt(CONVERSATION_ASSISTANT_INITIAL_PREPARATION_CHUNK_TTL_MS);
         const expectedIds = new Set<string>();
 
         for (const [chunkIndex, chunk] of chunks.entries()) {
           const chunkId = toContextChunkId(sessionId, snapshotId, chunkIndex);
           expectedIds.add(chunkId);
           const saved = await db.runTransaction(async (transaction) => {
-            const sessionRef = db
-              .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
-              .doc(sessionId);
             const sessionSnapshot = await transaction.get(sessionRef);
             if (!sessionSnapshot.exists) return false;
             const session = toSession(sessionSnapshot.id, sessionSnapshot.data());
@@ -479,10 +632,23 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             ) {
               return false;
             }
+            if (!(await sourceAccountAllowsPrivatePreparation(transaction, db, session))) {
+              return false;
+            }
+            if (
+              writeFence.preparationClaimId !== undefined &&
+              (session.status !== 'preparing' ||
+                session.preparationAttempt !== writeFence.preparationAttempt ||
+                session.preparationClaimId !== writeFence.preparationClaimId)
+            ) {
+              return false;
+            }
             transaction.set(collection.doc(chunkId), {
               sessionId,
               userId,
               sessionGenerationId: expectedGenerationId ?? null,
+              sourceAccountId: session.sourceAccountId,
+              sourceAccountGeneration: session.sourceAccountGeneration,
               snapshotId,
               chunkIndex,
               kind: chunk.kind,
@@ -490,6 +656,13 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
               end: chunk.end,
               messages: chunk.messages,
               omittedMessages: chunk.omittedMessages,
+              ...(writeFence.preparationClaimId === undefined
+                ? {}
+                : {
+                    preparationAttempt: writeFence.preparationAttempt,
+                    preparationClaimId: writeFence.preparationClaimId,
+                    expireAt: pendingExpireAt,
+                  }),
             });
             return true;
           });
@@ -514,11 +687,54 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             );
           }
         }
-        return true;
+        if (writeFence.preparationClaimId !== undefined) {
+          const manifest: PendingContextChunkStorage = {
+            type: 'chunks',
+            snapshotId,
+            chunkIds: [...expectedIds],
+            chunkCount: expectedIds.size,
+            ...(expectedGenerationId === undefined
+              ? {}
+              : { sessionGenerationId: expectedGenerationId }),
+            sourceAccountId: writeFence.sourceAccountId,
+            sourceAccountGeneration: writeFence.sourceAccountGeneration,
+            preparationAttempt: writeFence.preparationAttempt as number,
+            preparationClaimId: writeFence.preparationClaimId,
+          };
+          const manifestSaved = await db.runTransaction(async (transaction) => {
+            const sessionSnapshot = await transaction.get(sessionRef);
+            if (!sessionSnapshot.exists) return false;
+            const session = toSession(sessionSnapshot.id, sessionSnapshot.data());
+            if (
+              session.userId !== userId ||
+              session.deletionStartedAt !== undefined ||
+              session.generationId !== expectedGenerationId ||
+              session.status !== 'preparing' ||
+              session.preparationAttempt !== manifest.preparationAttempt ||
+              session.preparationClaimId !== manifest.preparationClaimId ||
+              !(await sourceAccountAllowsPrivatePreparation(transaction, db, session))
+            ) {
+              return false;
+            }
+            transaction.update(sessionRef, { pendingContextStorage: manifest });
+            return true;
+          });
+          if (!manifestSaved) {
+            await deleteContextSnapshotForGeneration(
+              db,
+              sessionId,
+              userId,
+              snapshotId,
+              expectedGenerationId
+            );
+            return false;
+          }
+        }
+            return true;
+          },
+        });
       } catch (error) {
-        throw new Error(
-          `Failed to save Conversation Assistant context: ${getErrorMessage(error)}`
-        );
+        throw new Error(`Failed to save Conversation Assistant context: ${getErrorMessage(error)}`);
       }
     },
 
@@ -558,6 +774,19 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
     > {
       try {
         const db = getFirestore();
+        const sessionSnapshot = await db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(sessionId)
+          .get();
+        if (
+          !sessionSnapshot.exists ||
+          !(await conversationAssistantSessionReadFenceAllows({
+            db,
+            sessionData: sessionSnapshot.data(),
+          }))
+        ) {
+          return { messages: [], omittedMessages: [], snapshotAvailable: false };
+        }
         const [messageChunks, omittedChunks] = await Promise.all([
           loadContextChunksForPage(
             db,
@@ -576,11 +805,7 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
             input.limit
           ),
         ]);
-        const messages = sliceIncludedContextPage(
-          messageChunks,
-          input.messageCursor,
-          input.limit
-        );
+        const messages = sliceIncludedContextPage(messageChunks, input.messageCursor, input.limit);
         const omittedMessages = sliceOmittedContextPage(
           omittedChunks,
           input.omittedCursor,
@@ -590,21 +815,17 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           messages,
           omittedMessages,
           snapshotAvailable:
-            messages.length === expectedContextPageLength(
-              input.messageCursor,
-              input.messageCount,
-              input.limit
-            ) &&
-            omittedMessages.length === expectedContextPageLength(
-              input.omittedCursor,
-              input.omittedMessageCount,
-              input.limit
-            ),
+            messages.length ===
+              expectedContextPageLength(input.messageCursor, input.messageCount, input.limit) &&
+            omittedMessages.length ===
+              expectedContextPageLength(
+                input.omittedCursor,
+                input.omittedMessageCount,
+                input.limit
+              ),
         };
       } catch (error) {
-        throw new Error(
-          `Failed to load Conversation Assistant context: ${getErrorMessage(error)}`
-        );
+        throw new Error(`Failed to load Conversation Assistant context: ${getErrorMessage(error)}`);
       }
     },
 
@@ -645,6 +866,9 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           ) {
             return false;
           }
+          if (!(await sourceAccountAllowsSessionWrite(transaction, db, snapshot.data(), current))) {
+            return false;
+          }
           transaction.set(turnRef, {
             ...turn,
             sessionGenerationId: expectedGenerationId ?? null,
@@ -683,6 +907,9 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
           ) {
             return false;
           }
+          if (!(await sourceAccountAllowsSessionWrite(transaction, db, snapshot.data(), current))) {
+            return false;
+          }
           const storage =
             parseTranscriptStorage(snapshot.data()?.['transcriptStorage']) ??
             emptyTranscriptStorage();
@@ -712,13 +939,35 @@ export function createConversationAssistantRepository(): ConversationAssistantRe
 
     async listTurnsBySessionId(sessionId: string): Promise<ConversationAssistantTurn[]> {
       try {
-        const snapshot = await getFirestore()
+        const db = getFirestore();
+        const sessionSnapshot = await db
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(sessionId)
+          .get();
+        const sessionData = sessionSnapshot.data() as Record<string, unknown> | undefined;
+        if (
+          !sessionSnapshot.exists ||
+          !(await conversationAssistantSessionReadFenceAllows({
+            db,
+            sessionData,
+          }))
+        ) {
+          return [];
+        }
+        const sessionUserId = sessionData?.['userId'];
+        /* v8 ignore start -- upstream: userId is guaranteed non-empty by the prior conversationAssistantSessionReadFenceAllows check @preserve */
+        if (typeof sessionUserId !== 'string') return [];
+        /* v8 ignore stop @preserve */
+        const snapshot = await db
           .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
           .where('sessionId', '==', sessionId)
+          .where('userId', '==', sessionUserId)
           .orderBy('createdAt', 'asc')
           .orderBy(FieldPath.documentId(), 'asc')
           .get();
-        return snapshot.docs.map((doc) => toTurn(doc.id, doc.data()));
+        return snapshot.docs
+          .map((doc) => toTurn(doc.id, doc.data()))
+          .sort(compareConversationAssistantTurns);
       } catch (error) {
         throw new Error(`Failed to list Conversation Assistant turns: ${getErrorMessage(error)}`);
       }
@@ -774,7 +1023,8 @@ function toSession(
     transcriptMessageCount: session?.transcriptMessageCount ?? 0,
     transcriptText: transcriptText ?? session?.transcriptText ?? '',
     assistantRoleLabel:
-      typeof session?.assistantRoleLabel === 'string' && session.assistantRoleLabel.trim().length > 0
+      typeof session?.assistantRoleLabel === 'string' &&
+      session.assistantRoleLabel.trim().length > 0
         ? session.assistantRoleLabel
         : DEFAULT_CONVERSATION_ASSISTANT_ROLE_LABEL,
     omitted: session?.omitted ?? {
@@ -790,6 +1040,12 @@ function toSession(
   };
   if (session?.chatDisplayName !== undefined) {
     projected.chatDisplayName = session.chatDisplayName;
+  }
+  if (typeof session?.sourceAccountId === 'string') {
+    projected.sourceAccountId = session.sourceAccountId;
+  }
+  if (typeof session?.sourceAccountGeneration === 'string') {
+    projected.sourceAccountGeneration = session.sourceAccountGeneration;
   }
   if (session?.lastTurnAt !== undefined) {
     projected.lastTurnAt = session.lastTurnAt;
@@ -834,6 +1090,13 @@ function toSession(
   if (typeof session?.preparationLeaseExpiresAt === 'string') {
     projected.preparationLeaseExpiresAt = session.preparationLeaseExpiresAt;
   }
+  if (typeof session?.preparationDisplayTimeZone === 'string') {
+    projected.preparationDisplayTimeZone = session.preparationDisplayTimeZone;
+  }
+  const continuation = toSessionContinuation(session?.continuation);
+  if (continuation !== undefined) {
+    projected.continuation = continuation;
+  }
   if (
     typeof session?.maxMessages === 'number' &&
     Number.isInteger(session.maxMessages) &&
@@ -842,6 +1105,156 @@ function toSession(
     projected.maxMessages = session.maxMessages;
   }
   return projected;
+}
+
+function sourceAccountFenceMatches(
+  account: Record<string, unknown> | undefined,
+  session: ConversationAssistantSession
+): boolean {
+  if (
+    typeof session.sourceAccountId !== 'string' ||
+    session.sourceAccountId === '' ||
+    typeof session.sourceAccountGeneration !== 'string' ||
+    session.sourceAccountGeneration === ''
+  ) {
+    return false;
+  }
+  const storedGeneration =
+    typeof account?.['generationId'] === 'string' && account['generationId'] !== ''
+      ? account['generationId']
+      : account?.['sourceAccountId'];
+  return (
+    account?.['userId'] === session.userId &&
+    account['sourceAccountId'] === session.sourceAccountId &&
+    storedGeneration === session.sourceAccountGeneration &&
+    account['status'] === 'active' &&
+    account['erasureStatus'] !== 'erasing'
+  );
+}
+
+async function sourceAccountAllowsPrivatePreparation(
+  transaction: FirebaseFirestore.Transaction,
+  db: ReturnType<typeof getFirestore>,
+  session: ConversationAssistantSession
+): Promise<boolean> {
+  const accountSnapshot = await transaction.get(
+    db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(session.userId)
+  );
+  return accountSnapshot.exists && sourceAccountFenceMatches(accountSnapshot.data(), session);
+}
+
+function preparationLeaseIsActive(
+  session: ConversationAssistantSession,
+  now: string
+): boolean {
+  if (session.status !== 'preparing' || session.preparationLeaseExpiresAt === undefined) {
+    return false;
+  }
+  const nowMs = Date.parse(now);
+  const leaseExpiresAtMs = Date.parse(session.preparationLeaseExpiresAt);
+  return Number.isFinite(nowMs) && Number.isFinite(leaseExpiresAtMs) && leaseExpiresAtMs > nowMs;
+}
+
+function pendingChunkExpiresAfter(value: unknown, now: string): boolean {
+  const nowMs = Date.parse(now);
+  return value instanceof Timestamp && Number.isFinite(nowMs) && value.toMillis() > nowMs;
+}
+
+async function sourceAccountAllowsSessionWrite(
+  transaction: FirebaseFirestore.Transaction,
+  db: ReturnType<typeof getFirestore>,
+  sessionData: Record<string, unknown> | undefined,
+  session: ConversationAssistantSession
+): Promise<boolean> {
+  let sourceAccountId = session.sourceAccountId ?? session.continuation?.sourceAccountId;
+  if (sourceAccountId === undefined) {
+    const chatSnapshot = await transaction.get(
+      db.collection(PRIVATE_WHATSAPP_CHATS_COLLECTION).doc(session.chatId)
+    );
+    const chat = chatSnapshot.data();
+    if (
+      !chatSnapshot.exists ||
+      chat?.['userId'] !== session.userId ||
+      typeof chat['sourceAccountId'] !== 'string'
+    ) {
+      return false;
+    }
+    sourceAccountId = chat['sourceAccountId'];
+  }
+
+  const accountSnapshot = await transaction.get(
+    db.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc(session.userId)
+  );
+  const account = accountSnapshot.data();
+  if (!accountSnapshot.exists || account === undefined) return false;
+  const accountGeneration: unknown = account['generationId'];
+  const accountSourceId: unknown = account['sourceAccountId'];
+  const storedGeneration =
+    typeof accountGeneration === 'string' && accountGeneration !== ''
+      ? accountGeneration
+      : accountSourceId;
+  const expectedGeneration =
+    typeof sessionData?.['sourceAccountGeneration'] === 'string'
+      ? sessionData['sourceAccountGeneration']
+      : session.sourceAccountGeneration;
+  return (
+    account['userId'] === session.userId &&
+    account['sourceAccountId'] === sourceAccountId &&
+    account['status'] === 'active' &&
+    account['erasureStatus'] !== 'erasing' &&
+    (expectedGeneration === undefined || storedGeneration === expectedGeneration)
+  );
+}
+
+function toSessionContinuation(
+  value: unknown
+): ConversationAssistantSessionContinuation | undefined {
+  if (!isRecord(value)) return undefined;
+  const integerFields = [
+    'contextVersion',
+    'contextChangeThrough',
+    'nextTurnSequence',
+    'nextConversationRevision',
+    'completedConversationRevision',
+    'attachmentCount',
+    'totalAttachedMessageCount',
+    'totalAttachedOmittedCount',
+  ] as const;
+  if (
+    typeof value['sourceAccountId'] !== 'string' ||
+    value['sourceAccountId'].length === 0 ||
+    typeof value['contextEventThrough'] !== 'string' ||
+    typeof value['contextChainSha256'] !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(value['contextChainSha256']) ||
+    typeof value['displayTimeZone'] !== 'string' ||
+    integerFields.some(
+      (field) =>
+        typeof value[field] !== 'number' || !Number.isInteger(value[field]) || value[field] < 0
+    )
+  ) {
+    return undefined;
+  }
+  const continuation: ConversationAssistantSessionContinuation = {
+    sourceAccountId: value['sourceAccountId'],
+    contextVersion: value['contextVersion'] as number,
+    contextEventThrough: value['contextEventThrough'],
+    contextChangeThrough: value['contextChangeThrough'] as number,
+    contextChainSha256: value['contextChainSha256'],
+    displayTimeZone: value['displayTimeZone'],
+    nextTurnSequence: value['nextTurnSequence'] as number,
+    nextConversationRevision: value['nextConversationRevision'] as number,
+    completedConversationRevision: value['completedConversationRevision'] as number,
+    attachmentCount: value['attachmentCount'] as number,
+    totalAttachedMessageCount: value['totalAttachedMessageCount'] as number,
+    totalAttachedOmittedCount: value['totalAttachedOmittedCount'] as number,
+  };
+  if (typeof value['activeTurnRequestId'] === 'string') {
+    continuation.activeTurnRequestId = value['activeTurnRequestId'];
+  }
+  if (typeof value['activeTurnLeaseExpiresAt'] === 'string') {
+    continuation.activeTurnLeaseExpiresAt = value['activeTurnLeaseExpiresAt'];
+  }
+  return continuation;
 }
 
 async function loadTranscriptText(
@@ -912,13 +1325,177 @@ function emptyTranscriptStorage(): TranscriptChunkStorage {
   };
 }
 
+function parsePendingContextStorage(value: unknown): PendingContextChunkStorage | null {
+  if (!isRecord(value) || value['type'] !== 'chunks') return null;
+  const chunkIds = value['chunkIds'];
+  const chunkCount = value['chunkCount'];
+  if (
+    typeof value['snapshotId'] !== 'string' ||
+    value['snapshotId'].length === 0 ||
+    !Array.isArray(chunkIds) ||
+    !chunkIds.every((chunkId) => typeof chunkId === 'string' && chunkId.length > 0) ||
+    !isInteger(chunkCount) ||
+    chunkCount !== chunkIds.length ||
+    chunkCount > CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS ||
+    new Set(chunkIds).size !== chunkIds.length ||
+    typeof value['sourceAccountId'] !== 'string' ||
+    value['sourceAccountId'].length === 0 ||
+    typeof value['sourceAccountGeneration'] !== 'string' ||
+    value['sourceAccountGeneration'].length === 0 ||
+    !isInteger(value['preparationAttempt']) ||
+    value['preparationAttempt'] < 0 ||
+    typeof value['preparationClaimId'] !== 'string' ||
+    value['preparationClaimId'].length === 0
+  ) {
+    return null;
+  }
+  return {
+    type: 'chunks',
+    snapshotId: value['snapshotId'],
+    chunkIds: chunkIds.filter((chunkId): chunkId is string => typeof chunkId === 'string'),
+    chunkCount,
+    ...(typeof value['sessionGenerationId'] === 'string'
+      ? { sessionGenerationId: value['sessionGenerationId'] }
+      : {}),
+    sourceAccountId: value['sourceAccountId'],
+    sourceAccountGeneration: value['sourceAccountGeneration'],
+    preparationAttempt: value['preparationAttempt'],
+    preparationClaimId: value['preparationClaimId'],
+  };
+}
+
+async function loadPendingInitialPreparationChunksForFinalization(input: {
+  transaction: FirebaseFirestore.Transaction;
+  db: ReturnType<typeof getFirestore>;
+  sessionData: Record<string, unknown> | undefined;
+  current: ConversationAssistantSession;
+  readySession: ConversationAssistantSession;
+  transcriptStorage: TranscriptChunkStorage;
+  attempt: number;
+  claimId: string;
+  now: string;
+}): Promise<FirebaseFirestore.DocumentReference[] | null> {
+  const contextStorage =
+    input.readySession.contextSnapshotId === undefined
+      ? undefined
+      : parsePendingContextStorage(input.sessionData?.['pendingContextStorage']);
+  if (
+    input.readySession.contextSnapshotId !== undefined &&
+    (contextStorage === null || contextStorage === undefined)
+  ) {
+    return null;
+  }
+  if (
+    contextStorage !== null &&
+    contextStorage !== undefined &&
+    (contextStorage.snapshotId !== input.readySession.contextSnapshotId ||
+      contextStorage.sessionGenerationId !== input.readySession.generationId ||
+      contextStorage.sourceAccountId !== input.readySession.sourceAccountId ||
+      contextStorage.sourceAccountGeneration !== input.readySession.sourceAccountGeneration ||
+      contextStorage.preparationAttempt !== input.attempt ||
+      contextStorage.preparationClaimId !== input.claimId)
+  ) {
+    return null;
+  }
+  const contextChunkCount = contextStorage?.chunkCount ?? 0;
+  return await resolveConversationAssistantInitialPreparationChunkLimit({
+    chunkCounts: [input.transcriptStorage.chunkCount, contextChunkCount],
+    overLimit: () => Promise.resolve(null),
+    withinLimit: async () => {
+      const transcriptChunkRefs = Array.from(
+    { length: input.transcriptStorage.chunkCount },
+    (_value, chunkIndex) =>
+      input.db
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+        .doc(
+          toTranscriptChunkId(
+            input.readySession.id,
+            chunkIndex,
+            input.transcriptStorage.snapshotId
+          )
+        )
+  );
+  const contextChunkRefs = (contextStorage?.chunkIds ?? []).map((chunkId) =>
+    input.db.collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION).doc(chunkId)
+  );
+  const transcriptSnapshots = [];
+  for (const chunkRef of transcriptChunkRefs) {
+    transcriptSnapshots.push(await input.transaction.get(chunkRef));
+  }
+  const contextSnapshots = [];
+  for (const chunkRef of contextChunkRefs) {
+    contextSnapshots.push(await input.transaction.get(chunkRef));
+  }
+
+  for (const [chunkIndex, snapshot] of transcriptSnapshots.entries()) {
+    const data = snapshot.data();
+    if (
+      !snapshot.exists ||
+      data?.['sessionId'] !== input.readySession.id ||
+      data['sessionGenerationId'] !== input.readySession.generationId ||
+      data['sourceAccountId'] !== input.readySession.sourceAccountId ||
+      data['sourceAccountGeneration'] !== input.readySession.sourceAccountGeneration ||
+      data['preparationAttempt'] !== input.attempt ||
+      data['preparationClaimId'] !== input.claimId ||
+      data['snapshotId'] !== input.transcriptStorage.snapshotId ||
+      data['chunkIndex'] !== chunkIndex ||
+      typeof data['text'] !== 'string' ||
+      !pendingChunkExpiresAfter(data['expireAt'], input.now)
+    ) {
+      return null;
+    }
+  }
+  for (const [chunkIndex, snapshot] of contextSnapshots.entries()) {
+    const data = snapshot.data();
+    const expectedChunkId = toContextChunkId(
+      input.readySession.id,
+      /* v8 ignore start -- ts-type: contextSnapshots cannot contain entries when contextStorage is undefined; noUncheckedIndexedAccess requires this fallback @preserve */
+      contextStorage?.snapshotId ?? '',
+      /* v8 ignore stop @preserve */
+      chunkIndex
+    );
+    if (
+      !snapshot.exists ||
+      snapshot.id !== expectedChunkId ||
+      data?.['sessionId'] !== input.readySession.id ||
+      data['userId'] !== input.readySession.userId ||
+      data['sessionGenerationId'] !== input.readySession.generationId ||
+      data['sourceAccountId'] !== input.readySession.sourceAccountId ||
+      data['sourceAccountGeneration'] !== input.readySession.sourceAccountGeneration ||
+      data['preparationAttempt'] !== input.attempt ||
+      data['preparationClaimId'] !== input.claimId ||
+      data['snapshotId'] !== contextStorage?.snapshotId ||
+      data['chunkIndex'] !== chunkIndex ||
+      !pendingChunkExpiresAfter(data['expireAt'], input.now)
+    ) {
+      return null;
+    }
+  }
+      return [...transcriptChunkRefs, ...contextChunkRefs];
+    },
+  });
+}
+
+async function saveTranscriptChunks(
+  db: ReturnType<typeof getFirestore>,
+  session: ConversationAssistantSession
+): Promise<TranscriptChunkStorage>;
 async function saveTranscriptChunks(
   db: ReturnType<typeof getFirestore>,
   session: ConversationAssistantSession,
-  fence?: { attempt: number; claimId: string }
-): Promise<TranscriptChunkStorage> {
+  fence: { attempt: number; claimId: string; now: string }
+): Promise<TranscriptChunkStorage | null>;
+async function saveTranscriptChunks(
+  db: ReturnType<typeof getFirestore>,
+  session: ConversationAssistantSession,
+  fence?: { attempt: number; claimId: string; now: string }
+): Promise<TranscriptChunkStorage | null> {
   const chunks = splitTranscriptText(session.transcriptText);
-  const snapshotId = chunks.length === 0 ? '' : session.transcriptSha256.trim();
+  return await resolveConversationAssistantInitialPreparationChunkLimit({
+    chunkCounts: fence === undefined ? [] : [chunks.length],
+    overLimit: () => Promise.resolve(null),
+    withinLimit: async () => {
+      const snapshotId = chunks.length === 0 ? '' : session.transcriptSha256.trim();
   const storage: TranscriptChunkStorage = {
     type: 'chunks',
     chunkCount: chunks.length,
@@ -929,6 +1506,10 @@ async function saveTranscriptChunks(
   const chunkCollection = db.collection(
     WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION
   );
+  const pendingExpireAt =
+    fence === undefined
+      ? undefined
+      : computeExpireAt(CONVERSATION_ASSISTANT_INITIAL_PREPARATION_CHUNK_TTL_MS);
   for (const [chunkIndex, text] of chunks.entries()) {
     const chunkRef = chunkCollection.doc(
       toTranscriptChunkId(session.id, chunkIndex, storage.snapshotId)
@@ -936,10 +1517,17 @@ async function saveTranscriptChunks(
     const chunkDocument = {
       sessionId: session.id,
       sessionGenerationId: session.generationId ?? null,
+      ...(typeof session.sourceAccountId === 'string'
+        ? { sourceAccountId: session.sourceAccountId }
+        : {}),
+      ...(typeof session.sourceAccountGeneration === 'string'
+        ? { sourceAccountGeneration: session.sourceAccountGeneration }
+        : {}),
       ...(fence !== undefined
         ? {
             preparationAttempt: fence.attempt,
             preparationClaimId: fence.claimId,
+            expireAt: pendingExpireAt,
           }
         : {}),
       ...(storage.snapshotId !== undefined ? { snapshotId: storage.snapshotId } : {}),
@@ -962,16 +1550,43 @@ async function saveTranscriptChunks(
         current.deletionStartedAt !== undefined ||
         current.generationId !== session.generationId ||
         current.preparationAttempt !== fence.attempt ||
-        current.preparationClaimId !== fence.claimId
+        current.preparationClaimId !== fence.claimId ||
+        !preparationLeaseIsActive(current, fence.now)
+      ) {
+        return false;
+      }
+      if (!(await sourceAccountAllowsPrivatePreparation(transaction, db, current))) {
+        return false;
+      }
+      const pendingContextStorage = parsePendingContextStorage(
+        sessionSnapshot.data()?.['pendingContextStorage']
+      );
+      if (
+        session.status === 'ready' &&
+        session.contextSnapshotId !== undefined &&
+        (pendingContextStorage === null ||
+          pendingContextStorage.chunkCount + chunks.length >
+            CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS)
       ) {
         return false;
       }
       transaction.set(chunkRef, chunkDocument);
       return true;
     });
-    if (!saved) break;
+    if (!saved) {
+      await deleteTranscriptChunks(
+        db,
+        session.id,
+        storage,
+        session.generationId,
+        fence
+      );
+      return null;
+    }
   }
-  return storage;
+      return storage;
+    },
+  });
 }
 
 async function deleteTranscriptChunks(
@@ -979,18 +1594,19 @@ async function deleteTranscriptChunks(
   sessionId: string,
   storage: TranscriptChunkStorage,
   expectedGenerationId?: string,
-  expectedFence?: { attempt: number; claimId: string }
+  expectedFence?: { attempt: number; claimId: string; now?: string }
 ): Promise<void> {
   const collection = db.collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION);
   for (let chunkIndex = 0; chunkIndex < storage.chunkCount; chunkIndex += 1) {
-    const chunkRef = collection.doc(
-      toTranscriptChunkId(sessionId, chunkIndex, storage.snapshotId)
-    );
-    await deleteDocumentIfCurrentMatches(db, chunkRef, (data) =>
-      documentBelongsToGeneration(data, expectedGenerationId) &&
-      (expectedFence === undefined ||
-        (data?.['preparationAttempt'] === expectedFence.attempt &&
-          data['preparationClaimId'] === expectedFence.claimId))
+    const chunkRef = collection.doc(toTranscriptChunkId(sessionId, chunkIndex, storage.snapshotId));
+    await deleteDocumentIfCurrentMatches(
+      db,
+      chunkRef,
+      (data) =>
+        documentBelongsToGeneration(data, expectedGenerationId) &&
+        (expectedFence === undefined ||
+          (data?.['preparationAttempt'] === expectedFence.attempt &&
+            data['preparationClaimId'] === expectedFence.claimId))
     );
   }
 }
@@ -1119,11 +1735,7 @@ function splitTranscriptText(transcriptText: string): string[] {
   return chunks;
 }
 
-function toTranscriptChunkId(
-  sessionId: string,
-  chunkIndex: number,
-  snapshotId?: string
-): string {
+function toTranscriptChunkId(sessionId: string, chunkIndex: number, snapshotId?: string): string {
   const prefix = snapshotId === undefined ? sessionId : `${sessionId}_${snapshotId}`;
   return `${prefix}_${String(chunkIndex).padStart(6, '0')}`;
 }
@@ -1187,9 +1799,7 @@ function splitContextItems<T>(items: T[]): T[][] {
 }
 
 function countPreviousItems(chunks: unknown[][], chunkIndex: number): number {
-  return chunks
-    .slice(0, chunkIndex)
-    .reduce((total, chunk) => total + chunk.length, 0);
+  return chunks.slice(0, chunkIndex).reduce((total, chunk) => total + chunk.length, 0);
 }
 
 function toContextChunkId(sessionId: string, snapshotId: string, chunkIndex: number): string {
@@ -1309,7 +1919,8 @@ function parseContextMessage(
     importedAt,
     direction,
     speakerLabel,
-    messageType: messageType as ConversationAssistantContextResult['messages'][number]['messageType'],
+    messageType:
+      messageType as ConversationAssistantContextResult['messages'][number]['messageType'],
     contentKind,
     content,
   };
@@ -1353,7 +1964,8 @@ function parseOmittedContextMessage(
     importedAt,
     direction,
     speakerLabel,
-    messageType: messageType as ConversationAssistantContextResult['messages'][number]['messageType'],
+    messageType:
+      messageType as ConversationAssistantContextResult['messages'][number]['messageType'],
     omissionReason,
   };
   const contentKind = value['contentKind'];
@@ -1379,9 +1991,7 @@ function parseOmittedReactionReference(
   chunkId: string,
   messageIndex: number,
   value: unknown
-): NonNullable<
-  ConversationAssistantContextResult['omittedMessages'][number]['reaction']
-> {
+): NonNullable<ConversationAssistantContextResult['omittedMessages'][number]['reaction']> {
   if (!isRecord(value)) {
     throw new Error(
       `Invalid reaction reference for omitted context message ${String(messageIndex)} in ${chunkId}`
@@ -1472,7 +2082,9 @@ function toTurn(id: string, data: Record<string, unknown> | undefined): Conversa
     /* v8 ignore start -- test-infra: FakeFirestore where('sessionId', '==', value) cannot return documents that omit sessionId before hydration @preserve */
     sessionId: turn?.sessionId ?? '',
     /* v8 ignore stop @preserve */
+    /* v8 ignore start -- upstream: Firestore equality query on userId guarantees a matching string before hydration @preserve */
     userId: turn?.userId ?? '',
+    /* v8 ignore stop @preserve */
     role: turn?.role === 'assistant' ? 'assistant' : 'user',
     text: turn?.text ?? '',
     createdAt: turn?.createdAt ?? '',
@@ -1483,5 +2095,110 @@ function toTurn(id: string, data: Record<string, unknown> | undefined): Conversa
   if (turn?.error !== undefined) {
     projected.error = turn.error;
   }
+  if (isInteger(turn?.sequence) && turn.sequence >= 0) {
+    projected.sequence = turn.sequence;
+  }
+  if (isInteger(turn?.conversationRevision) && turn.conversationRevision >= 0) {
+    projected.conversationRevision = turn.conversationRevision;
+  }
+  if (typeof turn?.requestId === 'string') {
+    projected.requestId = turn.requestId;
+  }
+  if (turn?.kind === 'message' || turn?.kind === 'context_attachment_question') {
+    projected.kind = turn.kind;
+  }
+  if (typeof turn?.contextAttachmentId === 'string') {
+    projected.contextAttachmentId = turn.contextAttachmentId;
+  }
+  const contextAttachment = toTurnContextAttachmentSummary(turn?.contextAttachment);
+  if (contextAttachment !== undefined) {
+    projected.contextAttachment = contextAttachment;
+  }
+  if (typeof turn?.acknowledgment === 'string') {
+    projected.acknowledgment = turn.acknowledgment;
+  }
   return projected;
+}
+
+function compareConversationAssistantTurns(
+  left: ConversationAssistantTurn,
+  right: ConversationAssistantTurn
+): number {
+  if (left.sequence !== undefined && right.sequence !== undefined) {
+    const sequenceComparison = left.sequence - right.sequence;
+    if (sequenceComparison !== 0) return sequenceComparison;
+  }
+  const createdComparison = left.createdAt.localeCompare(right.createdAt);
+  return createdComparison === 0 ? left.id.localeCompare(right.id) : createdComparison;
+}
+
+function toTurnContextAttachmentSummary(
+  value: unknown
+): ConversationAssistantTurn['contextAttachment'] {
+  if (
+    !isRecord(value) ||
+    typeof value['id'] !== 'string' ||
+    typeof value['capturedAt'] !== 'string'
+  ) {
+    return undefined;
+  }
+  const captureRange = toStoredDateRange(value['captureRange']);
+  const counts = value['counts'];
+  const omitted = value['omitted'];
+  if (captureRange === undefined || !isRecord(counts) || !isRecord(omitted)) return undefined;
+  const countFields = [
+    'included',
+    'excluded',
+    'newlyAvailable',
+    'edited',
+    'redacted',
+    'deleted',
+    'reactionsChanged',
+    'lateIngested',
+    'completedTranscriptions',
+  ] as const;
+  const omittedFields = [
+    'mediaOnly',
+    'failedTranscriptions',
+    'pendingTranscriptions',
+    'nonText',
+    'overLimit',
+  ] as const;
+  if (
+    countFields.some((field) => !isInteger(counts[field]) || counts[field] < 0) ||
+    omittedFields.some((field) => !isInteger(omitted[field]) || omitted[field] < 0)
+  ) {
+    return undefined;
+  }
+  const eventRange = toStoredDateRange(value['eventRange']);
+  return {
+    id: value['id'],
+    capturedAt: value['capturedAt'],
+    captureRange,
+    ...(eventRange === undefined ? {} : { eventRange }),
+    counts: {
+      included: counts['included'] as number,
+      excluded: counts['excluded'] as number,
+      newlyAvailable: counts['newlyAvailable'] as number,
+      edited: counts['edited'] as number,
+      redacted: counts['redacted'] as number,
+      deleted: counts['deleted'] as number,
+      reactionsChanged: counts['reactionsChanged'] as number,
+      lateIngested: counts['lateIngested'] as number,
+      completedTranscriptions: counts['completedTranscriptions'] as number,
+    },
+    omitted: {
+      mediaOnly: omitted['mediaOnly'] as number,
+      failedTranscriptions: omitted['failedTranscriptions'] as number,
+      pendingTranscriptions: omitted['pendingTranscriptions'] as number,
+      nonText: omitted['nonText'] as number,
+      overLimit: omitted['overLimit'] as number,
+    },
+  };
+}
+
+function toStoredDateRange(value: unknown): { from: string; to: string } | undefined {
+  return isRecord(value) && typeof value['from'] === 'string' && typeof value['to'] === 'string'
+    ? { from: value['from'], to: value['to'] }
+    : undefined;
 }

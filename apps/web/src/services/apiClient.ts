@@ -56,6 +56,7 @@ interface RequestOptions {
    * propagates to the caller.
    */
   refreshToken?: () => Promise<string>;
+  signal?: AbortSignal;
 }
 
 const DEFAULT_TIMEOUT_MS = 30000;
@@ -76,7 +77,14 @@ async function performRequest<T>(
   options: RequestOptions,
   retried: boolean
 ): Promise<T> {
-  const { method = 'GET', body, headers = {}, timeout = DEFAULT_TIMEOUT_MS, refreshToken } = options;
+  const {
+    method = 'GET',
+    body,
+    headers = {},
+    timeout = DEFAULT_TIMEOUT_MS,
+    refreshToken,
+    signal: callerSignal,
+  } = options;
 
   // AbortController for timeout handling
   const controller = new AbortController();
@@ -96,10 +104,14 @@ async function performRequest<T>(
     requestHeaders['Content-Type'] = 'application/json';
   }
 
+  const requestSignal =
+    callerSignal === undefined
+      ? controller.signal
+      : AbortSignal.any([controller.signal, callerSignal]);
   const fetchOptions: RequestInit = {
     method,
     headers: requestHeaders,
-    signal: controller.signal,
+    signal: requestSignal,
     // Disable caching to always get fresh data
     cache: 'no-store',
   };
@@ -113,7 +125,7 @@ async function performRequest<T>(
     response = await fetch(url, fetchOptions);
   } catch (err) {
     // Rethrow with clearer message for abort/timeout errors
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (err instanceof Error && err.name === 'AbortError' && callerSignal?.aborted !== true) {
       throw new ApiError('TIMEOUT', 'Request timed out. Please check your connection and try again.', 408);
     }
     throw err;

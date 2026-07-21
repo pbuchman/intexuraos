@@ -17,6 +17,12 @@ export interface ProjectPrivateConversationContextInput {
   maxMessages?: number;
   totalMessageCount?: number;
   captureOmittedMessages?: boolean;
+  referenceScope?: ConversationAssistantMessageReferenceScope;
+}
+
+export interface ConversationAssistantMessageReferenceScope {
+  sessionId: string;
+  sessionGenerationId: string;
 }
 
 interface PrivateWhatsAppTranscriptReaction {
@@ -53,7 +59,11 @@ export function projectPrivateConversationContext(
   const attachedReactionIds = new Set<string>();
 
   for (const message of input.messages) {
-    if (message.messageType !== 'reaction') {
+    if (
+      message.messageType !== 'reaction' ||
+      message.contextState === 'redacted' ||
+      message.contextState === 'deleted'
+    ) {
       continue;
     }
     const reaction = normalizeTranscriptReaction(message, targetsByMatrixEventId);
@@ -83,7 +93,13 @@ export function projectPrivateConversationContext(
   }
 
   for (const message of input.messages) {
-    if (attachedReactionIds.has(message.id)) {
+    if (
+      attachedReactionIds.has(message.id) ||
+      message.relation !== undefined ||
+      message.messageType === 'redaction' ||
+      message.contextState === 'redacted' ||
+      message.contextState === 'deleted'
+    ) {
       continue;
     }
     const text = message.text?.trim();
@@ -187,7 +203,10 @@ export function projectPrivateConversationContext(
     );
   }
 
-  const transcriptText = buildPrivateConversationTranscriptText(contextMessages);
+  const transcriptText = buildPrivateConversationTranscriptText(
+    contextMessages,
+    input.referenceScope
+  );
   return {
     chat: toContextChat(input.chat),
     range: input.range,
@@ -299,8 +318,16 @@ function firstNonEmpty(...values: (string | undefined)[]): string | undefined {
 }
 
 export function buildPrivateConversationTranscriptText(
-  messages: PrivateConversationContextMessage[]
+  messages: PrivateConversationContextMessage[],
+  referenceScope?: ConversationAssistantMessageReferenceScope
 ): string {
+  if (referenceScope !== undefined) {
+    return messages
+      .map((message) =>
+        buildPrivateConversationModelFacingMessageProjection(message, referenceScope)
+      )
+      .join('\n');
+  }
   return messages
     .map((message) => {
       const reactionLine =
@@ -310,6 +337,55 @@ export function buildPrivateConversationTranscriptText(
       return `[Sent ${formatTranscriptDateLabel(message.eventTimestamp)}; imported ${formatTranscriptDateLabel(message.importedAt)}] ${message.speakerLabel}: ${message.content}${reactionLine}`;
     })
     .join('\n');
+}
+
+export function buildPrivateConversationModelFacingMessageProjection(
+  message: PrivateConversationContextMessage,
+  referenceScope: ConversationAssistantMessageReferenceScope
+): string {
+  return JSON.stringify({
+    reference: createConversationAssistantMessageReference(referenceScope, message.id),
+    sentDate: formatTranscriptDateLabel(message.eventTimestamp),
+    importedDate: formatTranscriptDateLabel(message.importedAt),
+    direction: message.direction,
+    speakerLabel: message.speakerLabel,
+    messageType: message.messageType,
+    contentKind: message.contentKind,
+    content: message.content,
+    reactions: [...(message.reactions ?? [])].sort(compareTranscriptReactions).map((reaction) => ({
+      emoji: reaction.emoji,
+      direction: reaction.direction,
+      speakerLabel:
+        reaction.direction === 'outgoing'
+          ? 'You'
+          : firstNonEmpty(reaction.senderDisplayName) ?? 'Unknown',
+      eventDate: formatTranscriptDateLabel(reaction.eventTimestamp),
+    })),
+  });
+}
+
+export function createConversationAssistantMessageReference(
+  scope: ConversationAssistantMessageReferenceScope,
+  rawMessageId: string
+): string {
+  const digest = createHash('sha256')
+    .update('intexuraos:whatsapp-conversation-assistant:message-reference:v1')
+    .update('\0')
+    .update(scope.sessionId)
+    .update('\0')
+    .update(scope.sessionGenerationId)
+    .update('\0')
+    .update(rawMessageId)
+    .digest('hex');
+  return `wa_msg_${digest}`;
+}
+
+function compareTranscriptReactions(
+  left: PrivateWhatsAppReactionSummary,
+  right: PrivateWhatsAppReactionSummary
+): number {
+  const timestamp = left.eventTimestamp.localeCompare(right.eventTimestamp);
+  return timestamp === 0 ? left.id.localeCompare(right.id) : timestamp;
 }
 
 function formatReactionSummary(reaction: PrivateWhatsAppReactionSummary): string {

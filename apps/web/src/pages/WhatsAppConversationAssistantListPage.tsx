@@ -206,6 +206,7 @@ function ConversationAssistantListSummary({
 }: {
   session: ConversationAssistantSession;
 }): React.JSX.Element {
+  const displayTimeZone = session.contextSummary.displayTimeZone;
   return (
     <>
       <span className="min-w-0">
@@ -214,23 +215,25 @@ function ConversationAssistantListSummary({
         </span>
         <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">{session.chatDisplayName ?? session.chatId}</span>
+          <span className="truncate">{session.chatDisplayName ?? session.title}</span>
         </span>
       </span>
       <span className="min-w-0 text-xs text-slate-500 dark:text-slate-400">
         <span className="flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate sm:hidden">
-            {formatDateTimeCompact(session.range.from)} – {formatDateTimeCompact(session.range.to)}
+            {formatDateTimeCompact(session.range.from, displayTimeZone)} –{' '}
+            {formatDateTimeCompact(session.range.to, displayTimeZone)}
           </span>
           <span className="hidden truncate sm:inline">
-            {formatDateTime(session.range.from)} – {formatDateTime(session.range.to)}
+            {formatDateTime(session.range.from, displayTimeZone)} –{' '}
+            {formatDateTime(session.range.to, displayTimeZone)}
           </span>
         </span>
         <span className="mt-1 block pl-5">
           <span className="sm:hidden">Updated </span>
           <span className="hidden sm:inline">Last activity </span>
-          {formatDateTimeCompact(session.lastTurnAt ?? session.updatedAt)}
+          {formatDateTimeCompact(session.lastTurnAt ?? session.updatedAt, displayTimeZone)}
         </span>
       </span>
       <span className="flex items-center justify-between gap-3 sm:justify-end">

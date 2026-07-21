@@ -1,10 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
+import {
+  Timestamp,
+  createFakeFirestore,
+  resetFirestore,
+  setFirestore,
+} from '@intexuraos/infra-firestore';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import {
   CASCADE_DELETE_BATCH_SIZE,
+  CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS,
   CONTEXT_CHUNK_MAX_BYTES,
   createConversationAssistantRepository,
+  resolveConversationAssistantInitialPreparationChunkLimit,
   TRANSCRIPT_CHUNK_MAX_BYTES,
   WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION,
   WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION,
@@ -12,16 +19,28 @@ import {
   WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION,
 } from '../../infra/firestore/conversationAssistantRepository.js';
 import type {
+  ConversationAssistantContextResult,
   ConversationAssistantSession,
   ConversationAssistantTurn,
 } from '../../domain/conversation-assistant/types.js';
 import { createConversationAssistantDeletionToken } from '../../domain/conversation-assistant/deletionToken.js';
+import { WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENTS_COLLECTION } from '../../infra/firestore/conversationAssistantContextAttachmentRepository.js';
+import { WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_COLLECTION } from '../../infra/firestore/conversationAssistantTurnRequestRepository.js';
+import { createPrivateWhatsAppErasureRepository } from '../../infra/firestore/privateWhatsAppErasureRepository.js';
+import {
+  PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION,
+  PRIVATE_WHATSAPP_CHATS_COLLECTION,
+} from '../../infra/firestore/privateWhatsAppRepository.js';
 
-function makeSession(overrides: Partial<ConversationAssistantSession> = {}): ConversationAssistantSession {
+function makeSession(
+  overrides: Partial<ConversationAssistantSession> = {}
+): ConversationAssistantSession {
   return {
     id: 'whatsapp_conv_session_1',
     userId: 'user-123',
     chatId: 'chat-123',
+    sourceAccountId: 'source-account-123',
+    sourceAccountGeneration: 'account-generation-123',
     chatDisplayName: 'Alice',
     status: 'active',
     range: { from: '2026-06-30T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
@@ -31,7 +50,13 @@ function makeSession(overrides: Partial<ConversationAssistantSession> = {}): Con
     transcriptMessageCount: 1,
     transcriptText: '[2026-06-30T10:00:00.000Z] Alice: hello',
     assistantRoleLabel: 'Doctor',
-    omitted: { mediaOnly: 0, failedTranscriptions: 0, pendingTranscriptions: 0, nonText: 0, overLimit: 0 },
+    omitted: {
+      mediaOnly: 0,
+      failedTranscriptions: 0,
+      pendingTranscriptions: 0,
+      nonText: 0,
+      overLimit: 0,
+    },
     title: 'Question',
     createdAt: '2026-06-30T10:00:00.000Z',
     updatedAt: '2026-06-30T10:00:00.000Z',
@@ -48,6 +73,21 @@ function makeTurn(overrides: Partial<ConversationAssistantTurn> = {}): Conversat
     text: 'What happened?',
     createdAt: '2026-06-30T10:01:00.000Z',
     ...overrides,
+  };
+}
+
+function makeContextMessage(
+  id: string
+): ConversationAssistantContextResult['messages'][number] {
+  return {
+    id,
+    eventTimestamp: '2026-07-21T10:00:00.000Z',
+    importedAt: '2026-07-21T10:00:01.000Z',
+    direction: 'incoming',
+    speakerLabel: 'Them',
+    messageType: 'text',
+    contentKind: 'text',
+    content: `Context ${id}`,
   };
 }
 
@@ -70,6 +110,26 @@ describe('conversationAssistantRepository', () => {
     fakeFirestore = createFakeFirestore();
     setFirestore(fakeFirestore as unknown as Parameters<typeof setFirestore>[0]);
     repository = createConversationAssistantRepository();
+    fakeFirestore.seedCollection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION, [
+      {
+        id: 'user-123',
+        data: {
+          userId: 'user-123',
+          sourceAccountId: 'source-account-123',
+          generationId: 'account-generation-123',
+          status: 'active',
+        },
+      },
+    ]);
+    fakeFirestore.seedCollection(PRIVATE_WHATSAPP_CHATS_COLLECTION, [
+      {
+        id: 'chat-123',
+        data: {
+          userId: 'user-123',
+          sourceAccountId: 'source-account-123',
+        },
+      },
+    ]);
   });
 
   afterEach(() => {
@@ -80,6 +140,28 @@ describe('conversationAssistantRepository', () => {
     const largestChunkBytes = Math.max(TRANSCRIPT_CHUNK_MAX_BYTES, CONTEXT_CHUNK_MAX_BYTES);
 
     expect(CASCADE_DELETE_BATCH_SIZE * largestChunkBytes).toBeLessThanOrEqual(5_000_000);
+  });
+
+  it('enforces the initial preparation finalization chunk boundary without materializing payloads', () => {
+    const withinLimit = vi.fn(() => 'within');
+    const overLimit = vi.fn(() => 'over');
+
+    expect(
+      resolveConversationAssistantInitialPreparationChunkLimit({
+        chunkCounts: [498, 1],
+        withinLimit,
+        overLimit,
+      })
+    ).toBe('within');
+    expect(
+      resolveConversationAssistantInitialPreparationChunkLimit({
+        chunkCounts: [499, 1],
+        withinLimit,
+        overLimit,
+      })
+    ).toBe('over');
+    expect(withinLimit).toHaveBeenCalledOnce();
+    expect(overLimit).toHaveBeenCalledOnce();
   });
 
   it('revalidates and deletes at most one cascade document per transaction', async () => {
@@ -100,26 +182,27 @@ describe('conversationAssistantRepository', () => {
     );
     const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
     let maximumReadsInOneTransaction = 0;
-    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) =>
-      await originalRunTransaction(async (transaction) => {
-        let reads = 0;
-        const instrumentedTransaction = new Proxy(transaction, {
-          get(target, property, receiver): unknown {
-            if (property === 'get') {
-              return async (
-                ...args: Parameters<typeof target.get>
-              ): Promise<Awaited<ReturnType<typeof target.get>>> => {
-                reads += 1;
-                maximumReadsInOneTransaction = Math.max(maximumReadsInOneTransaction, reads);
-                return await target.get(...args);
-              };
-            }
-            const value = Reflect.get(target, property, receiver);
-            return typeof value === 'function' ? value.bind(target) : value;
-          },
-        });
-        return await updateFn(instrumentedTransaction);
-      })
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(
+      async (updateFn) =>
+        await originalRunTransaction(async (transaction) => {
+          let reads = 0;
+          const instrumentedTransaction = new Proxy(transaction, {
+            get(target, property, receiver): unknown {
+              if (property === 'get') {
+                return async (
+                  ...args: Parameters<typeof target.get>
+                ): Promise<Awaited<ReturnType<typeof target.get>>> => {
+                  reads += 1;
+                  maximumReadsInOneTransaction = Math.max(maximumReadsInOneTransaction, reads);
+                  return await target.get(...args);
+                };
+              }
+              const value = Reflect.get(target, property, receiver);
+              return typeof value === 'function' ? value.bind(target) : value;
+            },
+          });
+          return await updateFn(instrumentedTransaction);
+        })
     );
 
     await repository.deleteSession(deletionInput(session));
@@ -177,9 +260,36 @@ describe('conversationAssistantRepository', () => {
     });
   });
 
+  it('round-trips continuation watermarks without exposing transcript storage details', async () => {
+    const continuation = {
+      sourceAccountId: 'source-account-123',
+      contextVersion: 0,
+      contextEventThrough: '2026-07-01T00:00:00.000Z',
+      contextChangeThrough: 7,
+      contextChainSha256: 'a'.repeat(64),
+      displayTimeZone: 'Europe/Warsaw',
+      nextTurnSequence: 1,
+      nextConversationRevision: 1,
+      completedConversationRevision: 0,
+      attachmentCount: 0,
+      totalAttachedMessageCount: 0,
+      totalAttachedOmittedCount: 0,
+    };
+    await repository.saveSession(makeSession({ continuation }));
+
+    const loaded = await repository.getSessionById('whatsapp_conv_session_1');
+
+    expect(loaded?.continuation).toEqual(continuation);
+  });
+
   it('stores and lists turns chronologically by session', async () => {
-    await repository.saveTurn(makeTurn({ id: 'turn-2', role: 'assistant', createdAt: '2026-06-30T10:02:00.000Z' }));
-    await repository.saveTurn(makeTurn({ id: 'turn-1', role: 'user', createdAt: '2026-06-30T10:01:00.000Z' }));
+    await repository.saveSession(makeSession());
+    await repository.saveTurn(
+      makeTurn({ id: 'turn-2', role: 'assistant', createdAt: '2026-06-30T10:02:00.000Z' })
+    );
+    await repository.saveTurn(
+      makeTurn({ id: 'turn-1', role: 'user', createdAt: '2026-06-30T10:01:00.000Z' })
+    );
     await repository.saveTurn(makeTurn({ id: 'foreign-turn', sessionId: 'other-session' }));
 
     const listed = await repository.listTurnsBySessionId('whatsapp_conv_session_1');
@@ -190,6 +300,253 @@ describe('conversationAssistantRepository', () => {
 
     expect(listed.map((turn) => turn.id)).toEqual(['turn-1', 'turn-2']);
     expect(storedDoc.data()?.['role']).toBe('assistant');
+  });
+
+  it('hides every public session read immediately after erasure starts before any delete batch', async () => {
+    const session = makeSession({
+      generationId: 'session-generation-read-fence',
+      contextSnapshotId: 'snapshot-read-fence',
+    });
+    const includedMessage = {
+      id: 'message-read-fence',
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      importedAt: '2026-06-30T10:00:01.000Z',
+      direction: 'incoming' as const,
+      speakerLabel: 'Alice',
+      messageType: 'text' as const,
+      contentKind: 'text' as const,
+      content: 'Must disappear as soon as erasure starts',
+    };
+    await repository.saveSession(session);
+    await repository.saveTurn(makeTurn({ sessionId: session.id }));
+    await repository.saveContextSnapshot(
+      session.id,
+      session.userId,
+      'snapshot-read-fence',
+      { messages: [includedMessage], omittedMessages: [] },
+      session.generationId
+    );
+
+    const erasure = createPrivateWhatsAppErasureRepository();
+    await expect(
+      erasure.start({
+        sourceAccountId: 'source-account-123',
+        userId: session.userId,
+        erasureRequestId: 'erasure-read-fence',
+        now: '2026-07-21T10:00:00.000Z',
+      })
+    ).resolves.toMatchObject({ ok: true, value: { status: 'created' } });
+
+    await expect(repository.getSessionById(session.id)).resolves.toBeNull();
+    await expect(
+      repository.getSessionSnapshotById({ sessionId: session.id, userId: session.userId })
+    ).resolves.toBeNull();
+    await expect(repository.listSessionsByUserId(session.userId)).resolves.toEqual([]);
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+    await expect(
+      repository.getContextPage(session.id, 'snapshot-read-fence', {
+        messageCursor: 0,
+        omittedCursor: 0,
+        limit: 100,
+        messageCount: 1,
+        omittedMessageCount: 0,
+      })
+    ).resolves.toEqual({ messages: [], omittedMessages: [], snapshotAvailable: false });
+  });
+
+  it('keeps same-generation disabled history readable but hides missing and replacement accounts', async () => {
+    const session = makeSession({ generationId: 'session-generation-account-read-fence' });
+    await repository.saveSession(session);
+    await repository.saveTurn(makeTurn({ sessionId: session.id }));
+    const accountRef = fakeFirestore
+      .collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+      .doc(session.userId);
+    const sameGenerationAccount = {
+      userId: session.userId,
+      sourceAccountId: session.sourceAccountId,
+      generationId: session.sourceAccountGeneration,
+      status: 'disabled',
+    };
+
+    await accountRef.set(sameGenerationAccount);
+    await expect(repository.getSessionById(session.id)).resolves.toMatchObject({ id: session.id });
+    await expect(repository.listSessionsByUserId(session.userId)).resolves.toHaveLength(1);
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toHaveLength(1);
+
+    for (const unsafeAccount of [
+      undefined,
+      { ...sameGenerationAccount, generationId: 'replacement-generation', status: 'active' },
+      { ...sameGenerationAccount, sourceAccountId: 'replacement-source', status: 'active' },
+    ]) {
+      if (unsafeAccount === undefined) await accountRef.delete();
+      else await accountRef.set(unsafeAccount);
+      await expect(repository.getSessionById(session.id)).resolves.toBeNull();
+      await expect(repository.listSessionsByUserId(session.userId)).resolves.toEqual([]);
+      await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+    }
+  });
+
+  it('round-trips durable request ordering, revision, and immutable attachment summary fields', async () => {
+    const durableTurn = {
+      ...makeTurn(),
+      sequence: 3,
+      conversationRevision: 2,
+      requestId: 'request-durable-1',
+      kind: 'context_attachment_question' as const,
+      contextAttachmentId: 'attachment-1',
+      contextAttachment: {
+        id: 'attachment-1',
+        capturedAt: '2026-07-21T10:00:00.000Z',
+        captureRange: {
+          from: '2026-07-18T00:00:00.000Z',
+          to: '2026-07-21T10:00:00.000Z',
+        },
+        eventRange: {
+          from: '2026-07-19T08:00:00.000Z',
+          to: '2026-07-20T09:00:00.000Z',
+        },
+        counts: {
+          included: 2,
+          excluded: 1,
+          newlyAvailable: 0,
+          edited: 1,
+          redacted: 1,
+          deleted: 0,
+          reactionsChanged: 1,
+          lateIngested: 0,
+          completedTranscriptions: 0,
+        },
+        omitted: {
+          mediaOnly: 1,
+          failedTranscriptions: 0,
+          pendingTranscriptions: 0,
+          nonText: 0,
+          overLimit: 0,
+        },
+      },
+      acknowledgment: 'Added the requested context.',
+    } as ConversationAssistantTurn & {
+      sequence: number;
+      conversationRevision: number;
+      requestId: string;
+      kind: 'context_attachment_question';
+      contextAttachmentId: string;
+      contextAttachment: Record<string, unknown>;
+    };
+
+    await repository.saveSession(makeSession());
+    await repository.saveTurn(durableTurn);
+    const [loaded] = await repository.listTurnsBySessionId(durableTurn.sessionId);
+
+    expect(loaded).toMatchObject({
+      sequence: 3,
+      conversationRevision: 2,
+      requestId: 'request-durable-1',
+      kind: 'context_attachment_question',
+      contextAttachmentId: 'attachment-1',
+      contextAttachment: durableTurn.contextAttachment,
+      acknowledgment: 'Added the requested context.',
+    });
+  });
+
+  it('orders durable turns by their reserved sequence even when timestamps disagree', async () => {
+    await repository.saveSession(makeSession());
+    await repository.saveTurn({
+      ...makeTurn({ id: 'turn-sequence-4', createdAt: '2026-06-30T10:00:00.000Z' }),
+      sequence: 4,
+      conversationRevision: 2,
+      requestId: 'request-2',
+      kind: 'message',
+    });
+    await repository.saveTurn({
+      ...makeTurn({ id: 'turn-sequence-3', createdAt: '2026-06-30T11:00:00.000Z' }),
+      sequence: 3,
+      conversationRevision: 2,
+      requestId: 'request-2',
+      kind: 'message',
+    });
+
+    const loaded = await repository.listTurnsBySessionId('whatsapp_conv_session_1');
+
+    expect(loaded.map((candidate) => candidate.id)).toEqual(['turn-sequence-3', 'turn-sequence-4']);
+  });
+
+  it('orders equal-sequence and equal-time turns by stable document id', async () => {
+    await repository.saveSession(makeSession());
+    for (const id of ['turn-tie-b', 'turn-tie-a']) {
+      await repository.saveTurn({
+        ...makeTurn({ id, createdAt: '2026-06-30T10:01:00.000Z' }),
+        sequence: 3,
+        conversationRevision: 2,
+        requestId: 'request-tie',
+        kind: 'message',
+      });
+    }
+
+    const loaded = await repository.listTurnsBySessionId('whatsapp_conv_session_1');
+
+    expect(loaded.map((candidate) => candidate.id)).toEqual(['turn-tie-a', 'turn-tie-b']);
+  });
+
+  it('drops malformed immutable attachment summaries while hydrating turns', async () => {
+    await repository.saveSession(makeSession());
+    const validCounts = {
+      included: 1,
+      excluded: 0,
+      newlyAvailable: 1,
+      edited: 0,
+      redacted: 0,
+      deleted: 0,
+      reactionsChanged: 0,
+      lateIngested: 0,
+      completedTranscriptions: 0,
+    };
+    const validOmitted = {
+      mediaOnly: 0,
+      failedTranscriptions: 0,
+      pendingTranscriptions: 0,
+      nonText: 0,
+      overLimit: 0,
+    };
+    const baseSummary = {
+      id: 'attachment-corrupt',
+      capturedAt: '2026-07-21T10:00:00.000Z',
+      captureRange: {
+        from: '2026-07-20T00:00:00.000Z',
+        to: '2026-07-21T10:00:00.000Z',
+      },
+      counts: validCounts,
+      omitted: validOmitted,
+    };
+    await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
+      .doc('turn-valid-summary-without-event-range')
+      .set({
+        ...makeTurn({ id: 'turn-valid-summary-without-event-range' }),
+        contextAttachment: baseSummary,
+      });
+    for (const [index, contextAttachment] of [
+      { ...baseSummary, captureRange: null },
+      { ...baseSummary, counts: { ...validCounts, included: -1 } },
+      { ...baseSummary, omitted: { ...validOmitted, mediaOnly: -1 } },
+    ].entries()) {
+      await fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
+        .doc(`turn-corrupt-summary-${String(index)}`)
+        .set({
+          ...makeTurn({ id: `turn-corrupt-summary-${String(index)}` }),
+          contextAttachment,
+        });
+    }
+
+    const loaded = await repository.listTurnsBySessionId('whatsapp_conv_session_1');
+
+    expect(loaded).toHaveLength(4);
+    expect(loaded.filter((turn) => turn.contextAttachment !== undefined)).toHaveLength(1);
+    expect(
+      loaded.find((turn) => turn.id === 'turn-valid-summary-without-event-range')
+        ?.contextAttachment
+    ).toEqual(baseSummary);
   });
 
   it('deletes every owned session record and leaves foreign records untouched', async () => {
@@ -240,8 +597,22 @@ describe('conversationAssistantRepository', () => {
           .get()
       ).exists
     ).toBe(false);
-    await expect(repository.getSessionById('foreign-session')).resolves.not.toBeNull();
-    await expect(repository.listTurnsBySessionId('foreign-session')).resolves.toHaveLength(1);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc('foreign-session')
+          .get()
+      ).exists
+    ).toBe(true);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
+          .doc('foreign-turn')
+          .get()
+      ).exists
+    ).toBe(true);
     expect(
       (
         await fakeFirestore
@@ -251,9 +622,66 @@ describe('conversationAssistantRepository', () => {
       ).exists
     ).toBe(true);
 
-    await expect(
-      repository.deleteSession(deletionInput(ownedSession))
-    ).resolves.toBeUndefined();
+    await expect(repository.deleteSession(deletionInput(ownedSession))).resolves.toBeUndefined();
+  });
+
+  it('cascades generated-session deletion through attachments and durable request records', async () => {
+    const session = {
+      ...makeSession(),
+      generationId: 'generation-cascade-new-context',
+    } as ConversationAssistantSession;
+    await repository.saveSession(session);
+    const ownedDocument = {
+      sessionId: session.id,
+      userId: session.userId,
+      sessionGenerationId: session.generationId,
+    };
+    const replacementGenerationDocument = {
+      sessionId: session.id,
+      userId: session.userId,
+      sessionGenerationId: 'generation-replacement',
+    };
+    fakeFirestore.seedCollection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENTS_COLLECTION, [
+      { id: 'owned-attachment', data: { ...ownedDocument, status: 'ready' } },
+      {
+        id: 'replacement-attachment',
+        data: { ...replacementGenerationDocument, status: 'ready' },
+      },
+    ]);
+    fakeFirestore.seedCollection(WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_COLLECTION, [
+      { id: 'owned-request', data: { ...ownedDocument, status: 'completed' } },
+      {
+        id: 'replacement-request',
+        data: { ...replacementGenerationDocument, status: 'completed' },
+      },
+    ]);
+    fakeFirestore.seedCollection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION, [
+      {
+        id: 'owned-attachment-chunk',
+        data: { ...ownedDocument, attachmentId: 'owned-attachment' },
+      },
+      {
+        id: 'replacement-attachment-chunk',
+        data: { ...replacementGenerationDocument, attachmentId: 'replacement-attachment' },
+      },
+    ]);
+
+    await repository.deleteSession(deletionInput(session));
+
+    for (const [collection, id] of [
+      [WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENTS_COLLECTION, 'owned-attachment'],
+      [WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_COLLECTION, 'owned-request'],
+      [WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION, 'owned-attachment-chunk'],
+    ] as const) {
+      expect((await fakeFirestore.collection(collection).doc(id).get()).exists).toBe(false);
+    }
+    for (const [collection, id] of [
+      [WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_ATTACHMENTS_COLLECTION, 'replacement-attachment'],
+      [WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_COLLECTION, 'replacement-request'],
+      [WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION, 'replacement-attachment-chunk'],
+    ] as const) {
+      expect((await fakeFirestore.collection(collection).doc(id).get()).exists).toBe(true);
+    }
   });
 
   it('persists turns only while their owned session still exists', async () => {
@@ -267,9 +695,9 @@ describe('conversationAssistantRepository', () => {
     });
     await repository.saveSession(session);
 
-    await expect(
-      repository.saveTurnIfSessionExists(userTurn, session.generationId)
-    ).resolves.toBe(true);
+    await expect(repository.saveTurnIfSessionExists(userTurn, session.generationId)).resolves.toBe(
+      true
+    );
     await expect(
       repository.saveAssistantTurnAndTouchSession({ session, turn: assistantTurn })
     ).resolves.toBe(true);
@@ -280,14 +708,112 @@ describe('conversationAssistantRepository', () => {
     });
 
     await repository.deleteSession(deletionInput(session));
-    await expect(
-      repository.saveTurnIfSessionExists(userTurn, session.generationId)
-    ).resolves.toBe(false);
+    await expect(repository.saveTurnIfSessionExists(userTurn, session.generationId)).resolves.toBe(
+      false
+    );
     await expect(
       repository.saveAssistantTurnAndTouchSession({ session, turn: assistantTurn })
     ).resolves.toBe(false);
     await expect(repository.getSessionById(session.id)).resolves.toBeNull();
     await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+  });
+
+  it('atomically fences legacy turn writes when private-account erasure starts', async () => {
+    const session = makeSession();
+    await repository.saveSession(session);
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+      .doc(session.userId)
+      .update({ status: 'disabled', erasureStatus: 'erasing' });
+
+    await expect(
+      repository.saveTurnIfSessionExists(makeTurn({ id: 'fenced-user-turn' }), session.generationId)
+    ).resolves.toBe(false);
+    await expect(
+      repository.saveAssistantTurnAndTouchSession({
+        session,
+        turn: makeTurn({
+          id: 'fenced-assistant-turn',
+          role: 'assistant',
+          text: 'Must not persist',
+        }),
+      })
+    ).resolves.toBe(false);
+    await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
+  });
+
+  it('fails closed for every legacy source lookup and account-generation fence', async () => {
+    const legacySession = makeSession({ id: 'legacy-source-fence-session' });
+    delete legacySession.sourceAccountId;
+    delete legacySession.sourceAccountGeneration;
+    await repository.saveSession(legacySession);
+    const save = async (id: string): Promise<boolean> =>
+      await repository.saveTurnIfSessionExists(
+        makeTurn({ id, sessionId: legacySession.id }),
+        legacySession.generationId
+      );
+    const chatRef = fakeFirestore
+      .collection(PRIVATE_WHATSAPP_CHATS_COLLECTION)
+      .doc(legacySession.chatId);
+    const accountRef = fakeFirestore
+      .collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+      .doc(legacySession.userId);
+    const validChat = {
+      userId: legacySession.userId,
+      sourceAccountId: 'source-account-123',
+    };
+    const validAccount = {
+      userId: legacySession.userId,
+      sourceAccountId: 'source-account-123',
+      generationId: 'account-generation-123',
+      status: 'active',
+    };
+
+    await chatRef.delete();
+    await expect(save('missing-chat-turn')).resolves.toBe(false);
+    await chatRef.set({ ...validChat, userId: 'foreign-user' });
+    await expect(save('foreign-chat-turn')).resolves.toBe(false);
+    await chatRef.set({ ...validChat, sourceAccountId: 42 });
+    await expect(save('invalid-chat-source-turn')).resolves.toBe(false);
+    await chatRef.set(validChat);
+
+    await accountRef.delete();
+    await expect(save('missing-account-turn')).resolves.toBe(false);
+    await accountRef.set({ ...validAccount, userId: 'foreign-user' });
+    await expect(save('foreign-account-turn')).resolves.toBe(false);
+    await accountRef.set({ ...validAccount, sourceAccountId: 'replacement-source' });
+    await expect(save('replacement-account-turn')).resolves.toBe(false);
+    await accountRef.set({ ...validAccount, status: 'disabled' });
+    await expect(save('disabled-account-turn')).resolves.toBe(false);
+    await accountRef.set({ ...validAccount, erasureStatus: 'erasing' });
+    await expect(save('erasing-account-turn')).resolves.toBe(false);
+    await accountRef.set({
+      userId: validAccount.userId,
+      sourceAccountId: validAccount.sourceAccountId,
+      status: validAccount.status,
+    });
+    await expect(save('legacy-generation-turn')).resolves.toBe(true);
+
+    const fencedSession = makeSession({
+      id: 'generated-source-fence-session',
+      sourceAccountId: validAccount.sourceAccountId,
+      sourceAccountGeneration: validAccount.generationId,
+    });
+    await repository.saveSession(fencedSession);
+    await accountRef.set(validAccount);
+    await expect(
+      repository.saveTurnIfSessionExists(
+        makeTurn({ id: 'generated-fence-turn', sessionId: fencedSession.id }),
+        fencedSession.generationId
+      )
+    ).resolves.toBe(true);
+    await accountRef.set({ ...validAccount, generationId: 'replacement-generation' });
+    await expect(
+      repository.saveTurnIfSessionExists(
+        makeTurn({ id: 'stale-generation-turn', sessionId: fencedSession.id }),
+        fencedSession.generationId
+      )
+    ).resolves.toBe(false);
   });
 
   it('touches a legacy session that has no transcript storage metadata', async () => {
@@ -387,9 +913,9 @@ describe('conversationAssistantRepository', () => {
         return await originalRunTransaction(updateFn);
       });
 
-    await expect(
-      repository.deleteSession(deletionInput(session))
-    ).rejects.toThrow('interrupted cascade');
+    await expect(repository.deleteSession(deletionInput(session))).rejects.toThrow(
+      'interrupted cascade'
+    );
     const storedDuringDeletion = await fakeFirestore
       .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
       .doc(session.id)
@@ -397,9 +923,7 @@ describe('conversationAssistantRepository', () => {
     expect(storedDuringDeletion.exists).toBe(true);
     expect(storedDuringDeletion.data()?.['deletionStartedAt']).toEqual(expect.any(String));
     await expect(repository.getSessionById(session.id)).resolves.toBeNull();
-    await expect(repository.listSessionsByUserId(session.userId)).resolves.toEqual([
-      expect.objectContaining({ id: session.id, deletionStartedAt: expect.any(String) }),
-    ]);
+    await expect(repository.listSessionsByUserId(session.userId)).resolves.toEqual([]);
 
     const saveTurnForGeneration = repository.saveTurnIfSessionExists as unknown as (
       turn: ConversationAssistantTurn,
@@ -410,9 +934,7 @@ describe('conversationAssistantRepository', () => {
     ).resolves.toBe(false);
 
     transactionSpy.mockRestore();
-    await expect(
-      repository.deleteSession(deletionInput(session))
-    ).resolves.toBeUndefined();
+    await expect(repository.deleteSession(deletionInput(session))).resolves.toBeUndefined();
     expect(transactionCount).toBeGreaterThan(1);
     await expect(repository.getSessionById(session.id)).resolves.toBeNull();
     await expect(repository.listTurnsBySessionId(session.id)).resolves.toEqual([]);
@@ -642,6 +1164,7 @@ describe('conversationAssistantRepository', () => {
         },
         attempt: 1,
         claimId: 'claim-original',
+        now: '2026-06-30T10:01:00.000Z',
       })
     ).resolves.toBe(false);
     const sharedChunk = await fakeFirestore
@@ -777,8 +1300,170 @@ describe('conversationAssistantRepository', () => {
     expect(chunks.empty).toBe(true);
   });
 
+  it('rechecks source authority and the preparation claim for every context chunk write', async () => {
+    const accountRef = fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('user-123');
+    const activeAccount = (await accountRef.get()).data();
+    if (activeAccount === undefined) throw new Error('Expected account fixture');
+
+    for (const scenario of ['source', 'claim'] as const) {
+      await accountRef.set(activeAccount);
+      const pending = makeSession({
+        id: `context-chunk-${scenario}-race`,
+        generationId: `context-chunk-${scenario}-generation`,
+        status: 'preparing',
+        preparationStage: 'loading_messages',
+        preparationAttempt: 1,
+        preparationClaimId: `context-chunk-${scenario}-claim`,
+        preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+        transcriptText: '',
+        transcriptSha256: '',
+      });
+      await repository.saveSession(pending);
+      const sessionRef = fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+        .doc(pending.id);
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let transactionNumber = 0;
+      const transactionSpy = vi
+        .spyOn(fakeFirestore, 'runTransaction')
+        .mockImplementation(async (operation) => {
+          transactionNumber += 1;
+          if (transactionNumber === 2) {
+            if (scenario === 'source') await accountRef.delete();
+            else await sessionRef.update({ preparationClaimId: 'replacement-claim' });
+          }
+          return await originalRunTransaction(operation);
+        });
+
+      await expect(
+        repository.saveContextSnapshot(
+          pending.id,
+          pending.userId,
+          `context-chunk-${scenario}-snapshot`,
+          { messages: [makeContextMessage(`context-chunk-${scenario}`)], omittedMessages: [] },
+          pending.generationId
+        )
+      ).resolves.toBe(false);
+      transactionSpy.mockRestore();
+    }
+  });
+
+  it('cleans pending context chunks when the final manifest loses its session fence', async () => {
+    for (const scenario of ['missing', 'claim'] as const) {
+      const pending = makeSession({
+        id: `context-manifest-${scenario}-race`,
+        generationId: `context-manifest-${scenario}-generation`,
+        status: 'preparing',
+        preparationStage: 'loading_messages',
+        preparationAttempt: 1,
+        preparationClaimId: `context-manifest-${scenario}-claim`,
+        preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+        transcriptText: '',
+        transcriptSha256: '',
+      });
+      await repository.saveSession(pending);
+      const sessionRef = fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+        .doc(pending.id);
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let transactionNumber = 0;
+      const transactionSpy = vi
+        .spyOn(fakeFirestore, 'runTransaction')
+        .mockImplementation(async (operation) => {
+          transactionNumber += 1;
+          if (transactionNumber === 3) {
+            if (scenario === 'missing') await sessionRef.delete();
+            else await sessionRef.update({ preparationClaimId: 'replacement-claim' });
+          }
+          return await originalRunTransaction(operation);
+        });
+
+      await expect(
+        repository.saveContextSnapshot(
+          pending.id,
+          pending.userId,
+          `context-manifest-${scenario}-snapshot`,
+          { messages: [makeContextMessage(`context-manifest-${scenario}`)], omittedMessages: [] },
+          pending.generationId
+        )
+      ).resolves.toBe(false);
+      transactionSpy.mockRestore();
+      const chunks = await fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+        .where('sessionId', '==', pending.id)
+        .get();
+      expect(chunks.empty).toBe(true);
+    }
+  });
+
+  it('stores a generation-less pending manifest without inventing a generation and fails closed', async () => {
+    const pending = makeSession({
+      id: 'context-manifest-legacy-generation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'context-manifest-legacy-claim',
+      preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(pending);
+
+    await expect(
+      repository.saveContextSnapshot(
+        pending.id,
+        pending.userId,
+        'context-manifest-legacy-snapshot',
+        { messages: [makeContextMessage('context-manifest-legacy')], omittedMessages: [] }
+      )
+    ).resolves.toBe(true);
+    const sessionDocument = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(pending.id)
+      .get();
+    expect(sessionDocument.data()?.['pendingContextStorage']).toMatchObject({
+      snapshotId: 'context-manifest-legacy-snapshot',
+      preparationClaimId: 'context-manifest-legacy-claim',
+    });
+    expect(
+      (sessionDocument.data()?.['pendingContextStorage'] as Record<string, unknown>)[
+        'sessionGenerationId'
+      ]
+    ).toBeUndefined();
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...pending,
+          status: 'ready',
+          preparationStage: 'ready',
+          contextSnapshotId: 'context-manifest-legacy-snapshot',
+        },
+        attempt: 1,
+        claimId: 'context-manifest-legacy-claim',
+        now: '2026-07-21T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+  });
+
   it('creates a session only once without overwriting a preparation claim', async () => {
+    const sourceFence = {
+      sourceAccountId: 'source-account-123',
+      accountGeneration: 'account-generation-123',
+    };
+    fakeFirestore.seedCollection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION, [
+      {
+        id: 'user-123',
+        data: {
+          userId: 'user-123',
+          sourceAccountId: sourceFence.sourceAccountId,
+          generationId: sourceFence.accountGeneration,
+          status: 'active',
+        },
+      },
+    ]);
     const queued = makeSession({
+      sourceAccountId: sourceFence.sourceAccountId,
+      sourceAccountGeneration: sourceFence.accountGeneration,
       status: 'preparing',
       preparationStage: 'queued',
       preparationAttempt: 1,
@@ -787,6 +1472,17 @@ describe('conversationAssistantRepository', () => {
     });
     const created = await repository.createSessionIfAbsent(queued);
     expect(created.status).toBe('created');
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(queued.id)
+          .get()
+      ).data()
+    ).toMatchObject({
+      sourceAccountId: sourceFence.sourceAccountId,
+      sourceAccountGeneration: sourceFence.accountGeneration,
+    });
     const claim = await repository.claimPreparation({
       sessionId: queued.id,
       userId: queued.userId,
@@ -806,9 +1502,7 @@ describe('conversationAssistantRepository', () => {
         preparationClaimId: 'active-claim',
       },
     });
-    expect(
-      (await repository.getSessionById(queued.id))?.preparationClaimId
-    ).toBe('active-claim');
+    expect((await repository.getSessionById(queued.id))?.preparationClaimId).toBe('active-claim');
 
     const deleting = {
       ...queued,
@@ -819,6 +1513,151 @@ describe('conversationAssistantRepository', () => {
     await expect(repository.createSessionIfAbsent(deleting)).resolves.toMatchObject({
       status: 'existing',
       session: { id: deleting.id, deletionStartedAt: deleting.deletionStartedAt },
+    });
+
+    const legacyStored = makeSession({
+      id: 'whatsapp_conv_session_existing_without_source_fence',
+      status: 'preparing',
+      preparationStage: 'queued',
+    });
+    delete legacyStored.sourceAccountId;
+    delete legacyStored.sourceAccountGeneration;
+    await repository.saveSession(legacyStored);
+    const legacyCandidate = {
+      ...legacyStored,
+      sourceAccountId: sourceFence.sourceAccountId,
+      sourceAccountGeneration: sourceFence.accountGeneration,
+    };
+    await expect(repository.createSessionIfAbsent(legacyCandidate)).resolves.toMatchObject({
+      status: 'existing',
+      session: {
+        sourceAccountId: sourceFence.sourceAccountId,
+        sourceAccountGeneration: sourceFence.accountGeneration,
+      },
+    });
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(legacyStored.id)
+          .get()
+      ).data()
+    ).toMatchObject({
+      sourceAccountId: sourceFence.sourceAccountId,
+      sourceAccountGeneration: sourceFence.accountGeneration,
+    });
+
+    const mismatchedStored = {
+      ...legacyCandidate,
+      id: 'whatsapp_conv_session_existing_source_mismatch',
+      sourceAccountId: 'different-source-account',
+    };
+    await repository.saveSession(mismatchedStored);
+    await expect(
+      repository.createSessionIfAbsent({
+        ...legacyCandidate,
+        id: mismatchedStored.id,
+      })
+    ).resolves.toEqual({ status: 'source_unavailable' });
+  });
+
+  it('atomically fences session creation when source erasure or generation drift begins', async () => {
+    const queued = makeSession({
+      id: 'whatsapp_conv_session_source_fence',
+      sourceAccountId: 'source-account-123',
+      sourceAccountGeneration: 'account-generation-123',
+      status: 'preparing',
+      preparationStage: 'queued',
+      preparationAttempt: 1,
+      transcriptSha256: '',
+      transcriptText: '',
+    });
+    const sourceFence = {
+      sourceAccountId: 'source-account-123',
+      accountGeneration: 'account-generation-123',
+    };
+
+    for (const account of [
+      undefined,
+      {
+        userId: queued.userId,
+        sourceAccountId: sourceFence.sourceAccountId,
+        generationId: sourceFence.accountGeneration,
+        status: 'disabled',
+        erasureStatus: 'erasing',
+      },
+      {
+        userId: queued.userId,
+        sourceAccountId: sourceFence.sourceAccountId,
+        generationId: 'new-generation',
+        status: 'active',
+      },
+    ]) {
+      if (account === undefined) {
+        await fakeFirestore
+          .collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+          .doc(queued.userId)
+          .delete();
+      } else {
+        fakeFirestore.seedCollection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION, [
+          { id: queued.userId, data: account },
+        ]);
+      }
+
+      await expect(repository.createSessionIfAbsent(queued)).resolves.toEqual({
+        status: 'source_unavailable',
+      });
+      expect(
+        (
+          await fakeFirestore
+            .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+            .doc(queued.id)
+            .get()
+        ).exists
+      ).toBe(false);
+    }
+
+    fakeFirestore.seedCollection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION, [
+      {
+        id: queued.userId,
+        data: {
+          userId: queued.userId,
+          sourceAccountId: sourceFence.sourceAccountId,
+          generationId: sourceFence.accountGeneration,
+          status: 'active',
+        },
+      },
+    ]);
+    const missingSourceFence = makeSession({
+      id: 'whatsapp_conv_session_missing_source_fence',
+      status: 'preparing',
+      preparationStage: 'queued',
+    });
+    delete missingSourceFence.sourceAccountId;
+    delete missingSourceFence.sourceAccountGeneration;
+    await expect(repository.createSessionIfAbsent(missingSourceFence)).resolves.toEqual({
+      status: 'source_unavailable',
+    });
+
+    const legacyGenerationSession = makeSession({
+      id: 'whatsapp_conv_session_legacy_source_generation',
+      sourceAccountId: sourceFence.sourceAccountId,
+      sourceAccountGeneration: sourceFence.sourceAccountId,
+      status: 'preparing',
+      preparationStage: 'queued',
+    });
+    fakeFirestore.seedCollection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION, [
+      {
+        id: queued.userId,
+        data: {
+          userId: queued.userId,
+          sourceAccountId: sourceFence.sourceAccountId,
+          status: 'active',
+        },
+      },
+    ]);
+    await expect(repository.createSessionIfAbsent(legacyGenerationSession)).resolves.toMatchObject({
+      status: 'created',
     });
   });
 
@@ -899,6 +1738,7 @@ describe('conversationAssistantRepository', () => {
         }),
         attempt: 1,
         claimId: 'claim-1',
+        now: '2026-06-30T10:01:00.000Z',
       })
     ).resolves.toBe(false);
     expect(
@@ -1098,6 +1938,7 @@ describe('conversationAssistantRepository', () => {
       session: { ...claimed.session, status: 'ready', preparationStage: 'ready' },
       attempt: 1,
       claimId: 'claim-2',
+      now: '2026-06-30T10:03:00.000Z',
     });
     expect(staleSave).toBe(false);
     expect((await repository.getSessionById('whatsapp_conv_session_1'))?.status).toBe('preparing');
@@ -1123,6 +1964,7 @@ describe('conversationAssistantRepository', () => {
       session: { ...claimed.session, status: 'ready', preparationStage: 'ready' },
       attempt: 1,
       claimId: 'claim-1',
+      now: '2026-06-30T10:04:00.000Z',
     });
     expect(oldGenerationSave).toBe(false);
     if (secondClaim.status !== 'claimed') return;
@@ -1131,9 +1973,549 @@ describe('conversationAssistantRepository', () => {
       session: { ...secondClaim.session, status: 'ready', preparationStage: 'ready' },
       attempt: 2,
       claimId: 'claim-generation-2',
+      now: '2026-06-30T10:04:00.000Z',
     });
     expect(saved).toBe(true);
     expect((await repository.getSessionById('whatsapp_conv_session_1'))?.status).toBe('ready');
+  });
+
+  it('atomically fences initial preparation authority and private writes after source erasure or reconnect', async () => {
+    const accountRef = fakeFirestore
+      .collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION)
+      .doc('user-123');
+    const activeAccount = {
+      userId: 'user-123',
+      sourceAccountId: 'source-account-123',
+      generationId: 'account-generation-123',
+      status: 'active',
+    };
+    const deniedAccounts = [
+      { label: 'missing', account: undefined },
+      {
+        label: 'erasing',
+        account: { ...activeAccount, status: 'disabled', erasureStatus: 'erasing' },
+      },
+      {
+        label: 'replacement-generation',
+        account: { ...activeAccount, generationId: 'replacement-generation' },
+      },
+    ] as const;
+
+    for (const scenario of deniedAccounts) {
+      await accountRef.set(activeAccount);
+      const sessionId = `initial-preparation-${scenario.label}`;
+      const queued = makeSession({
+        id: sessionId,
+        generationId: `session-generation-${scenario.label}`,
+        status: 'preparing',
+        preparationStage: 'queued',
+        preparationAttempt: 1,
+        transcriptSha256: '',
+        transcriptText: '',
+      });
+      await expect(repository.createSessionIfAbsent(queued)).resolves.toMatchObject({
+        status: 'created',
+      });
+      const claim = await repository.claimPreparation({
+        sessionId,
+        userId: queued.userId,
+        attempt: 1,
+        claimId: `claim-${scenario.label}`,
+        now: '2026-07-21T10:00:00.000Z',
+        leaseExpiresAt: '2026-07-21T10:05:00.000Z',
+        expectedGenerationId: queued.generationId as string,
+      });
+      expect(claim.status).toBe('claimed');
+      if (claim.status !== 'claimed') throw new Error('Expected preparation claim');
+
+      if (scenario.account === undefined) await accountRef.delete();
+      else await accountRef.set(scenario.account);
+
+      await expect(
+        repository.saveClaimedPreparationSession({
+          session: {
+            ...claim.session,
+            status: 'ready',
+            preparationStage: 'ready',
+            transcriptSha256: `snapshot-${scenario.label}`,
+            transcriptText: `${'x'.repeat(TRANSCRIPT_CHUNK_MAX_BYTES)}y`,
+          },
+          attempt: 1,
+          claimId: `claim-${scenario.label}`,
+          now: '2026-07-21T10:01:00.000Z',
+        })
+      ).resolves.toBe(false);
+      await expect(
+        repository.saveContextSnapshot(
+          sessionId,
+          queued.userId,
+          `context-${scenario.label}`,
+          {
+            messages: [
+              {
+                id: `message-${scenario.label}`,
+                eventTimestamp: '2026-07-21T10:00:00.000Z',
+                importedAt: '2026-07-21T10:00:01.000Z',
+                direction: 'incoming',
+                speakerLabel: 'Them',
+                messageType: 'text',
+                contentKind: 'text',
+                content: 'must not persist',
+              },
+            ],
+            omittedMessages: [],
+          },
+          queued.generationId
+        )
+      ).resolves.toBe(false);
+
+      const transcriptChunks = await fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+        .where('sessionId', '==', sessionId)
+        .get();
+      const contextChunks = await fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+        .where('sessionId', '==', sessionId)
+        .get();
+      expect(transcriptChunks.empty).toBe(true);
+      expect(contextChunks.empty).toBe(true);
+      expect(
+        (
+          await fakeFirestore
+            .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+            .doc(sessionId)
+            .get()
+        ).data()
+      ).toMatchObject({
+        status: 'preparing',
+        preparationClaimId: `claim-${scenario.label}`,
+      });
+
+      await accountRef.set(activeAccount);
+      const unclaimed = makeSession({
+        ...queued,
+        id: `${sessionId}-unclaimed`,
+        generationId: `${queued.generationId}-unclaimed`,
+      });
+      await expect(repository.createSessionIfAbsent(unclaimed)).resolves.toMatchObject({
+        status: 'created',
+      });
+      if (scenario.account === undefined) await accountRef.delete();
+      else await accountRef.set(scenario.account);
+      await expect(
+        repository.claimPreparation({
+          sessionId: unclaimed.id,
+          userId: unclaimed.userId,
+          attempt: 1,
+          claimId: `forbidden-claim-${scenario.label}`,
+          now: '2026-07-21T10:00:00.000Z',
+          leaseExpiresAt: '2026-07-21T10:05:00.000Z',
+          expectedGenerationId: unclaimed.generationId as string,
+        })
+      ).resolves.toEqual({ status: 'not_found' });
+      expect(
+        (
+          await fakeFirestore
+            .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+            .doc(unclaimed.id)
+            .get()
+        ).data()?.['preparationClaimId']
+      ).toBeUndefined();
+    }
+  });
+
+  it('keeps crash-orphaned initial chunks on native pending TTL', async () => {
+    const queued = makeSession({
+      id: 'initial-pending-ttl-crash',
+      generationId: 'initial-pending-ttl-generation',
+      status: 'preparing',
+      preparationStage: 'queued',
+      preparationAttempt: 1,
+      transcriptSha256: '',
+      transcriptText: '',
+    });
+    await repository.createSessionIfAbsent(queued);
+    const claim = await repository.claimPreparation({
+      sessionId: queued.id,
+      userId: queued.userId,
+      attempt: 1,
+      claimId: 'initial-pending-ttl-claim',
+      now: '2026-07-21T10:00:00.000Z',
+      leaseExpiresAt: '2026-07-21T10:05:00.000Z',
+      expectedGenerationId: queued.generationId as string,
+    });
+    if (claim.status !== 'claimed') throw new Error('Expected preparation claim');
+    await expect(
+      repository.saveContextSnapshot(
+        queued.id,
+        queued.userId,
+        'initial-pending-context',
+        {
+          messages: [
+            {
+              id: 'pending-message',
+              eventTimestamp: '2026-07-21T10:00:00.000Z',
+              importedAt: '2026-07-21T10:00:01.000Z',
+              direction: 'incoming',
+              speakerLabel: 'Them',
+              messageType: 'text',
+              contentKind: 'text',
+              content: 'pending private context',
+            },
+          ],
+          omittedMessages: [],
+        },
+        queued.generationId
+      )
+    ).resolves.toBe(true);
+    const pendingContext = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', queued.id)
+      .get();
+    expect(pendingContext.empty).toBe(false);
+    expect(
+      pendingContext.docs.every(
+        (document) => document.data()?.['expireAt'] instanceof Timestamp
+      )
+    )
+      .toBe(true);
+
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (operation) => {
+      transactionNumber += 1;
+      if (transactionNumber === 3) throw new Error('simulated crash before final manifest');
+      return await originalRunTransaction(operation);
+    });
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...claim.session,
+          status: 'ready',
+          preparationStage: 'ready',
+          contextSnapshotId: 'initial-pending-context',
+          transcriptSha256: 'initial-pending-transcript',
+          transcriptText: `${'t'.repeat(TRANSCRIPT_CHUNK_MAX_BYTES)}u`,
+        },
+        attempt: 1,
+        claimId: 'initial-pending-ttl-claim',
+        now: '2026-07-21T10:01:00.000Z',
+      })
+    ).rejects.toThrow('simulated crash before final manifest');
+    const pendingTranscript = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', queued.id)
+      .get();
+    expect(pendingTranscript).toHaveProperty('size', 2);
+    expect(
+      pendingTranscript.docs.every(
+        (document) => document.data()?.['expireAt'] instanceof Timestamp
+      )
+    ).toBe(true);
+  });
+
+  it('atomically removes pending TTL from the exact initial manifest on ready publication', async () => {
+    const preparationNow = new Date().toISOString();
+    const preparationLeaseExpiresAt = new Date(Date.parse(preparationNow) + 5 * 60 * 1000).toISOString();
+    const queued = makeSession({
+      id: 'initial-pending-ttl-ready',
+      generationId: 'initial-ready-generation',
+      status: 'preparing',
+      preparationStage: 'queued',
+      preparationAttempt: 1,
+      transcriptSha256: '',
+      transcriptText: '',
+    });
+    await repository.createSessionIfAbsent(queued);
+    const claim = await repository.claimPreparation({
+      sessionId: queued.id,
+      userId: queued.userId,
+      attempt: 1,
+      claimId: 'initial-ready-claim',
+      now: preparationNow,
+      leaseExpiresAt: preparationLeaseExpiresAt,
+      expectedGenerationId: queued.generationId as string,
+    });
+    if (claim.status !== 'claimed') throw new Error('Expected preparation claim');
+    const snapshotId = 'initial-ready-context';
+    await repository.saveContextSnapshot(
+      queued.id,
+      queued.userId,
+      snapshotId,
+      {
+        messages: [
+          {
+            id: 'ready-message',
+            eventTimestamp: '2026-07-21T10:00:00.000Z',
+            importedAt: '2026-07-21T10:00:01.000Z',
+            direction: 'incoming',
+            speakerLabel: 'Them',
+            messageType: 'text',
+            contentKind: 'text',
+            content: 'durable private context',
+          },
+        ],
+        omittedMessages: [],
+      },
+      queued.generationId
+    );
+
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...claim.session,
+          status: 'ready',
+          preparationStage: 'ready',
+          contextSnapshotId: snapshotId,
+          transcriptSha256: 'initial-ready-transcript',
+          transcriptText: 'durable transcript',
+        },
+        attempt: 1,
+        claimId: 'initial-ready-claim',
+        now: preparationNow,
+      })
+    ).resolves.toBe(true);
+    const contextChunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', queued.id)
+      .get();
+    const transcriptChunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', queued.id)
+      .get();
+    expect([...contextChunks.docs, ...transcriptChunks.docs]).toHaveLength(2);
+    expect(
+      [...contextChunks.docs, ...transcriptChunks.docs].every(
+        (document) => document.data()?.['expireAt'] === undefined
+      )
+    ).toBe(true);
+    expect(
+      (
+        await fakeFirestore
+          .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+          .doc(queued.id)
+          .get()
+      ).data()
+    ).toMatchObject({
+      status: 'ready',
+      contextSnapshotId: snapshotId,
+      transcriptStorage: { chunkCount: 1 },
+    });
+    expect(CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS + 1).toBe(500);
+  });
+
+  it('uses at most 500 writes to publish initial chunks and rejects a 501-write finalization', async () => {
+    const now = new Date().toISOString();
+    const leaseExpiresAt = new Date(Date.parse(now) + 5 * 60 * 1000).toISOString();
+    const pendingExpireAt = Timestamp.fromMillis(Date.parse(now) + 30 * 60 * 1000);
+
+    const finalize = async (chunkCount: number, label: string): Promise<boolean> => {
+      const sessionId = `initial-finalization-${label}`;
+      const generationId = `initial-finalization-generation-${label}`;
+      const snapshotId = `initial-finalization-context-${label}`;
+      const claimId = `initial-finalization-claim-${label}`;
+      const queued = makeSession({
+        id: sessionId,
+        generationId,
+        status: 'preparing',
+        preparationStage: 'queued',
+        preparationAttempt: 1,
+        transcriptSha256: '',
+        transcriptText: '',
+      });
+      await repository.createSessionIfAbsent(queued);
+      const claim = await repository.claimPreparation({
+        sessionId,
+        userId: queued.userId,
+        attempt: 1,
+        claimId,
+        now,
+        leaseExpiresAt,
+        expectedGenerationId: generationId,
+      });
+      if (claim.status !== 'claimed') throw new Error('Expected preparation claim');
+      const chunkIds = Array.from(
+        { length: chunkCount },
+        (_value, chunkIndex) =>
+          `${sessionId}_${snapshotId}_${String(chunkIndex).padStart(6, '0')}`
+      );
+      fakeFirestore.seedCollection(
+        WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION,
+        chunkIds.map((chunkId, chunkIndex) => ({
+          id: chunkId,
+          data: {
+            sessionId,
+            userId: queued.userId,
+            sessionGenerationId: generationId,
+            sourceAccountId: queued.sourceAccountId,
+            sourceAccountGeneration: queued.sourceAccountGeneration,
+            snapshotId,
+            chunkIndex,
+            preparationAttempt: 1,
+            preparationClaimId: claimId,
+            expireAt: pendingExpireAt,
+          },
+        }))
+      );
+      await fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+        .doc(sessionId)
+        .update({
+          pendingContextStorage: {
+            type: 'chunks',
+            snapshotId,
+            chunkIds,
+            chunkCount,
+            sessionGenerationId: generationId,
+            sourceAccountId: queued.sourceAccountId,
+            sourceAccountGeneration: queued.sourceAccountGeneration,
+            preparationAttempt: 1,
+            preparationClaimId: claimId,
+          },
+        });
+
+      return await repository.saveClaimedPreparationSession({
+        session: {
+          ...claim.session,
+          status: 'ready',
+          preparationStage: 'ready',
+          contextSnapshotId: snapshotId,
+          transcriptSha256: '',
+          transcriptText: '',
+        },
+        attempt: 1,
+        claimId,
+        now,
+      });
+    };
+
+    await expect(
+      finalize(CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS, '500-writes')
+    ).resolves.toBe(true);
+    const publishedChunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', 'initial-finalization-500-writes')
+      .get();
+    expect(publishedChunks).toHaveProperty(
+      'size',
+      CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS
+    );
+    expect(
+      publishedChunks.docs.every((document) => document.data()?.['expireAt'] === undefined)
+    ).toBe(true);
+
+    await expect(
+      finalize(CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS + 1, '501-writes')
+    ).resolves.toBe(false);
+    const rejectedChunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', 'initial-finalization-501-writes')
+      .get();
+    expect(rejectedChunks).toHaveProperty(
+      'size',
+      CONVERSATION_ASSISTANT_INITIAL_PREPARATION_MAX_FINALIZATION_CHUNKS + 1
+    );
+    expect(
+      rejectedChunks.docs.every((document) => document.data()?.['expireAt'] === pendingExpireAt)
+    ).toBe(true);
+    await expect(
+      repository.getSessionById('initial-finalization-501-writes')
+    ).resolves.toMatchObject({ status: 'preparing' });
+  });
+
+  it('does not publish initial context after its pending TTL or preparation lease expires', async () => {
+    const baseNowMs = Date.now();
+    const claimNow = new Date(baseNowMs).toISOString();
+    const leaseExpiresAt = new Date(baseNowMs + 5 * 60 * 1000).toISOString();
+
+    for (const scenario of [
+      {
+        label: 'chunk-ttl',
+        finalizationNow: new Date(baseNowMs + 60 * 1000).toISOString(),
+        expireChunk: true,
+      },
+      { label: 'lease', finalizationNow: leaseExpiresAt, expireChunk: false },
+    ]) {
+      const sessionId = `initial-expired-${scenario.label}`;
+      const generationId = `initial-expired-generation-${scenario.label}`;
+      const snapshotId = `initial-expired-context-${scenario.label}`;
+      const claimId = `initial-expired-claim-${scenario.label}`;
+      const queued = makeSession({
+        id: sessionId,
+        generationId,
+        status: 'preparing',
+        preparationStage: 'queued',
+        preparationAttempt: 1,
+        transcriptSha256: '',
+        transcriptText: '',
+      });
+      await repository.createSessionIfAbsent(queued);
+      const claim = await repository.claimPreparation({
+        sessionId,
+        userId: queued.userId,
+        attempt: 1,
+        claimId,
+        now: claimNow,
+        leaseExpiresAt,
+        expectedGenerationId: generationId,
+      });
+      if (claim.status !== 'claimed') throw new Error('Expected preparation claim');
+      await expect(
+        repository.saveContextSnapshot(
+          sessionId,
+          queued.userId,
+          snapshotId,
+          {
+            messages: [
+              {
+                id: `message-${scenario.label}`,
+                eventTimestamp: claimNow,
+                importedAt: claimNow,
+                direction: 'incoming',
+                speakerLabel: 'Them',
+                messageType: 'text',
+                contentKind: 'text',
+                content: `private ${scenario.label} context`,
+              },
+            ],
+            omittedMessages: [],
+          },
+          generationId
+        )
+      ).resolves.toBe(true);
+      const pendingChunks = await fakeFirestore
+        .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
+        .where('sessionId', '==', sessionId)
+        .get();
+      expect(pendingChunks).toHaveProperty('size', 1);
+      if (scenario.expireChunk) {
+        await pendingChunks.docs[0]?.ref.update({
+          expireAt: Timestamp.fromMillis(Date.parse(scenario.finalizationNow) - 1),
+        });
+      }
+
+      await expect(
+        repository.saveClaimedPreparationSession({
+          session: {
+            ...claim.session,
+            status: 'ready',
+            preparationStage: 'ready',
+            contextSnapshotId: snapshotId,
+            transcriptSha256: '',
+            transcriptText: '',
+          },
+          attempt: 1,
+          claimId,
+          now: scenario.finalizationNow,
+        })
+      ).resolves.toBe(false);
+      await expect(repository.getSessionById(sessionId)).resolves.toMatchObject({
+        status: 'preparing',
+        preparationClaimId: claimId,
+      });
+      const retainedChunk = await pendingChunks.docs[0]?.ref.get();
+      expect(retainedChunk?.data()?.['expireAt']).toBeInstanceOf(Timestamp);
+    }
   });
 
   it('does not let stale claim cleanup remove a newer claim transcript', async () => {
@@ -1143,6 +2525,7 @@ describe('conversationAssistantRepository', () => {
         preparationStage: 'loading_messages',
         preparationAttempt: 1,
         preparationClaimId: 'claim-a',
+        preparationLeaseExpiresAt: '2026-06-30T10:05:00.000Z',
         transcriptText: '',
         transcriptSha256: '',
       }),
@@ -1180,6 +2563,7 @@ describe('conversationAssistantRepository', () => {
       session: readyA,
       attempt: 1,
       claimId: 'claim-a',
+      now: '2026-06-30T10:01:00.000Z',
     });
     await aSessionWriteStarted;
 
@@ -1215,6 +2599,7 @@ describe('conversationAssistantRepository', () => {
         session: readyB,
         attempt: 1,
         claimId: 'claim-b',
+        now: '2026-06-30T10:01:00.000Z',
       })
     ).resolves.toBe(true);
 
@@ -1291,9 +2676,7 @@ describe('conversationAssistantRepository', () => {
         preparationClaimId: 'active-claim',
       },
     });
-    expect((await repository.getSessionById('whatsapp_conv_session_1'))?.status).toBe(
-      'preparing'
-    );
+    expect((await repository.getSessionById('whatsapp_conv_session_1'))?.status).toBe('preparing');
   });
 
   it('round-trips reactions and exact omitted messages in a versioned context snapshot', async () => {
@@ -1362,6 +2745,7 @@ describe('conversationAssistantRepository', () => {
   it('hydrates all supported context variants from stored chunks', async () => {
     const sessionId = 'whatsapp_conv_session_context_variants';
     const snapshotId = 'snapshot-variants';
+    await repository.saveSession(makeSession({ id: sessionId }));
     const includedMessage = {
       id: 'included-outgoing',
       eventTimestamp: '2026-06-30T10:00:00.000Z',
@@ -1614,6 +2998,7 @@ describe('conversationAssistantRepository', () => {
   ])('rejects $name in persisted context chunks', async ({ kind, chunk, expected }) => {
     const sessionId = 'whatsapp_conv_session_invalid_context';
     const snapshotId = `snapshot-${kind}`;
+    await repository.saveSession(makeSession({ id: sessionId }));
     await fakeFirestore
       .collection(WHATSAPP_CONVERSATION_ASSISTANT_CONTEXT_CHUNKS_COLLECTION)
       .doc('invalid-context-chunk')
@@ -1658,12 +3043,10 @@ describe('conversationAssistantRepository', () => {
       content: 'second',
     };
 
-    await repository.saveContextSnapshot(
-      'whatsapp_conv_session_1',
-      'user-123',
-      'snapshot-1',
-      { messages: [firstMessage, secondMessage], omittedMessages: [] }
-    );
+    await repository.saveContextSnapshot('whatsapp_conv_session_1', 'user-123', 'snapshot-1', {
+      messages: [firstMessage, secondMessage],
+      omittedMessages: [],
+    });
 
     expect(
       await repository.getContextPage('whatsapp_conv_session_1', 'snapshot-1', {
@@ -1690,12 +3073,10 @@ describe('conversationAssistantRepository', () => {
       messages: [secondMessage],
     });
 
-    await repository.saveContextSnapshot(
-      'whatsapp_conv_session_1',
-      'user-123',
-      'snapshot-1',
-      { messages: [secondMessage], omittedMessages: [] }
-    );
+    await repository.saveContextSnapshot('whatsapp_conv_session_1', 'user-123', 'snapshot-1', {
+      messages: [secondMessage],
+      omittedMessages: [],
+    });
 
     expect(
       await repository.getContextPage('whatsapp_conv_session_1', 'snapshot-1', {
@@ -1728,18 +3109,14 @@ describe('conversationAssistantRepository', () => {
       contentKind: 'text' as const,
       content: 'Included',
     };
-    await repository.saveContextSnapshot(
-      'whatsapp_conv_session_1',
-      'user-123',
-      'snapshot-delete',
-      { messages: [message], omittedMessages: [] }
-    );
-    await repository.saveContextSnapshot(
-      'whatsapp_conv_session_1',
-      'user-123',
-      'snapshot-keep',
-      { messages: [message], omittedMessages: [] }
-    );
+    await repository.saveContextSnapshot('whatsapp_conv_session_1', 'user-123', 'snapshot-delete', {
+      messages: [message],
+      omittedMessages: [],
+    });
+    await repository.saveContextSnapshot('whatsapp_conv_session_1', 'user-123', 'snapshot-keep', {
+      messages: [message],
+      omittedMessages: [],
+    });
 
     await repository.deleteContextSnapshot(
       'whatsapp_conv_session_1',
@@ -1781,11 +3158,19 @@ describe('conversationAssistantRepository', () => {
   it('loads a session snapshot with hydrated transcript chunks and turns from one repository call', async () => {
     const transcriptText = `${'x'.repeat(TRANSCRIPT_CHUNK_MAX_BYTES)}y`;
     await repository.saveSession(makeSession({ transcriptText }));
-    await repository.saveTurn(makeTurn({ id: 'turn-2', role: 'assistant', createdAt: '2026-06-30T10:02:00.000Z' }));
-    await repository.saveTurn(makeTurn({ id: 'turn-1', role: 'user', createdAt: '2026-06-30T10:01:00.000Z' }));
+    await repository.saveTurn(
+      makeTurn({ id: 'turn-2', role: 'assistant', createdAt: '2026-06-30T10:02:00.000Z' })
+    );
+    await repository.saveTurn(
+      makeTurn({ id: 'turn-1', role: 'user', createdAt: '2026-06-30T10:01:00.000Z' })
+    );
     await repository.saveTurn(makeTurn({ id: 'foreign-turn', sessionId: 'other-session' }));
     await repository.saveTurn(
-      makeTurn({ id: 'foreign-user-turn', userId: 'other-user', createdAt: '2026-06-30T10:03:00.000Z' })
+      makeTurn({
+        id: 'foreign-user-turn',
+        userId: 'other-user',
+        createdAt: '2026-06-30T10:03:00.000Z',
+      })
     );
 
     const snapshot = await repository.getSessionSnapshotById({
@@ -1878,6 +3263,8 @@ describe('conversationAssistantRepository', () => {
     expect(chunk.data()).toEqual({
       sessionId: chunkSessionId,
       sessionGenerationId: null,
+      sourceAccountId: 'source-account-123',
+      sourceAccountGeneration: 'account-generation-123',
       chunkIndex: 0,
       text: 'legacy chunk',
     });
@@ -1911,7 +3298,9 @@ describe('conversationAssistantRepository', () => {
       });
 
     const wrongType = await repository.getSessionById('whatsapp_conv_session_wrong_storage_type');
-    const invalidShape = await repository.getSessionById('whatsapp_conv_session_invalid_storage_shape');
+    const invalidShape = await repository.getSessionById(
+      'whatsapp_conv_session_invalid_storage_shape'
+    );
 
     expect(wrongType?.transcriptText).toBe('wrong storage type fallback');
     expect(invalidShape?.transcriptText).toBe('invalid storage shape fallback');
@@ -1963,7 +3352,7 @@ describe('conversationAssistantRepository', () => {
     );
   });
 
-  it('returns null for missing sessions and hydrates defensive defaults', async () => {
+  it('returns null for missing and malformed unowned sessions', async () => {
     const missing = await repository.getSessionById('whatsapp_conv_session_missing');
     expect(missing).toBeNull();
 
@@ -1982,28 +3371,8 @@ describe('conversationAssistantRepository', () => {
     const empty = await repository.getSessionById('whatsapp_conv_session_empty');
     const loaded = await repository.getSessionById('whatsapp_conv_session_partial');
 
-    expect(empty?.chatDisplayName).toBeUndefined();
-    expect(empty?.lastTurnAt).toBeUndefined();
-    expect(loaded).toEqual({
-      id: 'whatsapp_conv_session_partial',
-      userId: '',
-      chatId: '',
-      status: 'ready',
-      range: { from: '', to: '' },
-      effectiveRange: { from: '', to: '' },
-      model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
-      transcriptSha256: '',
-      transcriptMessageCount: 0,
-      transcriptText: '',
-      assistantRoleLabel: 'Assistant',
-      omitted: { mediaOnly: 0, failedTranscriptions: 0, pendingTranscriptions: 0, nonText: 0, overLimit: 0 },
-      title: '',
-      createdAt: '',
-      updatedAt: '',
-      chatDisplayName: 'Alice',
-      lastTurnAt: '2026-06-30T10:03:00.000Z',
-    });
-    expect(empty?.assistantRoleLabel).toBe('Assistant');
+    expect(empty).toBeNull();
+    expect(loaded).toBeNull();
   });
 
   it('preserves unknown legacy models while defaulting missing model values', async () => {
@@ -2012,12 +3381,14 @@ describe('conversationAssistantRepository', () => {
       .doc('whatsapp_conv_session_missing_model')
       .set({
         userId: 'user-123',
+        chatId: 'chat-123',
       });
     await fakeFirestore
       .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
       .doc('whatsapp_conv_session_legacy_model')
       .set({
         userId: 'user-123',
+        chatId: 'chat-123',
         model: 'legacy/model',
       });
 
@@ -2046,13 +3417,350 @@ describe('conversationAssistantRepository', () => {
     });
   });
 
+  it('hydrates preparation timezone and active continuation lease metadata', async () => {
+    const continuation = {
+      sourceAccountId: 'source-account-123',
+      contextVersion: 2,
+      contextEventThrough: '2026-07-01T00:00:00.000Z',
+      contextChangeThrough: 7,
+      contextChainSha256: 'a'.repeat(64),
+      displayTimeZone: 'Europe/Warsaw',
+      nextTurnSequence: 5,
+      nextConversationRevision: 3,
+      completedConversationRevision: 2,
+      attachmentCount: 1,
+      totalAttachedMessageCount: 4,
+      totalAttachedOmittedCount: 1,
+      activeTurnRequestId: 'request-active',
+      activeTurnLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+    };
+    await repository.saveSession(
+      makeSession({
+        id: 'whatsapp_conv_session_continuation_metadata',
+        preparationDisplayTimeZone: 'Europe/Warsaw',
+        continuation,
+      })
+    );
+
+    const loaded = await repository.getSessionById(
+      'whatsapp_conv_session_continuation_metadata'
+    );
+
+    expect(loaded).toMatchObject({ preparationDisplayTimeZone: 'Europe/Warsaw', continuation });
+  });
+
+  it('fails malformed session identity and continuation hydration closed in preparation claims', async () => {
+    const collection = fakeFirestore.collection(
+      WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION
+    );
+    const malformedUser = { ...makeSession({ status: 'preparing', preparationAttempt: 1 }) } as Record<
+      string,
+      unknown
+    >;
+    Reflect.deleteProperty(malformedUser, 'userId');
+    await collection.doc('malformed-user-session').set(malformedUser);
+    await expect(
+      repository.claimPreparation({
+        sessionId: 'malformed-user-session',
+        userId: 'user-123',
+        attempt: 1,
+        claimId: 'claim-malformed-user',
+        now: '2026-06-30T10:01:00.000Z',
+        leaseExpiresAt: '2026-06-30T10:06:00.000Z',
+      })
+    ).resolves.toEqual({ status: 'not_found' });
+
+    const malformedChat = {
+      ...makeSession({ status: 'preparing', preparationAttempt: 1 }),
+      continuation: { sourceAccountId: '' },
+    } as Record<string, unknown>;
+    Reflect.deleteProperty(malformedChat, 'chatId');
+    await collection.doc('malformed-chat-session').set(malformedChat);
+    const claim = await repository.claimPreparation({
+      sessionId: 'malformed-chat-session',
+      userId: 'user-123',
+      attempt: 1,
+      claimId: 'claim-malformed-chat',
+      now: '2026-06-30T10:01:00.000Z',
+      leaseExpiresAt: '2026-06-30T10:06:00.000Z',
+    });
+    expect(claim).toMatchObject({ status: 'claimed', session: { chatId: '' } });
+    if (claim.status === 'claimed') expect(claim.session.continuation).toBeUndefined();
+  });
+
+  it('covers empty and unauthorized conditional preparation persistence boundaries', async () => {
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: makeSession({
+          id: 'missing-empty-preparation',
+          status: 'ready',
+          preparationAttempt: 1,
+          transcriptText: '',
+          transcriptSha256: '',
+        }),
+        attempt: 1,
+        claimId: 'claim-missing-empty',
+        now: '2026-06-30T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+
+    const inactiveLeaseSession = makeSession({
+      id: 'inactive-lease-preparation',
+      status: 'failed',
+      preparationAttempt: 1,
+      preparationClaimId: 'claim-inactive-lease',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(inactiveLeaseSession);
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: inactiveLeaseSession,
+        attempt: 1,
+        claimId: 'claim-inactive-lease',
+        now: '2026-06-30T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+
+    const activeClaim = makeSession({
+      id: 'active-empty-preparation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'claim-active-empty',
+      preparationLeaseExpiresAt: '2026-06-30T10:06:00.000Z',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(activeClaim);
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: { ...activeClaim, preparationStage: 'building_context' },
+        attempt: 1,
+        claimId: 'claim-active-empty',
+        now: '2026-06-30T10:01:00.000Z',
+      })
+    ).resolves.toBe(true);
+
+    const deniedClaim = makeSession({
+      id: 'denied-empty-preparation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'claim-denied-empty',
+      preparationLeaseExpiresAt: '2026-06-30T10:06:00.000Z',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(deniedClaim);
+    const accountRef = fakeFirestore.collection(PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION).doc('user-123');
+    await accountRef.delete();
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: { ...deniedClaim, status: 'ready', preparationStage: 'ready' },
+        attempt: 1,
+        claimId: 'claim-denied-empty',
+        now: '2026-06-30T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+
+    await expect(
+      repository.requeueFailedPreparation({
+        sessionId: 'denied-empty-preparation',
+        userId: 'user-123',
+        expectedAttempt: 1,
+        updatedAt: '2026-06-30T10:02:00.000Z',
+      })
+    ).resolves.toEqual({ status: 'not_found' });
+  });
+
+  it('keeps the current transcript snapshot when final persistence loses its fence', async () => {
+    const pending = makeSession({
+      id: 'same-transcript-snapshot-cleanup',
+      generationId: 'same-transcript-generation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'same-transcript-claim',
+      preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+      transcriptText: 'same transcript',
+      transcriptSha256: 'same-transcript-hash',
+    });
+    await repository.saveSession(pending);
+    const sessionRef = fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(pending.id);
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    const transactionSpy = vi
+      .spyOn(fakeFirestore, 'runTransaction')
+      .mockImplementation(async (operation) => {
+        transactionNumber += 1;
+        if (transactionNumber === 2) {
+          await sessionRef.update({ deletionStartedAt: '2026-07-21T10:00:30.000Z' });
+        }
+        return await originalRunTransaction(operation);
+      });
+
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: { ...pending, status: 'ready', preparationStage: 'ready' },
+        attempt: 1,
+        claimId: 'same-transcript-claim',
+        now: '2026-07-21T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+    transactionSpy.mockRestore();
+    const chunk = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc(`${pending.id}_same-transcript-hash_000000`)
+      .get();
+    expect(chunk.exists).toBe(true);
+    expect(chunk.data()?.['text']).toBe('same transcript');
+  });
+
+  it('rejects a pending context manifest that no longer matches ready publication', async () => {
+    const pending = makeSession({
+      id: 'mismatched-pending-context-manifest',
+      generationId: 'mismatched-context-generation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'mismatched-context-claim',
+      preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(pending);
+    await expect(
+      repository.saveContextSnapshot(
+        pending.id,
+        pending.userId,
+        'mismatched-context-snapshot',
+        { messages: [makeContextMessage('mismatched-context')], omittedMessages: [] },
+        pending.generationId
+      )
+    ).resolves.toBe(true);
+    const sessionRef = fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_SESSIONS_COLLECTION)
+      .doc(pending.id);
+    const sessionDocument = await sessionRef.get();
+    await sessionRef.update({
+      pendingContextStorage: {
+        ...(sessionDocument.data()?.['pendingContextStorage'] as Record<string, unknown>),
+        snapshotId: 'replacement-context-snapshot',
+      },
+    });
+
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...pending,
+          status: 'ready',
+          preparationStage: 'ready',
+          contextSnapshotId: 'mismatched-context-snapshot',
+        },
+        attempt: 1,
+        claimId: 'mismatched-context-claim',
+        now: '2026-07-21T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+  });
+
+  it('rejects an expired pending transcript chunk during ready publication', async () => {
+    const pending = makeSession({
+      id: 'expired-pending-transcript',
+      generationId: 'expired-transcript-generation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'expired-transcript-claim',
+      preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(pending);
+    const chunkRef = fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .doc(`${pending.id}_expired-transcript-hash_000000`);
+    const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+    let transactionNumber = 0;
+    const transactionSpy = vi
+      .spyOn(fakeFirestore, 'runTransaction')
+      .mockImplementation(async (operation) => {
+        transactionNumber += 1;
+        if (transactionNumber === 2) {
+          await chunkRef.update({
+            expireAt: Timestamp.fromMillis(Date.parse('2026-07-21T10:00:59.000Z')),
+          });
+        }
+        return await originalRunTransaction(operation);
+      });
+
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...pending,
+          status: 'ready',
+          preparationStage: 'ready',
+          transcriptText: 'pending transcript',
+          transcriptSha256: 'expired-transcript-hash',
+        },
+        attempt: 1,
+        claimId: 'expired-transcript-claim',
+        now: '2026-07-21T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+    transactionSpy.mockRestore();
+    expect((await chunkRef.get()).exists).toBe(false);
+  });
+
+  it('rejects transcript staging when ready context has no pending manifest', async () => {
+    const pending = makeSession({
+      id: 'missing-pending-context-manifest',
+      generationId: 'missing-context-generation',
+      status: 'preparing',
+      preparationStage: 'loading_messages',
+      preparationAttempt: 1,
+      preparationClaimId: 'missing-context-claim',
+      preparationLeaseExpiresAt: '2026-07-21T10:05:00.000Z',
+      transcriptText: '',
+      transcriptSha256: '',
+    });
+    await repository.saveSession(pending);
+
+    await expect(
+      repository.saveClaimedPreparationSession({
+        session: {
+          ...pending,
+          status: 'ready',
+          preparationStage: 'ready',
+          contextSnapshotId: 'missing-context-snapshot',
+          transcriptText: 'pending transcript',
+          transcriptSha256: 'missing-context-transcript-hash',
+        },
+        attempt: 1,
+        claimId: 'missing-context-claim',
+        now: '2026-07-21T10:01:00.000Z',
+      })
+    ).resolves.toBe(false);
+    const chunks = await fakeFirestore
+      .collection(WHATSAPP_CONVERSATION_ASSISTANT_TRANSCRIPT_CHUNKS_COLLECTION)
+      .where('sessionId', '==', pending.id)
+      .get();
+    expect(chunks.empty).toBe(true);
+  });
+
   it('hydrates assistant turn defaults and optional metadata', async () => {
+    await repository.saveSession(makeSession());
     await fakeFirestore
       .collection(WHATSAPP_CONVERSATION_ASSISTANT_TURNS_COLLECTION)
       .doc('turn-partial')
       .set({
         sessionId: 'whatsapp_conv_session_1',
+        userId: 'user-123',
         role: 'assistant',
+        createdAt: null,
         usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3, costUsd: 0.001 },
         error: { code: 'LLM_ERROR', message: 'failed' },
       });
@@ -2063,7 +3771,7 @@ describe('conversationAssistantRepository', () => {
       {
         id: 'turn-partial',
         sessionId: 'whatsapp_conv_session_1',
-        userId: '',
+        userId: 'user-123',
         role: 'assistant',
         text: '',
         createdAt: '',

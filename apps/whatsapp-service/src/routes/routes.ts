@@ -31,6 +31,8 @@
  * POST   /internal/whatsapp/pubsub/send-message   → ./pubsubRoutes.ts
  * POST   /internal/whatsapp/webhooks/retry-pending → ./internalRoutes.ts
  * POST   /internal/whatsapp/private/events        → ./privateSyncRoutes.ts
+ * POST   /internal/whatsapp/private/accounts/:sourceAccountId/erasure → ./privateErasureRoutes.ts
+ * GET    /internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId → ./privateErasureRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */
 

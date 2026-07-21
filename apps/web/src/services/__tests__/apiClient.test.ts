@@ -137,6 +137,22 @@ describe('apiRequest', () => {
     vi.restoreAllMocks();
   });
 
+  it('composes caller cancellation with the request timeout signal', async () => {
+    const caller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+      receivedSignal = init?.signal as AbortSignal | undefined;
+      return Promise.resolve(
+        mockFetchResponse({ success: true, data: { ok: true } }, 200)
+      );
+    });
+
+    await apiRequest(baseUrl, path, token, { signal: caller.signal });
+    caller.abort();
+
+    expect(receivedSignal?.aborted).toBe(true);
+  });
+
   /** Create a minimal fetch Response mock compatible with jsdom. */
   function mockFetchResponse(body: unknown, status: number): Response {
     return {

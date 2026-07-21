@@ -3,6 +3,7 @@
  * Provides class-based adapters for domain use cases.
  */
 import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createMetricsClient } from '@intexuraos/common-metrics';
 import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
 import {
   MessageRepositoryAdapter,
@@ -26,6 +27,8 @@ import type {
   LinkPreviewFetcherPort,
   MediaStoragePort,
   PrivateWhatsAppRepository,
+  PrivateWhatsAppErasurePublisher,
+  PrivateWhatsAppErasureRepository,
   NotificationPreferencesRepository,
   OutboundMessageRepository,
   PhoneVerificationRepository,
@@ -42,9 +45,26 @@ import type {
   ConversationAssistantPdfExporter,
   ConversationAssistantRepository,
 } from './domain/conversation-assistant/ports.js';
+import type {
+  ConversationAssistantContextAttachmentAccessRepository,
+  ConversationAssistantContextAttachmentDeltaBuilder,
+  ConversationAssistantContextAttachmentPreparationRepository,
+  ConversationAssistantContextAttachmentRepository,
+} from './domain/conversation-assistant/contextAttachmentPorts.js';
+import type { ConversationAssistantOperationalTelemetry } from './domain/conversation-assistant/operationalTelemetry.js';
+import type {
+  ConversationAssistantTurnRequestRepository,
+  ConversationAssistantTurnRequestRunner,
+} from './domain/conversation-assistant/turnRequestPorts.js';
+import { createConversationAssistantContextAttachmentDeltaBuilder } from './domain/conversation-assistant/contextAttachmentDeltaBuilder.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
+import { createPrivateWhatsAppErasureRepository } from './infra/firestore/privateWhatsAppErasureRepository.js';
 import { createConversationAssistantRepository } from './infra/firestore/conversationAssistantRepository.js';
+import { createConversationAssistantContextAttachmentRepository } from './infra/firestore/conversationAssistantContextAttachmentRepository.js';
+import { createConversationAssistantTurnRequestRepository } from './infra/firestore/conversationAssistantTurnRequestRepository.js';
+import { createConversationAssistantTurnRunner } from './infra/llm/conversationAssistantTurnRunner.js';
+import { createConversationAssistantOperationalTelemetry } from './infra/metrics/conversationAssistantOperationalTelemetry.js';
 import { createMatrixOutboundAdapterClient } from './infra/http/matrixOutboundAdapterClient.js';
 
 /**
@@ -94,6 +114,8 @@ export interface ServiceContainer {
   phoneVerificationRepository: PhoneVerificationRepository;
   notificationPreferencesRepository: NotificationPreferencesRepository;
   privateWhatsAppRepository: PrivateWhatsAppRepository;
+  privateWhatsAppErasureRepository?: PrivateWhatsAppErasureRepository;
+  privateWhatsAppErasurePublisher?: PrivateWhatsAppErasurePublisher;
   matrixOutboundGateway: MatrixOutboundGateway;
   mediaStorage: MediaStoragePort;
   eventPublisher: EventPublisherPort;
@@ -102,6 +124,13 @@ export interface ServiceContainer {
   thumbnailGenerator: ThumbnailGeneratorPort;
   linkPreviewFetcher: LinkPreviewFetcherPort;
   conversationAssistantRepository?: ConversationAssistantRepository;
+  conversationAssistantContextAttachmentRepository?: ConversationAssistantContextAttachmentRepository &
+    ConversationAssistantContextAttachmentPreparationRepository &
+    ConversationAssistantContextAttachmentAccessRepository;
+  conversationAssistantContextAttachmentDeltaBuilder?: ConversationAssistantContextAttachmentDeltaBuilder;
+  conversationAssistantTurnRequestRepository?: ConversationAssistantTurnRequestRepository;
+  conversationAssistantTurnRequestRunner?: ConversationAssistantTurnRequestRunner;
+  conversationAssistantOperationalTelemetry?: ConversationAssistantOperationalTelemetry;
   llmClientFactory?: ConversationAssistantLlmClientFactory;
   pdfConversationExporter?: ConversationAssistantPdfExporter;
   conversationAssistantModel?: ConversationAssistantModel;
@@ -131,6 +160,25 @@ export function getServices(): ServiceContainer {
     throw new Error('Service container not initialized. Call initServices() first.');
   }
 
+  const privateWhatsAppRepository = createPrivateWhatsAppRepository();
+  const llmClientFactory = createConversationAssistantLlmClientFactory(serviceConfig);
+  const telemetryLogger = createAppLogger({
+    name: 'whatsapp-conversation-assistant-operational-telemetry',
+  });
+  const conversationAssistantOperationalTelemetry =
+    createConversationAssistantOperationalTelemetry({
+      metrics: createMetricsClient({
+        projectId: serviceConfig.gcpProjectId,
+        serviceName: 'whatsapp-service',
+        logger: telemetryLogger,
+      }),
+      logger: telemetryLogger,
+    });
+  const conversationAssistantContextAttachmentRepository =
+    createConversationAssistantContextAttachmentRepository({
+      telemetry: conversationAssistantOperationalTelemetry,
+    });
+  const pubSubPublisher = new GcpPubSubPublisher(buildPubSubConfig(serviceConfig));
   container = {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
@@ -138,13 +186,15 @@ export function getServices(): ServiceContainer {
     outboundMessageRepository: createOutboundMessageRepository(),
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
-    privateWhatsAppRepository: createPrivateWhatsAppRepository(),
+    privateWhatsAppRepository,
+    privateWhatsAppErasureRepository: createPrivateWhatsAppErasureRepository(),
+    privateWhatsAppErasurePublisher: pubSubPublisher,
     matrixOutboundGateway: createMatrixOutboundAdapterClient({
       baseUrl: serviceConfig.matrixOutboundAdapterBaseUrl,
       authToken: serviceConfig.matrixOutboundAdapterAuthToken,
     }),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
-    eventPublisher: new GcpPubSubPublisher(buildPubSubConfig(serviceConfig)),
+    eventPublisher: pubSubPublisher,
     messageSender: new WhatsAppCloudApiSender(
       serviceConfig.whatsappAccessToken,
       serviceConfig.whatsappPhoneNumberId
@@ -157,7 +207,23 @@ export function getServices(): ServiceContainer {
       logger: createAppLogger({ name: 'webAgentLinkPreviewClient' }),
     }),
     conversationAssistantRepository: createConversationAssistantRepository(),
-    llmClientFactory: createConversationAssistantLlmClientFactory(serviceConfig),
+    conversationAssistantContextAttachmentRepository,
+    conversationAssistantContextAttachmentDeltaBuilder:
+      createConversationAssistantContextAttachmentDeltaBuilder({
+        privateWhatsAppRepository,
+        confirmationSecret: serviceConfig.internalAuthToken,
+        warningMessageThreshold: 5_000,
+        warningTokenThreshold: 50_000,
+      }),
+    conversationAssistantTurnRequestRepository:
+      createConversationAssistantTurnRequestRepository({
+        telemetry: conversationAssistantOperationalTelemetry,
+      }),
+    conversationAssistantTurnRequestRunner: createConversationAssistantTurnRunner({
+      llmClientFactory,
+    }),
+    conversationAssistantOperationalTelemetry,
+    llmClientFactory,
     pdfConversationExporter: createConversationAssistantPdfExporter(),
     conversationAssistantModel: serviceConfig.conversationAssistantModel,
   };

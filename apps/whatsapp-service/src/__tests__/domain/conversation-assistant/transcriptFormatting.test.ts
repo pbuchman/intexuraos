@@ -19,6 +19,11 @@ const chat: PrivateWhatsAppChat = {
   updatedAt: '2026-06-22T11:00:00.000Z',
 };
 
+const modelReferenceScope = {
+  sessionId: 'session-model-reference',
+  sessionGenerationId: 'generation-model-reference',
+} as const;
+
 type MessageOverrides = Partial<
   Omit<
     PrivateWhatsAppMessage,
@@ -98,6 +103,113 @@ function message(overrides: MessageOverrides): PrivateWhatsAppMessage {
 }
 
 describe('projectPrivateConversationContext', () => {
+  it('renders every model-facing transcript line with a stable generation-scoped opaque reference and full projection', () => {
+    const target = message({
+      id: 'raw-private-message-id',
+      matrixEventId: '$raw-private-matrix-id',
+      text: 'Line one\nLine two',
+      eventTimestamp: '2026-07-03T10:00:00.000Z',
+    });
+    const reaction = message({
+      id: 'raw-private-reaction-id',
+      matrixEventId: '$raw-private-reaction-event',
+      messageType: 'reaction',
+      text: undefined,
+      eventTimestamp: '2026-07-03T10:05:00.000Z',
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$raw-private-matrix-id',
+        targetMessageId: 'raw-private-message-id',
+      },
+    });
+    const context = projectPrivateConversationContext({
+      chat,
+      range: { from: '2026-07-03T00:00:00.000Z', to: '2026-07-04T00:00:00.000Z' },
+      messages: [target, reaction],
+      referenceScope: modelReferenceScope,
+    });
+
+    const transcript = buildPrivateConversationTranscriptText(
+      context.messages,
+      modelReferenceScope
+    );
+    const lines = transcript.split('\n');
+    expect(lines).toHaveLength(1);
+    const projection = JSON.parse(lines[0] ?? '{}') as Record<string, unknown>;
+    expect(projection).toEqual({
+      reference: expect.stringMatching(/^wa_msg_[a-f0-9]{64}$/),
+      sentDate: '3 July 2026',
+      importedDate: '22 June 2026',
+      direction: 'incoming',
+      speakerLabel: 'Alice',
+      messageType: 'text',
+      contentKind: 'text',
+      content: 'Line one\nLine two',
+      reactions: [
+        {
+          emoji: '👍',
+          direction: 'incoming',
+          speakerLabel: 'Alice',
+          eventDate: '3 July 2026',
+        },
+      ],
+    });
+    expect(transcript).not.toContain('raw-private-message-id');
+    expect(transcript).not.toContain('$raw-private-matrix-id');
+    expect(transcript).not.toContain('T10:00:00');
+    expect(context.transcriptSha256).toBe(
+      createHash('sha256').update(transcript).digest('hex')
+    );
+
+    const repeated = buildPrivateConversationTranscriptText(context.messages, modelReferenceScope);
+    const otherGeneration = buildPrivateConversationTranscriptText(context.messages, {
+      ...modelReferenceScope,
+      sessionGenerationId: 'replacement-generation',
+    });
+    expect(repeated).toBe(transcript);
+    expect(otherGeneration).not.toBe(transcript);
+  });
+
+  it('excludes relation records and redacted tombstones from the initial transcript', () => {
+    const target = message({ id: 'target', text: 'Corrected target' });
+    const editOperation = message({
+      id: 'edit-operation',
+      matrixEventId: '$edit-operation',
+      text: 'Corrected target',
+      relation: {
+        kind: 'replacement',
+        targetMatrixEventId: '$event-1',
+        targetMessageId: 'target',
+        applicationStatus: 'applied',
+      },
+    });
+    const redacted = message({
+      id: 'redacted-target',
+      text: 'must not survive',
+      contextState: 'redacted',
+      redactedAt: '2026-06-22T10:30:00.000Z',
+    });
+
+    const result = projectPrivateConversationContext({
+      chat,
+      range: {
+        from: '2026-06-22T09:00:00.000Z',
+        to: '2026-06-22T11:00:00.000Z',
+      },
+      messages: [target, editOperation, redacted],
+    });
+
+    expect(result.messages.map((candidate) => candidate.id)).toEqual(['target']);
+    expect(result.messageCount).toBe(1);
+    expect(result.omitted).toEqual({
+      mediaOnly: 0,
+      failedTranscriptions: 0,
+      pendingTranscriptions: 0,
+      nonText: 0,
+      overLimit: 0,
+    });
+  });
+
   it('projects only text and completed transcriptions into a stable sanitized context', () => {
     const result = projectPrivateConversationContext({
       chat,

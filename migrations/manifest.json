@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "123",
+  "lastReservedId": "125",
   "entries": [
     {
       "id": "001",
@@ -615,6 +615,16 @@
       "id": "123",
       "name": "private-whatsapp-literal-reaction-index",
       "checksum": "sha256:8be6dd007e1e298d5f44f8694f25c369afb4fc29ecec131b100ff576492a3ac3"
+    },
+    {
+      "id": "124",
+      "name": "whatsapp-conversation-assistant-context-snapshot-index",
+      "checksum": "sha256:98472dc0bed82d94cba55acd5b1d00bdb474f35d6c2dd12535df59919cdb6a6c"
+    },
+    {
+      "id": "125",
+      "name": "whatsapp-conversation-assistant-context-attachments-indexes",
+      "checksum": "sha256:0ac2af30839dd2af0a26d27f7bb9cdfb3a3d2833d113525922eec4aebc6c3957"
     }
   ]
 }

@@ -29,7 +29,7 @@ export interface PromptDeps {
  * // Usage
  * const prompt = titlePrompt.build({ content: 'Article text...' }, { maxLength: 50 });
  */
-export interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps> {
+export interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps, TOutput = string> {
   /** Unique identifier for the prompt (for logging/tracking) */
   readonly name: string;
   /** Human-readable description of what the prompt does */
@@ -46,5 +46,5 @@ export interface PromptBuilder<TInput, TDeps extends PromptDeps = PromptDeps> {
    */
   readonly version: string;
   /** Build the prompt string from input and optional dependencies */
-  build(input: TInput, deps?: TDeps): string;
+  build(input: TInput, deps?: TDeps): TOutput;
 }

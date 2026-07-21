@@ -160,7 +160,13 @@ test('collectPrivateWhatsAppEvents maps Matrix media, emote, reaction, and stick
         matrixMessage({
           event_id: '$reaction',
           type: 'm.reaction',
-          content: { 'm.relates_to': { key: '👍' } },
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.annotation',
+              event_id: '$reaction-target',
+              key: '👍',
+            },
+          },
         }),
         matrixMessage({
           event_id: '$sticker',
@@ -222,7 +228,12 @@ test('collectPrivateWhatsAppEvents maps Matrix media, emote, reaction, and stick
   assert.deepEqual(
     events.map((event) => event.message),
     [
-      { direction: 'incoming', type: 'reaction', text: '👍' },
+      {
+        direction: 'incoming',
+        type: 'reaction',
+        text: '👍',
+        reaction: { emoji: '👍', targetMatrixEventId: '$reaction-target' },
+      },
       {
         direction: 'incoming',
         type: 'sticker',
@@ -276,6 +287,184 @@ test('collectPrivateWhatsAppEvents maps Matrix media, emote, reaction, and stick
       { direction: 'incoming', type: 'text', text: 'waves' },
     ]
   );
+});
+
+test('collectPrivateWhatsAppEvents normalizes Matrix replacements to the target message', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: { events: [] },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$replacement',
+                  content: {
+                    msgtype: 'm.text',
+                    body: '* corrected text',
+                    'm.new_content': { msgtype: 'm.text', body: 'corrected text' },
+                    'm.relates_to': {
+                      rel_type: 'm.replace',
+                      event_id: '$original',
+                    },
+                  },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.deepEqual(events[0]?.message, {
+    direction: 'incoming',
+    type: 'text',
+    text: 'corrected text',
+    relation: {
+      kind: 'replacement',
+      targetMatrixEventId: '$original',
+      applicationStatus: 'pending',
+    },
+  });
+});
+
+test('collectPrivateWhatsAppEvents normalizes Matrix redactions to the target message', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: { events: [] },
+            timeline: {
+              events: [
+                matrixMessage({
+                  type: 'm.room.redaction',
+                  event_id: '$redaction',
+                  redacts: '$original',
+                  content: { reason: 'Message deleted for everyone on WhatsApp' },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.deepEqual(events[0]?.message, {
+    direction: 'incoming',
+    type: 'redaction',
+    relation: {
+      kind: 'redaction',
+      targetMatrixEventId: '$original',
+      applicationStatus: 'pending',
+    },
+  });
+  assert.equal(events[0]?.message.type, 'redaction');
+});
+
+test('collectPrivateWhatsAppEvents normalizes Matrix reaction target metadata', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: { events: [] },
+            timeline: {
+              events: [
+                matrixMessage({
+                  type: 'm.reaction',
+                  event_id: '$reaction',
+                  content: {
+                    'm.relates_to': {
+                      rel_type: 'm.annotation',
+                      event_id: '$original',
+                      key: '👍',
+                    },
+                  },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.deepEqual(events[0]?.message, {
+    direction: 'incoming',
+    type: 'reaction',
+    text: '👍',
+    reaction: {
+      emoji: '👍',
+      targetMatrixEventId: '$original',
+    },
+  });
+});
+
+test('collectPrivateWhatsAppEvents rejects incomplete and self-targeting context relations', () => {
+  const events = collectPrivateWhatsAppEvents(
+    {
+      rooms: {
+        join: {
+          '!direct:home-dev': {
+            state: { events: [] },
+            timeline: {
+              events: [
+                matrixMessage({
+                  event_id: '$self-replacement',
+                  content: {
+                    msgtype: 'm.text',
+                    body: '* invalid',
+                    'm.new_content': { msgtype: 'm.text', body: 'invalid' },
+                    'm.relates_to': {
+                      rel_type: 'm.replace',
+                      event_id: '$self-replacement',
+                    },
+                  },
+                }),
+                matrixMessage({
+                  event_id: '$missing-new-content',
+                  content: {
+                    msgtype: 'm.text',
+                    body: '* invalid',
+                    'm.relates_to': {
+                      rel_type: 'm.replace',
+                      event_id: '$original',
+                    },
+                  },
+                }),
+                matrixMessage({
+                  type: 'm.room.redaction',
+                  event_id: '$self-redaction',
+                  redacts: '$self-redaction',
+                  content: {},
+                }),
+                matrixMessage({
+                  type: 'm.reaction',
+                  event_id: '$incomplete-reaction',
+                  content: {
+                    'm.relates_to': {
+                      rel_type: 'm.annotation',
+                      key: '👍',
+                    },
+                  },
+                }),
+              ],
+            },
+          },
+        },
+      },
+    },
+    config
+  );
+
+  assert.deepEqual(events, []);
 });
 
 test('collectPrivateWhatsAppEvents maps finite positive Matrix image dimensions only', () => {
@@ -717,6 +906,10 @@ test('collectPrivateWhatsAppEvents keeps stale cached LID member counts from dow
     direction: 'incoming',
     type: 'reaction',
     text: 'ok',
+    reaction: {
+      emoji: 'ok',
+      targetMatrixEventId: '$message-being-reacted-to',
+    },
   });
 });
 

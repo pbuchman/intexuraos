@@ -8,10 +8,12 @@ import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../services.js';
 import type {
   ConversationAssistantPreparationRequestedEvent,
+  ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageSourceType,
   MediaCleanupEvent,
   PrivateWhatsAppTranscriptionState,
+  PrivateWhatsAppErasureWorkItem,
   SendMessageEvent,
   TranscriptionCompletedEvent,
   TranscriptionState,
@@ -31,6 +33,9 @@ import {
   prepareConversationAssistantSession,
 } from '../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
+import { prepareConversationAssistantContextAttachment } from '../domain/conversation-assistant/contextAttachmentUseCases.js';
+import { randomUUID } from 'node:crypto';
+import { processPrivateWhatsAppErasureBatch } from '../domain/whatsapp/usecases/privateWhatsAppErasure.js';
 
 interface PubSubPushMessage {
   message: {
@@ -996,7 +1001,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, {
           message: 'Received request to /internal/whatsapp/pubsub/process-webhook',
-          bodyPreviewLength: 200,
+          bodyPreviewLength: 0,
         });
 
         const fromHeader = request.headers.from;
@@ -1037,6 +1042,145 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
         const parsedType = eventData.type as string;
 
+        if (parsedType === 'whatsapp.private-account.erasure') {
+          const erasureAuth = validateInternalAuth(request);
+          if (!erasureAuth.valid) {
+            request.log.warn(
+              { reason: erasureAuth.reason },
+              'Internal auth failed for private WhatsApp erasure work'
+            );
+            return await reply.fail(
+              'UNAUTHORIZED',
+              'Internal auth failed for private WhatsApp erasure work'
+            );
+          }
+          const erasureEvent = eventData as unknown as PrivateWhatsAppErasureWorkItem;
+          if (
+            typeof erasureEvent.sourceAccountId !== 'string' ||
+            erasureEvent.sourceAccountId.trim() === '' ||
+            typeof erasureEvent.userId !== 'string' ||
+            erasureEvent.userId.trim() === '' ||
+            typeof erasureEvent.erasureRequestId !== 'string' ||
+            erasureEvent.erasureRequestId.trim() === '' ||
+            !Number.isInteger(erasureEvent.attempt) ||
+            erasureEvent.attempt < 0
+          ) {
+            request.log.warn(
+              { outcome: 'invalid' },
+              'Invalid private WhatsApp erasure event'
+            );
+            return await reply.ok({});
+          }
+          const services = getServices();
+          if (
+            services.privateWhatsAppErasureRepository === undefined ||
+            services.privateWhatsAppErasurePublisher === undefined
+          ) {
+            return await reply.fail(
+              'INTERNAL_ERROR',
+              'Private WhatsApp erasure is not configured'
+            );
+          }
+          const result = await processPrivateWhatsAppErasureBatch(erasureEvent, {
+            repository: services.privateWhatsAppErasureRepository,
+            publisher: services.privateWhatsAppErasurePublisher,
+            mediaStorage: services.mediaStorage,
+            now: () => new Date().toISOString(),
+            ...(services.conversationAssistantOperationalTelemetry === undefined
+              ? {}
+              : { telemetry: services.conversationAssistantOperationalTelemetry }),
+          });
+          if (!result.ok) {
+            request.log.error(
+              { outcome: 'retryable_failure', code: result.error.code },
+              'Private WhatsApp erasure batch failed'
+            );
+            return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp erasure batch failed');
+          }
+          request.log.info(
+            { outcome: result.value.status },
+            'Private WhatsApp erasure batch processed'
+          );
+          return await reply.ok({});
+        }
+
+        if (
+          parsedType ===
+          'whatsapp.conversation-assistant.context-attachment.prepare'
+        ) {
+          const attachmentEvent =
+            eventData as unknown as ConversationAssistantContextAttachmentPreparationRequestedEvent;
+          if (
+            typeof attachmentEvent.userId !== 'string' ||
+            attachmentEvent.userId.trim() === '' ||
+            typeof attachmentEvent.sessionId !== 'string' ||
+            attachmentEvent.sessionId.trim() === '' ||
+            typeof attachmentEvent.sessionGenerationId !== 'string' ||
+            attachmentEvent.sessionGenerationId.trim() === '' ||
+            typeof attachmentEvent.attachmentId !== 'string' ||
+            attachmentEvent.attachmentId.trim() === '' ||
+            !Number.isInteger(attachmentEvent.attempt) ||
+            attachmentEvent.attempt < 1
+          ) {
+            request.log.warn(
+              { outcome: 'invalid' },
+              'Invalid Conversation Assistant context attachment preparation event'
+            );
+            return await reply.ok({});
+          }
+          const services = getServices();
+          if (
+            services.conversationAssistantContextAttachmentRepository === undefined ||
+            services.conversationAssistantContextAttachmentDeltaBuilder === undefined
+          ) {
+            return await reply.fail(
+              'INTERNAL_ERROR',
+              'Conversation Assistant services are not configured'
+            );
+          }
+          try {
+            const result = await prepareConversationAssistantContextAttachment(
+              {
+                userId: attachmentEvent.userId,
+                sessionId: attachmentEvent.sessionId,
+                attachmentId: attachmentEvent.attachmentId,
+                sessionGenerationId: attachmentEvent.sessionGenerationId,
+                attempt: attachmentEvent.attempt,
+                claimId: randomUUID(),
+              },
+              {
+                repository: services.conversationAssistantContextAttachmentRepository,
+                deltaBuilder: services.conversationAssistantContextAttachmentDeltaBuilder,
+                clock: conversationAssistantSystemClock,
+                ...(services.conversationAssistantOperationalTelemetry === undefined
+                  ? {}
+                  : { telemetry: services.conversationAssistantOperationalTelemetry }),
+              },
+              request.log
+            );
+            request.log.info(
+              { outcome: result.kind, attempt: attachmentEvent.attempt },
+              'Conversation Assistant context attachment preparation completed'
+            );
+            if (result.kind === 'busy') {
+              return await reply.fail(
+                'INTERNAL_ERROR',
+                'Context attachment preparation is still leased'
+              );
+            }
+            return await reply.ok({});
+          } catch {
+            request.log.error(
+              { outcome: 'retryable_persistence_failure' },
+              'Conversation Assistant context attachment preparation failed'
+            );
+            return await reply.fail(
+              'INTERNAL_ERROR',
+              'Context attachment preparation persistence failed'
+            );
+          }
+        }
+
         if (parsedType === 'whatsapp.conversation-assistant.prepare') {
           const preparationEvent = eventData as unknown as ConversationAssistantPreparationRequestedEvent;
           if (
@@ -1072,6 +1216,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             defaultModel: services.conversationAssistantModel,
             clock: conversationAssistantSystemClock,
             ids: conversationAssistantRandomIds,
+            ...(services.conversationAssistantOperationalTelemetry === undefined
+              ? {}
+              : { telemetry: services.conversationAssistantOperationalTelemetry }),
           };
           if (services.pdfConversationExporter !== undefined) {
             deps.pdfExporter = services.pdfConversationExporter;
@@ -1091,10 +1238,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           if (!result.ok) {
             request.log.error(
               {
-                sessionId: preparationEvent.sessionId,
-                userId: preparationEvent.userId,
+                attempt: preparationEvent.attempt,
                 code: result.error.code,
-                error: result.error.message,
               },
               'Conversation Assistant preparation failed'
             );
@@ -1106,8 +1251,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
           request.log.info(
             {
-              sessionId: preparationEvent.sessionId,
-              userId: preparationEvent.userId,
+              attempt: preparationEvent.attempt,
               status: result.value.session.status,
             },
             'Conversation Assistant preparation completed'

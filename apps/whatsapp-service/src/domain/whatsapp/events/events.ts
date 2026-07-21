@@ -375,6 +375,16 @@ export interface ConversationAssistantPreparationRequestedEvent {
   generationId?: string;
 }
 
+/** Content-free work item for preparing one immutable context update draft. */
+export interface ConversationAssistantContextAttachmentPreparationRequestedEvent {
+  type: 'whatsapp.conversation-assistant.context-attachment.prepare';
+  userId: string;
+  sessionId: string;
+  sessionGenerationId: string;
+  attachmentId: string;
+  attempt: number;
+}
+
 /**
  * Union of all event types for type safety.
  */
@@ -387,4 +397,5 @@ export type WhatsAppEvent =
   | SendMessageEvent
   | WebhookProcessEvent
   | ExtractLinkPreviewsEvent
-  | ConversationAssistantPreparationRequestedEvent;
+  | ConversationAssistantPreparationRequestedEvent
+  | ConversationAssistantContextAttachmentPreparationRequestedEvent;

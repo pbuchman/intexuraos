@@ -81,7 +81,7 @@ jobs:
           esac
 
           BUILD_ID="$(gcloud builds triggers run "$TARGET" \
-            --branch="${GITHUB_REF_NAME:-development}" \
+            --sha="${GITHUB_SHA}" \
             --region="$REGION" \
             --substitutions="COMMIT_SHA=${GITHUB_SHA},BRANCH_NAME=${GITHUB_REF_NAME:-development}" \
             --format="value(metadata.build.id)")"
@@ -102,6 +102,18 @@ jobs:
 
             case "$STATUS" in
               SUCCESS)
+                RESOLVED_COMMIT_SHA="$(gcloud builds describe "$BUILD_ID" \
+                  --region="$REGION" \
+                  --format="value(sourceProvenance.resolvedGitSource.revision)")"
+                if [[ -z "$RESOLVED_COMMIT_SHA" ]]; then
+                  RESOLVED_COMMIT_SHA="$(gcloud builds describe "$BUILD_ID" \
+                    --region="$REGION" \
+                    --format="value(sourceProvenance.resolvedRepoSource.commitSha)")"
+                fi
+                if [[ "$RESOLVED_COMMIT_SHA" != "$GITHUB_SHA" ]]; then
+                  echo "Cloud Build provenance SHA mismatch: expected $GITHUB_SHA, resolved ${RESOLVED_COMMIT_SHA:-<empty>}" >&2
+                  exit 1
+                fi
                 exit 0
                 ;;
               FAILURE|TIMEOUT|CANCELLED|INTERNAL_ERROR)

@@ -17,10 +17,15 @@ import {
   type PrivateWhatsAppChat,
   type PrivateWhatsAppChatQueryInput,
   type PrivateWhatsAppChatQueryResult,
+  type PrivateWhatsAppContextJournalQueryInput,
+  type PrivateWhatsAppContextJournalQueryResult,
+  type PrivateWhatsAppContextMessagesByIdsInput,
   type PrivateWhatsAppConversationContextMessageResult,
   type PrivateWhatsAppIngestOutcome,
+  type PrivateWhatsAppMessage,
   type PrivateWhatsAppMessageQueryInput,
   type PrivateWhatsAppMessageQueryResult,
+  type PrivateWhatsAppOwnedChatInput,
   type PrivateWhatsAppRepository,
   type PrivateWhatsAppSenderQueryInput,
   type PrivateWhatsAppSenderQueryResult,
@@ -32,6 +37,7 @@ import {
   type UpdatePrivateWhatsAppMessageStoredMediaInput,
   type UpdatePrivateWhatsAppMessageStoredMediaResult,
   type UpdatePrivateWhatsAppMessageTranscriptionInput,
+  type UpdatePrivateWhatsAppMessageTranscriptionResult,
   type UpsertPrivateWhatsAppAccountInput,
   type WebhookProcessEvent,
   type WhatsAppError,
@@ -174,12 +180,30 @@ class TestPrivateWhatsAppRepository implements PrivateWhatsAppRepository {
 
   updateMessageTranscription(
     input: UpdatePrivateWhatsAppMessageTranscriptionInput
-  ): Promise<Result<void, WhatsAppError>> {
+  ): Promise<Result<UpdatePrivateWhatsAppMessageTranscriptionResult, WhatsAppError>> {
     this.transcriptions.push({
       messageId: input.messageId,
       transcription: input.transcription,
     });
-    return Promise.resolve(ok(undefined));
+    return Promise.resolve(ok({ status: 'updated', messageId: input.messageId }));
+  }
+
+  getConversationContextJournalHead(
+    _input: PrivateWhatsAppOwnedChatInput
+  ): Promise<Result<number, WhatsAppError>> {
+    return Promise.resolve(ok(0));
+  }
+
+  findConversationContextJournalEntries(
+    _input: PrivateWhatsAppContextJournalQueryInput
+  ): Promise<Result<PrivateWhatsAppContextJournalQueryResult, WhatsAppError>> {
+    return Promise.resolve(ok({ entries: [] }));
+  }
+
+  findConversationContextMessagesByIds(
+    _input: PrivateWhatsAppContextMessagesByIdsInput
+  ): Promise<Result<PrivateWhatsAppMessage[], WhatsAppError>> {
+    return Promise.resolve(ok([]));
   }
 
   findMessages(
@@ -272,6 +296,12 @@ class TestEventPublisher implements EventPublisherPort {
   }
 
   publishConversationAssistantPreparation(): Promise<Result<void, WhatsAppError>> {
+    return Promise.resolve(ok(undefined));
+  }
+
+  publishConversationAssistantContextAttachmentPreparation(): Promise<
+    Result<void, WhatsAppError>
+  > {
     return Promise.resolve(ok(undefined));
   }
 }
@@ -496,6 +526,329 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
       undefined,
       undefined,
     ]);
+  });
+
+  it('normalizes replacement and redaction relations before repository storage', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$replacement-event' }),
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'corrected text',
+              relation: {
+                kind: 'replacement',
+                targetMatrixEventId: '$original-event',
+                applicationStatus: 'pending',
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$redaction-event' }),
+            message: {
+              direction: 'incoming',
+              type: 'redaction',
+            },
+            rawMatrixEvent: {
+              type: 'm.room.redaction',
+              event_id: '$redaction-event',
+              redacts: '$original-event',
+              content: {},
+            },
+          },
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(
+      repository.stored.map(
+        (stored) =>
+          (stored.message as {
+            relation?: {
+              kind: string;
+              targetMatrixEventId: string;
+              applicationStatus: string;
+            };
+          }).relation
+      )
+    ).toEqual([
+      {
+        kind: 'replacement',
+        targetMatrixEventId: '$original-event',
+        applicationStatus: 'pending',
+      },
+      {
+        kind: 'redaction',
+        targetMatrixEventId: '$original-event',
+        applicationStatus: 'pending',
+      },
+    ]);
+  });
+
+  it('normalizes content redactions, Matrix replacements, and explicit redactions', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$content-redaction-event' }),
+            message: { direction: 'incoming', type: 'redaction' },
+            rawMatrixEvent: {
+              type: 'm.room.redaction',
+              event_id: '$content-redaction-event',
+              content: { redacts: '$content-redaction-target' },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$matrix-replacement-event' }),
+            message: { direction: 'incoming', type: 'text', text: 'Matrix replacement' },
+            rawMatrixEvent: {
+              type: 'm.room.message',
+              event_id: '$matrix-replacement-event',
+              content: {
+                'm.relates_to': {
+                  rel_type: 'm.replace',
+                  event_id: '$matrix-replacement-target',
+                },
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$explicit-redaction-event' }),
+            message: {
+              direction: 'incoming',
+              type: 'redaction',
+              relation: {
+                kind: 'redaction',
+                targetMatrixEventId: '$explicit-redaction-target',
+                applicationStatus: 'pending',
+              },
+            },
+          },
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    expect(repository.stored.map((stored) => stored.message.relation)).toEqual([
+      {
+        kind: 'redaction',
+        targetMatrixEventId: '$content-redaction-target',
+        applicationStatus: 'pending',
+      },
+      {
+        kind: 'replacement',
+        targetMatrixEventId: '$matrix-replacement-target',
+        applicationStatus: 'pending',
+      },
+      {
+        kind: 'redaction',
+        targetMatrixEventId: '$explicit-redaction-target',
+        applicationStatus: 'pending',
+      },
+    ]);
+  });
+
+  it('rejects malformed explicit and Matrix context relations before repository writes', async () => {
+    const base = createEvent();
+    const malformedEvents: unknown[] = [
+      {
+        ...base,
+        matrixEventId: '$relation-not-object',
+        message: { ...base.message, relation: 'replacement' },
+      },
+      {
+        ...base,
+        matrixEventId: '$relation-unsupported-kind',
+        message: {
+          ...base.message,
+          relation: { kind: 'reference', targetMatrixEventId: '$target' },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$relation-empty-target',
+        message: {
+          ...base.message,
+          relation: { kind: 'replacement', targetMatrixEventId: '   ' },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$redaction-invalid-target',
+        message: { direction: 'incoming', type: 'redaction' },
+        rawMatrixEvent: {
+          type: 'm.room.redaction',
+          event_id: '$redaction-invalid-target',
+          redacts: 42,
+          content: {},
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$replacement-missing-target',
+        rawMatrixEvent: {
+          type: 'm.room.message',
+          event_id: '$replacement-missing-target',
+          content: { 'm.relates_to': { rel_type: 'm.replace' } },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$replacement-empty-target',
+        rawMatrixEvent: {
+          type: 'm.room.message',
+          event_id: '$replacement-empty-target',
+          content: {
+            'm.relates_to': { rel_type: 'm.replace', event_id: '   ' },
+          },
+        },
+      },
+      {
+        ...base,
+        matrixEventId: '$replacement-self-target',
+        rawMatrixEvent: {
+          type: 'm.room.message',
+          event_id: '$replacement-self-target',
+          content: {
+            'm.relates_to': {
+              rel_type: 'm.replace',
+              event_id: '$replacement-self-target',
+            },
+          },
+        },
+      },
+    ];
+
+    const result = await useCase.execute(createInput({ events: malformedEvents }), logger);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages).toEqual(
+      malformedEvents.map((event) => ({
+        matrixEventId: String((event as { matrixEventId: unknown }).matrixEventId),
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      }))
+    );
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('rejects malformed and self-targeting context relations without repository writes', async () => {
+    const result = await useCase.execute(
+      createInput({
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$self-replacement' }),
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              text: 'invalid',
+              relation: {
+                kind: 'replacement',
+                targetMatrixEventId: '$self-replacement',
+                applicationStatus: 'pending',
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$self-redaction' }),
+            message: { direction: 'incoming', type: 'redaction' },
+            rawMatrixEvent: {
+              type: 'm.room.redaction',
+              event_id: '$self-redaction',
+              redacts: '$self-redaction',
+              content: {},
+            },
+          },
+        ],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).toMatchObject({ accepted: 0, duplicates: 0, rejected: 2 });
+    expect(result.value.messages).toEqual([
+      {
+        matrixEventId: '$self-replacement',
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      },
+      {
+        matrixEventId: '$self-redaction',
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      },
+    ]);
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('prioritizes an invalid context relation over malformed media metadata', async () => {
+    const event = createEvent({ matrixEventId: '$invalid-relation-and-media' }) as unknown as Record<
+      string,
+      unknown
+    >;
+    event['message'] = {
+      direction: 'incoming',
+      type: 'image',
+      relation: {
+        kind: 'unsupported',
+        targetMatrixEventId: '$relation-target',
+      },
+      media: {},
+    };
+    const result = await useCase.execute(
+      createInput({
+        events: [event],
+      }),
+      logger
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages).toEqual([
+      {
+        matrixEventId: '$invalid-relation-and-media',
+        outcome: 'rejected',
+        reason: 'invalid_context_relation',
+      },
+    ]);
+    expect(repository.stored).toEqual([]);
+  });
+
+  it('rejects a pending context operation without an event timestamp before repository storage', async () => {
+    const event = createEvent({
+      matrixEventId: '$pending-operation-without-timestamp',
+      message: {
+        direction: 'incoming',
+        type: 'text',
+        text: 'Late edit',
+        relation: {
+          kind: 'replacement',
+          targetMatrixEventId: '$pending-operation-target',
+          applicationStatus: 'pending',
+        },
+      },
+    }) as unknown as Record<string, unknown>;
+    Reflect.deleteProperty(event, 'eventTimestamp');
+
+    const result = await useCase.execute(createInput({ events: [event] }), logger);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.value.messages).toEqual([
+      {
+        matrixEventId: '$pending-operation-without-timestamp',
+        outcome: 'rejected',
+        reason: 'missing_event_timestamp',
+      },
+    ]);
+    expect(repository.stored).toEqual([]);
   });
 
   it('preserves stored private image media fields from the Matrix adapter', async () => {

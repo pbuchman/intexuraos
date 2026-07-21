@@ -44,7 +44,6 @@ function createHookResult(
     model: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     modelDisplayName: 'Gemini 3.5 Flash Thinking',
     assistantRoleLabel: 'Psychologist',
-    transcriptSha256: 'abc123',
     transcriptMessageCount: 9,
     omitted: {
       mediaOnly: 2,
@@ -57,6 +56,16 @@ function createHookResult(
     createdAt: '2026-06-21T11:00:00.000Z',
     updatedAt: '2026-06-21T11:05:00.000Z',
     lastTurnAt: '2026-06-21T11:05:00.000Z',
+    contextSummary: {
+      displayTimeZone: 'UTC',
+      availability: { state: 'available', displayTimeZone: 'UTC' },
+      contextVersion: 0,
+      snapshotCount: 1,
+      totalAttachedMessageCount: 0,
+      totalAttachedOmittedCount: 0,
+      completedConversationRevision: 0,
+      activeTurn: null,
+    },
   };
 
   return {
@@ -82,6 +91,10 @@ function createHookResult(
     fromDateTimeLocal: '2026-06-20T09:00',
     toDateTimeLocal: '2026-06-21T10:00',
     followUpQuestion: '',
+    pendingContextAttachment: { phase: 'idle', sessionId: 'session-1' },
+    contextAttachmentRequestPhase: 'idle',
+    contextAttachmentWarningAcknowledged: false,
+    contextContinuationState: 'available',
     loading: false,
     loadingTurns: false,
     loadingContext: false,
@@ -102,6 +115,16 @@ function createHookResult(
     setFollowUpQuestion: vi.fn(),
     createSession: vi.fn(),
     sendFollowUp: vi.fn(),
+    includeNewMessages: vi.fn(),
+    refreshContextAttachment: vi.fn(),
+    retryContextAttachment: vi.fn(),
+    removeContextAttachment: vi.fn(),
+    keepCurrentContextAttachment: vi.fn(),
+    acknowledgeContextAttachmentWarning: vi.fn(),
+    loadContextAttachmentPreview: vi.fn(),
+    loadContextSnapshotPreview: vi.fn(),
+    loadContextHistory: vi.fn(),
+    retryTurnAnswer: vi.fn(),
     loadContext: vi.fn(),
     loadMoreContext: vi.fn(),
     retryPreparation: vi.fn(),
@@ -150,7 +173,7 @@ describe('separated Conversation Assistant pages', () => {
       'href',
       '/whatsapp/conversation-assistant/session-1'
     );
-    expect(analysisLink).toHaveTextContent('Jun 20, 11:00 AM – Jun 21, 12:00 PM');
+    expect(analysisLink).toHaveTextContent('Jun 20, 9:00 AM – Jun 21, 10:00 AM');
     expect(screen.queryByLabelText('Private direct chat')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
     expect(screen.queryByText('Psychologist')).not.toBeInTheDocument();
@@ -498,12 +521,273 @@ describe('separated Conversation Assistant pages', () => {
     expect(screen.getByPlaceholderText('Ask your first question about this conversation')).toBeInTheDocument();
     const sendButton = screen.getByRole('button', { name: 'Send' });
     expect(sendButton).toBeDisabled();
-    expect(sendButton).toHaveClass('h-12', 'w-12', 'sm:w-auto');
-    expect(sendButton.closest('form')).toHaveClass('flex-row', 'items-end');
+    expect(sendButton).toHaveClass('h-12', 'min-w-11');
+    expect(sendButton.closest('form')).toHaveClass('min-w-0', 'overflow-x-hidden');
     expect(screen.getByLabelText('Model used')).toHaveTextContent('Gemini 3.5 Flash Thinking');
     expect(screen.queryByLabelText('Private direct chat')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Create analysis' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Alice context/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the session timezone after the WhatsApp source becomes unavailable', () => {
+    const result = createHookResult();
+    const session = {
+      ...firstSession(result),
+      contextSummary: {
+        ...firstSession(result).contextSummary,
+        displayTimeZone: 'Europe/Warsaw',
+        availability: { state: 'source_unavailable' as const },
+      },
+    };
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        sessions: [session],
+        selectedSessionId: session.id,
+        selectedSession: session,
+        contextContinuationState: 'source_unavailable',
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/conversation-assistant/session-1']}>
+        <Routes>
+          <Route
+            path="/whatsapp/conversation-assistant/:sessionId"
+            element={<WhatsAppConversationAssistantSessionPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Alice · Jun 20, 2026, 11:00 AM/)).toBeInTheDocument();
+    expect(
+      screen.getByText('The source WhatsApp conversation is no longer available.')
+    ).toBeInTheDocument();
+  });
+
+  it('exports the last completed revision while a newer answer is active', () => {
+    const result = createHookResult();
+    const session = {
+      ...firstSession(result),
+      contextSummary: {
+        ...firstSession(result).contextSummary,
+        completedConversationRevision: 1,
+        activeTurn: { requestId: 'request-active', stateVersion: 1 },
+      },
+    };
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        sessions: [session],
+        selectedSessionId: session.id,
+        selectedSession: session,
+        turnPhase: 'streaming',
+        turns: [
+          {
+            id: 'turn-user',
+            sessionId: session.id,
+            userId: 'user-1',
+            role: 'user',
+            text: 'What changed?',
+            createdAt: '2026-06-21T11:01:00.000Z',
+          },
+          {
+            id: 'turn-assistant',
+            sessionId: session.id,
+            userId: 'user-1',
+            role: 'assistant',
+            text: 'The completed answer.',
+            createdAt: '2026-06-21T11:02:00.000Z',
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/conversation-assistant/session-1']}>
+        <Routes>
+          <Route
+            path="/whatsapp/conversation-assistant/:sessionId"
+            element={<WhatsAppConversationAssistantSessionPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const exportButton = screen.getByRole('button', {
+      name: 'Export last completed PDF, revision 1',
+    });
+    expect(exportButton).toBeEnabled();
+    expect(exportButton).toHaveTextContent('Export last completed PDF');
+  });
+
+  it('integrates the explicit Include action without replacing the typed question', async () => {
+    const user = userEvent.setup();
+    const result = createHookResult();
+    const includeNewMessages = vi.fn().mockResolvedValue(undefined);
+    const setFollowUpQuestion = vi.fn();
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSessionId: 'session-1',
+        selectedSession: { ...firstSession(result), contextContinuationAvailable: true },
+        followUpQuestion: 'How did the attitude change?',
+        includeNewMessages,
+        setFollowUpQuestion,
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/conversation-assistant/session-1']}>
+        <Routes>
+          <Route
+            path="/whatsapp/conversation-assistant/:sessionId"
+            element={<WhatsAppConversationAssistantSessionPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText('Ask first question')).toHaveValue(
+      'How did the attitude change?'
+    );
+    await user.click(screen.getByRole('button', { name: 'Include new messages' }));
+    expect(includeNewMessages).toHaveBeenCalledTimes(1);
+    expect(setFollowUpQuestion).not.toHaveBeenCalled();
+  });
+
+  it('renders a committed context update permanently above its exact question', async () => {
+    const user = userEvent.setup();
+    const result = createHookResult();
+    const loadContextSnapshotPreview = vi.fn().mockResolvedValue({ items: [] });
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSessionId: 'session-1',
+        selectedSession: { ...firstSession(result), contextContinuationAvailable: true },
+        loadContextSnapshotPreview,
+        turns: [
+          {
+            id: 'turn-with-context',
+            sessionId: 'session-1',
+            userId: 'user-1',
+            role: 'user',
+            text: 'How did the attitude change?',
+            createdAt: '2026-07-21T10:02:00.000Z',
+            kind: 'context_attachment_question',
+            contextAttachmentId: 'attachment-1',
+            contextAttachment: {
+              id: 'attachment-1',
+              capturedAt: '2026-07-21T10:00:00.000Z',
+              captureRange: {
+                from: '2026-07-20T10:00:00.000Z',
+                to: '2026-07-21T10:00:00.000Z',
+              },
+              counts: {
+                included: 18,
+                excluded: 2,
+                newlyAvailable: 18,
+                edited: 0,
+                redacted: 0,
+                deleted: 0,
+                reactionsChanged: 0,
+                lateIngested: 0,
+                completedTranscriptions: 0,
+              },
+              omitted: {
+                mediaOnly: 2,
+                failedTranscriptions: 0,
+                pendingTranscriptions: 0,
+                nonText: 0,
+                overLimit: 0,
+              },
+            },
+          },
+        ],
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/conversation-assistant/session-1']}>
+        <Routes>
+          <Route
+            path="/whatsapp/conversation-assistant/:sessionId"
+            element={<WhatsAppConversationAssistantSessionPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const card = screen.getByRole('group', {
+      name: 'WhatsApp context update attached to this question',
+    });
+    const question = screen.getByText('How did the attitude change?');
+    expect(card.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(screen.queryByRole('button', { name: /Remove/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'View messages' }));
+    await waitFor(() => {
+      expect(loadContextSnapshotPreview).toHaveBeenCalledWith('attachment-1', undefined);
+    });
+  });
+
+  it('opens Conversation context history when committed updates exist', async () => {
+    const user = userEvent.setup();
+    const result = createHookResult();
+    const loadContextHistory = vi.fn().mockResolvedValue({
+      snapshots: [
+        {
+          kind: 'initial',
+          contextVersion: 0,
+          capturedAt: '2026-07-20T10:00:00.000Z',
+          messageCount: 9,
+          excludedCount: 6,
+        },
+        {
+          kind: 'update',
+          contextVersion: 1,
+          capturedAt: '2026-07-21T10:00:00.000Z',
+          messageCount: 18,
+          excludedCount: 2,
+          attachmentId: 'attachment-1',
+          linkedTurnId: 'turn-with-context',
+        },
+      ],
+    });
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSessionId: 'session-1',
+        selectedSession: {
+          ...firstSession(result),
+          contextSummary: {
+            ...firstSession(result).contextSummary,
+            snapshotCount: 2,
+            totalAttachedMessageCount: 18,
+            totalAttachedOmittedCount: 2,
+          },
+        },
+        loadContextHistory,
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/conversation-assistant/session-1']}>
+        <Routes>
+          <Route
+            path="/whatsapp/conversation-assistant/:sessionId"
+            element={<WhatsAppConversationAssistantSessionPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const contextButton = screen.getByRole('button', { name: 'View conversation context' });
+    expect(contextButton).toHaveTextContent('9 initial · 18 added · 8 excluded');
+    await user.click(contextButton);
+    expect(await screen.findByText('Initial snapshot')).toBeInTheDocument();
+    expect(screen.getByText('Update 1')).toBeInTheDocument();
+    expect(loadContextHistory).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(contextButton).toHaveFocus();
+    });
   });
 
   it('deletes the open analysis and returns to the analysis list', async () => {
@@ -615,7 +899,7 @@ describe('separated Conversation Assistant pages', () => {
               omissionReason: 'non_text',
               reaction: {
                 emoji: '👍',
-                targetMessageId: 'message-outside-snapshot',
+                targetReference: 'context-item-outside-snapshot',
               },
             },
           ],
@@ -623,7 +907,6 @@ describe('separated Conversation Assistant pages', () => {
           omittedMessageCount: 6,
           snapshotAvailable: true,
           omitted: firstSession(result).omitted,
-          transcriptSha256: 'abc123',
         },
         loadContext,
       })
@@ -646,14 +929,25 @@ describe('separated Conversation Assistant pages', () => {
     await user.click(contextButton);
 
     expect(loadContext).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Frozen context' })).toBeInTheDocument();
     expect(screen.getByText('The exact message used by the model.')).toBeInTheDocument();
     expect(screen.getByText('Unsupported message type')).toBeInTheDocument();
     expect(
-      screen.getByText('Reaction 👍 to message message-outside-snapshot')
+      screen.getByText('Reaction 👍 to message context-item-outside-snapshot')
     ).toBeInTheDocument();
     expect(screen.getByText('2 media-only messages')).toBeInTheDocument();
+    expect(
+      dialog.querySelector('time[datetime="2026-06-20T09:30:00.000Z"]')
+    ).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/June 20, 2026.*UTC/)
+    );
+    await user.click(screen.getByRole('button', { name: 'Close frozen context' }));
+    await waitFor(() => {
+      expect(contextButton).toHaveFocus();
+    });
   });
 
   it('shows preparation progress without an irrelevant disabled composer', () => {
@@ -795,8 +1089,7 @@ describe('separated Conversation Assistant pages', () => {
     const { rerender } = render(view());
     const sendingButton = screen.getByRole('button', { name: 'Sending…' });
     expect(sendingButton).toBeDisabled();
-    expect(sendingButton).toHaveClass('h-12', 'w-auto');
-    expect(sendingButton).not.toHaveClass('w-12');
+    expect(sendingButton).toHaveClass('h-12', 'min-w-11');
     expect(screen.getByLabelText('Ask first question')).toBeDisabled();
 
     mockUseAssistant.mockReturnValue(
@@ -840,7 +1133,7 @@ describe('separated Conversation Assistant pages', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
-  it('renders persisted turn errors inline with the affected answer', () => {
+  it('renders a superseded persisted turn error without offering a stale history retry', () => {
     const result = createHookResult();
     mockUseAssistant.mockReturnValue(
       createHookResult({
@@ -853,8 +1146,28 @@ describe('separated Conversation Assistant pages', () => {
             userId: 'user-1',
             role: 'assistant',
             text: '',
+            requestId: 'request-a',
+            canRetryAnswer: false,
             createdAt: '2026-06-21T11:02:00.000Z',
             error: { code: 'LLM_ERROR', message: 'Model request failed' },
+          },
+          {
+            id: 'turn-b-user',
+            sessionId: 'session-1',
+            userId: 'user-1',
+            role: 'user',
+            text: 'Question B',
+            requestId: 'request-b',
+            createdAt: '2026-06-21T11:03:00.000Z',
+          },
+          {
+            id: 'turn-b-assistant',
+            sessionId: 'session-1',
+            userId: 'user-1',
+            role: 'assistant',
+            text: 'Answer B',
+            requestId: 'request-b',
+            createdAt: '2026-06-21T11:04:00.000Z',
           },
         ],
       })
@@ -871,7 +1184,10 @@ describe('separated Conversation Assistant pages', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('LLM_ERROR: Model request failed')).toBeInTheDocument();
+    expect(
+      screen.getByText('The assistant could not complete this answer.')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try answer again' })).not.toBeInTheDocument();
   });
 
   it('restores bottom-follow mode while an answer is streaming', () => {

@@ -67,6 +67,62 @@ describe('setupSentryErrorHandler', () => {
     expect(Sentry.withScope).toHaveBeenCalled();
   });
 
+  it('uses the normalized route template in Sentry and excludes dynamic ids and query text', async () => {
+    const setTag = vi.fn();
+    const setContext = vi.fn();
+    vi.mocked(Sentry.withScope).mockImplementationOnce(((
+      callback: (scope: { setTag: typeof setTag; setContext: typeof setContext }) => void
+    ) => {
+      callback({ setTag, setContext });
+    }) as never);
+    setupSentryErrorHandler(app);
+    app.get('/sessions/:sessionId/attachments/:attachmentId', async () => {
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/sessions/private-session/attachments/private-attachment?question=private-text',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(setTag).toHaveBeenCalledWith('url', '/sessions/:sessionId/attachments/:attachmentId');
+    expect(setContext).toHaveBeenCalledWith(
+      'request',
+      expect.objectContaining({
+        url: '/sessions/:sessionId/attachments/:attachmentId',
+        method: 'GET',
+      })
+    );
+    const sentryPayload = JSON.stringify([setTag.mock.calls, setContext.mock.calls]);
+    expect(sentryPayload).not.toContain('private-session');
+    expect(sentryPayload).not.toContain('private-attachment');
+    expect(sentryPayload).not.toContain('private-text');
+  });
+
+  it('uses a safe fallback when Fastify provides no route template', async () => {
+    const setTag = vi.fn();
+    const setContext = vi.fn();
+    vi.mocked(Sentry.withScope).mockImplementationOnce(((
+      callback: (scope: { setTag: typeof setTag; setContext: typeof setContext }) => void
+    ) => {
+      callback({ setTag, setContext });
+    }) as never);
+    setupSentryErrorHandler(app);
+    app.setNotFoundHandler(async () => {
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/missing-template' });
+
+    expect(response.statusCode).toBe(500);
+    expect(setTag).toHaveBeenCalledWith('url', 'unmatched_route');
+    expect(setContext).toHaveBeenCalledWith(
+      'request',
+      expect.objectContaining({ url: 'unmatched_route', method: 'GET' })
+    );
+  });
+
   it('handles Sentry failures gracefully', async () => {
     // Make Sentry.withScope throw
     vi.mocked(Sentry.withScope).mockImplementationOnce(() => {
@@ -382,6 +438,62 @@ describe('setupSentryErrorHandler', () => {
 describe('sanitizeHeaders (via error handler)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('serializes only coarse diagnostic headers and fixed authentication markers', async () => {
+    const setContext = vi.fn();
+    vi.mocked(Sentry.withScope).mockImplementationOnce(((
+      callback: (scope: { setTag: ReturnType<typeof vi.fn>; setContext: typeof setContext }) => void
+    ) => {
+      callback({ setTag: vi.fn(), setContext });
+    }) as never);
+    const app = Fastify({ logger: false });
+    addMockFailMethod(app);
+    setupSentryErrorHandler(app);
+    app.get('/test', async () => {
+      throw new Error('Test error');
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': '0',
+        authorization: 'Bearer authorization-canary',
+        'x-internal-auth': 'internal-auth-canary',
+        'x-conversation-assistant-deletion-token': 'deletion-token-canary',
+        'x-request-id': 'request-id-canary',
+        'x-custom-header': 'custom-header-canary',
+        referer: 'https://example.test/referer-canary',
+        'user-agent': 'user-agent-canary',
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(setContext).toHaveBeenCalledWith('request', {
+      url: '/test',
+      method: 'GET',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': '0',
+        authorization: '[REDACTED]',
+        'x-internal-auth': '[REDACTED]',
+      },
+    });
+    const serializedPayload = JSON.stringify(setContext.mock.calls);
+    expect(serializedPayload).not.toContain('x-conversation-assistant-deletion-token');
+    expect(serializedPayload).not.toContain('deletion-token-canary');
+    expect(serializedPayload).not.toContain('x-request-id');
+    expect(serializedPayload).not.toContain('request-id-canary');
+    expect(serializedPayload).not.toContain('x-custom-header');
+    expect(serializedPayload).not.toContain('custom-header-canary');
+    expect(serializedPayload).not.toContain('referer');
+    expect(serializedPayload).not.toContain('referer-canary');
+    expect(serializedPayload).not.toContain('user-agent');
+    expect(serializedPayload).not.toContain('user-agent-canary');
+    expect(serializedPayload).not.toContain('authorization-canary');
+    expect(serializedPayload).not.toContain('internal-auth-canary');
   });
 
   // We can't directly test sanitizeHeaders since it's not exported,

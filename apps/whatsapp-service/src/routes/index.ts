@@ -18,6 +18,7 @@ import { createPrivateReadRoutes } from './privateReadRoutes.js';
 import { privateMediaRoutes } from './privateMediaRoutes.js';
 import { conversationAssistantRoutes } from './conversationAssistantRoutes.js';
 import { privateMatrixOutboundRoutes } from './privateMatrixOutboundRoutes.js';
+import { privateErasureRoutes } from './privateErasureRoutes.js';
 
 /**
  * Creates routes plugin with config.
@@ -39,6 +40,7 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(privateSyncRoutes);
     fastify.register(privateMediaRoutes);
     fastify.register(privateMatrixOutboundRoutes);
+    fastify.register(privateErasureRoutes);
     done();
   };
 }
