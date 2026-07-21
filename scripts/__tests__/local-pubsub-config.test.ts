@@ -47,4 +47,9 @@ describe('local Pub/Sub configuration', () => {
       "'pr-triage': 'http://host.docker.internal:8128/internal/code/pubsub/pr-triage'"
     );
   });
+
+  it('forwards local Pub/Sub pushes with the trusted Google provenance marker', () => {
+    expect(pubsubUiSource).toContain("From: 'noreply@google.com'");
+    expect(pubsubUiSource).toContain("'X-Internal-Auth': INTEXURAOS_INTERNAL_AUTH_TOKEN");
+  });
 });

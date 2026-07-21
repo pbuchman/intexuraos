@@ -9,6 +9,7 @@ import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   LlmProviders,
   type LLMError,
+  type MatrixCorpusProviderCallUsageV1,
   type NormalizedUsage,
   type OwnerType,
   type ToolCallingClient,
@@ -29,6 +30,7 @@ export interface OpenRouterToolCallingConfig {
   usageSink: UsageSink;
   ownerType?: OwnerType;
   timeoutMs?: number;
+  evidenceModelId?: string;
 }
 
 interface OpenRouterFunctionCall {
@@ -65,6 +67,12 @@ const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const APP_TITLE = 'IntexuraOS';
 const DEFAULT_TIMEOUT_MS = 840_000;
 const DEFAULT_MAX_ITERATIONS = 5;
+const MATRIX_PROVIDER_FAILURE_CODE = 'MATRIX_PROVIDER_CALL_FAILED';
+const MATRIX_PROVIDER_FAILURE_MESSAGE = 'Matrix provider call failed';
+
+function nonNegativeProviderCost(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
 
 class OpenRouterApiError extends Error {
   constructor(
@@ -104,6 +112,7 @@ export function createOpenRouterToolCallingClient(
     usageSink,
     ownerType,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    evidenceModelId = model,
   } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
@@ -141,7 +150,7 @@ export function createOpenRouterToolCallingClient(
         providerReportedUsd: null,
       };
     }
-    const providerReportedUsd = typeof usage.cost === 'number' ? usage.cost : null;
+    const providerReportedUsd = nonNegativeProviderCost(usage.cost);
     return {
       normalized: normalizeUsage(usage.prompt_tokens, usage.completion_tokens, providerReportedUsd),
       providerReportedUsd,
@@ -173,13 +182,38 @@ export function createOpenRouterToolCallingClient(
       let effectiveMax = maxIterations;
       let onExhaustedFn = onExhausted;
       const repairIters = repairIterations ?? 2;
+      const providerCalls: MatrixCorpusProviderCallUsageV1[] = [];
       let aggregatedUsage: NormalizedUsage = {
         inputTokens: 0,
         outputTokens: 0,
         totalTokens: 0,
         costUsd: 0,
       };
-      let providerReportedUsd: number | null = null;
+      let providerReportedUsd = 0;
+      let responsesWithUsage = 0;
+      let hasUnknownProviderCost = false;
+
+      function completeUsage(): NormalizedUsage {
+        if (hasUnknownProviderCost || responsesWithUsage === 0) {
+          return {
+            inputTokens: aggregatedUsage.inputTokens,
+            outputTokens: aggregatedUsage.outputTokens,
+            totalTokens: aggregatedUsage.totalTokens,
+            costUsd: 0,
+          };
+        }
+        return {
+          inputTokens: aggregatedUsage.inputTokens,
+          outputTokens: aggregatedUsage.outputTokens,
+          totalTokens: aggregatedUsage.totalTokens,
+          costUsd: providerReportedUsd,
+          providerReportedUsd,
+        };
+      }
+
+      function completeProviderReportedUsd(): number | null {
+        return hasUnknownProviderCost || responsesWithUsage === 0 ? null : providerReportedUsd;
+      }
 
       try {
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -217,11 +251,30 @@ export function createOpenRouterToolCallingClient(
             const data = (await response.json()) as OpenRouterToolCallingResponse;
             const message = data.choices[0]?.message;
             const usage = extractUsage(data.usage);
+            if (params.matrixCorpusContext !== undefined) {
+              const providerCall: MatrixCorpusProviderCallUsageV1 = {
+                context: {
+                  ...params.matrixCorpusContext,
+                  callOrdinal: params.matrixCorpusContext.callOrdinal + iteration - 1,
+                },
+                modelId: evidenceModelId,
+                inputTokens: usage.normalized.inputTokens,
+                outputTokens: usage.normalized.outputTokens,
+                totalTokens: usage.normalized.totalTokens,
+                ...(usage.providerReportedUsd === null
+                  ? {}
+                  : { providerReportedUsd: usage.providerReportedUsd }),
+              };
+              providerCalls.push(providerCall);
+              await params.onMatrixCorpusProviderCall?.(providerCall);
+            }
             aggregatedUsage = addUsage(aggregatedUsage, usage.normalized);
-            providerReportedUsd = addProviderReportedUsd(
-              providerReportedUsd,
-              usage.providerReportedUsd
-            );
+            responsesWithUsage++;
+            if (usage.providerReportedUsd === null) {
+              hasUnknownProviderCost = true;
+            } else {
+              providerReportedUsd += usage.providerReportedUsd;
+            }
 
             const toolCalls = message?.tool_calls ?? [];
             if (toolCalls.length > 0) {
@@ -233,7 +286,13 @@ export function createOpenRouterToolCallingClient(
               });
 
               for (const [index, toolCall] of toolCalls.entries()) {
-                const toolResponse = await runToolCall(toolMap, toolCall, logger, iteration);
+                const toolResponse = await runToolCall(
+                  toolMap,
+                  toolCall,
+                  logger,
+                  iteration,
+                  params.matrixCorpusContext !== undefined
+                );
                 conversation.push({
                   role: 'tool',
                   tool_call_id: toolCall.id ?? `call_${String(iteration)}_${String(index)}`,
@@ -261,11 +320,11 @@ export function createOpenRouterToolCallingClient(
             const finalText = typeof message?.content === 'string' ? message.content : '';
             if (finalText === '') {
               trackUsage(
-                aggregatedUsage,
+                completeUsage(),
                 false,
                 Date.now() - runStart,
                 'Empty response from model',
-                providerReportedUsd,
+                completeProviderReportedUsd(),
                 promptType
               );
               return err({ code: 'API_ERROR', message: 'Empty response from model' });
@@ -287,11 +346,11 @@ export function createOpenRouterToolCallingClient(
             );
 
             trackUsage(
-              aggregatedUsage,
+              completeUsage(),
               true,
               Date.now() - runStart,
               undefined,
-              providerReportedUsd,
+              completeProviderReportedUsd(),
               promptType
             );
 
@@ -299,7 +358,8 @@ export function createOpenRouterToolCallingClient(
               content: finalText,
               toolCallsMade: totalToolCalls,
               iterationCount: iteration,
-              usage: aggregatedUsage,
+              usage: completeUsage(),
+              ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
             });
           }
 
@@ -323,11 +383,11 @@ export function createOpenRouterToolCallingClient(
         }
 
         trackUsage(
-          aggregatedUsage,
+          completeUsage(),
           false,
           Date.now() - runStart,
           'Tool calling loop exceeded maxIterations',
-          providerReportedUsd,
+          completeProviderReportedUsd(),
           promptType
         );
         return err({
@@ -335,16 +395,23 @@ export function createOpenRouterToolCallingClient(
           message: 'Tool calling loop exceeded maxIterations',
         });
       } catch (error: unknown) {
-        const errorMsg = getErrorMessage(error);
+        hasUnknownProviderCost = true;
+        const matrixCorpus = params.matrixCorpusContext !== undefined;
+        const errorMsg = matrixCorpus ? MATRIX_PROVIDER_FAILURE_CODE : getErrorMessage(error);
         trackUsage(
-          aggregatedUsage,
+          completeUsage(),
           false,
           Date.now() - runStart,
           errorMsg,
-          providerReportedUsd,
+          completeProviderReportedUsd(),
           promptType
         );
-        return err(mapOpenRouterError(error));
+        const mappedError = mapOpenRouterError(error);
+        return err(
+          matrixCorpus
+            ? { code: mappedError.code, message: MATRIX_PROVIDER_FAILURE_MESSAGE }
+            : mappedError
+        );
       }
     },
   };
@@ -394,7 +461,8 @@ async function runToolCall(
   toolMap: Map<string, ToolDefinition>,
   toolCall: OpenRouterToolCall,
   logger: Logger,
-  iteration: number
+  iteration: number,
+  matrixCorpus: boolean
 ): Promise<string> {
   const toolName = toolCall.function?.name ?? '';
   const toolArgs = parseToolArgs(toolCall.function?.arguments);
@@ -405,10 +473,12 @@ async function runToolCall(
     // self-correction signal — we echo an error back to the model so it can
     // retry with a real tool. Page noise; suppress while keeping stdout log.
     logger.warn(
-      { iteration, toolName, _skipSentry: true },
+      matrixCorpus
+        ? { iteration, errorCode: 'UNKNOWN_TOOL_SELECTION', _skipSentry: true }
+        : { iteration, toolName, _skipSentry: true },
       'OpenRouter tool calling: hallucinated tool name'
     );
-    return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+    return JSON.stringify({ error: matrixCorpus ? 'Unknown tool' : `Unknown tool: ${toolName}` });
   }
 
   try {
@@ -416,10 +486,12 @@ async function runToolCall(
   } catch (error: unknown) {
     const errorMsg = getErrorMessage(error);
     logger.warn(
-      { iteration, toolName, error: errorMsg },
+      matrixCorpus
+        ? { iteration, errorCode: 'TOOL_CALLBACK_REJECTED', _skipSentry: true }
+        : { iteration, toolName, error: errorMsg },
       'OpenRouter tool calling: run callback threw'
     );
-    return JSON.stringify({ error: errorMsg });
+    return JSON.stringify({ error: matrixCorpus ? 'Tool execution failed' : errorMsg });
   }
 }
 
@@ -450,12 +522,6 @@ function addUsage(a: NormalizedUsage, b: NormalizedUsage): NormalizedUsage {
     totalTokens: a.totalTokens + b.totalTokens,
     costUsd: a.costUsd + b.costUsd,
   };
-}
-
-function addProviderReportedUsd(current: number | null, next: number | null): number | null {
-  if (next === null) return current;
-  if (current === null) return next;
-  return current + next;
 }
 
 function mapOpenRouterError(error: unknown): LLMError {

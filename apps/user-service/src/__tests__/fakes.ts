@@ -5,6 +5,7 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
+import { isIntexAgentModel, type IntexAgentModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue, Encryptor } from '../infra/encryption.js';
 import type {
   Auth0Client,
@@ -14,16 +15,19 @@ import type {
   AuthTokensPublic,
   RefreshResult,
 } from '../domain/identity/index.js';
-import type {
-  LlmProvider,
-  LlmTestResponse,
-  LlmTestResult,
-  LlmValidationError,
-  LlmValidator,
-  SettingsError,
-  TranscriptionProvider,
-  UserSettings,
-  UserSettingsRepository,
+import {
+  isValidTimezone,
+  type IntexAgentModelUpdateResult,
+  type IntexAgentModelReadResult,
+  type LlmProvider,
+  type LlmTestResponse,
+  type LlmTestResult,
+  type LlmValidationError,
+  type LlmValidator,
+  type SettingsError,
+  type TranscriptionProvider,
+  type UserSettings,
+  type UserSettingsRepository,
 } from '../domain/settings/index.js';
 import type {
   OAuthConnection,
@@ -42,6 +46,50 @@ import type {
   GitHubOAuthClient,
   GitHubTokenResponse,
 } from '../domain/oauth/ports/GitHubOAuthClient.js';
+
+function readFakeIntexAgentModelState(
+  preferences: unknown
+):
+  | { ok: true; explicitModel: IntexAgentModel | null; revision: number }
+  | { ok: false } {
+  if (preferences === undefined) {
+    return { ok: true, explicitModel: null, revision: 0 };
+  }
+  if (typeof preferences !== 'object' || preferences === null || Array.isArray(preferences)) {
+    return { ok: false };
+  }
+  const prototype = Object.getPrototypeOf(preferences);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return { ok: false };
+  }
+
+  const map = preferences as Record<string, unknown>;
+  const hasModel = Object.hasOwn(map, 'intexAgentModel');
+  let explicitModel: IntexAgentModel | null = null;
+  if (hasModel) {
+    const model = map['intexAgentModel'];
+    if (!isIntexAgentModel(model)) {
+      return { ok: false };
+    }
+    explicitModel = model;
+  }
+
+  const hasRevision = Object.hasOwn(map, 'intexAgentModelRevision');
+  let revision = 0;
+  if (hasRevision) {
+    const storedRevision = map['intexAgentModelRevision'];
+    if (
+      typeof storedRevision !== 'number' ||
+      !Number.isSafeInteger(storedRevision) ||
+      storedRevision < 0
+    ) {
+      return { ok: false };
+    }
+    revision = storedRevision;
+  }
+
+  return { ok: true, explicitModel, revision };
+}
 
 /**
  * Fake Auth token repository for testing.
@@ -238,6 +286,9 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
   private shouldFailClearLlmPreferences = false;
   private shouldFailUpdateTranscriptionPreferences = false;
   private shouldFailUpdateTimezone = false;
+  private shouldFailGetIntexAgentModelState = false;
+  private shouldFailUpdateIntexAgentModel = false;
+  private shouldFailGetTimezonePreference = false;
 
   /**
    * Configure the fake to fail the next getSettings call.
@@ -302,11 +353,82 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
     this.shouldFailUpdateTimezone = fail;
   }
 
+  setFailNextGetIntexAgentModelState(fail: boolean): void {
+    this.shouldFailGetIntexAgentModelState = fail;
+  }
+
+  setFailNextUpdateIntexAgentModel(fail: boolean): void {
+    this.shouldFailUpdateIntexAgentModel = fail;
+  }
+
+  setFailNextGetTimezonePreference(fail: boolean): void {
+    this.shouldFailGetTimezonePreference = fail;
+  }
+
   /**
    * Store settings directly (for test setup).
    */
   setSettings(settings: UserSettings): void {
     this.settings.set(settings.userId, settings);
+  }
+
+  /** Store raw selector bytes for route tests of corrupt persisted state. */
+  setRawIntexAgentModelState(userId: string, llmPreferences: unknown): void {
+    const existing = this.settings.get(userId);
+    const now = new Date().toISOString();
+    this.settings.set(userId, {
+      ...(existing ?? { userId, createdAt: now, updatedAt: now }),
+      llmPreferences: llmPreferences as NonNullable<UserSettings['llmPreferences']>,
+    });
+  }
+
+  /** Store an own raw timezone value for strict route/repository boundary tests. */
+  setRawTimezonePreference(userId: string, timezone: unknown): void {
+    const existing = this.settings.get(userId);
+    const now = new Date().toISOString();
+    this.settings.set(userId, {
+      ...(existing ?? { userId, createdAt: now, updatedAt: now }),
+      timezone: timezone as string,
+    });
+  }
+
+  getIntexAgentModelState(
+    userId: string
+  ): Promise<Result<IntexAgentModelReadResult, SettingsError>> {
+    if (this.shouldFailGetIntexAgentModelState) {
+      this.shouldFailGetIntexAgentModelState = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated Intex Agent model state failure' })
+      );
+    }
+    const state = readFakeIntexAgentModelState(this.settings.get(userId)?.llmPreferences);
+    return Promise.resolve(
+      ok(
+        state.ok
+          ? { status: 'valid', explicitModel: state.explicitModel, revision: state.revision }
+          : { status: 'invalid_stored_value' }
+      )
+    );
+  }
+
+  getTimezonePreference(userId: string): Promise<Result<string | undefined, SettingsError>> {
+    if (this.shouldFailGetTimezonePreference) {
+      this.shouldFailGetTimezonePreference = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated timezone preference failure' })
+      );
+    }
+    const settings = this.settings.get(userId);
+    if (settings === undefined || !Object.hasOwn(settings, 'timezone')) {
+      return Promise.resolve(ok(undefined));
+    }
+    const timezone: unknown = settings.timezone;
+    if (typeof timezone !== 'string' || !isValidTimezone(timezone)) {
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Stored timezone preference is invalid' })
+      );
+    }
+    return Promise.resolve(ok(timezone));
   }
 
   getSettings(userId: string): Promise<Result<UserSettings | null, SettingsError>> {
@@ -448,11 +570,61 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
       );
     }
     const existing = this.settings.get(userId);
-    if (existing !== undefined) {
-      const { llmPreferences: _removed, ...rest } = existing;
-      this.settings.set(userId, { ...rest, updatedAt: new Date().toISOString() });
+    if (existing?.llmPreferences !== undefined) {
+      const { defaultModel: _defaultModel, fallbackModel: _fallbackModel, ...rest } =
+        existing.llmPreferences;
+      existing.llmPreferences = rest;
+      existing.updatedAt = new Date().toISOString();
+      this.settings.set(userId, existing);
     }
     return Promise.resolve(ok(undefined));
+  }
+
+  updateIntexAgentModel(
+    userId: string,
+    intexAgentModel: IntexAgentModel | null,
+    expectedRevision: number
+  ): Promise<Result<IntexAgentModelUpdateResult, SettingsError>> {
+    if (this.shouldFailUpdateIntexAgentModel) {
+      this.shouldFailUpdateIntexAgentModel = false;
+      return Promise.resolve(
+        err({ code: 'INTERNAL_ERROR', message: 'Simulated Intex Agent model update failure' })
+      );
+    }
+    const existing = this.settings.get(userId);
+    const state = readFakeIntexAgentModelState(existing?.llmPreferences);
+    if (!state.ok) {
+      return Promise.resolve(ok({ status: 'invalid_stored_value' }));
+    }
+    const { explicitModel, revision } = state;
+    const preferences = existing?.llmPreferences;
+
+    if (revision !== expectedRevision) {
+      return Promise.resolve(ok({ status: 'conflict', explicitModel, revision }));
+    }
+    if (explicitModel === intexAgentModel) {
+      return Promise.resolve(ok({ status: 'unchanged', explicitModel, revision }));
+    }
+    if (revision === Number.MAX_SAFE_INTEGER) {
+      return Promise.resolve(ok({ status: 'revision_exhausted', explicitModel, revision }));
+    }
+
+    const now = new Date().toISOString();
+    const nextPreferences = { ...preferences, intexAgentModelRevision: revision + 1 };
+    if (intexAgentModel === null) {
+      delete nextPreferences.intexAgentModel;
+    } else {
+      nextPreferences.intexAgentModel = intexAgentModel;
+    }
+    this.settings.set(userId, {
+      ...(existing ?? { createdAt: now }),
+      userId,
+      llmPreferences: nextPreferences,
+      updatedAt: now,
+    });
+    return Promise.resolve(
+      ok({ status: 'updated', explicitModel: intexAgentModel, revision: revision + 1 })
+    );
   }
 
   updateLlmPreferences(

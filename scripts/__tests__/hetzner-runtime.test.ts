@@ -1412,8 +1412,8 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain(
       'write_env_line "${output_path}" "INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL" "${PUBLIC_ORIGIN}/api/code"'
     );
-    expect(terraform).toContain(
-      'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL  = "${local.public_origin}/api/code"'
+    expect(terraform).toMatch(
+      /INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL\s*=\s*"\$\{local\.public_origin\}\/api\/code"/u
     );
     expect(script).toContain(
       'write_env_line "${output_path}" "INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY" "pbuchman/intexuraos"'
@@ -1421,8 +1421,10 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain(
       'write_env_line "${output_path}" "INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH" "development"'
     );
-    expect(terraform).toContain('INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY  = "pbuchman/intexuraos"');
-    expect(terraform).toContain('INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH = "development"');
+    expect(terraform).toMatch(
+      /INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY\s*=\s*"pbuchman\/intexuraos"/u
+    );
+    expect(terraform).toMatch(/INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH\s*=\s*"development"/u);
   });
 
   it('writes private Matrix outbound adapter config for Hetzner prod', () => {

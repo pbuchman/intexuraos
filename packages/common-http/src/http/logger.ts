@@ -27,6 +27,16 @@ export function shouldLogRequest(url: string | undefined): boolean {
   return path === undefined || !SILENT_PATHS.has(path);
 }
 
+export interface RequestLoggingOptions {
+  /** URL path prefixes whose trailing path and query must not enter logs. */
+  privatePathPrefixes?: readonly string[];
+}
+
+function requestUrlForLogging(url: string, privatePathPrefixes: readonly string[]): string {
+  const privatePrefix = privatePathPrefixes.find((prefix) => url.startsWith(prefix));
+  return privatePrefix === undefined ? url : `${privatePrefix}[REDACTED]`;
+}
+
 /**
  * Registers request logging hooks that skip health check endpoints.
  * Use this after creating the Fastify instance with `disableRequestLogging: true`.
@@ -38,14 +48,19 @@ export function shouldLogRequest(url: string | undefined): boolean {
  * });
  * registerQuietHealthCheckLogging(app);
  */
-export function registerQuietHealthCheckLogging(app: FastifyInstance): void {
+export function registerQuietHealthCheckLogging(
+  app: FastifyInstance,
+  options: RequestLoggingOptions = {}
+): void {
+  const privatePathPrefixes = options.privatePathPrefixes ?? [];
   app.addHook('onRequest', (request, _reply, done) => {
     if (shouldLogRequest(request.url)) {
+      const privateSafeUrl = requestUrlForLogging(request.url, privatePathPrefixes);
       request.log.info(
         {
           req: {
             method: request.method,
-            url: getSafeRequestRoute(request),
+            url: privateSafeUrl === request.url ? getSafeRequestRoute(request) : privateSafeUrl,
             host: request.headers.host,
             remoteAddress: request.ip,
           },
@@ -98,6 +113,12 @@ export interface LogIncomingRequestOptions {
   includeParams?: boolean;
 
   /**
+   * Whether to include request headers in the log output.
+   * @default true
+   */
+  includeHeaders?: boolean;
+
+  /**
    * Custom log message.
    * @default 'Incoming request'
    */
@@ -145,6 +166,7 @@ export function logIncomingRequest(
   const {
     bodyPreviewLength = 500,
     includeParams = false,
+    includeHeaders = true,
     message = 'Incoming request',
     additionalFields = {},
   } = options;
@@ -155,10 +177,13 @@ export function logIncomingRequest(
     const bodyString = request.body === undefined ? 'undefined' : JSON.stringify(request.body);
     const logPayload: Record<string, unknown> = {
       event: 'incoming_request',
-      headers: selectSafeRequestHeaders(request.headers),
       bodyPreview: bodyString.substring(0, bodyPreviewLength),
       ...additionalFields,
     };
+
+    if (includeHeaders) {
+      logPayload['headers'] = selectSafeRequestHeaders(request.headers);
+    }
 
     // Conditionally include params
     if (includeParams) {

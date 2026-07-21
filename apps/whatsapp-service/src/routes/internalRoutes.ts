@@ -104,6 +104,9 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         whatsappCloudApi: services.whatsappCloudApi,
         thumbnailGenerator: services.thumbnailGenerator,
         eventPublisher: services.eventPublisher,
+        ...(services.matrixCorpus === undefined
+          ? {}
+          : { matrixCorpusIngress: services.matrixCorpus.ingress }),
       });
       const retryPendingWebhookEventsUseCase = new RetryPendingWebhookEventsUseCase({
         webhookEventRepository: services.webhookEventRepository,

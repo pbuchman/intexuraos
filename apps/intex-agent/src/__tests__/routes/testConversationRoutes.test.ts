@@ -4,7 +4,6 @@ import { Writable } from 'node:stream';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import { buildServer } from '../../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
-import { INTEX_AGENT_MODEL } from '../../domain/agent/systemPrompt.js';
 import { emptyPromptPreferences } from '../../domain/preferences/promptPreferences.js';
 import type { TestConversationResponse } from '../../domain/testConversation/testConversationTypes.js';
 
@@ -22,6 +21,7 @@ const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token';
 interface RoutePayload {
   contractVersion: string;
   mode: string;
+  agentModel: string;
   runId: string;
   userId: string;
   currentDateTime: string;
@@ -147,6 +147,8 @@ describe('test conversation routes', () => {
     ['run id only matches namespace prefix', { runId: 'agent', userId: 'test-intex-agent-other-run' }],
     ['bad run id characters', { runId: 'INTEX-E2E-ROUTE', userId: 'test-intex-agent-INTEX-E2E-ROUTE' }],
     ['scripted runner mode', { mode: 'scripted_runner' }],
+    ['missing agent model', { agentModel: undefined }],
+    ['wrong agent model', { agentModel: 'or:google/gemini-3-flash-preview' }],
     ['invalid current date', { currentDateTime: 'not-a-date' }],
     ['invalid IANA time zone', { timeZone: 'Mars/Olympus' }],
     ['tool mocks must be object', { toolMocks: null }],
@@ -492,6 +494,7 @@ function validPayload(): RoutePayload {
   return {
     contractVersion: '2026-07-01',
     mode: 'live_llm_mock_tools',
+    agentModel: 'or:deepseek/deepseek-v4-flash',
     runId: 'intex-e2e-route',
     userId: 'test-intex-agent-intex-e2e-route',
     currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -537,6 +540,7 @@ class FakeTestConversationRunner {
     return {
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       runId: 'intex-e2e-route',
       userId: 'test-intex-agent-intex-e2e-route',
       finalSessionId: 'intex_session_route',
@@ -571,8 +575,9 @@ function createRouteTestServices(
       llmUsageServiceUrl: 'http://llm-usage.test',
       openRouterAppApiKey: 'openrouter-key',
       whatsappSendTopic: 'whatsapp-send',
-      sessionTimeoutMs: 30 * 60 * 1000,
-      model: INTEX_AGENT_MODEL,
+    sessionTimeoutMs: 30 * 60 * 1000,
+    matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
+    testRunsRead: { enabled: false },
     },
     sessionRepository: new UnusedSessionRepository(),
     preferencesRepository: {

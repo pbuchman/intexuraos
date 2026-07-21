@@ -12,7 +12,7 @@ handle_signal() {
 trap handle_signal HUP INT TERM
 
 usage_error() {
-  printf '%s\n' 'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke}' >&2
+  printf '%s\n' 'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke|matrix-corpus}' >&2
   exit 2
 }
 
@@ -43,6 +43,10 @@ case "${1-}" in
     [[ $# -eq 1 ]] || usage_error
     cli_arguments=('matrix-smoke')
     ;;
+  matrix-corpus)
+    [[ $# -eq 1 ]] || usage_error
+    cli_arguments=('matrix-corpus')
+    ;;
   *)
     usage_error
     ;;
@@ -57,11 +61,12 @@ fi
 readonly repository_root
 
 implementation_paths=(
-  'apps/intex-agent/src/routes/testConversationRoutes.ts'
-  'apps/intex-agent/src/domain/testConversation/'
+  'apps/intex-agent/src/'
+  'apps/whatsapp-service/src/'
+  'apps/user-service/src/'
+  'packages/'
   'tools/intex-agent-evals/'
   'scripts/run-intex-agent-evals-home-dev.sh'
-  'scripts/cleanup-intex-agent-test-conversations.mjs'
   'package.json'
   'pnpm-lock.yaml'
   'pnpm-workspace.yaml'
@@ -72,8 +77,6 @@ implementation_paths=(
   'scripts/typecheck-parallel.mjs'
   'scripts/verify-workspace-deps.mjs'
   'scripts/lib/workspace-discovery.mjs'
-  'packages/llm-contract/src/types.ts'
-  'packages/infra-openrouter/src/client.ts'
 )
 
 if ! implementation_status=$(
@@ -136,8 +139,27 @@ if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
 fi
 required_sha=$1
 shift
-if ! git merge-base --is-ancestor "$required_sha" HEAD >/dev/null 2>&1; then
+if ! deployed_sha=$(git rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
   emit 'revision_mismatch'
+  finish 2
+fi
+if [ "$deployed_sha" != "$required_sha" ]; then
+  emit 'revision_mismatch'
+  finish 2
+fi
+if [ ${#deployed_sha} -ne 40 ]; then
+  emit 'revision_mismatch'
+  finish 2
+fi
+if ! remote_status=$(git status --porcelain=v1 --untracked-files=all -- \
+  apps/intex-agent/src/ apps/whatsapp-service/src/ apps/user-service/src/ \
+  packages/ \
+  tools/intex-agent-evals/ scripts/run-intex-agent-evals-home-dev.sh package.json 2>/dev/null); then
+  emit 'remote_implementation_paths_dirty'
+  finish 2
+fi
+if [ -n "$remote_status" ]; then
+  emit 'remote_implementation_paths_dirty'
   finish 2
 fi
 if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || ! direnv exec . true >/dev/null 2>&1; then
@@ -145,7 +167,13 @@ if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || !
   finish 2
 fi
 set +e
-direnv exec . node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+direnv exec . env \
+  INTEXURAOS_EVAL_REQUESTED_REVISION="$required_sha" \
+  INTEXURAOS_EVAL_DEPLOYED_REVISION="$deployed_sha" \
+  INTEXURAOS_EVAL_WRAPPER_ATTESTED=true \
+  INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN=true \
+  INTEXURAOS_EVAL_REMOTE_CRITICAL_PATHS_CLEAN=true \
+  node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
 cli_status=$?
 set -e
 finish "$cli_status"
@@ -182,6 +210,7 @@ readonly safe_check_pattern='(runtime|environment|config|matrix_files|intex_agen
 readonly safe_failure_pattern='(HOME_DEV_REQUIRED|REQUIRED_ENV_MISSING|SETUP_TTY_REQUIRED|CONFIG_NOT_FOUND|CONFIG_INVALID|CONFIG_PARENT_UNSAFE|CONFIG_FILE_UNSAFE|CONFIG_CONFLICT|CONFIG_WRITE_FAILED|MATRIX_TOKEN_FILE_UNSAFE|MATRIX_TOKEN_INVALID|MATRIX_TARGETS_FILE_UNSAFE|MATRIX_TARGETS_INVALID|INTEX_AGENT_HEALTH_FAILED|WHATSAPP_HEALTH_FAILED|MATRIX_HEALTH_FAILED|FIREBASE_IDENTITY_MISSING|FIREBASE_IDENTITY_DISABLED|FIREBASE_CHECK_FAILED|MATRIX_IDENTITY_MISMATCH|MATRIX_WHOAMI_UNAUTHORIZED|MATRIX_WHOAMI_FAILED|WHATSAPP_DELIVERY_NOT_READY|WHATSAPP_DELIVERY_FAILED|SCENARIO_CATALOG_FAILED|MINIMAX_KEY_MISSING|MINIMAX_PROBE_TIMEOUT|MINIMAX_PROBE_INVALID|MINIMAX_PROBE_FAILED|UNEXPECTED_FAILURE)'
 readonly safe_alias_pattern='^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$'
 readonly safe_run_id_pattern='[a-z0-9][a-z0-9._-]{0,95}'
+readonly matrix_corpus_failure_pattern='(REVISION_INVALID|REVISION_MISMATCH|IMPLEMENTATION_PATHS_DIRTY|HOME_DEV_REQUIRED|SERVICES_NOT_READY|USER_NOT_READY|ACCOUNT_TUPLE_INVALID|MATRIX_NOT_READY|WHATSAPP_NOT_READY|CAPABILITY_BOUNDARY_NOT_READY|CATALOG_INVALID|MODEL_BINDING_INVALID|RUN_CONFLICT|ARTIFACT_ROOT_NOT_READY|PREFLIGHT_UNEXPECTED_FAILURE)'
 
 is_safe_alias() {
   local candidate=$1
@@ -502,6 +531,86 @@ validate_evaluation_payload() {
   esac
 }
 
+validate_matrix_corpus_payload() {
+  local payload=$1
+  local expected_status=$2
+  local remaining=$payload
+  local line=''
+  local preflight_seen=0
+  local run_id=''
+  local terminal_status=''
+  local report_seen=0
+  local scenario_seen=0
+  local run_pattern="^evaluation run (${safe_run_id_pattern}) command matrix-corpus$"
+  local scenario_pattern='^scenario intex-eval-([0-9]{3}) (PASS|BEHAVIORAL_FAILURE|INFRASTRUCTURE_FAILURE)$'
+  local report_pattern="^evaluation report \\.artifacts/intex-agent-evals/(${safe_run_id_pattern})$"
+  local failure_pattern="^preflight result FAIL ${matrix_corpus_failure_pattern}$"
+
+  while [[ -n $remaining ]]; do
+    [[ $remaining == *$'\n'* ]] || return 1
+    line=${remaining%%$'\n'*}
+    remaining=${remaining#*$'\n'}
+    if [[ $line == 'preflight result PASS' ]]; then
+      ((preflight_seen == 0)) || return 1
+      preflight_seen=1
+      continue
+    fi
+    if [[ $line =~ $failure_pattern ]]; then
+      [[ $expected_status == 2 && $preflight_seen -eq 0 && -z $run_id && -z $terminal_status ]] || return 1
+      terminal_status=2
+      continue
+    fi
+    if [[ $line =~ $run_pattern ]]; then
+      [[ $preflight_seen -eq 1 && -z $run_id ]] || return 1
+      run_id=${BASH_REMATCH[1]}
+      continue
+    fi
+    if [[ $line =~ $scenario_pattern ]]; then
+      [[ -n $run_id && -z $terminal_status ]] || return 1
+      scenario_seen=$((scenario_seen + 1))
+      ((scenario_seen <= 20)) || return 1
+      printf -v expected_scenario_ordinal '%03d' "$scenario_seen"
+      [[ ${BASH_REMATCH[1]} == "$expected_scenario_ordinal" ]] || return 1
+      continue
+    fi
+    case $line in
+      'evaluation result PASS exit 0')
+        [[ -n $run_id && -z $terminal_status ]] || return 1
+        terminal_status=0
+        ;;
+      'evaluation result BEHAVIORAL_FAILURE exit 1')
+        [[ -n $run_id && -z $terminal_status ]] || return 1
+        terminal_status=1
+        ;;
+      'evaluation result INFRASTRUCTURE_FAILURE exit 2')
+        [[ -n $run_id && -z $terminal_status ]] || return 1
+        terminal_status=2
+        ;;
+      *)
+        if [[ $line =~ $report_pattern ]]; then
+          ((report_seen == 0)) || return 1
+          [[ -n $run_id && ${BASH_REMATCH[1]} == "$run_id" && -n $terminal_status ]] || return 1
+          report_seen=1
+        else
+          return 1
+        fi
+        ;;
+    esac
+  done
+
+  [[ -n $terminal_status && $terminal_status == "$expected_status" ]] || return 1
+  if [[ -z $run_id ]]; then
+    [[ $expected_status == 2 && $preflight_seen -eq 0 && $report_seen -eq 0 ]]
+    return
+  fi
+  [[ $preflight_seen -eq 1 ]] || return 1
+  if [[ $expected_status == 0 || $expected_status == 1 ]]; then
+    [[ $scenario_seen -eq 20 && $report_seen -eq 1 ]]
+  else
+    [[ $report_seen -eq 0 || $report_seen -eq 1 ]]
+  fi
+}
+
 extract_validated_payload() {
   local captured=$1
   local expected_status=$2
@@ -517,7 +626,7 @@ extract_validated_payload() {
   [[ -n $payload && $payload == *$'\n' ]] || return 1
 
   if [[ $expected_status == 2 && \
-    ($payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n') ]]; then
+    ($payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n' || $payload == $'remote_implementation_paths_dirty\n') ]]; then
     printf -v "$destination_name" '%s' "$payload"
     return 0
   fi
@@ -525,6 +634,9 @@ extract_validated_payload() {
   case ${cli_arguments[0]} in
     preflight)
       validate_preflight_payload "$payload" "$expected_status" || return 1
+      ;;
+    matrix-corpus)
+      validate_matrix_corpus_payload "$payload" "$expected_status" || return 1
       ;;
     endpoint | full | scenario | matrix-smoke)
       validate_evaluation_payload "$payload" "$expected_status" || return 1

@@ -18,7 +18,8 @@
     "apps/*/src/__tests__/**/*.ts",
     "packages/*/src/__tests__/**/*.ts",
     "workers/*/src/__tests__/**/*.ts",
-    "tools/intex-agent-evals/src/__tests__/**/*.ts"
+    "tools/intex-agent-evals/src/__tests__/**/*.ts",
+    "integration-tests/**/*.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

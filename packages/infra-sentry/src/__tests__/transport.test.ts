@@ -2,6 +2,8 @@
  * Tests for Sentry stream and transport functions.
  */
 
+import { Writable } from 'node:stream';
+import pino from 'pino';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
 import {
@@ -9,6 +11,7 @@ import {
   createSentryTransport,
   sendToSentry,
   isSentryConfigured,
+  SKIP_SENTRY_KEY,
 } from '../transport.js';
 
 // Mock Sentry - must use factory function to avoid hoisting issues
@@ -39,9 +42,11 @@ const originalEnv = process.env;
 const getMockedSentry = (): {
   captureException: ReturnType<typeof vi.fn>;
   captureMessage: ReturnType<typeof vi.fn>;
+  withScope: ReturnType<typeof vi.fn>;
 } => ({
   captureException: vi.mocked(Sentry).captureException as ReturnType<typeof vi.fn>,
   captureMessage: vi.mocked(Sentry).captureMessage as ReturnType<typeof vi.fn>,
+  withScope: vi.mocked(Sentry).withScope as ReturnType<typeof vi.fn>,
 });
 
 describe('isSentryConfigured', () => {
@@ -270,9 +275,10 @@ describe('sendToSentry', () => {
 
 describe('createSentryStream - sendLogToSentry internal function', () => {
   beforeEach(() => {
-    const { captureException, captureMessage } = getMockedSentry();
+    const { captureException, captureMessage, withScope } = getMockedSentry();
     captureException.mockClear();
     captureMessage.mockClear();
+    withScope.mockClear();
     process.env = { ...originalEnv };
   });
 
@@ -532,6 +538,53 @@ describe('createSentryStream - sendLogToSentry internal function', () => {
     ms.streams[0]?.stream.write(warnLog);
 
     expect(captureMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps a marked warning in the primary Pino stream while skipping Sentry capture', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException, captureMessage, withScope } = getMockedSentry();
+    const primaryEntries: Record<string, unknown>[] = [];
+    const primaryStream = new Writable({
+      write(chunk, _encoding, callback): void {
+        primaryEntries.push(JSON.parse(String(chunk)) as Record<string, unknown>);
+        callback();
+      },
+    });
+    const logger = pino(
+      { level: 'warn' },
+      createSentryStream(pino.multistream([{ level: 'trace', stream: primaryStream }]))
+    );
+
+    logger.warn({ control: true }, 'unmarked control warning');
+
+    expect(primaryEntries).toHaveLength(1);
+    expect(withScope).toHaveBeenCalledTimes(1);
+    expect(captureMessage).toHaveBeenCalledWith('unmarked control warning');
+    expect(captureException).not.toHaveBeenCalled();
+
+    primaryEntries.length = 0;
+    captureException.mockClear();
+    captureMessage.mockClear();
+    withScope.mockClear();
+
+    logger.warn(
+      {
+        reason: 'runtime_settings_resolution_failed',
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'Intex Agent runtime settings resolution failed'
+    );
+
+    expect(primaryEntries).toHaveLength(1);
+    expect(primaryEntries[0]).toMatchObject({
+      level: 40,
+      reason: 'runtime_settings_resolution_failed',
+      [SKIP_SENTRY_KEY]: true,
+      msg: 'Intex Agent runtime settings resolution failed',
+    });
+    expect(withScope).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
+    expect(captureException).not.toHaveBeenCalled();
   });
 
   it('skips Sentry captureMessage for internal auth token mismatch warnings', () => {

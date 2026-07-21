@@ -21,6 +21,7 @@
     "@auth0/auth0-react": "^2.2.4",
     "@intexuraos/code-task-domain": "workspace:*",
     "@intexuraos/common-core": "workspace:*",
+    "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@radix-ui/react-dialog": "^1.1.15",
     "@sentry/react": "^8.55.0",

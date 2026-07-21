@@ -4958,6 +4958,168 @@ describe('createIntexAgentRunner', () => {
     expect(systemPrompt).not.toContain('User Preferences are durable user guidance');
     expect(systemPrompt).toContain('Current date-time: 2026-06-24T10:00:00.000+00:00');
   });
+
+  it('runs the selection gate after argument validation and before read-only execution', async () => {
+    const order: string[] = [];
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'count',
+          timeMin: '2026-06-24T00:00:00Z',
+          timeMax: '2026-06-25T00:00:00Z',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'No events.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolSelectionGate: async ({ args }) => {
+        order.push(`gate:${String(args['mode'])}`);
+        return { decision: 'allow', metadata: { turnIndex: 3, ordinal: 1 } };
+      },
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => {
+          order.push('strict_executor');
+          return JSON.stringify({ status: 'completed', mode: 'count', count: 0 });
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'How many events are on my calendar today?',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      toolSelection: { turnIndex: 3, ordinal: 1 },
+    });
+    expect(order).toEqual(['gate:count', 'strict_executor']);
+  });
+
+  it('does not invoke the selection gate when tool arguments fail schema validation', async () => {
+    let selectionGateCalls = 0;
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args: {} },
+      [ok(toolResult({ outcome: 'completed', reply: 'Invalid.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor(),
+      toolSelectionGate: async () => {
+        selectionGateCalls += 1;
+        return { decision: 'allow', metadata: { turnIndex: 0, ordinal: 1 } };
+      },
+    });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'Create a note.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+    expect(selectionGateCalls).toBe(0);
+  });
+
+  it('persists selection metadata before a mutating tool enters confirmation preview', async () => {
+    let productionExecutorCalls = 0;
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args: { content: 'Synthetic note' } },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_note']),
+      toolExecutor: fakeToolExecutor({
+        createNote: async () => {
+          productionExecutorCalls += 1;
+          return JSON.stringify({ status: 'completed' });
+        },
+      }),
+      toolSelectionGate: async () => ({
+        decision: 'allow',
+        metadata: { turnIndex: 5, ordinal: 1 },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a note: Synthetic note',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_note',
+      toolSelection: { turnIndex: 5, ordinal: 1 },
+    });
+    expect(productionExecutorCalls).toBe(0);
+  });
+
+  it('returns a terminal selection rejection before executor or response repair', async () => {
+    let executorCalls = 0;
+    const repairClient = new FakeStructuredClient([]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'count',
+          timeMin: '2026-06-24T00:00:00Z',
+          timeMax: '2026-06-25T00:00:00Z',
+        },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ignored.' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient: repairClient,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => {
+          executorCalls += 1;
+          return JSON.stringify({ status: 'completed', mode: 'count', count: 0 });
+        },
+      }),
+      toolSelectionGate: async () => ({
+        decision: 'reject',
+        category: 'behavioral_failure',
+        code: 'FORBIDDEN_TOOL_SELECTED',
+        metadata: { turnIndex: 4, ordinal: 1 },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'How many events are on my calendar today?',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_selection_rejected',
+      toolName: 'query_calendar_events',
+      category: 'behavioral_failure',
+      code: 'FORBIDDEN_TOOL_SELECTED',
+      toolSelection: { turnIndex: 4, ordinal: 1 },
+      reply: '',
+    });
+    expect(executorCalls).toBe(0);
+    expect(repairClient.calls).toHaveLength(0);
+  });
 });
 
 function toolResult(content: Record<string, unknown>): ToolCallingResult {

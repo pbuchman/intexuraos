@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { runTestConversation } from '../../domain/testConversation/runTestConversation.js';
+import {
+  runTestConversation as runTestConversationDomain,
+  type RunTestConversationDeps,
+} from '../../domain/testConversation/runTestConversation.js';
 import type {
   CapturedToolCall,
+  RunTestConversationInput,
   TestConversationHttpRequest,
   TestConversationResponse,
 } from '../../domain/testConversation/testConversationTypes.js';
@@ -23,6 +27,7 @@ describe('test conversation contract', () => {
     const request: TestConversationHttpRequest = {
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       userId: 'test-intex-agent-intex-e2e-contract',
       runId: 'intex-e2e-contract',
       currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -49,6 +54,7 @@ describe('test conversation contract', () => {
       userId: request.userId,
       contractVersion: '2026-07-01',
       mode: 'live_llm_mock_tools',
+      agentModel: 'or:deepseek/deepseek-v4-flash',
       finalSessionId: 'intex_session_1',
       turns: [
         {
@@ -79,13 +85,14 @@ describe('test conversation contract', () => {
     expect(response.runId).toBe('intex-e2e-contract');
   });
 
-  it('defaults legacy 2026-07-01 requests without timeZone to UTC', async () => {
+  it('defaults requests without timeZone to UTC', async () => {
     const runner = new ScriptedRunner([{ outcome: 'no_action', reply: 'Got it.' }]);
 
     await runTestConversation(
       {
         contractVersion: '2026-07-01',
         mode: 'live_llm_mock_tools',
+        agentModel: 'or:deepseek/deepseek-v4-flash',
         userId: 'test-intex-agent-intex-e2e-legacy-time-zone',
         runId: 'intex-e2e-legacy-time-zone',
         currentDateTime: '2026-07-01T10:00:00.000Z',
@@ -102,6 +109,54 @@ describe('test conversation contract', () => {
     );
 
     expect(runner.calls[0]).toMatchObject({ timeZone: 'UTC' });
+  });
+
+  it('fails closed when a direct domain caller omits the agent model', async () => {
+    await expect(
+      runTestConversationDomain(
+        {
+          contractVersion: '2026-07-01',
+          mode: 'live_llm_mock_tools',
+          agentModel: undefined,
+          userId: 'test-intex-agent-intex-e2e-model-omitted',
+          runId: 'intex-e2e-model-omitted',
+          currentDateTime: '2026-07-01T10:00:00.000Z',
+          turns: [{ kind: 'message', text: 'Missing model.' }],
+        } as unknown as RunTestConversationInput,
+        {
+          sessionRepository: new MemorySessionRepository(),
+          runner: new ScriptedRunner([]),
+          sessionTimeoutMs: 30 * 60 * 1000,
+          ids: fixedTestIds(),
+          toolCalls: [],
+          logger: silentLogger(),
+        }
+      )
+    ).rejects.toThrow('Intex Agent test conversation model mismatch');
+  });
+
+  it('fails closed when a direct domain caller requests another agent model', async () => {
+    await expect(
+      runTestConversation(
+        {
+          contractVersion: '2026-07-01',
+          mode: 'live_llm_mock_tools',
+          agentModel: 'or:google/gemini-2.5-flash',
+          userId: 'test-intex-agent-intex-e2e-model-mismatch',
+          runId: 'intex-e2e-model-mismatch',
+          currentDateTime: '2026-07-01T10:00:00.000Z',
+          turns: [{ kind: 'message', text: 'Model mismatch.' }],
+        },
+        {
+          sessionRepository: new MemorySessionRepository(),
+          runner: new ScriptedRunner([]),
+          sessionTimeoutMs: 30 * 60 * 1000,
+          ids: fixedTestIds(),
+          toolCalls: [],
+          logger: silentLogger(),
+        }
+      )
+    ).rejects.toThrow('Intex Agent test conversation model mismatch');
   });
 
   it('runs two message turns through handleIncomingMessage and returns sanitized evidence', async () => {
@@ -882,6 +937,16 @@ describe('test conversation contract', () => {
     );
   });
 });
+
+function runTestConversation(
+  input: Omit<RunTestConversationInput, 'agentModel'> & { readonly agentModel?: string },
+  deps: RunTestConversationDeps
+): ReturnType<typeof runTestConversationDomain> {
+  return runTestConversationDomain(
+    { agentModel: 'or:deepseek/deepseek-v4-flash', ...input },
+    deps
+  );
+}
 
 class ScriptedRunner implements IntexAgentRunner {
   readonly calls: unknown[] = [];

@@ -1,5 +1,5 @@
 /**
- * Curated allowlist of 15 frontier models from 10 providers.
+ * Curated allowlist of 16 frontier models from 11 providers.
  *
  * This is a hardcoded list instead of fetching the full OpenRouter catalog
  * to avoid overwhelming users and ensure quality. Each entry includes
@@ -32,10 +32,19 @@ export interface AllowedOpenRouterModel {
 }
 
 /**
- * Curated allowlist of 15 frontier models from 10 providers.
+ * Curated allowlist of 16 frontier models from 11 providers.
  * Fallback pricing is used when live pricing is unavailable.
  */
 export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
+  // DeepSeek
+  {
+    id: 'deepseek/deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    provider: 'DeepSeek',
+    contextLength: 1_048_576,
+    promptPerToken: '0.000000098',
+    completionPerToken: '0.000000196',
+  },
   // Qwen
   {
     id: 'qwen/qwen3.5-plus-02-15',

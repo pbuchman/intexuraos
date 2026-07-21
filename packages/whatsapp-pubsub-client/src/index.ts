@@ -14,5 +14,6 @@ export type {
 } from './types.js';
 export {
   type WhatsAppSendPublisher,
+  type WhatsAppSendPublisherWithReceipt,
   createWhatsAppSendPublisher,
 } from './whatsappSendPublisher.js';

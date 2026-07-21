@@ -41,7 +41,11 @@ export interface InternalHttpClientRequest {
   requestId?: string | undefined;
   extraHeaders?: Record<string, string> | undefined;
   allowRawSuccess?: boolean | undefined;
+  /** Preserve a successful response body for a stricter domain-owned envelope decoder. */
+  responseMode?: 'envelope' | 'raw' | undefined;
   skipSentry?: boolean | undefined;
+  /** Suppress route identifiers and raw transport errors for private control-plane calls. */
+  privateRequest?: boolean | undefined;
 }
 
 export type InternalHttpClientError =
@@ -85,6 +89,7 @@ export function createInternalHttpClient(cfg: InternalHttpClientConfig): Interna
         timeoutMs,
         requestId: args.requestId,
         skipSentry: args.skipSentry,
+        privateRequest: args.privateRequest,
       });
 
       if (!transport.ok) {
@@ -104,6 +109,10 @@ export function createInternalHttpClient(cfg: InternalHttpClientConfig): Interna
             body,
           },
         };
+      }
+
+      if (args.responseMode === 'raw') {
+        return { ok: true, value: body as T };
       }
 
       const envelope = unwrapEnvelope<T>(body);

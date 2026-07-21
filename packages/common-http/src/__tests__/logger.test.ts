@@ -136,6 +136,54 @@ describe('Logger utilities', () => {
       expect(done).toHaveBeenCalledTimes(2);
       expect(info).not.toHaveBeenCalled();
     });
+
+    it('redacts identifiers from configured private request paths', () => {
+      const { app, hooks } = makeHookRecorder();
+      registerQuietHealthCheckLogging(app, {
+        privatePathPrefixes: ['/internal/matrix-corpus/', '/internal/test-runs/'],
+      });
+      const info = vi.fn();
+      const request = {
+        method: 'GET',
+        url: '/internal/matrix-corpus/runs/RUN_PRIVATE_SENTINEL/scenarios/SCENARIO_PRIVATE_SENTINEL/evidence?token=QUERY_PRIVATE_SENTINEL',
+        headers: { host: 'api.example.test' },
+        ip: '127.0.0.1',
+        log: { info },
+      } as unknown as FastifyRequest;
+      const reply = { statusCode: 200, elapsedTime: 4 } as FastifyReply;
+      const done = vi.fn();
+
+      hooks.onRequest?.(request, reply, done);
+      hooks.onResponse?.(request, reply, done);
+
+      const serialized = JSON.stringify(info.mock.calls);
+      expect(serialized).toContain('/internal/matrix-corpus/[REDACTED]');
+      expect(serialized).not.toContain('RUN_PRIVATE_SENTINEL');
+      expect(serialized).not.toContain('SCENARIO_PRIVATE_SENTINEL');
+      expect(serialized).not.toContain('QUERY_PRIVATE_SENTINEL');
+    });
+
+    it('redacts configured Test Run projection identifiers', () => {
+      const { app, hooks } = makeHookRecorder();
+      registerQuietHealthCheckLogging(app, {
+        privatePathPrefixes: ['/internal/matrix-corpus/', '/internal/test-runs/'],
+      });
+      const info = vi.fn();
+      const request = {
+        method: 'PUT',
+        url: '/internal/test-runs/RUN_PROJECTION_PRIVATE_SENTINEL/projection',
+        headers: { host: 'api.example.test' },
+        ip: '127.0.0.1',
+        log: { info },
+      } as unknown as FastifyRequest;
+      const reply = { statusCode: 200, elapsedTime: 4 } as FastifyReply;
+
+      hooks.onRequest?.(request, reply, vi.fn());
+
+      const serialized = JSON.stringify(info.mock.calls);
+      expect(serialized).toContain('/internal/test-runs/[REDACTED]');
+      expect(serialized).not.toContain('RUN_PROJECTION_PRIVATE_SENTINEL');
+    });
   });
 
   describe('logIncomingRequest', () => {
@@ -406,6 +454,15 @@ describe('Logger utilities', () => {
       const payload = logged?.payload as Record<string, unknown>;
 
       expect(payload['bodyPreview']).toBe('');
+    });
+
+    it('omits headers when includeHeaders is false', () => {
+      logIncomingRequest(mockRequest as FastifyRequest, { includeHeaders: false });
+
+      const logged = loggedPayloads[0];
+      const payload = logged?.payload as Record<string, unknown>;
+
+      expect(Object.hasOwn(payload, 'headers')).toBe(false);
     });
 
     it('omits very long arbitrary headers without error', () => {

@@ -2,8 +2,11 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
+import { createPrivateKey, randomUUID } from 'node:crypto';
+
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createMetricsClient } from '@intexuraos/common-metrics';
+import { getFirestore } from '@intexuraos/infra-firestore';
 import type { ConversationAssistantModel } from '@intexuraos/llm-contract';
 import {
   MessageRepositoryAdapter,
@@ -66,6 +69,43 @@ import { createConversationAssistantTurnRequestRepository } from './infra/firest
 import { createConversationAssistantTurnRunner } from './infra/llm/conversationAssistantTurnRunner.js';
 import { createConversationAssistantOperationalTelemetry } from './infra/metrics/conversationAssistantOperationalTelemetry.js';
 import { createMatrixOutboundAdapterClient } from './infra/http/matrixOutboundAdapterClient.js';
+import type { WhatsAppMatrixCorpusConfig } from './config.js';
+import { MatrixCorpusControlPlane } from './domain/matrixCorpus/controlPlane.js';
+import { MatrixCorpusRouteControlPlaneAdapter } from './domain/matrixCorpus/routeControlPlane.js';
+import type { MatrixCorpusRoutesDependencies } from './routes/matrixCorpusRoutes.js';
+import {
+  createMatrixCorpusKeyedDigests,
+  createMatrixCorpusReplayProjectionDigest,
+  createMatrixCorpusSha256,
+} from './domain/matrixCorpus/crypto.js';
+import {
+  FirestoreMatrixCorpusLeaseBindingAuthorization,
+  FirestoreMatrixCorpusRepository,
+  FirestoreMatrixCorpusSignedEnvelopeStore,
+} from './infra/firestore/matrixCorpusRepository.js';
+import { FirestoreMatrixCorpusRecoveryScanner } from './infra/firestore/matrixCorpusRecoveryScanner.js';
+import { createIntexAgentMatrixCorpusClient } from './infra/http/intexAgentMatrixCorpusClient.js';
+import { createMatrixCorpusOutboxDrainer } from './infra/pubsub/matrixCorpusOutboxDrainer.js';
+import { signMatrixCorpusAttestation } from './domain/matrixCorpus/attestation.js';
+import { createMatrixCorpusControlAuthorizationIssuer } from './domain/matrixCorpus/controlAuthorization.js';
+import type { CleanupResult, MatrixCorpusClock } from './domain/matrixCorpus/types.js';
+import {
+  MatrixCorpusRecoveryController,
+  createMatrixCorpusRecoveryWork,
+  createRuntimeMatrixCorpusTimerScheduler,
+} from './jobs/matrixCorpusLeaseSweeper.js';
+import type { Firestore } from '@intexuraos/infra-firestore';
+import type { IntexAgentMatrixCorpusClient } from './domain/matrixCorpus/ports/intexAgentMatrixCorpusClient.js';
+import type { MatrixCorpusTimerScheduler } from './jobs/matrixCorpusLeaseSweeper.js';
+import type { MatrixCorpusIngressPort } from './domain/matrixCorpus/ports/matrixCorpusIngress.js';
+import { FirestoreMatrixCorpusIngress } from './infra/firestore/matrixCorpusIngress.js';
+
+export function composeWhatsAppMatrixCorpusFeature<T>(
+  config: WhatsAppMatrixCorpusConfig,
+  createEnabled: (config: Extract<WhatsAppMatrixCorpusConfig, { enabled: true }>) => T
+): T | null {
+  return config.enabled ? createEnabled(config) : null;
+}
 
 /**
  * Configuration for service initialization.
@@ -86,6 +126,14 @@ export interface ServiceConfig {
   conversationAssistantModel: ConversationAssistantModel;
   matrixOutboundAdapterBaseUrl: string;
   matrixOutboundAdapterAuthToken: string;
+  intexAgentBaseUrl: string;
+  matrixCorpus: WhatsAppMatrixCorpusConfig;
+}
+
+export interface WhatsAppMatrixCorpusRuntime {
+  routes: MatrixCorpusRoutesDependencies;
+  ingress: MatrixCorpusIngressPort;
+  recoveryController: MatrixCorpusRecoveryController;
 }
 
 function buildPubSubConfig(config: ServiceConfig): GcpPubSubPublisherConfig {
@@ -134,6 +182,7 @@ export interface ServiceContainer {
   llmClientFactory?: ConversationAssistantLlmClientFactory;
   pdfConversationExporter?: ConversationAssistantPdfExporter;
   conversationAssistantModel?: ConversationAssistantModel;
+  matrixCorpus?: WhatsAppMatrixCorpusRuntime;
 }
 
 let container: ServiceContainer | null = null;
@@ -159,6 +208,7 @@ export function getServices(): ServiceContainer {
   if (serviceConfig === null) {
     throw new Error('Service container not initialized. Call initServices() first.');
   }
+  const initializedConfig = serviceConfig;
 
   const privateWhatsAppRepository = createPrivateWhatsAppRepository();
   const llmClientFactory = createConversationAssistantLlmClientFactory(serviceConfig);
@@ -178,8 +228,8 @@ export function getServices(): ServiceContainer {
     createConversationAssistantContextAttachmentRepository({
       telemetry: conversationAssistantOperationalTelemetry,
     });
-  const pubSubPublisher = new GcpPubSubPublisher(buildPubSubConfig(serviceConfig));
-  container = {
+  const eventPublisher = new GcpPubSubPublisher(buildPubSubConfig(serviceConfig));
+  const ordinaryContainer: ServiceContainer = {
     webhookEventRepository: new WebhookEventRepositoryAdapter(),
     userMappingRepository: new UserMappingRepositoryAdapter(),
     messageRepository: new MessageRepositoryAdapter(),
@@ -188,13 +238,13 @@ export function getServices(): ServiceContainer {
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
     privateWhatsAppRepository,
     privateWhatsAppErasureRepository: createPrivateWhatsAppErasureRepository(),
-    privateWhatsAppErasurePublisher: pubSubPublisher,
+    privateWhatsAppErasurePublisher: eventPublisher,
     matrixOutboundGateway: createMatrixOutboundAdapterClient({
       baseUrl: serviceConfig.matrixOutboundAdapterBaseUrl,
       authToken: serviceConfig.matrixOutboundAdapterAuthToken,
     }),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
-    eventPublisher: pubSubPublisher,
+    eventPublisher,
     messageSender: new WhatsAppCloudApiSender(
       serviceConfig.whatsappAccessToken,
       serviceConfig.whatsappPhoneNumberId
@@ -227,7 +277,225 @@ export function getServices(): ServiceContainer {
     pdfConversationExporter: createConversationAssistantPdfExporter(),
     conversationAssistantModel: serviceConfig.conversationAssistantModel,
   };
+  const matrixCorpus = composeWhatsAppMatrixCorpusFeature(
+    serviceConfig.matrixCorpus,
+    (enabledConfig) =>
+      createWhatsAppMatrixCorpusRuntime({
+        config: enabledConfig,
+        serviceConfig: initializedConfig,
+        eventPublisher,
+      })
+  );
+  container =
+    matrixCorpus === null
+      ? ordinaryContainer
+      : { ...ordinaryContainer, matrixCorpus };
   return container;
+}
+
+interface CreateWhatsAppMatrixCorpusRuntimeInput {
+  config: Extract<WhatsAppMatrixCorpusConfig, { enabled: true }>;
+  serviceConfig: ServiceConfig;
+  eventPublisher: EventPublisherPort;
+  dependencies?: Readonly<{
+    firestore: Firestore;
+    intexAgent: IntexAgentMatrixCorpusClient;
+    privateKey: ReturnType<typeof createPrivateKey>;
+    logger: ReturnType<typeof createAppLogger>;
+    scheduler: MatrixCorpusTimerScheduler;
+    now(): string;
+    workerNonce: string;
+  }>;
+}
+
+export function createWhatsAppMatrixCorpusRuntime(
+  input: CreateWhatsAppMatrixCorpusRuntimeInput
+): WhatsAppMatrixCorpusRuntime {
+  if (input.serviceConfig.intexAgentBaseUrl.trim() === '') {
+    throw new Error('INTEXURAOS_INTEX_AGENT_URL is invalid');
+  }
+
+  const logger =
+    input.dependencies?.logger ?? createAppLogger({ name: 'whatsapp-matrix-corpus' });
+  const firestore = input.dependencies?.firestore ?? getFirestore();
+  const digests = createMatrixCorpusKeyedDigests(input.config.evaluatorBindingHmacKey);
+  const sha256 = createMatrixCorpusSha256();
+  const repository = new FirestoreMatrixCorpusRepository({
+    firestore,
+    replayProjectionDigest: createMatrixCorpusReplayProjectionDigest(),
+  });
+  const intexAgent =
+    input.dependencies?.intexAgent ??
+    createIntexAgentMatrixCorpusClient({
+      baseUrl: input.serviceConfig.intexAgentBaseUrl,
+      internalAuthToken: input.serviceConfig.internalAuthToken,
+      logger,
+    });
+  const clock: MatrixCorpusClock = {
+    now: input.dependencies?.now ?? ((): string => new Date().toISOString()),
+  };
+  const controlPlane = new MatrixCorpusControlPlane({
+    repository,
+    clock,
+    digests,
+    sha256,
+    ids: {
+      ingestReceiptId: (): string => `imc_receipt_${randomUUID()}`,
+      ingestOutboxId: (): string => `imc_outbox_${randomUUID()}`,
+    },
+    intexAgent,
+    logger,
+    leaseTtlMs: 300_000,
+    capabilityTtlMs: 300_000,
+  });
+  const leaseBindingAuthorization = new FirestoreMatrixCorpusLeaseBindingAuthorization({
+    firestore,
+    digests,
+  });
+  const routeControlPlane = new MatrixCorpusRouteControlPlaneAdapter({
+    controlPlane,
+    leaseBindingAuthorization,
+    cleanup: {
+      async cleanupExactRun(cleanupInput): Promise<CleanupResult> {
+        const now = clock.now();
+        const leaseSlotDigest = digests.digest('imc-lease-slot-v1', [
+          cleanupInput.runtimeAudience,
+          cleanupInput.userId,
+        ]);
+        const currentRunFenceDigest = digests.digest('imc-run-fence-v1', [
+          cleanupInput.runtimeAudience,
+          cleanupInput.userId,
+          cleanupInput.runId,
+        ]);
+        const idempotencyKeyDigest = digests.digest('imc-operation-idempotency-v1', [
+          'cleanup',
+          cleanupInput.idempotencyKey,
+        ]);
+        const canonicalRequestDigest = digests.digest('imc-operation-request-v1', [
+          'cleanup',
+          JSON.stringify({
+            runtimeAudience: cleanupInput.runtimeAudience,
+            currentRunId: cleanupInput.runId,
+            userId: cleanupInput.userId,
+            currentLeaseFence: cleanupInput.leaseFence,
+            targetRunId: cleanupInput.targetRunId,
+            targetLeaseFence: cleanupInput.targetLeaseFence,
+            targetRunFenceDigest: cleanupInput.targetRunFenceDigest,
+            expectedRevision: cleanupInput.expectedRevision,
+          }),
+        ]);
+        return await repository.cleanupExactRun({
+          runtimeAudience: cleanupInput.runtimeAudience,
+          currentRunId: cleanupInput.runId,
+          userId: cleanupInput.userId,
+          currentLeaseFence: cleanupInput.leaseFence,
+          leaseSlotDigest,
+          currentRunFenceDigest,
+          targetRunId: cleanupInput.targetRunId,
+          targetLeaseFence: cleanupInput.targetLeaseFence,
+          targetRunFenceDigest: cleanupInput.targetRunFenceDigest,
+          expectedRevision: cleanupInput.expectedRevision,
+          idempotencyKeyDigest,
+          canonicalRequestDigest,
+          now,
+        });
+      },
+    },
+    intexAgent,
+  });
+
+  const privateKey =
+    input.dependencies?.privateKey ??
+    createPrivateKey({
+      key: JSON.parse(input.config.signingKeyMaterial) as never,
+      format: 'jwk',
+    });
+  const signedEnvelopeStore = new FirestoreMatrixCorpusSignedEnvelopeStore({ firestore });
+  const signAttestation = async (
+    signInput: Parameters<typeof signMatrixCorpusAttestation>[0]
+  ): Promise<Awaited<ReturnType<typeof signMatrixCorpusAttestation>>> =>
+    await signMatrixCorpusAttestation(signInput, {
+      keyVersion: input.config.signingKeyVersion,
+      privateKey,
+    });
+  const issueControlAuthorization = createMatrixCorpusControlAuthorizationIssuer({
+    getTransportStatus: async (authority) =>
+      await routeControlPlane.getTransportStatus(authority),
+    sign: signAttestation,
+    now: (): string => clock.now(),
+    eventId: (): string => `imc_control_${randomUUID()}`,
+  });
+  const drainer = createMatrixCorpusOutboxDrainer({
+    repository,
+    publisher: input.eventPublisher,
+    intexAgentClient: intexAgent,
+    signedEnvelopeStore,
+    sign: signAttestation,
+    now: (): string => clock.now(),
+  });
+  const scanner = new FirestoreMatrixCorpusRecoveryScanner({ firestore, digests });
+  const recovery = createMatrixCorpusRecoveryWork({
+    scanner,
+    drainer,
+    controlPlane,
+    now: (): string => clock.now(),
+    ownerDigest: digests.digest('imc-claim-owner-v1', [
+      'whatsapp-service',
+      input.dependencies?.workerNonce ?? randomUUID(),
+    ]),
+  });
+  const recoveryController = new MatrixCorpusRecoveryController({
+    scheduler: input.dependencies?.scheduler ?? createRuntimeMatrixCorpusTimerScheduler(),
+    drainBatch: async (): Promise<void> => {
+      await recovery.drainBatch();
+    },
+    sweepExpiredLeases: async (): Promise<void> => {
+      await recovery.sweepExpiredLeases();
+    },
+    logger,
+  });
+
+  const evaluator = {
+    userId: input.config.configuredEvaluatorUserId,
+    matrixRoomBindingDigest: digests.digest('imc-lease-slot-v1', [
+      'matrix-room-binding',
+      input.config.matrixRoomBinding,
+    ]),
+    whatsappAccountBindingDigest: digests.digest('imc-lease-slot-v1', [
+      'whatsapp-account-binding',
+      input.config.whatsappAccountBinding,
+    ]),
+    whatsappSenderBindingDigest: digests.digest('imc-lease-slot-v1', [
+      'whatsapp-sender-binding',
+      input.config.whatsappSenderBinding,
+    ]),
+  };
+
+  const ingress = new FirestoreMatrixCorpusIngress({
+    firestore,
+    controlPlane,
+    digests,
+    sha256,
+    expectedMatrixRoomBindingDigest: evaluator.matrixRoomBindingDigest,
+    expectedWhatsAppAccountBindingDigest: evaluator.whatsappAccountBindingDigest,
+    expectedWhatsAppSenderBindingDigest: evaluator.whatsappSenderBindingDigest,
+  });
+
+  return {
+    routes: {
+      gate: {
+        enabled: true,
+        runtimeAudience: 'home-dev',
+        evaluator,
+      },
+      digestMatrixIdempotencyKey: (idempotencyKey) =>
+        digests.digest('imc-matrix-idempotency-v1', [idempotencyKey]),
+      issueControlAuthorization,
+      controlPlane: routeControlPlane,
+    },
+    ingress,
+    recoveryController,
+  };
 }
 
 export function createConversationAssistantLlmClientFactory(

@@ -65,7 +65,7 @@ export interface ReplyTechnicalFacts {
     actualAction?: IntexAgentTransitionAction;
     expectedPreviousEndReason?: IntexAgentSessionEndReason;
     actualPreviousEndReason?: IntexAgentSessionEndReason;
-    outcome: CheckOutcome;
+    outcome: AssertionGroupOutcome;
   };
   session: {
     allowedStatuses: IntexAgentSessionStatus[];
@@ -76,14 +76,14 @@ export interface ReplyTechnicalFacts {
     actualEndReason?: IntexAgentSessionEndReason;
     expectedActiveTool?: IntexAgentToolName;
     actualActiveTool?: IntexAgentToolName;
-    outcome: CheckOutcome;
+    outcome: AssertionGroupOutcome;
   };
   timeline: {
-    required: { eventType: IntexAgentSessionEventType; outcome: CheckOutcome }[];
-    forbidden: { eventType: IntexAgentSessionEventType; outcome: CheckOutcome }[];
+    required: { eventType: IntexAgentSessionEventType; outcome: AssertionGroupOutcome }[];
+    forbidden: { eventType: IntexAgentSessionEventType; outcome: AssertionGroupOutcome }[];
     payloadGroups: {
       eventType: IntexAgentSessionEventType;
-      outcome: CheckOutcome;
+      outcome: AssertionGroupOutcome;
       syntheticMarkerEvidence: AssertionGroupOutcome;
     }[];
   };

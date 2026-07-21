@@ -5,6 +5,7 @@ import type { IntexAgentSession, IntexAgentSessionEvent, IntexAgentToolName } fr
 export const TEST_CONVERSATION_CONTRACT_VERSION = '2026-07-01';
 export const TEST_CONVERSATION_SIDE_EFFECT_BOUNDARY = 'mocked_tools_no_downstream_writes';
 export const TEST_CONVERSATION_TOOL_FAILURE_CODE = 'tool_execution_failed';
+export const TEST_CONVERSATION_AGENT_MODEL = 'or:deepseek/deepseek-v4-flash' as const;
 
 export type TestConversationMode = 'live_llm_mock_tools';
 
@@ -38,6 +39,8 @@ export type TestToolMocks = Partial<Record<IntexAgentToolName, TestToolMock>>;
 export interface TestConversationHttpRequest {
   contractVersion: typeof TEST_CONVERSATION_CONTRACT_VERSION;
   mode: TestConversationMode;
+  /** Runtime boundary accepts a required string so the service can fail closed on model drift. */
+  agentModel: string;
   userId: string;
   runId: string;
   scenarioId?: string;
@@ -204,6 +207,7 @@ export interface BehavioralTranscript {
 export interface TestConversationResponse {
   contractVersion: typeof TEST_CONVERSATION_CONTRACT_VERSION;
   mode: TestConversationMode;
+  agentModel: typeof TEST_CONVERSATION_AGENT_MODEL;
   runId: string;
   scenarioId?: string;
   userId: string;

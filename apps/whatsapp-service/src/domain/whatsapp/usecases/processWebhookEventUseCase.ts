@@ -24,6 +24,12 @@ import type { WhatsAppMessage } from '../models/WhatsAppMessage.js';
 import { ProcessImageMessageUseCase } from './processImageMessage.js';
 import { ProcessAudioMessageUseCase } from './processAudioMessage.js';
 import { ProcessVideoMessageUseCase } from './processVideoMessage.js';
+import { parseMatrixCorpusVisibleMessage } from '../../matrixCorpus/visibleHeader.js';
+import {
+  matrixCorpusReservedIngressResultSchema,
+  notReadyMatrixCorpusIngress,
+  type MatrixCorpusIngressPort,
+} from '../../matrixCorpus/ports/matrixCorpusIngress.js';
 import type { WebhookPayload } from '../../../routes/schemas.js';
 import {
   extractAudioMedia,
@@ -56,6 +62,7 @@ export interface ProcessWebhookEventDeps {
   whatsappCloudApi: WhatsAppCloudApiPort;
   thumbnailGenerator: ThumbnailGeneratorPort;
   eventPublisher: EventPublisherPort;
+  matrixCorpusIngress?: MatrixCorpusIngressPort;
 }
 
 export interface ProcessWebhookEventFailure {
@@ -89,6 +96,7 @@ export class ProcessWebhookEventUseCase {
     logger: Logger
   ): Promise<ProcessWebhookEventResult> {
     const { webhookEventRepository, userMappingRepository } = this.deps;
+    let isMatrixCorpusReserved = false;
 
     logger.info({ eventId: savedEvent.id }, 'Starting asynchronous webhook processing');
 
@@ -117,11 +125,15 @@ export class ProcessWebhookEventUseCase {
       const videoMedia = extractVideoMedia(payload);
       const reactionData = extractReactionData(payload);
       const buttonResponse = extractButtonResponse(payload);
+      isMatrixCorpusReserved =
+        messageType === 'text' &&
+        messageText !== null &&
+        parseMatrixCorpusVisibleMessage(messageText).kind !== 'ordinary';
 
       logger.info(
         {
           eventId: savedEvent.id,
-          fromNumber,
+          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { fromNumber }),
           messageType,
           hasText: messageText !== null,
           hasImage: imageMedia !== null,
@@ -225,31 +237,53 @@ export class ProcessWebhookEventUseCase {
       }
 
       // Look up user by phone number
-      logger.info({ eventId: savedEvent.id, fromNumber }, 'Looking up user by phone number');
+      logger.info(
+        {
+          eventId: savedEvent.id,
+          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { fromNumber }),
+        },
+        'Looking up user by phone number'
+      );
 
       const userIdResult = await userMappingRepository.findUserByPhoneNumber(fromNumber);
       if (!userIdResult.ok) {
         logger.error(
-          { eventId: savedEvent.id, fromNumber, error: userIdResult.error },
+          isMatrixCorpusReserved
+            ? {
+                eventId: savedEvent.id,
+                matrixCorpusReserved: true,
+                reason: 'mapping_lookup_failed',
+              }
+            : { eventId: savedEvent.id, fromNumber, error: userIdResult.error },
           'Failed to look up user by phone number'
         );
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-          failureDetails: userIdResult.error.message,
+          failureDetails: isMatrixCorpusReserved
+            ? 'Matrix corpus user mapping lookup failed'
+            : userIdResult.error.message,
         });
         return;
       }
 
       if (userIdResult.value === null) {
         logger.info(
-          { eventId: savedEvent.id, fromNumber },
+          {
+            eventId: savedEvent.id,
+            ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { fromNumber }),
+          },
           'No user mapping found for phone number'
         );
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'user_unmapped', {
-          ignoredReason: {
-            code: 'user_unmapped',
-            message: `No user mapping found for phone number: ${fromNumber}`,
-            details: { phoneNumber: fromNumber },
-          },
+          ignoredReason: isMatrixCorpusReserved
+            ? {
+                code: 'user_unmapped',
+                message: 'No user mapping found for Matrix corpus transport',
+              }
+            : {
+                code: 'user_unmapped',
+                message: `No user mapping found for phone number: ${fromNumber}`,
+                details: { phoneNumber: fromNumber },
+              },
         });
         return;
       }
@@ -257,7 +291,12 @@ export class ProcessWebhookEventUseCase {
       const userId = userIdResult.value;
 
       logger.info(
-        { eventId: savedEvent.id, fromNumber, userId },
+        {
+          eventId: savedEvent.id,
+          ...(isMatrixCorpusReserved
+            ? { matrixCorpusReserved: true }
+            : { fromNumber, userId }),
+        },
         'User mapping found for phone number'
       );
 
@@ -265,14 +304,17 @@ export class ProcessWebhookEventUseCase {
       const mappingResult = await userMappingRepository.getMapping(userId);
       if (!mappingResult.ok || mappingResult.value?.connected !== true) {
         logger.info(
-          { eventId: savedEvent.id, userId },
+          {
+            eventId: savedEvent.id,
+            ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { userId }),
+          },
           'User mapping exists but is disconnected'
         );
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'user_unmapped', {
           ignoredReason: {
             code: 'USER_DISCONNECTED',
             message: 'User mapping exists but is disconnected',
-            details: { userId },
+            ...(isMatrixCorpusReserved ? {} : { details: { userId } }),
           },
         });
         return;
@@ -289,9 +331,10 @@ export class ProcessWebhookEventUseCase {
       logger.info(
         {
           eventId: savedEvent.id,
-          userId,
           messageType,
-          waMessageId,
+          ...(isMatrixCorpusReserved
+            ? { matrixCorpusReserved: true }
+            : { userId, waMessageId }),
         },
         'Routing message to handler'
       );
@@ -404,22 +447,31 @@ export class ProcessWebhookEventUseCase {
         return { ok: false, retryable: true, failureDetails: error.message };
       }
 
+      const failureDetails = isMatrixCorpusReserved
+        ? 'Unexpected Matrix corpus webhook processing failure'
+        : `Unexpected error: ${getErrorMessage(error)}`;
       logger.error(
-        {
-          eventId: savedEvent.id,
-          error: getErrorMessage(error),
-        },
+        isMatrixCorpusReserved
+          ? {
+              eventId: savedEvent.id,
+              matrixCorpusReserved: true,
+              reason: 'unexpected_processing_failure',
+            }
+          : {
+              eventId: savedEvent.id,
+              error: getErrorMessage(error),
+            },
         'Unexpected error during asynchronous webhook processing'
       );
       // Update event status so it's not stuck in 'pending' forever
       await this.deps.webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-        failureDetails: `Unexpected error: ${getErrorMessage(error)}`,
+        failureDetails,
         retryable: false,
       });
       return {
         ok: false,
         retryable: false,
-        failureDetails: `Unexpected error: ${getErrorMessage(error)}`,
+        failureDetails,
       };
     }
     return undefined;
@@ -750,6 +802,63 @@ export class ProcessWebhookEventUseCase {
     logger: Logger
   ): Promise<void> {
     const { webhookEventRepository, messageRepository, eventPublisher } = this.deps;
+
+    const matrixCorpusMessage = parseMatrixCorpusVisibleMessage(messageText);
+    if (matrixCorpusMessage.kind === 'reserved_malformed') {
+      const statusResult = await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+        ignoredReason: {
+          code: 'MATRIX_CORPUS_RESERVED_HEADER_REJECTED',
+          message: 'Reserved Matrix corpus header rejected',
+        },
+      });
+      if (!statusResult.ok) {
+        throw new RetryableWebhookProcessingError('Failed to record Matrix corpus terminal status');
+      }
+      return;
+    }
+    if (matrixCorpusMessage.kind === 'matrix_corpus') {
+      const matrixCorpusIngress = this.deps.matrixCorpusIngress ?? notReadyMatrixCorpusIngress;
+      let ingressResult: unknown;
+      try {
+        ingressResult = await matrixCorpusIngress.consumeReservedMessage({
+          message: matrixCorpusMessage,
+          userId,
+          transportMessageId: waMessageId,
+          webhookEventId: savedEvent.id,
+          senderPhoneNumber: fromNumber,
+          recipientPhoneNumber: toNumber,
+          whatsappAccountId: phoneNumberId,
+          timestamp,
+        });
+      } catch {
+        throw new RetryableWebhookProcessingError('Matrix corpus ingress failed');
+      }
+      const parsedIngressResult = matrixCorpusReservedIngressResultSchema.safeParse(ingressResult);
+      if (!parsedIngressResult.success) {
+        throw new RetryableWebhookProcessingError('Matrix corpus ingress returned invalid state');
+      }
+      const accepted =
+        parsedIngressResult.data.code === 'INGEST_ENQUEUED' ||
+        parsedIngressResult.data.code === 'ALREADY_APPLIED';
+      const statusResult = accepted
+        ? await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {})
+        : await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
+            ignoredReason:
+              parsedIngressResult.data.code === 'NOT_READY'
+                ? {
+                    code: 'MATRIX_CORPUS_CONTROL_PLANE_NOT_READY',
+                    message: 'Matrix corpus control plane is not ready',
+                  }
+                : {
+                    code: 'MATRIX_CORPUS_INGRESS_REJECTED',
+                    message: 'Matrix corpus ingress rejected',
+                  },
+          });
+      if (!statusResult.ok) {
+        throw new RetryableWebhookProcessingError('Failed to record Matrix corpus terminal status');
+      }
+      return;
+    }
 
     // Build text message object
     const messageToSave: Parameters<typeof messageRepository.saveMessage>[0] = {

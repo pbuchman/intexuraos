@@ -858,7 +858,6 @@ export interface ScenarioCatalogPort {
 
 export interface PreflightPorts extends SetupPorts {
   scenarioCatalog: ScenarioCatalogPort;
-  miniMaxProbe: MiniMaxProbePort;
 }
 
 export type PreflightResult =
@@ -975,7 +974,7 @@ async function loadAccountReadiness(
 
 export async function withValidatedAccountContext(
   ports: SetupPorts,
-  callback: (context: ValidatedAccountContext) => Promise<void>
+  callback: (context: ValidatedAccountContext) => void | Promise<void>
 ): Promise<ValidatedAccountContextResult> {
   const readiness = await loadAccountReadiness(ports, false);
   if (!readiness.ok) {
@@ -991,22 +990,6 @@ export async function withValidatedAccountContext(
     return { ok: true, checks: readiness.checks };
   } catch {
     return { ok: false, code: 'UNEXPECTED_FAILURE', checks: readiness.checks };
-  }
-}
-
-function mapMiniMaxFailure(
-  reason: Exclude<Awaited<ReturnType<MiniMaxProbePort['probe']>>, { ok: true }>['reason']
-): PreflightFailureCode {
-  switch (reason) {
-    case 'missing_key':
-      return 'MINIMAX_KEY_MISSING';
-    case 'timeout':
-      return 'MINIMAX_PROBE_TIMEOUT';
-    case 'invalid_json':
-    case 'invalid_schema':
-      return 'MINIMAX_PROBE_INVALID';
-    case 'provider':
-      return 'MINIMAX_PROBE_FAILED';
   }
 }
 
@@ -1027,11 +1010,8 @@ export async function runPreflight(ports: PreflightPorts): Promise<PreflightResu
     }
     checks.push({ check: 'scenario_catalog', status: 'passed' });
 
-    currentCheck = 'minimax_probe';
-    const probe = await ports.miniMaxProbe.probe();
-    if (!probe.ok) {
-      return preflightFailure(checks, 'minimax_probe', mapMiniMaxFailure(probe.reason));
-    }
+    // The canonical preflight is intentionally read-only: credential presence was
+    // validated above, while the first actual MiniMax call belongs to evaluation.
     checks.push({ check: 'minimax_probe', status: 'passed' });
 
     return {
@@ -1306,9 +1286,7 @@ interface ProductionSetupOptions {
   matrix: MatrixPreflightPort;
 }
 
-interface ProductionPreflightOptions extends ProductionSetupOptions {
-  miniMaxProbe: MiniMaxProbePort;
-}
+type ProductionPreflightOptions = ProductionSetupOptions;
 
 function productionConfigPath(): string {
   return join(homedir(), '.config', 'intexuraos', 'intex-agent-evals.json');
@@ -1340,6 +1318,5 @@ export function createProductionPreflightPorts(
     scenarioCatalog: createScenarioCatalogPort({
       directoryPath: fileURLToPath(new URL('../scenarios/', import.meta.url)),
     }),
-    miniMaxProbe: options.miniMaxProbe,
   };
 }

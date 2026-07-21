@@ -51,6 +51,28 @@ export interface IntexAgentSession {
   endReason?: IntexAgentSessionEndReason;
   activeTool?: IntexAgentToolName;
   summary?: string;
+  matrixCorpusProfile?: IntexAgentMatrixCorpusProfileV1;
+  lastEventSequence?: number;
+}
+
+export interface IntexAgentMatrixCorpusProfileV1 {
+  version: 1;
+  kind: 'matrix_corpus';
+  runtimeAudience: 'home-dev';
+  leaseFence: string;
+  runId: string;
+  scenarioId: string;
+  scenarioNumber: number;
+  scenarioLabel: string;
+  executionMode: 'strict_mock_tools';
+  agentModel: 'or:deepseek/deepseek-v4-flash';
+  evaluatorModel: 'or:minimax/minimax-m3';
+  promptPreferencesVersion: number;
+  promptPreferencesDigest: string;
+  userTimeZone: string;
+  mockProfile: StrictToolMockProfileV1;
+  mockProfileDigest: string;
+  expectedToolSchedule: MatrixCorpusExpectedToolScheduleV1;
 }
 
 export type IntexAgentSessionEventType =
@@ -65,6 +87,11 @@ export type IntexAgentSessionEventType =
   | 'tool_call_started'
   | 'tool_call_completed'
   | 'tool_call_failed'
+  | 'matrix_corpus_execution_boundary'
+  | 'llm_call_usage'
+  | 'llm_usage_summary'
+  | 'turn_processing_completed'
+  | 'turn_processing_failed'
   | 'unsupported_request';
 
 export interface IntexAgentSessionEvent {
@@ -74,4 +101,9 @@ export interface IntexAgentSessionEvent {
   type: IntexAgentSessionEventType;
   payload: Record<string, unknown>;
   createdAt: string;
+  eventSequence?: number;
 }
+import type {
+  MatrixCorpusExpectedToolScheduleV1,
+  StrictToolMockProfileV1,
+} from '@intexuraos/http-contracts';

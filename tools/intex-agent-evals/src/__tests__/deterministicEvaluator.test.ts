@@ -821,6 +821,7 @@ function responseFor(scenario: IntexEvalScenario): EndpointConversationResponse 
   return {
     contractVersion: '2026-07-01',
     mode: 'live_llm_mock_tools',
+    agentModel: 'or:deepseek/deepseek-v4-flash',
     runId: 'synthetic-run',
     scenarioId: scenario.id,
     userId: 'synthetic-user',

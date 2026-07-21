@@ -335,6 +335,28 @@ describe('createInternalHttpClient', () => {
     expect(result).toEqual({ ok: true, value: { cancelled: true } });
   });
 
+  it('returns the untouched success envelope for a stricter domain decoder', async () => {
+    const envelope = {
+      success: true,
+      data: { status: 'available' },
+      diagnostics: { requestId: 'request-1' },
+    };
+    nock(BASE).get('/strict-envelope').reply(200, envelope);
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: 'secret',
+      logger: noopLogger,
+    });
+    const result = await client.request<unknown>({
+      method: 'GET',
+      path: '/strict-envelope',
+      responseMode: 'raw',
+    });
+
+    expect(result).toEqual({ ok: true, value: envelope });
+  });
+
   it('extraHeaders are propagated to the outbound request', async () => {
     nock(BASE).get('/h').matchHeader('x-foo', 'bar').reply(200, { success: true, data: 'ok' });
 

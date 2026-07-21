@@ -12,6 +12,12 @@ const MatrixRoomIdSchema = z
   .max(255)
   .regex(/^![^\s:]+:[^\s]+$/u);
 
+const MatrixEventIdSchema = z
+  .string()
+  .min(2)
+  .max(4_096)
+  .regex(/^\$[^\s]+$/u);
+
 const MatrixWhoAmISchema = z
   .object({
     user_id: MatrixUserIdSchema,
@@ -40,6 +46,9 @@ const MatrixRelationSchema = z
 
 const MatrixTimelineEventSchema = z
   .object({
+    event_id: MatrixEventIdSchema.optional(),
+    origin_server_ts: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    redacts: MatrixEventIdSchema.optional(),
     type: z.string().min(1).max(255),
     sender: z.string().min(1).max(255),
     content: z
@@ -63,6 +72,9 @@ const MatrixTimelineEventSchema = z
   .strict()
   .transform(
     (value): MatrixTimelineEvent => ({
+      ...(value.event_id !== undefined ? { eventId: value.event_id } : {}),
+      ...(value.origin_server_ts !== undefined ? { originServerTs: value.origin_server_ts } : {}),
+      ...(value.redacts !== undefined ? { redacts: value.redacts } : {}),
       type: value.type,
       sender: value.sender,
       ...(value.content !== undefined
@@ -88,6 +100,9 @@ export type MatrixWhoAmIResult =
     };
 
 export interface MatrixTimelineEvent {
+  eventId?: string;
+  originServerTs?: number;
+  redacts?: string;
   type: string;
   sender: string;
   content?: {
@@ -202,6 +217,9 @@ const MATRIX_SYNC_EVENT_TYPES = [
 ] as const;
 
 const MATRIX_SYNC_EVENT_FIELDS = [
+  'event_id',
+  'origin_server_ts',
+  'redacts',
   'type',
   'sender',
   'content.msgtype',

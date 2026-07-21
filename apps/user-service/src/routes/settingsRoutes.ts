@@ -6,7 +6,13 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
-import { isDefaultEligibleModel, getProviderForModel } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_INTEX_AGENT_MODEL,
+  getProviderForModel,
+  INTEX_AGENT_MODEL_OPTIONS,
+  isDefaultEligibleModel,
+  isIntexAgentModel,
+} from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { getUserSettings, isTranscriptionProvider, isValidTimezone, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
 
@@ -32,9 +38,115 @@ const userSettingsDataSchema = {
     timezone: { type: 'string' },
     createdAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
+    intexAgentCapabilities: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        testRuns: {
+          oneOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                status: { type: 'string', enum: ['available'] },
+                runtimeAudience: { type: 'string', enum: ['home-dev'] },
+              },
+              required: ['status', 'runtimeAudience'],
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: { status: { type: 'string', enum: ['unavailable'] } },
+              required: ['status'],
+            },
+          ],
+        },
+      },
+      required: ['testRuns'],
+    },
   },
-  required: ['userId', 'createdAt', 'updatedAt'],
+  required: ['userId', 'createdAt', 'updatedAt', 'intexAgentCapabilities'],
 } as const;
+
+function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  try {
+    const prototype = Object.getPrototypeOf(value) as unknown;
+    return prototype === Object.prototype;
+  } catch {
+    return false;
+  }
+}
+
+function isGeneralModelCandidate(value: unknown): value is Record<string, unknown> {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+  try {
+    const keys = Object.keys(value);
+    return Object.hasOwn(value, 'defaultModel') && keys.every((key) => key === 'defaultModel' || key === 'fallbackModel');
+  } catch {
+    return false;
+  }
+}
+
+function isIntexAgentSelectorPatch(value: unknown): value is { intexAgentModel: unknown; expectedRevision: unknown } {
+  if (!isPlainJsonObject(value)) {
+    return false;
+  }
+  try {
+    const keys = Object.keys(value);
+    return keys.length === 2 && Object.hasOwn(value, 'intexAgentModel') && Object.hasOwn(value, 'expectedRevision');
+  } catch {
+    return false;
+  }
+}
+
+function selectorResponse(
+  explicitModel: import('@intexuraos/llm-contract').IntexAgentModel | null,
+  revision: number
+): Readonly<{
+  explicitModel: import('@intexuraos/llm-contract').IntexAgentModel | null;
+  effectiveModel: import('@intexuraos/llm-contract').IntexAgentModel;
+  source: 'default_absent' | 'explicit';
+  revision: number;
+}> {
+  return {
+    explicitModel,
+    effectiveModel: explicitModel ?? DEFAULT_INTEX_AGENT_MODEL,
+    source: explicitModel === null ? ('default_absent' as const) : ('explicit' as const),
+    revision,
+  };
+}
+
+const INTEG_AGENT_MODEL_IDS = INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => id);
+
+function intexAgentProjectionConsistencySchema(): Readonly<Record<string, unknown>> {
+  return {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          explicitModel: { const: null },
+          effectiveModel: { const: DEFAULT_INTEX_AGENT_MODEL },
+          source: { const: 'default_absent' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      },
+      ...INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => ({
+        type: 'object',
+        properties: {
+          explicitModel: { const: id },
+          effectiveModel: { const: id },
+          source: { const: 'explicit' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      })),
+    ],
+  };
+}
 
 export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings
@@ -109,7 +221,7 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as { uid: string };
-      const { userSettingsRepository } = getServices();
+      const { userSettingsRepository, intexAgentTestRunsReadCapability } = getServices();
 
       const result = await getUserSettings(
         { userId: params.uid, requestingUserId: user.userId },
@@ -120,7 +232,17 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail(mapGetErrorCode(result.error.code), result.error.message);
       }
 
-      return await reply.ok(result.value);
+      const testRunsAvailable = await intexAgentTestRunsReadCapability.isAvailableForUser(
+        user.userId
+      );
+      return await reply.ok({
+        ...result.value,
+        intexAgentCapabilities: {
+          testRuns: testRunsAvailable
+            ? { status: 'available', runtimeAudience: 'home-dev' }
+            : { status: 'unavailable' },
+        },
+      });
     }
   );
 
@@ -140,20 +262,6 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
           required: ['uid'],
         },
-        body: {
-          type: 'object',
-          required: ['defaultModel'],
-          properties: {
-            defaultModel: {
-              type: 'string',
-              description: 'Default model for generate() calls',
-            },
-            fallbackModel: {
-              type: ['string', 'null'],
-              description: 'Optional fallback model. Pass null to clear.',
-            },
-          },
-        },
         response: {
           200: {
             description: 'Settings updated successfully',
@@ -161,11 +269,35 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             properties: {
               success: { type: 'boolean', enum: [true] },
               data: {
-                type: 'object',
-                properties: {
-                  defaultModel: { type: 'string' },
-                  fallbackModel: { type: 'string', nullable: true },
-                },
+                oneOf: [
+                  {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      defaultModel: { type: 'string' },
+                      fallbackModel: { type: 'string', nullable: true },
+                    },
+                    required: ['defaultModel', 'fallbackModel'],
+                  },
+                  {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      explicitModel: {
+                        type: ['string', 'null'],
+                        enum: [...INTEG_AGENT_MODEL_IDS, null],
+                      },
+                      effectiveModel: {
+                        type: 'string',
+                        enum: INTEG_AGENT_MODEL_IDS,
+                      },
+                      source: { type: 'string', enum: ['explicit', 'default_absent'] },
+                      revision: { type: 'integer', minimum: 0 },
+                    },
+                    allOf: [intexAgentProjectionConsistencySchema()],
+                    required: ['explicitModel', 'effectiveModel', 'source', 'revision'],
+                  },
+                ],
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
@@ -201,6 +333,26 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             required: ['success', 'error'],
           },
+          404: {
+            description: 'Intex Agent model selector unavailable',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
+          409: {
+            description: 'Selector revision conflict',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
           500: {
             description: 'Internal server error',
             type: 'object',
@@ -216,7 +368,10 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       logIncomingRequest(request, {
-        message: 'Received request to PATCH /users/:uid/settings',
+        message: 'PATCH /users/:uid/settings',
+        bodyPreviewLength: 0,
+        includeParams: false,
+        includeHeaders: false,
       });
 
       const user = await requireAuth(request, reply);
@@ -225,20 +380,69 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const params = request.params as { uid: string };
-      const body = request.body as { defaultModel: string; fallbackModel?: string | null };
+      const body: unknown = request.body;
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot update other user settings');
       }
 
-      if (!isDefaultEligibleModel(body.defaultModel)) {
-        return await reply.fail('INVALID_REQUEST', `Invalid model: ${body.defaultModel}. Must be a supported model.`);
+      if (!isGeneralModelCandidate(body)) {
+        const { userSettingsRepository, intexAgentModelAvailability } = getServices();
+        if (!(await intexAgentModelAvailability.isAvailableForUser(params.uid))) {
+          return await reply.fail('NOT_FOUND', 'Intex Agent model selector is unavailable');
+        }
+        if (!isIntexAgentSelectorPatch(body)) {
+          return await reply.fail('INVALID_REQUEST', 'Invalid Intex Agent model selector request');
+        }
+
+        const { intexAgentModel, expectedRevision } = body;
+        if (
+          (intexAgentModel !== null && !isIntexAgentModel(intexAgentModel)) ||
+          typeof expectedRevision !== 'number' ||
+          !Number.isSafeInteger(expectedRevision) ||
+          expectedRevision < 0
+        ) {
+          return await reply.fail('INVALID_REQUEST', 'Invalid Intex Agent model selector request');
+        }
+
+        try {
+          const result = await userSettingsRepository.updateIntexAgentModel(
+            params.uid,
+            intexAgentModel,
+            expectedRevision
+          );
+          if (!result.ok) {
+            return await reply.fail('INTERNAL_ERROR', 'Failed to update Intex Agent model selector');
+          }
+          if (result.value.status === 'invalid_stored_value') {
+            return await reply.fail('INTERNAL_ERROR', 'Intex Agent model selector state is invalid');
+          }
+          if (result.value.status === 'conflict') {
+            return await reply.fail('CONFLICT', 'Revision conflict', undefined, {
+              currentRevision: result.value.revision,
+            });
+          }
+          if (result.value.status === 'revision_exhausted') {
+            return await reply.fail('CONFLICT', 'Revision exhausted', undefined, {
+              currentRevision: result.value.revision,
+            });
+          }
+          return await reply.ok(selectorResponse(result.value.explicitModel, result.value.revision));
+        } catch {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to update Intex Agent model selector');
+        }
+      }
+
+      const generalBody = body as { defaultModel: string; fallbackModel?: string | null };
+
+      if (!isDefaultEligibleModel(generalBody.defaultModel)) {
+        return await reply.fail('INVALID_REQUEST', `Invalid model: ${generalBody.defaultModel}. Must be a supported model.`);
       }
 
       const { userSettingsRepository } = getServices();
 
       // Verify the user has an API key configured for the defaultModel's provider
-      const provider = getProviderForModel(body.defaultModel);
+      const provider = getProviderForModel(generalBody.defaultModel);
       const settingsResult = await userSettingsRepository.getSettings(params.uid);
 
       if (!settingsResult.ok) {
@@ -251,35 +455,35 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (!hasKey) {
         return await reply.fail(
           'INVALID_REQUEST',
-          `Cannot set default model to ${body.defaultModel}: no API key configured for provider '${provider}'`
+          `Cannot set default model to ${generalBody.defaultModel}: no API key configured for provider '${provider}'`
         );
       }
 
       // Validate fallbackModel if provided and not null
-      if (body.fallbackModel !== undefined && body.fallbackModel !== null) {
-        if (!isDefaultEligibleModel(body.fallbackModel)) {
-          return await reply.fail('INVALID_REQUEST', `Invalid fallback model: ${body.fallbackModel}. Must be a supported model.`);
+      if (generalBody.fallbackModel !== undefined && generalBody.fallbackModel !== null) {
+        if (!isDefaultEligibleModel(generalBody.fallbackModel)) {
+          return await reply.fail('INVALID_REQUEST', `Invalid fallback model: ${generalBody.fallbackModel}. Must be a supported model.`);
         }
-        if (body.fallbackModel === body.defaultModel) {
+        if (generalBody.fallbackModel === generalBody.defaultModel) {
           return await reply.fail('INVALID_REQUEST', 'Fallback model must be different from the default model.');
         }
-        const fallbackProvider = getProviderForModel(body.fallbackModel);
+        const fallbackProvider = getProviderForModel(generalBody.fallbackModel);
         const hasFallbackKey = llmApiKeys[fallbackProvider] !== undefined;
         if (!hasFallbackKey) {
           return await reply.fail(
             'INVALID_REQUEST',
-            `Cannot set fallback model to ${body.fallbackModel}: no API key configured for provider '${fallbackProvider}'`
+            `Cannot set fallback model to ${generalBody.fallbackModel}: no API key configured for provider '${fallbackProvider}'`
           );
         }
       }
 
-      const result = await userSettingsRepository.updateLlmPreferences(params.uid, body.defaultModel, body.fallbackModel);
+      const result = await userSettingsRepository.updateLlmPreferences(params.uid, generalBody.defaultModel, generalBody.fallbackModel);
 
       if (!result.ok) {
         return await reply.fail('INTERNAL_ERROR', result.error.message);
       }
 
-      return await reply.ok({ defaultModel: body.defaultModel, fallbackModel: body.fallbackModel ?? null });
+      return await reply.ok({ defaultModel: generalBody.defaultModel, fallbackModel: generalBody.fallbackModel ?? null });
     }
   );
 

@@ -26,6 +26,7 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
@@ -36,7 +37,9 @@
     "@intexuraos/llm-utils": "workspace:*",
     "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "fastify": "catalog:",
-    "pino": "catalog:"
+    "jose": "^5.9.6",
+    "pino": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",

@@ -22,4 +22,5 @@ export { WhatsAppPreferencesCard } from './WhatsAppPreferencesCard.js';
 export { PrivateWhatsAppMirrorCard } from './PrivateWhatsAppMirrorCard.js';
 export { LinearIssueCombobox } from './LinearIssueCombobox.js';
 export { LinearIssueSelectorModal } from './LinearIssueSelectorModal.js';
+export { IntexAgentModelCard, type IntexAgentModelCardProps } from './IntexAgentModelCard.js';
 export * from './ui/index.js';

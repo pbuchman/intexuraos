@@ -27,13 +27,23 @@ export interface WhatsAppSendPublisher {
     ctaUrl?: { displayText: string; url: string };
     important?: boolean;
     correlationId?: string;
+    idempotencyKey?: string;
   }): Promise<Result<void, PublishError>>;
+}
+
+export interface WhatsAppSendPublisherWithReceipt extends WhatsAppSendPublisher {
+  publishSendMessageWithReceipt(
+    params: Parameters<WhatsAppSendPublisher['publishSendMessage']>[0]
+  ): Promise<Result<string, PublishError>>;
 }
 
 /**
  * WhatsApp send message publisher using BasePubSubPublisher.
  */
-class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppSendPublisher {
+class WhatsAppSendPublisherImpl
+  extends BasePubSubPublisher
+  implements WhatsAppSendPublisherWithReceipt
+{
   private readonly topicName: string;
 
   constructor(config: WhatsAppSendPublisherConfig) {
@@ -50,43 +60,25 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
     important?: boolean;
     correlationId?: string;
   }): Promise<Result<void, PublishError>> {
-    const userId = params.userId.trim();
-    if (userId === '') {
-      return err({
-        code: 'PUBLISH_FAILED',
-        message: 'WhatsApp send message userId is required',
-      });
-    }
-
-    const correlationId = params.correlationId ?? crypto.randomUUID();
-
-    const event: SendMessageEvent = {
-      type: 'whatsapp.message.send',
-      userId,
-      message: params.message,
-      correlationId,
-      timestamp: new Date().toISOString(),
-    };
-
-    if (params.replyToMessageId !== undefined) {
-      event.replyToMessageId = params.replyToMessageId;
-    }
-
-    if (params.buttons !== undefined) {
-      event.buttons = params.buttons;
-    }
-
-    /* v8 ignore start -- upstream: ctaUrl passthrough to Pub/Sub event, tested via consuming services @preserve */
-    if (params.ctaUrl !== undefined) {
-      event.ctaUrl = params.ctaUrl;
-    }
-    /* v8 ignore stop @preserve */
-
-    if (params.important !== undefined) {
-      event.important = params.important;
-    }
+    const built = buildSendMessageEvent(params);
+    if (!built.ok) return built;
+    const { event, correlationId, userId } = built.value;
 
     return await this.publishToTopic(
+      this.topicName,
+      event,
+      { correlationId, userId },
+      'WhatsApp send message'
+    );
+  }
+
+  async publishSendMessageWithReceipt(
+    params: Parameters<WhatsAppSendPublisher['publishSendMessage']>[0]
+  ): Promise<Result<string, PublishError>> {
+    const built = buildSendMessageEvent(params);
+    if (!built.ok) return built;
+    const { event, correlationId, userId } = built.value;
+    return await this.publishToTopicWithSafeReceipt(
       this.topicName,
       event,
       { correlationId, userId },
@@ -100,6 +92,34 @@ class WhatsAppSendPublisherImpl extends BasePubSubPublisher implements WhatsAppS
  */
 export function createWhatsAppSendPublisher(
   config: WhatsAppSendPublisherConfig
-): WhatsAppSendPublisher {
+): WhatsAppSendPublisherWithReceipt {
   return new WhatsAppSendPublisherImpl(config);
+}
+
+function buildSendMessageEvent(
+  params: Parameters<WhatsAppSendPublisher['publishSendMessage']>[0]
+): Result<
+  Readonly<{ event: SendMessageEvent; correlationId: string; userId: string }>,
+  PublishError
+> {
+  const userId = params.userId.trim();
+  if (userId === '')
+    return err({
+      code: 'PUBLISH_FAILED',
+      message: 'WhatsApp send message userId is required',
+    });
+  const correlationId = params.correlationId ?? crypto.randomUUID();
+  const event: SendMessageEvent = {
+    type: 'whatsapp.message.send',
+    userId,
+    message: params.message,
+    correlationId,
+    timestamp: new Date().toISOString(),
+    ...(params.replyToMessageId === undefined ? {} : { replyToMessageId: params.replyToMessageId }),
+    ...(params.buttons === undefined ? {} : { buttons: params.buttons }),
+    ...(params.ctaUrl === undefined ? {} : { ctaUrl: params.ctaUrl }),
+    ...(params.important === undefined ? {} : { important: params.important }),
+    ...(params.idempotencyKey === undefined ? {} : { idempotencyKey: params.idempotencyKey }),
+  };
+  return { ok: true, value: { event, correlationId, userId } };
 }

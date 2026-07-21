@@ -94,6 +94,7 @@ async function forwardToServiceEndpoint(topicName, message) {
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Auth': INTEXURAOS_INTERNAL_AUTH_TOKEN,
+        From: 'noreply@google.com',
       },
       body: JSON.stringify(pubsubMessage),
     });

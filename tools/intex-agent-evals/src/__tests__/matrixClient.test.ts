@@ -178,6 +178,8 @@ describe('createMatrixClient', () => {
 
   it('captures a target-room cursor with the exact filter and caller-owned signal', async () => {
     const event = {
+      event_id: '$event-1:home-dev',
+      origin_server_ts: 1_721_466_000_000,
       type: 'm.room.message',
       sender: '@whatsapp_48123123123:home-dev',
       content: {
@@ -211,6 +213,8 @@ describe('createMatrixClient', () => {
       limited: false,
       events: [
         {
+          eventId: event.event_id,
+          originServerTs: event.origin_server_ts,
           type: event.type,
           sender: event.sender,
           content: event.content,
@@ -232,6 +236,9 @@ describe('createMatrixClient', () => {
     });
     expect(JSON.parse(requestUrl.searchParams.get('filter') ?? '')).toEqual({
       event_fields: [
+        'event_id',
+        'origin_server_ts',
+        'redacts',
         'type',
         'sender',
         'content.msgtype',
@@ -260,6 +267,43 @@ describe('createMatrixClient', () => {
       },
       redirect: 'error',
       signal: controller.signal,
+    });
+  });
+
+  it('decodes the target event identifier from a standalone Matrix redaction', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse(
+        targetSyncBody([
+          {
+            event_id: '$redaction:home-dev',
+            origin_server_ts: 1_721_466_000_001,
+            redacts: '$reply:home-dev',
+            type: 'm.room.redaction',
+            sender: '@operator:home-dev',
+            content: {},
+          },
+        ])
+      )
+    );
+    const client = createMatrixClient({ fetchImpl, timeoutMs: 50, maxBytes: 4096 });
+
+    const result = await client.syncTargetRoom({
+      homeserverUrl: 'https://matrix.synthetic.test',
+      accessToken: 'private-token-sentinel',
+      targetRoomId: TARGET_ROOM_ID,
+      timeoutMs: 0,
+      signal: new AbortController().signal,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      events: [
+        {
+          eventId: '$redaction:home-dev',
+          redacts: '$reply:home-dev',
+          type: 'm.room.redaction',
+        },
+      ],
     });
   });
 

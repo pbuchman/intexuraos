@@ -23,7 +23,8 @@
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
-    "jose": "^6.2.2"
+    "jose": "^6.2.2",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "nock": "^14.0.5",

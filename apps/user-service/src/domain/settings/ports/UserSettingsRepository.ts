@@ -4,9 +4,26 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
+import type { IntexAgentModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from './Encryptor.js';
 import type { LlmProvider, LlmTestResult, TranscriptionProvider, UserSettings } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
+
+export type IntexAgentModelUpdateResult =
+  | {
+      status: 'updated' | 'unchanged' | 'conflict' | 'revision_exhausted';
+      explicitModel: IntexAgentModel | null;
+      revision: number;
+    }
+  | { status: 'invalid_stored_value' };
+
+export type IntexAgentModelReadResult =
+  | {
+      status: 'valid';
+      explicitModel: IntexAgentModel | null;
+      revision: number;
+    }
+  | { status: 'invalid_stored_value' };
 
 /**
  * Repository for storing and retrieving user settings.
@@ -70,6 +87,23 @@ export interface UserSettingsRepository {
    * Used when a provider's API key is deleted and the default model belongs to that provider.
    */
   clearLlmPreferences(userId: string): Promise<Result<void, SettingsError>>;
+
+  /**
+   * Atomically update the independent Intex Agent model selector.
+   */
+  updateIntexAgentModel(
+    userId: string,
+    intexAgentModel: IntexAgentModel | null,
+    expectedRevision: number
+  ): Promise<Result<IntexAgentModelUpdateResult, SettingsError>>;
+
+  /** Strictly project only the independent Intex Agent selector state. */
+  getIntexAgentModelState(
+    userId: string
+  ): Promise<Result<IntexAgentModelReadResult, SettingsError>>;
+
+  /** Read the timezone independently of selector decoding. */
+  getTimezonePreference(userId: string): Promise<Result<string | undefined, SettingsError>>;
 
   /**
    * Update the user's transcription provider preference.

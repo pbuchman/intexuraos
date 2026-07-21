@@ -11,11 +11,14 @@ import { registerHealthCheck, secretsHealthCheck } from '@intexuraos/http-server
 import { firestoreHealthCheck } from '@intexuraos/infra-firestore';
 import { createLogStream, setupSentryErrorHandler } from '@intexuraos/infra-sentry';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { internalRoutes } from './routes/internalRoutes.js';
+import { createInternalRoutes } from './routes/internalRoutes.js';
+import { createMatrixCorpusRoutes } from './routes/matrixCorpusRoutes.js';
 import { preferencesRoutes } from './routes/preferencesRoutes.js';
 import { promptPreferencesRoutes } from './routes/promptPreferencesRoutes.js';
 import { sessionRoutes } from './routes/sessionRoutes.js';
 import { testConversationRoutes } from './routes/testConversationRoutes.js';
+import { createTestRunRoutes } from './routes/testRunRoutes.js';
+import { getServices } from './services.js';
 
 const SERVICE_NAME = 'intex-agent';
 const SERVICE_VERSION = '0.0.1';
@@ -88,7 +91,13 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
     disableRequestLogging: true,
   });
 
-  registerQuietHealthCheckLogging(app);
+  const privateRequestPathPrefixes = [
+    '/internal/intex-agent/messages',
+    '/internal/matrix-corpus/',
+    '/internal/test-runs/',
+    '/test-runs',
+  ] as const;
+  registerQuietHealthCheckLogging(app, { privatePathPrefixes: privateRequestPathPrefixes });
 
   await app.register(fastifyCors, {
     origin: true,
@@ -98,7 +107,9 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
   await app.register(intexuraFastifyPlugin);
   await app.register(fastifyAuthPlugin);
 
-  setupSentryErrorHandler(app as unknown as FastifyInstance);
+  setupSentryErrorHandler(app as unknown as FastifyInstance, {
+    privatePathPrefixes: privateRequestPathPrefixes,
+  });
 
   registerCoreSchemas(app);
 
@@ -110,7 +121,22 @@ export async function buildServer(testLoggerStream?: NodeJS.WritableStream): Pro
   await app.register(sessionRoutes);
   await app.register(promptPreferencesRoutes);
   await app.register(preferencesRoutes);
-  await app.register(internalRoutes);
+  const services = getServices();
+  await app.register(
+    createInternalRoutes({
+      handleOrdinary: async (input) => await services.incomingMessageHandler.handle(input),
+      matrixCorpus: services.matrixCorpus ?? null,
+    })
+  );
+  if (services.matrixCorpus !== undefined)
+    await app.register(createMatrixCorpusRoutes(services.matrixCorpus));
+  if (services.testRuns !== undefined) {
+    await app.register(createTestRunRoutes(services.testRuns));
+    services.testRuns.sweepScheduler.start();
+    app.addHook('onClose', async () => {
+      await services.testRuns?.sweepScheduler.stop();
+    });
+  }
   await app.register(testConversationRoutes);
 
   app.get(

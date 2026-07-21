@@ -8,8 +8,14 @@ import {
   up,
 } from '../125_whatsapp-conversation-assistant-context-attachments-indexes.mjs'; // @allow-missing-js -- .mjs import
 
-const ascending = (fieldPath: string) => ({ fieldPath, order: 'ASCENDING' });
-const descending = (fieldPath: string) => ({ fieldPath, order: 'DESCENDING' });
+const ascending = (fieldPath: string): { fieldPath: string; order: 'ASCENDING' } => ({
+  fieldPath,
+  order: 'ASCENDING',
+});
+const descending = (fieldPath: string): { fieldPath: string; order: 'DESCENDING' } => ({
+  fieldPath,
+  order: 'DESCENDING',
+});
 
 describe('migration 125 - WhatsApp Conversation Assistant context attachment indexes', () => {
   it('is reserved in the immutable migration manifest with its exact checksum', () => {
@@ -23,12 +29,10 @@ describe('migration 125 - WhatsApp Conversation Assistant context attachment ind
     const manifest = JSON.parse(
       readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')
     ) as {
-      lastReservedId: string;
-      entries: Array<{ id: string; name: string; checksum: string }>;
+      entries: { id: string; name: string; checksum: string }[];
     };
 
-    expect(manifest.lastReservedId).toBe('125');
-    expect(manifest.entries.at(-1)).toEqual({
+    expect(manifest.entries.find((entry) => entry.id === '125')).toEqual({
       id: '125',
       name: 'whatsapp-conversation-assistant-context-attachments-indexes',
       checksum: `sha256:${createHash('sha256').update(migrationBytes).digest('hex')}`,

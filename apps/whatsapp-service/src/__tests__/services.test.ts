@@ -1,6 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { generateKeyPairSync } from 'node:crypto';
+
+import { createFakeFirestore } from '@intexuraos/infra-firestore';
 import { ok } from '@intexuraos/common-core';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createUserServiceClient: vi.fn(),
@@ -42,7 +45,9 @@ vi.mock(
 );
 
 const {
+  composeWhatsAppMatrixCorpusFeature,
   createConversationAssistantLlmClientFactory,
+  createWhatsAppMatrixCorpusRuntime,
   getServices,
   initServices,
   resetServices,
@@ -83,6 +88,8 @@ describe('whatsapp-service service wiring', () => {
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',
       matrixOutboundAdapterAuthToken: 'matrix-adapter-token',
+      intexAgentBaseUrl: 'https://intex-agent.test',
+      matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
     });
 
     const services = getServices();
@@ -112,6 +119,8 @@ describe('whatsapp-service service wiring', () => {
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',
       matrixOutboundAdapterAuthToken: 'matrix-adapter-token',
+      intexAgentBaseUrl: 'https://intex-agent.test',
+      matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
     });
 
     const result = await factory.createLlmClientForUser(
@@ -136,5 +145,110 @@ describe('whatsapp-service service wiring', () => {
       })
     );
     expect(JSON.stringify(mocks.createLlmClient.mock.calls)).not.toContain('poison-app-key');
+  });
+
+  it('does not construct any Matrix corpus dependency while the feature is disabled', () => {
+    const createEnabled = vi.fn(() => ({ marker: 'must-not-exist' }));
+
+    expect(
+      composeWhatsAppMatrixCorpusFeature(
+        { enabled: false, runtimeAudience: 'disabled' },
+        createEnabled
+      )
+    ).toBeNull();
+    expect(createEnabled).not.toHaveBeenCalled();
+  });
+
+  it('constructs the enabled Home Dev Matrix corpus runtime exactly once', () => {
+    const runtime = { marker: 'home-dev-runtime' };
+    const createEnabled = vi.fn(() => runtime);
+    const config = {
+      enabled: true as const,
+      runtimeAudience: 'home-dev' as const,
+      evaluatorBindingHmacKey: 'h'.repeat(32),
+      configuredEvaluatorUserId: 'synthetic-user',
+      matrixRoomBinding: 'synthetic-room',
+      whatsappAccountBinding: 'synthetic-account',
+      whatsappSenderBinding: 'synthetic-sender',
+      signingKeyVersion: 'matrix-test-v1',
+      signingKeyMaterial: 'synthetic-private-jwk',
+    };
+
+    expect(composeWhatsAppMatrixCorpusFeature(config, createEnabled)).toBe(runtime);
+    expect(createEnabled).toHaveBeenCalledTimes(1);
+    expect(createEnabled).toHaveBeenCalledWith(config);
+  });
+
+  it('composes the production control plane without starting timers or making live calls', () => {
+    const { privateKey } = generateKeyPairSync('ed25519');
+    const intexAgent = {
+      getTurnTerminal: vi.fn(),
+      getCurrentAcceptance: vi.fn(),
+      getControlStatus: vi.fn(),
+      postTerminalControl: vi.fn(),
+    };
+    const eventPublisher = { publishMatrixCorpusIngest: vi.fn() };
+    const scheduler = { setInterval: vi.fn(), clearInterval: vi.fn() };
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const config = {
+      enabled: true as const,
+      runtimeAudience: 'home-dev' as const,
+      evaluatorBindingHmacKey: 'h'.repeat(32),
+      configuredEvaluatorUserId: 'synthetic-user',
+      matrixRoomBinding: 'synthetic-room',
+      whatsappAccountBinding: 'synthetic-account',
+      whatsappSenderBinding: 'synthetic-sender',
+      signingKeyVersion: 'matrix-test-v1',
+      signingKeyMaterial: 'injected-in-this-test',
+    };
+
+    const runtime = createWhatsAppMatrixCorpusRuntime({
+      config,
+      serviceConfig: {
+        mediaBucket: 'bucket',
+        gcpProjectId: 'project',
+        mediaCleanupTopic: 'cleanup',
+        audioStoredTopic: 'audio',
+        intexMessageIngestTopic: 'intex',
+        whatsappAccessToken: 'whatsapp-token',
+        whatsappPhoneNumberId: 'phone-id',
+        webAgentUrl: 'https://web-agent.test',
+        internalAuthToken: 'internal-token',
+        llmUsageServiceUrl: 'https://llm-usage.test',
+        userServiceUrl: 'https://user-service.test',
+        conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
+        matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',
+        matrixOutboundAdapterAuthToken: 'matrix-adapter-token',
+        intexAgentBaseUrl: 'https://intex-agent.test',
+        matrixCorpus: config,
+      },
+      eventPublisher: eventPublisher as never,
+      dependencies: {
+        firestore: createFakeFirestore() as never,
+        intexAgent,
+        privateKey,
+        logger: logger as never,
+        scheduler,
+        now: () => '2026-07-20T10:00:00.000Z',
+        workerNonce: 'synthetic-worker',
+      },
+    });
+
+    expect(runtime.routes.gate).toMatchObject({
+      enabled: true,
+      runtimeAudience: 'home-dev',
+      evaluator: { userId: 'synthetic-user' },
+    });
+    expect(runtime.routes.gate.evaluator.matrixRoomBindingDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(scheduler.setInterval).not.toHaveBeenCalled();
+    expect(intexAgent.getCurrentAcceptance).not.toHaveBeenCalled();
+    expect(intexAgent.getControlStatus).not.toHaveBeenCalled();
+    expect(intexAgent.postTerminalControl).not.toHaveBeenCalled();
+    expect(eventPublisher.publishMatrixCorpusIngest).not.toHaveBeenCalled();
   });
 });

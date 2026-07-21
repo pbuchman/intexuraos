@@ -2,6 +2,8 @@
  * Pub/Sub Push Subscription Routes.
  * Receives Pub/Sub push messages for outbound WhatsApp messaging.
  */
+import { createHash } from 'node:crypto';
+
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
@@ -51,6 +53,34 @@ function maskPhoneNumber(phone: string): string {
     return phone;
   }
   return phone.slice(0, -4) + '****';
+}
+
+function matrixDeliveryPayloadDigest(event: SendMessageEvent): string {
+  const canonical = stableJson({
+    version: 1,
+    userId: event.userId,
+    message: event.message,
+    correlationId: event.correlationId,
+    replyToMessageId: event.replyToMessageId ?? null,
+    buttons: event.buttons ?? null,
+    ctaUrl: event.ctaUrl ?? null,
+    important: event.important ?? null,
+  });
+  return createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+function stableJson(value: unknown): string {
+  return JSON.stringify(sortValue(value));
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortValue);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, sortValue(nested)])
+  );
 }
 
 const TRANSCRIPTION_FAILURE_REPLY =
@@ -203,7 +233,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         // Log incoming request BEFORE auth check (for debugging)
         logIncomingRequest(request, {
           message: 'Received request to /internal/whatsapp/pubsub/send-message',
-          bodyPreviewLength: 200,
+          bodyPreviewLength: 0,
         });
 
         // Pub/Sub push requests use OIDC tokens (validated by Cloud Run automatically)
@@ -230,9 +260,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/send-message endpoint'
             );
-            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/send-message endpoint');
+            return await reply.fail(
+              'UNAUTHORIZED',
+              'Internal auth failed for pubsub/send-message endpoint'
+            );
           }
-
         }
 
         const body = request.body as PubSubPushMessage;
@@ -255,25 +287,48 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
         }
 
-        if (typeof eventData.userId !== 'string' || eventData.userId.trim() === '') {
+        const idempotencyKey =
+          typeof eventData.idempotencyKey === 'string' && eventData.idempotencyKey.trim() !== ''
+            ? eventData.idempotencyKey
+            : null;
+        if (eventData.idempotencyKey !== undefined && idempotencyKey === null) {
           request.log.warn(
             {
-              messageId: body.message.messageId,
-              correlationId:
-                typeof eventData.correlationId === 'string' ? eventData.correlationId : undefined,
+              lane: 'matrix_corpus',
+              errorCode: 'INVALID_IDEMPOTENCY_KEY',
               [SKIP_SENTRY_KEY]: true,
             },
+            'Rejected invalid idempotent WhatsApp delivery'
+          );
+          return await reply.ok({});
+        }
+        const isMatrixDelivery = idempotencyKey !== null;
+
+        if (typeof eventData.userId !== 'string' || eventData.userId.trim() === '') {
+          request.log.warn(
+            isMatrixDelivery
+              ? { lane: 'matrix_corpus', errorCode: 'INVALID_USER_ID', [SKIP_SENTRY_KEY]: true }
+              : {
+                  messageId: body.message.messageId,
+                  correlationId:
+                    typeof eventData.correlationId === 'string'
+                      ? eventData.correlationId
+                      : undefined,
+                  [SKIP_SENTRY_KEY]: true,
+                },
             'Invalid send message event: userId is required'
           );
           return await reply.fail('INVALID_REQUEST', 'Invalid send message event');
         }
 
         request.log.info(
-          {
-            messageId: body.message.messageId,
-            userId: eventData.userId,
-            correlationId: eventData.correlationId,
-          },
+          isMatrixDelivery
+            ? { lane: 'matrix_corpus' }
+            : {
+                messageId: body.message.messageId,
+                userId: eventData.userId,
+                correlationId: eventData.correlationId,
+              },
           'Processing send message event'
         );
 
@@ -281,12 +336,18 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const phoneResult = await userMappingRepository.findPhoneByUserId(eventData.userId);
         if (!phoneResult.ok) {
           request.log.error(
-            {
-              messageId: body.message.messageId,
-              userId: eventData.userId,
-              correlationId: eventData.correlationId,
-              error: phoneResult.error.message,
-            },
+            isMatrixDelivery
+              ? {
+                  lane: 'matrix_corpus',
+                  errorCode: 'PHONE_LOOKUP_FAILED',
+                  [SKIP_SENTRY_KEY]: true,
+                }
+              : {
+                  messageId: body.message.messageId,
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                  error: phoneResult.error.message,
+                },
             'Failed to look up phone number for user'
           );
           return await reply.fail('INTERNAL_ERROR', 'Failed to look up phone number');
@@ -294,11 +355,13 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
         if (phoneResult.value === null) {
           request.log.warn(
-            {
-              messageId: body.message.messageId,
-              userId: eventData.userId,
-              correlationId: eventData.correlationId,
-            },
+            isMatrixDelivery
+              ? { lane: 'matrix_corpus' }
+              : {
+                  messageId: body.message.messageId,
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                },
             'User not connected to WhatsApp, skipping message'
           );
           return await reply.ok({});
@@ -306,11 +369,13 @@ export function createPubsubRoutes(): FastifyPluginCallback {
 
         const phoneNumber = phoneResult.value;
         request.log.info(
-          {
-            messageId: body.message.messageId,
-            userId: eventData.userId,
-            phoneNumber: maskPhoneNumber(phoneNumber),
-          },
+          isMatrixDelivery
+            ? { lane: 'matrix_corpus' }
+            : {
+                messageId: body.message.messageId,
+                userId: eventData.userId,
+                phoneNumber: maskPhoneNumber(phoneNumber),
+              },
           'Found phone number for user'
         );
 
@@ -321,54 +386,136 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const level = prefsResult.ok ? prefsResult.value.notificationLevel : 'all';
         if (!prefsResult.ok) {
           request.log.warn(
-            {
-              userId: eventData.userId,
-              correlationId: eventData.correlationId,
-              error: prefsResult.error.message,
-            },
+            isMatrixDelivery
+              ? {
+                  lane: 'matrix_corpus',
+                  errorCode: 'PREFERENCES_READ_FAILED',
+                  [SKIP_SENTRY_KEY]: true,
+                }
+              : {
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                  error: prefsResult.error.message,
+                },
             'Failed to read notification preferences — falling back to deliver'
           );
         }
         if (!shouldDeliverMessage({ level, important: eventData.important })) {
           request.log.info(
-            {
-              userId: eventData.userId,
-              correlationId: eventData.correlationId,
-              level,
-              important: eventData.important ?? false,
-            },
+            isMatrixDelivery
+              ? { lane: 'matrix_corpus', level, important: eventData.important ?? false }
+              : {
+                  userId: eventData.userId,
+                  correlationId: eventData.correlationId,
+                  level,
+                  important: eventData.important ?? false,
+                },
             'Dropping non-important WhatsApp message per user preference'
           );
           return await reply.ok({});
         }
 
         const { messageSender, outboundMessageRepository } = getServices();
+        const deliveryPayloadDigest =
+          idempotencyKey === null ? null : matrixDeliveryPayloadDigest(eventData);
+        const deliveryStartedAt = new Date();
+        const deliveryExpiresAt = Math.floor(
+          (deliveryStartedAt.getTime() + 7 * 24 * 60 * 60 * 1000) / 1000
+        );
+        if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+          const reservation = await outboundMessageRepository.reserveIdempotentDelivery({
+            idempotencyKey,
+            payloadDigest: deliveryPayloadDigest,
+            now: deliveryStartedAt.toISOString(),
+            expiresAt: deliveryExpiresAt,
+          });
+          if (!reservation.ok) {
+            request.log.warn(
+              {
+                lane: 'matrix_corpus',
+                errorCode: reservation.code,
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Matrix WhatsApp delivery reservation rejected'
+            );
+            return reservation.code === 'PERSISTENCE_ERROR'
+              ? await reply.fail('INTERNAL_ERROR', 'Delivery reservation failed')
+              : await reply.ok({});
+          }
+          if (reservation.disposition !== 'acquired') {
+            request.log.info(
+              { lane: 'matrix_corpus', disposition: reservation.disposition },
+              'Suppressed duplicate Matrix WhatsApp delivery'
+            );
+            if (reservation.disposition === 'duplicate_in_flight') {
+              void reply.status(503);
+            }
+            return await reply.ok({});
+          }
+        }
 
         let result;
-        if (eventData.ctaUrl !== undefined) {
-          // Send CTA URL message (opens link in browser)
-          result = await messageSender.sendCtaUrlMessage(
-            phoneNumber,
-            eventData.message,
-            eventData.ctaUrl
-          );
-        } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
-          // Send interactive message with reply buttons
-          result = await messageSender.sendInteractiveMessage(
-            phoneNumber,
-            eventData.message,
-            eventData.buttons
-          );
-        } else {
-          // Send plain text message
-          result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
+        try {
+          if (eventData.ctaUrl !== undefined) {
+            // Send CTA URL message (opens link in browser)
+            result = await messageSender.sendCtaUrlMessage(
+              phoneNumber,
+              eventData.message,
+              eventData.ctaUrl
+            );
+          } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
+            // Send interactive message with reply buttons
+            result = await messageSender.sendInteractiveMessage(
+              phoneNumber,
+              eventData.message,
+              eventData.buttons
+            );
+          } else {
+            // Send plain text message
+            result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
+          }
+        } catch {
+          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+            await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
+              idempotencyKey,
+              payloadDigest: deliveryPayloadDigest,
+              now: new Date().toISOString(),
+            });
+            request.log.error(
+              {
+                lane: 'matrix_corpus',
+                errorCode: 'AMBIGUOUS_EXTERNAL_EFFECT',
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Matrix WhatsApp delivery ended ambiguously'
+            );
+            return await reply.ok({});
+          }
+          throw new Error('WhatsApp message sender threw');
         }
 
         if (!result.ok) {
-          const isPermanentError = result.error.httpStatus !== undefined
-            && result.error.httpStatus >= 400
-            && result.error.httpStatus < 500
-            && result.error.httpStatus !== 429;
+          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+            await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
+              idempotencyKey,
+              payloadDigest: deliveryPayloadDigest,
+              now: new Date().toISOString(),
+            });
+            request.log.error(
+              {
+                lane: 'matrix_corpus',
+                errorCode: 'AMBIGUOUS_EXTERNAL_EFFECT',
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Matrix WhatsApp delivery ended ambiguously'
+            );
+            return await reply.ok({});
+          }
+          const isPermanentError =
+            result.error.httpStatus !== undefined &&
+            result.error.httpStatus >= 400 &&
+            result.error.httpStatus < 500 &&
+            result.error.httpStatus !== 429;
 
           if (isPermanentError) {
             request.log.error(
@@ -399,30 +546,51 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const { wamid } = result.value;
 
         request.log.info(
-          {
-            messageId: body.message.messageId,
-            wamid,
-            userId: eventData.userId,
-            correlationId: eventData.correlationId,
-          },
+          isMatrixDelivery
+            ? { lane: 'matrix_corpus' }
+            : {
+                messageId: body.message.messageId,
+                wamid,
+                userId: eventData.userId,
+                correlationId: eventData.correlationId,
+              },
           'Successfully sent WhatsApp message'
         );
 
         // Store outbound message for reply correlation (best-effort, don't fail on error)
         const now = new Date();
         const TTL_DAYS = 7;
-        const expiresAt = Math.floor(
-          (now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000) / 1000
-        );
+        const expiresAt = Math.floor((now.getTime() + TTL_DAYS * 24 * 60 * 60 * 1000) / 1000);
 
-        const saveResult = await outboundMessageRepository.save({
+        const outboundMessage = {
           wamid,
           correlationId: eventData.correlationId,
           userId: eventData.userId,
           messageText: eventData.message,
           sentAt: now.toISOString(),
           expiresAt,
-        });
+        };
+        if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+          const completed = await outboundMessageRepository.completeIdempotentDelivery({
+            idempotencyKey,
+            payloadDigest: deliveryPayloadDigest,
+            outboundMessage,
+          });
+          if (!completed.ok) {
+            request.log.error(
+              {
+                lane: 'matrix_corpus',
+                errorCode: completed.code,
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Matrix WhatsApp delivery receipt completion failed'
+            );
+            void reply.status(503);
+          }
+          return await reply.ok({});
+        }
+
+        const saveResult = await outboundMessageRepository.save(outboundMessage);
 
         if (!saveResult.ok) {
           request.log.warn(
@@ -547,9 +715,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/media-cleanup endpoint'
             );
-            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/media-cleanup endpoint');
+            return await reply.fail(
+              'UNAUTHORIZED',
+              'Internal auth failed for pubsub/media-cleanup endpoint'
+            );
           }
-
         }
 
         const body = request.body as PubSubPushMessage;
@@ -731,8 +901,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const { messageRepository, eventPublisher } = services;
 
         if (eventData.messageSource === 'private_whatsapp') {
-          const privateMessageResult =
-            await services.privateWhatsAppRepository.getMessageById(eventData.messageId);
+          const privateMessageResult = await services.privateWhatsAppRepository.getMessageById(
+            eventData.messageId
+          );
           if (!privateMessageResult.ok) {
             request.log.error(
               {
@@ -869,7 +1040,10 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           eventData.status === 'completed' &&
           (completedTranscript === undefined || completedTranscript === '')
         ) {
-          return await reply.fail('INVALID_REQUEST', 'Completed transcription is missing transcript');
+          return await reply.fail(
+            'INVALID_REQUEST',
+            'Completed transcription is missing transcript'
+          );
         }
         const completedTranscriptText = completedTranscript ?? '';
 
@@ -1013,7 +1187,6 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             'Authenticated Pub/Sub push request (OIDC validated by Cloud Run)'
           );
         } else {
-          
           const authResult = validateInternalAuth(request);
 
           if (!authResult.valid) {
@@ -1021,9 +1194,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
               { reason: authResult.reason },
               'Internal auth failed for pubsub/process-webhook endpoint'
             );
-            return await reply.fail('UNAUTHORIZED', 'Internal auth failed for pubsub/process-webhook endpoint');
+            return await reply.fail(
+              'UNAUTHORIZED',
+              'Internal auth failed for pubsub/process-webhook endpoint'
+            );
           }
-
         }
 
         const body = request.body as PubSubPushMessage;
@@ -1291,6 +1466,9 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             whatsappCloudApi: services.whatsappCloudApi,
             thumbnailGenerator: services.thumbnailGenerator,
             eventPublisher: services.eventPublisher,
+            ...(services.matrixCorpus === undefined
+              ? {}
+              : { matrixCorpusIngress: services.matrixCorpus.ingress }),
           });
 
           const result = await processWebhookEventUseCase.execute(

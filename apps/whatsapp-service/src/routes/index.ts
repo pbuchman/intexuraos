@@ -19,6 +19,8 @@ import { privateMediaRoutes } from './privateMediaRoutes.js';
 import { conversationAssistantRoutes } from './conversationAssistantRoutes.js';
 import { privateMatrixOutboundRoutes } from './privateMatrixOutboundRoutes.js';
 import { privateErasureRoutes } from './privateErasureRoutes.js';
+import { createMatrixCorpusRoutes } from './matrixCorpusRoutes.js';
+import { getServices } from '../services.js';
 
 /**
  * Creates routes plugin with config.
@@ -41,6 +43,14 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(privateMediaRoutes);
     fastify.register(privateMatrixOutboundRoutes);
     fastify.register(privateErasureRoutes);
+    if (config.matrixCorpus.enabled) {
+      const matrixCorpus = getServices().matrixCorpus;
+      if (matrixCorpus === undefined) {
+        done(new Error('Matrix corpus service composition is unavailable'));
+        return;
+      }
+      fastify.register(createMatrixCorpusRoutes(matrixCorpus.routes));
+    }
     done();
   };
 }

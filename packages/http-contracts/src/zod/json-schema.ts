@@ -5,7 +5,10 @@ type JsonSchemaObject = Record<string, unknown>;
 type ZodSchemaInput = Parameters<typeof zodToJsonSchema>[0];
 
 function extractDefinition(name: string, schema: z.ZodTypeAny): JsonSchemaObject {
-  const jsonSchema = zodToJsonSchema(schema as ZodSchemaInput, name) as {
+  const jsonSchema = zodToJsonSchema(schema as ZodSchemaInput, {
+    name,
+    $refStrategy: 'none',
+  }) as {
     definitions?: Record<string, JsonSchemaObject>;
   };
   const definition = jsonSchema.definitions?.[name];

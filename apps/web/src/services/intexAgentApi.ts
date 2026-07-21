@@ -1,6 +1,17 @@
 import { config } from '@/config';
 import { apiRequest } from './apiClient.js';
-import type { IntexAgentSession, IntexAgentSessionEvent } from '@/types';
+import {
+  decodeTestRunDtoV1,
+  decodeTestRunListDtoV1,
+  decodeTestScenarioDtoV1,
+} from './intexAgentTestRunsDecoder.js';
+import type {
+  IntexAgentSession,
+  IntexAgentSessionEvent,
+  TestRunDtoV1,
+  TestRunListDtoV1,
+  TestScenarioDtoV1,
+} from '@/types';
 
 export interface IntexAgentPreferencesResponse {
   instructions: string;
@@ -102,6 +113,44 @@ export async function listIntexAgentSessionEvents(
     `/sessions/${encodeURIComponent(sessionId)}/events`,
     accessToken
   );
+}
+
+export async function listIntexAgentTestRuns(
+  accessToken: string,
+  signal?: AbortSignal
+): Promise<TestRunListDtoV1> {
+  const response =
+    signal === undefined
+      ? await apiRequest<unknown>(config.intexAgentUrl, '/test-runs', accessToken)
+      : await apiRequest<unknown>(config.intexAgentUrl, '/test-runs', accessToken, { signal });
+  return decodeTestRunListDtoV1(response);
+}
+
+export async function getIntexAgentTestRun(
+  accessToken: string,
+  runId: string,
+  signal?: AbortSignal
+): Promise<TestRunDtoV1> {
+  const path = `/test-runs/${encodeURIComponent(runId)}`;
+  const response =
+    signal === undefined
+      ? await apiRequest<unknown>(config.intexAgentUrl, path, accessToken)
+      : await apiRequest<unknown>(config.intexAgentUrl, path, accessToken, { signal });
+  return decodeTestRunDtoV1(response);
+}
+
+export async function getIntexAgentTestScenario(
+  accessToken: string,
+  runId: string,
+  scenarioId: string,
+  signal?: AbortSignal
+): Promise<TestScenarioDtoV1> {
+  const path = `/test-runs/${encodeURIComponent(runId)}/scenarios/${encodeURIComponent(scenarioId)}`;
+  const response =
+    signal === undefined
+      ? await apiRequest<unknown>(config.intexAgentUrl, path, accessToken)
+      : await apiRequest<unknown>(config.intexAgentUrl, path, accessToken, { signal });
+  return decodeTestScenarioDtoV1(response);
 }
 
 export async function getIntexAgentPreferences(

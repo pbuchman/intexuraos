@@ -9,7 +9,7 @@ import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { IntexAgentModels, LlmModels } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -1133,5 +1133,202 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
       expect(body.error.code).toBe('DOWNSTREAM_ERROR');
     });
+  });
+
+  describe('GET /internal/users/:uid/settings/intex-agent-runtime', () => {
+    it('checks internal auth before availability and repository calls', async () => {
+      const availability = vi.fn(async () => true);
+      const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+      const timezoneRead = vi.spyOn(fakeSettingsRepo, 'getTimezonePreference');
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: availability,
+        },
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/users/runtime-user/settings/intex-agent-runtime',
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(availability).not.toHaveBeenCalled();
+      expect(selectorRead).not.toHaveBeenCalled();
+      expect(timezoneRead).not.toHaveBeenCalled();
+    });
+
+    it('returns the unavailable platform default and UTC without decoding corrupt selector state', async () => {
+      const userId = 'runtime-unavailable-user';
+      fakeSettingsRepo.setRawIntexAgentModelState(userId, { intexAgentModelRevision: -1 });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => false,
+        },
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { data: unknown };
+      expect(body.data).toEqual({
+        status: 'unavailable',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        source: 'platform_default',
+        timeZone: 'UTC',
+      });
+    });
+
+    it('returns the available selector projection with its stored timezone', async () => {
+      const userId = 'runtime-available-user';
+      fakeSettingsRepo.setSettings({
+        userId,
+        timezone: 'Europe/Warsaw',
+        llmPreferences: {
+          intexAgentModel: IntexAgentModels.MiniMaxM3,
+          intexAgentModelRevision: 4,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => true,
+        },
+      });
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as { data: unknown };
+      expect(body.data).toEqual({
+        status: 'available',
+        effectiveModel: IntexAgentModels.MiniMaxM3,
+        explicitModel: IntexAgentModels.MiniMaxM3,
+        source: 'explicit',
+        revision: 4,
+        timeZone: 'Europe/Warsaw',
+      });
+    });
+
+    it('projects available default-absent state and maps timezone and selector failures statically', async () => {
+      const userId = 'runtime-default-absent-user';
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => true,
+        },
+      });
+      app = await buildServer();
+      const request = async (): Promise<import('fastify').LightMyRequestResponse> =>
+        await app.inject({
+          method: 'GET',
+          url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        });
+
+      const absent = await request();
+      expect(absent.statusCode).toBe(200);
+      expect((JSON.parse(absent.body) as { data: unknown }).data).toEqual({
+        status: 'available',
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        explicitModel: null,
+        source: 'default_absent',
+        revision: 0,
+        timeZone: 'UTC',
+      });
+
+      fakeSettingsRepo.setFailNextGetIntexAgentModelState(true);
+      const selectorFailure = await request();
+      expect((JSON.parse(selectorFailure.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to load Intex Agent runtime settings',
+      });
+
+      fakeSettingsRepo.setRawIntexAgentModelState(userId, { intexAgentModelRevision: -1 });
+      const invalid = await request();
+      expect((JSON.parse(invalid.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Intex Agent model selector state is invalid',
+      });
+
+      fakeSettingsRepo.setFailNextGetTimezonePreference(true);
+      const timezoneFailure = await request();
+      expect((JSON.parse(timezoneFailure.body) as { error: unknown }).error).toEqual({
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to load Intex Agent runtime settings',
+      });
+    });
+
+    it('reads only timezone for an unavailable runtime projection', async () => {
+      const userId = 'runtime-only-timezone-user';
+      const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+      const timezoneRead = vi.spyOn(fakeSettingsRepo, 'getTimezonePreference');
+      fakeSettingsRepo.setSettings({
+        userId,
+        timezone: 'America/Chicago',
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      setServices({
+        intexAgentModelAvailability: {
+          start: () => Promise.resolve(),
+          isAvailableForUser: async () => false,
+        },
+      });
+      app = await buildServer();
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(timezoneRead).toHaveBeenCalledWith(userId);
+      expect(selectorRead).not.toHaveBeenCalled();
+    });
+
+    it.each([true, false])(
+      'rejects corrupt timezone for selector availability %s without coercing it',
+      async (available) => {
+        const userId = `runtime-corrupt-timezone-${String(available)}`;
+        const selectorRead = vi.spyOn(fakeSettingsRepo, 'getIntexAgentModelState');
+        fakeSettingsRepo.setRawTimezonePreference(userId, 42);
+        setServices({
+          intexAgentModelAvailability: {
+            start: () => Promise.resolve(),
+            isAvailableForUser: async () => available,
+          },
+        });
+        app = await buildServer();
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        });
+
+        expect(response.statusCode).toBe(500);
+        expect((JSON.parse(response.body) as { error: unknown }).error).toEqual({
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to load Intex Agent runtime settings',
+        });
+        if (!available) {
+          expect(selectorRead).not.toHaveBeenCalled();
+        }
+      }
+    );
   });
 });

@@ -10,7 +10,6 @@ import {
   type IntexAgentPromptPreferenceVersionSummary,
   type IntexAgentPromptPreferences,
 } from '../../domain/preferences/promptPreferences.js';
-import { INTEX_AGENT_MODEL } from '../../domain/agent/systemPrompt.js';
 import type {
   ExternalSaveConnectionTestPort,
   IntexAgentExternalSavePreferences,
@@ -161,8 +160,9 @@ describe('preferences routes', () => {
         llmUsageServiceUrl: 'http://llm-usage.test',
         openRouterAppApiKey: 'openrouter-key',
         whatsappSendTopic: 'whatsapp-send',
-        sessionTimeoutMs: 30 * 60 * 1000,
-        model: INTEX_AGENT_MODEL,
+      sessionTimeoutMs: 30 * 60 * 1000,
+      matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
+      testRunsRead: { enabled: false },
       },
       sessionRepository: new FakeSessionRepository(),
       preferencesRepository,

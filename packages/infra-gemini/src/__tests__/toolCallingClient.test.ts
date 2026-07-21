@@ -119,6 +119,179 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.value.usage.outputTokens).toBe(20);
   });
 
+  it('preserves Gemini usage while correlating each Matrix provider iteration', async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(functionCallResponse('request_review', {}, 7, 3))
+      .mockResolvedValueOnce(textResponse('Done.', 9, 4));
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.providerCalls).toEqual([
+      {
+        context: expect.objectContaining({ callOrdinal: 1 }),
+        modelId: TEST_MODEL,
+        inputTokens: 7,
+        outputTokens: 3,
+        totalTokens: 10,
+      },
+      {
+        context: expect.objectContaining({ callOrdinal: 2 }),
+        modelId: TEST_MODEL,
+        inputTokens: 9,
+        outputTokens: 4,
+        totalTokens: 13,
+      },
+    ]);
+    expect(result.value.usage).toEqual(expect.objectContaining({ totalTokens: 23 }));
+  });
+
+  it('omits Matrix tool arguments, results, and thrown errors from logs and Sentry', async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(
+        functionCallResponse('request_review', { secret: 'PRIVATE_ARGUMENT_SENTINEL' })
+      )
+      .mockResolvedValueOnce(textResponse('Done.'));
+
+    await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review.',
+          parameters: { type: 'object' },
+          run: vi.fn(async () => {
+            throw new Error('PRIVATE_THROWN_ERROR_SENTINEL');
+          }),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    const logs = JSON.stringify([
+      vi.mocked(mockLogger.info).mock.calls,
+      vi.mocked(mockLogger.warn).mock.calls,
+      vi.mocked(mockLogger.error).mock.calls,
+    ]);
+    expect(logs).not.toMatch(/PRIVATE_ARGUMENT_SENTINEL|PRIVATE_THROWN_ERROR_SENTINEL/u);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'TOOL_CALLBACK_REJECTED', _skipSentry: true }),
+      expect.any(String)
+    );
+  });
+
+  it('persists completed Matrix usage before a later provider failure without exposing its error', async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(functionCallResponse('request_review', {}, 7, 3))
+      .mockRejectedValueOnce(new Error('PRIVATE_PROVIDER_ERROR_SENTINEL'));
+    const onProviderCall = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review.',
+          parameters: { type: 'object' },
+          run: vi.fn().mockResolvedValue('{}'),
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+      onMatrixCorpusProviderCall: onProviderCall,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Matrix provider call failed' },
+    });
+    expect(onProviderCall).toHaveBeenCalledTimes(1);
+    expect(onProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ inputTokens: 7, outputTokens: 3, totalTokens: 10 })
+    );
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ errorMessage: 'MATRIX_PROVIDER_CALL_FAILED' })
+    );
+    expect(
+      JSON.stringify([
+        result,
+        vi.mocked(mockLogger.info).mock.calls,
+        vi.mocked(mockLogger.warn).mock.calls,
+        vi.mocked(mockLogger.error).mock.calls,
+        mockUsageLoggerLog.mock.calls,
+      ])
+    ).not.toContain('PRIVATE_PROVIDER_ERROR_SENTINEL');
+  });
+
+  it('does not log a hallucinated Matrix tool name', async () => {
+    mockGenerateContent
+      .mockResolvedValueOnce(functionCallResponse('PRIVATE_TOOL_NAME_SENTINEL', {}))
+      .mockResolvedValueOnce(textResponse('Recovered.'));
+
+    await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    const logs = JSON.stringify([
+      vi.mocked(mockLogger.info).mock.calls,
+      vi.mocked(mockLogger.warn).mock.calls,
+      vi.mocked(mockLogger.error).mock.calls,
+    ]);
+    expect(logs).not.toContain('PRIVATE_TOOL_NAME_SENTINEL');
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ errorCode: 'UNKNOWN_TOOL_SELECTION', _skipSentry: true }),
+      'Tool calling: hallucinated tool name'
+    );
+  });
+
   it('executes tool call and returns final text', async () => {
     const mockRun = vi
       .fn()
@@ -406,6 +579,15 @@ describe('createGeminiToolCallingClient', () => {
         },
       ],
       maxIterations: 2,
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
     });
 
     // Should return the text from the last response instead of error
@@ -413,6 +595,41 @@ describe('createGeminiToolCallingClient', () => {
     if (!result.ok) return;
     expect(result.value.content).toBe('Ran out of iterations but here is my summary.');
     expect(result.value.toolCallsMade).toBe(2);
+    expect(result.value.providerCalls).toHaveLength(2);
+
+    mockGenerateContent
+      .mockResolvedValueOnce(functionCallResponse('request_review', { review_type: 'frontend' }))
+      .mockResolvedValueOnce({
+        candidates: [
+          {
+            content: {
+              role: 'model',
+              parts: [
+                { functionCall: { name: 'request_review', args: { review_type: 'backend' } } },
+                { text: 'Non-Matrix exhaustion summary.' },
+              ],
+            },
+          },
+        ],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 },
+      });
+    const nonMatrixResult = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [
+        {
+          name: 'request_review',
+          description: 'Review',
+          parameters: {},
+          run: vi.fn().mockResolvedValue('{"status":"ok"}'),
+        },
+      ],
+      maxIterations: 2,
+    });
+
+    expect(nonMatrixResult.ok).toBe(true);
+    if (!nonMatrixResult.ok) return;
+    expect(nonMatrixResult.value).not.toHaveProperty('providerCalls');
   });
 
   it('returns error on empty response', async () => {

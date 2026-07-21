@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { decodeIntexMessageIngestPush } from '../../../infra/pubsub/decoder.js';
+import {
+  decodeIntexMessageIngestPush,
+  decodeIntexMessageIngestPushEnvelope,
+} from '../../../infra/pubsub/decoder.js';
 
 describe('decodeIntexMessageIngestPush', () => {
   it('decodes an intex.message.ingest Pub/Sub push payload', () => {
@@ -27,6 +30,28 @@ describe('decodeIntexMessageIngestPush', () => {
     };
 
     expect(decodeIntexMessageIngestPush(push(event))).toEqual(event);
+  });
+
+  it('classifies only a closed signed Matrix corpus event as evaluation traffic', () => {
+    const event = {
+      version: 1,
+      kind: 'matrix_corpus_ingest',
+      ingestReceiptId: 'receipt_1',
+      leaseFence: '7',
+      payloadDigest: 'a'.repeat(64),
+      attestation: 'e30.e30.AA',
+    };
+
+    expect(decodeIntexMessageIngestPushEnvelope(push(event))).toEqual({
+      kind: 'matrix_corpus',
+      envelope: event,
+    });
+    expect(() => decodeIntexMessageIngestPush(push(event))).toThrow(
+      'Expected intex.message.ingest event'
+    );
+    expect(() =>
+      decodeIntexMessageIngestPushEnvelope(push({ ...event, trusted: true }))
+    ).toThrow('Invalid Matrix corpus ingest event');
   });
 
   it('decodes optional source URLs for external-save image and link forwarding', () => {

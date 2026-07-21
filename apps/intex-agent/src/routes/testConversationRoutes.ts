@@ -5,6 +5,7 @@ import type {
   TestConversationTurnInput,
   TestConversationHttpRequest,
 } from '../domain/testConversation/testConversationTypes.js';
+import { TEST_CONVERSATION_AGENT_MODEL } from '../domain/testConversation/testConversationTypes.js';
 import { getServices } from '../services.js';
 
 const TEST_USER_ID_PATTERN = /^test-intex-agent-[a-z0-9._-]{1,96}$/u;
@@ -56,10 +57,11 @@ const KNOWN_TOOL_NAMES = new Set<IntexAgentToolName>([
 const testConversationBodySchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['contractVersion', 'mode', 'runId', 'userId', 'currentDateTime', 'turns'],
+  required: ['contractVersion', 'mode', 'agentModel', 'runId', 'userId', 'currentDateTime', 'turns'],
   properties: {
     contractVersion: { type: 'string', enum: ['2026-07-01'] },
     mode: { type: 'string' },
+    agentModel: { type: 'string', enum: [TEST_CONVERSATION_AGENT_MODEL] },
     runId: { type: 'string', minLength: 1, maxLength: 128 },
     scenarioId: { type: 'string', minLength: 1, maxLength: 128 },
     userId: { type: 'string', minLength: 1, maxLength: 128 },
@@ -210,6 +212,11 @@ function validateTestConversationRequest(input: unknown): string | null {
   if (input['mode'] !== 'live_llm_mock_tools') {
     return 'mode must be live_llm_mock_tools';
   }
+  /* v8 ignore start -- schema: Fastify schema constrains agentModel to the sole DeepSeek test model before this defense-in-depth validator runs @preserve */
+  if (input['agentModel'] !== TEST_CONVERSATION_AGENT_MODEL) {
+    return `agentModel must be ${TEST_CONVERSATION_AGENT_MODEL}`;
+  }
+  /* v8 ignore stop @preserve */
   const runId = input['runId'];
   if (typeof runId !== 'string' || !RUN_ID_PATTERN.test(runId)) {
     return 'runId must be lowercase and contain only letters, numbers, dot, underscore, or dash';

@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -13,7 +13,7 @@ function writeFixture(rootDir: string, relativePath: string, body: string): void
   writeFileSync(fullPath, body);
 }
 
-function runVerifier(rootDir: string) {
+function runVerifier(rootDir: string): SpawnSyncReturns<string> {
   return spawnSync('node', [SCRIPT, '--root', rootDir], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -126,6 +126,7 @@ POST /internal/actions/process
       `
 const REQUIRED_ENV = ['INTEXURAOS_INTEX_AGENT_URL'];
 fastify.post('/internal/intex-agent/messages', async () => ({}));
+const receipt = command.ingestReceiptId;
 `
     );
     writeFixture(

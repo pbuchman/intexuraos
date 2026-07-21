@@ -307,6 +307,7 @@ export const DEFAULT_MODEL_DISPLAY_NAMES: Record<string, string> = {
 export type OpenRouterMiniMaxM3 = 'or:minimax/minimax-m3' & OpenRouterModelId;
 export type OpenRouterClaudeSonnet5 = 'or:anthropic/claude-sonnet-5' & OpenRouterModelId;
 export type OpenRouterGemini35Flash = 'or:google/gemini-3.5-flash' & OpenRouterModelId;
+export type OpenRouterDeepSeekV4Flash = 'or:deepseek/deepseek-v4-flash' & OpenRouterModelId;
 
 export type ConversationAssistantModel =
   | OpenRouterMiniMaxM3
@@ -368,6 +369,43 @@ export function getConversationAssistantModelDisplayName(model: string): string 
   return isConversationAssistantModel(model)
     ? (CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES[model] ?? model)
     : model;
+}
+
+// =============================================================================
+// Intex Agent Models
+// =============================================================================
+
+export type IntexAgentModel =
+  | OpenRouterDeepSeekV4Flash
+  | OpenRouterMiniMaxM3
+  | OpenRouterGemini3FlashPreview;
+
+export const IntexAgentModels = {
+  DeepSeekV4Flash: createOpenRouterModelId(
+    'deepseek/deepseek-v4-flash'
+  ) as OpenRouterDeepSeekV4Flash,
+  MiniMaxM3: createOpenRouterModelId('minimax/minimax-m3') as OpenRouterMiniMaxM3,
+  Gemini3FlashPreview: createOpenRouterModelId(
+    'google/gemini-3-flash-preview'
+  ) as OpenRouterGemini3FlashPreview,
+} as const;
+
+export const DEFAULT_INTEX_AGENT_MODEL = IntexAgentModels.DeepSeekV4Flash;
+
+export const INTEX_AGENT_MODEL_OPTIONS = [
+  { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash', provider: 'DeepSeek' },
+  { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3', provider: 'MiniMax' },
+  {
+    id: IntexAgentModels.Gemini3FlashPreview,
+    label: 'Gemini 3 Flash Preview',
+    provider: 'Google',
+  },
+] as const;
+
+const INTEX_AGENT_MODEL_IDS: ReadonlySet<string> = new Set(Object.values(IntexAgentModels));
+
+export function isIntexAgentModel(value: unknown): value is IntexAgentModel {
+  return typeof value === 'string' && INTEX_AGENT_MODEL_IDS.has(value);
 }
 
 /**
@@ -433,12 +471,12 @@ export function isFastModel(model: string): model is FastModel {
  */
 export type OpenRouterGemini3FlashPreview = 'or:google/gemini-3-flash-preview' & OpenRouterModelId;
 
-export type OpenRouterToolCallingModel = OpenRouterGemini3FlashPreview;
+export type OpenRouterToolCallingModel = IntexAgentModel;
 
 export const OpenRouterToolCallingModels = {
-  Gemini3FlashPreview: createOpenRouterModelId(
-    'google/gemini-3-flash-preview'
-  ) as OpenRouterGemini3FlashPreview,
+  DeepSeekV4Flash: IntexAgentModels.DeepSeekV4Flash,
+  MiniMaxM3: IntexAgentModels.MiniMaxM3,
+  Gemini3FlashPreview: IntexAgentModels.Gemini3FlashPreview,
 } as const;
 
 export type ToolCallingModel = Gemini25Flash | OpenRouterToolCallingModel;
@@ -446,6 +484,8 @@ export type ToolCallingModel = Gemini25Flash | OpenRouterToolCallingModel;
 /** All models that support tool calling */
 export const ALL_TOOL_CALLING_MODELS: readonly ToolCallingModel[] = [
   'gemini-2.5-flash',
+  OpenRouterToolCallingModels.DeepSeekV4Flash,
+  OpenRouterToolCallingModels.MiniMaxM3,
   OpenRouterToolCallingModels.Gemini3FlashPreview,
 ];
 

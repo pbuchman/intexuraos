@@ -19,21 +19,40 @@ describe('costCalculator', () => {
   });
 
   describe('normalizeUsage', () => {
-    it('normalizes usage with provider cost — costUsd is always 0', () => {
+    it('preserves a positive finite provider-reported cost', () => {
       const result = normalizeUsage(100, 50, 0.005);
       expect(result.inputTokens).toBe(100);
       expect(result.outputTokens).toBe(50);
       expect(result.totalTokens).toBe(150);
-      expect(result.costUsd).toBe(0);
+      expect(result.costUsd).toBe(0.005);
+      expect(result.providerReportedUsd).toBe(0.005);
     });
 
-    it('normalizes usage without provider cost — costUsd is always 0', () => {
+    it('keeps an absent provider-reported cost unknown', () => {
       const result = normalizeUsage(100, 50, undefined);
       expect(result.inputTokens).toBe(100);
       expect(result.outputTokens).toBe(50);
       expect(result.totalTokens).toBe(150);
       expect(result.costUsd).toBe(0);
+      expect(result).not.toHaveProperty('providerReportedUsd');
     });
+
+    it('preserves an explicitly reported zero cost', () => {
+      const result = normalizeUsage(100, 50, 0);
+
+      expect(result.costUsd).toBe(0);
+      expect(result.providerReportedUsd).toBe(0);
+    });
+
+    it.each([-0.005, Number.NaN, Number.POSITIVE_INFINITY])(
+      'keeps malformed provider cost %p unknown',
+      (providerCost) => {
+        const result = normalizeUsage(100, 50, providerCost);
+
+        expect(result.costUsd).toBe(0);
+        expect(result).not.toHaveProperty('providerReportedUsd');
+      }
+    );
 
     it('handles zero tokens', () => {
       const result = normalizeUsage(0, 0, undefined);

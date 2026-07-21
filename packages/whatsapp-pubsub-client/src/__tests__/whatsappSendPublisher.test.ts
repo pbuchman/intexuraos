@@ -43,6 +43,36 @@ describe('createWhatsAppSendPublisher', () => {
   });
 
   describe('publishSendMessage', () => {
+    it('returns the opaque durable Pub/Sub acknowledgement for Matrix corpus publication', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      await expect(
+        publisher.publishSendMessageWithReceipt({
+          userId: 'user-123',
+          message: 'Synthetic reply',
+          correlationId: 'imc_reply_key_1',
+          idempotencyKey: 'imc_reply_key_1',
+        })
+      ).resolves.toEqual({ ok: true, value: 'message-id-123' });
+      expect(mockPublishMessage).toHaveBeenCalledOnce();
+      const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const publishedData = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+      expect(publishedData['idempotencyKey']).toBe('imc_reply_key_1');
+    });
+
+    it('rejects a blank Matrix receipt user before publishing', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      await expect(
+        publisher.publishSendMessageWithReceipt({
+          userId: '   ',
+          message: 'Synthetic reply',
+          idempotencyKey: 'imc_reply_key_invalid',
+        })
+      ).resolves.toMatchObject({ ok: false });
+      expect(mockPublishMessage).not.toHaveBeenCalled();
+    });
+
     it('publishes message with all required fields', async () => {
       const publisher = createWhatsAppSendPublisher(config);
 
@@ -81,6 +111,20 @@ describe('createWhatsAppSendPublisher', () => {
       expect(publishedData['correlationId']).toBeDefined();
       expect(typeof publishedData['correlationId']).toBe('string');
       expect((publishedData['correlationId'] as string).length).toBeGreaterThan(0);
+    });
+
+    it('omits idempotencyKey for ordinary messages', async () => {
+      const publisher = createWhatsAppSendPublisher(config);
+
+      await publisher.publishSendMessage({
+        userId: 'user-123',
+        message: 'Hello',
+        correlationId: 'corr-123',
+      });
+
+      const call = mockPublishMessage.mock.calls[0] as [{ data: Buffer }];
+      const publishedData = JSON.parse(call[0].data.toString()) as Record<string, unknown>;
+      expect(publishedData).not.toHaveProperty('idempotencyKey');
     });
 
     it('rejects blank userId before publishing', async () => {

@@ -23,6 +23,33 @@ export interface OutboundMessage {
   expiresAt: number;
 }
 
+export type IdempotentDeliveryReserveResult =
+  | Readonly<{
+      ok: true;
+      disposition:
+        | 'acquired'
+        | 'duplicate_in_flight'
+        | 'duplicate_sent'
+        | 'duplicate_ambiguous';
+    }>
+  | Readonly<{
+      ok: false;
+      code: 'INVALID_INPUT' | 'CORRELATED_REPLAY_CONFLICT' | 'CORRUPT_RECEIPT' | 'PERSISTENCE_ERROR';
+    }>;
+
+export type IdempotentDeliveryMutationResult =
+  | Readonly<{ ok: true; disposition: 'applied' | 'already_applied' }>
+  | Readonly<{
+      ok: false;
+      code:
+        | 'INVALID_INPUT'
+        | 'NOT_FOUND'
+        | 'CORRELATED_REPLAY_CONFLICT'
+        | 'INVALID_STATE'
+        | 'CORRUPT_RECEIPT'
+        | 'PERSISTENCE_ERROR';
+    }>;
+
 /**
  * Port for storing and retrieving outbound message records.
  */
@@ -45,4 +72,23 @@ export interface OutboundMessageRepository {
    * @param wamid - The WhatsApp message ID
    */
   deleteByWamid(wamid: string): Promise<Result<void, WhatsAppError>>;
+
+  reserveIdempotentDelivery(input: Readonly<{
+    idempotencyKey: string;
+    payloadDigest: string;
+    now: string;
+    expiresAt: number;
+  }>): Promise<IdempotentDeliveryReserveResult>;
+
+  completeIdempotentDelivery(input: Readonly<{
+    idempotencyKey: string;
+    payloadDigest: string;
+    outboundMessage: OutboundMessage;
+  }>): Promise<IdempotentDeliveryMutationResult>;
+
+  markIdempotentDeliveryAmbiguous(input: Readonly<{
+    idempotencyKey: string;
+    payloadDigest: string;
+    now: string;
+  }>): Promise<IdempotentDeliveryMutationResult>;
 }

@@ -36,6 +36,11 @@ import {
   webAgentPageSummarySchema,
   webAgentSummarizePageRequestSchema,
 } from './zod/index.js';
+import {
+  testRunDtoV1Schema,
+  testRunListDtoV1Schema,
+  testScenarioDtoV1Schema,
+} from './intexAgentTestRuns.js';
 import { toFastifySchema } from './zod/json-schema.js';
 
 /**
@@ -88,6 +93,9 @@ export const fastifyErrorBodySchema = {
 };
 
 export const contractFastifySchemas = {
+  IntexAgentTestRunList: toFastifySchema('IntexAgentTestRunList', testRunListDtoV1Schema),
+  IntexAgentTestRun: toFastifySchema('IntexAgentTestRun', testRunDtoV1Schema),
+  IntexAgentTestScenario: toFastifySchema('IntexAgentTestScenario', testScenarioDtoV1Schema),
   ServiceFeedback: toFastifySchema('ServiceFeedback', serviceFeedbackZodSchema),
   BookmarksCreateBookmarkRequest: toFastifySchema(
     'BookmarksCreateBookmarkRequest',

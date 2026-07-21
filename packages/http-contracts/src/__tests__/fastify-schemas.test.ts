@@ -83,6 +83,9 @@ describe('Fastify Schemas', () => {
     it('includes calendar event list schemas', () => {
       expect(contractFastifySchemas).toHaveProperty('CalendarListEventsRequest');
       expect(contractFastifySchemas).toHaveProperty('CalendarListEventsData');
+      expect(contractFastifySchemas).toHaveProperty('IntexAgentTestRunList');
+      expect(contractFastifySchemas).toHaveProperty('IntexAgentTestRun');
+      expect(contractFastifySchemas).toHaveProperty('IntexAgentTestScenario');
 
       const requestSchema = contractFastifySchemas.CalendarListEventsRequest as {
         required?: string[];

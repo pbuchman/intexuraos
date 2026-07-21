@@ -39,6 +39,27 @@ class TestPublisher extends BasePubSubPublisher {
   ): Promise<Result<void, PublishError>> {
     return await this.publishToOptionalTopic(topicName, event, context, 'test optional event');
   }
+
+  async publishWithReceipt(
+    topicName: string,
+    event: unknown,
+    context: PublishContext
+  ): Promise<Result<string, PublishError>> {
+    return await this.publishToTopicWithReceipt(topicName, event, context, 'test receipt event');
+  }
+
+  async publishWithSafeReceipt(
+    topicName: string,
+    event: unknown,
+    context: PublishContext
+  ): Promise<Result<string, PublishError>> {
+    return await this.publishToTopicWithSafeReceipt(
+      topicName,
+      event,
+      context,
+      'test safe receipt event'
+    );
+  }
 }
 
 describe('BasePubSubPublisher', () => {
@@ -57,6 +78,38 @@ describe('BasePubSubPublisher', () => {
   });
 
   describe('publishToTopic', () => {
+    it('returns the provider publication receipt only through the explicit receipt seam', async () => {
+      await expect(
+        publisher.publishWithReceipt('test-topic', { data: 'test' }, {})
+      ).resolves.toEqual({ ok: true, value: 'message-id-123' });
+    });
+
+    it('redacts provider failures from the safe receipt result and application logs', async () => {
+      const privateProviderError = 'private-provider-error-fixture';
+      const error = vi.fn();
+      const safePublisher = new TestPublisher({
+        projectId: 'test-project',
+        logger: {
+          info: vi.fn(),
+          error,
+        } as unknown as pino.Logger,
+      });
+      mockPublishMessage.mockRejectedValueOnce(new Error(privateProviderError));
+
+      const result = await safePublisher.publishWithSafeReceipt(
+        'test-topic',
+        { data: 'private-payload-fixture' },
+        { eventKind: 'matrix_corpus_ingest' }
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub publication failed' },
+      });
+      expect(JSON.stringify(error.mock.calls)).not.toContain(privateProviderError);
+      expect(JSON.stringify(error.mock.calls)).not.toContain('private-payload-fixture');
+    });
+
     it('publishes event successfully', async () => {
       const result = await publisher.publish('test-topic', { data: 'test' }, { id: '123' });
 

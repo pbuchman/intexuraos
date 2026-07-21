@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
+import { Writable } from 'node:stream';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { buildServer } from '../server.js';
@@ -33,6 +34,7 @@ import {
 import type { Config } from '../config.js';
 import type { PrivateWhatsAppErasureRepository } from '../domain/whatsapp/ports/privateWhatsAppErasure.js';
 import { emptyPrivateWhatsAppErasureCounts } from '../domain/whatsapp/models/PrivateWhatsAppErasure.js';
+import { notReadyMatrixCorpusIngress } from '../domain/matrixCorpus/ports/matrixCorpusIngress.js';
 import type { ServiceContainer } from '../services.js';
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token-12345';
@@ -56,6 +58,7 @@ const testConfig: Config = {
   conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   port: 8080,
   host: '0.0.0.0',
+  matrixCorpus: { enabled: false, runtimeAudience: 'disabled' },
 };
 
 function encodeEvent(event: unknown): string {
@@ -79,6 +82,22 @@ function createPubSubBody(eventData: unknown): PubSubBody {
       publishTime: new Date().toISOString(),
     },
     subscription: 'projects/test/subscriptions/test-sub',
+  };
+}
+
+function createMatrixSendEvent(
+  userId: string,
+  suffix: string,
+  overrides: Readonly<Record<string, unknown>> = {}
+): Record<string, unknown> {
+  return {
+    type: 'whatsapp.message.send',
+    userId,
+    message: `Synthetic Matrix reply ${suffix}`,
+    correlationId: `imc_reply_${suffix}`,
+    idempotencyKey: `imc_reply_publish_${suffix}`,
+    timestamp: new Date().toISOString(),
+    ...overrides,
   };
 }
 
@@ -186,6 +205,48 @@ describe('Pub/Sub Routes', () => {
   });
 
   describe('POST /internal/whatsapp/pubsub/send-message', () => {
+    it('redacts private Matrix URL, headers, query, and raw errors in global server logs', async () => {
+      await app.close();
+      const logChunks: string[] = [];
+      app = await buildServer(
+        testConfig,
+        new Writable({
+          write(chunk, _encoding, callback): void {
+            logChunks.push(String(chunk));
+            callback();
+          },
+        })
+      );
+      app.get('/internal/matrix-corpus/private-error/:runId', async () => {
+        throw new Error('WHATSAPP_MATRIX_RAW_ERROR_SENTINEL');
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/matrix-corpus/private-error/RUN_WHATSAPP_LOG_SENTINEL?value=QUERY_WHATSAPP_LOG_SENTINEL',
+        headers: {
+          'x-matrix-corpus-user-id': 'USER_WHATSAPP_HEADER_SENTINEL',
+          'x-matrix-corpus-session-id': 'SESSION_WHATSAPP_HEADER_SENTINEL',
+        },
+      });
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+
+      expect(response.statusCode).toBe(500);
+      const serializedLogs = logChunks.join('');
+      expect(serializedLogs).toContain('/internal/matrix-corpus/[REDACTED]');
+      for (const sentinel of [
+        'RUN_WHATSAPP_LOG_SENTINEL',
+        'QUERY_WHATSAPP_LOG_SENTINEL',
+        'USER_WHATSAPP_HEADER_SENTINEL',
+        'SESSION_WHATSAPP_HEADER_SENTINEL',
+        'WHATSAPP_MATRIX_RAW_ERROR_SENTINEL',
+      ]) {
+        expect(serializedLogs).not.toContain(sentinel);
+      }
+    });
+
     it('returns 401 when X-Internal-Auth header is missing', async () => {
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
@@ -202,7 +263,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toContain('auth failed');
     });
 
@@ -223,7 +287,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toContain('auth failed');
     });
 
@@ -276,7 +343,10 @@ describe('Pub/Sub Routes', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+        const responseBody = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
         expect(responseBody.error.message).toContain('auth failed');
       });
     });
@@ -297,7 +367,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
@@ -317,7 +390,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
@@ -338,7 +414,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Unexpected event type');
     });
 
@@ -463,7 +542,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(502);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('WhatsApp API error');
     });
 
@@ -511,7 +593,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(500);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Failed to look up phone number');
     });
 
@@ -558,7 +643,10 @@ describe('Pub/Sub Routes', () => {
         type: 'whatsapp.message.send',
         userId: 'user-cta',
         message: 'Task completed successfully',
-        ctaUrl: { displayText: 'View progress', url: 'https://intexuraos.cloud/#/code-tasks/task-123' },
+        ctaUrl: {
+          displayText: 'View progress',
+          url: 'https://intexuraos.cloud/#/code-tasks/task-123',
+        },
         correlationId: 'corr-cta',
         timestamp: new Date().toISOString(),
       });
@@ -586,7 +674,10 @@ describe('Pub/Sub Routes', () => {
 
     it('returns 500 when sendInteractiveMessage fails', async () => {
       await userMappingRepository.saveMapping('user-fail-buttons', ['+48987654321']);
-      messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error for buttons' });
+      messageSender.setFail(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'WhatsApp API error for buttons',
+      });
 
       const buttons = [{ type: 'reply', reply: { id: 'btn-1', title: 'Test' } }];
 
@@ -607,14 +698,20 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(502);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('WhatsApp API error for buttons');
     });
 
     it('sends CTA URL message when ctaUrl is provided', async () => {
       await userMappingRepository.saveMapping('user-cta', ['+48111222333']);
 
-      const ctaUrl = { displayText: 'View pull request', url: 'https://github.com/owner/repo/pull/42' };
+      const ctaUrl = {
+        displayText: 'View pull request',
+        url: 'https://github.com/owner/repo/pull/42',
+      };
 
       const body = createPubSubBody({
         type: 'whatsapp.message.send',
@@ -646,7 +743,10 @@ describe('Pub/Sub Routes', () => {
 
     it('returns 500 when sendCtaUrlMessage fails', async () => {
       await userMappingRepository.saveMapping('user-cta-fail', ['+48111222333']);
-      messageSender.setFail(true, { code: 'INTERNAL_ERROR', message: 'WhatsApp API error for CTA URL' });
+      messageSender.setFail(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'WhatsApp API error for CTA URL',
+      });
 
       const ctaUrl = { displayText: 'View PR', url: 'https://github.com/owner/repo/pull/1' };
 
@@ -667,7 +767,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(502);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('WhatsApp API error for CTA URL');
     });
 
@@ -897,6 +1000,345 @@ describe('Pub/Sub Routes', () => {
       expect(saved[0]?.messageText).toBe('Save success');
     });
 
+    it('sends an exact idempotent Matrix delivery only once across Pub/Sub redelivery', async () => {
+      await userMappingRepository.saveMapping('user-matrix-once', ['+48111222333']);
+      const event = {
+        type: 'whatsapp.message.send',
+        userId: 'user-matrix-once',
+        message: 'Synthetic Matrix reply',
+        correlationId: 'imc_reply_digest_1',
+        idempotencyKey: 'imc_reply_publish_1',
+        buttons: [{ type: 'reply', reply: { id: 'matrix-ok', title: 'Continue' } }],
+        timestamp: new Date().toISOString(),
+      };
+
+      const responses = await Promise.all([
+        app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(event),
+        }),
+        app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(event),
+        }),
+      ]);
+
+      expect(responses.map((response) => response.statusCode)).toEqual([200, 200]);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(1);
+    });
+
+    it('fails a Matrix delivery with an empty user id without exposing ordinary metadata', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(createMatrixSendEvent('', 'invalid_user')),
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('fails a Matrix delivery when phone lookup persistence fails', async () => {
+      userMappingRepository.setFailFindPhoneByUserId(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(createMatrixSendEvent('user-matrix-phone-fail', 'phone_fail')),
+      });
+
+      expect(response.statusCode).toBe(500);
+    });
+
+    it('skips a Matrix delivery when the user has no WhatsApp mapping', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(createMatrixSendEvent('user-matrix-unmapped', 'unmapped')),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('delivers a Matrix message after a notification-preferences read failure', async () => {
+      await userMappingRepository.saveMapping('user-matrix-prefs-fail', ['+48111222333']);
+      prefs.failNext({ code: 'PERSISTENCE_ERROR', message: 'private prefs failure' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-matrix-prefs-fail', 'prefs_fail')
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+    });
+
+    it('drops a non-important Matrix message according to notification preferences', async () => {
+      await userMappingRepository.saveMapping('user-matrix-drop', ['+48111222333']);
+      prefs.setLevel('user-matrix-drop', 'important');
+
+      const explicit = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-matrix-drop', 'preferences_drop', { important: false })
+        ),
+      });
+      const absent = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-matrix-drop', 'preferences_drop_absent')
+        ),
+      });
+
+      expect([explicit.statusCode, absent.statusCode]).toEqual([200, 200]);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs a Matrix delivery when its reservation cannot be persisted', async () => {
+      await userMappingRepository.saveMapping('user-matrix-reserve-fail', ['+48111222333']);
+      outboundMessageRepository.setFail(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-matrix-reserve-fail', 'reserve_fail')
+        ),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('marks a thrown Matrix send as ambiguous without retrying blindly', async () => {
+      await userMappingRepository.saveMapping('user-matrix-throw', ['+48111222333']);
+      messageSender.setThrow(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(createMatrixSendEvent('user-matrix-throw', 'throw')),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('returns an internal error when an ordinary WhatsApp sender throws', async () => {
+      await userMappingRepository.saveMapping('user-ordinary-throw', ['+48111222333']);
+      messageSender.setThrow(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-ordinary-throw',
+          message: 'Ordinary message',
+          correlationId: 'ordinary_throw',
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('does not write Matrix delivery payload or identity sentinels to logs', async () => {
+      await userMappingRepository.saveMapping('USER_LOG_PRIVATE_SENTINEL', ['+48123456001']);
+      const info = vi.spyOn(app.log, 'info');
+      const warn = vi.spyOn(app.log, 'warn');
+      const error = vi.spyOn(app.log, 'error');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'USER_LOG_PRIVATE_SENTINEL',
+          message: 'MESSAGE_LOG_PRIVATE_SENTINEL',
+          correlationId: 'CORRELATION_LOG_PRIVATE_SENTINEL',
+          idempotencyKey: 'IDEMPOTENCY_LOG_PRIVATE_SENTINEL',
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const serializedLogs = JSON.stringify([info.mock.calls, warn.mock.calls, error.mock.calls]);
+      expect(serializedLogs).toContain('matrix_corpus');
+      for (const sentinel of [
+        'USER_LOG_PRIVATE_SENTINEL',
+        'MESSAGE_LOG_PRIVATE_SENTINEL',
+        'CORRELATION_LOG_PRIVATE_SENTINEL',
+        'IDEMPOTENCY_LOG_PRIVATE_SENTINEL',
+        '+48123456001',
+      ]) {
+        expect(serializedLogs).not.toContain(sentinel);
+      }
+    });
+
+    it('rejects an empty Matrix idempotency key before any WhatsApp send', async () => {
+      await userMappingRepository.saveMapping('user-matrix-invalid-key', ['+48111222333']);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.message.send',
+          userId: 'user-matrix-invalid-key',
+          message: 'Must not be sent',
+          correlationId: 'imc_reply_invalid_key',
+          idempotencyKey: '   ',
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+    });
+
+    it('rejects a changed payload replay without sending a second Matrix message', async () => {
+      await userMappingRepository.saveMapping('user-matrix-conflict', ['+48111222333']);
+      const original = {
+        type: 'whatsapp.message.send',
+        userId: 'user-matrix-conflict',
+        message: 'Original synthetic reply',
+        correlationId: 'imc_reply_digest_2',
+        idempotencyKey: 'imc_reply_publish_2',
+        timestamp: new Date().toISOString(),
+      };
+      await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(original),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({ ...original, message: 'Changed synthetic reply' }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+    });
+
+    it('does not blindly resend after an ambiguous Matrix delivery failure', async () => {
+      await userMappingRepository.saveMapping('user-matrix-ambiguous', ['+48111222333']);
+      const event = {
+        type: 'whatsapp.message.send',
+        userId: 'user-matrix-ambiguous',
+        message: 'Synthetic reply with uncertain delivery',
+        correlationId: 'imc_reply_digest_3',
+        idempotencyKey: 'imc_reply_publish_3',
+        timestamp: new Date().toISOString(),
+      };
+      messageSender.setFail(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'PRIVATE_AMBIGUOUS_SEND_ERROR',
+      });
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+      messageSender.setFail(false);
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(first.statusCode).toBe(200);
+      expect(replay.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs until a successful Matrix send with an incomplete receipt can be reconciled', async () => {
+      await userMappingRepository.saveMapping('user-matrix-completion-failure', ['+48111222333']);
+      const event = {
+        type: 'whatsapp.message.send',
+        userId: 'user-matrix-completion-failure',
+        message: 'Synthetic reply with failed receipt completion',
+        correlationId: 'imc_reply_digest_completion_failure',
+        idempotencyKey: 'imc_reply_publish_completion_failure',
+        timestamp: new Date().toISOString(),
+      };
+      outboundMessageRepository.setFailIdempotentCompletion(true);
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+      outboundMessageRepository.setFailIdempotentCompletion(false);
+      const replay = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(first.statusCode).toBe(503);
+      expect(replay.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+    });
+
+    it('does not deduplicate ordinary messages that omit idempotencyKey', async () => {
+      await userMappingRepository.saveMapping('user-ordinary-repeat', ['+48111222333']);
+      const event = {
+        type: 'whatsapp.message.send',
+        userId: 'user-ordinary-repeat',
+        message: 'Ordinary repeated message',
+        correlationId: 'ordinary-correlation',
+        timestamp: new Date().toISOString(),
+      };
+
+      await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(messageSender.getSentMessages()).toHaveLength(2);
+    });
+
     describe('important filtering', () => {
       it("delivers when level='all' and no important flag", async () => {
         await userMappingRepository.saveMapping('user-all', ['+48111111111']);
@@ -1063,7 +1505,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toContain('auth failed');
     });
 
@@ -1084,7 +1529,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toContain('auth failed');
     });
 
@@ -1140,7 +1588,10 @@ describe('Pub/Sub Routes', () => {
         });
 
         expect(response.statusCode).toBe(401);
-        const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+        const responseBody = JSON.parse(response.body) as {
+          success: boolean;
+          error: { code: string; message: string };
+        };
         expect(responseBody.error.message).toContain('auth failed');
       });
     });
@@ -1161,7 +1612,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
@@ -1181,7 +1635,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Failed to decode PubSub message');
     });
 
@@ -1202,7 +1659,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toBe('Unexpected event type');
     });
 
@@ -1224,7 +1684,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean; data: { deletedCount: number } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        data: { deletedCount: number };
+      };
       expect(responseBody.success).toBe(true);
       expect(responseBody.data.deletedCount).toBe(2);
 
@@ -1249,7 +1712,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean; data: { deletedCount: number } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        data: { deletedCount: number };
+      };
       expect(responseBody.success).toBe(true);
       expect(responseBody.data.deletedCount).toBe(0);
     });
@@ -1274,7 +1740,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      const responseBody = JSON.parse(response.body) as { success: boolean; data: { deletedCount: number } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        data: { deletedCount: number };
+      };
       expect(responseBody.success).toBe(true);
       expect(responseBody.data.deletedCount).toBe(0);
     });
@@ -1314,6 +1783,32 @@ describe('Pub/Sub Routes', () => {
       erasureRequestId: 'erase-1',
       attempt: 1,
     };
+
+    it('wires Matrix corpus ingress into asynchronous webhook processing when enabled', async () => {
+      setServices({
+        ...getServices(),
+        matrixCorpus: {
+          routes: null as never,
+          ingress: notReadyMatrixCorpusIngress,
+          recoveryController: null as never,
+        },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.webhook.process',
+          eventId: 'event-matrix-enabled',
+          payload: '{}',
+          phoneNumberId: 'phone-matrix-enabled',
+          receivedAt: new Date().toISOString(),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
 
     it('rejects a spoofable Pub/Sub From header for private erasure work', async () => {
       const response = await app.inject({
@@ -1920,7 +2415,10 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
-      const responseBody = JSON.parse(response.body) as { success: boolean; error: { code: string; message: string } };
+      const responseBody = JSON.parse(response.body) as {
+        success: boolean;
+        error: { code: string; message: string };
+      };
       expect(responseBody.error.message).toContain('auth failed');
     });
 

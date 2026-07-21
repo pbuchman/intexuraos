@@ -11,6 +11,11 @@ import {
   type IntexAgentStylePreferenceAction,
 } from '@intexuraos/llm-prompts';
 import type { Logger as AppLogger } from '@intexuraos/common-core';
+import type {
+  MatrixCorpusLlmCallContextV1,
+  MatrixCorpusLlmStageV1,
+  MatrixCorpusProviderCallUsageV1,
+} from '@intexuraos/llm-contract';
 import {
   formatZodErrors,
   generateStructured,
@@ -56,6 +61,12 @@ export interface IntexAgentIntentClassifierInput {
   events: IntexAgentSessionEvent[];
   currentDateTime: string;
   replyContext?: IntexIncomingMessageReplyContext;
+  matrixCorpusLlm?: MatrixCorpusLlmRecorder;
+}
+
+export interface MatrixCorpusLlmRecorder {
+  nextContext(stage: MatrixCorpusLlmStageV1): MatrixCorpusLlmCallContextV1;
+  recordProviderCall(call: MatrixCorpusProviderCallUsageV1): Promise<void>;
 }
 
 export type IntexAgentIntentClassification =
@@ -108,6 +119,7 @@ export function createLlmIntexAgentIntentClassifier(deps: {
 }): IntexAgentIntentClassifier {
   return {
     async classify(input): Promise<IntexAgentIntentClassification> {
+      const matrixCorpusLlm = input.matrixCorpusLlm;
       const replyLanguage = classifierReplyLanguage(input);
       const directIntent = classifyIntexAgentIntent(input.message);
       if (directIntent.kind === 'no_action' && directIntent.reason === 'greeting') {
@@ -137,9 +149,24 @@ export function createLlmIntexAgentIntentClassifier(deps: {
             },
           }),
         maxRepairAttempts: 1,
+        ...(matrixCorpusLlm === undefined
+          ? {}
+          : {
+              optionsForAttempt: (attempt: number): Record<string, unknown> => ({
+                matrixCorpusContext: matrixCorpusLlm.nextContext(
+                  attempt === 0 ? 'intent_classification' : 'response_schema_repair'
+                ),
+              }),
+              onProviderCall: async (call: MatrixCorpusProviderCallUsageV1): Promise<void> => {
+                await matrixCorpusLlm.recordProviderCall(call);
+              },
+            }),
       });
 
       if (!result.ok) {
+        if (matrixCorpusLlm !== undefined) {
+          throw new Error('Matrix corpus intent classification failed');
+        }
         deps.logger.warn(
           {
             errorKind: result.error.kind,

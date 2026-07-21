@@ -34,6 +34,10 @@
       "owner": "whatsapp-service",
       "description": "Tracking of outbound WhatsApp messages with wamid and correlationId for reply matching"
     },
+    "whatsapp_outbound_delivery_receipts": {
+      "owner": "whatsapp-service",
+      "description": "Hashed idempotency receipts that suppress duplicate Matrix-corpus WhatsApp sends without storing raw delivery keys or message bodies"
+    },
     "whatsapp_phone_verifications": {
       "owner": "whatsapp-service",
       "description": "Phone number verification codes with TTL-based expiry for WhatsApp connection"
@@ -90,6 +94,27 @@
       "owner": "whatsapp-service",
       "description": "Autosaved user and assistant turns for private WhatsApp Conversation Assistant sessions."
     },
+    "matrix_corpus_run_leases": {
+      "owner": "whatsapp-service",
+      "description": "Home Dev Matrix corpus run leases and lifecycle fences.",
+      "subcollections": ["runs", "renew_receipts", "capability_issuance_receipts"]
+    },
+    "matrix_corpus_capabilities": {
+      "owner": "whatsapp-service",
+      "description": "Single-use Home Dev Matrix corpus transport capabilities."
+    },
+    "matrix_corpus_ingest_outbox": {
+      "owner": "whatsapp-service",
+      "description": "Durable signed Matrix corpus ingest delivery outbox."
+    },
+    "matrix_corpus_terminal_control_outbox": {
+      "owner": "whatsapp-service",
+      "description": "Durable signed Matrix corpus terminal-control delivery outbox."
+    },
+    "matrix_corpus_transport_receipts": {
+      "owner": "whatsapp-service",
+      "description": "Matrix corpus transport acknowledgements correlated to current run fences."
+    },
     "mobile_notifications": {
       "owner": "mobile-notifications-service",
       "description": "Mobile push notifications received from user devices"
@@ -125,6 +150,38 @@
     "intex_agent_session_events": {
       "owner": "intex-agent",
       "description": "Chronological timeline events for intex-agent WhatsApp Assistant sessions, including user messages, assistant replies, clarifications, tool calls, and close events."
+    },
+    "intex_agent_matrix_corpus_ingest_receipts": {
+      "owner": "intex-agent",
+      "description": "Replay-safe receipts for verified Matrix corpus ingest envelopes."
+    },
+    "intex_agent_matrix_corpus_test_confirmations": {
+      "owner": "intex-agent",
+      "description": "Isolated Matrix corpus confirmation records."
+    },
+    "intex_agent_matrix_corpus_run_manifests": {
+      "owner": "intex-agent",
+      "description": "Immutable owner and fence manifests for Matrix corpus runs."
+    },
+    "intex_agent_matrix_corpus_run_contexts": {
+      "owner": "intex-agent",
+      "description": "Private encrypted context for Matrix corpus runs."
+    },
+    "intex_agent_matrix_corpus_recovery_receipts": {
+      "owner": "intex-agent",
+      "description": "Durable first-wins acknowledgements for Matrix corpus abandoned-run recovery."
+    },
+    "intex_agent_matrix_corpus_scenario_contexts": {
+      "owner": "intex-agent",
+      "description": "Private encrypted context for Matrix corpus scenarios."
+    },
+    "intex_agent_test_runs": {
+      "owner": "intex-agent",
+      "description": "Safe evaluator-visible projections of Intex Agent test runs."
+    },
+    "intex_agent_test_run_scenarios": {
+      "owner": "intex-agent",
+      "description": "Safe evaluator-visible per-scenario projections for Intex Agent test runs."
     },
     "intex_agent_user_preferences": {
       "owner": "intex-agent",

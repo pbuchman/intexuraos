@@ -59,6 +59,12 @@ export interface SendMessageEvent {
   important?: boolean;
 
   /**
+   * Optional consumer-side delivery idempotency key. Only callers that require
+   * durable exactly-once suppression should set this field.
+   */
+  idempotencyKey?: string;
+
+  /**
    * Correlation ID for tracing across services.
    */
   correlationId: string;

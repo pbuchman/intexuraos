@@ -4,6 +4,7 @@ import type {
   ConversationAssistantModel,
   LlmProvider,
 } from '@intexuraos/llm-contract';
+export type * from './intexAgentTestRuns.js';
 /**
  * API Response types matching backend response format.
  */
@@ -932,11 +933,13 @@ export interface NotificationFiltersData {
 export interface UserSettings {
   userId: string;
   timezone?: string;
-  notifications: {
-    filters: NotificationFilter[];
-  };
   createdAt: string;
   updatedAt: string;
+  intexAgentCapabilities: {
+    testRuns:
+      | { status: 'available'; runtimeAudience: 'home-dev' }
+      | { status: 'unavailable' };
+  };
 }
 
 /**

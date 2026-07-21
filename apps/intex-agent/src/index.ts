@@ -6,7 +6,7 @@ import { loadConfig } from './config.js';
 import { buildServer } from './server.js';
 import { initServices } from './services.js';
 
-const REQUIRED_ENV = [
+const REQUIRED_ENV: string[] = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
@@ -23,7 +23,22 @@ const REQUIRED_ENV = [
   'INTEXURAOS_OPENROUTER_APP_API_KEY',
   'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
   'INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS',
+  'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED',
 ];
+
+if (process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED']?.trim() === 'true') {
+  REQUIRED_ENV.push(
+    'INTEXURAOS_ENVIRONMENT',
+    'INTEXURAOS_MATRIX_CORPUS_ENABLED',
+    'INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME',
+    'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+    'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+    'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY'
+  );
+}
 
 validateRequiredEnv(REQUIRED_ENV);
 
@@ -36,7 +51,7 @@ initSentry({
 
 async function main(): Promise<void> {
   const config = loadConfig();
-  initServices(config);
+  await initServices(config);
 
   const app = await buildServer();
   installUsageSinkShutdownHandler({ app, logger: app.log });

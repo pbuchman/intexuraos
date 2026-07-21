@@ -3,10 +3,12 @@
  * Mocks @intexuraos/infra-pubsub to test the publisher implementation.
  */
 import pino from 'pino';
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GcpPubSubPublisher } from '../../infra/pubsub/index.js';
 
 const mockPublishToTopic = vi.fn();
+const mockPublishToTopicWithSafeReceipt = vi.fn();
 const mockPublishToOptionalTopic = vi.fn();
 
 vi.mock('@intexuraos/infra-pubsub', () => ({
@@ -38,6 +40,17 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
     > {
       return mockPublishToOptionalTopic(topicName, data, attributes);
     }
+
+    async publishToTopicWithSafeReceipt(
+      topicName: string,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: string } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToTopicWithSafeReceipt(topicName, data, attributes);
+    }
   },
 }));
 
@@ -46,8 +59,13 @@ describe('GcpPubSubPublisher', () => {
 
   beforeEach(() => {
     mockPublishToTopic.mockReset();
+    mockPublishToTopicWithSafeReceipt.mockReset();
     mockPublishToOptionalTopic.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToTopicWithSafeReceipt.mockResolvedValue({
+      ok: true,
+      value: 'provider-receipt-private',
+    });
     mockPublishToOptionalTopic.mockResolvedValue({ ok: true, value: undefined });
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
@@ -170,6 +188,51 @@ describe('GcpPubSubPublisher', () => {
         messageId: 'wamid.abc',
       });
       expect(mockPublishToOptionalTopic).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('publishMatrixCorpusIngest', () => {
+    const event = {
+      version: 1 as const,
+      kind: 'matrix_corpus_ingest' as const,
+      ingestReceiptId: 'receipt_1',
+      leaseFence: '7',
+      payloadDigest: '1'.repeat(64),
+      attestation: 'e30.e30.AA',
+    };
+
+    it('publishes on the existing Intex topic and returns only a digest of the provider receipt', async () => {
+      const result = await publisher.publishMatrixCorpusIngest(event);
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          publisherReceiptDigest: createHash('sha256')
+            .update('provider-receipt-private', 'utf8')
+            .digest('hex'),
+        },
+      });
+      expect(mockPublishToTopicWithSafeReceipt).toHaveBeenCalledWith(
+        'intex-message-ingest-topic',
+        event,
+        { eventKind: 'matrix_corpus_ingest' }
+      );
+      expect(mockPublishToTopic).not.toHaveBeenCalled();
+    });
+
+    it('returns one static safe error when the provider publish fails', async () => {
+      mockPublishToTopicWithSafeReceipt.mockResolvedValue({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'private-provider-error-fixture' },
+      });
+
+      const result = await publisher.publishMatrixCorpusIngest(event);
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'INTERNAL_ERROR', message: 'Matrix corpus ingest publication failed' },
+      });
+      expect(JSON.stringify(result)).not.toContain('private-provider-error-fixture');
     });
   });
 

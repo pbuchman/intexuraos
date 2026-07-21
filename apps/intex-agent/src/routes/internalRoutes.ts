@@ -2,7 +2,12 @@ import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-htt
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import type { IntexIncomingMessage } from '../domain/ports/incomingMessageHandler.js';
-import { decodeIntexMessageIngestPush } from '../infra/pubsub/decoder.js';
+import type { MatrixCorpusAttestationVerificationResult } from '../domain/matrixCorpus/attestation.js';
+import type { MatrixCorpusIngestAcceptanceResult } from '../domain/matrixCorpus/ingestReceiptService.js';
+import {
+  decodeIntexMessageIngestPushEnvelope,
+  type DecodedIntexMessageIngestPush,
+} from '../infra/pubsub/decoder.js';
 import { getServices } from '../services.js';
 
 const incomingMessageBodySchema = {
@@ -50,51 +55,73 @@ const pubSubPushBodySchema = {
   },
 } as const;
 
-export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
-  fastify.post<{ Body: unknown }>(
-    '/internal/intex-agent/messages',
-    {
-      schema: {
-        operationId: 'ingestIntexAgentMessage',
-        summary: 'Ingest WhatsApp Assistant message',
-        description: 'Internal endpoint for WhatsApp Assistant text and transcription events.',
-        tags: ['internal'],
-        body: {
-          anyOf: [incomingMessageBodySchema, pubSubPushBodySchema],
+export interface InternalRoutesDependencies {
+  handleOrdinary(input: IntexIncomingMessage): Promise<Readonly<{ sessionId: string }>>;
+  matrixCorpus: Readonly<{
+    enabled: boolean;
+    verifyAttestation(input: unknown): Promise<MatrixCorpusAttestationVerificationResult>;
+    acceptVerifiedIngest(input: unknown): Promise<MatrixCorpusIngestAcceptanceResult>;
+  }> | null;
+}
+
+export function createInternalRoutes(
+  dependencies: InternalRoutesDependencies
+): FastifyPluginCallback {
+  return (fastify, _opts, done) => {
+    fastify.post<{ Body: unknown }>(
+      '/internal/intex-agent/messages',
+      {
+        schema: {
+          operationId: 'ingestIntexAgentMessage',
+          summary: 'Ingest WhatsApp Assistant message',
+          description: 'Internal endpoint for WhatsApp Assistant text and transcription events.',
+          tags: ['internal'],
+          body: {
+            anyOf: [incomingMessageBodySchema, pubSubPushBodySchema],
+          },
         },
       },
-    },
-    async (request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) => {
-      logIncomingRequest(request, {
-        message: 'Received request to POST /internal/intex-agent/messages',
-      });
+      async (request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) => {
+        logIncomingRequest(request, {
+          message: 'Received request to POST /internal/intex-agent/messages',
+          bodyPreviewLength: 0,
+        });
 
-      if (!isAuthenticatedIntexMessageRequest(request)) {
-        request.log.warn('Internal auth failed for intex message ingest');
-        return await reply.fail('UNAUTHORIZED', 'Internal auth failed for intex message ingest');
+        if (!isAuthenticatedIntexMessageRequest(request)) {
+          request.log.warn('Internal auth failed for intex message ingest');
+          return await reply.fail('UNAUTHORIZED', 'Internal auth failed for intex message ingest');
+        }
+
+        let decoded: DecodedIncomingMessageBody;
+        try {
+          decoded = decodeIncomingMessageBody(request.body);
+        } catch (error) {
+          const message = getErrorMessage(error, 'Invalid intex.message.ingest event');
+          request.log.warn({ error: message }, 'Invalid intex message ingest payload');
+          return await reply.fail('INVALID_REQUEST', message);
+        }
+
+        if (decoded.kind === 'matrix_corpus')
+          return await handleMatrixCorpusMessage(request, reply, decoded.envelope, dependencies);
+
+        const result = await dependencies.handleOrdinary(decoded.message);
+
+        void reply.status(202);
+        return await reply.ok({
+          accepted: true,
+          sessionId: result.sessionId,
+        });
       }
+    );
 
-      let incomingMessage: IntexIncomingMessage;
-      try {
-        incomingMessage = decodeIncomingMessageBody(request.body);
-      } catch (error) {
-        const message = getErrorMessage(error, 'Invalid intex.message.ingest event');
-        request.log.warn({ error: message }, 'Invalid intex message ingest payload');
-        return await reply.fail('INVALID_REQUEST', message);
-      }
+    done();
+  };
+}
 
-      const result = await getServices().incomingMessageHandler.handle(incomingMessage);
-
-      void reply.status(202);
-      return await reply.ok({
-        accepted: true,
-        sessionId: result.sessionId,
-      });
-    }
-  );
-
-  done();
-};
+export const internalRoutes: FastifyPluginCallback = createInternalRoutes({
+  handleOrdinary: async (input) => await getServices().incomingMessageHandler.handle(input),
+  matrixCorpus: null,
+});
 
 function isAuthenticatedIntexMessageRequest(request: FastifyRequest): boolean {
   const fromHeader = request.headers.from;
@@ -110,12 +137,67 @@ function isAuthenticatedIntexMessageRequest(request: FastifyRequest): boolean {
   return authResult.valid;
 }
 
-function decodeIncomingMessageBody(body: unknown): IntexIncomingMessage {
+type DecodedIncomingMessageBody =
+  | Readonly<{ kind: 'ordinary'; message: IntexIncomingMessage }>
+  | Extract<DecodedIntexMessageIngestPush, Readonly<{ kind: 'matrix_corpus' }>>;
+
+function decodeIncomingMessageBody(body: unknown): DecodedIncomingMessageBody {
   if (isDirectIntexIncomingMessage(body)) {
-    return body;
+    return { kind: 'ordinary', message: body };
   }
 
-  return decodeIntexMessageIngestPush(body);
+  return decodeIntexMessageIngestPushEnvelope(body);
+}
+
+async function handleMatrixCorpusMessage(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  envelope: Extract<DecodedIntexMessageIngestPush, Readonly<{ kind: 'matrix_corpus' }>>['envelope'],
+  dependencies: InternalRoutesDependencies
+): Promise<unknown> {
+  const hasPubSubMarker = request.headers.from === 'noreply@google.com';
+  const hasInternalAuth = validateInternalAuth(request).valid;
+  if (!hasPubSubMarker || !hasInternalAuth) {
+    request.log.warn('Matrix corpus ingest provenance rejected');
+    return await reply.fail('UNAUTHORIZED', 'Matrix corpus ingest provenance rejected');
+  }
+
+  const matrixCorpus = dependencies.matrixCorpus;
+  if (matrixCorpus === null) {
+    request.log.warn('Matrix corpus ingest is disabled');
+    void reply.status(503);
+    return await reply.ok({ accepted: false, state: 'rejected', correlationCount: 0 });
+  }
+  if (!matrixCorpus.enabled) {
+    request.log.warn('Matrix corpus ingest is disabled');
+    void reply.status(503);
+    return await reply.ok({ accepted: false, state: 'rejected', correlationCount: 0 });
+  }
+
+  let verified: MatrixCorpusAttestationVerificationResult;
+  try {
+    verified = await matrixCorpus.verifyAttestation(envelope);
+  } catch {
+    request.log.warn('Matrix corpus attestation verification failed');
+    void reply.status(400);
+    return await reply.ok({ accepted: false, state: 'rejected', correlationCount: 0 });
+  }
+  if (!verified.ok || verified.claims.kind !== 'matrix_corpus_ingest') {
+    request.log.warn('Matrix corpus attestation rejected');
+    void reply.status(400);
+    return await reply.ok({ accepted: false, state: 'rejected', correlationCount: 0 });
+  }
+
+  let acceptance: MatrixCorpusIngestAcceptanceResult;
+  try {
+    acceptance = await matrixCorpus.acceptVerifiedIngest(verified.claims);
+  } catch {
+    request.log.warn('Matrix corpus receipt processing failed');
+    void reply.status(500);
+    return await reply.ok({ accepted: false, state: 'rejected', correlationCount: 0 });
+  }
+  void reply.status(acceptance.state === 'retry' ? 503 : 202);
+  return await reply.ok(acceptance);
 }
 
 function isDirectIntexIncomingMessage(body: unknown): body is IntexIncomingMessage {

@@ -7,23 +7,27 @@ The evaluator runs only on the Linux host `home-dev`, from
 service ports are Intex Agent `8134`, WhatsApp Service `8113`, and Matrix adapter
 `8099`.
 
-Endpoint scenarios use the real deployed Intex Agent LLM, mocked product tools,
-synthetic test users, and guarded cleanup. The endpoint accepts from 1 through
-exactly 20 product turns. `or:minimax/minimax-m3` is the only semantic judge.
-Missing credentials, a timeout, invalid output, or provider failure is an
-infrastructure failure with exit `2`; there is no fallback judge.
+`matrix-corpus` is the canonical live acceptance command. It runs the tracked corpus of
+20 scenarios and 59 turns sequentially through the real Matrix/WhatsApp transport. Each
+scenario starts a labelled Intex session and all later turns stay bound to that exact
+session. The agent model is locked to `or:deepseek/deepseek-v4-flash`; product tools run
+only through the strict mock boundary, while `or:minimax/minimax-m3` evaluates assistant
+replies. Missing credentials, a timeout, invalid output, owner-cleanup failure, or provider
+failure is an infrastructure failure with exit `2`; there is no fallback model, judge,
+transport, or production tool execution.
 
-`endpoint` and `scenario` send no real Matrix message. `matrix-smoke` sends one
-safe operator-owned Matrix/WhatsApp prompt. `full` sends that one prompt only when
-the endpoint corpus executed by the same invocation passes; otherwise it stops
-before Matrix. A sent prompt can leave one real Intex Agent session plus bridge
-metadata. The documented final acceptance runs `full`, not a preceding standalone
-`matrix-smoke`, and therefore sends at most one safe message.
+The preflight embedded in `matrix-corpus` is read-only: it sends no message, calls no LLM,
+creates no run or artifact, and performs no Firestore, Pub/Sub, or filesystem write. Only
+after preflight passes may the command provision the run and send the first Matrix message.
+
+`endpoint`, `scenario`, `matrix-smoke`, and `full` remain diagnostics for the legacy
+evaluator path. They are not substitutes for the 20-scenario Matrix corpus and are not
+part of its normal acceptance sequence.
 
 Preparation commands never run the wrapper. Every wrapper command below is
 **LIVE** and requires the explicit instruction “odpal testy” or equally explicit
-authorization. `preflight`, `endpoint`, `scenario`, `matrix-smoke`, and `full`
-can invoke paid MiniMax calls.
+authorization. `endpoint`, `scenario`, `matrix-smoke`, `full`, and the execution phase of
+`matrix-corpus` can invoke paid LLM calls. `preflight` does not.
 
 ## Protected machine-local configuration
 
@@ -82,7 +86,7 @@ the wrapper does not copy them to the workstation.
 
 Before connecting, the wrapper requires clean evaluator implementation paths and
 passes the workstation's exact 40-character `HEAD` only as revision proof. On Home
-Dev it requires that revision to be an ancestor of deployed `HEAD`, enters the
+Dev it requires that revision to equal deployed `HEAD`, enters the
 fixed repository, verifies `direnv` and `node`, preserves remote exits `0`, `1`,
 and `2`, and forwards only safe CLI output.
 
@@ -91,6 +95,15 @@ and tool totals; deterministic and MiniMax verdicts; cleanup counts; Matrix
 transport facts; duration; aggregate token counts; and provider-reported USD. The
 terminal and reports retain no prompts, replies, rationale, credentials, protected
 paths, raw errors, or real identifiers.
+
+For a passing canonical run, report validation requires 20 unique session-reference
+digests, 59 correlated turns/replies, the tracked 17 confirmation decisions, the exact
+19-row strict-mock tool schedule, reconciled DeepSeek/MiniMax usage, and successful ready
+artifact cleanup/release gates. `sessionsClosed` remains `0` because session-close state is
+not part of the current safe evidence projection; it must not be inferred from scenario
+lifecycle. The strict-mock proof is derived from one persisted execution-boundary event per
+terminal turn, including the explicit `no_executor_required` outcome for a rejected
+confirmation, rather than from a report-side declaration.
 
 ## Exact commands
 
@@ -112,27 +125,51 @@ scripts/run-intex-agent-evals-home-dev.sh endpoint
 scripts/run-intex-agent-evals-home-dev.sh scenario intex-eval-003
 scripts/run-intex-agent-evals-home-dev.sh matrix-smoke
 scripts/run-intex-agent-evals-home-dev.sh full
+scripts/run-intex-agent-evals-home-dev.sh matrix-corpus
+```
+
+The repository alias for the same canonical live operation is:
+
+```bash
+pnpm eval:intex-agent:matrix-corpus
 ```
 
 The wrapper accepts only `setup`, `preflight`, `endpoint`, `full`,
-`scenario intex-eval-NNN`, and `matrix-smoke` in those forms. `scenario` and
-`matrix-smoke` are targeted diagnostics, not additional final-acceptance steps.
+`scenario intex-eval-NNN`, `matrix-smoke`, and `matrix-corpus` in those forms.
+`scenario`, `endpoint`, `matrix-smoke`, and `full` are targeted legacy diagnostics, not
+additional matrix-corpus acceptance steps.
 
-Normal operator acceptance is `preflight` → `endpoint` → `full`. If preflight
-returns `CONFIG_NOT_FOUND`, obtain the operator's values through one interactive
-`setup`, then rerun preflight. Stop on a nonzero endpoint result before sending a
-real message. After endpoint exit `0`, run `full` once and do not also run
-`matrix-smoke`. The fresh endpoint corpus inside `full` independently gates its
-Matrix stage, so a behavioral or infrastructure result there also sends no
-message.
+The instruction **“odpal testy” means exactly one invocation of `matrix-corpus`**. Do not
+prepend a separate `preflight`, `endpoint`, `full`, or `matrix-smoke`; the canonical
+command contains its own zero-side-effect preflight. If it returns `CONFIG_NOT_FOUND`,
+run one explicitly authorized interactive `setup`, then wait for another explicit live
+test instruction. The wrapper performs no pull, deploy, restart, or revision switch.
+
+## Deliberately deferred hardening
+
+The current delivery is intentionally Home-Dev-specific. A portable account bootstrap,
+automatic registration of dedicated e-mail/WhatsApp test identities, cross-machine
+configuration distribution, and production scheduling remain future hardening; private
+operator identities stay only in the protected local configuration.
+
+Live evidence proves that every scenario has a distinct bound session and that its later
+turns continue that binding. It does not yet expose every internal session-transition and
+timeline field through the privacy-safe evidence DTO; those fields remain `not_observed`
+rather than being inferred from expectations. Extending that DTO is the remaining path to
+full internal-transition attestation.
+
+Steady-state retention removes at most one old exact run per new provisioning lease. A
+pre-existing backlog requiring more than one owner cleanup fails closed before mutation
+and requires an explicit recovery operation; the runner never falls back to a user-wide
+delete.
 
 ## Exit codes and triage
 
 | Exit | Meaning | Action |
 | --- | --- | --- |
 | `0` | All executed deterministic and MiniMax checks passed. | Preserve report path and continue. |
-| `1` | Behavioral failure. | Preserve report, list failed scenario IDs, stop before `full`, correct through a new reviewed revision. |
-| `2` | Configuration, revision, connectivity, endpoint, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, stop, correct the named boundary, rerun from preflight. |
+| `1` | Behavioral failure. | Preserve the report, list failed scenario IDs, and correct through a new reviewed revision. |
+| `2` | Configuration, revision, connectivity, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, stop, and correct the named boundary before another explicitly authorized run. |
 
 Triage only from the safe terminal code and report fields. Never paste protected
 configuration, raw provider or endpoint bodies, assistant text, Matrix history,
@@ -140,7 +177,7 @@ tokens, or protected paths.
 
 `revision_mismatch` means the reviewed revision has not reached the existing Home
 Dev deployment. Wait for deployment; do not use remote `git pull`, `rsync`, `scp`,
-or a wrapper bypass. After the reviewed merge is an ancestor of deployed `HEAD`,
-restart only the Home Dev `intex-agent` PM2 process and verify health on all three
-fixed ports before preflight. A missing configuration requires the operator's
+or a wrapper bypass. After the reviewed merge equals deployed `HEAD`,
+restart only the Home Dev processes affected by that revision and verify health on all
+three fixed ports before the next run. A missing configuration requires the operator's
 interactive values; never infer them from e-mail or adapter legacy fields.

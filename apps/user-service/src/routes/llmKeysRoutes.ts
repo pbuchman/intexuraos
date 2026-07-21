@@ -8,11 +8,62 @@
 
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
-import { getProviderForModel } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_INTEX_AGENT_MODEL,
+  getProviderForModel,
+  INTEX_AGENT_MODEL_OPTIONS,
+} from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../infra/encryption.js';
 import { getServices } from '../services.js';
 import { type LlmProvider, type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
 import { formatLlmError } from '../domain/settings/formatLlmError.js';
+
+const INTEG_AGENT_MODEL_IDS = INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => id);
+const INTEG_AGENT_SELECTOR_OPTIONS_SCHEMA = {
+  type: 'array',
+  minItems: INTEX_AGENT_MODEL_OPTIONS.length,
+  maxItems: INTEX_AGENT_MODEL_OPTIONS.length,
+  items: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { id: { type: 'string' }, label: { type: 'string' } },
+    required: ['id', 'label'],
+  },
+  allOf: [
+    {
+      type: 'array',
+      minItems: INTEX_AGENT_MODEL_OPTIONS.length,
+      maxItems: INTEX_AGENT_MODEL_OPTIONS.length,
+      items: INTEX_AGENT_MODEL_OPTIONS.map(({ id, label }) => ({ const: { id, label } })),
+      additionalItems: false,
+    },
+  ],
+} as const;
+
+function intexAgentProjectionConsistencySchema(): Readonly<Record<string, unknown>> {
+  return {
+    oneOf: [
+      {
+        type: 'object',
+        properties: {
+          explicitModel: { const: null },
+          effectiveModel: { const: DEFAULT_INTEX_AGENT_MODEL },
+          source: { const: 'default_absent' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      },
+      ...INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => ({
+        type: 'object',
+        properties: {
+          explicitModel: { const: id },
+          effectiveModel: { const: id },
+          source: { const: 'explicit' },
+        },
+        required: ['explicitModel', 'effectiveModel', 'source'],
+      })),
+    ],
+  };
+}
 
 export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   // GET /users/:uid/settings/llm-keys
@@ -103,7 +154,38 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                       },
                     },
                   },
+                  intexAgentModelSelector: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                          status: { const: 'available' },
+                          explicitModel: {
+                            type: ['string', 'null'],
+                            enum: [...INTEG_AGENT_MODEL_IDS, null],
+                          },
+                          effectiveModel: {
+                            type: 'string',
+                            enum: INTEG_AGENT_MODEL_IDS,
+                          },
+                          source: { type: 'string', enum: ['explicit', 'default_absent'] },
+                          revision: { type: 'integer', minimum: 0 },
+                          options: INTEG_AGENT_SELECTOR_OPTIONS_SCHEMA,
+                        },
+                        allOf: [intexAgentProjectionConsistencySchema()],
+                        required: ['status', 'explicitModel', 'effectiveModel', 'source', 'revision', 'options'],
+                      },
+                      {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: { status: { const: 'unavailable' } },
+                        required: ['status'],
+                      },
+                    ],
+                  },
                 },
+                required: ['defaultModel', 'fallbackModel', 'google', 'openai', 'anthropic', 'perplexity', 'openrouter', 'testResults', 'intexAgentModelSelector'],
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
@@ -129,11 +211,26 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             },
             required: ['success', 'error'],
           },
+          500: {
+            description: 'Internal server error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+            required: ['success', 'error'],
+          },
         },
       },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      logIncomingRequest(request, { message: 'GET /users/:uid/settings/llm-keys' });
+      logIncomingRequest(request, {
+        message: 'GET /users/:uid/settings/llm-keys',
+        bodyPreviewLength: 0,
+        includeParams: false,
+        includeHeaders: false,
+      });
 
       try {
         const user = await requireAuth(request, reply);
@@ -147,11 +244,21 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.fail('FORBIDDEN', 'Cannot access other user settings');
         }
 
-        const { userSettingsRepository } = getServices();
+        const { userSettingsRepository, intexAgentModelAvailability } = getServices();
+        const available = await intexAgentModelAvailability.isAvailableForUser(params.uid);
+        const selectorResult = await userSettingsRepository.getIntexAgentModelState(params.uid);
+
+        if (!selectorResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to load Intex Agent model selector');
+        }
+        if (selectorResult.value.status === 'invalid_stored_value') {
+          return await reply.fail('INTERNAL_ERROR', 'Intex Agent model selector state is invalid');
+        }
+
         const result = await userSettingsRepository.getSettings(params.uid);
 
         if (!result.ok) {
-          return await reply.fail('INTERNAL_ERROR', result.error.message);
+          return await reply.fail('INTERNAL_ERROR', 'Failed to get LLM keys');
         }
 
         const settings = result.value;
@@ -182,9 +289,19 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             perplexity: llmTestResults?.perplexity ?? null,
             openrouter: llmTestResults?.openrouter ?? null,
           },
+          intexAgentModelSelector: available
+            ? {
+                status: 'available' as const,
+                explicitModel: selectorResult.value.explicitModel,
+                effectiveModel: selectorResult.value.explicitModel ?? DEFAULT_INTEX_AGENT_MODEL,
+                source: selectorResult.value.explicitModel === null ? ('default_absent' as const) : ('explicit' as const),
+                revision: selectorResult.value.revision,
+                options: INTEX_AGENT_MODEL_OPTIONS.map(({ id, label }) => ({ id, label })),
+              }
+            : { status: 'unavailable' as const },
         });
-      } catch (error) {
-        request.log.error({ err: error }, 'Unhandled error in getLlmApiKeys');
+      } catch (_error) {
+        request.log.error('Unhandled error in getLlmApiKeys');
         reply.status(500);
         return await reply.fail('INTERNAL_ERROR', 'Failed to get LLM keys');
       }

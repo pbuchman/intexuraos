@@ -13,6 +13,7 @@ const REQUIRED_SECTIONS = [
   '## Protected machine-local configuration',
   '## Tracked inputs and private outputs',
   '## Exact commands',
+  '## Deliberately deferred hardening',
   '## Exit codes and triage',
 ] as const;
 
@@ -30,6 +31,7 @@ const LIVE_WRAPPER_COMMANDS = [
   'scripts/run-intex-agent-evals-home-dev.sh scenario intex-eval-003',
   'scripts/run-intex-agent-evals-home-dev.sh matrix-smoke',
   'scripts/run-intex-agent-evals-home-dev.sh full',
+  'scripts/run-intex-agent-evals-home-dev.sh matrix-corpus',
 ] as const;
 
 const CONFIG_FIELDS = [
@@ -90,11 +92,11 @@ describe('Intex Agent evaluation documentation', () => {
     ]) {
       expect(runbook).toContain(fact);
     }
-    expect(runbook).toContain('`full` sends that one prompt only when');
     expect(runbook).toContain(
-      'the endpoint corpus executed by the same invocation passes; otherwise it stops'
+      'The instruction **“odpal testy” means exactly one invocation of `matrix-corpus`**.'
     );
-    expect(runbook).toContain('The fresh endpoint corpus inside `full` independently gates its');
+    expect(runbook).toContain('20 scenarios and 59 turns');
+    expect(runbook).toContain('or:deepseek/deepseek-v4-flash');
 
     for (const field of CONFIG_FIELDS) {
       expect(runbook).toContain(`"${field}"`);
@@ -104,10 +106,10 @@ describe('Intex Agent evaluation documentation', () => {
       '| `0` | All executed deterministic and MiniMax checks passed. | Preserve report path and continue. |'
     );
     expect(runbook).toContain(
-      '| `1` | Behavioral failure. | Preserve report, list failed scenario IDs, stop before `full`, correct through a new reviewed revision. |'
+      '| `1` | Behavioral failure. | Preserve the report, list failed scenario IDs, and correct through a new reviewed revision. |'
     );
     expect(runbook).toContain(
-      '| `2` | Configuration, revision, connectivity, endpoint, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, stop, correct the named boundary, rerun from preflight. |'
+      '| `2` | Configuration, revision, connectivity, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, stop, and correct the named boundary before another explicitly authorized run. |'
     );
   });
 

@@ -15,6 +15,7 @@ import type { Content, FunctionDeclaration, Part } from '@google/genai';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import type {
   LLMError,
+  MatrixCorpusProviderCallUsageV1,
   NormalizedUsage,
   ToolCallingClient,
   ToolCallingResult,
@@ -27,6 +28,8 @@ import type { Logger } from '@intexuraos/common-core';
 import { normalizeUsage } from './costCalculator.js';
 
 const DEFAULT_MAX_ITERATIONS = 5;
+const MATRIX_PROVIDER_FAILURE_CODE = 'MATRIX_PROVIDER_CALL_FAILED';
+const MATRIX_PROVIDER_FAILURE_MESSAGE = 'Matrix provider call failed';
 
 /**
  * Configuration for creating a Gemini tool calling client.
@@ -39,6 +42,7 @@ export interface ToolCallingClientConfig {
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */
   usageSink: UsageSink;
+  evidenceModelId?: string;
 }
 
 /**
@@ -46,7 +50,7 @@ export interface ToolCallingClientConfig {
  */
 export function createGeminiToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
-  const { model, userId, logger, usageSink } = config;
+  const { model, userId, logger, usageSink, evidenceModelId = model } = config;
 
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
 
@@ -117,6 +121,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
       let effectiveMax = maxIterations;
       let onExhaustedFn = onExhausted;
       const repairIters = repairIterations ?? 2;
+      const providerCalls: MatrixCorpusProviderCallUsageV1[] = [];
 
       try {
         // Outer: allows one re-entry after repair injection
@@ -149,6 +154,20 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             const outputTokens = response.usageMetadata?.candidatesTokenCount ?? 0;
             const thinkingTokens = response.usageMetadata?.thoughtsTokenCount ?? 0;
             const iterationUsage = normalizeUsage(inputTokens, outputTokens, false, thinkingTokens);
+            if (params.matrixCorpusContext !== undefined) {
+              const providerCall: MatrixCorpusProviderCallUsageV1 = {
+                context: {
+                  ...params.matrixCorpusContext,
+                  callOrdinal: params.matrixCorpusContext.callOrdinal + iteration - 1,
+                },
+                modelId: evidenceModelId,
+                inputTokens: iterationUsage.inputTokens,
+                outputTokens: iterationUsage.outputTokens,
+                totalTokens: iterationUsage.totalTokens,
+              };
+              providerCalls.push(providerCall);
+              await params.onMatrixCorpusProviderCall?.(providerCall);
+            }
             aggregatedUsage = addUsage(aggregatedUsage, iterationUsage);
 
             // Extract parts from response
@@ -175,10 +194,15 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
                 // signal, not an application error; suppress from Sentry while
                 // preserving stdout/Cloud Logging output.
                 toolResponse = JSON.stringify({
-                  error: `Unknown tool: ${resolvedName}`,
+                  error:
+                    params.matrixCorpusContext === undefined
+                      ? `Unknown tool: ${resolvedName}`
+                      : 'Unknown tool',
                 });
                 logger.warn(
-                  { iteration, toolName: resolvedName, _skipSentry: true },
+                  params.matrixCorpusContext === undefined
+                    ? { iteration, toolName: resolvedName, _skipSentry: true }
+                    : { iteration, errorCode: 'UNKNOWN_TOOL_SELECTION', _skipSentry: true },
                   'Tool calling: hallucinated tool name'
                 );
               } else {
@@ -186,9 +210,20 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
                   toolResponse = await toolDef.run(resolvedArgs);
                 } catch (runError: unknown) {
                   const runErrorMsg = getErrorMessage(runError);
-                  toolResponse = JSON.stringify({ error: runErrorMsg });
+                  toolResponse = JSON.stringify({
+                    error:
+                      params.matrixCorpusContext === undefined
+                        ? runErrorMsg
+                        : 'Tool execution failed',
+                  });
                   logger.warn(
-                    { iteration, toolName: resolvedName, error: runErrorMsg },
+                    params.matrixCorpusContext === undefined
+                      ? { iteration, toolName: resolvedName, error: runErrorMsg }
+                      : {
+                          iteration,
+                          errorCode: 'TOOL_CALLBACK_REJECTED',
+                          _skipSentry: true,
+                        },
                     'Tool calling: run callback threw'
                   );
                 }
@@ -198,10 +233,16 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               logger.info(
                 {
                   iteration,
-                  toolName: resolvedName,
-                  toolArgs: resolvedArgs,
-                  toolResponseTruncated:
-                    toolResponse.length > 200 ? toolResponse.slice(0, 200) + '...' : toolResponse,
+                  ...(params.matrixCorpusContext === undefined
+                    ? {
+                        toolName: resolvedName,
+                        toolArgs: resolvedArgs,
+                        toolResponseTruncated:
+                          toolResponse.length > 200
+                            ? toolResponse.slice(0, 200) + '...'
+                            : toolResponse,
+                      }
+                    : {}),
                   usage: {
                     inputTokens: iterationUsage.inputTokens,
                     outputTokens: iterationUsage.outputTokens,
@@ -283,6 +324,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               toolCallsMade: totalToolCalls,
               iterationCount: iteration,
               usage: aggregatedUsage,
+              ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
             });
           }
 
@@ -315,6 +357,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
             toolCallsMade: totalToolCalls,
             iterationCount: iteration,
             usage: aggregatedUsage,
+            ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
           });
         }
 
@@ -330,9 +373,15 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
           message: 'Tool calling loop exceeded maxIterations',
         });
       } catch (error: unknown) {
-        const errorMsg = getErrorMessage(error);
+        const matrixCorpus = params.matrixCorpusContext !== undefined;
+        const errorMsg = matrixCorpus ? MATRIX_PROVIDER_FAILURE_CODE : getErrorMessage(error);
         trackUsage(aggregatedUsage, false, Date.now() - runStart, errorMsg, promptType);
-        return err(mapGeminiError(error));
+        const mappedError = mapGeminiError(error);
+        return err(
+          matrixCorpus
+            ? { code: mappedError.code, message: MATRIX_PROVIDER_FAILURE_MESSAGE }
+            : mappedError
+        );
       }
     },
   };

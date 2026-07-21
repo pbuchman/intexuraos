@@ -6,7 +6,7 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import type { OwnerType } from '@intexuraos/llm-contract';
+import type { MatrixCorpusLlmCallContextV1, OwnerType } from '@intexuraos/llm-contract';
 
 export type {
   LLMError as OpenRouterError,
@@ -41,6 +41,7 @@ export interface GenerateOptions {
     taskId?: string | null;
     requestId?: string | null;
   };
+  matrixCorpusContext?: MatrixCorpusLlmCallContextV1;
 }
 
 /**
@@ -93,6 +94,8 @@ export interface OpenRouterConfig {
   usageSink: UsageSink;
   /** Owner scope of the call. When omitted, the usage sink defaults to 'system'. */
   ownerType?: OwnerType;
+  /** Canonical model ID persisted in Matrix corpus evidence. */
+  evidenceModelId?: string;
   /** OpenRouter-specific provider routing constraints. */
   providerRouting?: {
     /** Route only to providers that support every supplied request parameter. */

@@ -1021,10 +1021,12 @@ class FakeFirestoreImpl {
       const result = await updateFn(transaction);
       // Commit: apply all pending writes to the store
       for (const [key, value] of pendingWrites.entries()) {
-        const [collectionName, docId] = key.split('/');
-        if (collectionName === undefined || docId === undefined) {
+        const separator = key.lastIndexOf('/');
+        if (separator <= 0 || separator === key.length - 1) {
           continue; // Skip malformed keys
         }
+        const collectionName = key.slice(0, separator);
+        const docId = key.slice(separator + 1);
         let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
         if (collection === undefined) {
           const newCollection = new Map<string, DocumentData>();

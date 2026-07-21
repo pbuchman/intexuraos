@@ -23,6 +23,7 @@ const ENDPOINT_URL = 'http://127.0.0.1:8134/internal/intex-agent/test/conversati
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const RUN_ID_PATTERN = /^[a-z0-9._-]{1,96}$/u;
 const USER_ID_PATTERN = /^test-intex-agent-[a-z0-9._-]{1,96}$/u;
+export const ENDPOINT_AGENT_MODEL = 'or:deepseek/deepseek-v4-flash' as const;
 
 export type EndpointFailureCode =
   | 'missing_internal_auth'
@@ -117,6 +118,7 @@ const EndpointConversationRequestSchema = z
   .object({
     contractVersion: z.literal('2026-07-01'),
     mode: z.literal('live_llm_mock_tools'),
+    agentModel: z.literal(ENDPOINT_AGENT_MODEL),
     userId: z.string().regex(USER_ID_PATTERN),
     runId: z.string().regex(RUN_ID_PATTERN),
     scenarioId: BoundedIdentifierSchema,
@@ -294,6 +296,7 @@ const EndpointConversationResponseSchema = z
   .object({
     contractVersion: z.literal('2026-07-01'),
     mode: z.literal('live_llm_mock_tools'),
+    agentModel: z.literal(ENDPOINT_AGENT_MODEL),
     runId: z.string().regex(RUN_ID_PATTERN),
     scenarioId: BoundedIdentifierSchema.optional(),
     userId: z.string().regex(USER_ID_PATTERN),
@@ -313,6 +316,7 @@ const EndpointConversationResponseSchema = z
 const CorrelatableEndpointConversationResponseSchema = EndpointConversationResponseSchema.extend({
   contractVersion: BoundedStringSchema,
   mode: BoundedStringSchema,
+  agentModel: BoundedStringSchema,
   runId: BoundedIdentifierSchema,
   userId: BoundedIdentifierSchema,
   sideEffectBoundary: BoundedStringSchema,
@@ -325,6 +329,7 @@ type CorrelatableEndpointConversationResponse = z.infer<
 export interface EndpointConversationResponse {
   contractVersion: '2026-07-01';
   mode: 'live_llm_mock_tools';
+  agentModel: typeof ENDPOINT_AGENT_MODEL;
   runId: string;
   scenarioId?: string;
   userId: string;
@@ -443,6 +448,7 @@ export function materializeEndpointRequest(
   return EndpointConversationRequestSchema.parse({
     contractVersion: '2026-07-01',
     mode: 'live_llm_mock_tools',
+    agentModel: ENDPOINT_AGENT_MODEL,
     userId: identity.userId,
     runId: identity.runId,
     scenarioId: scenario.id,
@@ -580,6 +586,7 @@ function isCorrelated(
   if (
     response.contractVersion !== request.contractVersion ||
     response.mode !== request.mode ||
+    response.agentModel !== request.agentModel ||
     response.runId !== request.runId ||
     response.scenarioId !== request.scenarioId ||
     response.userId !== request.userId ||

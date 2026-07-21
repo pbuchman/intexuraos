@@ -45,7 +45,7 @@ if [ "$WORKSPACE" = "web" ]; then
 
   echo ""
   echo "[3/3] Tests (no coverage threshold)..."
-  pnpm run test -- $SERVICE_DIR
+  pnpm --filter @intexuraos/$WORKSPACE test
 
   echo ""
   echo "=== All checks passed for $WORKSPACE ==="

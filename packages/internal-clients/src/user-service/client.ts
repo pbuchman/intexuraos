@@ -4,10 +4,12 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import { err, getErrorMessage, ok } from '@intexuraos/common-core';
+import { err, ERROR_HTTP_STATUS, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   getProviderForModel,
+  IntexAgentModels,
   isDefaultEligibleModel,
+  isIntexAgentModel,
   LlmModels,
   LlmProviders,
   type LlmProvider,
@@ -19,6 +21,7 @@ import {
   type LlmGenerateClient,
   type GenerateOptions,
 } from '@intexuraos/llm-factory';
+import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
 
 import type {
   UserServiceConfig,
@@ -28,6 +31,9 @@ import type {
   OAuthTokenResult,
   OAuthProvider,
   UserTimezoneLookupOptions,
+  IntexAgentRuntimeSettingsClient,
+  IntexAgentRuntimeSettingsClientError,
+  IntexAgentRuntimeSettingsV1,
 } from './types.js';
 
 export type { LlmProvider } from '@intexuraos/llm-contract';
@@ -39,6 +45,9 @@ export type {
   OAuthTokenResult,
   OAuthProvider,
   UserTimezoneLookupOptions,
+  IntexAgentRuntimeSettingsClient,
+  IntexAgentRuntimeSettingsClientError,
+  IntexAgentRuntimeSettingsV1,
 } from './types.js';
 
 const PROVIDER_KEYS: Record<LlmProvider, string> = {
@@ -49,6 +58,222 @@ const PROVIDER_KEYS: Record<LlmProvider, string> = {
   openrouter: 'openrouter',
 };
 
+const runtimeSettingsTransportLogger = {
+  info: (): void => undefined,
+  warn: (): void => undefined,
+  error: (): void => undefined,
+  debug: (): void => undefined,
+};
+
+function hasOnlyOwnKeys(value: object, expectedKeys: readonly string[]): boolean {
+  const ownKeys = Object.keys(value);
+  return (
+    ownKeys.length === expectedKeys.length &&
+    expectedKeys.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+  );
+}
+
+function ownValue(value: object, key: string): unknown {
+  return Object.getOwnPropertyDescriptor(value, key)?.value;
+}
+
+function isRuntimeSettingsObject(value: unknown): value is object {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Reflect.getPrototypeOf(value);
+  return prototype === Object.prototype;
+}
+
+const runtimeSettingsDiagnosticsKeys: readonly string[] = [
+  'requestId',
+  'durationMs',
+  'downstreamStatus',
+  'downstreamRequestId',
+  'endpointCalled',
+];
+
+function hasOwnKey(value: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isRuntimeSettingsDiagnostics(value: unknown): boolean {
+  if (!isRuntimeSettingsObject(value)) {
+    return false;
+  }
+
+  const ownKeys = Object.keys(value);
+  if (
+    !hasOwnKey(value, 'requestId') ||
+    ownKeys.some((key) => !runtimeSettingsDiagnosticsKeys.includes(key))
+  ) {
+    return false;
+  }
+
+  const requestId = ownValue(value, 'requestId');
+  const durationMs = ownValue(value, 'durationMs');
+  const downstreamStatus = ownValue(value, 'downstreamStatus');
+  const downstreamRequestId = ownValue(value, 'downstreamRequestId');
+  const endpointCalled = ownValue(value, 'endpointCalled');
+
+  return (
+    typeof requestId === 'string' &&
+    (!hasOwnKey(value, 'durationMs') ||
+      (typeof durationMs === 'number' && Number.isFinite(durationMs))) &&
+    (!hasOwnKey(value, 'downstreamStatus') || Number.isInteger(downstreamStatus)) &&
+    (!hasOwnKey(value, 'downstreamRequestId') || typeof downstreamRequestId === 'string') &&
+    (!hasOwnKey(value, 'endpointCalled') || typeof endpointCalled === 'string')
+  );
+}
+
+function hasValidOptionalDiagnostics(value: object, requiredKeys: readonly string[]): boolean {
+  if (!hasOwnKey(value, 'diagnostics')) {
+    return hasOnlyOwnKeys(value, requiredKeys);
+  }
+
+  return (
+    hasOnlyOwnKeys(value, [...requiredKeys, 'diagnostics']) &&
+    isRuntimeSettingsDiagnostics(ownValue(value, 'diagnostics'))
+  );
+}
+
+type RuntimeSettingsEnvelopeResult =
+  | { status: 'data'; data: unknown }
+  | { status: 'api_error' }
+  | { status: 'malformed' };
+
+function decodeRuntimeSettingsEnvelope(value: unknown): RuntimeSettingsEnvelopeResult {
+  if (!isRuntimeSettingsObject(value)) {
+    return { status: 'malformed' };
+  }
+
+  const success = ownValue(value, 'success');
+  if (success === true) {
+    if (!hasValidOptionalDiagnostics(value, ['success', 'data'])) {
+      return { status: 'malformed' };
+    }
+    return { status: 'data', data: ownValue(value, 'data') };
+  }
+
+  if (success === false) {
+    if (!hasValidOptionalDiagnostics(value, ['success', 'error'])) {
+      return { status: 'malformed' };
+    }
+
+    const error = ownValue(value, 'error');
+    if (
+      !isRuntimeSettingsObject(error) ||
+      (!hasOnlyOwnKeys(error, ['code', 'message']) &&
+        !hasOnlyOwnKeys(error, ['code', 'message', 'details']))
+    ) {
+      return { status: 'malformed' };
+    }
+
+    const errorCode = ownValue(error, 'code');
+    if (
+      typeof errorCode !== 'string' ||
+      !Object.hasOwn(ERROR_HTTP_STATUS, errorCode) ||
+      typeof ownValue(error, 'message') !== 'string'
+    ) {
+      return { status: 'malformed' };
+    }
+
+    return { status: 'api_error' };
+  }
+
+  return { status: 'malformed' };
+}
+
+function decodeIntexAgentRuntimeSettings(value: unknown): IntexAgentRuntimeSettingsV1 | undefined {
+  if (!isRuntimeSettingsObject(value)) {
+    return undefined;
+  }
+
+  const status = ownValue(value, 'status');
+  if (status === 'available') {
+    if (
+      !hasOnlyOwnKeys(value, [
+        'status',
+        'effectiveModel',
+        'explicitModel',
+        'source',
+        'revision',
+        'timeZone',
+      ])
+    ) {
+      return undefined;
+    }
+
+    const effectiveModel = ownValue(value, 'effectiveModel');
+    const explicitModel = ownValue(value, 'explicitModel');
+    const source = ownValue(value, 'source');
+    const revision = ownValue(value, 'revision');
+    const timeZone = ownValue(value, 'timeZone');
+    if (
+      !isIntexAgentModel(effectiveModel) ||
+      (explicitModel !== null && !isIntexAgentModel(explicitModel)) ||
+      (source !== 'explicit' && source !== 'default_absent') ||
+      typeof revision !== 'number' ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0 ||
+      typeof timeZone !== 'string'
+    ) {
+      return undefined;
+    }
+
+    if (
+      (source === 'explicit' && (explicitModel === null || effectiveModel !== explicitModel)) ||
+      (source === 'default_absent' &&
+        (explicitModel !== null || effectiveModel !== IntexAgentModels.DeepSeekV4Flash))
+    ) {
+      return undefined;
+    }
+
+    return { status, effectiveModel, explicitModel, source, revision, timeZone };
+  }
+
+  if (status === 'unavailable') {
+    if (!hasOnlyOwnKeys(value, ['status', 'effectiveModel', 'source', 'timeZone'])) {
+      return undefined;
+    }
+
+    const effectiveModel = ownValue(value, 'effectiveModel');
+    const source = ownValue(value, 'source');
+    const timeZone = ownValue(value, 'timeZone');
+    if (
+      effectiveModel !== IntexAgentModels.DeepSeekV4Flash ||
+      source !== 'platform_default' ||
+      typeof timeZone !== 'string'
+    ) {
+      return undefined;
+    }
+
+    return {
+      status,
+      effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+      source,
+      timeZone,
+    };
+  }
+
+  return undefined;
+}
+
+function runtimeSettingsError(
+  code: IntexAgentRuntimeSettingsClientError['code']
+): IntexAgentRuntimeSettingsClientError {
+  switch (code) {
+    case 'TIMEOUT':
+      return { code, message: 'User Service runtime settings request timed out' };
+    case 'MALFORMED_RESPONSE':
+      return { code, message: 'User Service runtime settings response was malformed' };
+    case 'NETWORK_ERROR':
+    case 'API_ERROR':
+      return { code, message: 'User Service runtime settings request failed' };
+  }
+}
+
 export function providerToKeyField(provider: LlmProvider): string {
   return PROVIDER_KEYS[provider];
 }
@@ -56,10 +281,55 @@ export function providerToKeyField(provider: LlmProvider): string {
 /**
  * Create a user service client with the given configuration.
  */
-export function createUserServiceClient(config: UserServiceConfig): UserServiceClient {
+export function createUserServiceClient(
+  config: UserServiceConfig
+): UserServiceClient & IntexAgentRuntimeSettingsClient {
   const { logger } = config;
+  const runtimeSettingsHttp = createInternalHttpClient({
+    baseUrl: config.baseUrl,
+    token: config.internalAuthToken,
+    logger: runtimeSettingsTransportLogger,
+    defaultTimeoutMs: 30_000,
+  });
 
   return {
+    async resolveIntexAgentRuntimeSettings(
+      userId: string
+    ): Promise<Result<IntexAgentRuntimeSettingsV1, IntexAgentRuntimeSettingsClientError>> {
+      const response = await runtimeSettingsHttp.request<unknown>({
+        method: 'GET',
+        path: `/internal/users/${encodeURIComponent(userId)}/settings/intex-agent-runtime`,
+        timeoutMs: 30_000,
+        responseMode: 'raw',
+      });
+
+      if (!response.ok) {
+        if (response.error.code === 'TIMEOUT') {
+          return err(runtimeSettingsError('TIMEOUT'));
+        }
+        return err(
+          runtimeSettingsError(
+            response.error.code === 'NETWORK_ERROR' ? 'NETWORK_ERROR' : 'API_ERROR'
+          )
+        );
+      }
+
+      const envelope = decodeRuntimeSettingsEnvelope(response.value);
+      if (envelope.status === 'malformed') {
+        return err(runtimeSettingsError('MALFORMED_RESPONSE'));
+      }
+      if (envelope.status === 'api_error') {
+        return err(runtimeSettingsError('API_ERROR'));
+      }
+
+      const settings = decodeIntexAgentRuntimeSettings(envelope.data);
+      if (settings === undefined) {
+        return err(runtimeSettingsError('MALFORMED_RESPONSE'));
+      }
+
+      return ok(settings);
+    },
+
     async getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>> {
       try {
         const response = await fetch(

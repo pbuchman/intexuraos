@@ -10,10 +10,15 @@ import type {
   ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageIngestEvent,
+  MatrixCorpusSignedIngestEvent,
   MediaCleanupEvent,
   MediaTranscriptionRequestedEvent,
   WebhookProcessEvent,
 } from '../events/index.js';
+
+export interface MatrixCorpusPublishReceipt {
+  publisherReceiptDigest: string;
+}
 
 /**
  * Port for publishing events to external systems.
@@ -44,6 +49,10 @@ export interface EventPublisherPort {
    * Triggers intex-agent realtime session handling.
    */
   publishIntexMessageIngest(event: IntexMessageIngestEvent): Promise<Result<void, WhatsAppError>>;
+
+  publishMatrixCorpusIngest(
+    event: MatrixCorpusSignedIngestEvent
+  ): Promise<Result<MatrixCorpusPublishReceipt, WhatsAppError>>;
 
   /**
    * Publish a webhook process event.
