@@ -66,6 +66,13 @@ setup/preflight select only its `intex_agent` room. Never add a real UID, e-mail
 phone number, Matrix identity, room, token, protected absolute operator path, or
 account data to Git.
 
+The ignored Home Dev `.envrc.local` additionally contains
+`INTEXURAOS_MATRIX_CORPUS_MATRIX_PUPPET_USER_ID`, set to the exact current WhatsApp
+puppet Matrix user visible in that room. This binding is deliberately separate from
+the WhatsApp webhook account and sender bindings. Preflight requires the configured
+puppet to appear in the room timeline and ignores unrelated historical puppets; the
+value must never be committed or printed.
+
 `setup` is interactive and reads all five values without echo. Only the validated
 `accountAlias` can appear afterward in the closed setup result. Run it only when
 preflight returns `CONFIG_NOT_FOUND` or the operator has independently confirmed
