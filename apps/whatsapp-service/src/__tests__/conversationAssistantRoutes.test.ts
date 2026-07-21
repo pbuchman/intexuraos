@@ -1528,17 +1528,23 @@ describe('Conversation Assistant routes', () => {
       ok: false,
       error: { code: 'INTERNAL_ERROR' },
     });
-    const failedJson = await ctx.app.inject({
-      method: 'POST',
-      url: `/conversation-assistant/sessions/${sessionId}/turns`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: { requestId: 'legacy-init-json-failure', question: 'Hello' },
-    });
+    const { continuation: _legacyContinuation, ...legacySession } = stored;
+    const getSession = vi.spyOn(ctx.conversationAssistantRepository, 'getSessionById');
+    getSession
+      .mockResolvedValueOnce(legacySession)
+      .mockRejectedValueOnce(new Error('stream initialization failure'));
     const failedStream = await ctx.app.inject({
       method: 'POST',
       url: `/conversation-assistant/sessions/${sessionId}/turns/stream`,
       headers: { authorization: `Bearer ${token}` },
       payload: { requestId: 'legacy-init-stream-failure', question: 'Hello' },
+    });
+    getSession.mockRestore();
+    const failedJson = await ctx.app.inject({
+      method: 'POST',
+      url: `/conversation-assistant/sessions/${sessionId}/turns`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: { requestId: 'legacy-init-json-failure', question: 'Hello' },
     });
     expect(failedJson.statusCode).toBe(500);
     expect(failedStream.statusCode).toBe(500);
@@ -1572,6 +1578,21 @@ describe('Conversation Assistant routes', () => {
       requestId: 'existing-request',
       kind: 'message',
     });
+    const legacyUnversionedTurn = {
+      id: 'legacy-unversioned-turn',
+      sessionId,
+      userId: USER_ID,
+      role: 'assistant',
+      text: 'Existing answer',
+      createdAt: '2026-07-20T00:01:00.000Z',
+      sequence: 0,
+      conversationRevision: 0,
+      requestId: 'removed-for-legacy-fixture',
+      kind: 'message',
+    } as const;
+    delete (legacyUnversionedTurn as { requestId?: string }).requestId;
+    delete (legacyUnversionedTurn as { kind?: string }).kind;
+    await ctx.conversationAssistantRepository.saveTurn(legacyUnversionedTurn);
 
     expect(await initializeLegacyDurableTurnState(USER_ID, sessionId)).toEqual({
       ok: true,
@@ -1579,6 +1600,10 @@ describe('Conversation Assistant routes', () => {
     });
     const turns = await ctx.conversationAssistantRepository.listTurnsBySessionId(sessionId);
     expect(turns[0]).toMatchObject({ requestId: 'existing-request', kind: 'message' });
+    expect(turns[1]).toMatchObject({
+      requestId: 'legacy-legacy-unversioned-turn',
+      kind: 'message',
+    });
   });
 
   it('sanitizes new legacy LLM failures across JSON, SSE, persistence, logs, and telemetry', async () => {
