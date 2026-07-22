@@ -124,16 +124,14 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     return {
       ok: true,
       acceptance:
-        blocked ?? (newest === undefined
+        blocked ??
+        (newest === undefined
           ? { kind: 'admission_ready', current: 'absent' }
           : classifyCurrentAcceptance(newest)),
     };
   }
 
-  async listLatestForUser(
-    userId: string,
-    limit = 4
-  ): Promise<TestRunRepositoryListResult> {
+  async listLatestForUser(userId: string, limit = 4): Promise<TestRunRepositoryListResult> {
     if (!SAFE_ID_PATTERN.test(userId) || limit !== 4) return failure('INVALID_INPUT');
     const snapshot = await this.deps.firestore
       .collection(INTEX_AGENT_TEST_RUNS_COLLECTION)
@@ -225,7 +223,11 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       retentionQuery.get(),
     ]);
 
-    if (!currentRunSnapshot.exists || !currentContextSnapshot.exists || !currentManifestSnapshot.exists)
+    if (
+      !currentRunSnapshot.exists ||
+      !currentContextSnapshot.exists ||
+      !currentManifestSnapshot.exists
+    )
       return failure('NOT_FOUND');
     const current = parseRecord(currentRunSnapshot.data());
     const currentContext = parseMatrixCorpusRunContextDocument(currentContextSnapshot.data());
@@ -250,12 +252,11 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     const retentionCandidates = retentionSnapshot.docs.map((document) =>
       parseRecord(document.data())
     );
-    if (retentionCandidates.some((record) => record === null))
-      return failure('CORRUPT_RECORD');
+    if (retentionCandidates.some((record) => record === null)) return failure('CORRUPT_RECORD');
     if (
-      selectRetainedTestRuns(
-        retentionCandidates as IntexAgentTestRunRecordV1[]
-      ).some((record) => record.runId === input.targetIdentity.runId)
+      selectRetainedTestRuns(retentionCandidates as IntexAgentTestRunRecordV1[]).some(
+        (record) => record.runId === input.targetIdentity.runId
+      )
     )
       return failure('INVALID_TRANSITION');
 
@@ -327,11 +328,20 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     )
       return failure('EVIDENCE_MISMATCH');
 
-    const boundTargetScenarios = target.scenarios.filter(
-      (scenario) => scenario.sessionId !== null
-    );
+    const acceptsAbandonedProjectionGap =
+      target.lifecycle === 'stopped' &&
+      target.verdict === 'not_evaluated' &&
+      target.terminalWinner.kind === 'abandoned' &&
+      target.terminalWinner.outcome === 'stopped_not_evaluated' &&
+      targetRecovery?.outcome === 'stopped_not_evaluated' &&
+      target.terminalCandidate === null &&
+      target.artifactStageDigest === null &&
+      targetManifest.terminalCandidate === null &&
+      targetManifest.artifactStage === null &&
+      target.artifactDelivery.status === 'failed' &&
+      target.artifactDelivery.failureCode === 'REPORT_STAGING_INTERRUPTED';
+    const boundTargetScenarios = target.scenarios.filter((scenario) => scenario.sessionId !== null);
     if (
-      boundTargetScenarios.length !== targetManifest.scenarioBindings.length ||
       boundTargetScenarios.some((scenario) => {
         const binding = targetManifest.scenarioBindings.find(
           (candidate) => candidate.scenarioId === scenario.scenarioId
@@ -340,6 +350,17 @@ export class FirestoreTestRunRepository implements TestRunRepository {
           binding?.scenarioNumber !== scenario.scenarioNumber ||
           binding.scenarioLabel !== scenario.scenarioLabel ||
           binding.sessionId !== scenario.sessionId
+        );
+      }) ||
+      targetManifest.scenarioBindings.some((binding) => {
+        const scenario = target.scenarios.find(
+          (candidate) => candidate.scenarioId === binding.scenarioId
+        );
+        return (
+          scenario?.scenarioNumber !== binding.scenarioNumber ||
+          scenario.scenarioLabel !== binding.scenarioLabel ||
+          (scenario.sessionId !== binding.sessionId &&
+            !(acceptsAbandonedProjectionGap && isUnprojectedAbandonedScenario(scenario)))
         );
       })
     )
@@ -360,14 +381,19 @@ export class FirestoreTestRunRepository implements TestRunRepository {
           .collection(INTEX_AGENT_MATRIX_CORPUS_INGEST_RECEIPTS_COLLECTION)
           .where('sessionId', '==', binding.sessionId);
         const projectionRef = this.scenarioRef(input.targetIdentity.runId, binding.scenarioId);
-        const [sessionSnapshot, eventSnapshot, confirmationSnapshot, ingestSnapshot, projectionSnapshot] =
-          await Promise.all([
-            sessionRef.get(),
-            eventQuery.get(),
-            confirmationQuery.get(),
-            ingestQuery.get(),
-            projectionRef.get(),
-          ]);
+        const [
+          sessionSnapshot,
+          eventSnapshot,
+          confirmationSnapshot,
+          ingestSnapshot,
+          projectionSnapshot,
+        ] = await Promise.all([
+          sessionRef.get(),
+          eventQuery.get(),
+          confirmationQuery.get(),
+          ingestQuery.get(),
+          projectionRef.get(),
+        ]);
         return {
           binding,
           sessionRef,
@@ -402,10 +428,14 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       const projection = item.projectionSnapshot.exists
         ? parseScenarioProjection(item.projectionSnapshot.data())
         : null;
+      const isAbandonedProjectionGap =
+        acceptsAbandonedProjectionGap &&
+        summary !== undefined &&
+        isUnprojectedAbandonedScenario(summary) &&
+        !item.projectionSnapshot.exists;
       if (
         summary?.scenarioNumber !== item.binding.scenarioNumber ||
         summary.scenarioLabel !== item.binding.scenarioLabel ||
-        summary.sessionId !== item.binding.sessionId ||
         session?.id !== item.binding.sessionId ||
         session.userId !== input.targetIdentity.userId ||
         session.matrixCorpusProfile.runId !== input.targetIdentity.runId ||
@@ -413,11 +443,13 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         session.matrixCorpusProfile.scenarioNumber !== item.binding.scenarioNumber ||
         session.matrixCorpusProfile.scenarioLabel !== item.binding.scenarioLabel ||
         session.matrixCorpusProfile.leaseFence !== input.targetIdentity.leaseFence ||
-        projection?.userId !== input.targetIdentity.userId ||
-        projection.runId !== input.targetIdentity.runId ||
-        projection.scenarioId !== item.binding.scenarioId ||
-        projection.sessionId !== item.binding.sessionId ||
-        projection.sessionBindingDigest !== summary.sessionBindingDigest
+        (!isAbandonedProjectionGap &&
+          (summary.sessionId !== item.binding.sessionId ||
+            projection?.userId !== input.targetIdentity.userId ||
+            projection.runId !== input.targetIdentity.runId ||
+            projection.scenarioId !== item.binding.scenarioId ||
+            projection.sessionId !== item.binding.sessionId ||
+            projection.sessionBindingDigest !== summary.sessionBindingDigest))
       )
         return failure('EVIDENCE_MISMATCH');
 
@@ -442,8 +474,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
             )
         ) ||
         item.ingestSnapshot.docs.some(
-          (document) =>
-            !matchesIngestEvidence(document.data(), input.targetIdentity, item.binding)
+          (document) => !matchesIngestEvidence(document.data(), input.targetIdentity, item.binding)
         )
       )
         return failure('EVIDENCE_MISMATCH');
@@ -460,7 +491,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       removed.events += item.eventSnapshot.docs.length;
       removed.confirmations += item.confirmationSnapshot.docs.length;
       removed.ingestReceipts += item.ingestSnapshot.docs.length;
-      removed.scenarioProjections += 1;
+      removed.scenarioProjections += item.projectionSnapshot.exists ? 1 : 0;
     }
 
     for (let offset = 0; offset < childRefs.length; offset += 400) {
@@ -517,9 +548,9 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         return failure('EVIDENCE_MISMATCH');
       if (
         stableRetentionCandidates.some((record) => record === null) ||
-        selectRetainedTestRuns(
-          stableRetentionCandidates as IntexAgentTestRunRecordV1[]
-        ).some((record) => record.runId === input.targetIdentity.runId)
+        selectRetainedTestRuns(stableRetentionCandidates as IntexAgentTestRunRecordV1[]).some(
+          (record) => record.runId === input.targetIdentity.runId
+        )
       )
         return failure('INVALID_TRANSITION');
       if (
@@ -563,11 +594,19 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       }
       if (
         stableProjectionSnapshots.some((snapshot, index) => {
-          if (!snapshot.exists) return true;
-          const projection = parseScenarioProjection(snapshot.data());
           const binding = targetManifest.scenarioBindings[
             index
           ] as (typeof targetManifest.scenarioBindings)[number];
+          const summary = target.scenarios.find(
+            (scenario) => scenario.scenarioId === binding.scenarioId
+          );
+          if (!snapshot.exists)
+            return !(
+              acceptsAbandonedProjectionGap &&
+              summary !== undefined &&
+              isUnprojectedAbandonedScenario(summary)
+            );
+          const projection = parseScenarioProjection(snapshot.data());
           return (
             projection?.runId !== input.targetIdentity.runId ||
             projection.userId !== input.targetIdentity.userId ||
@@ -598,9 +637,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     });
   }
 
-  async createOrGet(
-    record: IntexAgentTestRunRecordV1
-  ): Promise<TestRunRepositoryMutationResult> {
+  async createOrGet(record: IntexAgentTestRunRecordV1): Promise<TestRunRepositoryMutationResult> {
     if (!checkTestRunDocumentSize(record).ok) return failure('DOCUMENT_TOO_LARGE');
     const parsed = intexAgentTestRunRecordV1Schema.safeParse(record);
     if (
@@ -688,10 +725,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       ]);
       if (!projectionSnapshot.exists || !sessionSnapshot.exists) return failure('NOT_FOUND');
       const projection = parseScenarioProjection(projectionSnapshot.data());
-      const session = parseMatrixCorpusSessionDocument(
-        sessionSnapshot.id,
-        sessionSnapshot.data()
-      );
+      const session = parseMatrixCorpusSessionDocument(sessionSnapshot.id, sessionSnapshot.data());
       if (projection === null || session === undefined) return failure('CORRUPT_RECORD');
       if (
         projection.userId !== input.userId ||
@@ -748,8 +782,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     input: Parameters<TestRunRepository['applyProjection']>[0]
   ): Promise<TestRunRepositoryMutationResult> {
     if (!isValidIdentity(input.identity)) return failure('INVALID_INPUT');
-    if (input.command.nextLifecycle === 'finalizing')
-      return failure('INVALID_TRANSITION');
+    if (input.command.nextLifecycle === 'finalizing') return failure('INVALID_TRANSITION');
     if (
       input.command.scenario !== null &&
       !checkTestRunScenarioDocumentSize(input.command.scenario.projection).ok
@@ -761,8 +794,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       if (!snapshot.exists) return failure('NOT_FOUND');
       const current = parseRecord(snapshot.data());
       if (current === null) return failure('CORRUPT_RECORD');
-      if (!matchesIdentity(current, input.identity))
-        return failure('CORRELATED_REPLAY_CONFLICT');
+      if (!matchesIdentity(current, input.identity)) return failure('CORRELATED_REPLAY_CONFLICT');
       if (input.command.retentionReconciled === true) {
         const retentionSnapshot = await transaction.get(
           this.deps.firestore
@@ -772,20 +804,16 @@ export class FirestoreTestRunRepository implements TestRunRepository {
             .orderBy('startedAt', 'desc')
             .limit(TEST_RUN_RETENTION_QUERY_LIMIT)
         );
-        const candidates = retentionSnapshot.docs.map((document) =>
-          parseRecord(document.data())
-        );
+        const candidates = retentionSnapshot.docs.map((document) => parseRecord(document.data()));
         if (
           candidates.some((record) => record === null) ||
-          !candidates.some(
-            (record) => record !== null && matchesIdentity(record, input.identity)
-          )
+          !candidates.some((record) => record !== null && matchesIdentity(record, input.identity))
         )
           return failure('EVIDENCE_MISMATCH');
         const retainedIds = new Set(
-          selectRetainedTestRuns(
-            candidates as IntexAgentTestRunRecordV1[]
-          ).map((record) => record.runId)
+          selectRetainedTestRuns(candidates as IntexAgentTestRunRecordV1[]).map(
+            (record) => record.runId
+          )
         );
         if (
           candidates.some(
@@ -824,12 +852,13 @@ export class FirestoreTestRunRepository implements TestRunRepository {
           input.identity.runId,
           input.command.scenario.scenarioId
         );
-        const [manifestSnapshot, sessionSnapshot, eventSnapshot, projectionSnapshot] = await Promise.all([
-          transaction.get(manifestRef),
-          transaction.get(sessionRef),
-          transaction.get(eventQuery),
-          transaction.get(projectionRef),
-        ]);
+        const [manifestSnapshot, sessionSnapshot, eventSnapshot, projectionSnapshot] =
+          await Promise.all([
+            transaction.get(manifestRef),
+            transaction.get(sessionRef),
+            transaction.get(eventQuery),
+            transaction.get(projectionRef),
+          ]);
         const manifest = manifestSnapshot.exists
           ? parseMatrixCorpusRunManifestDocument(manifestSnapshot.data())
           : undefined;
@@ -862,9 +891,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         )
           return failure('EVENT_WATERMARK_GAP');
         const exactEvents = events as NonNullable<(typeof events)[number]>[];
-        exactEvents.sort(
-          (left, right) => Number(left.eventSequence) - Number(right.eventSequence)
-        );
+        exactEvents.sort((left, right) => Number(left.eventSequence) - Number(right.eventSequence));
         if (
           exactEvents.some(
             (event, index) =>
@@ -926,8 +953,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         evidenceProjections === null
           ? null
           : deriveTestRunEvidenceTotals(transitioned.record.scenarios, evidenceProjections);
-      if (evidenceProjections !== null && derived === null)
-        return failure('INVALID_TRANSITION');
+      if (evidenceProjections !== null && derived === null) return failure('INVALID_TRANSITION');
       const nextRecord =
         derived === null
           ? transitioned.record
@@ -1020,13 +1046,12 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       .where('runId', '==', input.identity.runId);
 
     return await this.deps.firestore.runTransaction(async (transaction) => {
-      const [runSnapshot, contextSnapshot, manifestSnapshot, scenarioSnapshot] =
-        await Promise.all([
-          transaction.get(runRef),
-          transaction.get(contextRef),
-          transaction.get(manifestRef),
-          transaction.get(scenarioQuery),
-        ]);
+      const [runSnapshot, contextSnapshot, manifestSnapshot, scenarioSnapshot] = await Promise.all([
+        transaction.get(runRef),
+        transaction.get(contextRef),
+        transaction.get(manifestRef),
+        transaction.get(scenarioQuery),
+      ]);
       if (!runSnapshot.exists || !contextSnapshot.exists || !manifestSnapshot.exists)
         return failure('NOT_FOUND');
 
@@ -1046,8 +1071,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         ref: document.ref,
         context: parseMatrixCorpusScenarioContextDocument(document.data()),
       }));
-      if (scenarios.some((entry) => entry.context === undefined))
-        return failure('CORRUPT_RECORD');
+      if (scenarios.some((entry) => entry.context === undefined)) return failure('CORRUPT_RECORD');
 
       if (context.status === 'finalized' || current.lifecycle === 'finalizing') {
         if (
@@ -1070,8 +1094,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         return finalizationSuccess('already_applied', current, context);
       }
 
-      if (current.revision !== input.expectedRevision)
-        return failure('REVISION_CONFLICT');
+      if (current.revision !== input.expectedRevision) return failure('REVISION_CONFLICT');
       if (
         current.lifecycle !== 'running' ||
         context.invalidatedAt !== null ||
@@ -1086,9 +1109,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       )
         return failure('FINALIZATION_MISMATCH');
 
-      const scenarioById = new Map(
-        scenarios.map((entry) => [entry.context?.scenarioId, entry])
-      );
+      const scenarioById = new Map(scenarios.map((entry) => [entry.context?.scenarioId, entry]));
       for (const binding of manifest.scenarioBindings) {
         const scenario = scenarioById.get(binding.scenarioId)?.context;
         const projection = current.scenarios.find(
@@ -1165,9 +1186,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         )
           return failure('EVENT_WATERMARK_GAP');
         const exactEvents = events as NonNullable<(typeof events)[number]>[];
-        exactEvents.sort(
-          (left, right) => Number(left.eventSequence) - Number(right.eventSequence)
-        );
+        exactEvents.sort((left, right) => Number(left.eventSequence) - Number(right.eventSequence));
         if (
           exactEvents.some(
             (event, index) =>
@@ -1206,8 +1225,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         scenarioContextCount: scenarios.length,
         finalizedAt: input.updatedAt,
       };
-      const tombstoneDigest =
-        FirestoreTestRunRepository.digestContextFinalization(tombstone);
+      const tombstoneDigest = FirestoreTestRunRepository.digestContextFinalization(tombstone);
       const transitioned = applyTestRunProjectionCas(current, {
         expectedRevision: input.expectedRevision,
         nextLifecycle: 'finalizing',
@@ -1242,17 +1260,12 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       if (!snapshot.exists) return failure('NOT_FOUND');
       const current = parseRecord(snapshot.data());
       if (current === null) return failure('CORRUPT_RECORD');
-      if (!matchesIdentity(current, input.identity))
-        return failure('CORRELATED_REPLAY_CONFLICT');
+      if (!matchesIdentity(current, input.identity)) return failure('CORRELATED_REPLAY_CONFLICT');
       const candidateDigest =
         current.terminalCandidate === null
           ? null
           : FirestoreTestRunRepository.digestTerminalCandidate(current.terminalCandidate);
-      const transitioned = applyTestRunTerminalControl(
-        current,
-        input.command,
-        candidateDigest
-      );
+      const transitioned = applyTestRunTerminalControl(current, input.command, candidateDigest);
       if (!transitioned.ok) return failure(mapTransitionFailure(transitioned.code));
       if (transitioned.disposition === 'applied')
         transaction.set(ref, cloneRecord(transitioned.record));
@@ -1318,8 +1331,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       if (recoverySnapshot.exists) {
         const receipt = parseRecoveryReceipt(recoverySnapshot.data());
         if (receipt === undefined) return failure('CORRUPT_RECORD');
-        if (!matchesIdentity(receipt, input.identity))
-          return failure('CORRELATED_REPLAY_CONFLICT');
+        if (!matchesIdentity(receipt, input.identity)) return failure('CORRELATED_REPLAY_CONFLICT');
         return abandonedRecoverySuccess('already_applied', receipt);
       }
 
@@ -1365,9 +1377,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         sessionSnapshot.docs.some(
           (document) => !hasExactMatrixRunEvidence(document.data(), input.identity)
         ) ||
-        ingestSnapshot.docs.some(
-          (document) => !matchesRunFence(document.data(), input.identity)
-        ) ||
+        ingestSnapshot.docs.some((document) => !matchesRunFence(document.data(), input.identity)) ||
         confirmations.some((confirmation) => confirmation === undefined)
       )
         return failure('CORRELATED_REPLAY_CONFLICT');
@@ -1406,8 +1416,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         };
       }
 
-      if (context === undefined || manifest === undefined)
-        return failure('FINALIZATION_MISMATCH');
+      if (context === undefined || manifest === undefined) return failure('FINALIZATION_MISMATCH');
       if (
         exactConfirmations.some((confirmation) => {
           const binding = manifest.scenarioBindings.find(
@@ -1473,11 +1482,10 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         return failure('FINALIZATION_MISMATCH');
       }
 
-      const transitioned = applyTestRunTerminalControl(
-        current,
-        input.command,
-        null
-      ) as Extract<ReturnType<typeof applyTestRunTerminalControl>, { ok: true }>;
+      const transitioned = applyTestRunTerminalControl(current, input.command, null) as Extract<
+        ReturnType<typeof applyTestRunTerminalControl>,
+        { ok: true }
+      >;
       const recoveredRecord = {
         ...transitioned.record,
         contextFinalizationTombstoneDigest,
@@ -1512,15 +1520,33 @@ function parseRecord(value: unknown): IntexAgentTestRunRecordV1 | null {
   return parsed.success ? parsed.data : null;
 }
 
+function isUnprojectedAbandonedScenario(
+  scenario: IntexAgentTestRunRecordV1['scenarios'][number]
+): boolean {
+  return (
+    scenario.scenarioRevision === 1 &&
+    scenario.eventWatermark === 0 &&
+    scenario.lifecycle === 'not_run' &&
+    scenario.verdict === 'not_evaluated' &&
+    scenario.completedTurns === 0 &&
+    scenario.completedReplies === 0 &&
+    scenario.selectedTools.length === 0 &&
+    scenario.deterministicVerdict === 'not_evaluated' &&
+    scenario.semanticVerdict === 'not_evaluated' &&
+    scenario.startedAt === null &&
+    scenario.finishedAt === null &&
+    scenario.durationMs === null &&
+    scenario.sessionId === null &&
+    scenario.sessionBindingDigest === null
+  );
+}
+
 function parseScenarioProjection(value: unknown): TestRunScenarioProjectionV1 | null {
   const parsed = testRunScenarioProjectionV1Schema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
-function matchesIdentity(
-  record: TestRunIdentity,
-  identity: TestRunIdentity
-): boolean {
+function matchesIdentity(record: TestRunIdentity, identity: TestRunIdentity): boolean {
   return (
     record.runId === identity.runId &&
     record.userId === identity.userId &&
@@ -1528,9 +1554,7 @@ function matchesIdentity(
   );
 }
 
-function classifyCurrentAcceptance(
-  record: IntexAgentTestRunRecordV1
-): TestRunCurrentAcceptance {
+function classifyCurrentAcceptance(record: IntexAgentTestRunRecordV1): TestRunCurrentAcceptance {
   if (
     record.lifecycle === 'preflight' ||
     record.lifecycle === 'running' ||
@@ -1576,7 +1600,10 @@ function isExactProjectionRetry(
   )
     return false;
   if (command.scenario === null) return storedProjection === null;
-  if (storedProjection === null || stableJson(storedProjection) !== stableJson(command.scenario.projection))
+  if (
+    storedProjection === null ||
+    stableJson(storedProjection) !== stableJson(command.scenario.projection)
+  )
     return false;
   const summary = current.scenarios.find(
     (scenario) => scenario.scenarioId === command.scenario?.scenarioId
@@ -1614,8 +1641,7 @@ function isExactArtifactDeliveryRetry(
       current.artifactStageDigest === compositeDigest &&
       manifest.artifactStage?.revision === current.revision &&
       manifest.artifactStage.jsonCandidateDigest === command.next.jsonCandidateDigest &&
-      manifest.artifactStage.markdownCandidateDigest ===
-        command.next.markdownCandidateDigest &&
+      manifest.artifactStage.markdownCandidateDigest === command.next.markdownCandidateDigest &&
       manifest.artifactStage.compositeDigest === compositeDigest &&
       manifest.artifactStage.stagedAt === command.updatedAt
     );
@@ -1625,8 +1651,7 @@ function isExactArtifactDeliveryRetry(
       current.artifactDelivery.status === 'ready' &&
       current.terminalWinner?.eventId === command.next.terminalControlEventId
     );
-  if (command.next.status === 'unknown')
-    return current.artifactDelivery.status === 'unknown';
+  if (command.next.status === 'unknown') return current.artifactDelivery.status === 'unknown';
   return (
     current.artifactDelivery.status === 'failed' &&
     current.artifactDelivery.failureCode === command.next.failureCode &&
@@ -1706,8 +1731,7 @@ function matchesConfirmationEvidence(
     identity
   );
   return (
-    confirmation?.scenarioId === binding.scenarioId &&
-    confirmation.sessionId === binding.sessionId
+    confirmation?.scenarioId === binding.scenarioId && confirmation.sessionId === binding.sessionId
   );
 }
 
@@ -1734,10 +1758,7 @@ interface AbandonedRecoveryReceipt extends TestRunIdentity {
   runtimeAudience: 'hetzner-prod';
   eventId: string;
   payloadDigest: string;
-  outcome: Extract<
-    TestRunTerminalWinnerV1,
-    { kind: 'abandoned' }
-  >['outcome'];
+  outcome: Extract<TestRunTerminalWinnerV1, { kind: 'abandoned' }>['outcome'];
   acknowledgedAt: string;
 }
 
@@ -1834,9 +1855,7 @@ function failure(
   return { ok: false, code } as const;
 }
 
-function mapTransitionFailure(
-  code: TestRunTransitionFailureCode
-): TestRunRepositoryFailureCode {
+function mapTransitionFailure(code: TestRunTransitionFailureCode): TestRunRepositoryFailureCode {
   const mapped: Record<TestRunTransitionFailureCode, TestRunRepositoryFailureCode> = {
     INVALID_RECORD: 'CORRUPT_RECORD',
     REVISION_CONFLICT: 'REVISION_CONFLICT',
