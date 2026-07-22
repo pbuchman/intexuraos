@@ -55,6 +55,7 @@ import {
   runPreflight,
   setupEvaluatorConfig,
   withValidatedAccountContext,
+  withValidatedProductionMatrixAccountContext,
   type EvaluatorConfig,
   type FirebaseAdminDependencies,
   type PreflightPorts,
@@ -1022,6 +1023,46 @@ describe('withValidatedAccountContext', () => {
     expect(result).toMatchObject({ ok: false, code: 'UNEXPECTED_FAILURE' });
     expect(JSON.stringify(result)).not.toContain('private callback exception sentinel');
     expect(JSON.stringify(result)).not.toContain('synthetic-matrix-token');
+  });
+});
+
+describe('withValidatedProductionMatrixAccountContext', () => {
+  it('validates the Home Dev Matrix account under prod without calling Home Dev product services', async () => {
+    const ports = createSetupPorts(VALID_CONFIG, createPreflightProtectedFiles(VALID_CONFIG));
+    ports.runtime = createRuntimePort({ INTEXURAOS_ENVIRONMENT: 'prod' });
+    ports.healthHttp.get = vi.fn(async (url) => {
+      if (url !== MATRIX_ADAPTER_HEALTH_URL) {
+        throw new Error('Home Dev product services must not be called');
+      }
+      return {
+        ok: true as const,
+        status: 200,
+        body: runningMatrixHealth(VALID_CONFIG.matrixUserId),
+      };
+    });
+    ports.whatsapp.getDeliveryStatus = vi.fn(async () => {
+      throw new Error('Home Dev WhatsApp delivery must not be called');
+    });
+    const callback = vi.fn(async (_context: ValidatedAccountContext) => undefined);
+
+    const result = await withValidatedProductionMatrixAccountContext(ports, callback);
+
+    expect(result).toEqual({
+      ok: true,
+      checks: [
+        { check: 'runtime', status: 'passed' },
+        { check: 'environment', status: 'passed' },
+        { check: 'config', status: 'passed' },
+        { check: 'matrix_files', status: 'passed' },
+        { check: 'matrix_health', status: 'passed' },
+        { check: 'firebase_identity', status: 'passed' },
+        { check: 'matrix_identity', status: 'passed' },
+      ],
+    });
+    expect(callback).toHaveBeenCalledOnce();
+    expect(ports.healthHttp.get).toHaveBeenCalledOnce();
+    expect(ports.healthHttp.get).toHaveBeenCalledWith(MATRIX_ADAPTER_HEALTH_URL);
+    expect(ports.whatsapp.getDeliveryStatus).not.toHaveBeenCalled();
   });
 });
 

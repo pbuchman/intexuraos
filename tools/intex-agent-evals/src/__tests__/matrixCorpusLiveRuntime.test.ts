@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { IntexAgentServiceClient, WhatsAppServiceClient } from '@intexuraos/internal-clients';
+import type { OpenRouterCatalogClient } from '@intexuraos/infra-openrouter';
+
 vi.mock('firebase-admin/app', () => ({
   applicationDefault: vi.fn(),
   getApp: vi.fn(),
@@ -18,6 +21,7 @@ vi.mock('firebase-admin/auth', () => ({
 import { loadCanonicalMatrixCorpus } from '../matrixCorpus/catalog.js';
 import {
   createMatrixCorpusLiveRuntime,
+  createProductionMatrixCorpusLiveReadPort,
   inspectArtifactRoot,
   inspectHomeDevRuntime,
   listHomeDevFirestoreCompositeIndexes,
@@ -27,6 +31,13 @@ import {
   type HomeDevRuntimeInspectionDeps,
   type MatrixCorpusPreparedContext,
 } from '../matrixCorpus/liveRuntime.js';
+import type { MatrixClient } from '../live/matrixClient.js';
+import {
+  canonicalizeEvaluatorConfig,
+  MATRIX_ADAPTER_HEALTH_URL,
+  type EvaluatorConfig,
+  type SetupPorts,
+} from '../preflight.js';
 import type { MatrixCorpusPreflightSnapshot } from '../matrixCorpus/preflight.js';
 import type { MatrixCorpusRunResult } from '../matrixCorpus/runMatrixCorpus.js';
 
@@ -105,6 +116,169 @@ describe('Matrix corpus live runtime handoff', () => {
 });
 
 describe('production Hetzner runtime inspection from the Home Dev runner', () => {
+  it('reads the production boundary without falling back to Home Dev product services', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const repositoryRoot = await mkdtemp(join(tmpdir(), 'matrix-corpus-production-read-'));
+    temporaryDirectories.push(repositoryRoot);
+    const artifactRoot = join(repositoryRoot, '.artifacts', 'intex-agent-evals');
+    await mkdir(artifactRoot, { recursive: true, mode: 0o700 });
+    await chmod(artifactRoot, 0o700);
+
+    const evaluatorUserId = 'auth0|production-evaluator';
+    const matrixUserId = '@operator:matrix.test';
+    const puppetUserId = '@whatsapp_1:matrix.test';
+    const config: EvaluatorConfig = {
+      schemaVersion: 1,
+      accountAlias: 'Production evaluator',
+      userId: evaluatorUserId,
+      matrixUserId,
+      matrixAccessTokenFile: '/home/operator/.config/matrix-token',
+      matrixTargetsFile: '/home/operator/.config/matrix-targets.json',
+    };
+    const env: NodeJS.ProcessEnv = {
+      GOOGLE_APPLICATION_CREDENTIALS: '/synthetic/service-account.json',
+      INTEXURAOS_ENVIRONMENT: 'prod',
+      INTEXURAOS_INTERNAL_AUTH_TOKEN: 'synthetic-internal-token',
+      INTEXURAOS_GCP_PROJECT_ID: 'intexuraos-dev-test',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'synthetic-openrouter-key',
+      INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY: 'synthetic-hmac-key',
+      INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+      INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'hetzner-prod',
+      INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: evaluatorUserId,
+      INTEXURAOS_MATRIX_CORPUS_MATRIX_PUPPET_USER_ID: puppetUserId,
+      INTEXURAOS_EVAL_REQUESTED_REVISION: 'a'.repeat(40),
+      INTEXURAOS_EVAL_WRAPPER_ATTESTED: 'true',
+      INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN: 'true',
+    };
+    const matrix = {
+      whoAmI: vi.fn(async () => ({ ok: true as const, userId: matrixUserId })),
+      syncTargetRoom: vi.fn(async () => ({
+        ok: true as const,
+        nextBatch: 'next-batch',
+        limited: false,
+        events: [
+          {
+            type: 'm.room.message' as const,
+            sender: puppetUserId,
+            content: { msgtype: 'm.text' as const, body: 'historical reply' },
+          },
+        ],
+      })),
+    } as unknown as MatrixClient;
+    const setup: SetupPorts = {
+      configPath: '/home/operator/.config/intexuraos/intex-agent-evals.json',
+      runtime: {
+        platform: () => 'linux',
+        hostname: () => 'home-dev',
+        uid: () => process.getuid?.() ?? 1000,
+        env: (name) => env[name],
+      },
+      protectedFiles: {
+        read: vi.fn(async (path) => {
+          if (path === config.matrixAccessTokenFile) {
+            return { ok: true as const, contents: 'synthetic-matrix-token' };
+          }
+          if (path === config.matrixTargetsFile) {
+            return {
+              ok: true as const,
+              contents: JSON.stringify({
+                'source-account': { intex_agent: '!agent-room:matrix.test' },
+              }),
+            };
+          }
+          return { ok: true as const, contents: canonicalizeEvaluatorConfig(config) };
+        }),
+        validatePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
+        ensurePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
+        createExclusive: vi.fn(async () => ({ state: 'exists' as const })),
+      },
+      healthHttp: {
+        get: vi.fn(async (url) => {
+          if (url !== MATRIX_ADAPTER_HEALTH_URL) {
+            throw new Error('Home Dev product health must not be called');
+          }
+          return {
+            ok: true as const,
+            status: 200,
+            body: {
+              ok: true,
+              state: 'running',
+              homeserverUrl: 'https://matrix.test',
+              matrixUserId,
+              ingestUrl: 'http://127.0.0.1:8113/internal/whatsapp/private/matrix/events',
+              sourceAccountId: 'source-account',
+              counters: { received: 1 },
+            },
+          };
+        }),
+      },
+      firebaseIdentity: {
+        getUserState: vi.fn(async () => ({ ok: true as const, state: 'enabled' as const })),
+      },
+      matrix,
+      whatsapp: {
+        getDeliveryStatus: vi.fn(async () => {
+          throw new Error('Home Dev WhatsApp delivery must not be called');
+        }),
+      },
+    };
+    const intex = {
+      getMatrixCorpusCurrentAcceptance: vi.fn(async () => ({
+        ok: true as const,
+        value: { kind: 'admission_ready' as const, current: 'absent' as const },
+      })),
+    } as unknown as IntexAgentServiceClient;
+    const whatsapp = {
+      getMatrixCorpusReadiness: vi.fn(async () => ({
+        ok: true as const,
+        value: { status: 'ready' as const },
+      })),
+    } as unknown as WhatsAppServiceClient;
+    const modelCatalog = {
+      getIntexAgentCatalogEvidence: vi.fn(async () => ({
+        snapshotVersion: '2026-07-19' as const,
+        fetchedAt: new Date().toISOString(),
+        models: [{ id: catalog.agentModel }, { id: catalog.evaluatorModel }],
+      })),
+    } as unknown as OpenRouterCatalogClient;
+
+    const read = createProductionMatrixCorpusLiveReadPort({
+      matrix,
+      repositoryRoot,
+      env,
+      intex,
+      whatsapp,
+      catalog: modelCatalog,
+      inspectFirestoreIndexes: async () => true,
+      inspectRuntime: async () => ({
+        ready: true,
+        deployedRevision: 'a'.repeat(40),
+        criticalPathsClean: true,
+      }),
+      setup,
+    });
+
+    const result = await read.read(catalog);
+
+    expect(result.snapshot).toMatchObject({
+      environmentAlias: 'prod',
+      runtimeAudience: 'hetzner-prod',
+      servicesReady: true,
+      userReady: true,
+      accountTupleCount: 1,
+      matrixReady: true,
+      whatsappReady: true,
+      modelBoundaryReady: true,
+      runAdmission: 'absent',
+    });
+    expect(intex.getMatrixCorpusCurrentAcceptance).toHaveBeenCalledWith(evaluatorUserId);
+    expect(whatsapp.getMatrixCorpusReadiness).toHaveBeenCalledOnce();
+    expect(setup.healthHttp.get).toHaveBeenCalledOnce();
+    expect(setup.healthHttp.get).toHaveBeenCalledWith(MATRIX_ADAPTER_HEALTH_URL);
+    expect(setup.whatsapp.getDeliveryStatus).not.toHaveBeenCalled();
+  });
+
   it('lists paginated Firestore indexes through the bounded read-only Admin API', async () => {
     const firstIndex = requiredFirestoreIndexes()[0];
     const secondIndex = requiredFirestoreIndexes()[1];
