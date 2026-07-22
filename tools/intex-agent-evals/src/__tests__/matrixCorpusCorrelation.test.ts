@@ -4,6 +4,7 @@ import {
   captureMatrixCorpusCursor,
   collectCorrelatedReplies,
   digestMatrixReply,
+  MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX,
   proveMatrixCorpusOutboundEvent,
   type MatrixCorpusReplyEvidencePort,
 } from '../matrixCorpus/correlation.js';
@@ -14,8 +15,13 @@ const CONTEXT = {
   targetRoomId: '!room:home-dev',
 };
 const PUPPET = '@whatsapp_48123123123:home-dev';
-
 describe('Matrix corpus reply correlation', () => {
+  it('pins the exact production WhatsApp confirmation mirror rendering', () => {
+    expect(MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX).toBe(
+      '\n\n<Yes> - <No>\nUse the WhatsApp app to click buttons'
+    );
+  });
+
   it('proves the exact self-authored outbound event in the bound room', async () => {
     const messageText = '🧪 Scenario 001/020 · Matrix corpus · tools mocked · imc1_fixture';
     const matrix = matrixWith([
@@ -143,6 +149,135 @@ describe('Matrix corpus reply correlation', () => {
       cursor: 'cursor-3',
       replies: [{ body: 'First' }, { body: 'Second' }],
     });
+  });
+
+  it('correlates the exact WhatsApp confirmation mirror with the durable assistant reply', async () => {
+    const assistantReply = 'Save this note?\n\nContent: [redacted]';
+    const matrix = matrixWith([
+      {
+        ok: true,
+        nextBatch: 'cursor-2',
+        limited: false,
+        events: [
+          reply('$reply-1', `${assistantReply}${MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX}`),
+        ],
+      },
+    ]);
+    const evidence = evidenceWith([
+      {
+        status: 'completed',
+        replyCount: 1,
+        replyDigests: [digestMatrixReply(assistantReply, 0)],
+      },
+    ]);
+
+    const result = await collectCorrelatedReplies({
+      ...baseInput(matrix, evidence),
+      expectedReplyRendering: 'whatsapp_confirmation_buttons',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      replies: [
+        {
+          eventId: '$reply-1',
+          body: assistantReply,
+          digest: digestMatrixReply(assistantReply, 0),
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ['plain rendering policy', MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX, 'plain'],
+    ['missing interactive suffix', '', 'whatsapp_confirmation_buttons'],
+    [
+      'changed button label',
+      '\n\n<Confirm> - <No>\nUse the WhatsApp app to click buttons',
+      'whatsapp_confirmation_buttons',
+    ],
+    [
+      'changed instruction',
+      '\n\n<Yes> - <No>\nUse WhatsApp to click buttons',
+      'whatsapp_confirmation_buttons',
+    ],
+    [
+      'extra trailing newline',
+      `${MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX}\n`,
+      'whatsapp_confirmation_buttons',
+    ],
+  ] as const)('rejects a confirmation mirror with %s', async (_label, suffix, rendering) => {
+    const assistantReply = 'Save this note?';
+    const result = await collectCorrelatedReplies({
+      ...baseInput(
+        matrixWith([
+          {
+            ok: true,
+            nextBatch: 'cursor-2',
+            limited: false,
+            events: [reply('$reply-1', `${assistantReply}${suffix}`)],
+          },
+        ]),
+        evidenceWith([
+          {
+            status: 'completed',
+            replyCount: 1,
+            replyDigests: [digestMatrixReply(assistantReply, 0)],
+          },
+        ])
+      ),
+      expectedReplyRendering: rendering,
+    });
+
+    expect(result).toEqual({ ok: false, code: 'unbound_reply' });
+  });
+
+  it('rejects a confirmation mirror without a non-empty assistant body', async () => {
+    const result = await collectCorrelatedReplies({
+      ...baseInput(
+        matrixWith([
+          {
+            ok: true,
+            nextBatch: 'cursor-2',
+            limited: false,
+            events: [reply('$reply-1', MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX)],
+          },
+        ]),
+        evidenceWith([
+          {
+            status: 'completed',
+            replyCount: 1,
+            replyDigests: [digestMatrixReply('', 0)],
+          },
+        ])
+      ),
+      expectedReplyRendering: 'whatsapp_confirmation_buttons',
+    });
+
+    expect(result).toEqual({ ok: false, code: 'unbound_reply' });
+  });
+
+  it('rejects duplicate event identities whose raw Matrix bodies differ after normalization', async () => {
+    const assistantReply = 'Save this note?';
+    const result = await collectCorrelatedReplies({
+      ...baseInput(
+        matrixWith([
+          {
+            ok: true,
+            nextBatch: 'cursor-2',
+            limited: false,
+            events: [
+              reply('$reply-1', `${assistantReply}${MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX}`),
+              reply('$reply-1', assistantReply),
+            ],
+          },
+        ]),
+        evidenceWith([{ status: 'pending' }])
+      ),
+      expectedReplyRendering: 'whatsapp_confirmation_buttons',
+    });
+
+    expect(result).toEqual({ ok: false, code: 'unbound_reply' });
   });
 
   it.each([
@@ -278,6 +413,7 @@ function baseInput(
     scenarioId: 'intex-eval-001',
     turnIndex: 0,
     sessionId: 'session_1',
+    expectedReplyRendering: 'plain',
     signal: signal(),
   } as const;
 }

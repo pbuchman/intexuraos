@@ -34,6 +34,11 @@ export interface CorrelatedMatrixReply {
 
 type UnhashedMatrixReply = Omit<CorrelatedMatrixReply, 'digest'>;
 
+export type MatrixCorpusExpectedReplyRendering = 'plain' | 'whatsapp_confirmation_buttons';
+
+export const MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX =
+  '\n\n<Yes> - <No>\nUse the WhatsApp app to click buttons';
+
 export type MatrixCorpusCorrelationFailureCode =
   | 'matrix_sync_failed'
   | 'matrix_sync_invalid'
@@ -138,11 +143,13 @@ export async function collectCorrelatedReplies(input: {
   scenarioId: string;
   turnIndex: number;
   sessionId: string;
+  expectedReplyRendering: MatrixCorpusExpectedReplyRendering;
   signal: AbortSignal;
 }): Promise<MatrixCorpusCorrelatedRepliesResult> {
   let cursor = input.cursor;
   const replies: CorrelatedMatrixReply[] = [];
   const byEventId = new Map<string, CorrelatedMatrixReply>();
+  const rawBodiesByEventId = new Map<string, string>();
   const redactedEventIds = new Set<string>();
 
   for (;;) {
@@ -172,10 +179,19 @@ export async function collectCorrelatedReplies(input: {
       if (redactedEventIds.has(candidate.reply.eventId)) {
         return { ok: false, code: 'unbound_reply' };
       }
+      const previousRawBody = rawBodiesByEventId.get(candidate.reply.eventId);
+      if (previousRawBody !== undefined && previousRawBody !== candidate.reply.body) {
+        return { ok: false, code: 'unbound_reply' };
+      }
+      const canonicalBody = canonicalMatrixReplyBody(
+        candidate.reply.body,
+        input.expectedReplyRendering
+      );
+      if (canonicalBody === undefined) return { ok: false, code: 'unbound_reply' };
       const previous = byEventId.get(candidate.reply.eventId);
       if (previous !== undefined) {
         if (
-          previous.body !== candidate.reply.body ||
+          previous.body !== canonicalBody ||
           previous.originServerTs !== candidate.reply.originServerTs
         ) {
           return { ok: false, code: 'unbound_reply' };
@@ -184,8 +200,10 @@ export async function collectCorrelatedReplies(input: {
       }
       const reply = {
         ...candidate.reply,
-        digest: digestMatrixReply(candidate.reply.body, replies.length),
+        body: canonicalBody,
+        digest: digestMatrixReply(canonicalBody, replies.length),
       };
+      rawBodiesByEventId.set(reply.eventId, candidate.reply.body);
       byEventId.set(reply.eventId, reply);
       replies.push(reply);
       if (replies.length > MATRIX_CORPUS_MAX_REPLIES_PER_TURN)
@@ -219,6 +237,16 @@ export async function collectCorrelatedReplies(input: {
     }
     return { ok: true, cursor, replies };
   }
+}
+
+function canonicalMatrixReplyBody(
+  body: string,
+  expectedRendering: MatrixCorpusExpectedReplyRendering
+): string | undefined {
+  if (expectedRendering === 'plain') return body;
+  if (!body.endsWith(MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX)) return undefined;
+  const canonicalBody = body.slice(0, -MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX.length);
+  return canonicalBody.length === 0 ? undefined : canonicalBody;
 }
 
 function classifyReplyEvent(

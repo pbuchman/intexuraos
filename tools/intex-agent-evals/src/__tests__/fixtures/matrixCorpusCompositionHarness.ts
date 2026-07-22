@@ -24,7 +24,10 @@ import type {
   MatrixTargetSyncResult,
   MatrixTimelineEvent,
 } from '../../live/matrixClient.js';
-import { digestMatrixReply } from '../../matrixCorpus/correlation.js';
+import {
+  digestMatrixReply,
+  MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX,
+} from '../../matrixCorpus/correlation.js';
 import type { MatrixCorpusPreparedContext } from '../../matrixCorpus/liveRuntime.js';
 import {
   MATRIX_CORPUS_PREFLIGHT_CHECKS,
@@ -324,6 +327,13 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
         createScenarioProgress(entry, state.progress.size + 1);
       state.progress.set(issued.scenarioId, progress);
       const reply = `Scenario ${String(entry.scenarioNumber).padStart(3, '0')} turn ${String(issued.turnIndex + 1)} completed.`;
+      const expectedTurn = entry.scenario.expected.turns[issued.turnIndex];
+      if (expectedTurn === undefined) throw new Error('turn expectation is missing');
+      const matrixReply = expectedTurn.timeline.requiredEventTypes.includes(
+        'confirmation_requested'
+      )
+        ? `${reply}${MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX}`
+        : reply;
       progress.lastTurnIndex = issued.turnIndex;
       progress.eventRevision = issued.turnIndex + 1;
       progress.replies.set(issued.turnIndex, reply);
@@ -345,7 +355,7 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
             entry.scenarioNumber === state.wrongPuppetScenarioNumber
               ? '@whatsapp_lid-wrong-puppet-sentinel:example.test'
               : '@whatsapp_lid-private-puppet-sentinel:example.test',
-          content: { msgtype: 'm.text', body: reply },
+          content: { msgtype: 'm.text', body: matrixReply },
         });
       }
       state.metrics.matrixMessages.push(request.text);
