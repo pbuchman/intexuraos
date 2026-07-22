@@ -22,6 +22,26 @@ afterEach(() => {
 });
 
 describe('createWhatsAppServiceClient', () => {
+  it('forwards Matrix corpus calls through the protected evaluator edge prefix', async () => {
+    nock(BASE_URL)
+      .get('/internal/evals/whatsapp/matrix-corpus/readiness')
+      .matchHeader('authorization', 'Bearer evaluator-token')
+      .reply(200, { success: true, data: { status: 'ready' } });
+
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: '',
+      logger,
+      pathPrefix: '/internal/evals/whatsapp',
+      authorizationHeaderProvider: vi.fn().mockResolvedValue('Bearer evaluator-token'),
+    });
+
+    await expect(client.getMatrixCorpusReadiness()).resolves.toEqual({
+      ok: true,
+      value: { status: 'ready' },
+    });
+  });
+
   it('drives every Matrix corpus control endpoint with strict responses', async () => {
     const digest = 'a'.repeat(64);
     const now = '2026-07-20T10:00:00.000Z';

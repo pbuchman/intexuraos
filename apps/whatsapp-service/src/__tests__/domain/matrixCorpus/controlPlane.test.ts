@@ -144,7 +144,7 @@ const profile: StrictToolMockProfileV1 = {
   unexpectedKnownToolPolicy: 'behavioral_failure_no_execution',
 };
 const validAcquireInput = {
-  runtimeAudience: 'home-dev' as const,
+  runtimeAudience: 'hetzner-prod' as const,
   runId: safeId,
   userId: 'user_1',
   matrixRoomBindingDigest: digest,
@@ -153,7 +153,7 @@ const validAcquireInput = {
   idempotencyKey: 'idempotency-key-0001',
 };
 const validControlInput = {
-  runtimeAudience: 'home-dev' as const,
+  runtimeAudience: 'hetzner-prod' as const,
   runId: safeId,
   userId: 'user_1',
   leaseFence: '1',
@@ -161,7 +161,7 @@ const validControlInput = {
 };
 const validIssueInput = {
   version: 1 as const,
-  runtimeAudience: 'home-dev' as const,
+  runtimeAudience: 'hetzner-prod' as const,
   runId: safeId,
   leaseFence: '1',
   userId: 'user_1',
@@ -272,7 +272,7 @@ const attestedPayload: MatrixCorpusAttestedIngestPayloadV1 = {
   context: {
     version: 1,
     kind: 'matrix_corpus',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     leaseFence: '1',
     ingestReceiptId: 'receipt_1',
     runId: safeId,
@@ -472,12 +472,12 @@ function createRepositorySpy(options: RepositorySpyOptions = {}): Readonly<{
 
 function createIntexAgentSpy(): Readonly<{
   client: IntexAgentMatrixCorpusClient;
-  acceptanceInputs: Readonly<{ runtimeAudience: 'home-dev'; userId: string }>[];
-  controlStatusInputs: Readonly<{ runtimeAudience: 'home-dev'; runId: string; userId: string; leaseFence: string }>[];
+  acceptanceInputs: Readonly<{ runtimeAudience: 'hetzner-prod'; userId: string }>[];
+  controlStatusInputs: Readonly<{ runtimeAudience: 'hetzner-prod'; runId: string; userId: string; leaseFence: string }>[];
   postTerminalControlCalls(): number;
 }> {
-  const acceptanceInputs: Readonly<{ runtimeAudience: 'home-dev'; userId: string }>[] = [];
-  const controlStatusInputs: Readonly<{ runtimeAudience: 'home-dev'; runId: string; userId: string; leaseFence: string }>[] = [];
+  const acceptanceInputs: Readonly<{ runtimeAudience: 'hetzner-prod'; userId: string }>[] = [];
+  const controlStatusInputs: Readonly<{ runtimeAudience: 'hetzner-prod'; runId: string; userId: string; leaseFence: string }>[] = [];
   let postTerminalControlCalls = 0;
   const client: IntexAgentMatrixCorpusClient = {
     async getCurrentAcceptance(input) {
@@ -675,7 +675,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
 
   it('keeps public control inputs strict and free of derived authority', () => {
     const acquire = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -689,7 +689,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     );
     expect(
       activateRunInputSchema.safeParse({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -698,7 +698,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(true);
     expect(
       renewLeaseInputSchema.safeParse({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -707,7 +707,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(true);
     expect(
       quiesceRunInputSchema.safeParse({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -716,7 +716,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(true);
     expect(
       releaseRunInputSchema.safeParse({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -728,7 +728,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(true);
     expect(
       getTransportStatusInputSchema.safeParse({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -792,7 +792,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(false);
 
     const commonClaim = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -1024,7 +1024,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
 
   it('rejects unknown and cross-correlated command, record, and result fields', () => {
     const acquireCommand = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -1044,7 +1044,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(false);
 
     const abandonCommand = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       observedRunId: safeId,
       observedUserId: 'user_1',
       observedLeaseFence: '1',
@@ -1283,7 +1283,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
 
   it('requires exact release readiness correlation while preserving not-ready replay proof', () => {
     const releaseCommand = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -1398,7 +1398,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
 
   it('requires exact activation status identity and every readiness proof without a release lifecycle rule', () => {
     const activationCommand = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -1482,7 +1482,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
   it('shares phase, drain, cleanup-bound, and claim-TTL invariants across lease records', () => {
     const lease = {
       version: 1 as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -1680,7 +1680,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
     ).toBe(false);
 
     const claimInput = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -1717,7 +1717,7 @@ describe('Matrix corpus A2 frozen contracts', () => {
 
   it('enforces zero, five-minute, and over-five-minute bounds on every claim family', () => {
     const common = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -1900,7 +1900,7 @@ describe('MatrixCorpusControlPlane facade', () => {
 
     await expect(
       controlPlane.acquireProvisioningLease({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'invalid id',
         userId: 'user_1',
         matrixRoomBindingDigest: digest,
@@ -1911,7 +1911,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     ).resolves.toEqual({ code: 'CORRUPT_STATE', recordKind: 'input_contract' });
     await expect(
       controlPlane.acquireProvisioningLease({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         matrixRoomBindingDigest: digest,
@@ -1922,7 +1922,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     ).resolves.toEqual(expect.objectContaining({ code: 'ACQUIRED' }));
     await expect(
       controlPlane.activateRun({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -2285,7 +2285,7 @@ describe('MatrixCorpusControlPlane facade', () => {
 
     await expect(
       controlPlane.abortProvisioningRun({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         observedRunId: safeId,
         observedUserId: 'user_1',
         observedLeaseFence: '1',
@@ -2778,7 +2778,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     const controlPlane = new MatrixCorpusControlPlane(dependencies);
 
     const pendingAcquire = controlPlane.acquireProvisioningLease({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: safeId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -2795,7 +2795,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     expect(repositorySpy.acquireCommands[0]?.expiresAt).toBe('2026-07-20T00:03:00.000Z');
 
     const pendingActivation = controlPlane.activateRun({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -2830,7 +2830,7 @@ describe('MatrixCorpusControlPlane facade', () => {
       },
     };
     const acquireInput = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -2879,7 +2879,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     expect(acquireDigests.remaining()).toBe(0);
 
     const controlInput = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -2929,7 +2929,7 @@ describe('MatrixCorpusControlPlane facade', () => {
 
     const issueInput = {
       version: 1 as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       leaseFence: '1',
       userId: 'user_1',
@@ -3028,7 +3028,7 @@ describe('MatrixCorpusControlPlane facade', () => {
       capabilityTtlMs: 60_000,
     };
     const input = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -3048,7 +3048,7 @@ describe('MatrixCorpusControlPlane facade', () => {
       expiresAt: '2026-07-20T00:01:00.000Z',
     });
     expect(clockCalls).toBe(1);
-    expect(intexAgentSpy.acceptanceInputs).toEqual([{ runtimeAudience: 'home-dev', userId: 'user_1' }]);
+    expect(intexAgentSpy.acceptanceInputs).toEqual([{ runtimeAudience: 'hetzner-prod', userId: 'user_1' }]);
     expect(digestDomains).toEqual([
       'imc-lease-slot-v1',
       'imc-run-fence-v1',
@@ -3057,7 +3057,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     ]);
     expect(repositorySpy.acquireCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         matrixRoomBindingDigest: digest,
@@ -3096,7 +3096,7 @@ describe('MatrixCorpusControlPlane facade', () => {
       capabilityTtlMs: 60_000,
     };
     const input = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -3107,7 +3107,7 @@ describe('MatrixCorpusControlPlane facade', () => {
 
     expect(result).toEqual({ code: 'NOT_FOUND' });
     expect(intexAgentSpy.controlStatusInputs).toEqual([
-      { runtimeAudience: 'home-dev', runId: safeId, userId: 'user_1', leaseFence: '1' },
+      { runtimeAudience: 'hetzner-prod', runId: safeId, userId: 'user_1', leaseFence: '1' },
     ]);
     expect(digestDomains).toEqual([
       'imc-lease-slot-v1',
@@ -3117,7 +3117,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     ]);
     expect(repositorySpy.activateCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -3172,7 +3172,7 @@ describe('MatrixCorpusControlPlane facade', () => {
       capabilityTtlMs: 60_000,
     };
     const input = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       userId: 'user_1',
       leaseFence: '1',
@@ -3191,7 +3191,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     ]);
     expect(repositorySpy.renewCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -3240,7 +3240,7 @@ describe('MatrixCorpusControlPlane facade', () => {
     };
     const input = {
       version: 1 as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: safeId,
       leaseFence: '1',
       userId: 'user_1',
@@ -3280,7 +3280,7 @@ describe('MatrixCorpusControlPlane facade', () => {
         runFenceDigest: '2'.padStart(64, '0'),
         capability: {
           version: 1,
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           runId: safeId,
           leaseFence: '1',
           userId: 'user_1',
@@ -3747,12 +3747,12 @@ describe('MatrixCorpusControlPlane facade', () => {
     const digests = createExpectedDigestQueue([
       {
         domain: 'imc-lease-slot-v1',
-        parts: ['home-dev', 'user_1'],
+        parts: ['hetzner-prod', 'user_1'],
         output: leaseSlotDigest,
       },
       {
         domain: 'imc-run-fence-v1',
-        parts: ['home-dev', 'user_1', safeId],
+        parts: ['hetzner-prod', 'user_1', safeId],
         output: runFenceDigest,
       },
       {
@@ -4285,7 +4285,7 @@ describe('MatrixCorpusControlPlane facade', () => {
 describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', () => {
   const validQuiesceInput = validControlInput;
   const validTransportStatusInput = {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: safeId,
     userId: 'user_1',
     leaseFence: '1',
@@ -4399,12 +4399,12 @@ describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', (
     const digests = createExpectedDigestQueue([
       {
         domain: 'imc-lease-slot-v1',
-        parts: ['home-dev', 'user_1'],
+        parts: ['hetzner-prod', 'user_1'],
         output: leaseSlotDigest,
       },
       {
         domain: 'imc-run-fence-v1',
-        parts: ['home-dev', 'user_1', safeId],
+        parts: ['hetzner-prod', 'user_1', safeId],
         output: runFenceDigest,
       },
       {
@@ -4417,7 +4417,7 @@ describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', (
         parts: [
           'quiesce',
           JSON.stringify({
-            runtimeAudience: 'home-dev',
+            runtimeAudience: 'hetzner-prod',
             runId: safeId,
             userId: 'user_1',
             leaseFence: '1',
@@ -4478,7 +4478,7 @@ describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', (
     expect(idCalls).toBe(0);
     expect(repositorySpy.quiesceCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -4506,12 +4506,12 @@ describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', (
     const digests = createExpectedDigestQueue([
       {
         domain: 'imc-lease-slot-v1',
-        parts: ['home-dev', 'user_1'],
+        parts: ['hetzner-prod', 'user_1'],
         output: leaseSlotDigest,
       },
       {
         domain: 'imc-run-fence-v1',
-        parts: ['home-dev', 'user_1', safeId],
+        parts: ['hetzner-prod', 'user_1', safeId],
         output: runFenceDigest,
       },
     ]);
@@ -4561,7 +4561,7 @@ describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', (
     expect(idCalls).toBe(0);
     expect(repositorySpy.statusCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -4960,7 +4960,7 @@ describe('MatrixCorpusControlPlane quiesce and transport-status facade slice', (
 
 describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
   const validReleaseInput = {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: safeId,
     userId: 'user_1',
     leaseFence: '1',
@@ -4970,7 +4970,7 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
     artifactStageDigest: digest,
   };
   const validAbandonInput = {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     observedRunId: safeId,
     observedUserId: 'user_1',
     observedLeaseFence: '1',
@@ -5213,12 +5213,12 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
     const keyedDigests = createExpectedDigestQueue([
       {
         domain: 'imc-lease-slot-v1',
-        parts: ['home-dev', 'user_1'],
+        parts: ['hetzner-prod', 'user_1'],
         output: leaseSlotDigest,
       },
       {
         domain: 'imc-run-fence-v1',
-        parts: ['home-dev', 'user_1', safeId],
+        parts: ['hetzner-prod', 'user_1', safeId],
         output: runFenceDigest,
       },
       {
@@ -5231,7 +5231,7 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
         parts: [
           'release',
           JSON.stringify({
-            runtimeAudience: 'home-dev',
+            runtimeAudience: 'hetzner-prod',
             runId: safeId,
             userId: 'user_1',
             leaseFence: '1',
@@ -5301,7 +5301,7 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
     expect(sha256.remaining()).toBe(0);
     expect(repositorySpy.releaseCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: safeId,
         userId: 'user_1',
         leaseFence: '1',
@@ -5343,12 +5343,12 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
     const keyedDigests = createExpectedDigestQueue([
       {
         domain: 'imc-lease-slot-v1',
-        parts: ['home-dev', 'user_1'],
+        parts: ['hetzner-prod', 'user_1'],
         output: leaseSlotDigest,
       },
       {
         domain: 'imc-run-fence-v1',
-        parts: ['home-dev', 'user_1', safeId],
+        parts: ['hetzner-prod', 'user_1', safeId],
         output: runFenceDigest,
       },
       {
@@ -5408,7 +5408,7 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
     expect(sha256.remaining()).toBe(0);
     expect(repositorySpy.abandonCommands).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         observedRunId: safeId,
         observedUserId: 'user_1',
         observedLeaseFence: '1',
@@ -5933,7 +5933,7 @@ describe('MatrixCorpusControlPlane release and abandon facade slice', () => {
 describe('FakeMatrixCorpusRepository A2 fake core', () => {
   function acquireCommand(overrides: Partial<AcquireProvisioningLeaseCommand> = {}): AcquireProvisioningLeaseCommand {
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -5954,7 +5954,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     overrides: Partial<import('../../../domain/matrixCorpus/types.js').ActivateRunCommand> = {}
   ): import('../../../domain/matrixCorpus/types.js').ActivateRunCommand {
     return {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -5983,7 +5983,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
 
   function renewCommand(overrides: Partial<import('../../../domain/matrixCorpus/types.js').RenewLeaseCommand> = {}) {
     return {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -6074,7 +6074,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     };
     const current = {
       version: 1 as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId,
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -6195,7 +6195,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
 
   function quiesceCommand(overrides: Partial<QuiesceRunCommand> = {}): QuiesceRunCommand {
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -6212,7 +6212,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     overrides: Partial<GetTransportStatusCommand> = {}
   ): GetTransportStatusCommand {
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -6261,7 +6261,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
   function releaseCommand(overrides: Partial<ReleaseRunCommand> = {}): ReleaseRunCommand {
     const terminalControlId = 'terminal_release';
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -6307,7 +6307,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
   ): AbandonExpiredRunCommand {
     const terminalControlId = 'terminal_abandoned';
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       observedRunId: 'run_1',
       observedUserId: 'user_1',
       observedLeaseFence: '1',
@@ -6857,7 +6857,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       }));
     const lease = {
       version: 1,
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -7054,7 +7054,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     const firstGate = repository.deferNextBeforeAdmission('acquire');
     const secondGate = repository.deferNextBeforeAdmission('acquire');
     const firstCommand = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'user_1',
       matrixRoomBindingDigest: digest,
@@ -10114,7 +10114,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       terminalControlOutboxes: [terminal],
     } satisfies Parameters<FakeMatrixCorpusRepository['seedValidCleanupOutboxState']>[0];
     const command = {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       currentRunId: 'run_1',
       userId: 'user_1',
       currentLeaseFence: '1',
@@ -10217,7 +10217,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     overrides: Partial<ClaimPendingIngestOutboxInput> = {}
   ): ClaimPendingIngestOutboxInput {
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -10239,7 +10239,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
   ): RenewIngestOutboxClaimInput {
     if (outbox.claim === null) throw new Error('renewal fixture requires a claim');
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '1',
@@ -10264,7 +10264,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     const publisherReceiptDigest = indexedDigest(311_000);
     const publishedAt = '2026-07-20T00:00:10.000Z';
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: outbox.runId,
       userId: outbox.userId,
       leaseFence: outbox.leaseFence,
@@ -10287,7 +10287,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     overrides: Partial<ClaimPendingTerminalControlOutboxInput> = {}
   ): ClaimPendingTerminalControlOutboxInput {
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: outbox.runId,
       userId: outbox.userId,
       leaseFence: outbox.leaseFence,
@@ -10309,7 +10309,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
   ): RenewTerminalControlOutboxClaimInput {
     if (outbox.claim === null) throw new Error('terminal renewal fixture requires a claim');
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: outbox.runId,
       userId: outbox.userId,
       leaseFence: outbox.leaseFence,
@@ -10365,7 +10365,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
   ): AcknowledgeTerminalControlInput {
     if (request.claim === null) throw new Error('terminal acknowledgement fixture requires a claim');
     return {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: request.runId,
       userId: request.userId,
       leaseFence: request.leaseFence,
@@ -10665,7 +10665,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       terminalControlOutboxes: [terminal],
     });
     const command = {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       currentRunId: 'run_1',
       userId: 'user_1',
       currentLeaseFence: '1',
@@ -10714,7 +10714,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     const { repository } = await activeRepository();
     await expect(
       repository.cleanupExactRun({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         currentRunId: 'run_1',
         userId: 'user_1',
         currentLeaseFence: '1',
@@ -10740,7 +10740,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       pair: { leaseSlotDigest: seeded.pair.leaseSlotDigest, current, history: { ...current, leaseSlotDigest: seeded.pair.leaseSlotDigest } },
     });
     const command = {
-      runtimeAudience: 'home-dev', currentRunId: 'run_1', userId: 'user_1', currentLeaseFence: '1', leaseSlotDigest: digest,
+      runtimeAudience: 'hetzner-prod', currentRunId: 'run_1', userId: 'user_1', currentLeaseFence: '1', leaseSlotDigest: digest,
       currentRunFenceDigest: 'b'.repeat(64), targetRunId: 'run_9', targetLeaseFence: '2', targetRunFenceDigest: 'c'.repeat(64),
       expectedRevision: 0, idempotencyKeyDigest: '4'.repeat(64), canonicalRequestDigest: '5'.repeat(64), now: '2026-07-20T00:00:06.000Z',
     } satisfies CleanupExactRunCommand;
@@ -10787,7 +10787,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       issuanceReceipts: [], capabilities: [], transportReceipts: [], ingestOutboxes: [], terminalControlOutboxes: [terminal],
     });
     const command = {
-      runtimeAudience: 'home-dev', currentRunId: 'run_1', userId: 'user_1', currentLeaseFence: '1', leaseSlotDigest: digest,
+      runtimeAudience: 'hetzner-prod', currentRunId: 'run_1', userId: 'user_1', currentLeaseFence: '1', leaseSlotDigest: digest,
       currentRunFenceDigest: 'b'.repeat(64), targetRunId: target.runId, targetLeaseFence: target.leaseFence, targetRunFenceDigest: target.runFenceDigest,
       expectedRevision: 0, idempotencyKeyDigest: '4'.repeat(64), canonicalRequestDigest: '5'.repeat(64), now: '2026-07-20T00:00:06.000Z',
     } satisfies CleanupExactRunCommand;
@@ -10934,7 +10934,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       terminalControlOutboxes: [terminal],
     });
     const command = {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       currentRunId: 'run_1',
       userId: 'user_1',
       currentLeaseFence: '1',
@@ -11576,7 +11576,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       ),
     });
     const commandFor = (revision: number): CleanupExactRunCommand => ({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       currentRunId: 'run_1',
       userId: 'user_1',
       currentLeaseFence: '1',
@@ -12087,7 +12087,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     };
     await expect(
       markerState.repository.acknowledgeIngestOutbox({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: markerless.runId,
         userId: markerless.userId,
         leaseFence: markerless.leaseFence,
@@ -12148,7 +12148,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     const publishedAt = '2026-07-20T00:00:12.000Z';
     await expect(
       publicationState.repository.acknowledgeIngestOutbox({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: beforePublication.runId,
         userId: beforePublication.userId,
         leaseFence: beforePublication.leaseFence,
@@ -13792,7 +13792,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     ).resolves.toEqual({ code: 'PHASE_CONFLICT', actualPhase: 'abandon_pending' });
     await expect(
       closedState.repository.renewTerminalControlOutboxClaim({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: closedRelease.runId,
         userId: closedRelease.userId,
         leaseFence: closedRelease.leaseFence,

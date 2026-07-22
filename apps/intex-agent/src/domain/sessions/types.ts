@@ -58,7 +58,7 @@ export interface IntexAgentSession {
 export interface IntexAgentMatrixCorpusProfileV1 {
   version: 1;
   kind: 'matrix_corpus';
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   leaseFence: string;
   runId: string;
   scenarioId: string;

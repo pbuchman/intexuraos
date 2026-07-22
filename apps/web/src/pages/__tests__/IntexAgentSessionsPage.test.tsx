@@ -163,7 +163,7 @@ describe('IntexAgentSessionsPage', () => {
       createdAt: '2026-07-20T10:00:00.000Z',
       updatedAt: '2026-07-20T10:00:00.000Z',
       intexAgentCapabilities: {
-        testRuns: { status: 'available', runtimeAudience: 'home-dev' },
+        testRuns: { status: 'available', runtimeAudience: 'hetzner-prod' },
       },
     });
     mockListSessions.mockResolvedValue([
@@ -482,7 +482,7 @@ describe('IntexAgentSessionsPage', () => {
       createdAt: '2026-07-20T10:00:00.000Z',
       updatedAt: '2026-07-20T10:00:00.000Z',
       intexAgentCapabilities: {
-        testRuns: { status: 'available', runtimeAudience: 'home-dev' },
+        testRuns: { status: 'available', runtimeAudience: 'hetzner-prod' },
       },
     });
 

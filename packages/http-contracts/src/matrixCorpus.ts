@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
 export const MATRIX_CORPUS_VISIBLE_VERSION = 1 as const;
+export const MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE = 'home-dev' as const;
+export const MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE = 'hetzner-prod' as const;
+export const matrixCorpusRuntimeAudienceSchema = z.enum([
+  MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE,
+  MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE,
+]);
+export type MatrixCorpusRuntimeAudience = z.infer<typeof matrixCorpusRuntimeAudienceSchema>;
 export const MATRIX_CORPUS_SCENARIO_TOTAL = 20 as const;
 export const MATRIX_CORPUS_MAX_VISIBLE_MESSAGE_CODE_UNITS = 4096 as const;
 export const MATRIX_CORPUS_MAX_HEADER_CODE_UNITS = 256 as const;
@@ -529,7 +536,7 @@ const phaseCorrelation = (
 const ingestContextShape = {
   version: z.literal(1),
   kind: z.literal('matrix_corpus'),
-  runtimeAudience: z.literal('home-dev'),
+  runtimeAudience: matrixCorpusRuntimeAudienceSchema,
   leaseFence: matrixCorpusDecimalFenceSchema,
   ingestReceiptId: safeIdSchema,
   runId: safeIdSchema,
@@ -591,7 +598,7 @@ export type MatrixCorpusAttestedIngestPayloadV1 = z.infer<
 
 const capabilityIssueSemanticShape = {
   version: z.literal(1),
-  runtimeAudience: z.literal('home-dev'),
+  runtimeAudience: matrixCorpusRuntimeAudienceSchema,
   runId: safeIdSchema,
   leaseFence: matrixCorpusDecimalFenceSchema,
   userId: safeIdSchema,
@@ -895,7 +902,7 @@ const attestationCoreShape = {
   version: z.literal(1),
   issuer: z.literal('whatsapp-service'),
   audience: z.literal('intex-agent'),
-  runtimeAudience: z.literal('home-dev'),
+  runtimeAudience: matrixCorpusRuntimeAudienceSchema,
   keyVersion: safeIdSchema,
   eventId: safeIdSchema,
   leaseFence: matrixCorpusDecimalFenceSchema,

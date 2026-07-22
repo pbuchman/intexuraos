@@ -781,7 +781,7 @@ function repositoryFixture(events: ReturnType<typeof event>[]): MatrixCorpusSess
         matrixCorpusProfile: {
           version: 1 as const,
           kind: 'matrix_corpus' as const,
-          runtimeAudience: 'home-dev' as const,
+          runtimeAudience: 'hetzner-prod' as const,
           leaseFence: identity.leaseFence,
           runId: identity.runId,
           scenarioId: identity.scenarioId,

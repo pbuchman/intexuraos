@@ -27,7 +27,7 @@ export interface MatrixCorpusEncryptedValueV1 {
 
 type MatrixCorpusContextEncryptionBindingBaseV1 = Readonly<{
   version: 1;
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   userId: string;
   leaseFence: string;
@@ -192,7 +192,7 @@ function isValidBinding(binding: MatrixCorpusContextEncryptionBindingV1): boolea
   const raw = binding as unknown as Record<string, unknown>;
   const commonValid =
     raw['version'] === 1 &&
-    raw['runtimeAudience'] === 'home-dev' &&
+    raw['runtimeAudience'] === 'hetzner-prod' &&
     matrixCorpusSafeIdSchema.safeParse(binding.runId).success &&
     matrixCorpusSafeIdSchema.safeParse(binding.userId).success &&
     matrixCorpusDecimalFenceSchema.safeParse(binding.leaseFence).success;

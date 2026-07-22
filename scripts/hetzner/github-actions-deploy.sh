@@ -195,6 +195,8 @@ deploy_web_and_edge() {
 
 verify_backend_readiness() {
   run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/whatsapp/health >/dev/null'
+  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/intex-agent/health >/dev/null'
+  run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/verify-matrix-corpus-runtime.sh'
   curl --fail --silent --show-error --max-time 15 \
     --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
     "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
@@ -284,6 +286,8 @@ verify_runtime_readiness() {
     "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
   curl --fail --silent --show-error --max-time 15 \
     "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
+  curl --fail --silent --show-error --max-time 15 \
+    "https://${PUBLIC_DOMAIN}/api/intex-agent/health" >/dev/null
   verify_non_404_route "/api/code/internal/logs"
 }
 

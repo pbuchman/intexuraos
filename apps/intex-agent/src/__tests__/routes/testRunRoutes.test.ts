@@ -137,7 +137,7 @@ describe('Test Runs public routes', () => {
     await app.register(
       createTestRunRoutes({
         enabled: true,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         configuredUserId: 'auth0:user_1',
         repository,
       })
@@ -364,7 +364,7 @@ describe('Test Runs server registration guard', () => {
       serverServices({
         testRuns: {
           enabled: true,
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           configuredUserId: 'auth0:user_1',
           repository,
           sweepScheduler,
@@ -397,7 +397,7 @@ describe('Test Runs server registration guard', () => {
       serverServices({
         testRuns: {
           enabled: true,
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           configuredUserId: 'auth0:user_1',
           repository: {
             listLatestForUser: vi.fn(async () => ({ ok: true as const, records: [] })),

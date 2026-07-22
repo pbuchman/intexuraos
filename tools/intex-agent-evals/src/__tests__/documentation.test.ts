@@ -31,7 +31,7 @@ const LIVE_WRAPPER_COMMANDS = [
   'scripts/run-intex-agent-evals-home-dev.sh scenario intex-eval-003',
   'scripts/run-intex-agent-evals-home-dev.sh matrix-smoke',
   'scripts/run-intex-agent-evals-home-dev.sh full',
-  'scripts/run-intex-agent-evals-home-dev.sh matrix-corpus',
+  'scripts/run-intex-agent-evals-prod.sh matrix-corpus',
 ] as const;
 
 const CONFIG_FIELDS = [
@@ -81,6 +81,8 @@ describe('Intex Agent evaluation documentation', () => {
   it('documents fixed runtime, protected configuration, inputs, outputs, and exits', () => {
     for (const fact of [
       'home-dev',
+      'https://intexuraos.cloud',
+      'hetzner-prod',
       '$HOME/deploy/intexuraos',
       '`8134`',
       '`8113`',
@@ -95,6 +97,9 @@ describe('Intex Agent evaluation documentation', () => {
     expect(runbook).toContain(
       'The instruction **“odpal testy” means exactly one invocation of `matrix-corpus`**.'
     );
+    expect(runbook).toContain(
+      '`scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any'
+    );
     expect(runbook).toContain('20 scenarios and 59 turns');
     expect(runbook).toContain('or:deepseek/deepseek-v4-flash');
 
@@ -106,10 +111,10 @@ describe('Intex Agent evaluation documentation', () => {
       '| `0` | All executed deterministic and MiniMax checks passed. | Preserve report path and continue. |'
     );
     expect(runbook).toContain(
-      '| `1` | Behavioral failure. | Preserve the report, list failed scenario IDs, and correct through a new reviewed revision. |'
+      '| `1` | Behavioral failure. | Preserve the report, correct the failed scenarios, deploy, and automatically run the production corpus again. |'
     );
     expect(runbook).toContain(
-      '| `2` | Configuration, revision, connectivity, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, stop, and correct the named boundary before another explicitly authorized run. |'
+      '| `2` | Configuration, revision, connectivity, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, correct the named boundary, deploy, and automatically run the production corpus again. |'
     );
   });
 

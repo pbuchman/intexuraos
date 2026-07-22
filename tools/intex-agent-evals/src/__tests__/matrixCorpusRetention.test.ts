@@ -49,8 +49,12 @@ function record(
 describe('matrix corpus exact-ID retention', () => {
   it('uses the same length-framed keyed run-fence digest as the WhatsApp owner', () => {
     expect(
-      matrixCorpusKeyedDigest('h'.repeat(32), 'imc-run-fence-v1', ['home-dev', 'user_1', 'run_old'])
-    ).toBe('22b22538b09eea002251e20cf58f70a33b282d62cad9e6abc15405c8e1eb5245');
+      matrixCorpusKeyedDigest('h'.repeat(32), 'imc-run-fence-v1', [
+        'hetzner-prod',
+        'user_1',
+        'run_old',
+      ])
+    ).toBe('b43c05bdbee55b90ed94218060830437b6c899b862d5ef2e4b4434993d5e71db');
   });
 
   it('retains a nonterminal/pending current acceptance plus latest ready pass and latest failure', () => {
@@ -349,7 +353,7 @@ describe('matrix corpus exact-ID retention', () => {
         expectedRevision: 0,
         targetRunId: 'run_old',
         targetLeaseFence: '7',
-        targetRunFenceDigest: '22b22538b09eea002251e20cf58f70a33b282d62cad9e6abc15405c8e1eb5245',
+        targetRunFenceDigest: 'b43c05bdbee55b90ed94218060830437b6c899b862d5ef2e4b4434993d5e71db',
       })
     );
     expect(removeExactPrivateDirectory).toHaveBeenCalledWith('/private/artifacts/run_old');

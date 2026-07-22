@@ -109,7 +109,7 @@ describe('Firestore Test Run foundation repository', () => {
     ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
     await firestore.collection('intex_agent_test_runs').doc('run_corrupt').set({
       userId: 'auth0:user_1',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       startedAt: later,
       artifactDelivery: { status: 'staged' },
       finishedAt: later,
@@ -676,7 +676,7 @@ describe('Firestore Test Run foundation repository', () => {
         mutate: async (firestore): Promise<void> => {
           await firestore.collection('intex_agent_test_runs').doc('race_corrupt').set({
             userId: 'auth0:user_1',
-            runtimeAudience: 'home-dev',
+            runtimeAudience: 'hetzner-prod',
             startedAt: later,
           });
         },
@@ -891,7 +891,7 @@ describe('Firestore Test Run foundation repository', () => {
       .doc('run_target')
       .set({
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_target',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -991,7 +991,7 @@ describe('Firestore Test Run foundation repository', () => {
       await writeCleanupFixture(firestore);
       await firestore.collection('intex_agent_test_runs').doc('run_corrupt_retention').set({
         userId: 'auth0:user_1',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         startedAt: '2026-07-20T10:03:00.000Z',
       });
       await expect(repository.cleanupExactRun(cleanupInput())).resolves.toEqual({
@@ -1103,7 +1103,7 @@ describe('Firestore Test Run foundation repository', () => {
         .doc('run_target')
         .set({
           version: 1,
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           runId: 'run_target',
           userId: 'auth0:foreign',
           leaseFence: '7',
@@ -1345,7 +1345,7 @@ describe('Firestore Test Run foundation repository', () => {
       await repository.createOrGet(testRunRecord({ retentionReconciled: false }));
       await firestore.collection('intex_agent_test_runs').doc('corrupt_retention').set({
         userId: 'auth0:user_1',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         startedAt: later,
       });
       await expect(
@@ -2842,7 +2842,7 @@ describe('Firestore Test Run foundation repository', () => {
 
     const validReceipt = {
       version: 1,
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       ...identity(),
       eventId: 'abandoned_event_1',
       payloadDigest: 'f'.repeat(64),
@@ -3052,7 +3052,7 @@ describe('Firestore Test Run foundation repository', () => {
       .set({
         version: 1,
         status: 'finalized',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         scenarioContextCount: 0,
         finalizedAt: later,
@@ -3306,6 +3306,10 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('derives the closed current-acceptance admission gate without exposing records', async () => {
     const { firestore, repository } = fixture();
+    await firestore.collection('intex_agent_test_runs').doc('run_legacy').set({
+      ...testRunRecord({ runId: 'run_legacy' }),
+      runtimeAudience: 'home-dev',
+    });
     await expect(repository.getCurrentAcceptance('auth0:user_1')).resolves.toEqual({
       ok: true,
       acceptance: { kind: 'admission_ready', current: 'absent' },
@@ -3457,7 +3461,7 @@ function activeRunContext(): MatrixCorpusPrivateRunContextV1 {
   return {
     version: 1,
     status: 'active',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -3483,7 +3487,7 @@ function activeRunContext(): MatrixCorpusPrivateRunContextV1 {
 function activeScenarioContext(): MatrixCorpusPrivateScenarioContextV1 {
   return {
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     scenarioId: 'scenario_001',
     userId: 'auth0:user_1',
@@ -3507,7 +3511,7 @@ function activeScenarioContext(): MatrixCorpusPrivateScenarioContextV1 {
 function emptyRunManifest(): MatrixCorpusRunManifestV1 {
   return {
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -3675,7 +3679,7 @@ async function writeScenarioEvidence(
   };
   await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set({
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -3703,7 +3707,7 @@ async function writeScenarioEvidence(
     matrixCorpusProfile: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       runId: 'run_1',
       scenarioId: 'scenario_001',
@@ -3753,7 +3757,7 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
   const targetContext = {
     version: 1 as const,
     status: 'finalized' as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_target',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -3855,7 +3859,7 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
     .set(targetContext);
   await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_target').set({
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_target',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -3898,7 +3902,7 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
     matrixCorpusProfile: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       runId: 'run_target',
       scenarioId: 'scenario_001',
@@ -3936,7 +3940,7 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
       sessionId: 'matrix_target_session',
       userId: 'auth0:user_1',
       leaseFence: '7',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       lane: 'matrix_corpus',
     });
   await firestore

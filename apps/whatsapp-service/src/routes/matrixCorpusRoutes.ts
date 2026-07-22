@@ -487,7 +487,7 @@ export interface MatrixCorpusRoutesDependencies {
   }>;
   digestMatrixIdempotencyKey(idempotencyKey: string): string;
   issueControlAuthorization(input: Readonly<{
-    runtimeAudience: 'home-dev';
+    runtimeAudience: 'hetzner-prod';
     runId: string;
     userId: string;
     leaseFence: string;
@@ -513,7 +513,7 @@ export function createMatrixCorpusRoutes(
       '/internal/matrix-corpus/readiness',
       routeSchema(
         'getMatrixCorpusReadiness',
-        'Verify the enabled Home Dev Matrix corpus boundary',
+        'Verify the enabled production Matrix corpus boundary',
         {},
         readinessResponseSchema
       ),
@@ -526,7 +526,7 @@ export function createMatrixCorpusRoutes(
 
     fastify.post<{ Body: Readonly<{ runId: string; idempotencyKey: string }> }>(
       '/internal/matrix-corpus/runs',
-      routeSchema('createMatrixCorpusRun', 'Create a Home Dev Matrix corpus run lease', {
+      routeSchema('createMatrixCorpusRun', 'Create a production Matrix corpus run lease', {
         body: provisionBodySchema,
       }, provisionResponseSchema),
       async (request, reply) => {
@@ -537,7 +537,7 @@ export function createMatrixCorpusRoutes(
           reply,
           () =>
             dependencies.controlPlane.acquireProvisioningLease({
-              runtimeAudience: 'home-dev',
+              runtimeAudience: 'hetzner-prod',
               runId: request.body.runId,
               userId: evaluator.userId,
               matrixRoomBindingDigest: evaluator.matrixRoomBindingDigest,
@@ -567,7 +567,7 @@ export function createMatrixCorpusRoutes(
 
     fastify.post<{ Params: RunParams; Body: OperationBody }>(
       '/internal/matrix-corpus/runs/:runId/activate',
-      routeSchema('activateMatrixCorpusRun', 'Activate a Home Dev Matrix corpus run', {
+      routeSchema('activateMatrixCorpusRun', 'Activate a production Matrix corpus run', {
         params: runParamsSchema,
         body: operationBodySchema,
       }, activationResponseSchema),
@@ -598,7 +598,7 @@ export function createMatrixCorpusRoutes(
 
     fastify.post<{ Params: RunParams; Body: OperationBody }>(
       '/internal/matrix-corpus/runs/:runId/lease/renew',
-      routeSchema('renewMatrixCorpusRunLease', 'Renew a Home Dev Matrix corpus run lease', {
+      routeSchema('renewMatrixCorpusRunLease', 'Renew a production Matrix corpus run lease', {
         params: runParamsSchema,
         body: operationBodySchema,
       }, renewResponseSchema),
@@ -650,7 +650,7 @@ export function createMatrixCorpusRoutes(
           return await safeControlFailure(reply, 'CORRUPT_STATE');
         const parsed = matrixCorpusCapabilityIssueRequestV1Schema.safeParse({
           version: 1,
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           rawCapability: request.body.capability,
           runId: request.params.runId,
           leaseFence: request.body.leaseFence,
@@ -717,7 +717,7 @@ export function createMatrixCorpusRoutes(
           reply,
           () =>
             dependencies.controlPlane.recordMatrixSendProof({
-              runtimeAudience: 'home-dev',
+              runtimeAudience: 'hetzner-prod',
               runId: request.params.runId,
               userId: evaluator.userId,
               leaseFence: request.body.leaseFence,
@@ -772,7 +772,7 @@ export function createMatrixCorpusRoutes(
         let result: unknown;
         try {
           result = await dependencies.issueControlAuthorization({
-            runtimeAudience: 'home-dev',
+            runtimeAudience: 'hetzner-prod',
             runId: request.params.runId,
             userId: dependencies.gate.evaluator.userId,
             leaseFence: request.body.leaseFence,
@@ -838,7 +838,7 @@ export function createMatrixCorpusRoutes(
           reply,
           () =>
             dependencies.controlPlane.getTransportStatus({
-              runtimeAudience: 'home-dev',
+              runtimeAudience: 'hetzner-prod',
               runId: request.params.runId,
               userId: dependencies.gate.evaluator.userId,
               leaseFence: request.headers['x-matrix-corpus-lease-fence'],
@@ -875,7 +875,7 @@ export function createMatrixCorpusRoutes(
 
     fastify.post<{ Params: RunParams; Body: OperationBody }>(
       '/internal/matrix-corpus/runs/:runId/quiesce',
-      routeSchema('quiesceMatrixCorpusRun', 'Quiesce a Home Dev Matrix corpus run', {
+      routeSchema('quiesceMatrixCorpusRun', 'Quiesce a production Matrix corpus run', {
         params: runParamsSchema,
         body: operationBodySchema,
       }, quiesceResponseSchema),
@@ -907,7 +907,7 @@ export function createMatrixCorpusRoutes(
 
     fastify.post<{ Params: RunParams; Body: OperationBody }>(
       '/internal/matrix-corpus/runs/:runId/release',
-      routeSchema('releaseMatrixCorpusRun', 'Release a drained Home Dev Matrix corpus run', {
+      routeSchema('releaseMatrixCorpusRun', 'Release a drained production Matrix corpus run', {
         params: runParamsSchema,
         body: operationBodySchema,
       }, releaseResponseSchema),
@@ -940,7 +940,7 @@ export function createMatrixCorpusRoutes(
       '/internal/matrix-corpus/runs/:runId/abort-provisioning',
       routeSchema(
         'abortProvisioningMatrixCorpusRun',
-        'Abort a Home Dev Matrix corpus run before activation',
+        'Abort a production Matrix corpus run before activation',
         { params: runParamsSchema, body: operationBodySchema },
         abortResponseSchema
       ),
@@ -992,7 +992,7 @@ export function createMatrixCorpusRoutes(
           reply,
           () =>
             dependencies.controlPlane.cleanupExactRun({
-              runtimeAudience: 'home-dev',
+              runtimeAudience: 'hetzner-prod',
               runId: request.params.runId,
               userId: dependencies.gate.evaluator.userId,
               leaseFence: request.body.leaseFence,
@@ -1149,7 +1149,7 @@ function operationInput(
   request: FastifyRequest<{ Params: RunParams; Body: OperationBody }>
 ): Parameters<MatrixCorpusRouteControlPlane['activateRun']>[0] {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: request.params.runId,
     userId: dependencies.gate.evaluator.userId,
     leaseFence: request.body.leaseFence,
@@ -1165,7 +1165,7 @@ function operationInput(
 function hasEnabledHomeDevGate(gate: MatrixCorpusRoutesDependencies['gate']): boolean {
   return (
     gate.enabled &&
-    gate.runtimeAudience === 'home-dev' &&
+    gate.runtimeAudience === 'hetzner-prod' &&
     matrixCorpusSafeIdSchema.safeParse(gate.evaluator.userId).success &&
     matrixCorpusKeyedDigestSchema.safeParse(gate.evaluator.matrixRoomBindingDigest).success &&
     matrixCorpusKeyedDigestSchema.safeParse(gate.evaluator.whatsappAccountBindingDigest).success &&

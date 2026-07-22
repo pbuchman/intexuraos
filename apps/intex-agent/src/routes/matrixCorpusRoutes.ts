@@ -31,7 +31,7 @@ import {
 
 const contextRegistrationSchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
     catalogDigest: matrixCorpusSha256DigestSchema,
@@ -42,7 +42,7 @@ const contextRegistrationSchema = z
   .strict();
 const contextIdentitySchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
   })
@@ -187,7 +187,7 @@ const controlAuthorizationJsonSchema = closedJsonObject(
   }
 );
 const contextIdentityJsonProperties = {
-  runtimeAudience: { type: 'string', enum: ['home-dev'] },
+  runtimeAudience: { type: 'string', enum: ['hetzner-prod'] },
   userId: safeIdJsonSchema,
   leaseFence: fenceJsonSchema,
 } as const;
@@ -195,7 +195,7 @@ const currentAcceptanceBodyJsonSchema = closedJsonObject(
   ['runtimeAudience', 'userId'],
   ['runtimeAudience', 'userId'],
   {
-    runtimeAudience: { type: 'string', enum: ['home-dev'] },
+    runtimeAudience: { type: 'string', enum: ['hetzner-prod'] },
     userId: safeIdJsonSchema,
   }
 );
@@ -530,7 +530,7 @@ const testRunRecordJsonSchema = closedJsonObject(
     corpusId: safeIdJsonSchema,
     corpusVersion: { type: 'string', minLength: 1, maxLength: 64 },
     catalogDigest: digestJsonSchema,
-    runtimeAudience: { type: 'string', enum: ['home-dev'] },
+    runtimeAudience: { type: 'string', enum: ['hetzner-prod'] },
     transport: { type: 'string', enum: ['matrix_whatsapp'] },
     executionMode: { type: 'string', enum: ['strict_mock_tools'] },
     lifecycle: {
@@ -934,7 +934,7 @@ const artifactDeliveryHeadersJsonSchema = closedJsonObject(
   ],
   {
     'x-internal-auth': { type: 'string', minLength: 1, maxLength: 512 },
-    'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['home-dev'] },
+    'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['hetzner-prod'] },
     'x-matrix-corpus-user-id': safeIdJsonSchema,
     'x-matrix-corpus-lease-fence': fenceJsonSchema,
   }
@@ -1334,7 +1334,7 @@ const evidenceHeadersJsonSchema = {
   ],
   properties: {
     ...internalHeadersJsonSchema.properties,
-    'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['home-dev'] },
+    'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['hetzner-prod'] },
     'x-matrix-corpus-user-id': safeIdJsonSchema,
     'x-matrix-corpus-lease-fence': fenceJsonSchema,
     'x-matrix-corpus-session-id': safeIdJsonSchema,
@@ -1559,7 +1559,7 @@ export function createMatrixCorpusRoutes(
         if (!hasInternalAuth(request)) return await unauthorized(reply);
         const parsed = z
           .object({
-            runtimeAudience: z.literal('home-dev'),
+            runtimeAudience: z.literal('hetzner-prod'),
             userId: matrixCorpusSafeIdSchema,
           })
           .strict()
@@ -1780,7 +1780,7 @@ export function createMatrixCorpusRoutes(
           ],
           properties: {
             ...internalHeadersJsonSchema.properties,
-            'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['home-dev'] },
+            'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['hetzner-prod'] },
             'x-matrix-corpus-user-id': safeIdJsonSchema,
             'x-matrix-corpus-lease-fence': fenceJsonSchema,
           },
@@ -1854,7 +1854,7 @@ export function createMatrixCorpusRoutes(
             ],
             properties: {
               ...internalHeadersJsonSchema.properties,
-              'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['home-dev'] },
+              'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['hetzner-prod'] },
               'x-matrix-corpus-user-id': safeIdJsonSchema,
               'x-matrix-corpus-lease-fence': fenceJsonSchema,
             },
@@ -1945,7 +1945,7 @@ export function createMatrixCorpusRoutes(
             ],
             properties: {
               ...internalHeadersJsonSchema.properties,
-              'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['home-dev'] },
+              'x-matrix-corpus-runtime-audience': { type: 'string', enum: ['hetzner-prod'] },
               'x-matrix-corpus-user-id': safeIdJsonSchema,
               'x-matrix-corpus-lease-fence': fenceJsonSchema,
             },
@@ -2309,7 +2309,7 @@ function parseEvidenceHeaders(
 }> | null {
   const parsed = z
     .object({
-      runtimeAudience: z.literal('home-dev'),
+      runtimeAudience: z.literal('hetzner-prod'),
       userId: matrixCorpusSafeIdSchema,
       leaseFence: matrixCorpusDecimalFenceSchema,
       sessionId: matrixCorpusSafeIdSchema,

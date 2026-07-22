@@ -21,6 +21,7 @@
     "@intexuraos/llm-pricing": "workspace:*",
     "@intexuraos/llm-prompts": "workspace:*",
     "firebase-admin": "^13.6.0",
+    "google-auth-library": "^10.0.0",
     "zod": "catalog:"
   },
   "devDependencies": {

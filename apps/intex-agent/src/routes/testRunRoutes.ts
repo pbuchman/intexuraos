@@ -170,7 +170,7 @@ async function authorizeEvaluator(
 ): Promise<string | null> {
   const user = await requireAuth(request, reply);
   if (user === null) return null;
-  if (!deps.enabled || deps.runtimeAudience !== 'home-dev' || user.userId !== deps.configuredUserId) {
+  if (!deps.enabled || deps.runtimeAudience !== 'hetzner-prod' || user.userId !== deps.configuredUserId) {
     await notFound(reply);
     return null;
   }

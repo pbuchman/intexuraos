@@ -276,31 +276,6 @@ locals {
     INTEXURAOS_WEB_APP_URL                        = local.public_origin
   }
 
-  # Schema-only inventory for the protected Home Dev Matrix-corpus runtime.
-  # Actual evaluator, transport, HMAC, and signing values are supplied outside
-  # Terraform and are intentionally absent from Secret Manager/production wiring.
-  matrix_corpus_home_dev_env_names = {
-    shared_whatsapp_intex = toset([
-      "INTEXURAOS_MATRIX_CORPUS_ENABLED",
-      "INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME",
-      "INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE",
-      "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
-      "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION",
-    ])
-    whatsapp_service = toset([
-      "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
-      "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
-      "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
-      "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
-      "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
-    ])
-    intex_agent = toset([
-      "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY",
-      "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION",
-      "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
-    ])
-  }
-
   hetzner_runtime_secret_names = toset([
     "INTEXURAOS_AUTH0_CLIENT_ID",
     "INTEXURAOS_AUTH0_DOMAIN",
@@ -325,6 +300,16 @@ locals {
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
+    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION",
+    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
+    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION",
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
     "INTEXURAOS_OPENAI_APP_API_KEY",
@@ -525,6 +510,17 @@ module "secret_manager" {
     # Private Matrix outbound adapter
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"        = "Base URL for the external WhatsApp private Matrix outbound adapter"
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN" = "Auth token for WhatsApp private Matrix outbound adapter"
+    # Production Matrix corpus evaluator
+    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID"              = "User ID whose production Intex Agent sessions are exercised by the Matrix corpus"
+    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING"            = "Expected Matrix room ID binding for production corpus envelopes"
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING"       = "Expected WhatsApp account binding for production corpus envelopes"
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING"        = "Expected WhatsApp sender binding for production corpus envelopes"
+    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY"               = "HMAC key for production Matrix corpus transport bindings"
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION"            = "Version identifier for production Matrix corpus signing keys"
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"            = "Private signing key for production Matrix corpus receipts"
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY"             = "Public verification key for production Matrix corpus receipts"
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION" = "Version identifier for production Matrix corpus context encryption"
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY"         = "Encryption key for production Matrix corpus execution context"
     # Firebase configuration for web app
     "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
     "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"

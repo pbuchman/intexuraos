@@ -35,9 +35,11 @@ import {
 } from './preflight.js';
 import type { MatrixCorpusRunResult } from './runMatrixCorpus.js';
 import type { CanonicalMatrixCorpus } from './types.js';
+import { createProductionControlAuthorizationHeaderProvider } from './productionControlTransport.js';
 
-const INTEX_AGENT_BASE_URL = 'http://127.0.0.1:8134';
-const WHATSAPP_BASE_URL = 'http://127.0.0.1:8113';
+const PRODUCTION_ORIGIN = 'https://intexuraos.cloud';
+const INTEX_AGENT_EDGE_PREFIX = '/internal/evals/intex-agent';
+const WHATSAPP_EDGE_PREFIX = '/internal/evals/whatsapp';
 const MIN_ARTIFACT_FREE_BYTES = 128 * 1024 * 1024;
 const FIRESTORE_INDEX_LIST_MAX_BYTES = 5 * 1024 * 1024;
 const FIRESTORE_INDEX_LIST_TIMEOUT_MS = 10_000;
@@ -54,6 +56,7 @@ export const MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS = [
   'packages/',
   'tools/intex-agent-evals/',
   'scripts/run-intex-agent-evals-home-dev.sh',
+  'scripts/run-intex-agent-evals-prod.sh',
   'package.json',
 ] as const;
 const NO_OP_LOGGER: InternalHttpClientLogger = {
@@ -238,13 +241,16 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
 }): MatrixCorpusLiveReadPort {
   const env = options.env ?? process.env;
   const setup = createProductionSetupPorts({ matrix: options.matrix });
+  const authorizationHeaderProvider = createProductionControlAuthorizationHeaderProvider();
   const intex =
     options.intex ??
     createIntexAgentServiceClient({
-      baseUrl: INTEX_AGENT_BASE_URL,
+      baseUrl: PRODUCTION_ORIGIN,
       internalAuthToken: env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
       defaultTimeoutMs: 10_000,
       logger: NO_OP_LOGGER,
+      pathPrefix: INTEX_AGENT_EDGE_PREFIX,
+      authorizationHeaderProvider,
     });
   const modelCatalog =
     options.catalog ??
@@ -255,10 +261,12 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
   const whatsapp =
     options.whatsapp ??
     createWhatsAppServiceClient({
-      baseUrl: WHATSAPP_BASE_URL,
+      baseUrl: PRODUCTION_ORIGIN,
       internalAuthToken: env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
       defaultTimeoutMs: 10_000,
       logger: NO_OP_LOGGER,
+      pathPrefix: WHATSAPP_EDGE_PREFIX,
+      authorizationHeaderProvider,
     });
 
   return {
@@ -562,6 +570,7 @@ export interface HomeDevRuntimeInspectionDeps {
   homedir(): string;
   realpath(path: string): Promise<string>;
   git(cwd: string, args: readonly string[]): Promise<{ stdout: string }>;
+  fetchDeploymentDocument(): Promise<unknown>;
 }
 
 const PRODUCTION_RUNTIME_INSPECTION_DEPS: HomeDevRuntimeInspectionDeps = {
@@ -571,6 +580,14 @@ const PRODUCTION_RUNTIME_INSPECTION_DEPS: HomeDevRuntimeInspectionDeps = {
   realpath,
   async git(cwd, args): Promise<{ stdout: string }> {
     return await execFileAsync('git', [...args], { cwd, encoding: 'utf8' });
+  },
+  async fetchDeploymentDocument(): Promise<unknown> {
+    const response = await fetch(`${PRODUCTION_ORIGIN}/deployment.json`, {
+      headers: { accept: 'application/json', 'cache-control': 'no-cache' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) throw new Error('production_deployment_document_unavailable');
+    return await response.json();
   },
 };
 
@@ -583,7 +600,7 @@ export async function inspectHomeDevRuntime(
   criticalPathsClean: boolean;
 }> {
   try {
-    const [actualRoot, expectedRoot, revision, status] = await Promise.all([
+    const [actualRoot, expectedRoot, revision, status, deploymentDocument] = await Promise.all([
       deps.realpath(repositoryRoot),
       deps.realpath(join(deps.homedir(), 'deploy', 'intexuraos')),
       deps.git(repositoryRoot, ['rev-parse', '--verify', 'HEAD^{commit}']),
@@ -594,14 +611,27 @@ export async function inspectHomeDevRuntime(
         '--',
         ...MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS,
       ]),
+      deps.fetchDeploymentDocument(),
     ]);
-    const deployedRevision = revision.stdout.trim();
+    const runnerRevision = revision.stdout.trim();
+    const deployedRevision =
+      isRecord(deploymentDocument) &&
+      Object.keys(deploymentDocument).length === 3 &&
+      typeof deploymentDocument['commitSha'] === 'string' &&
+      typeof deploymentDocument['workflowRunId'] === 'string' &&
+      typeof deploymentDocument['deployedAt'] === 'string' &&
+      /^[0-9a-f]{40}$/u.test(deploymentDocument['commitSha']) &&
+      deploymentDocument['workflowRunId'].length > 0 &&
+      Number.isFinite(Date.parse(deploymentDocument['deployedAt']))
+        ? deploymentDocument['commitSha']
+        : '';
     return {
       ready:
         deps.hostname() === 'home-dev' &&
         deps.platform() === 'linux' &&
         actualRoot === expectedRoot &&
-        /^[0-9a-f]{40}$/u.test(deployedRevision),
+        /^[0-9a-f]{40}$/u.test(runnerRevision) &&
+        runnerRevision === deployedRevision,
       deployedRevision,
       criticalPathsClean: status.stdout.trim() === '',
     };
@@ -619,17 +649,13 @@ function hasCapabilityBoundary(env: NodeJS.ProcessEnv): boolean {
   const required = [
     'INTEXURAOS_OPENROUTER_APP_API_KEY',
     'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
-    'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
-    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
-    'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
-    'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
-    'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+    'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
     'INTEXURAOS_MATRIX_CORPUS_MATRIX_PUPPET_USER_ID',
   ] as const;
   return (
     env['INTEXURAOS_MATRIX_CORPUS_ENABLED'] === 'true' &&
-    env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] === 'home-dev' &&
-    env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] === 'home-dev' &&
+    env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] === 'hetzner-prod' &&
+    env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] === 'hetzner-prod' &&
     required.every((name) => (env[name]?.trim().length ?? 0) > 0)
   );
 }

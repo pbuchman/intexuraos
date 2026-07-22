@@ -37,7 +37,7 @@ function encryptedRunPrompt(plaintext = 'private baseline'): MatrixCorpusEncrypt
   return crypto().encrypt(plaintext, {
     version: 1,
     kind: 'run_prompt_context',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -51,7 +51,7 @@ function encryptedScenarioPrompt(
   return crypto().encrypt(plaintext, {
     version: 1,
     kind: 'scenario_prompt_context',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     scenarioId,
     userId: 'auth0:user_1',
@@ -65,7 +65,7 @@ function runContext(
   return {
     version: 1 as const,
     status: 'active' as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -90,7 +90,7 @@ function scenarioContext(
   const scenarioId = `scenario_${String(scenarioNumber).padStart(3, '0')}`;
   return {
     version: 1 as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     scenarioId,
     userId: 'auth0:user_1',
@@ -115,7 +115,7 @@ function runManifest(
 ): MatrixCorpusRunManifestV1 {
   return {
     version: 1 as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     ...identity(),
     catalogDigest: 'a'.repeat(64),
     scenarioBindings: [],
@@ -182,7 +182,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
     const finalized = {
       version: 1 as const,
       status: 'finalized' as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       ...identity(),
       scenarioContextCount: 1,
       finalizedAt: createdAt,
@@ -226,7 +226,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
     const { firestore, repository } = fixture();
     await firestore.collection('intex_agent_matrix_corpus_recovery_receipts').doc('run_1').set({
       version: 1,
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       ...identity(),
       eventId: 'abandoned_event_1',
       payloadDigest: 'f'.repeat(64),
@@ -406,7 +406,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
         .set({
           version: 1,
           status: 'finalized',
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           ...identity(),
           scenarioContextCount: 0,
           finalizedAt: createdAt,
@@ -448,7 +448,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
         .set({
           version: 1,
           status: 'finalized',
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           ...identity(),
           scenarioContextCount: 0,
           finalizedAt: createdAt,
@@ -673,7 +673,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
         .set({
           version: 1,
           status: 'finalized',
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           ...identity(),
           scenarioContextCount: 1,
           finalizedAt: createdAt,
@@ -856,7 +856,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
     await repository.registerRunContext(runContext());
     await manifestRepository.createOrGet({
       version: 1,
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       ...identity(),
       catalogDigest: 'a'.repeat(64),
       scenarioBindings: [],
@@ -886,7 +886,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
       context: {
         version: 1,
         status: 'finalized',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         scenarioContextCount: 2,
         finalizedAt,
@@ -933,7 +933,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
     await repository.registerRunContext(runContext());
     await manifestRepository.createOrGet({
       version: 1,
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       ...identity(),
       catalogDigest: 'a'.repeat(64),
       scenarioBindings: [],

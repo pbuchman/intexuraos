@@ -118,14 +118,14 @@ export type MatrixCorpusPostTerminalControlResult = z.infer<
 
 export interface AcquisitionReadinessPort {
   getCurrentAcceptance(input: Readonly<{
-    runtimeAudience: 'home-dev';
+    runtimeAudience: 'hetzner-prod';
     userId: string;
   }>): Promise<MatrixCorpusCurrentAcceptanceResult>;
 }
 
 export interface MatrixCorpusControlStatusPort {
   getControlStatus(input: Readonly<{
-    runtimeAudience: 'home-dev';
+    runtimeAudience: 'hetzner-prod';
     runId: string;
     userId: string;
     leaseFence: string;
@@ -136,7 +136,7 @@ export interface IntexAgentMatrixCorpusClient
   extends AcquisitionReadinessPort,
     MatrixCorpusControlStatusPort {
   getTurnTerminal(input: Readonly<{
-    runtimeAudience: 'home-dev';
+    runtimeAudience: 'hetzner-prod';
     runId: string;
     userId: string;
     leaseFence: string;

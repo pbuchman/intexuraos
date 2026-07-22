@@ -342,7 +342,7 @@ function addMilliseconds(timestamp: string, milliseconds: number): string {
 function baseAuthority(
   input: MatrixCorpusIngestDrainInput | MatrixCorpusTerminalDrainInput
 ): Readonly<{
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   userId: string;
   leaseFence: string;

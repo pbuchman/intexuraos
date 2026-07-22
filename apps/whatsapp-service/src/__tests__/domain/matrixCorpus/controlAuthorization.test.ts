@@ -16,7 +16,7 @@ function input(
     | 'advance_projection' = 'register_context'
 ) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'configured_user',
     leaseFence: '7',

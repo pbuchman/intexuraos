@@ -162,7 +162,7 @@ export interface FirestoreMatrixCorpusLeaseBindingAuthorizationDeps {
 
 const boundLeaseAuthoritySchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     runId: matrixCorpusSafeIdSchema,
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
@@ -3325,7 +3325,7 @@ function hasTerminalAuthority(
 
 function assertBaseAuthority(input: SignedEnvelopeAuthority): void {
   if (
-    input.runtimeAudience !== 'home-dev' ||
+    input.runtimeAudience !== 'hetzner-prod' ||
     !matrixCorpusSafeIdSchema.safeParse(input.runId).success ||
     !matrixCorpusSafeIdSchema.safeParse(input.userId).success ||
     !matrixCorpusDecimalFenceSchema.safeParse(input.leaseFence).success ||

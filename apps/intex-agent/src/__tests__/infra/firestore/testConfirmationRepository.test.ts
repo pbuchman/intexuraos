@@ -76,7 +76,7 @@ describe('FirestoreTestConfirmationRepository', () => {
       confirmation: {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         state: 'pending',
         toolName: 'create_note',
@@ -200,7 +200,7 @@ describe('FirestoreTestConfirmationRepository', () => {
       confirmation: {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         state: 'pending',
         toolName: 'create_note',
@@ -269,7 +269,7 @@ describe('FirestoreTestConfirmationRepository', () => {
       encryptedToolArgs: crypto.encrypt(plaintext, {
         version: 1,
         kind: 'test_confirmation_tool_args',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         toolName: 'create_note',
         selectionTurnIndex: 0,
@@ -408,7 +408,7 @@ describe('FirestoreTestConfirmationRepository', () => {
       {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         state: 'pending',
         toolName: 'create_note',
@@ -425,7 +425,7 @@ describe('FirestoreTestConfirmationRepository', () => {
       {
         version: 2,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...identity(),
         state: 'pending',
         toolName: 'create_note',

@@ -4,7 +4,7 @@ import type { MatrixCorpusRunManifestV1 } from './matrixCorpusManifestRepository
 export interface MatrixCorpusPrivateRunContextV1 {
   version: 1;
   status: 'active';
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   userId: string;
   leaseFence: string;
@@ -22,7 +22,7 @@ export interface MatrixCorpusPrivateRunContextV1 {
 
 export interface MatrixCorpusPrivateScenarioContextV1 {
   version: 1;
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   scenarioId: string;
   userId: string;
@@ -39,7 +39,7 @@ export interface MatrixCorpusPrivateScenarioContextV1 {
 export interface MatrixCorpusContextFinalizationV1 {
   version: 1;
   status: 'finalized';
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   userId: string;
   leaseFence: string;

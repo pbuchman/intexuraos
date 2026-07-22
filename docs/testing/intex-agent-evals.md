@@ -1,11 +1,20 @@
 # Intex Agent Evaluation Runbook
 
+The exact operator procedure for the canonical live Matrix/WhatsApp run, including the
+phone-visible message flow and browser acceptance checklist, is documented in
+[`intex-agent-matrix-whatsapp-live-procedure.md`](./intex-agent-matrix-whatsapp-live-procedure.md).
+
 ## Scope and safety
 
-The evaluator runs only on the Linux host `home-dev`, from
-`$HOME/deploy/intexuraos`, through the SSH alias `home-dev`. Its fixed host-local
-service ports are Intex Agent `8134`, WhatsApp Service `8113`, and Matrix adapter
-`8099`.
+The evaluator process and its protected Matrix credentials run only on the Linux host
+`home-dev`, from `$HOME/deploy/intexuraos`, through the SSH alias `home-dev`. The
+system under test is exclusively the Hetzner production deployment at
+`https://intexuraos.cloud`, with runtime audience `hetzner-prod`. Its WhatsApp Service,
+Intex Agent, webhook ingress, sessions, LLM calls, strict mocks, and Test Runs are all
+production processes. The runner reaches the two corpus-only control planes through
+Google-OIDC-protected `/internal/evals/...` routes; it never falls back to Home Dev
+service ports. The fixed Home Dev ports Intex Agent `8134`, WhatsApp Service `8113`,
+and Matrix adapter `8099` belong only to legacy diagnostics and local Matrix transport.
 
 `matrix-corpus` is the canonical live acceptance command. It runs the tracked corpus of
 20 scenarios and 59 turns sequentially through the real Matrix/WhatsApp transport. Each
@@ -27,10 +36,11 @@ Firestore Admin REST API and requires all eight Matrix-corpus composite indexes 
 evaluator path. They are not substitutes for the 20-scenario Matrix corpus and are not
 part of its normal acceptance sequence.
 
-Preparation commands never run the wrapper. Every wrapper command below is
-**LIVE** and requires the explicit instruction “odpal testy” or equally explicit
-authorization. `endpoint`, `scenario`, `matrix-smoke`, `full`, and the execution phase of
-`matrix-corpus` can invoke paid LLM calls. `preflight` does not.
+Preparation commands never run the wrapper. Every wrapper command below is **LIVE**.
+One explicit instruction “odpal testy”, or an active persistent goal that requires
+iteration until PASS, authorizes the production corpus loop. `endpoint`, `scenario`,
+`matrix-smoke`, `full`, and the execution phase of `matrix-corpus` can invoke paid LLM
+calls. The embedded production preflight does not.
 
 ## Protected machine-local configuration
 
@@ -77,9 +87,11 @@ puppet to appear in the room timeline and ignores unrelated historical puppets; 
 value must never be committed or printed.
 
 `setup` is interactive and reads all five values without echo. Only the validated
-`accountAlias` can appear afterward in the closed setup result. Run it only when
-preflight returns `CONFIG_NOT_FOUND` or the operator has independently confirmed
-that the configuration file is absent.
+`accountAlias` can appear afterward in the closed setup result. The current Home Dev
+operator account is already configured, so normal execution never invokes `setup` and
+never asks the user for identity values. `CONFIG_NOT_FOUND` is an unexpected protected
+configuration failure: stop and restore the known machine-local configuration, or run
+`setup` only after separate authorization.
 
 ## Tracked inputs and private outputs
 
@@ -94,11 +106,13 @@ The wrapper prints only the safe relative path
 `.artifacts/intex-agent-evals/<eval-run-id>`. The ignored reports stay on Home Dev;
 the wrapper does not copy them to the workstation.
 
-Before connecting, the wrapper requires clean evaluator implementation paths and
-passes the workstation's exact 40-character `HEAD` only as revision proof. On Home
-Dev it requires that revision to equal deployed `HEAD`, enters the
-fixed repository, verifies `direnv` and `node`, preserves remote exits `0`, `1`,
-and `2`, and forwards only safe CLI output.
+Before connecting, the wrapper requires clean evaluator implementation paths and passes
+the workstation's exact 40-character `HEAD` only as revision proof. On Home Dev it
+requires that revision to equal the runner repository `HEAD`; the embedded preflight
+then requires the same revision in the production
+`https://intexuraos.cloud/deployment.json` attestation. It enters the fixed repository,
+verifies `direnv` and `node`, preserves remote exits `0`, `1`, and `2`, and forwards only
+safe CLI output.
 
 The CLI report, not the wrapper, records preflight checks; scenario, turn, reply,
 and tool totals; deterministic and MiniMax verdicts; cleanup counts; Matrix
@@ -135,7 +149,7 @@ scripts/run-intex-agent-evals-home-dev.sh endpoint
 scripts/run-intex-agent-evals-home-dev.sh scenario intex-eval-003
 scripts/run-intex-agent-evals-home-dev.sh matrix-smoke
 scripts/run-intex-agent-evals-home-dev.sh full
-scripts/run-intex-agent-evals-home-dev.sh matrix-corpus
+scripts/run-intex-agent-evals-prod.sh matrix-corpus
 ```
 
 The repository alias for the same canonical live operation is:
@@ -144,23 +158,27 @@ The repository alias for the same canonical live operation is:
 pnpm eval:intex-agent:matrix-corpus
 ```
 
-The wrapper accepts only `setup`, `preflight`, `endpoint`, `full`,
-`scenario intex-eval-NNN`, `matrix-smoke`, and `matrix-corpus` in those forms.
-`scenario`, `endpoint`, `matrix-smoke`, and `full` are targeted legacy diagnostics, not
-additional matrix-corpus acceptance steps.
+The production wrapper accepts only `matrix-corpus`. The Home Dev wrapper retains
+`setup`, `preflight`, `endpoint`, `full`, `scenario intex-eval-NNN`, and `matrix-smoke`.
+`scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any
+message send with `PRODUCTION_MATRIX_CORPUS_REQUIRED`.
+`scenario`, `endpoint`, `matrix-smoke`, and `full` are targeted legacy
+diagnostics, not additional matrix-corpus acceptance steps.
 
-The instruction **“odpal testy” means exactly one invocation of `matrix-corpus`**. Do not
-prepend a separate `preflight`, `endpoint`, `full`, or `matrix-smoke`; the canonical
-command contains its own zero-side-effect preflight. If it returns `CONFIG_NOT_FOUND`,
-run one explicitly authorized interactive `setup`, then wait for another explicit live
-test instruction. The wrapper performs no pull, deploy, restart, or revision switch.
+The instruction **“odpal testy” means exactly one invocation of `matrix-corpus`**.
+For a single requested run, do not prepend a separate `preflight`, `endpoint`, `full`, or
+`matrix-smoke`; the canonical command contains its own zero-side-effect production
+preflight. Under a persistent “iterate until PASS” goal, exit `1` or `2` starts the
+diagnosis/fix/review/PR/merge/deploy loop and then exactly one new invocation. The wrapper
+itself performs no pull, deploy, restart, or revision switch.
 
 ## Deliberately deferred hardening
 
-The current delivery is intentionally Home-Dev-specific. A portable account bootstrap,
-automatic registration of dedicated e-mail/WhatsApp test identities, cross-machine
-configuration distribution, and production scheduling remain future hardening; private
-operator identities stay only in the protected local configuration.
+The runner is intentionally Home-Dev-specific, while the system under test is production
+Hetzner. A portable account bootstrap, automatic registration of dedicated
+e-mail/WhatsApp test identities, cross-machine configuration distribution, and production
+scheduling remain future hardening; private operator identities stay only in the
+protected local configuration.
 
 Live evidence proves that every scenario has a distinct bound session and that its later
 turns continue that binding. It does not yet expose every internal session-transition and
@@ -178,16 +196,16 @@ delete.
 | Exit | Meaning | Action |
 | --- | --- | --- |
 | `0` | All executed deterministic and MiniMax checks passed. | Preserve report path and continue. |
-| `1` | Behavioral failure. | Preserve the report, list failed scenario IDs, and correct through a new reviewed revision. |
-| `2` | Configuration, revision, connectivity, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, stop, and correct the named boundary before another explicitly authorized run. |
+| `1` | Behavioral failure. | Preserve the report, correct the failed scenarios, deploy, and automatically run the production corpus again. |
+| `2` | Configuration, revision, connectivity, cleanup, judge, Matrix, or reporting infrastructure failure. | Preserve safe code/output, correct the named boundary, deploy, and automatically run the production corpus again. |
 
 Triage only from the safe terminal code and report fields. Never paste protected
 configuration, raw provider or endpoint bodies, assistant text, Matrix history,
 tokens, or protected paths.
 
-`revision_mismatch` means the reviewed revision has not reached the existing Home
-Dev deployment. Wait for deployment; do not use remote `git pull`, `rsync`, `scp`,
-or a wrapper bypass. After the reviewed merge equals deployed `HEAD`,
-restart only the Home Dev processes affected by that revision and verify health on all
-three fixed ports before the next run. A missing configuration requires the operator's
-interactive values; never infer them from e-mail or adapter legacy fields.
+`revision_mismatch` means that the reviewed revision is not simultaneously present in the
+Home Dev runner checkout and the production Hetzner deployment attestation. Complete the
+normal merge/deployment and update the runner checkout through the established deployment
+workflow; never bypass revision proof. A missing protected runner configuration is
+repaired from the already-established machine-local state rather than by asking again for
+known account values.

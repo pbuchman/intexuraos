@@ -36,8 +36,8 @@ function decodeTestRunsCapability(value: unknown): UserSettings['intexAgentCapab
   if (!isPlainRecord(value) || typeof value['status'] !== 'string') {
     throw new Error('Invalid user settings response');
   }
-  if (value['status'] === 'available' && hasExactKeys(value, ['status', 'runtimeAudience']) && value['runtimeAudience'] === 'home-dev') {
-    return { status: 'available', runtimeAudience: 'home-dev' };
+  if (value['status'] === 'available' && hasExactKeys(value, ['status', 'runtimeAudience']) && value['runtimeAudience'] === 'hetzner-prod') {
+    return { status: 'available', runtimeAudience: 'hetzner-prod' };
   }
   if (value['status'] === 'unavailable' && hasExactKeys(value, ['status'])) {
     return { status: 'unavailable' };

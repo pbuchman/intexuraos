@@ -19,7 +19,7 @@ function manifest(
 ): MatrixCorpusRunManifestV1 {
   return {
     version: 1 as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',

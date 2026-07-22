@@ -184,7 +184,7 @@ export class FirestoreMatrixCorpusRecoveryScanner {
       const authority = this.deriveAuthority(outbox.runId, outbox.userId);
       if (authority === null) continue;
       const base = {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: outbox.runId,
         userId: outbox.userId,
         leaseFence: outbox.leaseFence,
@@ -232,7 +232,7 @@ export class FirestoreMatrixCorpusRecoveryScanner {
       const authority = this.deriveAuthority(outbox.runId, outbox.userId);
       if (authority === null) continue;
       candidates.push({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: outbox.runId,
         userId: outbox.userId,
         leaseFence: outbox.leaseFence,
@@ -253,11 +253,11 @@ export class FirestoreMatrixCorpusRecoveryScanner {
   ): Readonly<{ leaseSlotDigest: string; runFenceDigest: string }> | null {
     try {
       const leaseSlotDigest = this.dependencies.digests.digest('imc-lease-slot-v1', [
-        'home-dev',
+        'hetzner-prod',
         userId,
       ]);
       const runFenceDigest = this.dependencies.digests.digest('imc-run-fence-v1', [
-        'home-dev',
+        'hetzner-prod',
         userId,
         runId,
       ]);

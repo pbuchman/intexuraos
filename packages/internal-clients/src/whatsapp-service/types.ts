@@ -11,6 +11,8 @@ export interface WhatsAppServiceClientConfig {
   internalAuthToken: string;
   logger: InternalHttpClientLogger;
   defaultTimeoutMs?: number;
+  pathPrefix?: string;
+  authorizationHeaderProvider?: () => Promise<string>;
 }
 
 export type PrivateMatrixDeliveryStatus =

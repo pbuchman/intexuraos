@@ -129,7 +129,7 @@ export class FirestoreMatrixCorpusIngress implements MatrixCorpusIngressPort {
         context: {
           version: 1 as const,
           kind: 'matrix_corpus' as const,
-          runtimeAudience: 'home-dev' as const,
+          runtimeAudience: 'hetzner-prod' as const,
           leaseFence: stored.leaseFence,
           ingestReceiptId,
           runId: stored.runId,

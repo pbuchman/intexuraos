@@ -368,6 +368,10 @@ export function createWhatsAppServiceClient(
     token: config.internalAuthToken,
     logger: config.logger,
     ...(config.defaultTimeoutMs !== undefined ? { defaultTimeoutMs: config.defaultTimeoutMs } : {}),
+    ...(config.pathPrefix !== undefined ? { pathPrefix: config.pathPrefix } : {}),
+    ...(config.authorizationHeaderProvider !== undefined
+      ? { authorizationHeaderProvider: config.authorizationHeaderProvider }
+      : {}),
   });
 
   return {

@@ -20,7 +20,7 @@ function runBinding(
   return {
     version: 1,
     kind: 'run_prompt_context',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'user_1',
     leaseFence: '7',
@@ -85,7 +85,7 @@ describe('Matrix corpus context crypto', () => {
     const binding: MatrixCorpusContextEncryptionBindingV1 = {
       version: 1,
       kind: 'scenario_prompt_context',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '7',
@@ -103,7 +103,7 @@ describe('Matrix corpus context crypto', () => {
     const binding: MatrixCorpusContextEncryptionBindingV1 = {
       version: 1,
       kind: 'test_confirmation_tool_args',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       confirmationId: 'confirmation_1',
       runId: 'run_1',
       scenarioId: 'scenario_1',

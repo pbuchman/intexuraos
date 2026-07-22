@@ -15,7 +15,7 @@ import type {
 } from '../types.js';
 
 export interface MatrixCorpusBoundLeaseAuthority {
-  readonly runtimeAudience: 'home-dev';
+  readonly runtimeAudience: 'hetzner-prod';
   readonly runId: string;
   readonly userId: string;
   readonly leaseFence: string;

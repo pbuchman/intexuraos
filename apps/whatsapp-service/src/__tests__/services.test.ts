@@ -164,7 +164,7 @@ describe('whatsapp-service service wiring', () => {
     const createEnabled = vi.fn(() => runtime);
     const config = {
       enabled: true as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       evaluatorBindingHmacKey: 'h'.repeat(32),
       configuredEvaluatorUserId: 'synthetic-user',
       matrixRoomBinding: 'synthetic-room',
@@ -197,7 +197,7 @@ describe('whatsapp-service service wiring', () => {
     };
     const config = {
       enabled: true as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       evaluatorBindingHmacKey: 'h'.repeat(32),
       configuredEvaluatorUserId: 'synthetic-user',
       matrixRoomBinding: 'synthetic-room',
@@ -241,7 +241,7 @@ describe('whatsapp-service service wiring', () => {
 
     expect(runtime.routes.gate).toMatchObject({
       enabled: true,
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       evaluator: { userId: 'synthetic-user' },
     });
     expect(runtime.routes.gate.evaluator.matrixRoomBindingDigest).toMatch(/^[0-9a-f]{64}$/);

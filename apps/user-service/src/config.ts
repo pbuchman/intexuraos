@@ -10,7 +10,7 @@ export interface UserServiceConfig {
   intexAgentModelSelector: IntexAgentModelSelectorConfig;
   intexAgentTestRunsRead:
     | { status: 'disabled' }
-    | { status: 'enabled'; runtimeAudience: 'home-dev'; userId: string };
+    | { status: 'enabled'; runtimeAudience: 'hetzner-prod'; userId: string };
 }
 
 export function loadConfig(): UserServiceConfig {
@@ -47,10 +47,10 @@ function loadEnabledTestRunsReadConfig(): Extract<
   UserServiceConfig['intexAgentTestRunsRead'],
   { status: 'enabled' }
 > {
-  if (process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] !== 'home-dev')
-    throw new Error('INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE must be home-dev');
+  if (process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] !== 'hetzner-prod')
+    throw new Error('INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE must be hetzner-prod');
   const userId = process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
   if (userId === undefined || userId === '')
     throw new Error('INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID is required');
-  return { status: 'enabled', runtimeAudience: 'home-dev', userId };
+  return { status: 'enabled', runtimeAudience: 'hetzner-prod', userId };
 }

@@ -485,7 +485,7 @@ export function createWhatsAppMatrixCorpusRuntime(
     routes: {
       gate: {
         enabled: true,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         evaluator,
       },
       digestMatrixIdempotencyKey: (idempotencyKey) =>

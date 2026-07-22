@@ -104,7 +104,7 @@ describe('Matrix corpus live runtime handoff', () => {
   });
 });
 
-describe('production Home Dev runtime inspection', () => {
+describe('production Hetzner runtime inspection from the Home Dev runner', () => {
   it('lists paginated Firestore indexes through the bounded read-only Admin API', async () => {
     const firstIndex = requiredFirestoreIndexes()[0];
     const secondIndex = requiredFirestoreIndexes()[1];
@@ -347,7 +347,7 @@ describe('production Home Dev runtime inspection', () => {
     });
   });
 
-  it('accepts only the exact Home Dev host, canonical repository, clean critical paths, and commit', async () => {
+  it('accepts only the exact Home Dev runner whose commit matches the production deployment', async () => {
     const deps = runtimeInspectionDeps();
 
     await expect(inspectHomeDevRuntime('/repo/current', deps)).resolves.toEqual({
@@ -361,6 +361,7 @@ describe('production Home Dev runtime inspection', () => {
       expect.arrayContaining(['status', '--porcelain=v1', 'packages/'])
     );
     expect(MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS).toContain('packages/');
+    expect(deps.fetchDeploymentDocument).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -372,7 +373,26 @@ describe('production Home Dev runtime inspection', () => {
     expect(result.ready).toBe(false);
   });
 
-  it('reports dirty critical paths and rejects an invalid deployed revision', async () => {
+  it('rejects a runner revision that does not match the production deployment', async () => {
+    const result = await inspectHomeDevRuntime(
+      '/repo/current',
+      runtimeInspectionDeps({
+        fetchDeploymentDocument: vi.fn(async () => ({
+          commitSha: 'b'.repeat(40),
+          workflowRunId: '654321',
+          deployedAt: '2026-07-22T12:30:00.000Z',
+        })),
+      })
+    );
+
+    expect(result).toEqual({
+      ready: false,
+      deployedRevision: 'b'.repeat(40),
+      criticalPathsClean: true,
+    });
+  });
+
+  it('reports dirty critical paths and rejects an invalid runner revision', async () => {
     const dirty = runtimeInspectionDeps({
       git: vi.fn(async (_cwd: string, args: readonly string[]) => ({
         stdout: args[0] === 'rev-parse' ? 'invalid\n' : ' M packages/common-core/src/index.ts\n',
@@ -381,7 +401,7 @@ describe('production Home Dev runtime inspection', () => {
 
     await expect(inspectHomeDevRuntime('/repo/current', dirty)).resolves.toEqual({
       ready: false,
-      deployedRevision: 'invalid',
+      deployedRevision: 'a'.repeat(40),
       criticalPathsClean: false,
     });
   });
@@ -414,6 +434,11 @@ function runtimeInspectionDeps(
         : path,
     git: vi.fn(async (_cwd: string, args: readonly string[]) => ({
       stdout: args[0] === 'rev-parse' ? `${'a'.repeat(40)}\n` : '',
+    })),
+    fetchDeploymentDocument: vi.fn(async () => ({
+      commitSha: 'a'.repeat(40),
+      workflowRunId: '123456',
+      deployedAt: '2026-07-22T12:00:00.000Z',
     })),
     ...overrides,
   };
@@ -478,8 +503,8 @@ function snapshot(catalogDigest: string): MatrixCorpusPreflightSnapshot {
     deployedRevision: 'a'.repeat(40),
     localCriticalPathsClean: true,
     remoteCriticalPathsClean: true,
-    runtimeAudience: 'home-dev',
-    environmentAlias: 'dev',
+    runtimeAudience: 'hetzner-prod',
+    environmentAlias: 'prod',
     protectedConfigReady: true,
     servicesReady: true,
     clocksReady: true,

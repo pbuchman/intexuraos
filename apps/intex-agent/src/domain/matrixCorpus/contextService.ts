@@ -84,7 +84,7 @@ type MatrixCorpusPreferenceOverlayStateV1 = z.infer<typeof preferenceOverlayStat
 type MatrixCorpusEncryptedPromptPayloadV1 = z.infer<typeof encryptedPromptPayloadSchema>;
 
 export interface MatrixCorpusRunContextRegistrationInput extends MatrixCorpusContextIdentity {
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   catalogDigest: string;
   agentModel: typeof AGENT_MODEL;
   evaluatorModel: typeof EVALUATOR_MODEL;
@@ -251,7 +251,7 @@ export function createMatrixCorpusContextService(
       const context: MatrixCorpusPrivateRunContextV1 = {
         version: 1,
         status: 'active',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: input.runId,
         userId: input.userId,
         leaseFence: input.leaseFence,
@@ -315,7 +315,7 @@ export function createMatrixCorpusContextService(
       const overlayDigest = sha256(stableJson(promptPayload.preferenceOverlay));
       const context: MatrixCorpusPrivateScenarioContextV1 = {
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: input.runId,
         scenarioId: input.scenarioId,
         userId: input.userId,
@@ -736,7 +736,7 @@ function manifestForContext(
 ): Parameters<MatrixCorpusContextRepository['registerRunContextAndManifest']>[0]['manifest'] {
   return {
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: context.runId,
     userId: context.userId,
     leaseFence: context.leaseFence,
@@ -800,7 +800,7 @@ function runBinding(
   return {
     version: 1 as const,
     kind: 'run_prompt_context' as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: input.runId,
     userId: input.userId,
     leaseFence: input.leaseFence,
@@ -813,7 +813,7 @@ function scenarioBinding(
   return {
     version: 1 as const,
     kind: 'scenario_prompt_context' as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: input.runId,
     scenarioId: input.scenarioId,
     userId: input.userId,
@@ -848,7 +848,7 @@ function serviceFailure(
 function isValidRunRegistration(input: MatrixCorpusRunContextRegistrationInput): boolean {
   const raw = input as unknown as Record<string, unknown>;
   return (
-    raw['runtimeAudience'] === 'home-dev' &&
+    raw['runtimeAudience'] === 'hetzner-prod' &&
     isValidIdentity(input) &&
     SHA_256_PATTERN.test(input.catalogDigest) &&
     raw['agentModel'] === AGENT_MODEL &&

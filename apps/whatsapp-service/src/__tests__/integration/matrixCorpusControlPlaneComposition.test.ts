@@ -108,7 +108,7 @@ describe('Matrix corpus route/control-plane composition', () => {
       createMatrixCorpusRoutes({
         gate: {
           enabled: true,
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           evaluator: {
             userId: 'configured_user',
             matrixRoomBindingDigest: bindingA,
@@ -133,7 +133,7 @@ describe('Matrix corpus route/control-plane composition', () => {
     expect(response.statusCode).toBe(409);
     expect(response.json().data).toEqual({ code: 'NOT_READY' });
     expect(authorizeCurrentLeaseBinding).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       leaseFence: '7',

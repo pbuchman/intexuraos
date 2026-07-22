@@ -43,7 +43,7 @@ function ingestPayload(): MatrixCorpusAttestedIngestPayloadV1 {
     context: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       ingestReceiptId: 'receipt_1',
       runId: 'run_1',
@@ -89,7 +89,7 @@ function terminalPayload(): MatrixCorpusTerminalControlV1 {
 
 function drainIdentity() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -404,7 +404,7 @@ describe('MatrixCorpusOutboxDrainer', () => {
       claimExpiresAt,
     });
     expect(current.getTurnTerminal).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',

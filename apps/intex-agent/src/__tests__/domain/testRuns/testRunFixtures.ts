@@ -41,7 +41,7 @@ export function testRunRecord(
     corpusId: 'intex-agent-matrix-corpus',
     corpusVersion: '2026-07-19',
     catalogDigest: 'a'.repeat(64),
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     transport: 'matrix_whatsapp',
     executionMode: 'strict_mock_tools',
     lifecycle: 'preflight',

@@ -62,7 +62,7 @@ const admissionSchema = z.discriminatedUnion('kind', [
 ]);
 const registerContextSchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
     catalogDigest: digest,
@@ -409,6 +409,10 @@ export function createIntexAgentServiceClient(
     token: config.internalAuthToken,
     logger: config.logger,
     ...(config.defaultTimeoutMs === undefined ? {} : { defaultTimeoutMs: config.defaultTimeoutMs }),
+    ...(config.pathPrefix === undefined ? {} : { pathPrefix: config.pathPrefix }),
+    ...(config.authorizationHeaderProvider === undefined
+      ? {}
+      : { authorizationHeaderProvider: config.authorizationHeaderProvider }),
   });
 
   return {
@@ -421,7 +425,7 @@ export function createIntexAgentServiceClient(
         {
           path: '/internal/matrix-corpus/current-acceptance',
           method: 'POST',
-          body: { runtimeAudience: 'home-dev', userId },
+          body: { runtimeAudience: 'hetzner-prod', userId },
         },
         admissionSchema
       );
@@ -783,7 +787,7 @@ async function request<T>(
 
 function identityHeaders(input: { userId: string; leaseFence: string }): Record<string, string> {
   return {
-    'x-matrix-corpus-runtime-audience': 'home-dev',
+    'x-matrix-corpus-runtime-audience': 'hetzner-prod',
     'x-matrix-corpus-user-id': input.userId,
     'x-matrix-corpus-lease-fence': input.leaseFence,
   };

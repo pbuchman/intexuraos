@@ -372,7 +372,7 @@ export class FirestoreMatrixCorpusContextRepository implements MatrixCorpusConte
       const finalized: MatrixCorpusContextFinalizationV1 = {
         version: 1,
         status: 'finalized',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: input.runId,
         userId: input.userId,
         leaseFence: input.leaseFence,
@@ -477,7 +477,7 @@ function isValidActiveRunContext(context: MatrixCorpusPrivateRunContextV1): bool
   return (
     runtime['version'] === 1 &&
     runtime['status'] === 'active' &&
-    runtime['runtimeAudience'] === 'home-dev' &&
+    runtime['runtimeAudience'] === 'hetzner-prod' &&
     isValidIdentity(context) &&
     SHA_256_PATTERN.test(context.catalogDigest) &&
     runtime['agentModel'] === 'or:deepseek/deepseek-v4-flash' &&
@@ -498,7 +498,7 @@ function isValidScenarioContext(context: MatrixCorpusPrivateScenarioContextV1): 
   const runtime = context as unknown as Readonly<Record<string, unknown>>;
   return (
     runtime['version'] === 1 &&
-    runtime['runtimeAudience'] === 'home-dev' &&
+    runtime['runtimeAudience'] === 'hetzner-prod' &&
     isValidIdentity(context) &&
     SAFE_ID_PATTERN.test(context.scenarioId) &&
     SHA_256_PATTERN.test(context.baselinePromptPreferencesDigest) &&
@@ -518,7 +518,7 @@ function isValidFinalization(context: MatrixCorpusContextFinalizationV1): boolea
   return (
     runtime['version'] === 1 &&
     runtime['status'] === 'finalized' &&
-    runtime['runtimeAudience'] === 'home-dev' &&
+    runtime['runtimeAudience'] === 'hetzner-prod' &&
     isValidIdentity(context) &&
     Number.isInteger(context.scenarioContextCount) &&
     context.scenarioContextCount >= 0 &&

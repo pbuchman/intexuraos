@@ -30,17 +30,42 @@ beforeEach(() => {
 afterEach(() => nock.cleanAll());
 
 describe('Intex Agent Matrix corpus internal client', () => {
+  it('uses the production edge prefix, OIDC authorization, and runtime audience', async () => {
+    const authorizationHeaderProvider = vi.fn().mockResolvedValue('Bearer evaluator-token');
+    nock(BASE_URL, { reqheaders: { authorization: 'Bearer evaluator-token' } })
+      .post('/internal/evals/intex-agent/matrix-corpus/current-acceptance', {
+        runtimeAudience: 'hetzner-prod',
+        userId: 'user_1',
+      })
+      .reply(200, { success: true, data: { kind: 'admission_ready', current: 'absent' } });
+
+    const client = createIntexAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      pathPrefix: '/internal/evals/intex-agent',
+      authorizationHeaderProvider,
+    });
+
+    await expect(client.getMatrixCorpusCurrentAcceptance('user_1')).resolves.toEqual({
+      ok: true,
+      value: { kind: 'admission_ready', current: 'absent' },
+    });
+    expect(authorizationHeaderProvider).toHaveBeenCalledTimes(1);
+    expect(nock.isDone()).toBe(true);
+  });
+
   it('drives every control endpoint with strict safe responses', async () => {
     nock(BASE_URL)
       .post('/internal/matrix-corpus/current-acceptance', {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         userId: 'user_1',
       })
       .reply(200, { success: true, data: { kind: 'admission_ready', current: 'absent' } })
       .post('/internal/matrix-corpus/runs/run_1/context', {
         authorization,
         request: {
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           userId: 'user_1',
           leaseFence: '7',
           catalogDigest: DIGEST,
@@ -268,7 +293,7 @@ describe('Intex Agent Matrix corpus internal client', () => {
         runId: 'run_1',
         authorization,
         request: {
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           userId: 'user_1',
           leaseFence: '7',
           expectedRevision: 2,
@@ -602,7 +627,7 @@ describe('Intex Agent Matrix corpus internal client', () => {
         runId: 'run_1',
         authorization,
         request: {
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           userId: 'user_1',
           leaseFence: '7',
           expectedRevision: 2,
@@ -773,7 +798,7 @@ function contextRequest(): Parameters<
   IntexAgentServiceClient['registerMatrixCorpusContext']
 >[0]['request'] {
   return {
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     userId: 'user_1',
     leaseFence: '7',
     catalogDigest: DIGEST,

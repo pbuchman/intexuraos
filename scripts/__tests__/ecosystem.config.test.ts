@@ -202,28 +202,19 @@ function loadInheritedEmulatorEnv(): Record<string, Record<string, string | unde
 }
 
 describe('ecosystem.config.cjs', () => {
-  it('declares only the service-owned Matrix corpus variable names in Terraform', () => {
+  it('declares exactly the production Matrix corpus runtime secrets in Terraform', () => {
     const matrixCorpusSection =
-      TERRAFORM_DEV_MAIN.split('matrix_corpus_home_dev_env_names = {')[1]?.split('\n  }')[0] ?? '';
+      TERRAFORM_DEV_MAIN.split('# Production Matrix corpus evaluator')[1]?.split(
+        '# Firebase configuration for web app'
+      )[0] ?? '';
 
     expect(matrixCorpusSection).not.toBe('');
     expect(matrixCorpusSection).not.toMatch(/synthetic-|home-dev|BEGIN PRIVATE|contact@/);
-    for (const name of MATRIX_CORPUS_ENV_NAMES) {
+    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(3)) {
       expect(matrixCorpusSection.match(new RegExp(`"${name}"`, 'g'))?.length, name).toBe(1);
     }
-
-    const whatsappSection = matrixCorpusSection
-      .split('whatsapp_service = toset([')[1]
-      ?.split('])')[0];
-    const intexSection = matrixCorpusSection.split('intex_agent = toset([')[1]?.split('])')[0];
-    expect(whatsappSection).toBeDefined();
-    expect(intexSection).toBeDefined();
-    expect(whatsappSection).toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"');
-    expect(whatsappSection).not.toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY"');
-    expect(intexSection).toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY"');
-    expect(intexSection).not.toContain('"INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"');
-    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(3, 8)) {
-      expect(intexSection, name).not.toContain(`"${name}"`);
+    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(0, 3)) {
+      expect(matrixCorpusSection, name).not.toContain(`"${name}"`);
     }
   });
 

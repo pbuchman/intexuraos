@@ -29,7 +29,7 @@ const SECRET_SENTINEL = 'wrapper-secret-sentinel-2d56179a';
 const GENERIC_PATH_SENTINEL = '/private/wrapper-path-sentinel-9f4f55a1';
 const GENERIC_TOKEN_SENTINEL = 'generic-wrapper-token-sentinel-9867d198';
 const USAGE_LINE =
-  'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke|matrix-corpus}\n';
+  'usage: run-intex-agent-evals-home-dev.sh {setup|preflight|endpoint|full|scenario intex-eval-NNN|matrix-smoke}\n';
 const FRAME_PLACEHOLDER = '0123456789abcdef0123456789abcdef0123456789abcdef';
 const FRAME_PATTERN = /[a-f0-9]{48}/u;
 
@@ -40,6 +40,7 @@ const IMPLEMENTATION_PATHS = [
   'packages/',
   'tools/intex-agent-evals/',
   'scripts/run-intex-agent-evals-home-dev.sh',
+  'scripts/run-intex-agent-evals-prod.sh',
   'package.json',
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
@@ -90,7 +91,8 @@ fi
 if ! remote_status=$(git status --porcelain=v1 --untracked-files=all -- \\
   apps/intex-agent/src/ apps/whatsapp-service/src/ apps/user-service/src/ \\
   packages/ \\
-  tools/intex-agent-evals/ scripts/run-intex-agent-evals-home-dev.sh package.json 2>/dev/null); then
+  tools/intex-agent-evals/ scripts/run-intex-agent-evals-home-dev.sh \\
+  scripts/run-intex-agent-evals-prod.sh package.json 2>/dev/null); then
   emit 'remote_implementation_paths_dirty'
   finish 2
 fi
@@ -103,13 +105,27 @@ if ! command -v direnv >/dev/null 2>&1 || ! command -v node >/dev/null 2>&1 || !
   finish 2
 fi
 set +e
-direnv exec . env \\
-  INTEXURAOS_EVAL_REQUESTED_REVISION="$required_sha" \\
-  INTEXURAOS_EVAL_DEPLOYED_REVISION="$deployed_sha" \\
-  INTEXURAOS_EVAL_WRAPPER_ATTESTED=true \\
-  INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN=true \\
-  INTEXURAOS_EVAL_REMOTE_CRITICAL_PATHS_CLEAN=true \\
-  node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+if [ "\${1-}" = 'matrix-corpus' ]; then
+  direnv exec . env \\
+    INTEXURAOS_ENVIRONMENT=prod \\
+    INTEXURAOS_MATRIX_CORPUS_ENABLED=true \\
+    INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME=hetzner-prod \\
+    INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE=hetzner-prod \\
+    INTEXURAOS_EVAL_REQUESTED_REVISION="$required_sha" \\
+    INTEXURAOS_EVAL_DEPLOYED_REVISION="$deployed_sha" \\
+    INTEXURAOS_EVAL_WRAPPER_ATTESTED=true \\
+    INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN=true \\
+    INTEXURAOS_EVAL_REMOTE_CRITICAL_PATHS_CLEAN=true \\
+    node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+else
+  direnv exec . env \\
+    INTEXURAOS_EVAL_REQUESTED_REVISION="$required_sha" \\
+    INTEXURAOS_EVAL_DEPLOYED_REVISION="$deployed_sha" \\
+    INTEXURAOS_EVAL_WRAPPER_ATTESTED=true \\
+    INTEXURAOS_EVAL_LOCAL_CRITICAL_PATHS_CLEAN=true \\
+    INTEXURAOS_EVAL_REMOTE_CRITICAL_PATHS_CLEAN=true \\
+    node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts "$@" >&3 2>/dev/null
+fi
 cli_status=$?
 set -e
 finish "$cli_status"`;
@@ -469,7 +485,7 @@ describe('Intex Agent evaluator command wiring', () => {
       full: 'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts',
       matrixSmoke:
         'node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts matrix-smoke',
-      matrixCorpus: 'scripts/run-intex-agent-evals-home-dev.sh matrix-corpus',
+      matrixCorpus: 'scripts/run-intex-agent-evals-prod.sh matrix-corpus',
     });
   });
 
@@ -590,7 +606,10 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     { label: 'endpoint extra', arguments_: ['endpoint', 'extra-sentinel'] },
     { label: 'full extra', arguments_: ['full', 'extra-sentinel'] },
     { label: 'matrix smoke extra', arguments_: ['matrix-smoke', 'extra-sentinel'] },
-    { label: 'matrix corpus extra', arguments_: ['matrix-corpus', 'extra-sentinel'] },
+    {
+      label: 'private production matrix corpus extra',
+      arguments_: ['__production-matrix-corpus', 'extra-sentinel'],
+    },
     { label: 'scenario missing id', arguments_: ['scenario'] },
     { label: 'scenario empty id', arguments_: ['scenario', ''] },
     { label: 'scenario short id', arguments_: ['scenario', 'intex-eval-01'] },
@@ -670,8 +689,8 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       payload: evaluationPayload('matrix-smoke', 0),
     },
     {
-      selector: 'matrix-corpus',
-      arguments_: ['matrix-corpus'],
+      selector: 'private production matrix-corpus transport',
+      arguments_: ['__production-matrix-corpus'],
       cliArguments: ['matrix-corpus'],
       tty: '-T',
       payload: matrixCorpusPayload(0),
@@ -713,6 +732,19 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       ]);
     },
     30_000
+  );
+
+  it.each([{ arguments_: ['matrix-corpus'] }, { arguments_: ['matrix-corpus', 'extra-sentinel'] }])(
+    'rejects the legacy Home Dev matrix-corpus command before git or ssh',
+    ({ arguments_ }) => {
+      const run = runWrapper(arguments_);
+
+      expect(run.result.status).toBe(2);
+      expect(run.result.stdout).toBe('');
+      expect(run.result.stderr).toBe('PRODUCTION_MATRIX_CORPUS_REQUIRED\n');
+      expect(run.gitCalls).toEqual([]);
+      expect(run.sshCalls).toEqual([]);
+    }
   );
 
   it.each([
@@ -886,7 +918,7 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       ),
     },
   ])('rejects a matrix-corpus payload with $label', ({ payload }) => {
-    const run = runWrapper(['matrix-corpus'], {
+    const run = runWrapper(['__production-matrix-corpus'], {
       sshStdout: framedOutput(payload, 0),
     });
 
