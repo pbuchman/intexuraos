@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 import type { Firestore } from '@intexuraos/infra-firestore';
 
+import type { MatrixCorpusContextCrypto } from '../../domain/matrixCorpus/contextCrypto.js';
+
 import type {
   TestRunIdentity,
   TestRunCurrentAcceptance,
@@ -64,7 +66,11 @@ import {
   parseMatrixCorpusSessionDocument,
 } from './sessionRepository.js';
 import { INTEX_AGENT_MATRIX_CORPUS_INGEST_RECEIPTS_COLLECTION } from './ingestReceiptRepository.js';
-import { INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION } from './testConfirmationRepository.js';
+import {
+  INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION,
+  parseMatrixCorpusTestConfirmationEvidenceDocument,
+  type MatrixCorpusTestConfirmationEvidenceIdentity,
+} from './testConfirmationRepository.js';
 
 type FirestoreDocumentReference = ReturnType<ReturnType<Firestore['collection']>['doc']>;
 
@@ -76,7 +82,12 @@ const FENCE_PATTERN = /^[1-9][0-9]{0,19}$/u;
 const SHA_256_PATTERN = /^[0-9a-f]{64}$/u;
 
 export class FirestoreTestRunRepository implements TestRunRepository {
-  constructor(private readonly deps: Readonly<{ firestore: Firestore }>) {}
+  constructor(
+    private readonly deps: Readonly<{
+      firestore: Firestore;
+      crypto: MatrixCorpusContextCrypto;
+    }>
+  ) {}
 
   static digestTerminalCandidate(candidate: MatrixCorpusTerminalCandidateV1): string {
     const parsed = matrixCorpusTerminalCandidateV1Schema.parse(candidate);
@@ -422,21 +433,17 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         ) ||
         item.confirmationSnapshot.docs.some(
           (document) =>
-            !matchesCleanupChild(
+            !matchesConfirmationEvidence(
+              document.id,
               document.data(),
+              this.deps.crypto,
               input.targetIdentity,
-              item.binding,
-              true
+              item.binding
             )
         ) ||
         item.ingestSnapshot.docs.some(
           (document) =>
-            !matchesCleanupChild(
-              document.data(),
-              input.targetIdentity,
-              item.binding,
-              false
-            )
+            !matchesIngestEvidence(document.data(), input.targetIdentity, item.binding)
         )
       )
         return failure('EVIDENCE_MISMATCH');
@@ -1338,6 +1345,14 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         ref: FirestoreDocumentReference;
         context: MatrixCorpusPrivateScenarioContextV1;
       }[];
+      const confirmations = confirmationSnapshot.docs.map((document) =>
+        parseMatrixCorpusTestConfirmationEvidenceDocument(
+          document.id,
+          document.data(),
+          this.deps.crypto,
+          input.identity
+        )
+      );
       const current = parsedCurrent ?? undefined;
       if (
         (current !== undefined && !matchesIdentity(current, input.identity)) ||
@@ -1353,11 +1368,11 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         ingestSnapshot.docs.some(
           (document) => !matchesRunFence(document.data(), input.identity)
         ) ||
-        confirmationSnapshot.docs.some(
-          (document) => !matchesRunFenceAndUser(document.data(), input.identity)
-        )
+        confirmations.some((confirmation) => confirmation === undefined)
       )
         return failure('CORRELATED_REPLAY_CONFLICT');
+
+      const exactConfirmations = confirmations as MatrixCorpusTestConfirmationEvidenceIdentity[];
 
       const hasExecutionEvidence =
         sessionSnapshot.docs.length > 0 ||
@@ -1393,6 +1408,27 @@ export class FirestoreTestRunRepository implements TestRunRepository {
 
       if (context === undefined || manifest === undefined)
         return failure('FINALIZATION_MISMATCH');
+      if (
+        exactConfirmations.some((confirmation) => {
+          const binding = manifest.scenarioBindings.find(
+            (candidate) => candidate.scenarioId === confirmation.scenarioId
+          );
+          if (binding?.sessionId !== confirmation.sessionId) return true;
+          const sessionDocument = sessionSnapshot.docs.find(
+            (document) => document.id === confirmation.sessionId
+          );
+          const profile = (sessionDocument?.data() as Record<string, unknown> | undefined)?.[
+            'matrixCorpusProfile'
+          ];
+          return (
+            typeof profile !== 'object' ||
+            profile === null ||
+            Array.isArray(profile) ||
+            (profile as Record<string, unknown>)['scenarioId'] !== confirmation.scenarioId
+          );
+        })
+      )
+        return failure('CORRELATED_REPLAY_CONFLICT');
       let contextFinalizationTombstoneDigest = current.contextFinalizationTombstoneDigest;
       if (current.lifecycle === 'running') {
         if (
@@ -1636,25 +1672,42 @@ function cleanupSuccess(
   };
 }
 
-function matchesCleanupChild(
+function matchesIngestEvidence(
   value: unknown,
   identity: TestRunIdentity,
   binding: Readonly<{
     scenarioId: string;
     sessionId: string;
-  }>,
-  requireUserAndLane: boolean
+  }>
 ): boolean {
   const record = value as Record<string, unknown>;
   return (
     record['runId'] === identity.runId &&
     record['scenarioId'] === binding.scenarioId &&
     record['sessionId'] === binding.sessionId &&
-    record['leaseFence'] === identity.leaseFence &&
-    (!requireUserAndLane ||
-      (record['userId'] === identity.userId &&
-        record['runtimeAudience'] === 'hetzner-prod' &&
-        record['lane'] === 'matrix_corpus'))
+    record['leaseFence'] === identity.leaseFence
+  );
+}
+
+function matchesConfirmationEvidence(
+  documentId: string,
+  value: unknown,
+  crypto: MatrixCorpusContextCrypto,
+  identity: TestRunIdentity,
+  binding: Readonly<{
+    scenarioId: string;
+    sessionId: string;
+  }>
+): boolean {
+  const confirmation = parseMatrixCorpusTestConfirmationEvidenceDocument(
+    documentId,
+    value,
+    crypto,
+    identity
+  );
+  return (
+    confirmation?.scenarioId === binding.scenarioId &&
+    confirmation.sessionId === binding.sessionId
   );
 }
 
@@ -1773,13 +1826,6 @@ function hasExactMatrixRunEvidence(value: unknown, identity: TestRunIdentity): b
 function matchesRunFence(value: unknown, identity: TestRunIdentity): boolean {
   const record = value as Record<string, unknown>;
   return record['runId'] === identity.runId && record['leaseFence'] === identity.leaseFence;
-}
-
-function matchesRunFenceAndUser(value: unknown, identity: TestRunIdentity): boolean {
-  return (
-    matchesRunFence(value, identity) &&
-    (value as Record<string, unknown>)['userId'] === identity.userId
-  );
 }
 
 function failure(
