@@ -3,28 +3,58 @@
 set -euo pipefail
 umask 077
 
-ENV_FILE="${ENV_FILE:-/etc/intexuraos/.env.prod}"
+RENDERED_CONFIG="${RENDERED_CONFIG:-/home/deploy/.pm2/intexuraos-prod-ecosystem.json}"
 [[ "${INTEXURAOS_ENVIRONMENT:-}" == 'prod' ]] || exit 1
-[[ -r "${ENV_FILE}" ]] || exit 1
-
-set -a
-# shellcheck disable=SC1090
-source "${ENV_FILE}"
-set +a
-
-[[ "${INTEXURAOS_MATRIX_CORPUS_ENABLED:-}" == 'true' ]] || exit 1
-[[ "${INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME:-}" == 'hetzner-prod' ]] || exit 1
-[[ "${INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE:-}" == 'hetzner-prod' ]] || exit 1
-[[ "${INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$ ]] || exit 1
-[[ -n "${INTEXURAOS_INTERNAL_AUTH_TOKEN:-}" ]] || exit 1
+[[ -r "${RENDERED_CONFIG}" ]] || exit 1
 
 temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/intexuraos-matrix-corpus-readiness.XXXXXX")"
 trap 'rm -rf -- "${temporary_directory}"' EXIT
 chmod 700 "${temporary_directory}"
 
-printf 'X-Internal-Auth: %s\n' "${INTEXURAOS_INTERNAL_AUTH_TOKEN}" > "${temporary_directory}/auth-header"
-node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({ runtimeAudience: "hetzner-prod", userId: process.env.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID }))' \
-  "${temporary_directory}/acceptance-request.json"
+node - \
+  "${RENDERED_CONFIG}" \
+  "${temporary_directory}/auth-header" \
+  "${temporary_directory}/acceptance-request.json" <<'NODE'
+const fs = require('node:fs');
+
+const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (config === null || typeof config !== 'object' || !Array.isArray(config.apps)) process.exit(1);
+
+const app = (name) => {
+  const matches = config.apps.filter((candidate) => candidate?.name === name);
+  if (matches.length !== 1) process.exit(1);
+  const env = matches[0]?.env;
+  if (env === null || typeof env !== 'object' || Array.isArray(env)) process.exit(1);
+  return env;
+};
+const whatsapp = app('whatsapp-service');
+const intex = app('intex-agent');
+const safeUserId = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/u;
+
+for (const env of [whatsapp, intex]) {
+  if (env.INTEXURAOS_MATRIX_CORPUS_ENABLED !== 'true') process.exit(1);
+  if (env.INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME !== 'hetzner-prod') process.exit(1);
+  if (env.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE !== 'hetzner-prod') process.exit(1);
+  if (!safeUserId.test(env.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID ?? '')) process.exit(1);
+  if (typeof env.INTEXURAOS_INTERNAL_AUTH_TOKEN !== 'string' || env.INTEXURAOS_INTERNAL_AUTH_TOKEN.length === 0)
+    process.exit(1);
+}
+if (whatsapp.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID !== intex.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID)
+  process.exit(1);
+if (whatsapp.INTEXURAOS_INTERNAL_AUTH_TOKEN !== intex.INTEXURAOS_INTERNAL_AUTH_TOKEN) process.exit(1);
+
+fs.writeFileSync(process.argv[3], `X-Internal-Auth: ${whatsapp.INTEXURAOS_INTERNAL_AUTH_TOKEN}\n`, {
+  mode: 0o600,
+});
+fs.writeFileSync(
+  process.argv[4],
+  JSON.stringify({
+    runtimeAudience: 'hetzner-prod',
+    userId: whatsapp.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID,
+  }),
+  { mode: 0o600 }
+);
+NODE
 
 curl --fail --silent --show-error --max-time 10 \
   --header "@${temporary_directory}/auth-header" \

@@ -1,7 +1,8 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync, type SpawnSyncReturns } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { parse as parseDotenv } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
@@ -17,6 +18,10 @@ const pubsubPublishTestPath = resolve(repoRoot, 'scripts/pubsub-publish-test.mjs
 const installNginxPath = resolve(repoRoot, 'scripts/hetzner/install-nginx-and-cert.sh');
 const provisionPath = resolve(repoRoot, 'scripts/hetzner/provision.sh');
 const githubActionsDeployPath = resolve(repoRoot, 'scripts/hetzner/github-actions-deploy.sh');
+const verifyMatrixCorpusRuntimePath = resolve(
+  repoRoot,
+  'scripts/hetzner/verify-matrix-corpus-runtime.sh'
+);
 const deploymentDocumentVerifierPath = resolve(
   repoRoot,
   'scripts/hetzner/verify-deployment-document.mjs'
@@ -1361,6 +1366,73 @@ describe('Hetzner async edge cutover', () => {
 });
 
 describe('Hetzner secret loader', () => {
+  it('round-trips JSON secret material through the generated dotenv file', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-secret-loader-'));
+    const outputPath = resolve(directory, '.env.prod');
+    const gcloudPath = resolve(directory, 'gcloud');
+    const installPath = resolve(directory, 'install');
+    const secretValue = JSON.stringify({
+      crv: 'Ed25519',
+      d: 'd'.repeat(43),
+      kid: 'production-test-v1',
+      kty: 'OKP',
+      x: 'x'.repeat(43),
+    });
+    const currentUser = execFileSync('id', ['-u'], { encoding: 'utf8' }).trim();
+    const currentGroup = execFileSync('id', ['-g'], { encoding: 'utf8' }).trim();
+
+    try {
+      writeFileSync(gcloudPath, '#!/usr/bin/env bash\nprintf \'%s\' "${MOCK_SECRET_VALUE}"\n', {
+        mode: 0o755,
+      });
+      writeFileSync(
+        installPath,
+        [
+          '#!/usr/bin/env bash',
+          'set -euo pipefail',
+          'if [[ "$1" == "-d" ]]; then',
+          '  mkdir -p "${@: -1}"',
+          'else',
+          '  cp "${@: -2:1}" "${@: -1}"',
+          'fi',
+          '',
+        ].join('\n'),
+        { mode: 0o755 }
+      );
+      const result = spawnSync(
+        'bash',
+        [
+          loadSecretsPath,
+          '--output',
+          outputPath,
+          '--secret',
+          'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+        ],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH ?? ''}`,
+            INTEXURAOS_ENVIRONMENT: 'prod',
+            DEPLOY_USER: currentUser,
+            NGINX_TOKEN_GROUP: currentGroup,
+            MOCK_SECRET_VALUE: secretValue,
+            PROVISIONER_SA_KEY_FILE: resolve(directory, 'missing-provisioner-key.json'),
+            RUNTIME_SA_KEY_FILE: resolve(directory, 'runtime-key.json'),
+            INTERNAL_AUTH_TOKEN_FILE: resolve(directory, 'internal-auth-token'),
+          },
+        }
+      );
+
+      expect(result.status, result.stderr).toBe(0);
+      const parsed = parseDotenv(readFileSync(outputPath, 'utf8'));
+      expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY']).toBe(secretValue);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('declares and loads the complete production Matrix corpus secret inventory', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
@@ -1651,6 +1723,88 @@ describe('Hetzner secret loader', () => {
     expect(hetznerImports).not.toContain(
       retiredDashed('intexuraos', 'todos', 'processing', 'prod', 'hetzner')
     );
+  });
+});
+
+describe('Hetzner Matrix corpus runtime verification', () => {
+  it('verifies the effective PM2 app configuration instead of sourcing the secret file', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-corpus-runtime-'));
+    const renderedConfigPath = resolve(directory, 'ecosystem.json');
+    const curlPath = resolve(directory, 'curl');
+    const runtimeEnv = {
+      INTEXURAOS_INTERNAL_AUTH_TOKEN: 'test-internal-token',
+      INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'user-test-1',
+      INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
+      INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'hetzner-prod',
+    };
+
+    try {
+      writeFileSync(
+        renderedConfigPath,
+        JSON.stringify({
+          apps: [
+            { name: 'whatsapp-service', env: runtimeEnv },
+            { name: 'intex-agent', env: runtimeEnv },
+          ],
+        })
+      );
+      writeFileSync(
+        curlPath,
+        [
+          '#!/usr/bin/env bash',
+          'set -euo pipefail',
+          'output=""',
+          'url=""',
+          'while [[ $# -gt 0 ]]; do',
+          '  case "$1" in',
+          '    --output) output="$2"; shift 2 ;;',
+          '    http://*) url="$1"; shift ;;',
+          '    *) shift ;;',
+          '  esac',
+          'done',
+          'if [[ "$url" == *"/readiness" ]]; then',
+          '  printf \'%s\' \'{"success":true,"data":{"status":"ready"},"diagnostics":{}}\' > "$output"',
+          'else',
+          '  printf \'%s\' \'{"success":true,"data":{"kind":"admission_ready","current":{}},"diagnostics":{}}\' > "$output"',
+          'fi',
+          '',
+        ].join('\n'),
+        { mode: 0o755 }
+      );
+
+      const verify = (configPath: string): SpawnSyncReturns<string> =>
+        spawnSync('bash', [verifyMatrixCorpusRuntimePath], {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${directory}:${process.env.PATH ?? ''}`,
+            INTEXURAOS_ENVIRONMENT: 'prod',
+            RENDERED_CONFIG: configPath,
+            ENV_FILE: resolve(directory, 'missing.env.prod'),
+          },
+        });
+
+      const accepted = verify(renderedConfigPath);
+      expect(accepted.status, accepted.stderr).toBe(0);
+
+      writeFileSync(
+        renderedConfigPath,
+        JSON.stringify({
+          apps: [
+            { name: 'whatsapp-service', env: runtimeEnv },
+            {
+              name: 'intex-agent',
+              env: { ...runtimeEnv, INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'home-dev' },
+            },
+          ],
+        })
+      );
+      expect(verify(renderedConfigPath).status).not.toBe(0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 

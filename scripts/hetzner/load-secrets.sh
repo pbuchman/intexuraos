@@ -153,7 +153,6 @@ dotenv_escape() {
   local value="$1"
 
   value="${value//\\/\\\\}"
-  value="${value//\"/\\\"}"
   value="${value//$'\n'/\\n}"
   value="${value//$'\r'/\\r}"
   printf '"%s"' "${value}"
