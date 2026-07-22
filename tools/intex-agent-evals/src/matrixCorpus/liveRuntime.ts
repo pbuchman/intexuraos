@@ -23,7 +23,8 @@ import {
   CONFIG_MAX_BYTES,
   createProductionSetupPorts,
   parseEvaluatorConfigContents,
-  withValidatedAccountContext,
+  withValidatedProductionMatrixAccountContext,
+  type SetupPorts,
   type ValidatedAccountContext,
 } from '../preflight.js';
 import type { MatrixClient } from '../live/matrixClient.js';
@@ -232,6 +233,7 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
   readonly intex?: IntexAgentServiceClient;
   readonly whatsapp?: WhatsAppServiceClient;
   readonly catalog?: OpenRouterCatalogClient;
+  readonly setup?: SetupPorts;
   readonly inspectFirestoreIndexes?: () => Promise<boolean>;
   readonly inspectRuntime?: () => Promise<{
     readonly ready: boolean;
@@ -240,7 +242,7 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
   }>;
 }): MatrixCorpusLiveReadPort {
   const env = options.env ?? process.env;
-  const setup = createProductionSetupPorts({ matrix: options.matrix });
+  const setup = options.setup ?? createProductionSetupPorts({ matrix: options.matrix });
   const authorizationHeaderProvider = createProductionControlAuthorizationHeaderProvider();
   const intex =
     options.intex ??
@@ -275,9 +277,12 @@ export function createProductionMatrixCorpusLiveReadPort(options: {
       prepared: MatrixCorpusPreparedContext;
     }> {
       let account: ValidatedAccountContext | undefined;
-      const accountResult = await withValidatedAccountContext(setup, (value): void => {
-        account = value;
-      });
+      const accountResult = await withValidatedProductionMatrixAccountContext(
+        setup,
+        (value): void => {
+          account = value;
+        }
+      );
       if (!accountResult.ok || account === undefined) throw new Error('account_not_ready');
 
       const configRead = await setup.protectedFiles.read(setup.configPath, {

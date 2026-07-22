@@ -587,7 +587,8 @@ function setupFailure(
 
 function validateRuntime(
   runtime: RuntimeIdentityPort,
-  includeMiniMaxKey: boolean
+  includeMiniMaxKey: boolean,
+  expectedEnvironment: 'dev' | 'prod'
 ):
   | { ok: true; checks: SafeCheckResult[] }
   | { ok: false; check: PreflightCheckId; code: PreflightFailureCode; checks: SafeCheckResult[] } {
@@ -605,7 +606,7 @@ function validateRuntime(
   checks.push({ check: 'runtime', status: 'passed' });
 
   if (
-    runtime.env('INTEXURAOS_ENVIRONMENT') !== 'dev' ||
+    runtime.env('INTEXURAOS_ENVIRONMENT') !== expectedEnvironment ||
     !isNonEmpty(runtime.env('INTEXURAOS_INTERNAL_AUTH_TOKEN')) ||
     !isNonEmpty(runtime.env('INTEXURAOS_GCP_PROJECT_ID')) ||
     !isNonEmpty(runtime.env('GOOGLE_APPLICATION_CREDENTIALS'))
@@ -646,7 +647,8 @@ function isHealthyService(result: SafeHttpResult, serviceName: string): boolean 
 
 async function validateAccountReadiness(
   config: EvaluatorConfig,
-  ports: AccountReadinessPorts
+  ports: AccountReadinessPorts,
+  includeHomeDevProductReadiness: boolean
 ): Promise<ReadinessResult> {
   const checks: SafeCheckResult[] = [];
   const tokenRead = await ports.protectedFiles.read(config.matrixAccessTokenFile, {
@@ -674,17 +676,19 @@ async function validateAccountReadiness(
   }
   checks.push({ check: 'matrix_files', status: 'passed' });
 
-  const intexHealth = await ports.healthHttp.get(INTEX_AGENT_HEALTH_URL);
-  if (!isHealthyService(intexHealth, 'intex-agent')) {
-    return readinessFailure(checks, 'intex_agent_health', 'INTEX_AGENT_HEALTH_FAILED');
-  }
-  checks.push({ check: 'intex_agent_health', status: 'passed' });
+  if (includeHomeDevProductReadiness) {
+    const intexHealth = await ports.healthHttp.get(INTEX_AGENT_HEALTH_URL);
+    if (!isHealthyService(intexHealth, 'intex-agent')) {
+      return readinessFailure(checks, 'intex_agent_health', 'INTEX_AGENT_HEALTH_FAILED');
+    }
+    checks.push({ check: 'intex_agent_health', status: 'passed' });
 
-  const whatsappHealth = await ports.healthHttp.get(WHATSAPP_HEALTH_URL);
-  if (!isHealthyService(whatsappHealth, 'whatsapp-service')) {
-    return readinessFailure(checks, 'whatsapp_health', 'WHATSAPP_HEALTH_FAILED');
+    const whatsappHealth = await ports.healthHttp.get(WHATSAPP_HEALTH_URL);
+    if (!isHealthyService(whatsappHealth, 'whatsapp-service')) {
+      return readinessFailure(checks, 'whatsapp_health', 'WHATSAPP_HEALTH_FAILED');
+    }
+    checks.push({ check: 'whatsapp_health', status: 'passed' });
   }
-  checks.push({ check: 'whatsapp_health', status: 'passed' });
 
   const matrixHealthResult = await ports.healthHttp.get(MATRIX_ADAPTER_HEALTH_URL);
   if (!matrixHealthResult.ok || matrixHealthResult.status !== 200) {
@@ -739,18 +743,20 @@ async function validateAccountReadiness(
   }
   checks.push({ check: 'matrix_identity', status: 'passed' });
 
-  const deliveryStatus = await ports.whatsapp.getDeliveryStatus(config.userId);
-  if (!deliveryStatus.ok) {
-    return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_FAILED');
+  if (includeHomeDevProductReadiness) {
+    const deliveryStatus = await ports.whatsapp.getDeliveryStatus(config.userId);
+    if (!deliveryStatus.ok) {
+      return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_FAILED');
+    }
+    const delivery = DeliveryStatusSchema.safeParse(deliveryStatus.value);
+    if (!delivery.success) {
+      return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_FAILED');
+    }
+    if (delivery.data.status !== 'ready') {
+      return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_NOT_READY');
+    }
+    checks.push({ check: 'whatsapp_delivery', status: 'passed' });
   }
-  const delivery = DeliveryStatusSchema.safeParse(deliveryStatus.value);
-  if (!delivery.success) {
-    return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_FAILED');
-  }
-  if (delivery.data.status !== 'ready') {
-    return readinessFailure(checks, 'whatsapp_delivery', 'WHATSAPP_DELIVERY_NOT_READY');
-  }
-  checks.push({ check: 'whatsapp_delivery', status: 'passed' });
   return {
     ok: true,
     checks,
@@ -774,7 +780,7 @@ export async function setupEvaluatorConfig(
 ): Promise<SetupResult> {
   let checks: SafeCheckResult[] = [];
   try {
-    const runtime = validateRuntime(ports.runtime, false);
+    const runtime = validateRuntime(ports.runtime, false, 'dev');
     checks = runtime.checks;
     if (!runtime.ok) {
       return setupFailure(checks, runtime.check, runtime.code);
@@ -787,7 +793,7 @@ export async function setupEvaluatorConfig(
     const config = parsedCandidate.data;
     checks.push({ check: 'config', status: 'passed' });
 
-    const readiness = await validateAccountReadiness(config, ports);
+    const readiness = await validateAccountReadiness(config, ports, true);
     checks.push(...readiness.checks);
     if (!readiness.ok) {
       return setupFailure(checks, readiness.check, readiness.code);
@@ -909,12 +915,16 @@ type LoadedAccountReadinessResult =
 
 async function loadAccountReadiness(
   ports: SetupPorts,
-  includeMiniMaxKey: boolean
+  includeMiniMaxKey: boolean,
+  options: {
+    readonly expectedEnvironment: 'dev' | 'prod';
+    readonly includeHomeDevProductReadiness: boolean;
+  } = { expectedEnvironment: 'dev', includeHomeDevProductReadiness: true }
 ): Promise<LoadedAccountReadinessResult> {
   let checks: SafeCheckResult[] = [];
   let currentCheck: PreflightCheckId = 'runtime';
   try {
-    const runtime = validateRuntime(ports.runtime, includeMiniMaxKey);
+    const runtime = validateRuntime(ports.runtime, includeMiniMaxKey, options.expectedEnvironment);
     checks = runtime.checks;
     if (!runtime.ok) {
       return runtime;
@@ -950,7 +960,11 @@ async function loadAccountReadiness(
     checks.push({ check: 'config', status: 'passed' });
 
     currentCheck = 'matrix_files';
-    const readiness = await validateAccountReadiness(loadedConfig.value, ports);
+    const readiness = await validateAccountReadiness(
+      loadedConfig.value,
+      ports,
+      options.includeHomeDevProductReadiness
+    );
     checks.push(...readiness.checks);
     if (!readiness.ok) {
       return { ...readiness, checks };
@@ -977,6 +991,30 @@ export async function withValidatedAccountContext(
   callback: (context: ValidatedAccountContext) => void | Promise<void>
 ): Promise<ValidatedAccountContextResult> {
   const readiness = await loadAccountReadiness(ports, false);
+  if (!readiness.ok) {
+    return {
+      ok: false,
+      code: readiness.code,
+      checks: [...readiness.checks, failedCheck(readiness.check, readiness.code)],
+    };
+  }
+
+  try {
+    await callback(readiness.context);
+    return { ok: true, checks: readiness.checks };
+  } catch {
+    return { ok: false, code: 'UNEXPECTED_FAILURE', checks: readiness.checks };
+  }
+}
+
+export async function withValidatedProductionMatrixAccountContext(
+  ports: SetupPorts,
+  callback: (context: ValidatedAccountContext) => void | Promise<void>
+): Promise<ValidatedAccountContextResult> {
+  const readiness = await loadAccountReadiness(ports, false, {
+    expectedEnvironment: 'prod',
+    includeHomeDevProductReadiness: false,
+  });
   if (!readiness.ok) {
     return {
       ok: false,
