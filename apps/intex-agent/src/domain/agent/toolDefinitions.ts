@@ -583,22 +583,207 @@ function toCreateNoteArgs(args: Record<string, unknown>): CreateNoteToolArgs {
 
 function toCreateCalendarEventArgs(args: Record<string, unknown>): CreateCalendarEventToolArgs {
   const summary = requiredString(args, 'summary');
-  const start = requiredString(args, 'start');
-  const end = requiredString(args, 'end');
   const timeZone = optionalString(args, 'timeZone');
+  if (timeZone !== undefined && !isValidTimeZone(timeZone)) {
+    throw new Error('Tool argument timeZone must be a valid IANA time zone');
+  }
+  const start = requiredCalendarEventDateTime(args, 'start', timeZone);
+  const end = requiredCalendarEventDateTime(args, 'end', timeZone);
+  if (start.hasOffset !== end.hasOffset) {
+    throw new Error(
+      'Tool arguments start and end must both include offsets or both use timeZone'
+    );
+  }
+  if (start.comparisonMs >= end.comparisonMs) {
+    throw new Error('Tool argument end must be after start');
+  }
   const location = optionalString(args, 'location');
   const description = optionalString(args, 'description');
   const attendees = optionalStringArray(args, 'attendees');
 
   return {
     summary,
-    start,
-    end,
+    start: start.value,
+    end: end.value,
     ...(timeZone !== undefined ? { timeZone } : {}),
     ...(location !== undefined ? { location } : {}),
     ...(description !== undefined ? { description } : {}),
     ...(attendees !== undefined ? { attendees } : {}),
   };
+}
+
+interface ValidatedCalendarEventDateTime {
+  value: string;
+  hasOffset: boolean;
+  comparisonMs: number;
+}
+
+const CALENDAR_EVENT_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})?$/u;
+
+function requiredCalendarEventDateTime(
+  args: Record<string, unknown>,
+  key: 'start' | 'end',
+  timeZone: string | undefined
+): ValidatedCalendarEventDateTime {
+  const value = requiredString(args, key);
+  const match = CALENDAR_EVENT_DATE_TIME_PATTERN.exec(value);
+  if (match === null || !hasValidCalendarDateTimeParts(match)) {
+    throw new Error(`Tool argument ${key} must be a valid ISO date-time string`);
+  }
+  const hasOffset = match[8] !== undefined;
+  if (hasOffset) {
+    return { value, hasOffset, comparisonMs: Date.parse(value) };
+  }
+  if (timeZone === undefined) {
+    throw new Error(`Tool argument ${key} without an offset requires timeZone`);
+  }
+  const comparisonMs = resolveUniqueCalendarInstant(match, timeZone);
+  if (!Number.isFinite(comparisonMs)) {
+    throw new Error(
+      `Tool argument ${key} must resolve to exactly one instant in timeZone; include an explicit offset`
+    );
+  }
+  return { value, hasOffset, comparisonMs };
+}
+
+function hasValidCalendarDateTimeParts(match: RegExpExecArray): boolean {
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  )
+    return false;
+  const civil = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    civil.getUTCFullYear() !== year ||
+    civil.getUTCMonth() !== month - 1 ||
+    civil.getUTCDate() !== day ||
+    civil.getUTCHours() !== hour ||
+    civil.getUTCMinutes() !== minute ||
+    civil.getUTCSeconds() !== second
+  )
+    return false;
+  const offset = match[8];
+  if (offset === undefined || offset === 'Z') return true;
+  const offsetHour = Number(offset.slice(1, 3));
+  const offsetMinute = Number(offset.slice(4, 6));
+  return offsetHour <= 23 && offsetMinute <= 59;
+}
+
+function calendarWallClockMs(match: RegExpExecArray): number {
+  const milliseconds = Number((match[7] ?? '').padEnd(3, '0').slice(0, 3));
+  return Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6]),
+    milliseconds
+  );
+}
+
+function resolveUniqueCalendarInstant(match: RegExpExecArray, timeZone: string): number {
+  const wallClockMs = calendarWallClockMs(match);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const possibleOffsets = new Set<number>();
+  const halfHourMs = 30 * 60 * 1000;
+  const searchRadiusMs = 36 * 60 * 60 * 1000;
+  const alignedWallClockMs = Math.floor(wallClockMs / halfHourMs) * halfHourMs;
+  for (let delta = -searchRadiusMs; delta <= searchRadiusMs; delta += halfHourMs) {
+    const sampleMs = alignedWallClockMs + delta;
+    const parts = readZonedCalendarParts(formatter, sampleMs);
+    possibleOffsets.add(calendarWallClockFromParts(parts) - sampleMs);
+  }
+  const matches = [...possibleOffsets]
+    .map((offsetMs) => wallClockMs - offsetMs)
+    .filter((candidateMs) => sameCalendarWallClock(match, formatter, candidateMs));
+  return matches.length === 1 ? Number(matches[0]) : Number.NaN;
+}
+
+interface CalendarDateTimeParts {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+function readZonedCalendarParts(
+  formatter: Intl.DateTimeFormat,
+  instantMs: number
+): CalendarDateTimeParts {
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(new Date(instantMs))
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, Number(part.value)])
+  );
+  return {
+    year: Number(parts['year']),
+    month: Number(parts['month']),
+    day: Number(parts['day']),
+    hour: Number(parts['hour']),
+    minute: Number(parts['minute']),
+    second: Number(parts['second']),
+  };
+}
+
+function calendarWallClockFromParts(parts: CalendarDateTimeParts): number {
+  return Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second
+  );
+}
+
+function sameCalendarWallClock(
+  match: RegExpExecArray,
+  formatter: Intl.DateTimeFormat,
+  candidateMs: number
+): boolean {
+  const actual = readZonedCalendarParts(formatter, candidateMs);
+  return (
+    actual.year === Number(match[1]) &&
+    actual.month === Number(match[2]) &&
+    actual.day === Number(match[3]) &&
+    actual.hour === Number(match[4]) &&
+    actual.minute === Number(match[5]) &&
+    actual.second === Number(match[6])
+  );
+}
+
+function isValidTimeZone(value: string): boolean {
+  if (value.trim() === '') return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function toQueryCalendarEventsArgs(args: Record<string, unknown>): QueryCalendarEventsToolArgs {

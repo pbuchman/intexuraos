@@ -587,6 +587,30 @@ describe('sequential Matrix corpus state machine', () => {
     expect(modelResult.failureCodes).toContain('judge_evidence_mismatch');
   });
 
+  it('accepts one MiniMax repair attempt as valid judge evidence', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.judgeReply).mockResolvedValue({
+      ok: true,
+      pass: true,
+      model: 'or:minimax/minimax-m3',
+      usage: {
+        logicalCalls: 2,
+        repairCount: 1,
+        inputTokens: 2,
+        outputTokens: 2,
+        totalTokens: 4,
+        costNanoUsd: 2,
+      },
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_repaired_judge', catalog }, ports);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.failureCodes).not.toContain('judge_evidence_mismatch');
+    expect(result.scenarios.every(({ status }) => status === 'passed')).toBe(true);
+  });
+
   it('rejects reuse of one created session across two scenarios before judging the second', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const ports = passingPorts([]);

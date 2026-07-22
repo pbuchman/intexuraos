@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('20.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('21.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('13.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('14.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -74,6 +74,21 @@ describe('buildIntexAgentSystemPrompt', () => {
     );
     expect(prompt).toContain('`*important*`');
     expect(prompt).toContain('Do not use double-asterisk Markdown bold such as `**important**`');
+  });
+
+  it('requires human-readable local dates in WhatsApp replies', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain(
+      'Format dates and times in replies as concise, human-readable local values'
+    );
+    expect(prompt).toContain(
+      'Never expose raw ISO timestamps, milliseconds, UTC offsets, or IANA time-zone identifiers'
+    );
   });
 
   it('prioritizes useful analysis before tool execution boundaries', () => {

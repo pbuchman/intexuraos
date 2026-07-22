@@ -860,7 +860,7 @@ function validUsage(usage: MatrixCorpusTurnObservation['agentUsage']): boolean {
 
 function validJudgeUsage(usage: Extract<MatrixCorpusJudgeResult, { ok: true }>['usage']): boolean {
   return (
-    usage.logicalCalls === 1 &&
+    usage.logicalCalls === usage.repairCount + 1 &&
     (usage.repairCount === 0 || usage.repairCount === 1) &&
     validTokenUsage(usage) &&
     Number.isSafeInteger(usage.costNanoUsd) &&
