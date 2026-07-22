@@ -347,7 +347,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             'save_external',
             args,
             config.userPreferences ?? null,
-            detectedReplyLanguage
+            detectedReplyLanguage,
+            input.timeZone
           ),
           toolName: 'save_external',
           toolArgs: args,
@@ -507,7 +508,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         toolExecutions,
         config.webAppUrl ?? DEFAULT_WEB_APP_URL,
         config.userPreferences ?? null,
-        replyLanguage
+        replyLanguage,
+        input.timeZone
       );
     },
   };
@@ -854,7 +856,8 @@ async function parseRunnerContent(
   toolExecutions: IntexAgentToolExecution[],
   webAppUrl: string,
   userPreferences: string | null,
-  replyLanguage: IntexAgentReplyLanguage
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
 ): Promise<IntexAgentRunnerResult> {
   const rejectedSelection = toolExecutions.find(
     (execution) => execution.selectionRejection !== undefined
@@ -903,7 +906,8 @@ async function parseRunnerContent(
         toolExecution.toolName,
         confirmationArgs,
         userPreferences,
-        replyLanguage
+        replyLanguage,
+        runtimeTimeZone
       ),
       toolName: toolExecution.toolName,
       toolArgs: confirmationArgs,
@@ -1385,7 +1389,8 @@ function buildConfirmationReply(
   toolName: MutatingIntexAgentToolName,
   args: Record<string, unknown>,
   userPreferences: string | null,
-  replyLanguage: IntexAgentReplyLanguage
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
 ): string {
   if (toolName === 'create_note') {
     const lines = [CONFIRMATION_INTROS.create_note[replyLanguage]];
@@ -1402,9 +1407,28 @@ function buildConfirmationReply(
 
   if (toolName === 'create_calendar_event') {
     const lines = [CONFIRMATION_INTROS.create_calendar_event[replyLanguage]];
+    const timeZone = readRawString(args, 'timeZone');
+    const start = readRawString(args, 'start');
+    const end = readRawString(args, 'end');
     appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'summary'));
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.start[replyLanguage], readRawString(args, 'start'));
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.end[replyLanguage], readRawString(args, 'end'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.start[replyLanguage],
+      /* v8 ignore start -- schema: validated calendar tool args always include start @preserve */
+      start === undefined
+        ? undefined
+        : formatCalendarConfirmationDateTime(start, timeZone, runtimeTimeZone, replyLanguage)
+      /* v8 ignore stop @preserve */
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.end[replyLanguage],
+      /* v8 ignore start -- schema: validated calendar tool args always include end @preserve */
+      end === undefined
+        ? undefined
+        : formatCalendarConfirmationDateTime(end, timeZone, runtimeTimeZone, replyLanguage)
+      /* v8 ignore stop @preserve */
+    );
     appendConfirmationLine(
       lines,
       CONFIRMATION_LABELS.location[replyLanguage],
@@ -1490,6 +1514,45 @@ function appendConfirmationLine(lines: string[], label: string, value: string | 
     lines.push('');
   }
   lines.push(`${label}: ${value}`);
+}
+
+function formatCalendarConfirmationDateTime(
+  value: string,
+  toolTimeZone: string | undefined,
+  runtimeTimeZone: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  const instant = new Date(value);
+  const preferredTimeZone = toolTimeZone ?? runtimeTimeZone;
+  const hasExplicitOffset = /(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+  const displayTimeZone = hasExplicitOffset ? preferredTimeZone : 'UTC';
+  const displayInstant = hasExplicitOffset ? instant : dateFromIsoWallClock(value);
+  const locale = replyLanguage === 'pl' ? 'pl-PL' : 'en-GB';
+  const date = new Intl.DateTimeFormat(locale, {
+    timeZone: displayTimeZone,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(displayInstant);
+  const time = new Intl.DateTimeFormat(locale, {
+    timeZone: displayTimeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(displayInstant);
+  return `${date}, ${time}`;
+}
+
+function dateFromIsoWallClock(value: string): Date {
+  return new Date(
+    Date.UTC(
+      Number(value.slice(0, 4)),
+      Number(value.slice(5, 7)) - 1,
+      Number(value.slice(8, 10)),
+      Number(value.slice(11, 13)),
+      Number(value.slice(14, 16))
+    )
+  );
 }
 
 function appendConfirmationListLine(

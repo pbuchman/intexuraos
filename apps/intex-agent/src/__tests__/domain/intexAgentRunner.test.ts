@@ -112,7 +112,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('20.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('21.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -2364,7 +2364,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('20.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('21.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -2950,6 +2950,7 @@ describe('createIntexAgentRunner', () => {
           events: [],
           message: explicitMessageFor(toolName),
           currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
         })
       ).resolves.toEqual({
         outcome: 'needs_confirmation',
@@ -2969,8 +2970,8 @@ describe('createIntexAgentRunner', () => {
         'Czy dodać wydarzenie w kalendarzu?',
         '',
         'Tytuł: Dentist',
-        'Początek: 2026-06-25T09:00:00+02:00',
-        'Koniec: 2026-06-25T10:00:00+02:00',
+        'Początek: 25 czerwca 2026, 09:00',
+        'Koniec: 25 czerwca 2026, 10:00',
         'Miejsce: Dental Clinic',
         'Uczestnicy: pat@example.com',
       ].join('\n'),
@@ -3014,6 +3015,7 @@ describe('createIntexAgentRunner', () => {
         events: [],
         message,
         currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
       })
     ).resolves.toMatchObject({
       outcome: 'needs_confirmation',
@@ -4137,17 +4139,122 @@ describe('createIntexAgentRunner', () => {
         events: [],
         message: 'Create a calendar event for Dentist tomorrow 9-10am.',
         currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
       })
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Add this calendar event?\n\nTitle: Dentist\nStart: 2026-06-25T09:00:00+02:00\nEnd: 2026-06-25T10:00:00+02:00',
+        'Add this calendar event?\n\nTitle: Dentist\nStart: 25 June 2026, 09:00\nEnd: 25 June 2026, 10:00',
       toolName: 'create_calendar_event',
       toolArgs: {
         summary: 'Dentist',
         start: '2026-06-25T09:00:00+02:00',
         end: '2026-06-25T10:00:00+02:00',
       },
+    });
+  });
+
+  it('renders calendar confirmation instants in the supplied local time zone without ISO metadata', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_calendar_event',
+      args: {
+        summary: 'Dentist',
+        start: '2026-12-25T08:00:00.000Z',
+        end: '2026-12-25T09:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          toolName: 'create_calendar_event',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Create a calendar event for Dentist on 25 December 9-10am.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      reply:
+        'Add this calendar event?\n\nTitle: Dentist\nStart: 25 December 2026, 09:00\nEnd: 25 December 2026, 10:00',
+    });
+    expect(result.reply).not.toMatch(/\.000|Europe\/Warsaw|[+-]\d{2}:\d{2}|T\d{2}:/u);
+  });
+
+  it('preserves offset-less calendar wall time in the tool time zone', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_calendar_event',
+      args: {
+        summary: 'Dentist',
+        start: '2026-07-15T09:00:00',
+        end: '2026-07-15T10:00:00',
+        timeZone: 'Europe/Warsaw',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          toolName: 'create_calendar_event',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Create a calendar event for Dentist on 15 July 9-10am.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'America/New_York',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      reply:
+        'Add this calendar event?\n\nTitle: Dentist\nStart: 15 July 2026, 09:00\nEnd: 15 July 2026, 10:00',
+    });
+  });
+
+  it('uses the validated account time zone when calendar arguments omit one', async () => {
+    const client = new ToolExecutingFakeToolCallingClient({
+      toolName: 'create_calendar_event',
+      args: {
+        summary: 'Dentist',
+        start: '2026-07-15T09:00:00.000Z',
+        end: '2026-07-15T10:00:00.000Z',
+      },
+    }, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Done.',
+          toolName: 'create_calendar_event',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Create a calendar event for Dentist on 15 July 11-12.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      reply:
+        'Add this calendar event?\n\nTitle: Dentist\nStart: 15 July 2026, 11:00\nEnd: 15 July 2026, 12:00',
     });
   });
 
@@ -5240,8 +5347,8 @@ function expectedConfirmationReplyFor(toolName: PreviewToolName): string {
       'Add this calendar event?',
       '',
       'Title: Dentist',
-      'Start: 2026-06-25T09:00:00+02:00',
-      'End: 2026-06-25T10:00:00+02:00',
+      'Start: 25 June 2026, 09:00',
+      'End: 25 June 2026, 10:00',
       'Location: Dental Clinic',
       'Attendees: pat@example.com',
     ].join('\n');

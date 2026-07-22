@@ -626,6 +626,74 @@ describe('createIntexAgentToolDefinitions', () => {
       })
     ).rejects.toThrow('Tool argument timeZone must be a string');
     await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start: '2026-02-30T09:00:00',
+        end: '2026-02-30T10:00:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).rejects.toThrow('Tool argument start must be a valid ISO date-time string');
+    await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start: '2026-08-18T14:30:00',
+        end: '2026-08-18T15:15:00',
+        timeZone: 'Invalid/Zone',
+      })
+    ).rejects.toThrow('Tool argument timeZone must be a valid IANA time zone');
+    await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start: '2026-08-18T14:30:00',
+        end: '2026-08-18T15:15:00',
+        timeZone: '   ',
+      })
+    ).rejects.toThrow('Tool argument timeZone must be a valid IANA time zone');
+    await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start: '2026-08-18T14:30:00',
+        end: '2026-08-18T15:15:00',
+      })
+    ).rejects.toThrow('Tool argument start without an offset requires timeZone');
+    await expect(
+      calendarTool?.run({
+        summary: 'DST gap',
+        start: '2026-03-29T02:15:00',
+        end: '2026-03-29T03:15:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).rejects.toThrow(
+      'Tool argument start must resolve to exactly one instant in timeZone; include an explicit offset'
+    );
+    await expect(
+      calendarTool?.run({
+        summary: 'DST fold',
+        start: '2026-10-25T02:15:00',
+        end: '2026-10-25T04:15:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).rejects.toThrow(
+      'Tool argument start must resolve to exactly one instant in timeZone; include an explicit offset'
+    );
+    await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start: '2026-08-18T15:15:00+02:00',
+        end: '2026-08-18T14:30:00+02:00',
+      })
+    ).rejects.toThrow('Tool argument end must be after start');
+    await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start: '2026-08-18T14:30:00+02:00',
+        end: '2026-08-18T15:15:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).rejects.toThrow(
+      'Tool arguments start and end must both include offsets or both use timeZone'
+    );
+    await expect(
       codeTaskTool?.run({ prompt: 'Implement this', taskMode: 'fast' })
     ).rejects.toThrow('Tool argument taskMode must be one of: planning, execution');
     await expect(
@@ -722,6 +790,29 @@ describe('createIntexAgentToolDefinitions', () => {
           maxResults: 2501,
         })
     ).rejects.toThrow('Tool argument maxResults must be a positive integer');
+  });
+
+  it.each([
+    ['zero month', '2026-00-18T14:30:00+02:00'],
+    ['month above twelve', '2026-13-18T14:30:00+02:00'],
+    ['zero day', '2026-08-00T14:30:00+02:00'],
+    ['hour above twenty-three', '2026-08-18T24:30:00+02:00'],
+    ['minute above fifty-nine', '2026-08-18T14:60:00+02:00'],
+    ['second above fifty-nine', '2026-08-18T14:30:60+02:00'],
+    ['offset hour above twenty-three', '2026-08-18T14:30:00+24:00'],
+    ['offset minute above fifty-nine', '2026-08-18T14:30:00+02:60'],
+  ])('rejects a calendar start with %s', async (_label, start) => {
+    const calendarTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'create_calendar_event'
+    );
+
+    await expect(
+      calendarTool?.run({
+        summary: 'Dentist',
+        start,
+        end: '2026-08-18T15:15:00+02:00',
+      })
+    ).rejects.toThrow('Tool argument start must be a valid ISO date-time string');
   });
 });
 
