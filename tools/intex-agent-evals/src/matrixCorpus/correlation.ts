@@ -14,6 +14,8 @@ export type MatrixCorpusTurnTerminal =
     }
   | { readonly status: 'failed'; readonly failureCode: string };
 
+export const MATRIX_CORPUS_MAX_REPLIES_PER_TURN = 5;
+
 export interface MatrixCorpusReplyEvidencePort {
   getTurnTerminal(input: {
     runId: string;
@@ -186,7 +188,8 @@ export async function collectCorrelatedReplies(input: {
       };
       byEventId.set(reply.eventId, reply);
       replies.push(reply);
-      if (replies.length > 5) return { ok: false, code: 'reply_overflow' };
+      if (replies.length > MATRIX_CORPUS_MAX_REPLIES_PER_TURN)
+        return { ok: false, code: 'reply_overflow' };
     }
 
     const terminal = await input.evidence.getTurnTerminal({
@@ -200,7 +203,7 @@ export async function collectCorrelatedReplies(input: {
     if (
       !Number.isInteger(terminal.replyCount) ||
       terminal.replyCount < 0 ||
-      terminal.replyCount > 5 ||
+      terminal.replyCount > MATRIX_CORPUS_MAX_REPLIES_PER_TURN ||
       terminal.replyDigests.length !== terminal.replyCount ||
       new Set(terminal.replyDigests).size !== terminal.replyDigests.length
     ) {

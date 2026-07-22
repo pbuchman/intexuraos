@@ -19,7 +19,11 @@ import {
 } from '@intexuraos/http-contracts';
 
 import type { MiniMaxEvaluator } from '../../minimaxJudge.js';
-import type { MatrixClient, MatrixTimelineEvent } from '../../live/matrixClient.js';
+import type {
+  MatrixClient,
+  MatrixTargetSyncResult,
+  MatrixTimelineEvent,
+} from '../../live/matrixClient.js';
 import { digestMatrixReply } from '../../matrixCorpus/correlation.js';
 import type { MatrixCorpusPreparedContext } from '../../matrixCorpus/liveRuntime.js';
 import {
@@ -81,6 +85,9 @@ interface SharedState {
   readonly scenarioStatusReads: Map<string, number>;
   readonly conflictStoppedScenarioProjectionOnce: boolean;
   stoppedScenarioProjectionConflictInjected: boolean;
+  readonly hangInitialCursor: boolean;
+  readonly dropReplyScenarioNumber: number | null;
+  readonly onReplyWaitStarted: () => void;
 }
 
 export interface MatrixCorpusCompositionHarnessOptions {
@@ -90,11 +97,14 @@ export interface MatrixCorpusCompositionHarnessOptions {
   readonly advanceEventRevisionAfterBindingScenarioNumber?: number;
   readonly deferBindingUntilQuiesceScenarioNumber?: number;
   readonly conflictStoppedScenarioProjectionOnce?: boolean;
+  readonly hangInitialCursor?: boolean;
+  readonly dropReplyScenarioNumber?: number;
 }
 
 export interface MatrixCorpusCompositionMetrics {
   maxConcurrentTurns: number;
   readonly matrixMessages: string[];
+  readonly leaseRenewalKeys: string[];
   deepSeekAgentCalls: number;
   confirmationAgentCalls: number;
   miniMaxJudgeCalls: number;
@@ -115,6 +125,7 @@ export interface MatrixCorpusCompositionHarness {
   readonly prepared: MatrixCorpusPreparedContext;
   readonly metrics: MatrixCorpusCompositionMetrics;
   readonly trace: string[];
+  readonly replyWaitStarted: Promise<void>;
   readonly now: () => Date;
   readonly cleanup: () => Promise<void>;
 }
@@ -125,9 +136,14 @@ export async function createPassingMatrixCorpusCompositionHarness(
 ): Promise<MatrixCorpusCompositionHarness> {
   const repositoryRoot = await mkdtemp(join(tmpdir(), 'matrix-corpus-composition-'));
   const trace: string[] = [];
+  let resolveReplyWaitStarted: (() => void) | null = null;
+  const replyWaitStarted = new Promise<void>((resolve) => {
+    resolveReplyWaitStarted = resolve;
+  });
   const metrics: MatrixCorpusCompositionMetrics = {
     maxConcurrentTurns: 0,
     matrixMessages: [],
+    leaseRenewalKeys: [],
     deepSeekAgentCalls: 0,
     confirmationAgentCalls: 0,
     miniMaxJudgeCalls: 0,
@@ -162,6 +178,9 @@ export async function createPassingMatrixCorpusCompositionHarness(
     scenarioStatusReads: new Map(),
     conflictStoppedScenarioProjectionOnce: options.conflictStoppedScenarioProjectionOnce ?? false,
     stoppedScenarioProjectionConflictInjected: false,
+    hangInitialCursor: options.hangInitialCursor ?? false,
+    dropReplyScenarioNumber: options.dropReplyScenarioNumber ?? null,
+    onReplyWaitStarted: () => resolveReplyWaitStarted?.(),
   };
 
   return {
@@ -185,6 +204,7 @@ export async function createPassingMatrixCorpusCompositionHarness(
     },
     metrics,
     trace,
+    replyWaitStarted,
     now: () => new Date(NOW),
     cleanup: async () => await rm(repositoryRoot, { recursive: true, force: true }),
   };
@@ -199,17 +219,35 @@ function createMatrixBoundary(state: SharedState): MatrixClient {
     async syncTargetRoom(input) {
       cursor += 1;
       if (input.timeoutMs === 0) {
+        if (state.hangInitialCursor) return await matrixTimeoutAfterAbort(input.signal);
         return { ok: true, nextBatch: `batch_${String(cursor)}`, limited: false, events: [] };
       }
       const event = state.matrixEvents.shift();
+      if (event === undefined) return await matrixTimeoutAfterAbort(input.signal);
+      if (event.sender.startsWith('@whatsapp_lid-')) {
+        state.trace.push(`matrix:reply:${event.eventId ?? 'missing'}`);
+      }
       return {
         ok: true,
         nextBatch: `batch_${String(cursor)}`,
         limited: false,
-        events: event === undefined ? [] : [event],
+        events: [event],
       };
     },
   };
+}
+
+async function matrixTimeoutAfterAbort(signal: AbortSignal): Promise<MatrixTargetSyncResult> {
+  if (signal.aborted) return { ok: false, reason: 'timeout' };
+  return await new Promise<MatrixTargetSyncResult>((resolve) => {
+    signal.addEventListener(
+      'abort',
+      () => {
+        resolve({ ok: false, reason: 'timeout' });
+      },
+      { once: true }
+    );
+  });
 }
 
 function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
@@ -241,7 +279,10 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
         value: { code: 'ACTIVATED', runId, leaseFence, phase: 'active', activatedAt: NOW },
       };
     },
-    async renewMatrixCorpusLease({ runId, leaseFence }) {
+    async renewMatrixCorpusLease({ runId, leaseFence, idempotencyKey }) {
+      state.metrics.leaseRenewalKeys.push(idempotencyKey);
+      state.trace.push(`lease:${idempotencyKey}`);
+      if (idempotencyKey.includes(':reply:')) state.onReplyWaitStarted();
       return {
         ok: true,
         value: {
@@ -295,16 +336,18 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
         sender: '@private_user_sentinel:example.test',
         content: { msgtype: 'm.text', body: request.text },
       });
-      state.matrixEvents.push({
-        eventId: `$matrix_reply_${String(state.metrics.matrixMessages.length + 1)}`,
-        originServerTs: Date.parse(NOW) + state.metrics.matrixMessages.length,
-        type: 'm.room.message',
-        sender:
-          entry.scenarioNumber === state.wrongPuppetScenarioNumber
-            ? '@whatsapp_lid-wrong-puppet-sentinel:example.test'
-            : '@whatsapp_lid-private-puppet-sentinel:example.test',
-        content: { msgtype: 'm.text', body: reply },
-      });
+      if (entry.scenarioNumber !== state.dropReplyScenarioNumber) {
+        state.matrixEvents.push({
+          eventId: `$matrix_reply_${String(state.metrics.matrixMessages.length + 1)}`,
+          originServerTs: Date.parse(NOW) + state.metrics.matrixMessages.length,
+          type: 'm.room.message',
+          sender:
+            entry.scenarioNumber === state.wrongPuppetScenarioNumber
+              ? '@whatsapp_lid-wrong-puppet-sentinel:example.test'
+              : '@whatsapp_lid-private-puppet-sentinel:example.test',
+          content: { msgtype: 'm.text', body: reply },
+        });
+      }
       state.metrics.matrixMessages.push(request.text);
       state.activeTurns += 1;
       state.metrics.maxConcurrentTurns = Math.max(
@@ -673,6 +716,9 @@ function createMiniMaxBoundary(state: SharedState): MiniMaxEvaluator {
     },
     async judgeReplies(inputs) {
       state.metrics.miniMaxJudgeCalls += inputs.length;
+      for (const input of inputs) {
+        state.trace.push(`judge:${input.scenarioId}:${String(input.turnIndex)}`);
+      }
       return {
         ok: true,
         verdicts: inputs.map((input) => {

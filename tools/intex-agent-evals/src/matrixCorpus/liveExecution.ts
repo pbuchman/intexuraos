@@ -65,7 +65,9 @@ import { createProductionControlAuthorizationHeaderProvider } from './production
 const PRODUCTION_ORIGIN = 'https://intexuraos.cloud';
 const INTEX_AGENT_EDGE_PREFIX = '/internal/evals/intex-agent';
 const WHATSAPP_EDGE_PREFIX = '/internal/evals/whatsapp';
-const CORRELATION_TIMEOUT_MS = 180_000;
+export const PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS = 3 * 60 * 1000;
+export const PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS = 4 * 60 * 1000;
+export const PRODUCTION_MATRIX_CORPUS_LEASE_TTL_MS = 5 * 60 * 1000;
 const POLL_INTERVAL_MS = 250;
 const CORPUS_VERSION = '2026-07-19';
 const CORPUS_ID = 'intex-agent-matrix-corpus';
@@ -127,6 +129,7 @@ export interface ProductionMatrixCorpusExecutorOptions {
   readonly evaluator?: MiniMaxEvaluator;
   readonly retentionSagas?: MatrixCorpusRetentionSagaPort;
   readonly correlationTimeoutMs?: number;
+  readonly replyTimeoutMs?: number;
   readonly pollIntervalMs?: number;
   readonly now?: () => Date;
 }
@@ -195,7 +198,9 @@ export function createProductionMatrixCorpusExecutor(
       retentionSagas,
       delivery,
       bindingHmacKey: env['INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY'] ?? '',
-      correlationTimeoutMs: options.correlationTimeoutMs ?? CORRELATION_TIMEOUT_MS,
+      correlationTimeoutMs:
+        options.correlationTimeoutMs ?? PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS,
+      replyTimeoutMs: options.replyTimeoutMs ?? PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS,
       pollIntervalMs: options.pollIntervalMs ?? POLL_INTERVAL_MS,
       now,
     });
@@ -242,6 +247,7 @@ function createRunPorts(input: {
   readonly delivery: MatrixCorpusArtifactDeliveryPort;
   readonly bindingHmacKey: string;
   readonly correlationTimeoutMs: number;
+  readonly replyTimeoutMs: number;
   readonly pollIntervalMs: number;
   readonly now: () => Date;
 }): MatrixCorpusRunPorts {
@@ -370,11 +376,16 @@ function createRunPorts(input: {
       return { ok: true, revision: result.value.revision };
     },
 
-    async renewLease({ runId, leaseFence, scenarioId }): MatrixCorpusPortReturn<'renewLease'> {
+    async renewLease(command): MatrixCorpusPortReturn<'renewLease'> {
       const result = await input.whatsapp.renewMatrixCorpusLease({
-        runId,
-        leaseFence,
-        idempotencyKey: operationKey(runId, `renew:${scenarioId}`),
+        runId: command.runId,
+        leaseFence: command.leaseFence,
+        idempotencyKey: operationKey(
+          command.runId,
+          command.stage === 'turn'
+            ? `renew:${command.scenarioId}:${String(command.turnIndex)}`
+            : `judge:${command.scenarioId}:${String(command.turnIndex)}:${String(command.replyIndex)}`
+        ),
       });
       return result.ok ? passed(undefined) : failed('lease_renewal_failed');
     },
@@ -811,6 +822,7 @@ async function executeLiveTurn(input: {
   readonly turnIndex: number;
   readonly expectedSessionId: string | null;
   readonly correlationTimeoutMs: number;
+  readonly replyTimeoutMs: number;
   readonly pollIntervalMs: number;
   readonly now: () => Date;
 }): Promise<ReturnType<MatrixCorpusRunPorts['executeTurn']> extends Promise<infer T> ? T : never> {
@@ -822,12 +834,15 @@ async function executeLiveTurn(input: {
     return { ok: false, kind: 'infrastructure_failure', code: 'turn_catalog_mismatch' };
   state.startedAt ??= input.now().toISOString();
 
-  const cursorController = new AbortController();
-  const cursor = await captureMatrixCorpusCursor({
-    matrix: input.matrix,
-    context: input.state.prepared.account,
-    signal: cursorController.signal,
-  });
+  const cursor = await runWithMatrixCorpusDeadline(
+    input.correlationTimeoutMs,
+    async (signal) =>
+      await captureMatrixCorpusCursor({
+        matrix: input.matrix,
+        context: input.state.prepared.account,
+        signal,
+      })
+  );
   if (!cursor.ok) return { ok: false, kind: 'infrastructure_failure', code: cursor.code };
 
   const before =
@@ -890,24 +905,19 @@ async function executeLiveTurn(input: {
   if (sent === null)
     return { ok: false, kind: 'safety_failure', code: 'matrix_outbound_ambiguous' };
 
-  const proofController = new AbortController();
-  const proofTimeout = setTimeout(() => {
-    proofController.abort();
-  }, input.correlationTimeoutMs);
-  let observedProof: Awaited<ReturnType<typeof proveMatrixCorpusOutboundEvent>>;
-  try {
-    observedProof = await proveMatrixCorpusOutboundEvent({
-      matrix: input.matrix,
-      context: input.state.prepared.account,
-      cursor: cursor.cursor,
-      matrixUserId: input.state.prepared.account.matrixUserId,
-      matrixEventId: sent.matrixEventId,
-      messageText,
-      signal: proofController.signal,
-    });
-  } finally {
-    clearTimeout(proofTimeout);
-  }
+  const observedProof = await runWithMatrixCorpusDeadline(
+    input.correlationTimeoutMs,
+    async (signal) =>
+      await proveMatrixCorpusOutboundEvent({
+        matrix: input.matrix,
+        context: input.state.prepared.account,
+        cursor: cursor.cursor,
+        matrixUserId: input.state.prepared.account.matrixUserId,
+        matrixEventId: sent.matrixEventId,
+        messageText,
+        signal,
+      })
+  );
   if (!observedProof.ok) return { ok: false, kind: 'safety_failure', code: observedProof.code };
   const attached = await input.whatsapp.recordMatrixCorpusSendProof({
     runId: input.runId,
@@ -950,58 +960,69 @@ async function executeLiveTurn(input: {
   state.sessionId = status.sessionId;
   state.eventRevision = status.eventRevision;
 
+  const replyLeaseRenewal = await input.whatsapp.renewMatrixCorpusLease({
+    runId: input.runId,
+    leaseFence: input.leaseFence,
+    idempotencyKey: operationKey(
+      input.runId,
+      `reply:${input.scenario.id}:${String(input.turnIndex)}`
+    ),
+  });
+  if (!replyLeaseRenewal.ok)
+    return {
+      ok: false,
+      kind: 'infrastructure_failure',
+      code: 'lease_renewal_failed',
+      boundSessionId: status.sessionId,
+    };
+
   const evidenceCapture: { value: MatrixCorpusEvidenceResult | null } = { value: null };
-  const replyController = new AbortController();
-  const timeout = setTimeout(() => {
-    replyController.abort();
-  }, input.correlationTimeoutMs);
-  let correlated: Awaited<ReturnType<typeof collectCorrelatedReplies>>;
-  try {
-    correlated = await collectCorrelatedReplies({
-      matrix: input.matrix,
-      context: input.state.prepared.account,
-      cursor: cursor.cursor,
-      matrixUserId: input.state.prepared.account.matrixUserId,
-      expectedPuppetSender: input.state.prepared.expectedPuppetSender,
-      runId: input.runId,
-      scenarioId: input.scenario.id,
-      turnIndex: input.turnIndex,
-      sessionId: status.sessionId,
-      signal: replyController.signal,
-      evidence: {
-        async getTurnTerminal(): Promise<MatrixCorpusTurnTerminal> {
-          const current = await readScenarioStatus(
-            input.intex,
-            input.state,
-            input.scenario.id,
-            input.leaseFence
-          );
-          if (current?.sessionId !== status.sessionId) return { status: 'pending' };
-          const evidence = await input.intex.getMatrixCorpusEvidence({
-            ...identity(input.state, input.runId, input.leaseFence),
-            scenarioId: input.scenario.id,
-            sessionId: status.sessionId,
-            eventRevision: current.eventRevision,
-          });
-          if (!evidence.ok) return { status: 'pending' };
-          evidenceCapture.value = evidence.value;
-          const terminal = evidence.value.turnTerminals.find(
-            (candidate) => candidate.turnIndex === input.turnIndex
-          );
-          if (terminal === undefined) return { status: 'pending' };
-          return terminal.status === 'completed'
-            ? {
-                status: 'completed',
-                replyCount: terminal.replyCount,
-                replyDigests: terminal.replyDigests,
-              }
-            : { status: 'failed', failureCode: terminal.failureCode };
+  const correlated = await runWithMatrixCorpusDeadline(
+    input.replyTimeoutMs,
+    async (signal) =>
+      await collectCorrelatedReplies({
+        matrix: input.matrix,
+        context: input.state.prepared.account,
+        cursor: cursor.cursor,
+        matrixUserId: input.state.prepared.account.matrixUserId,
+        expectedPuppetSender: input.state.prepared.expectedPuppetSender,
+        runId: input.runId,
+        scenarioId: input.scenario.id,
+        turnIndex: input.turnIndex,
+        sessionId: status.sessionId,
+        signal,
+        evidence: {
+          async getTurnTerminal(): Promise<MatrixCorpusTurnTerminal> {
+            const current = await readScenarioStatus(
+              input.intex,
+              input.state,
+              input.scenario.id,
+              input.leaseFence
+            );
+            if (current?.sessionId !== status.sessionId) return { status: 'pending' };
+            const evidence = await input.intex.getMatrixCorpusEvidence({
+              ...identity(input.state, input.runId, input.leaseFence),
+              scenarioId: input.scenario.id,
+              sessionId: status.sessionId,
+              eventRevision: current.eventRevision,
+            });
+            if (!evidence.ok) return { status: 'pending' };
+            evidenceCapture.value = evidence.value;
+            const terminal = evidence.value.turnTerminals.find(
+              (candidate) => candidate.turnIndex === input.turnIndex
+            );
+            if (terminal === undefined) return { status: 'pending' };
+            return terminal.status === 'completed'
+              ? {
+                  status: 'completed',
+                  replyCount: terminal.replyCount,
+                  replyDigests: terminal.replyDigests,
+                }
+              : { status: 'failed', failureCode: terminal.failureCode };
+          },
         },
-      },
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+      })
+  );
   if (!correlated.ok || evidenceCapture.value === null)
     return {
       ok: false,
@@ -2288,6 +2309,21 @@ function toNanoUsd(value: number): number | null {
 
 function isJudgeScore(value: number): value is 1 | 2 | 3 | 4 | 5 {
   return value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
+}
+
+export async function runWithMatrixCorpusDeadline<T>(
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await operation(controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function poll<T>(
