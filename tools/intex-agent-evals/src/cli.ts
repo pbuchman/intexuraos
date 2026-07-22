@@ -363,6 +363,9 @@ async function runMatrixCorpusCommand(dependencies: CliDependencies): Promise<Ex
       dependencies.output.stderr(`scenario ${scenario.scenarioId} INFRASTRUCTURE_FAILURE`);
     }
   }
+  if (result.run.effectiveKind === 'infrastructure_failure') {
+    renderMatrixCorpusFailureCodes(result.run.failureCodes, dependencies.output);
+  }
   renderEvaluationResult(result.run.effectiveKind, dependencies.output);
   if (
     result.reportReady &&
@@ -372,6 +375,107 @@ async function runMatrixCorpusCommand(dependencies: CliDependencies): Promise<Ex
     return result.run.exitCode;
   }
   return 2;
+}
+
+const SAFE_MATRIX_CORPUS_FAILURE_CODES = new Set<string>([
+  'MINIMAX_JUDGE_INVALID_OUTPUT',
+  'MINIMAX_JUDGE_KEY_MISSING',
+  'MINIMAX_JUDGE_PROVIDER_FAILED',
+  'MINIMAX_JUDGE_TIMEOUT',
+  'MINIMAX_JUDGE_USAGE_INVALID',
+  'REPORT_PUBLICATION_FAILED',
+  'REPORT_STAGING_FAILED',
+  'REPORT_VALIDATION_FAILED',
+  'RETENTION_CLEANUP_FAILED',
+  'TURN_AGENT_CALL_COUNT_MISMATCH',
+  'TURN_AGENT_COST_UNRECONCILED',
+  'TURN_AGENT_MODEL_MISMATCH',
+  'TURN_AGENT_USAGE_INVALID',
+  'TURN_CATALOG_EVIDENCE_MISSING',
+  'TURN_CONFIRMATION_EVIDENCE_MISMATCH',
+  'TURN_REPLY_COUNT_INVALID',
+  'TURN_REPLY_DIGEST_COUNT_MISMATCH',
+  'TURN_REPLY_EVALUATION_COUNT_MISMATCH',
+  'TURN_REPLY_METADATA_MISMATCH',
+  'TURN_SCENARIO_LABEL_MISMATCH',
+  'TURN_SESSION_BINDING_MISMATCH',
+  'TURN_SESSION_ID_MISMATCH',
+  'TURN_SESSION_ID_MISSING',
+  'TURN_TERMINAL_EVIDENCE_MISSING',
+  'TURN_TOOL_EVIDENCE_INVALID',
+  'activation_failed',
+  'capability_issue_failed',
+  'context_finalization_failed',
+  'context_registration_failed',
+  'drain_timeout',
+  'duplicate_scenario_session',
+  'final_projection_retry_exhausted',
+  'finalization_readiness_failed',
+  'finalization_readiness_mismatch',
+  'finalizing_projection_failed',
+  'judge_evidence_mismatch',
+  'lease_renewal_failed',
+  'matrix_outbound_ambiguous',
+  'matrix_send_proof_rejected',
+  'matrix_sync_failed',
+  'matrix_sync_invalid',
+  'matrix_timeline_limited',
+  'outbound_event_mismatch',
+  'outbound_event_timeout',
+  'preflight_handoff_invalid',
+  'projection_creation_failed',
+  'projection_retry_exhausted',
+  'projection_revision_conflict',
+  'projection_status_failed',
+  'provision_failed',
+  'provisioning_abort_ack_timeout',
+  'provisioning_abort_failed',
+  'quiesce_failed',
+  'release_failed',
+  'reply_overflow',
+  'reply_timeout',
+  'retention_cleanup_failed',
+  'running_projection_failed',
+  'running_projection_retry_exhausted',
+  'scenario_binding_timeout',
+  'scenario_projection_failed',
+  'scenario_projection_missing_evidence',
+  'scenario_status_mismatch',
+  'stopped_scenario_binding_mismatch',
+  'stopped_scenario_evidence_missing',
+  'stopped_scenario_evidence_revision_mismatch',
+  'stopped_scenario_missing',
+  'stopped_scenario_projection_failed',
+  'stopped_scenario_reconciliation_retry_exhausted',
+  'stopped_scenario_status_missing',
+  'stopped_scenario_strict_mock_proof_failed',
+  'stopped_scenario_unsafe_evidence_shape',
+  'stopped_scenario_usage_regressed',
+  'stopped_scenario_usage_totals_mismatch',
+  'strict_mock_proof_failed',
+  'terminal_ack_timeout',
+  'turn_catalog_mismatch',
+  'turn_evidence_mismatch',
+  'turn_evidence_missing',
+  'turn_processing_failed',
+  'unbound_reply',
+  'unexpected_failure',
+  'unexpected_judge_failure',
+  'unexpected_projection_failure',
+  'unexpected_turn_failure',
+  'unsafe_evidence_shape',
+  'wrong_puppet',
+]);
+
+function renderMatrixCorpusFailureCodes(
+  failureCodes: readonly string[],
+  output: CliTextOutput
+): void {
+  for (const code of new Set(failureCodes)) {
+    output.stderr(
+      `evaluation failure ${SAFE_MATRIX_CORPUS_FAILURE_CODES.has(code) ? code : 'UNKNOWN_FAILURE'}`
+    );
+  }
 }
 
 async function runSetup(dependencies: CliDependencies): Promise<ExitCode> {

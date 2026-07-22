@@ -919,6 +919,13 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
         'evaluation result PASS exit 0\nevaluation result PASS exit 0\n'
       ),
     },
+    {
+      label: 'failure code before pass',
+      payload: matrixCorpusPayload(0).replace(
+        'evaluation result PASS exit 0\n',
+        'evaluation failure reply_timeout\nevaluation result PASS exit 0\n'
+      ),
+    },
   ])('rejects a matrix-corpus payload with $label', ({ payload }) => {
     const run = runWrapper(['__production-matrix-corpus'], {
       sshStdout: framedOutput(payload, 0),
@@ -927,6 +934,55 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
     expect(run.result.status).toBe(2);
     expect(run.result.stdout).toBe('');
     expect(run.result.stderr).toBe('remote_execution_failed\n');
+  });
+
+  it('rejects a matrix-corpus failure code outside the allowlist', () => {
+    const payload = matrixCorpusPayload(2).replace(
+      'evaluation result INFRASTRUCTURE_FAILURE exit 2\n',
+      'evaluation failure PRIVATE_TOKEN_ABC123\nevaluation result INFRASTRUCTURE_FAILURE exit 2\n'
+    );
+    const run = runWrapper(['__production-matrix-corpus'], {
+      sshExit: 2,
+      sshStdout: framedOutput(payload, 2),
+    });
+
+    expect(run.result.status).toBe(2);
+    expect(run.result.stdout).toBe('');
+    expect(run.result.stderr).toBe('remote_execution_failed\n');
+  });
+
+  it.each([
+    { count: 100, accepted: true },
+    { count: 101, accepted: false },
+  ])('enforces the matrix-corpus failure-code limit at $count lines', ({ count, accepted }) => {
+    const failureLines = 'evaluation failure reply_timeout\n'.repeat(count);
+    const payload = matrixCorpusPayload(2).replace(
+      'evaluation result INFRASTRUCTURE_FAILURE exit 2\n',
+      `${failureLines}evaluation result INFRASTRUCTURE_FAILURE exit 2\n`
+    );
+    const run = runWrapper(['__production-matrix-corpus'], {
+      sshExit: 2,
+      sshStdout: framedOutput(payload, 2),
+    });
+
+    expect(run.result.status).toBe(2);
+    expect(run.result.stdout).toBe(accepted ? payload : '');
+    expect(run.result.stderr).toBe(accepted ? '' : 'remote_execution_failed\n');
+  });
+
+  it('preserves a validated matrix-corpus infrastructure failure code', () => {
+    const payload = matrixCorpusPayload(2).replace(
+      'evaluation result INFRASTRUCTURE_FAILURE exit 2\n',
+      'evaluation failure reply_timeout\nevaluation result INFRASTRUCTURE_FAILURE exit 2\n'
+    );
+    const run = runWrapper(['__production-matrix-corpus'], {
+      sshExit: 2,
+      sshStdout: framedOutput(payload, 2),
+    });
+
+    expect(run.result.status).toBe(2);
+    expect(run.result.stdout).toBe(payload);
+    expect(run.result.stderr).toBe('');
   });
 
   it.each([

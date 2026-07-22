@@ -552,7 +552,7 @@ describe('runCli evaluation orchestration and projection', () => {
           runId,
           effectiveKind: 'infrastructure_failure' as const,
           exitCode: 2 as const,
-          failureCodes: ['REPORT_PUBLICATION_FAILED'],
+          failureCodes: ['REPORT_PUBLICATION_FAILED', 'PRIVATE_TOKEN_ABC123'],
           scenarios: [
             { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
           ],
@@ -578,8 +578,11 @@ describe('runCli evaluation orchestration and projection', () => {
       ['scenario intex-eval-001 PASS'],
     ]);
     expect(harness.stderr.mock.calls).toEqual([
+      ['evaluation failure REPORT_PUBLICATION_FAILED'],
+      ['evaluation failure UNKNOWN_FAILURE'],
       ['evaluation result INFRASTRUCTURE_FAILURE exit 2'],
     ]);
+    expect(harness.outputText()).not.toContain('PRIVATE_TOKEN_ABC123');
     expect(harness.outputText()).not.toContain('evaluation report');
     expect(harness.outputText()).not.toContain(`.artifacts/intex-agent-evals/${runId}`);
   });
