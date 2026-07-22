@@ -21,6 +21,7 @@ import type {
   IntexAgentTestRunRecordV1,
   TestRunProjectionCasCommandV1,
 } from '../../../domain/testRuns/types.js';
+import { deriveTestRunScenarioTotals } from '../../../domain/testRuns/types.js';
 import { digestArtifactCandidates } from '../../../domain/testRuns/stateMachine.js';
 import {
   emptyDeterministicEvidence,
@@ -119,13 +120,16 @@ describe('Firestore Test Run foundation repository', () => {
     await expect(
       repository.listStagedArtifactsFinishedBefore({ cutoff: later, limit: 19 as 20 })
     ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
-    await firestore.collection('intex_agent_test_runs').doc('run_corrupt').set({
-      userId: 'auth0:user_1',
-      runtimeAudience: 'hetzner-prod',
-      startedAt: later,
-      artifactDelivery: { status: 'staged' },
-      finishedAt: later,
-    });
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_corrupt')
+      .set({
+        userId: 'auth0:user_1',
+        runtimeAudience: 'hetzner-prod',
+        startedAt: later,
+        artifactDelivery: { status: 'staged' },
+        finishedAt: later,
+      });
     await expect(repository.getCurrentAcceptance('auth0:user_1')).resolves.toEqual({
       ok: false,
       code: 'CORRUPT_RECORD',
@@ -205,23 +209,21 @@ describe('Firestore Test Run foundation repository', () => {
     const { firestore, repository } = fixture();
     for (let index = 1; index <= 5; index += 1) {
       const runId = `run_${String(index)}`;
-      await firestore.collection('intex_agent_test_runs').doc(runId).set(
-        testRunRecord({
-          runId,
-          startedAt: `2026-07-20T10:0${String(index)}:00.000Z`,
-          updatedAt: `2026-07-20T10:0${String(index)}:00.000Z`,
-        })
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc(runId)
+        .set(
+          testRunRecord({
+            runId,
+            startedAt: `2026-07-20T10:0${String(index)}:00.000Z`,
+            updatedAt: `2026-07-20T10:0${String(index)}:00.000Z`,
+          })
+        );
     }
 
     await expect(repository.listLatestForUser('auth0:user_1')).resolves.toMatchObject({
       ok: true,
-      records: [
-        { runId: 'run_5' },
-        { runId: 'run_4' },
-        { runId: 'run_3' },
-        { runId: 'run_2' },
-      ],
+      records: [{ runId: 'run_5' }, { runId: 'run_4' }, { runId: 'run_3' }, { runId: 'run_2' }],
     });
     await expect(repository.listLatestForUser('auth0:user_1', 3 as 4)).resolves.toEqual({
       ok: false,
@@ -231,10 +233,7 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('uses the exact bounded staged-artifact deadline query in oldest-first order', async () => {
     const { firestore, repository } = fixture();
-    const staged = (
-      runId: string,
-      finishedAt: string
-    ): ReturnType<typeof testRunRecord> =>
+    const staged = (runId: string, finishedAt: string): ReturnType<typeof testRunRecord> =>
       testRunRecord({
         runId,
         revision: 5,
@@ -251,15 +250,18 @@ describe('Firestore Test Run foundation repository', () => {
           acknowledgedAt: finishedAt,
         },
       });
-    await firestore.collection('intex_agent_test_runs').doc('run_old').set(
-      staged('run_old', '2026-07-20T10:00:00.000Z')
-    );
-    await firestore.collection('intex_agent_test_runs').doc('run_cutoff').set(
-      staged('run_cutoff', '2026-07-20T10:10:00.000Z')
-    );
-    await firestore.collection('intex_agent_test_runs').doc('run_new').set(
-      staged('run_new', '2026-07-20T10:11:00.000Z')
-    );
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_old')
+      .set(staged('run_old', '2026-07-20T10:00:00.000Z'));
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_cutoff')
+      .set(staged('run_cutoff', '2026-07-20T10:10:00.000Z'));
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_new')
+      .set(staged('run_new', '2026-07-20T10:11:00.000Z'));
 
     await expect(
       repository.listStagedArtifactsFinishedBefore({
@@ -290,33 +292,39 @@ describe('Firestore Test Run foundation repository', () => {
       jsonCandidateDigest,
       markdownCandidateDigest
     );
-    await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-      testRunRecord({
-        revision: 5,
-        lifecycle: 'completed',
-        verdict: 'passed',
-        finishedAt: later,
-        artifactDelivery: { status: 'staged', failureCode: null, updatedAt: later },
-        artifactStageDigest,
-        terminalWinner: {
-          kind: 'release',
-          eventId: 'terminal_event_1',
-          payloadDigest: 'f'.repeat(64),
-          outcome: 'completed_passed',
-          acknowledgedAt: later,
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_1')
+      .set(
+        testRunRecord({
+          revision: 5,
+          lifecycle: 'completed',
+          verdict: 'passed',
+          finishedAt: later,
+          artifactDelivery: { status: 'staged', failureCode: null, updatedAt: later },
+          artifactStageDigest,
+          terminalWinner: {
+            kind: 'release',
+            eventId: 'terminal_event_1',
+            payloadDigest: 'f'.repeat(64),
+            outcome: 'completed_passed',
+            acknowledgedAt: later,
+          },
+        })
+      );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_manifests')
+      .doc('run_1')
+      .set({
+        ...emptyRunManifest(),
+        artifactStage: {
+          revision: 2,
+          jsonCandidateDigest,
+          markdownCandidateDigest,
+          compositeDigest: artifactStageDigest,
+          stagedAt: later,
         },
-      })
-    );
-    await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set({
-      ...emptyRunManifest(),
-      artifactStage: {
-        revision: 2,
-        jsonCandidateDigest,
-        markdownCandidateDigest,
-        compositeDigest: artifactStageDigest,
-        stagedAt: later,
-      },
-    });
+      });
     const command = {
       expectedRevision: 5,
       updatedAt: '2026-07-20T10:20:00.000Z',
@@ -331,9 +339,7 @@ describe('Firestore Test Run foundation repository', () => {
       competingRepository.applyArtifactDelivery({ identity: identity(), command }),
     ]);
 
-    expect(results).toContainEqual(
-      expect.objectContaining({ ok: true, disposition: 'applied' })
-    );
+    expect(results).toContainEqual(expect.objectContaining({ ok: true, disposition: 'applied' }));
     expect(results).toContainEqual(
       expect.objectContaining({ ok: true, disposition: 'already_applied' })
     );
@@ -375,14 +381,18 @@ describe('Firestore Test Run foundation repository', () => {
 
     for (const corruptRoot of ['run', 'manifest'] as const) {
       const { firestore, repository } = fixture();
-      await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-        corruptRoot === 'run'
-          ? { corrupt: true }
-          : testRunRecord({ lifecycle: 'running', revision: 1 })
-      );
-      await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set(
-        corruptRoot === 'manifest' ? { corrupt: true } : emptyRunManifest()
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_1')
+        .set(
+          corruptRoot === 'run'
+            ? { corrupt: true }
+            : testRunRecord({ lifecycle: 'running', revision: 1 })
+        );
+      await firestore
+        .collection('intex_agent_matrix_corpus_run_manifests')
+        .doc('run_1')
+        .set(corruptRoot === 'manifest' ? { corrupt: true } : emptyRunManifest());
       await expect(
         repository.applyArtifactDelivery({ identity: identity(), command: stageCommand })
       ).resolves.toEqual({ ok: false, code: 'CORRUPT_RECORD' });
@@ -390,17 +400,23 @@ describe('Firestore Test Run foundation repository', () => {
 
     for (const foreignRoot of ['run', 'manifest'] as const) {
       const { firestore, repository } = fixture();
-      await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-        testRunRecord({
-          lifecycle: 'running',
-          revision: 1,
-          ...(foreignRoot === 'run' ? { userId: 'auth0:foreign' } : {}),
-        })
-      );
-      await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set({
-        ...emptyRunManifest(),
-        ...(foreignRoot === 'manifest' ? { leaseFence: '8' } : {}),
-      });
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_1')
+        .set(
+          testRunRecord({
+            lifecycle: 'running',
+            revision: 1,
+            ...(foreignRoot === 'run' ? { userId: 'auth0:foreign' } : {}),
+          })
+        );
+      await firestore
+        .collection('intex_agent_matrix_corpus_run_manifests')
+        .doc('run_1')
+        .set({
+          ...emptyRunManifest(),
+          ...(foreignRoot === 'manifest' ? { leaseFence: '8' } : {}),
+        });
       await expect(
         repository.applyArtifactDelivery({ identity: identity(), command: stageCommand })
       ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
@@ -453,23 +469,31 @@ describe('Firestore Test Run foundation repository', () => {
     ];
     for (const retry of retryCases) {
       const { firestore, repository } = fixture();
-      await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-        testRunRecord({
-          revision: 6,
-          lifecycle: 'completed',
-          verdict: 'passed',
-          updatedAt: later,
-          finishedAt: later,
-          artifactDelivery: retry.artifactDelivery,
-          terminalWinner,
-        })
-      );
-      await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set(
-        emptyRunManifest()
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_1')
+        .set(
+          testRunRecord({
+            revision: 6,
+            lifecycle: 'completed',
+            verdict: 'passed',
+            updatedAt: later,
+            finishedAt: later,
+            artifactDelivery: retry.artifactDelivery,
+            terminalWinner,
+          })
+        );
+      await firestore
+        .collection('intex_agent_matrix_corpus_run_manifests')
+        .doc('run_1')
+        .set(emptyRunManifest());
       await expect(
         repository.applyArtifactDelivery({ identity: identity(), command: retry.command })
-      ).resolves.toMatchObject({ ok: true, disposition: 'already_applied', record: { revision: 6 } });
+      ).resolves.toMatchObject({
+        ok: true,
+        disposition: 'already_applied',
+        record: { revision: 6 },
+      });
     }
   });
 
@@ -555,13 +579,16 @@ describe('Firestore Test Run foundation repository', () => {
       .collection('intex_agent_sessions')
       .doc('matrix_target_session')
       .get();
-    await firestore.collection('intex_agent_sessions').doc('matrix_target_session').set({
-      ...targetSession.data(),
-      matrixCorpusProfile: {
-        ...(targetSession.data()?.['matrixCorpusProfile'] as Record<string, unknown>),
-        runId: 'run_other',
-      },
-    });
+    await firestore
+      .collection('intex_agent_sessions')
+      .doc('matrix_target_session')
+      .set({
+        ...targetSession.data(),
+        matrixCorpusProfile: {
+          ...(targetSession.data()?.['matrixCorpusProfile'] as Record<string, unknown>),
+          runId: 'run_other',
+        },
+      });
 
     await expect(
       repository.cleanupExactRun({
@@ -586,10 +613,7 @@ describe('Firestore Test Run foundation repository', () => {
       const { firestore, repository } = fixture();
       await writeCleanupFixture(firestore);
       if (missingRoot === 'session')
-        await firestore
-          .collection('intex_agent_sessions')
-          .doc('matrix_target_session')
-          .delete();
+        await firestore.collection('intex_agent_sessions').doc('matrix_target_session').delete();
       if (missingRoot === 'projection')
         await firestore
           .collection('intex_agent_test_run_scenarios')
@@ -659,10 +683,7 @@ describe('Firestore Test Run foundation repository', () => {
       {
         name: 'bound session removed',
         mutate: async (firestore): Promise<void> => {
-          await firestore
-            .collection('intex_agent_sessions')
-            .doc('matrix_target_session')
-            .delete();
+          await firestore.collection('intex_agent_sessions').doc('matrix_target_session').delete();
         },
         code: 'EVIDENCE_MISMATCH',
       },
@@ -710,15 +731,18 @@ describe('Firestore Test Run foundation repository', () => {
       {
         name: 'child event reappeared',
         mutate: async (firestore): Promise<void> => {
-          await firestore.collection('intex_agent_session_events').doc('race_event').set({
-            id: 'race_event',
-            sessionId: 'matrix_target_session',
-            userId: 'auth0:user_1',
-            type: 'user_message',
-            payload: { race: true },
-            createdAt: later,
-            eventSequence: 1,
-          });
+          await firestore
+            .collection('intex_agent_session_events')
+            .doc('race_event')
+            .set({
+              id: 'race_event',
+              sessionId: 'matrix_target_session',
+              userId: 'auth0:user_1',
+              type: 'user_message',
+              payload: { race: true },
+              createdAt: later,
+              eventSequence: 1,
+            });
         },
         code: 'EVIDENCE_MISMATCH',
       },
@@ -876,48 +900,9 @@ describe('Firestore Test Run foundation repository', () => {
     }
   });
 
-  it('cleans an abandoned terminal target only with its exact recovery receipt', async () => {
+  it('cleans an abandoned target when manifest binding won before run projection', async () => {
     const { firestore, repository } = fixture();
-    await writeCleanupFixture(firestore);
-    const runRef = firestore.collection('intex_agent_test_runs').doc('run_target');
-    const run = await runRef.get();
-    const manifestRef = firestore
-      .collection('intex_agent_matrix_corpus_run_manifests')
-      .doc('run_target');
-    const manifest = await manifestRef.get();
-    await runRef.set({
-      ...run.data(),
-      lifecycle: 'stopped',
-      verdict: 'not_evaluated',
-      terminalCandidate: null,
-      artifactStageDigest: null,
-      terminalWinner: {
-        kind: 'abandoned',
-        eventId: 'abandoned_target_event',
-        payloadDigest: 'e'.repeat(64),
-        outcome: 'stopped_not_evaluated',
-        acknowledgedAt: later,
-      },
-    });
-    await manifestRef.set({
-      ...manifest.data(),
-      terminalCandidate: null,
-      artifactStage: null,
-    });
-    await firestore
-      .collection('intex_agent_matrix_corpus_recovery_receipts')
-      .doc('run_target')
-      .set({
-        version: 1,
-        runtimeAudience: 'hetzner-prod',
-        runId: 'run_target',
-        userId: 'auth0:user_1',
-        leaseFence: '7',
-        eventId: 'abandoned_target_event',
-        payloadDigest: 'e'.repeat(64),
-        outcome: 'stopped_not_evaluated',
-        acknowledgedAt: later,
-      });
+    await writeAbandonedProjectionGapFixture(firestore);
 
     await expect(repository.cleanupExactRun(cleanupInput())).resolves.toMatchObject({
       ok: true,
@@ -925,11 +910,64 @@ describe('Firestore Test Run foundation repository', () => {
       removed: { runs: 1 },
     });
     await expect(
-      firestore
-        .collection('intex_agent_matrix_corpus_recovery_receipts')
-        .doc('run_target')
-        .get()
+      firestore.collection('intex_agent_matrix_corpus_recovery_receipts').doc('run_target').get()
     ).resolves.toMatchObject({ exists: false });
+  });
+
+  it('fails closed for impossible abandoned projection-gap states', async () => {
+    const mutations: ((firestore: Firestore) => Promise<void>)[] = [
+      async (firestore): Promise<void> => {
+        const ref = firestore.collection('intex_agent_test_runs').doc('run_target');
+        const run = await ref.get();
+        await ref.set({ ...run.data(), lifecycle: 'completed', verdict: 'failed' });
+      },
+      async (firestore): Promise<void> => {
+        const runRef = firestore.collection('intex_agent_test_runs').doc('run_target');
+        const run = await runRef.get();
+        const winner = run.data()?.['terminalWinner'] as Record<string, unknown>;
+        await runRef.set({
+          ...run.data(),
+          terminalWinner: { ...winner, outcome: 'provisioning_rolled_back' },
+        });
+        const receiptRef = firestore
+          .collection('intex_agent_matrix_corpus_recovery_receipts')
+          .doc('run_target');
+        const receipt = await receiptRef.get();
+        await receiptRef.set({ ...receipt.data(), outcome: 'provisioning_rolled_back' });
+      },
+      async (firestore): Promise<void> => {
+        const ref = firestore.collection('intex_agent_test_runs').doc('run_target');
+        const run = await ref.get();
+        await ref.set({
+          ...run.data(),
+          artifactDelivery: { status: 'ready', failureCode: null, updatedAt: later },
+        });
+      },
+      async (firestore): Promise<void> => {
+        const ref = firestore.collection('intex_agent_test_runs').doc('run_target');
+        const run = await ref.get();
+        const scenarios = run.data()?.['scenarios'] as IntexAgentTestRunRecordV1['scenarios'];
+        await ref.set({
+          ...run.data(),
+          scenarios: scenarios.map((scenario, index) =>
+            index === 0 ? { ...scenario, scenarioRevision: 2 } : scenario
+          ),
+        });
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const { firestore, repository } = fixture();
+      await writeAbandonedProjectionGapFixture(firestore);
+      await mutate(firestore);
+      await expect(repository.cleanupExactRun(cleanupInput())).resolves.toEqual({
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+      });
+      await expect(
+        firestore.collection('intex_agent_sessions').doc('matrix_target_session').get()
+      ).resolves.toMatchObject({ exists: true });
+    }
   });
 
   it('fails closed for every missing, corrupt, or foreign current cleanup root', async () => {
@@ -973,9 +1011,10 @@ describe('Firestore Test Run foundation repository', () => {
     {
       const { firestore, repository } = fixture();
       await writeCleanupFixture(firestore);
-      await firestore.collection('intex_agent_test_runs').doc('run_current').set(
-        testRunRecord({ runId: 'run_current', leaseFence: '8', lifecycle: 'running' })
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_current')
+        .set(testRunRecord({ runId: 'run_current', leaseFence: '8', lifecycle: 'running' }));
       await expect(repository.cleanupExactRun(cleanupInput())).resolves.toEqual({
         ok: false,
         code: 'INVALID_TRANSITION',
@@ -1025,14 +1064,8 @@ describe('Firestore Test Run foundation repository', () => {
       await writeCleanupFixture(firestore);
       await Promise.all([
         firestore.collection('intex_agent_test_runs').doc('run_target').delete(),
-        firestore
-          .collection('intex_agent_matrix_corpus_run_contexts')
-          .doc('run_target')
-          .delete(),
-        firestore
-          .collection('intex_agent_matrix_corpus_run_manifests')
-          .doc('run_target')
-          .delete(),
+        firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_target').delete(),
+        firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_target').delete(),
       ]);
       await expect(repository.cleanupExactRun(cleanupInput())).resolves.toEqual({
         ok: false,
@@ -1218,9 +1251,10 @@ describe('Firestore Test Run foundation repository', () => {
       ok: true,
       record: { runId: 'run_1', leaseFence: '7' },
     });
-    await expect(
-      repository.getExact({ ...identity(), leaseFence: '8' })
-    ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+    await expect(repository.getExact({ ...identity(), leaseFence: '8' })).resolves.toEqual({
+      ok: false,
+      code: 'CORRELATED_REPLAY_CONFLICT',
+    });
   });
 
   it('fails closed for missing, foreign, and corrupt owner and projection mutations', async () => {
@@ -1253,9 +1287,10 @@ describe('Firestore Test Run foundation repository', () => {
 
     {
       const { firestore, repository } = fixture();
-      await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-        testRunRecord({ userId: 'auth0:foreign' })
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_1')
+        .set(testRunRecord({ userId: 'auth0:foreign' }));
       await expect(repository.getOwned('run_1', 'auth0:user_1')).resolves.toEqual({
         ok: false,
         code: 'NOT_FOUND',
@@ -1439,10 +1474,7 @@ describe('Firestore Test Run foundation repository', () => {
       await createRunningScenarioRun(repository);
       await writeScenarioEvidence(firestore);
       if (missingRoot === 'manifest')
-        await firestore
-          .collection('intex_agent_matrix_corpus_run_manifests')
-          .doc('run_1')
-          .delete();
+        await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').delete();
       if (missingRoot === 'session')
         await firestore.collection('intex_agent_sessions').doc('matrix_session_1').delete();
 
@@ -1478,9 +1510,9 @@ describe('Firestore Test Run foundation repository', () => {
     await writeScenarioEvidence(firestore);
 
     const applied = await repository.applyProjection({
-        identity: identity(),
-        command: scenarioProjectionCommand(),
-      });
+      identity: identity(),
+      command: scenarioProjectionCommand(),
+    });
     expect(applied).toMatchObject({ ok: true, disposition: 'applied' });
     if (!applied.ok) throw new Error('fixture projection failed');
     expect(applied.record.scenarios[0]).toMatchObject({
@@ -1610,11 +1642,14 @@ describe('Firestore Test Run foundation repository', () => {
       .collection('intex_agent_session_events')
       .doc('matrix_event_1')
       .get();
-    await firestore.collection('intex_agent_session_events').doc('matrix_event_2').set({
-      ...firstEvent.data(),
-      id: 'matrix_event_2',
-      eventSequence: 2,
-    });
+    await firestore
+      .collection('intex_agent_session_events')
+      .doc('matrix_event_2')
+      .set({
+        ...firstEvent.data(),
+        id: 'matrix_event_2',
+        eventSequence: 2,
+      });
     const base = scenarioProjectionCommand();
     const command = {
       ...base,
@@ -1803,7 +1838,9 @@ describe('Firestore Test Run foundation repository', () => {
       },
     };
 
-    await expect(repository.applyProjection({ identity: identity(), command })).resolves.toMatchObject({
+    await expect(
+      repository.applyProjection({ identity: identity(), command })
+    ).resolves.toMatchObject({
       ok: true,
       record: {
         totals: {
@@ -1860,9 +1897,10 @@ describe('Firestore Test Run foundation repository', () => {
           })
         : testRunScenario(index + 1)
     );
-    await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-      testRunRecord({ lifecycle: 'running', revision: 2, scenarios })
-    );
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_1')
+      .set(testRunRecord({ lifecycle: 'running', revision: 2, scenarios }));
     await expect(
       repository.getScenarioConsistent({
         runId: 'run_1',
@@ -1935,12 +1973,14 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('atomically finalizes context manifest and running projection in one transaction', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
-    await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set(
-      emptyRunManifest()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_manifests')
+      .doc('run_1')
+      .set(emptyRunManifest());
     await repository.createOrGet(testRunRecord());
     await repository.applyProjection({
       identity: identity(),
@@ -2080,12 +2120,14 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('rejects finalizing through generic projection CAS', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
-    await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set(
-      emptyRunManifest()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_manifests')
+      .doc('run_1')
+      .set(emptyRunManifest());
     await repository.createOrGet(testRunRecord());
     await repository.applyProjection({
       identity: identity(),
@@ -2123,12 +2165,14 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('leaves active ciphertext untouched when atomic finalization CAS conflicts', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
-    await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set(
-      emptyRunManifest()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_manifests')
+      .doc('run_1')
+      .set(emptyRunManifest());
     await repository.createOrGet(testRunRecord());
     await repository.applyProjection({
       identity: identity(),
@@ -2159,22 +2203,24 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('refuses finalization until every bound session event is projected', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
     await writeScenarioEvidence(firestore);
-    await firestore.collection('intex_agent_matrix_corpus_scenario_contexts').doc('context_1').set(
-      activeScenarioContext()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_scenario_contexts')
+      .doc('context_1')
+      .set(activeScenarioContext());
     await repository.createOrGet(
       testRunRecord({
         scenarios: Array.from({ length: 20 }, (_, index) =>
           index === 0
             ? testRunScenario(1, {
-            lifecycle: 'running',
-            sessionId: 'matrix_session_1',
-            sessionBindingDigest: '9'.repeat(64),
-          })
+                lifecycle: 'running',
+                sessionId: 'matrix_session_1',
+                sessionBindingDigest: '9'.repeat(64),
+              })
             : testRunScenario(index + 1)
         ),
       })
@@ -2214,9 +2260,10 @@ describe('Firestore Test Run foundation repository', () => {
       code: 'FINALIZATION_MISMATCH',
     });
     await scenarioContextRef.set(activeScenarioContext());
-    await expect(
-      repository.finalizeRun(input)
-    ).resolves.toEqual({ ok: false, code: 'EVIDENCE_MISMATCH' });
+    await expect(repository.finalizeRun(input)).resolves.toEqual({
+      ok: false,
+      code: 'EVIDENCE_MISMATCH',
+    });
   });
 
   it('atomically finalizes a manifest-bound scenario with exact projected session evidence', async () => {
@@ -2266,11 +2313,14 @@ describe('Firestore Test Run foundation repository', () => {
       .collection('intex_agent_session_events')
       .doc('matrix_event_1')
       .get();
-    await firestore.collection('intex_agent_session_events').doc('matrix_event_2').set({
-      ...firstEvent.data(),
-      id: 'matrix_event_2',
-      eventSequence: 2,
-    });
+    await firestore
+      .collection('intex_agent_session_events')
+      .doc('matrix_event_2')
+      .set({
+        ...firstEvent.data(),
+        id: 'matrix_event_2',
+        eventSequence: 2,
+      });
     const commandBase = scenarioProjectionCommand();
     const base = {
       ...commandBase,
@@ -2372,9 +2422,7 @@ describe('Firestore Test Run foundation repository', () => {
       code: 'EVIDENCE_MISMATCH',
     });
     await sessionRef.set(storedSession.data() ?? {});
-    const firstEventRef = firestore
-      .collection('intex_agent_session_events')
-      .doc('matrix_event_1');
+    const firstEventRef = firestore.collection('intex_agent_session_events').doc('matrix_event_1');
     const storedFirstEvent = await firstEventRef.get();
     await firstEventRef.update({ userId: 'auth0:foreign' });
     await expect(repository.finalizeRun(finalizationInput)).resolves.toEqual({
@@ -2382,9 +2430,7 @@ describe('Firestore Test Run foundation repository', () => {
       code: 'EVENT_WATERMARK_GAP',
     });
     await firstEventRef.set(storedFirstEvent.data() ?? {});
-    const secondEventRef = firestore
-      .collection('intex_agent_session_events')
-      .doc('matrix_event_2');
+    const secondEventRef = firestore.collection('intex_agent_session_events').doc('matrix_event_2');
     const secondEvent = await secondEventRef.get();
     await secondEventRef.delete();
     await expect(repository.finalizeRun(finalizationInput)).resolves.toEqual({
@@ -2470,8 +2516,7 @@ describe('Firestore Test Run foundation repository', () => {
         name: 'expired context',
         mutate: async ({ input }): Promise<void> => {
           (input as { updatedAt: string }).updatedAt = '2026-07-22T10:05:00.000Z';
-          (input.terminalCandidate as { createdAt: string }).createdAt =
-            '2026-07-22T10:05:00.000Z';
+          (input.terminalCandidate as { createdAt: string }).createdAt = '2026-07-22T10:05:00.000Z';
         },
       },
       {
@@ -2654,9 +2699,10 @@ describe('Firestore Test Run foundation repository', () => {
     }
     {
       const { firestore, repository } = fixture();
-      await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-        testRunRecord({ userId: 'auth0:foreign' })
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_1')
+        .set(testRunRecord({ userId: 'auth0:foreign' }));
       await expect(
         repository.applyTerminalControl({ identity: identity(), command })
       ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
@@ -2733,16 +2779,19 @@ describe('Firestore Test Run foundation repository', () => {
       });
       const jsonCandidateDigest = '1'.repeat(64);
       const markdownCandidateDigest = '2'.repeat(64);
-      await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set({
-        ...emptyRunManifest(),
-        artifactStage: {
-          revision: 1,
-          jsonCandidateDigest,
-          markdownCandidateDigest,
-          compositeDigest: digestArtifactCandidates(jsonCandidateDigest, markdownCandidateDigest),
-          stagedAt: later,
-        },
-      });
+      await firestore
+        .collection('intex_agent_matrix_corpus_run_manifests')
+        .doc('run_1')
+        .set({
+          ...emptyRunManifest(),
+          artifactStage: {
+            revision: 1,
+            jsonCandidateDigest,
+            markdownCandidateDigest,
+            compositeDigest: digestArtifactCandidates(jsonCandidateDigest, markdownCandidateDigest),
+            stagedAt: later,
+          },
+        });
       await expect(
         repository.applyArtifactDelivery({
           identity: identity(),
@@ -2758,12 +2807,14 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('atomically tombstones active context when abandoned recovery stops a running run', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
-    await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set(
-      emptyRunManifest()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_manifests')
+      .doc('run_1')
+      .set(emptyRunManifest());
     await repository.createOrGet(testRunRecord());
     await repository.applyProjection({
       identity: identity(),
@@ -2960,9 +3011,10 @@ describe('Firestore Test Run foundation repository', () => {
     for (const foreignRoot of ['run', 'context', 'manifest', 'scenario'] as const) {
       const { firestore, repository } = fixture();
       if (foreignRoot === 'run')
-        await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-          testRunRecord({ userId: 'auth0:foreign' })
-        );
+        await firestore
+          .collection('intex_agent_test_runs')
+          .doc('run_1')
+          .set(testRunRecord({ userId: 'auth0:foreign' }));
       if (foreignRoot === 'context')
         await firestore
           .collection('intex_agent_matrix_corpus_run_contexts')
@@ -3083,16 +3135,19 @@ describe('Firestore Test Run foundation repository', () => {
     });
 
     const second = fixture();
-    await second.firestore.collection('intex_agent_test_runs').doc('run_1').set(
-      testRunRecord({
-        lifecycle: 'finalizing',
-        revision: 3,
-        artifactDelivery: { status: 'staged', failureCode: null, updatedAt: later },
-        contextFinalizationTombstoneDigest: 'd'.repeat(64),
-        artifactStageDigest: staged.digest,
-        terminalCandidate: candidate,
-      })
-    );
+    await second.firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_1')
+      .set(
+        testRunRecord({
+          lifecycle: 'finalizing',
+          revision: 3,
+          artifactDelivery: { status: 'staged', failureCode: null, updatedAt: later },
+          contextFinalizationTombstoneDigest: 'd'.repeat(64),
+          artifactStageDigest: staged.digest,
+          terminalCandidate: candidate,
+        })
+      );
     await second.firestore
       .collection('intex_agent_matrix_corpus_run_contexts')
       .doc('run_1')
@@ -3140,9 +3195,10 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('atomically rolls back partial preflight provisioning without execution evidence', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
     await repository.createOrGet(testRunRecord());
 
     await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toMatchObject({
@@ -3197,20 +3253,23 @@ describe('Firestore Test Run foundation repository', () => {
   it('returns an already-terminal run and rejects running recovery without both roots', async () => {
     {
       const { firestore, repository } = fixture();
-      await firestore.collection('intex_agent_test_runs').doc('run_1').set(
-        testRunRecord({
-          lifecycle: 'stopped',
-          verdict: 'not_evaluated',
-          finishedAt: later,
-          terminalWinner: {
-            kind: 'abandoned',
-            eventId: 'existing_abandoned_event',
-            payloadDigest: 'e'.repeat(64),
-            outcome: 'stopped_not_evaluated',
-            acknowledgedAt: later,
-          },
-        })
-      );
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_1')
+        .set(
+          testRunRecord({
+            lifecycle: 'stopped',
+            verdict: 'not_evaluated',
+            finishedAt: later,
+            terminalWinner: {
+              kind: 'abandoned',
+              eventId: 'existing_abandoned_event',
+              payloadDigest: 'e'.repeat(64),
+              outcome: 'stopped_not_evaluated',
+              acknowledgedAt: later,
+            },
+          })
+        );
       await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toMatchObject({
         ok: true,
         disposition: 'already_applied',
@@ -3300,14 +3359,18 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('fails closed instead of rolling back provisioning with session evidence', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
     await repository.createOrGet(testRunRecord());
-    await firestore.collection('intex_agent_sessions').doc('session_1').set({
-      userId: 'auth0:user_1',
-      matrixCorpusProfile: { runId: 'run_1', leaseFence: '7' },
-    });
+    await firestore
+      .collection('intex_agent_sessions')
+      .doc('session_1')
+      .set({
+        userId: 'auth0:user_1',
+        matrixCorpusProfile: { runId: 'run_1', leaseFence: '7' },
+      });
 
     await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toEqual({
       ok: false,
@@ -3318,14 +3381,18 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('rejects abandoned recovery when same-run session evidence carries another lease fence', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set(
-      activeRunContext()
-    );
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
     await repository.createOrGet(testRunRecord());
-    await firestore.collection('intex_agent_sessions').doc('session_wrong_fence').set({
-      userId: 'auth0:user_1',
-      matrixCorpusProfile: { runId: 'run_1', leaseFence: '8' },
-    });
+    await firestore
+      .collection('intex_agent_sessions')
+      .doc('session_wrong_fence')
+      .set({
+        userId: 'auth0:user_1',
+        matrixCorpusProfile: { runId: 'run_1', leaseFence: '8' },
+      });
 
     await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toEqual({
       ok: false,
@@ -3339,11 +3406,14 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('rejects corrupt stored records without returning private document data', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_test_runs').doc('run_1').set({
-      ...testRunRecord(),
-      agentModel: 'or:google/gemini-3-flash-preview',
-      privatePrompt: 'must not leak',
-    });
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_1')
+      .set({
+        ...testRunRecord(),
+        agentModel: 'or:google/gemini-3-flash-preview',
+        privatePrompt: 'must not leak',
+      });
 
     await expect(repository.getExact(identity())).resolves.toEqual({
       ok: false,
@@ -3353,10 +3423,13 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('derives the closed current-acceptance admission gate without exposing records', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_test_runs').doc('run_legacy').set({
-      ...testRunRecord({ runId: 'run_legacy' }),
-      runtimeAudience: 'home-dev',
-    });
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_legacy')
+      .set({
+        ...testRunRecord({ runId: 'run_legacy' }),
+        runtimeAudience: 'home-dev',
+      });
     await expect(repository.getCurrentAcceptance('auth0:user_1')).resolves.toEqual({
       ok: true,
       acceptance: { kind: 'admission_ready', current: 'absent' },
@@ -3410,63 +3483,75 @@ describe('Firestore Test Run foundation repository', () => {
       { status: 'failed', failureCode: 'REPORT_PUBLICATION_FAILED', updatedAt: later },
       { kind: 'admission_ready', current: 'terminal_artifact_failed' },
     ],
-  ] as const)('classifies terminal artifact admission state %#', async (artifactDelivery, expected) => {
-    const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_test_runs').doc('run_terminal').set(
-      testRunRecord({
-        runId: 'run_terminal',
-        lifecycle: 'completed',
-        verdict: 'passed',
-        finishedAt: later,
-        artifactDelivery,
-        terminalWinner: {
-          kind: 'release',
-          eventId: 'terminal_event_2',
-          payloadDigest: 'f'.repeat(64),
-          outcome: 'completed_passed',
-          acknowledgedAt: later,
-        },
-      })
-    );
+  ] as const)(
+    'classifies terminal artifact admission state %#',
+    async (artifactDelivery, expected) => {
+      const { firestore, repository } = fixture();
+      await firestore
+        .collection('intex_agent_test_runs')
+        .doc('run_terminal')
+        .set(
+          testRunRecord({
+            runId: 'run_terminal',
+            lifecycle: 'completed',
+            verdict: 'passed',
+            finishedAt: later,
+            artifactDelivery,
+            terminalWinner: {
+              kind: 'release',
+              eventId: 'terminal_event_2',
+              payloadDigest: 'f'.repeat(64),
+              outcome: 'completed_passed',
+              acknowledgedAt: later,
+            },
+          })
+        );
 
-    await expect(repository.getCurrentAcceptance('auth0:user_1')).resolves.toEqual({
-      ok: true,
-      acceptance: expected,
-    });
-  });
+      await expect(repository.getCurrentAcceptance('auth0:user_1')).resolves.toEqual({
+        ok: true,
+        acceptance: expected,
+      });
+    }
+  );
 
   it('blocks admission when any older Home Dev record is still current', async () => {
     const { firestore, repository } = fixture();
-    await firestore.collection('intex_agent_test_runs').doc('run_current').set(
-      testRunRecord({
-        runId: 'run_current',
-        startedAt: '2026-07-20T09:00:00.000Z',
-        updatedAt: '2026-07-20T09:00:00.000Z',
-        lifecycle: 'running',
-      })
-    );
-    await firestore.collection('intex_agent_test_runs').doc('run_newer_terminal').set(
-      testRunRecord({
-        runId: 'run_newer_terminal',
-        startedAt: '2026-07-20T11:00:00.000Z',
-        updatedAt: '2026-07-20T11:00:00.000Z',
-        finishedAt: '2026-07-20T11:05:00.000Z',
-        lifecycle: 'completed',
-        verdict: 'passed',
-        artifactDelivery: {
-          status: 'ready',
-          failureCode: null,
-          updatedAt: '2026-07-20T11:05:00.000Z',
-        },
-        terminalWinner: {
-          kind: 'release',
-          eventId: 'terminal_event_newer',
-          payloadDigest: 'f'.repeat(64),
-          outcome: 'completed_passed',
-          acknowledgedAt: '2026-07-20T11:05:00.000Z',
-        },
-      })
-    );
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_current')
+      .set(
+        testRunRecord({
+          runId: 'run_current',
+          startedAt: '2026-07-20T09:00:00.000Z',
+          updatedAt: '2026-07-20T09:00:00.000Z',
+          lifecycle: 'running',
+        })
+      );
+    await firestore
+      .collection('intex_agent_test_runs')
+      .doc('run_newer_terminal')
+      .set(
+        testRunRecord({
+          runId: 'run_newer_terminal',
+          startedAt: '2026-07-20T11:00:00.000Z',
+          updatedAt: '2026-07-20T11:00:00.000Z',
+          finishedAt: '2026-07-20T11:05:00.000Z',
+          lifecycle: 'completed',
+          verdict: 'passed',
+          artifactDelivery: {
+            status: 'ready',
+            failureCode: null,
+            updatedAt: '2026-07-20T11:05:00.000Z',
+          },
+          terminalWinner: {
+            kind: 'release',
+            eventId: 'terminal_event_newer',
+            payloadDigest: 'f'.repeat(64),
+            outcome: 'completed_passed',
+            acknowledgedAt: '2026-07-20T11:05:00.000Z',
+          },
+        })
+      );
 
     await expect(repository.getCurrentAcceptance('auth0:user_1')).resolves.toEqual({
       ok: true,
@@ -3751,71 +3836,77 @@ async function writeScenarioEvidence(
     forbiddenSelections: [],
     unexpectedKnownToolPolicy: 'behavioral_failure_no_execution' as const,
   };
-  await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_1').set({
-    version: 1,
-    runtimeAudience: 'hetzner-prod',
-    runId: 'run_1',
-    userId: 'auth0:user_1',
-    leaseFence: '7',
-    catalogDigest: 'a'.repeat(64),
-    scenarioBindings: [
-      {
+  await firestore
+    .collection('intex_agent_matrix_corpus_run_manifests')
+    .doc('run_1')
+    .set({
+      version: 1,
+      runtimeAudience: 'hetzner-prod',
+      runId: 'run_1',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+      catalogDigest: 'a'.repeat(64),
+      scenarioBindings: [
+        {
+          scenarioId: 'scenario_001',
+          scenarioNumber: 1,
+          scenarioLabel: 'Scenario 001/020',
+          sessionId: options.manifestSessionId ?? 'matrix_session_1',
+        },
+      ],
+      artifactStage: null,
+      terminalCandidate: null,
+      createdAt: later,
+    });
+  await firestore
+    .collection('intex_agent_sessions')
+    .doc('matrix_session_1')
+    .set({
+      id: 'matrix_session_1',
+      userId: 'auth0:user_1',
+      channel: 'whatsapp',
+      status: 'active',
+      startedAt: later,
+      lastUserMessageAt: later,
+      startReason: 'no_active_session',
+      matrixCorpusProfile: {
+        version: 1,
+        kind: 'matrix_corpus',
+        runtimeAudience: 'hetzner-prod',
+        leaseFence: '7',
+        runId: 'run_1',
         scenarioId: 'scenario_001',
         scenarioNumber: 1,
         scenarioLabel: 'Scenario 001/020',
-        sessionId: options.manifestSessionId ?? 'matrix_session_1',
+        executionMode: 'strict_mock_tools',
+        agentModel: 'or:deepseek/deepseek-v4-flash',
+        evaluatorModel: 'or:minimax/minimax-m3',
+        promptPreferencesVersion: 2,
+        promptPreferencesDigest: 'b'.repeat(64),
+        userTimeZone: 'Europe/Warsaw',
+        mockProfile,
+        mockProfileDigest: createHash('sha256')
+          .update(canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile), 'utf8')
+          .digest('hex'),
+        expectedToolSchedule: [],
       },
-    ],
-    artifactStage: null,
-    terminalCandidate: null,
-    createdAt: later,
-  });
-  await firestore.collection('intex_agent_sessions').doc('matrix_session_1').set({
-    id: 'matrix_session_1',
-    userId: 'auth0:user_1',
-    channel: 'whatsapp',
-    status: 'active',
-    startedAt: later,
-    lastUserMessageAt: later,
-    startReason: 'no_active_session',
-    matrixCorpusProfile: {
-      version: 1,
-      kind: 'matrix_corpus',
-      runtimeAudience: 'hetzner-prod',
-      leaseFence: '7',
-      runId: 'run_1',
-      scenarioId: 'scenario_001',
-      scenarioNumber: 1,
-      scenarioLabel: 'Scenario 001/020',
-      executionMode: 'strict_mock_tools',
-      agentModel: 'or:deepseek/deepseek-v4-flash',
-      evaluatorModel: 'or:minimax/minimax-m3',
-      promptPreferencesVersion: 2,
-      promptPreferencesDigest: 'b'.repeat(64),
-      userTimeZone: 'Europe/Warsaw',
-      mockProfile,
-      mockProfileDigest: createHash('sha256')
-        .update(canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile), 'utf8')
-        .digest('hex'),
-      expectedToolSchedule: [],
-    },
-    lastEventSequence: 1,
-  });
-  await firestore.collection('intex_agent_session_events').doc('matrix_event_1').set({
-    id: 'matrix_event_1',
-    sessionId: 'matrix_session_1',
-    userId: 'auth0:user_1',
-    type: 'user_message',
-    payload: { phase: 'start', turnIndex: 0 },
-    createdAt: later,
-    eventSequence: 1,
-  });
+      lastEventSequence: 1,
+    });
+  await firestore
+    .collection('intex_agent_session_events')
+    .doc('matrix_event_1')
+    .set({
+      id: 'matrix_event_1',
+      sessionId: 'matrix_session_1',
+      userId: 'auth0:user_1',
+      type: 'user_message',
+      payload: { phase: 'start', turnIndex: 0 },
+      createdAt: later,
+      eventSequence: 1,
+    });
 }
 
-function injectNextTransactionMutation(
-  firestore: Firestore,
-  mutate: () => Promise<void>
-): void {
+function injectNextTransactionMutation(firestore: Firestore, mutate: () => Promise<void>): void {
   type TransactionRunner = (
     updateFunction: (transaction: never) => Promise<unknown>
   ) => Promise<unknown>;
@@ -3825,6 +3916,79 @@ function injectNextTransactionMutation(
     await mutate();
     return await original(updateFunction);
   };
+}
+
+async function writeAbandonedProjectionGapFixture(firestore: Firestore): Promise<void> {
+  await writeCleanupFixture(firestore);
+  const runRef = firestore.collection('intex_agent_test_runs').doc('run_target');
+  const run = await runRef.get();
+  const manifestRef = firestore
+    .collection('intex_agent_matrix_corpus_run_manifests')
+    .doc('run_target');
+  const manifest = await manifestRef.get();
+  const scenarios = run.data()?.['scenarios'] as IntexAgentTestRunRecordV1['scenarios'];
+  const recoveredScenarios = scenarios.map((scenario) => ({
+    ...scenario,
+    scenarioRevision: 1,
+    eventWatermark: 0,
+    lifecycle: 'not_run' as const,
+    verdict: 'not_evaluated' as const,
+    completedTurns: 0,
+    completedReplies: 0,
+    selectedTools: [],
+    deterministicVerdict: 'not_evaluated' as const,
+    semanticVerdict: 'not_evaluated' as const,
+    startedAt: null,
+    finishedAt: null,
+    durationMs: null,
+    sessionId: null,
+    sessionBindingDigest: null,
+  }));
+  const recoveredTotals = deriveTestRunScenarioTotals(recoveredScenarios);
+  await runRef.set({
+    ...run.data(),
+    lifecycle: 'stopped',
+    verdict: 'not_evaluated',
+    terminalCandidate: null,
+    artifactStageDigest: null,
+    artifactDelivery: {
+      status: 'failed',
+      failureCode: 'REPORT_STAGING_INTERRUPTED',
+      updatedAt: later,
+    },
+    scenarios: recoveredScenarios,
+    totals: { ...run.data()?.['totals'], ...recoveredTotals },
+    terminalWinner: {
+      kind: 'abandoned',
+      eventId: 'abandoned_target_event',
+      payloadDigest: 'e'.repeat(64),
+      outcome: 'stopped_not_evaluated',
+      acknowledgedAt: later,
+    },
+  });
+  await manifestRef.set({
+    ...manifest.data(),
+    terminalCandidate: null,
+    artifactStage: null,
+  });
+  await firestore
+    .collection('intex_agent_matrix_corpus_recovery_receipts')
+    .doc('run_target')
+    .set({
+      version: 1,
+      runtimeAudience: 'hetzner-prod',
+      runId: 'run_target',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+      eventId: 'abandoned_target_event',
+      payloadDigest: 'e'.repeat(64),
+      outcome: 'stopped_not_evaluated',
+      acknowledgedAt: later,
+    });
+  const projectionId = createHash('sha256')
+    .update('v1\u0000run_target\u0000scenario_001', 'utf8')
+    .digest('hex');
+  await firestore.collection('intex_agent_test_run_scenarios').doc(`v1_${projectionId}`).delete();
 }
 
 async function writeCleanupFixture(firestore: Firestore): Promise<void> {
@@ -3838,10 +4002,7 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
     scenarioContextCount: 0,
     finalizedAt: later,
   };
-  const targetArtifactStageDigest = digestArtifactCandidates(
-    '1'.repeat(64),
-    '2'.repeat(64)
-  );
+  const targetArtifactStageDigest = digestArtifactCandidates('1'.repeat(64), '2'.repeat(64));
   const targetTerminalCandidate = terminalCandidate({
     runId: 'run_target',
     outcome: 'completed_passed',
@@ -3868,143 +4029,167 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
         })
       : testRunScenario(index + 1)
   );
-  await firestore.collection('intex_agent_test_runs').doc('run_current').set(
-    testRunRecord({
+  await firestore
+    .collection('intex_agent_test_runs')
+    .doc('run_current')
+    .set(
+      testRunRecord({
+        runId: 'run_current',
+        leaseFence: '8',
+        retentionReconciled: false,
+      })
+    );
+  await firestore
+    .collection('intex_agent_matrix_corpus_run_contexts')
+    .doc('run_current')
+    .set({
+      ...activeRunContext(),
       runId: 'run_current',
       leaseFence: '8',
-      retentionReconciled: false,
-    })
-  );
-  await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_current').set({
-    ...activeRunContext(),
-    runId: 'run_current',
-    leaseFence: '8',
-  });
-  await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_current').set({
-    ...emptyRunManifest(),
-    runId: 'run_current',
-    leaseFence: '8',
-  });
-  await firestore.collection('intex_agent_test_runs').doc('run_target').set(
-    testRunRecord({
-      runId: 'run_target',
-      revision: 5,
-      lifecycle: 'completed',
-      verdict: 'passed',
-      finishedAt: later,
-      artifactDelivery: { status: 'ready', failureCode: null, updatedAt: later },
-      contextFinalizationTombstoneDigest:
-        FirestoreTestRunRepository.digestContextFinalization(targetContext),
-      artifactStageDigest: targetArtifactStageDigest,
-      terminalCandidate: targetTerminalCandidate,
-      terminalWinner: {
-        kind: 'release',
-        eventId: 'terminal_target',
-        payloadDigest: 'f'.repeat(64),
-        outcome: 'completed_passed',
-        acknowledgedAt: later,
-      },
-      scenarios: targetScenarios,
-    })
-  );
-  await firestore.collection('intex_agent_test_runs').doc('run_newer_success').set(
-    testRunRecord({
-      runId: 'run_newer_success',
-      leaseFence: '9',
-      revision: 5,
-      lifecycle: 'completed',
-      verdict: 'passed',
-      startedAt: '2026-07-20T10:04:00.000Z',
-      updatedAt: later,
-      finishedAt: later,
-      artifactDelivery: { status: 'ready', failureCode: null, updatedAt: later },
-      terminalWinner: {
-        kind: 'release',
-        eventId: 'terminal_newer_success',
-        payloadDigest: 'e'.repeat(64),
-        outcome: 'completed_passed',
-        acknowledgedAt: later,
-      },
-    })
-  );
+    });
+  await firestore
+    .collection('intex_agent_matrix_corpus_run_manifests')
+    .doc('run_current')
+    .set({
+      ...emptyRunManifest(),
+      runId: 'run_current',
+      leaseFence: '8',
+    });
+  await firestore
+    .collection('intex_agent_test_runs')
+    .doc('run_target')
+    .set(
+      testRunRecord({
+        runId: 'run_target',
+        revision: 5,
+        lifecycle: 'completed',
+        verdict: 'passed',
+        finishedAt: later,
+        artifactDelivery: { status: 'ready', failureCode: null, updatedAt: later },
+        contextFinalizationTombstoneDigest:
+          FirestoreTestRunRepository.digestContextFinalization(targetContext),
+        artifactStageDigest: targetArtifactStageDigest,
+        terminalCandidate: targetTerminalCandidate,
+        terminalWinner: {
+          kind: 'release',
+          eventId: 'terminal_target',
+          payloadDigest: 'f'.repeat(64),
+          outcome: 'completed_passed',
+          acknowledgedAt: later,
+        },
+        scenarios: targetScenarios,
+      })
+    );
+  await firestore
+    .collection('intex_agent_test_runs')
+    .doc('run_newer_success')
+    .set(
+      testRunRecord({
+        runId: 'run_newer_success',
+        leaseFence: '9',
+        revision: 5,
+        lifecycle: 'completed',
+        verdict: 'passed',
+        startedAt: '2026-07-20T10:04:00.000Z',
+        updatedAt: later,
+        finishedAt: later,
+        artifactDelivery: { status: 'ready', failureCode: null, updatedAt: later },
+        terminalWinner: {
+          kind: 'release',
+          eventId: 'terminal_newer_success',
+          payloadDigest: 'e'.repeat(64),
+          outcome: 'completed_passed',
+          acknowledgedAt: later,
+        },
+      })
+    );
   await firestore
     .collection('intex_agent_matrix_corpus_run_contexts')
     .doc('run_target')
     .set(targetContext);
-  await firestore.collection('intex_agent_matrix_corpus_run_manifests').doc('run_target').set({
-    version: 1,
-    runtimeAudience: 'hetzner-prod',
-    runId: 'run_target',
-    userId: 'auth0:user_1',
-    leaseFence: '7',
-    catalogDigest: 'a'.repeat(64),
-    scenarioBindings: [
-      {
-        scenarioId: 'scenario_001',
-        scenarioNumber: 1,
-        scenarioLabel: 'Scenario 001/020',
-        sessionId: 'matrix_target_session',
+  await firestore
+    .collection('intex_agent_matrix_corpus_run_manifests')
+    .doc('run_target')
+    .set({
+      version: 1,
+      runtimeAudience: 'hetzner-prod',
+      runId: 'run_target',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+      catalogDigest: 'a'.repeat(64),
+      scenarioBindings: [
+        {
+          scenarioId: 'scenario_001',
+          scenarioNumber: 1,
+          scenarioLabel: 'Scenario 001/020',
+          sessionId: 'matrix_target_session',
+        },
+      ],
+      artifactStage: {
+        revision: 3,
+        jsonCandidateDigest: '1'.repeat(64),
+        markdownCandidateDigest: '2'.repeat(64),
+        compositeDigest: targetArtifactStageDigest,
+        stagedAt: later,
       },
-    ],
-    artifactStage: {
-      revision: 3,
-      jsonCandidateDigest: '1'.repeat(64),
-      markdownCandidateDigest: '2'.repeat(64),
-      compositeDigest: targetArtifactStageDigest,
-      stagedAt: later,
-    },
-    terminalCandidate: targetTerminalCandidate,
-    createdAt: later,
-  });
+      terminalCandidate: targetTerminalCandidate,
+      createdAt: later,
+    });
   const mockProfile = {
     version: 1 as const,
     calls: [],
     forbiddenSelections: [],
     unexpectedKnownToolPolicy: 'behavioral_failure_no_execution' as const,
   };
-  await firestore.collection('intex_agent_sessions').doc('matrix_target_session').set({
-    id: 'matrix_target_session',
-    userId: 'auth0:user_1',
-    channel: 'whatsapp',
-    status: 'completed',
-    startedAt: later,
-    endedAt: later,
-    lastUserMessageAt: later,
-    lastAssistantMessageAt: later,
-    startReason: 'no_active_session',
-    endReason: 'tool_completed',
-    matrixCorpusProfile: {
-      version: 1,
-      kind: 'matrix_corpus',
-      runtimeAudience: 'hetzner-prod',
-      leaseFence: '7',
-      runId: 'run_target',
-      scenarioId: 'scenario_001',
-      scenarioNumber: 1,
-      scenarioLabel: 'Scenario 001/020',
-      executionMode: 'strict_mock_tools',
-      agentModel: 'or:deepseek/deepseek-v4-flash',
-      evaluatorModel: 'or:minimax/minimax-m3',
-      promptPreferencesVersion: 2,
-      promptPreferencesDigest: 'b'.repeat(64),
-      userTimeZone: 'Europe/Warsaw',
-      mockProfile,
-      mockProfileDigest: createHash('sha256')
-        .update(canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile), 'utf8')
-        .digest('hex'),
-      expectedToolSchedule: [],
-    },
-    lastEventSequence: 1,
-  });
-  await firestore.collection('intex_agent_session_events').doc('target_event_1').set({
-    id: 'target_event_1',
-    sessionId: 'matrix_target_session',
-    userId: 'auth0:user_1',
-    type: 'user_message',
-    payload: { text: 'private target message', turnIndex: 0 },
-    createdAt: later,
-    eventSequence: 1,
-  });
+  await firestore
+    .collection('intex_agent_sessions')
+    .doc('matrix_target_session')
+    .set({
+      id: 'matrix_target_session',
+      userId: 'auth0:user_1',
+      channel: 'whatsapp',
+      status: 'completed',
+      startedAt: later,
+      endedAt: later,
+      lastUserMessageAt: later,
+      lastAssistantMessageAt: later,
+      startReason: 'no_active_session',
+      endReason: 'tool_completed',
+      matrixCorpusProfile: {
+        version: 1,
+        kind: 'matrix_corpus',
+        runtimeAudience: 'hetzner-prod',
+        leaseFence: '7',
+        runId: 'run_target',
+        scenarioId: 'scenario_001',
+        scenarioNumber: 1,
+        scenarioLabel: 'Scenario 001/020',
+        executionMode: 'strict_mock_tools',
+        agentModel: 'or:deepseek/deepseek-v4-flash',
+        evaluatorModel: 'or:minimax/minimax-m3',
+        promptPreferencesVersion: 2,
+        promptPreferencesDigest: 'b'.repeat(64),
+        userTimeZone: 'Europe/Warsaw',
+        mockProfile,
+        mockProfileDigest: createHash('sha256')
+          .update(canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile), 'utf8')
+          .digest('hex'),
+        expectedToolSchedule: [],
+      },
+      lastEventSequence: 1,
+    });
+  await firestore
+    .collection('intex_agent_session_events')
+    .doc('target_event_1')
+    .set({
+      id: 'target_event_1',
+      sessionId: 'matrix_target_session',
+      userId: 'auth0:user_1',
+      type: 'user_message',
+      payload: { text: 'private target message', turnIndex: 0 },
+      createdAt: later,
+      eventSequence: 1,
+    });
   await writeTestConfirmation(firestore, {
     confirmationId: 'target_confirmation_1',
     runId: 'run_target',
@@ -4027,15 +4212,18 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
   const projectionId = createHash('sha256')
     .update('v1\u0000run_target\u0000scenario_001', 'utf8')
     .digest('hex');
-  await firestore.collection('intex_agent_test_run_scenarios').doc(`v1_${projectionId}`).set({
-    ...projection,
-    runId: 'run_target',
-    sessionId: 'matrix_target_session',
-    runRevision: 5,
-    lifecycle: 'completed',
-    verdict: 'passed',
-    completedTurns: 1,
-  });
+  await firestore
+    .collection('intex_agent_test_run_scenarios')
+    .doc(`v1_${projectionId}`)
+    .set({
+      ...projection,
+      runId: 'run_target',
+      sessionId: 'matrix_target_session',
+      runRevision: 5,
+      lifecycle: 'completed',
+      verdict: 'passed',
+      completedTurns: 1,
+    });
   await firestore.collection('intex_agent_sessions').doc('ordinary_session').set({
     id: 'ordinary_session',
     userId: 'auth0:user_1',
