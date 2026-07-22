@@ -8,6 +8,7 @@ import type {
   MatrixCorpusPrivateRunContextV1,
   MatrixCorpusPrivateScenarioContextV1,
 } from '../../../domain/matrixCorpus/ports/matrixCorpusContextRepository.js';
+import { createMatrixCorpusContextCrypto } from '../../../domain/matrixCorpus/contextCrypto.js';
 import type {
   MatrixCorpusRunManifestV1,
   MatrixCorpusTerminalCandidateV1,
@@ -27,11 +28,19 @@ import {
   testRunScenario,
 } from '../../domain/testRuns/testRunFixtures.js';
 import { FirestoreTestRunRepository } from '../../../infra/firestore/testRunRepository.js';
+import { FirestoreTestConfirmationRepository } from '../../../infra/firestore/testConfirmationRepository.js';
 
 const later = '2026-07-20T10:05:00.000Z';
 
 function identity(): TestRunIdentity {
   return { runId: 'run_1', userId: 'auth0:user_1', leaseFence: '7' };
+}
+
+function contextCrypto(): ReturnType<typeof createMatrixCorpusContextCrypto> {
+  return createMatrixCorpusContextCrypto({
+    key: Buffer.alloc(32, 7),
+    keyVersion: 'context-key-v1',
+  });
 }
 
 function cleanupInput(): Parameters<TestRunRepository['cleanupExactRun']>[0] {
@@ -47,7 +56,10 @@ function fixture(): Readonly<{
   repository: FirestoreTestRunRepository;
 }> {
   const firestore = createFakeFirestore() as unknown as Firestore;
-  return { firestore, repository: new FirestoreTestRunRepository({ firestore }) };
+  return {
+    firestore,
+    repository: new FirestoreTestRunRepository({ firestore, crypto: contextCrypto() }),
+  };
 }
 
 describe('Firestore Test Run foundation repository', () => {
@@ -268,7 +280,10 @@ describe('Firestore Test Run foundation repository', () => {
 
   it('serializes an artifact-timeout claim across repository instances', async () => {
     const { firestore, repository } = fixture();
-    const competingRepository = new FirestoreTestRunRepository({ firestore });
+    const competingRepository = new FirestoreTestRunRepository({
+      firestore,
+      crypto: contextCrypto(),
+    });
     const jsonCandidateDigest = '1'.repeat(64);
     const markdownCandidateDigest = '2'.repeat(64);
     const artifactStageDigest = digestArtifactCandidates(
@@ -726,7 +741,10 @@ describe('Firestore Test Run foundation repository', () => {
       .collection('intex_agent_matrix_corpus_test_confirmations')
       .doc('target_confirmation_1');
     const confirmation = await confirmationRef.get();
-    await confirmationRef.set({ ...confirmation.data(), userId: 'auth0:foreign' });
+    await confirmationRef.set({
+      ...confirmation.data(),
+      userBindingDigest: 'f'.repeat(64),
+    });
 
     await expect(
       repository.cleanupExactRun({
@@ -2757,7 +2775,6 @@ describe('Firestore Test Run foundation repository', () => {
         finalization: null,
       },
     });
-
     await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toMatchObject({
       ok: true,
       disposition: 'applied',
@@ -2785,24 +2802,19 @@ describe('Firestore Test Run foundation repository', () => {
       .collection('intex_agent_matrix_corpus_run_contexts')
       .doc('run_1')
       .set(activeRunContext());
-    await firestore
-      .collection('intex_agent_matrix_corpus_run_manifests')
-      .doc('run_1')
-      .set({
-        ...emptyRunManifest(),
-        scenarioBindings: [
-          {
-            scenarioId: 'scenario_001',
-            scenarioNumber: 1,
-            scenarioLabel: 'Scenario 001/020',
-            sessionId: 'matrix_session_1',
-          },
-        ],
-      });
+    await writeScenarioEvidence(firestore);
     await firestore
       .collection('intex_agent_matrix_corpus_scenario_contexts')
       .doc('scenario_context_1')
       .set(activeScenarioContext());
+    await writeTestConfirmation(firestore, {
+      confirmationId: 'confirmation_1',
+      runId: 'run_1',
+      scenarioId: 'scenario_001',
+      sessionId: 'matrix_session_1',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+    });
 
     await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toMatchObject({
       ok: true,
@@ -2815,6 +2827,33 @@ describe('Firestore Test Run foundation repository', () => {
         .doc('scenario_context_1')
         .get()
     ).resolves.toMatchObject({ exists: false });
+  });
+
+  it('rejects an AEAD-valid confirmation outside the exact manifest session binding', async () => {
+    const { firestore, repository } = fixture();
+    await createRunningScenarioRun(repository);
+    await firestore
+      .collection('intex_agent_matrix_corpus_run_contexts')
+      .doc('run_1')
+      .set(activeRunContext());
+    await writeScenarioEvidence(firestore);
+    await firestore
+      .collection('intex_agent_matrix_corpus_scenario_contexts')
+      .doc('scenario_context_1')
+      .set(activeScenarioContext());
+    await writeTestConfirmation(firestore, {
+      confirmationId: 'confirmation_1',
+      runId: 'run_1',
+      scenarioId: 'scenario_001',
+      sessionId: 'orphan_session_1',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+    });
+
+    await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toEqual({
+      ok: false,
+      code: 'CORRELATED_REPLAY_CONFLICT',
+    });
   });
 
   it('validates abandoned recovery commands and stored receipts field by field', async () => {
@@ -2964,21 +3003,9 @@ describe('Firestore Test Run foundation repository', () => {
         code: 'CORRELATED_REPLAY_CONFLICT',
       },
       {
-        collection: 'intex_agent_matrix_corpus_test_confirmations',
-        id: 'confirmation_1',
-        value: { runId: 'run_1', leaseFence: '7', userId: 'auth0:foreign' },
-        code: 'CORRELATED_REPLAY_CONFLICT',
-      },
-      {
         collection: 'intex_agent_matrix_corpus_ingest_receipts',
         id: 'ingest_1',
         value: { runId: 'run_1', leaseFence: '7' },
-        code: 'EVIDENCE_MISMATCH',
-      },
-      {
-        collection: 'intex_agent_matrix_corpus_test_confirmations',
-        id: 'confirmation_1',
-        value: { runId: 'run_1', leaseFence: '7', userId: 'auth0:user_1' },
         code: 'EVIDENCE_MISMATCH',
       },
     ] as const;
@@ -2989,6 +3016,26 @@ describe('Firestore Test Run foundation repository', () => {
       await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toEqual({
         ok: false,
         code: evidence.code,
+      });
+    }
+
+    for (const owner of [
+      { userId: 'auth0:foreign', code: 'CORRELATED_REPLAY_CONFLICT' },
+      { userId: 'auth0:user_1', code: 'EVIDENCE_MISMATCH' },
+    ] as const) {
+      const { firestore, repository } = fixture();
+      await repository.createOrGet(testRunRecord());
+      await writeTestConfirmation(firestore, {
+        confirmationId: 'confirmation_1',
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'matrix_session_1',
+        userId: owner.userId,
+        leaseFence: '7',
+      });
+      await expect(repository.applyAbandonedRecovery(abandonedRecovery())).resolves.toEqual({
+        ok: false,
+        code: owner.code,
       });
     }
   });
@@ -3538,6 +3585,33 @@ async function createRunningScenarioRun(repository: FirestoreTestRunRepository):
   if (!running.ok) throw new Error('running fixture transition failed');
 }
 
+async function writeTestConfirmation(
+  firestore: Firestore,
+  identity: Readonly<{
+    confirmationId: string;
+    runId: string;
+    scenarioId: string;
+    sessionId: string;
+    userId: string;
+    leaseFence: string;
+  }>
+): Promise<void> {
+  const repository = new FirestoreTestConfirmationRepository({
+    firestore,
+    crypto: contextCrypto(),
+  });
+  const result = await repository.createOrGet({
+    identity,
+    toolName: 'create_note',
+    toolArgs: { content: 'Synthetic Matrix confirmation' },
+    selectionTurnIndex: 0,
+    selectionOrdinal: 1,
+    createdAt: '2026-07-20T10:00:00.000Z',
+    expiresAt: '2026-07-20T10:05:00.000Z',
+  });
+  if (!result.ok) throw new Error('confirmation fixture creation failed');
+}
+
 async function prepareEmptyFinalizationFixture(): Promise<
   Readonly<{
     firestore: Firestore;
@@ -3931,18 +4005,14 @@ async function writeCleanupFixture(firestore: Firestore): Promise<void> {
     createdAt: later,
     eventSequence: 1,
   });
-  await firestore
-    .collection('intex_agent_matrix_corpus_test_confirmations')
-    .doc('target_confirmation_1')
-    .set({
-      runId: 'run_target',
-      scenarioId: 'scenario_001',
-      sessionId: 'matrix_target_session',
-      userId: 'auth0:user_1',
-      leaseFence: '7',
-      runtimeAudience: 'hetzner-prod',
-      lane: 'matrix_corpus',
-    });
+  await writeTestConfirmation(firestore, {
+    confirmationId: 'target_confirmation_1',
+    runId: 'run_target',
+    scenarioId: 'scenario_001',
+    sessionId: 'matrix_target_session',
+    userId: 'auth0:user_1',
+    leaseFence: '7',
+  });
   await firestore
     .collection('intex_agent_matrix_corpus_ingest_receipts')
     .doc('target_ingest_1')

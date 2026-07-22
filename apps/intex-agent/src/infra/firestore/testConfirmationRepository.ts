@@ -226,6 +226,42 @@ type StoredMatrixCorpusTestConfirmationV1 = Omit<
     userBindingDigest: string;
   }>;
 
+export interface MatrixCorpusTestConfirmationEvidenceIdentity {
+  confirmationId: string;
+  runId: string;
+  scenarioId: string;
+  sessionId: string;
+  leaseFence: string;
+}
+
+export function parseMatrixCorpusTestConfirmationEvidenceDocument(
+  documentId: string,
+  data: unknown,
+  crypto: MatrixCorpusContextCrypto,
+  expected: Pick<MatrixCorpusTestConfirmationIdentity, 'runId' | 'userId' | 'leaseFence'>
+): MatrixCorpusTestConfirmationEvidenceIdentity | undefined {
+  if (!isRecord(data)) return undefined;
+  const scenarioId = data['scenarioId'];
+  const sessionId = data['sessionId'];
+  if (typeof scenarioId !== 'string' || typeof sessionId !== 'string') return undefined;
+  const parsed = classifyConfirmation(data, crypto, {
+    confirmationId: documentId,
+    runId: expected.runId,
+    scenarioId,
+    sessionId,
+    userId: expected.userId,
+    leaseFence: expected.leaseFence,
+  });
+  if (!parsed.ok) return undefined;
+  return {
+    confirmationId: parsed.confirmation.confirmationId,
+    runId: parsed.confirmation.runId,
+    scenarioId: parsed.confirmation.scenarioId,
+    sessionId: parsed.confirmation.sessionId,
+    leaseFence: parsed.confirmation.leaseFence,
+  };
+}
+
 function encryptConfirmation(
   confirmation: MatrixCorpusTestConfirmation,
   crypto: MatrixCorpusContextCrypto

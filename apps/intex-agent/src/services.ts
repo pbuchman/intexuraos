@@ -268,7 +268,10 @@ export function createIntexMatrixCorpusRuntime(
     contextService,
     contextRepository,
     manifestRepository,
-    testRunRepository: new FirestoreTestRunRepository({ firestore: dependencies.firestore }),
+    testRunRepository: new FirestoreTestRunRepository({
+      firestore: dependencies.firestore,
+      crypto: contextCrypto,
+    }),
     sessionRepository: dependencies.sessionRepository,
     evidenceService,
     verifyAttestation,

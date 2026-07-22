@@ -10,6 +10,7 @@ import { createMatrixCorpusContextCrypto } from '../../../domain/matrixCorpus/co
 import {
   FirestoreTestConfirmationRepository,
   INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION,
+  parseMatrixCorpusTestConfirmationEvidenceDocument,
 } from '../../../infra/firestore/testConfirmationRepository.js';
 
 const createdAt = '2026-07-20T10:00:00.000Z';
@@ -67,6 +68,62 @@ function fixture(): Readonly<{
 }
 
 describe('FirestoreTestConfirmationRepository', () => {
+  it('verifies complete AEAD-bound confirmation evidence for a run owner', async () => {
+    const { firestore, crypto, repository } = fixture();
+    await repository.createOrGet(pendingInput());
+    const snapshot = await firestore
+      .collection(INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION)
+      .doc('confirmation_1')
+      .get();
+
+    expect(
+      parseMatrixCorpusTestConfirmationEvidenceDocument(
+        snapshot.id,
+        snapshot.data(),
+        crypto,
+        identity()
+      )
+    ).toEqual({
+      confirmationId: 'confirmation_1',
+      runId: 'run_1',
+      scenarioId: 'scenario_1',
+      sessionId: 'session_1',
+      leaseFence: '7',
+    });
+    expect(
+      parseMatrixCorpusTestConfirmationEvidenceDocument(
+        snapshot.id,
+        { ...snapshot.data(), sessionId: 'session_2' },
+        crypto,
+        identity()
+      )
+    ).toBeUndefined();
+    expect(
+      parseMatrixCorpusTestConfirmationEvidenceDocument(
+        snapshot.id,
+        null,
+        crypto,
+        identity()
+      )
+    ).toBeUndefined();
+    expect(
+      parseMatrixCorpusTestConfirmationEvidenceDocument(
+        snapshot.id,
+        { scenarioId: 1, sessionId: 'session_1' },
+        crypto,
+        identity()
+      )
+    ).toBeUndefined();
+    expect(
+      parseMatrixCorpusTestConfirmationEvidenceDocument(
+        snapshot.id,
+        { scenarioId: 'scenario_1', sessionId: 1 },
+        crypto,
+        identity()
+      )
+    ).toBeUndefined();
+  });
+
   it('creates one immutable Matrix-corpus confirmation foundation', async () => {
     const { firestore, repository } = fixture();
 
