@@ -131,6 +131,7 @@ export {
   matrixCorpusKeyedDigestSchema,
   matrixCorpusDecimalFenceSchema,
   matrixCorpusSafeIdSchema,
+  matrixCorpusTransportMessageIdSchema,
   matrixCorpusRfc3339TimestampSchema,
   matrixCorpusIanaTimeZoneSchema,
   matrixCorpusPromptDigestInputSchema,

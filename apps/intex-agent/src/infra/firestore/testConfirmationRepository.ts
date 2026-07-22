@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { matrixCorpusTransportMessageIdSchema } from '@intexuraos/http-contracts';
 import type { Firestore } from '@intexuraos/infra-firestore';
 
 import type {
@@ -131,7 +132,7 @@ export class FirestoreTestConfirmationRepository implements TestConfirmationRepo
   async resolveExact(
     input: Parameters<TestConfirmationRepository['resolveExact']>[0]
   ): Promise<MatrixCorpusTestConfirmationResolveResult> {
-    if (!isRfc3339(input.now) || !isSafeId(input.resolutionMessageId))
+    if (!isRfc3339(input.now) || !isTransportMessageId(input.resolutionMessageId))
       return { ok: false, code: 'CORRUPT_CONFIRMATION' };
     const ref = this.confirmationRef(input.identity.confirmationId);
     return await this.firestore.runTransaction(async (transaction) => {
@@ -346,6 +347,10 @@ function isSafeId(value: unknown): value is string {
   return typeof value === 'string' && safeIdPattern.test(value);
 }
 
+function isTransportMessageId(value: unknown): value is string {
+  return matrixCorpusTransportMessageIdSchema.safeParse(value).success;
+}
+
 function isValidCreateInput(
   input: Parameters<TestConfirmationRepository['createOrGet']>[0]
 ): boolean {
@@ -440,7 +445,7 @@ function hasValidResolutionState(record: Record<string, unknown>): boolean {
   return (
     record['state'] === 'resolved' &&
     (record['decision'] === 'confirm' || record['decision'] === 'reject') &&
-    isSafeId(record['resolutionMessageId']) &&
+    isTransportMessageId(record['resolutionMessageId']) &&
     isRfc3339(record['createdAt']) &&
     isRfc3339(record['expiresAt']) &&
     isRfc3339(record['resolvedAt']) &&

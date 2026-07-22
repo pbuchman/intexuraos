@@ -113,6 +113,30 @@ describe('Firestore Matrix corpus ingress', () => {
     );
   });
 
+  it('accepts a real-shaped Meta WAMID with terminal base64 padding', async () => {
+    const current = ingressFixture(storedCapability());
+    const metaMessageId = `wamid.${'A'.repeat(58)}==`;
+
+    await expect(
+      current.ingress.consumeReservedMessage({
+        ...startInput(),
+        transportMessageId: metaMessageId,
+      })
+    ).resolves.toEqual({ code: 'INGEST_ENQUEUED' });
+
+    expect(current.consumeCapabilityAndEnqueueIngest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transportMessageId: metaMessageId,
+        facts: expect.objectContaining({
+          ingressRequest: expect.objectContaining({ ordinaryMessageId: metaMessageId }),
+          payload: expect.objectContaining({
+            ordinaryIngest: expect.objectContaining({ messageId: metaMessageId }),
+          }),
+        }),
+      })
+    );
+  });
+
   it.each([
     ['non-numeric transport timestamp', 'not-a-timestamp'],
     ['unsafe Unix-seconds integer', '9999999999999'],

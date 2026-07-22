@@ -8,6 +8,7 @@ import {
   intexAgentToolNameV1Schema,
   matrixCorpusDecimalFenceSchema,
   matrixCorpusSafeIdSchema,
+  matrixCorpusTransportMessageIdSchema,
 } from '@intexuraos/http-contracts';
 
 const AES_256_KEY_BYTES = 32;
@@ -236,7 +237,7 @@ function hasValidConfirmationResolutionBinding(binding: Record<string, unknown>)
   return (
     binding['state'] === 'resolved' &&
     (binding['decision'] === 'confirm' || binding['decision'] === 'reject') &&
-    matrixCorpusSafeIdSchema.safeParse(binding['resolutionMessageId']).success &&
+    matrixCorpusTransportMessageIdSchema.safeParse(binding['resolutionMessageId']).success &&
     isRfc3339(binding['resolvedAt'])
   );
 }

@@ -14,6 +14,7 @@ import {
 
 const createdAt = '2026-07-20T10:00:00.000Z';
 const expiresAt = '2026-07-20T10:05:00.000Z';
+const paddedWamid = `wamid.${'A'.repeat(58)}==`;
 
 function identity(
   overrides: Partial<MatrixCorpusTestConfirmationIdentity> = {}
@@ -224,6 +225,32 @@ describe('FirestoreTestConfirmationRepository', () => {
         pendingInput({ toolName: 'create_calendar_event' as const })
       )
     ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+  });
+
+  it('resolves and reads a confirmation using a padded Meta transport message id', async () => {
+    const { repository } = fixture();
+    await repository.createOrGet(pendingInput());
+
+    await expect(
+      repository.resolveExact({
+        identity: identity(),
+        decision: 'confirm',
+        resolutionMessageId: paddedWamid,
+        now: '2026-07-20T10:01:00.000Z',
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      disposition: 'applied',
+      confirmation: {
+        state: 'resolved',
+        decision: 'confirm',
+        resolutionMessageId: paddedWamid,
+      },
+    });
+    await expect(repository.getExact({ ...identity(), now: createdAt })).resolves.toMatchObject({
+      ok: true,
+      confirmation: { resolutionMessageId: paddedWamid },
+    });
   });
 
   it.each([

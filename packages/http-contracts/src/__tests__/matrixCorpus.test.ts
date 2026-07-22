@@ -32,6 +32,7 @@ import {
   matrixCorpusPromptDigestInputSchema,
   matrixCorpusRfc3339TimestampSchema,
   matrixCorpusSafeIdSchema,
+  matrixCorpusTransportMessageIdSchema,
   matrixCorpusSha256DigestSchema,
   matrixCorpusSignedIngestV1Schema,
   matrixCorpusSignedControlMutationV1Schema,
@@ -275,6 +276,11 @@ describe('Matrix corpus shared contract', () => {
     expect(matrixCorpusSafeIdSchema.safeParse('auth0|operator_1').success).toBe(true);
     for (const invalid of ['', 'has space', 'mail@example.com', '🧪']) {
       expect(matrixCorpusSafeIdSchema.safeParse(invalid).success).toBe(false);
+    }
+    const paddedWamid = `wamid.${'A'.repeat(58)}==`;
+    expect(matrixCorpusTransportMessageIdSchema.safeParse(paddedWamid).success).toBe(true);
+    for (const invalid of ['wamid.bad=padding', 'wamid.has space', `wamid.${'A'.repeat(250)}==`]) {
+      expect(matrixCorpusTransportMessageIdSchema.safeParse(invalid).success).toBe(false);
     }
     expect(matrixCorpusRfc3339TimestampSchema.safeParse(now).success).toBe(true);
     expect(matrixCorpusRfc3339TimestampSchema.safeParse('2026-07-19T00:00:00Z').success).toBe(true);

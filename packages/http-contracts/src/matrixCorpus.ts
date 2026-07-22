@@ -17,6 +17,7 @@ export const MATRIX_CORPUS_MAX_COMPACT_JWS_CODE_UNITS =
 
 const SHA_256_DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/;
+const TRANSPORT_MESSAGE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,253}={0,2}$/;
 const MOCK_ID_PATTERN = /^mock_[A-Za-z0-9_-]{1,120}$/;
 const MOCK_PREFERENCE_ID_PATTERN = /^mock_pref_[A-Za-z0-9_-]{1,112}$/;
 const BASE64URL_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -25,6 +26,14 @@ export const matrixCorpusSha256DigestSchema = z.string().regex(SHA_256_DIGEST_PA
 export const matrixCorpusKeyedDigestSchema = matrixCorpusSha256DigestSchema;
 export const matrixCorpusDecimalFenceSchema = z.string().regex(/^[1-9][0-9]{0,19}$/);
 export const matrixCorpusSafeIdSchema = z.string().regex(SAFE_ID_PATTERN);
+/**
+ * Meta WAMIDs are opaque transport identifiers and may end in base64 padding.
+ * Keep that allowance isolated from the stricter internal-ID contract.
+ */
+export const matrixCorpusTransportMessageIdSchema = z
+  .string()
+  .max(256)
+  .regex(TRANSPORT_MESSAGE_ID_PATTERN);
 const safeIdSchema = matrixCorpusSafeIdSchema;
 const boundedTextSchema = z.string().min(1).max(4096);
 const cannedMessageSchema = z.string().min(1).max(1024);
@@ -552,7 +561,7 @@ export const matrixCorpusOrdinaryIngestV1Schema = z
   .object({
     type: z.literal('intex.message.ingest'),
     userId: safeIdSchema,
-    messageId: safeIdSchema,
+    messageId: matrixCorpusTransportMessageIdSchema,
     text: boundedTextSchema,
     sourceType: z.literal('whatsapp_text'),
     timestamp: rfc3339Schema,
@@ -744,7 +753,7 @@ export const matrixCorpusCanonicalIngressDigestInputV1Schema = z
     expectedSessionId: safeIdSchema.nullable(),
     pendingConfirmationId: safeIdSchema.nullable(),
     expectedDecision: z.enum(['confirm', 'reject']).nullable(),
-    ordinaryMessageId: safeIdSchema,
+    ordinaryMessageId: matrixCorpusTransportMessageIdSchema,
     ordinaryTimestamp: rfc3339Schema,
     ingestReceiptId: safeIdSchema,
     payloadDigest: matrixCorpusSha256DigestSchema,
