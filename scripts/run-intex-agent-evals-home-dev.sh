@@ -567,8 +567,10 @@ validate_matrix_corpus_payload() {
   local terminal_status=''
   local report_seen=0
   local scenario_seen=0
+  local evaluation_failure_seen=0
   local run_pattern="^evaluation run (${safe_run_id_pattern}) command matrix-corpus$"
   local scenario_pattern='^scenario intex-eval-([0-9]{3}) (PASS|BEHAVIORAL_FAILURE|INFRASTRUCTURE_FAILURE)$'
+  local evaluation_failure_pattern='^evaluation failure (UNKNOWN_FAILURE|MINIMAX_JUDGE_(INVALID_OUTPUT|KEY_MISSING|PROVIDER_FAILED|TIMEOUT|USAGE_INVALID)|REPORT_(PUBLICATION|STAGING|VALIDATION)_FAILED|RETENTION_CLEANUP_FAILED|TURN_(AGENT_(CALL_COUNT_MISMATCH|COST_UNRECONCILED|MODEL_MISMATCH|USAGE_INVALID)|CATALOG_EVIDENCE_MISSING|CONFIRMATION_EVIDENCE_MISMATCH|REPLY_(COUNT_INVALID|DIGEST_COUNT_MISMATCH|EVALUATION_COUNT_MISMATCH|METADATA_MISMATCH)|SCENARIO_LABEL_MISMATCH|SESSION_(BINDING_MISMATCH|ID_MISMATCH|ID_MISSING)|TERMINAL_EVIDENCE_MISSING|TOOL_EVIDENCE_INVALID)|activation_failed|capability_issue_failed|context_(finalization|registration)_failed|drain_timeout|duplicate_scenario_session|final_projection_retry_exhausted|finalization_readiness_(failed|mismatch)|finalizing_projection_failed|judge_evidence_mismatch|lease_renewal_failed|matrix_(outbound_ambiguous|send_proof_rejected|sync_failed|sync_invalid|timeline_limited)|outbound_event_(mismatch|timeout)|preflight_handoff_invalid|projection_(creation_failed|retry_exhausted|revision_conflict|status_failed)|provision_failed|provisioning_abort_(ack_timeout|failed)|quiesce_failed|release_failed|reply_(overflow|timeout)|retention_cleanup_failed|running_projection_(failed|retry_exhausted)|scenario_(binding_timeout|projection_failed|projection_missing_evidence|status_mismatch)|stopped_scenario_(binding_mismatch|evidence_missing|evidence_revision_mismatch|missing|projection_failed|reconciliation_retry_exhausted|status_missing|strict_mock_proof_failed|unsafe_evidence_shape|usage_regressed|usage_totals_mismatch)|strict_mock_proof_failed|terminal_ack_timeout|turn_(catalog_mismatch|evidence_mismatch|evidence_missing|processing_failed)|unbound_reply|unexpected_(failure|judge_failure|projection_failure|turn_failure)|unsafe_evidence_shape|wrong_puppet)$'
   local report_pattern="^evaluation report \\.artifacts/intex-agent-evals/(${safe_run_id_pattern})$"
   local failure_pattern="^preflight result FAIL ${matrix_corpus_failure_pattern}$"
 
@@ -599,6 +601,12 @@ validate_matrix_corpus_payload() {
       [[ ${BASH_REMATCH[1]} == "$expected_scenario_ordinal" ]] || return 1
       continue
     fi
+    if [[ $line =~ $evaluation_failure_pattern ]]; then
+      [[ -n $run_id && -z $terminal_status ]] || return 1
+      evaluation_failure_seen=$((evaluation_failure_seen + 1))
+      ((evaluation_failure_seen <= 100)) || return 1
+      continue
+    fi
     case $line in
       'evaluation result PASS exit 0')
         [[ -n $run_id && -z $terminal_status ]] || return 1
@@ -625,6 +633,7 @@ validate_matrix_corpus_payload() {
   done
 
   [[ -n $terminal_status && $terminal_status == "$expected_status" ]] || return 1
+  ((evaluation_failure_seen == 0)) || [[ $terminal_status == 2 ]] || return 1
   if [[ -z $run_id ]]; then
     [[ $expected_status == 2 && $preflight_seen -eq 0 && $report_seen -eq 0 ]]
     return
