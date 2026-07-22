@@ -535,6 +535,7 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
       expect.arrayContaining(['status', '--porcelain=v1', 'packages/'])
     );
     expect(MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS).toContain('packages/');
+    expect(MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS).toContain('scripts/hetzner/nginx/');
     expect(deps.fetchDeploymentDocument).toHaveBeenCalledOnce();
   });
 

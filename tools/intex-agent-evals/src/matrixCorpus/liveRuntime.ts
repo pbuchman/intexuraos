@@ -56,6 +56,7 @@ export const MATRIX_CORPUS_RUNTIME_CRITICAL_PATHS = [
   'apps/user-service/src/',
   'packages/',
   'tools/intex-agent-evals/',
+  'scripts/hetzner/nginx/',
   'scripts/run-intex-agent-evals-home-dev.sh',
   'scripts/run-intex-agent-evals-prod.sh',
   'package.json',

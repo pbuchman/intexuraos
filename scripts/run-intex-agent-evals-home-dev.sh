@@ -74,6 +74,7 @@ implementation_paths=(
   'apps/user-service/src/'
   'packages/'
   'tools/intex-agent-evals/'
+  'scripts/hetzner/nginx/'
   'scripts/run-intex-agent-evals-home-dev.sh'
   'scripts/run-intex-agent-evals-prod.sh'
   'package.json'
@@ -163,7 +164,8 @@ fi
 if ! remote_status=$(git status --porcelain=v1 --untracked-files=all -- \
   apps/intex-agent/src/ apps/whatsapp-service/src/ apps/user-service/src/ \
   packages/ \
-  tools/intex-agent-evals/ scripts/run-intex-agent-evals-home-dev.sh \
+  tools/intex-agent-evals/ scripts/hetzner/nginx/ \
+  scripts/run-intex-agent-evals-home-dev.sh \
   scripts/run-intex-agent-evals-prod.sh package.json 2>/dev/null); then
   emit 'remote_implementation_paths_dirty'
   finish 2

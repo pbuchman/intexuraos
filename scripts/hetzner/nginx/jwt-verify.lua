@@ -4,6 +4,7 @@ local openidc = require("resty.openidc")
 local EXPECTED_ISS = "https://accounts.google.com"
 local EXPECTED_AUD = "https://intexuraos.cloud"
 local INTERNAL_AUTH_TOKEN_FILE = "/etc/intexuraos/internal-auth-token"
+local EVALUATOR_ROUTE_PREFIX = "/internal/evals/"
 local GLOBAL_ALLOWED_SERVICE_ACCOUNTS = {
   ["intexuraos-scheduler-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
   ["intexuraos-whatsapp-svc-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
@@ -33,6 +34,14 @@ local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
   {
     pattern = [[^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)]],
     caller_role = "matrix_corpus_runner",
+    allowed_service_accounts = {
+      ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
+    pattern = [[^/internal/evals/intex-agent/test-runs/[^/]+/(?:projection|artifact-delivery)$]],
+    caller_role = "matrix_corpus_runner",
+    allowed_methods = { PUT = true },
     allowed_service_accounts = {
       ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
     },
@@ -102,9 +111,17 @@ local function is_service_account_allowed(email)
 
   for _, route_pattern in ipairs(ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS) do
     if ngx.re.match(ngx.var.uri, route_pattern.pattern, "jo") ~= nil then
-      local allowed = route_pattern.allowed_service_accounts[email] == true
+      local request_method = ngx.req.get_method()
+      local method_allowed = route_pattern.allowed_methods == nil
+        or route_pattern.allowed_methods[request_method] == true
+      local allowed = method_allowed and route_pattern.allowed_service_accounts[email] == true
       return allowed, allowed and route_pattern.caller_role or nil
     end
+  end
+
+  if string.sub(ngx.var.uri, 1, string.len(EVALUATOR_ROUTE_PREFIX)) ==
+      EVALUATOR_ROUTE_PREFIX then
+    return false, nil
   end
 
   for prefix, route_prefix_allowed_service_accounts in pairs(ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS) do
