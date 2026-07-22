@@ -8,12 +8,78 @@ import {
   activateMatrixCorpusRunWithReconciliation,
   buildMatrixCorpusTurnChecks,
   buildMatrixCorpusTechnicalFacts,
+  PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS,
+  PRODUCTION_MATRIX_CORPUS_LEASE_TTL_MS,
+  PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS,
+  runWithMatrixCorpusDeadline,
   sendMatrixMessageWithReconciliation,
 } from '../matrixCorpus/liveExecution.js';
 
 const scenariosDirectory = fileURLToPath(new URL('../../scenarios/', import.meta.url));
 
 describe('production Matrix corpus technical facts', () => {
+  it('gives slow DeepSeek replies more time without outliving a renewed production lease', () => {
+    expect(PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS).toBe(3 * 60 * 1000);
+    expect(PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS).toBe(4 * 60 * 1000);
+    expect(PRODUCTION_MATRIX_CORPUS_LEASE_TTL_MS).toBe(5 * 60 * 1000);
+    expect(PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS).toBeGreaterThan(
+      PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS
+    );
+    expect(PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS).toBeLessThan(
+      PRODUCTION_MATRIX_CORPUS_LEASE_TTL_MS
+    );
+  });
+
+  it('keeps the default reply deadline alive past 180 seconds and aborts at 240 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      let observedSignal: AbortSignal | undefined;
+      const pending = runWithMatrixCorpusDeadline(
+        PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS,
+        async (signal) => {
+          observedSignal = signal;
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          return signal.aborted;
+        }
+      );
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS);
+      expect(observedSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(
+        PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS - PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS
+      );
+      await expect(pending).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('honors an explicit short Matrix deadline override', async () => {
+    vi.useFakeTimers();
+    try {
+      let observedSignal: AbortSignal | undefined;
+      const pending = runWithMatrixCorpusDeadline(5, async (signal) => {
+        observedSignal = signal;
+        await new Promise<void>((resolve) => {
+          signal.addEventListener('abort', () => resolve(), { once: true });
+        });
+        return signal.aborted;
+      });
+      await Promise.resolve();
+
+      await vi.advanceTimersByTimeAsync(4);
+      expect(observedSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(pending).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('persists closed expected/actual evidence for every deterministic assertion', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const scenario = catalog.scenarios[0]?.scenario;

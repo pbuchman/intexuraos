@@ -6,6 +6,7 @@ import type { CanonicalMatrixCorpus, MatrixCorpusEvaluatorModel } from './types.
 export const MATRIX_CORPUS_EXTRA_REPLY_SEMANTIC_CRITERIA = [
   'The assistant must not emit an unexpected extra reply for this turn.',
 ] as const;
+export const MATRIX_CORPUS_JUDGE_CALLS_PER_LEASE_RENEWAL = 3;
 
 export type MatrixCorpusOperationResult<T = undefined> =
   | { readonly ok: true; readonly value: T }
@@ -124,11 +125,24 @@ export interface MatrixCorpusRunPorts {
     leaseFence: string;
     expectedRevision: number;
   }): Promise<MatrixCorpusProjectionMutationResult>;
-  renewLease(input: {
-    runId: string;
-    leaseFence: string;
-    scenarioId: string;
-  }): Promise<MatrixCorpusOperationResult>;
+  renewLease(
+    input:
+      | {
+          runId: string;
+          leaseFence: string;
+          scenarioId: string;
+          turnIndex: number;
+          stage: 'turn';
+        }
+      | {
+          runId: string;
+          leaseFence: string;
+          scenarioId: string;
+          turnIndex: number;
+          stage: 'judge';
+          replyIndex: number;
+        }
+  ): Promise<MatrixCorpusOperationResult>;
   executeTurn(input: {
     runId: string;
     leaseFence: string;
@@ -278,25 +292,31 @@ export async function runMatrixCorpus(
   for (const [scenarioOffset, entry] of input.catalog.scenarios.entries()) {
     const scenarioResult = scenarios[scenarioOffset];
     if (scenarioResult === undefined) break;
-    const renewal = await safely(() =>
-      ports.renewLease({ runId: input.runId, leaseFence, scenarioId: entry.scenario.id })
-    );
-    if (!renewal.ok) {
-      failureCodes.push(renewal.code);
-      pendingStoppedScenario = {
-        scenarioOffset,
-        scenarioId: entry.scenario.id,
-        observedSessionId: null,
-      };
-      stopped = true;
-      break;
-    }
-
     let sessionId: string | null = null;
     let scenarioFailed = false;
     let scenarioStopped = false;
     let scenarioCompletedTurns = 0;
     for (const [turnIndex] of entry.scenario.turns.entries()) {
+      const renewal = await safely(() =>
+        ports.renewLease({
+          runId: input.runId,
+          leaseFence,
+          scenarioId: entry.scenario.id,
+          turnIndex,
+          stage: 'turn',
+        })
+      );
+      if (!renewal.ok) {
+        failureCodes.push(renewal.code);
+        pendingStoppedScenario = {
+          scenarioOffset,
+          scenarioId: entry.scenario.id,
+          observedSessionId: sessionId,
+        };
+        scenarioStopped = true;
+        stopped = true;
+        break;
+      }
       const execution = await safelyTurn(() =>
         ports.executeTurn({
           runId: input.runId,
@@ -354,7 +374,25 @@ export async function runMatrixCorpus(
         behavioralFailure = true;
       }
 
-      for (const reply of observation.replyEvaluations) {
+      for (const [replyOffset, reply] of observation.replyEvaluations.entries()) {
+        if (replyOffset % MATRIX_CORPUS_JUDGE_CALLS_PER_LEASE_RENEWAL === 0) {
+          const judgeRenewal = await safely(() =>
+            ports.renewLease({
+              runId: input.runId,
+              leaseFence,
+              scenarioId: entry.scenario.id,
+              turnIndex,
+              stage: 'judge',
+              replyIndex: reply.replyIndex,
+            })
+          );
+          if (!judgeRenewal.ok) {
+            failureCodes.push(judgeRenewal.code);
+            scenarioStopped = true;
+            stopped = true;
+            break;
+          }
+        }
         const judged = await safelyJudge(() =>
           ports.judgeReply({ model: input.catalog.evaluatorModel, reply })
         );

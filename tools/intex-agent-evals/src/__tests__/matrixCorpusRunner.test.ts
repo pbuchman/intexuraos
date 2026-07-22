@@ -4,12 +4,16 @@ import type { ReplyEvaluationInput } from '../deterministicEvaluator.js';
 import { loadCanonicalMatrixCorpus } from '../matrixCorpus/catalog.js';
 import {
   MATRIX_CORPUS_EXTRA_REPLY_SEMANTIC_CRITERIA,
+  MATRIX_CORPUS_JUDGE_CALLS_PER_LEASE_RENEWAL,
   runMatrixCorpus,
   type MatrixCorpusRunPorts,
   type MatrixCorpusTurnExecutionResult,
   type MatrixCorpusTurnObservation,
 } from '../matrixCorpus/runMatrixCorpus.js';
-import { digestMatrixReply } from '../matrixCorpus/correlation.js';
+import {
+  digestMatrixReply,
+  MATRIX_CORPUS_MAX_REPLIES_PER_TURN,
+} from '../matrixCorpus/correlation.js';
 
 const scenariosDirectory = fileURLToPath(new URL('../../scenarios/', import.meta.url));
 
@@ -48,7 +52,15 @@ describe('sequential Matrix corpus state machine', () => {
       { lifecycle: 'completed', verdict: 'passed' },
     ]);
     expect(trace.filter((item) => item.startsWith('renew:'))).toEqual(
-      catalog.scenarios.map(({ scenario }) => `renew:${scenario.id}`)
+      catalog.scenarios.flatMap(({ scenario }) =>
+        scenario.turns.flatMap((_turn, turnIndex) => [
+          `renew:turn:${scenario.id}:${String(turnIndex)}`,
+          ...(scenario.expected.turns[turnIndex]?.replies ?? []).map(
+            (_reply, replyIndex) =>
+              `renew:judge:${scenario.id}:${String(turnIndex)}:${String(replyIndex)}`
+          ),
+        ])
+      )
     );
     expect(trace.indexOf('retention')).toBeLessThan(trace.indexOf('activate'));
     expect(trace.indexOf('activate')).toBeLessThan(trace.indexOf('project-running'));
@@ -395,7 +407,7 @@ describe('sequential Matrix corpus state machine', () => {
     }
   );
 
-  it('stops on lease-renewal failure before executing the scenario', async () => {
+  it('stops on lease-renewal failure before executing the turn', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const ports = passingPorts([]);
     vi.mocked(ports.renewLease).mockResolvedValue({ ok: false, code: 'lease_renewal_failed' });
@@ -408,6 +420,93 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.scenarios[0]?.status).toBe('not_run');
     expect(ports.projectScenario).not.toHaveBeenCalled();
     expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it('renews the lease before each judge batch and stops if that renewal fails', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.renewLease).mockImplementation(async (input) =>
+      input.stage === 'judge'
+        ? { ok: false, code: 'lease_renewal_failed' }
+        : { ok: true, value: undefined }
+    );
+
+    const result = await runMatrixCorpus({ runId: 'run_judge_lease', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('lease_renewal_failed');
+    expect(ports.executeTurn).toHaveBeenCalledOnce();
+    expect(ports.judgeReply).not.toHaveBeenCalled();
+    expect(result.scenarios[0]?.status).toBe('stopped');
+    expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it('batches the maximum reply count under the bounded lease-renewal receipt cap', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    const firstScenario = catalog.scenarios[0]?.scenario;
+    if (firstScenario === undefined) throw new Error('missing first scenario');
+    const base = observation(firstScenario, 0);
+    const expectedReply = base.replyEvaluations[0];
+    if (expectedReply === undefined) throw new Error('missing expected first reply');
+    const replies = [
+      expectedReply,
+      ...Array.from({ length: MATRIX_CORPUS_MAX_REPLIES_PER_TURN - 1 }, (_value, offset) => {
+        const replyIndex = offset + 1;
+        const reply = replyInput(
+          firstScenario.id,
+          0,
+          replyIndex,
+          MATRIX_CORPUS_EXTRA_REPLY_SEMANTIC_CRITERIA
+        );
+        reply.assistantText = `Synthetic extra reply ${String(replyIndex)}`;
+        return reply;
+      }),
+    ];
+    vi.mocked(ports.executeTurn).mockResolvedValueOnce({
+      ok: false,
+      kind: 'behavioral_failure',
+      code: 'deterministic_evidence_failed',
+      observation: {
+        ...base,
+        observedReplyCount: replies.length,
+        replyEvaluations: replies,
+        deterministicPassed: false,
+        transportEvidence: {
+          turnTerminal: 'completed',
+          replyDigests: replies.map((reply, replyIndex) =>
+            digestMatrixReply(reply.assistantText, replyIndex)
+          ),
+        },
+      },
+    });
+
+    await runMatrixCorpus({ runId: 'run_batched_judges', catalog }, ports);
+
+    const firstTurnJudgeRenewals = vi
+      .mocked(ports.renewLease)
+      .mock.calls.map(([input]) => input)
+      .filter(
+        (input) =>
+          input.stage === 'judge' && input.scenarioId === firstScenario.id && input.turnIndex === 0
+      );
+    expect(firstTurnJudgeRenewals).toEqual([
+      expect.objectContaining({ replyIndex: 0 }),
+      expect.objectContaining({ replyIndex: 3 }),
+    ]);
+
+    const turnCount = catalog.scenarios.reduce(
+      (total, entry) => total + entry.scenario.turns.length,
+      0
+    );
+    const maximumRenewalReceipts =
+      turnCount *
+      (2 +
+        Math.ceil(
+          MATRIX_CORPUS_MAX_REPLIES_PER_TURN / MATRIX_CORPUS_JUDGE_CALLS_PER_LEASE_RENEWAL
+        ));
+    expect(maximumRenewalReceipts).toBe(236);
+    expect(maximumRenewalReceipts).toBeLessThan(400);
   });
 
   it.each([
@@ -721,8 +820,12 @@ function passingPorts(trace: string[]): MatrixCorpusRunPorts {
       revision = input.expectedRevision + 1;
       return { ok: true, revision } as const;
     }),
-    renewLease: vi.fn(async ({ scenarioId }) => {
-      trace.push(`renew:${scenarioId}`);
+    renewLease: vi.fn(async (input) => {
+      trace.push(
+        input.stage === 'turn'
+          ? `renew:turn:${input.scenarioId}:${String(input.turnIndex)}`
+          : `renew:judge:${input.scenarioId}:${String(input.turnIndex)}:${String(input.replyIndex)}`
+      );
       return { ok: true, value: undefined } as const;
     }),
     executeTurn: vi.fn(

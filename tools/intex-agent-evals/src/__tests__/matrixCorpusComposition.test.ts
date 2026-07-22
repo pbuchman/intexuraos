@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { loadCanonicalMatrixCorpus } from '../matrixCorpus/catalog.js';
 import { createProductionMatrixCorpusExecutor } from '../matrixCorpus/liveExecution.js';
@@ -64,6 +64,29 @@ describe('production Matrix corpus composition', () => {
     ).toHaveLength(20);
     expect(harness.metrics.matrixMessages[0]).toContain('Scenario 001/020');
     expect(harness.metrics.matrixMessages.at(-1)).toContain('Scenario 020/020');
+    expect(harness.metrics.leaseRenewalKeys).toHaveLength(59 * 3);
+    expect(harness.metrics.leaseRenewalKeys).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('renew:intex-eval-001:0'),
+        expect.stringContaining('renew:intex-eval-020:1'),
+        expect.stringContaining('reply:intex-eval-001:0'),
+        expect.stringContaining('reply:intex-eval-020:1'),
+        expect.stringContaining('judge:intex-eval-001:0'),
+        expect.stringContaining('judge:intex-eval-020:1'),
+      ])
+    );
+    const firstReplyRenewal = harness.trace.findIndex((item) =>
+      item.includes('reply:intex-eval-001:0')
+    );
+    const firstReply = harness.trace.indexOf('matrix:reply:$matrix_reply_1');
+    const firstJudgeRenewal = harness.trace.findIndex(
+      (item) => item.includes('judge:intex-eval-001:0') && item.startsWith('lease:')
+    );
+    const firstJudge = harness.trace.indexOf('judge:intex-eval-001:0');
+    expect(firstReplyRenewal).toBeGreaterThanOrEqual(0);
+    expect(firstReplyRenewal).toBeLessThan(firstReply);
+    expect(firstReply).toBeLessThan(firstJudgeRenewal);
+    expect(firstJudgeRenewal).toBeLessThan(firstJudge);
     expect(harness.metrics.deepSeekAgentCalls).toBeGreaterThan(0);
     expect(harness.metrics.confirmationAgentCalls).toBe(0);
     expect(harness.metrics.miniMaxJudgeCalls).toBe(59);
@@ -111,6 +134,121 @@ describe('production Matrix corpus composition', () => {
     ]) {
       expect(reportText).not.toContain(sentinel);
       expect(reportMarkdown).not.toContain(sentinel);
+    }
+  });
+
+  it('bounds the initial Matrix cursor with the configured correlation deadline', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      hangInitialCursor: true,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      correlationTimeoutMs: 5,
+      replyTimeoutMs: 7,
+      pollIntervalMs: 1,
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result.run).toMatchObject({
+      exitCode: 2,
+      failureCodes: ['reply_timeout'],
+      terminalAcknowledged: true,
+      cleanupCompleted: true,
+    });
+    expect(harness.metrics.matrixMessages).toHaveLength(0);
+  });
+
+  it('wires an explicit reply deadline override into the live executor', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      dropReplyScenarioNumber: 1,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      correlationTimeoutMs: 50,
+      replyTimeoutMs: 5,
+      pollIntervalMs: 1,
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result.run).toMatchObject({ exitCode: 2, failureCodes: ['reply_timeout'] });
+    expect(harness.metrics.matrixMessages).toHaveLength(1);
+  });
+
+  it('keeps the executor default reply wait alive past 180 seconds and stops at 240 seconds', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      dropReplyScenarioNumber: 1,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      now: harness.now,
+    });
+
+    vi.useFakeTimers();
+    try {
+      let settled = false;
+      const pending = execute({
+        runId: harness.runId,
+        preflight: harness.preflight,
+        prepared: harness.prepared,
+      }).then((result) => {
+        settled = true;
+        return result;
+      });
+
+      await harness.replyWaitStarted;
+      expect(harness.metrics.leaseRenewalKeys).toEqual(
+        expect.arrayContaining([expect.stringContaining('reply:intex-eval-001:0')])
+      );
+      await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(60 * 1000);
+
+      const result = await pending;
+      expect(result.run).toMatchObject({ exitCode: 2, failureCodes: ['reply_timeout'] });
+    } finally {
+      vi.useRealTimers();
     }
   });
 
