@@ -196,4 +196,114 @@ describe('production Matrix corpus composition', () => {
       true
     );
   });
+
+  it('terminalizes a persisted session binding when Matrix correlation fails before observation', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      wrongPuppetScenarioNumber: 1,
+      advanceEventRevisionAfterBindingScenarioNumber: 1,
+      conflictStoppedScenarioProjectionOnce: true,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result).toMatchObject({
+      reportReady: true,
+      run: {
+        exitCode: 2,
+        effectiveKind: 'infrastructure_failure',
+        failureCodes: ['wrong_puppet'],
+        terminalAcknowledged: true,
+        cleanupCompleted: true,
+        totals: { agentCostNanoUsd: 1_000 },
+      },
+    });
+    expect(result.run.scenarios[0]).toMatchObject({ status: 'stopped', completedTurns: 0 });
+    expect(result.run.scenarios.slice(1).every((scenario) => scenario.status === 'not_run')).toBe(
+      true
+    );
+    expect(harness.metrics.scenarioProjectionSessions).toEqual(['matrix_session_1_1']);
+    expect(harness.metrics.scenarioProjectionEventWatermarks).toEqual([2]);
+    const report = MatrixCorpusReportV1Schema.parse(
+      JSON.parse(
+        await readFile(
+          `${harness.repositoryRoot}/${result.relativeReportDirectory}/report.json`,
+          'utf8'
+        )
+      )
+    );
+    expect(report.scenarios[0]?.agentUsage).toMatchObject({
+      logicalCalls: 1,
+      totalTokens: 15,
+      costNanoUsd: 1_000,
+      costComplete: true,
+    });
+    expect(report.scenarios[0]?.judge).toMatchObject({ status: 'not_run', passed: null });
+    expect(report.scenarios[0]?.strictMockProof.status).toBe('passed');
+    expect(report.usage.agent).toMatchObject({
+      logicalCalls: 1,
+      totalTokens: 15,
+      costNanoUsd: 1_000,
+      costComplete: true,
+    });
+    expect(report.usage).toMatchObject({ totalCostNanoUsd: 1_000, costComplete: true });
+  });
+
+  it('reconciles a session binding that appears while the failed turn is draining', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      deferBindingUntilQuiesceScenarioNumber: 1,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      correlationTimeoutMs: 5,
+      pollIntervalMs: 1,
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result).toMatchObject({
+      reportReady: true,
+      run: {
+        exitCode: 2,
+        failureCodes: ['scenario_binding_timeout'],
+        terminalAcknowledged: true,
+        cleanupCompleted: true,
+      },
+    });
+    expect(result.run.scenarios[0]).toMatchObject({ status: 'stopped', completedTurns: 0 });
+    expect(harness.metrics.scenarioProjectionSessions).toEqual(['matrix_session_1_1']);
+    expect(harness.metrics.scenarioProjectionEventWatermarks).toEqual([1]);
+  });
 });
