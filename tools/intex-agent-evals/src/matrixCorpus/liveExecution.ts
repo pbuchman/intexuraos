@@ -56,6 +56,7 @@ import {
   type MatrixCorpusProjectionMutationResult,
   type MatrixCorpusRunPorts,
   type MatrixCorpusRunResult,
+  type MatrixCorpusStoppedScenarioReconciliationResult,
   type MatrixCorpusTurnObservation,
 } from './runMatrixCorpus.js';
 import type { CanonicalMatrixCorpus, CanonicalMatrixCorpusScenario } from './types.js';
@@ -87,6 +88,7 @@ interface ScenarioExecutionState {
   readonly deterministicChecks: SafeDeterministicCheckV1[];
   deterministicPassed: boolean;
   strictMockProofTurns: number;
+  strictMockProofReconciled: boolean;
   readonly failureCodes: string[];
 }
 
@@ -336,6 +338,31 @@ function createRunPorts(input: {
       return activated ? passed(undefined) : failed('activation_failed');
     },
 
+    async projectRunning(command): MatrixCorpusPortReturn<'projectRunning'> {
+      const result = await input.control.mutateProjection({
+        runId: command.runId,
+        leaseFence: command.leaseFence,
+        request: {
+          kind: 'cas',
+          userId: state.prepared.account.userId,
+          leaseFence: command.leaseFence,
+          command: {
+            expectedRevision: command.expectedRevision,
+            nextLifecycle: 'running',
+            updatedAt: input.now().toISOString(),
+            scenario: null,
+            finalization: null,
+          },
+        },
+      });
+      if (!result.ok)
+        return result.error.httpStatus === 409
+          ? { ok: false, kind: 'revision_conflict', code: 'projection_revision_conflict' }
+          : projectionFailed('running_projection_failed');
+      state.revision = result.value.revision;
+      return { ok: true, revision: result.value.revision };
+    },
+
     async renewLease({ runId, leaseFence, scenarioId }): MatrixCorpusPortReturn<'renewLease'> {
       const result = await input.whatsapp.renewMatrixCorpusLease({
         runId,
@@ -420,6 +447,115 @@ function createRunPorts(input: {
       state.revision = result.value.revision;
       scenario.projectionRevision += 1;
       return { ok: true, revision: result.value.revision };
+    },
+
+    async reconcileStoppedScenario(command): MatrixCorpusPortReturn<'reconcileStoppedScenario'> {
+      const scenario = state.scenarios.get(command.scenarioId);
+      if (scenario === undefined)
+        return stoppedScenarioReconciliationFailed('stopped_scenario_missing');
+      const status = await readScenarioStatus(
+        input.intex,
+        state,
+        command.scenarioId,
+        command.leaseFence
+      );
+      if (status === null) {
+        if (scenario.sessionId !== null || command.observedSessionId !== null)
+          return stoppedScenarioReconciliationFailed('stopped_scenario_status_missing');
+        return {
+          ok: true,
+          revision: command.expectedRevision,
+          disposition: 'not_bound',
+          additionalAgentCostNanoUsd: 0,
+        };
+      }
+      if (
+        (command.observedSessionId !== null && command.observedSessionId !== status.sessionId) ||
+        (scenario.sessionId !== null && scenario.sessionId !== status.sessionId)
+      )
+        return stoppedScenarioReconciliationFailed('stopped_scenario_binding_mismatch');
+      const evidenceResult = await input.intex.getMatrixCorpusEvidence({
+        ...identity(state, command.runId, command.leaseFence),
+        scenarioId: command.scenarioId,
+        sessionId: status.sessionId,
+        eventRevision: status.eventRevision,
+      });
+      if (!evidenceResult.ok)
+        return stoppedScenarioReconciliationFailed('stopped_scenario_evidence_missing');
+      const evidence = evidenceResult.value;
+      if (evidence.eventRevision !== status.eventRevision)
+        return stoppedScenarioReconciliationFailed('stopped_scenario_evidence_revision_mismatch');
+      if (evidence.strictMockProof.mockProfileDigest !== scenario.entry.mockProfileDigest)
+        return stoppedScenarioReconciliationFailed('stopped_scenario_strict_mock_proof_failed');
+      const safeToolEvidence = evidence.toolEvidence.flatMap((item) => {
+        const parsed = safeToolEvidenceV1Schema.safeParse(item);
+        return parsed.success ? [parsed.data] : [];
+      });
+      const safeAgentUsage = evidence.agentUsage.flatMap((item) => {
+        const parsed = safeAgentUsageV1Schema.safeParse(item);
+        return parsed.success ? [parsed.data] : [];
+      });
+      if (
+        safeToolEvidence.length !== evidence.toolEvidence.length ||
+        safeAgentUsage.length !== evidence.agentUsage.length
+      )
+        return stoppedScenarioReconciliationFailed('stopped_scenario_unsafe_evidence_shape');
+      const previousUsageTotals = sumAgentUsage(scenario.agentUsage);
+      const usageTotals = sumAgentUsage(safeAgentUsage);
+      if (
+        usageTotals.inputTokens !== evidence.agentUsageTotals.inputTokens ||
+        usageTotals.outputTokens !== evidence.agentUsageTotals.outputTokens ||
+        usageTotals.totalTokens !== evidence.agentUsageTotals.totalTokens ||
+        usageTotals.costNanoUsd !== evidence.agentUsageTotals.costNanoUsd
+      )
+        return stoppedScenarioReconciliationFailed('stopped_scenario_usage_totals_mismatch');
+      if (usageTotals.costNanoUsd < previousUsageTotals.costNanoUsd)
+        return stoppedScenarioReconciliationFailed('stopped_scenario_usage_regressed');
+      const updatedAt = input.now().toISOString();
+      const reconciledScenario: ScenarioExecutionState = {
+        ...scenario,
+        sessionId: status.sessionId,
+        eventRevision: evidence.eventRevision,
+        toolEvidence: safeToolEvidence,
+        agentUsage: safeAgentUsage,
+        strictMockProofReconciled: true,
+        finishedAt: updatedAt,
+      };
+      const result = await input.control.mutateProjection({
+        runId: command.runId,
+        leaseFence: command.leaseFence,
+        request: {
+          kind: 'cas',
+          userId: state.prepared.account.userId,
+          leaseFence: command.leaseFence,
+          command: createScenarioProjectionCommand(
+            state,
+            reconciledScenario,
+            command.expectedRevision,
+            'stopped',
+            'not_evaluated',
+            updatedAt
+          ),
+        },
+      });
+      if (!result.ok)
+        return result.error.httpStatus === 409
+          ? { ok: false, kind: 'revision_conflict', code: 'projection_revision_conflict' }
+          : stoppedScenarioReconciliationFailed('stopped_scenario_projection_failed');
+      state.revision = result.value.revision;
+      scenario.sessionId = reconciledScenario.sessionId;
+      scenario.eventRevision = reconciledScenario.eventRevision;
+      scenario.toolEvidence = reconciledScenario.toolEvidence;
+      scenario.agentUsage = reconciledScenario.agentUsage;
+      scenario.strictMockProofReconciled = reconciledScenario.strictMockProofReconciled;
+      scenario.finishedAt = reconciledScenario.finishedAt;
+      scenario.projectionRevision += 1;
+      return {
+        ok: true,
+        revision: result.value.revision,
+        disposition: 'projected',
+        additionalAgentCostNanoUsd: usageTotals.costNanoUsd - previousUsageTotals.costNanoUsd,
+      };
     },
 
     async getProjectionRevision({
@@ -804,6 +940,8 @@ async function executeLiveTurn(input: {
   );
   if (status === undefined)
     return { ok: false, kind: 'infrastructure_failure', code: 'scenario_binding_timeout' };
+  state.sessionId = status.sessionId;
+  state.eventRevision = status.eventRevision;
 
   const evidenceCapture: { value: MatrixCorpusEvidenceResult | null } = { value: null };
   const replyController = new AbortController();
@@ -862,6 +1000,7 @@ async function executeLiveTurn(input: {
       ok: false,
       kind: 'infrastructure_failure',
       code: correlated.ok ? 'turn_evidence_missing' : correlated.code,
+      boundSessionId: status.sessionId,
     };
 
   input.state.turnsCorrelated += 1;
@@ -870,8 +1009,14 @@ async function executeLiveTurn(input: {
   state.matrixMirrors += correlated.replies.length;
 
   const evidence = evidenceCapture.value;
+  state.eventRevision = evidence.eventRevision;
   if (evidence.strictMockProof.mockProfileDigest !== entry.mockProfileDigest)
-    return { ok: false, kind: 'safety_failure', code: 'strict_mock_proof_failed' };
+    return {
+      ok: false,
+      kind: 'safety_failure',
+      code: 'strict_mock_proof_failed',
+      boundSessionId: status.sessionId,
+    };
   const safeToolEvidence = evidence.toolEvidence.flatMap((item) => {
     const parsed = safeToolEvidenceV1Schema.safeParse(item);
     return parsed.success ? [parsed.data] : [];
@@ -884,7 +1029,12 @@ async function executeLiveTurn(input: {
     safeToolEvidence.length !== evidence.toolEvidence.length ||
     safeAgentUsage.length !== evidence.agentUsage.length
   )
-    return { ok: false, kind: 'safety_failure', code: 'unsafe_evidence_shape' };
+    return {
+      ok: false,
+      kind: 'safety_failure',
+      code: 'unsafe_evidence_shape',
+      boundSessionId: status.sessionId,
+    };
   const toolEvidence = safeToolEvidence.filter((item) => item.turnIndex === input.turnIndex);
   const agentUsage = safeAgentUsage.filter((item) => item.turnIndex === input.turnIndex);
   const selected = toolEvidence
@@ -1037,6 +1187,7 @@ function createState(
           deterministicChecks: [],
           deterministicPassed: true,
           strictMockProofTurns: 0,
+          strictMockProofReconciled: false,
           failureCodes: [],
         },
       ])
@@ -1355,17 +1506,17 @@ function buildReport(
               20
           );
     const judgeStatus: 'passed' | 'failed' | 'not_run' =
-      lifecycle === 'not_run'
+      lifecycle === 'not_run' || execution.replyEvaluations.length === 0
         ? 'not_run'
-        : execution.replyEvaluations.length > 0 &&
-            execution.replyEvaluations.every((evaluation) => evaluation.verdict === 'passed')
+        : execution.replyEvaluations.every((evaluation) => evaluation.verdict === 'passed')
           ? 'passed'
           : 'failed';
     const strictMockStatus: 'passed' | 'failed' | 'not_run' =
       lifecycle === 'not_run'
         ? 'not_run'
-        : execution.completedTurns > 0 &&
-            execution.strictMockProofTurns === execution.completedTurns
+        : execution.strictMockProofReconciled ||
+            (execution.completedTurns > 0 &&
+              execution.strictMockProofTurns === execution.completedTurns)
           ? 'passed'
           : 'failed';
     return {
@@ -2154,6 +2305,12 @@ function failed(code: string): { readonly ok: false; readonly code: string } {
 }
 
 function projectionFailed(code: string): MatrixCorpusProjectionMutationResult {
+  return { ok: false as const, kind: 'failed' as const, code };
+}
+
+function stoppedScenarioReconciliationFailed(
+  code: string
+): MatrixCorpusStoppedScenarioReconciliationResult {
   return { ok: false as const, kind: 'failed' as const, code };
 }
 

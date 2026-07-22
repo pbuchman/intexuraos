@@ -51,6 +51,8 @@ describe('sequential Matrix corpus state machine', () => {
       catalog.scenarios.map(({ scenario }) => `renew:${scenario.id}`)
     );
     expect(trace.indexOf('retention')).toBeLessThan(trace.indexOf('activate'));
+    expect(trace.indexOf('activate')).toBeLessThan(trace.indexOf('project-running'));
+    expect(trace.indexOf('project-running')).toBeLessThan(trace.indexOf('turn:intex-eval-001:0'));
     expect(trace.slice(-7)).toEqual([
       'quiesce',
       'drain',
@@ -90,7 +92,12 @@ describe('sequential Matrix corpus state machine', () => {
     const ports = passingPorts(trace);
     vi.mocked(ports.executeTurn).mockImplementation(async (input) =>
       input.scenario.id === 'intex-eval-003'
-        ? { ok: false, kind: 'safety_failure', code: 'wrong_puppet' }
+        ? {
+            ok: false,
+            kind: 'safety_failure',
+            code: 'wrong_puppet',
+            boundSessionId: `session_${input.scenario.id}`,
+          }
         : { ok: true, observation: observation(input.scenario, input.turnIndex) }
     );
 
@@ -100,6 +107,86 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.failureCodes).toContain('wrong_puppet');
     expect(result.scenarios[2]?.status).toBe('stopped');
     expect(result.scenarios[3]?.status).toBe('not_run');
+    expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it('does not invent a scenario projection when infrastructure fails before session binding', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    const ports = passingPorts(trace);
+    vi.mocked(ports.executeTurn).mockResolvedValue({
+      ok: false,
+      kind: 'infrastructure_failure',
+      code: 'scenario_binding_timeout',
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_unbound', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('scenario_binding_timeout');
+    expect(result.scenarios[0]).toMatchObject({ status: 'not_run', completedTurns: 0 });
+    expect(ports.projectScenario).not.toHaveBeenCalled();
+    expect(ports.reconcileStoppedScenario).toHaveBeenCalledWith(
+      expect.objectContaining({ scenarioId: 'intex-eval-001', observedSessionId: null })
+    );
+    expect(trace).toContain('stage');
+    expect(result.terminalAcknowledged).toBe(true);
+    expect(result.cleanupCompleted).toBe(true);
+  });
+
+  it('projects a persisted session binding as stopped when correlation fails before observation', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockResolvedValue({
+      ok: false,
+      kind: 'infrastructure_failure',
+      code: 'reply_timeout',
+      boundSessionId: 'session_intex-eval-001',
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_bound_failure', catalog }, ports);
+
+    expect(result.exitCode).toBe(2);
+    expect(result.scenarios[0]).toMatchObject({ status: 'stopped', completedTurns: 0 });
+    expect(ports.reconcileStoppedScenario).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scenarioId: 'intex-eval-001',
+        observedSessionId: 'session_intex-eval-001',
+      })
+    );
+    expect(ports.projectScenario).not.toHaveBeenCalledWith(
+      expect.objectContaining({ scenarioId: 'intex-eval-001', lifecycle: 'stopped' })
+    );
+    expect(result.terminalAcknowledged).toBe(true);
+  });
+
+  it('reconciles a late session binding only after the stopped turn is drained', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    const ports = passingPorts(trace);
+    vi.mocked(ports.executeTurn).mockResolvedValue({
+      ok: false,
+      kind: 'infrastructure_failure',
+      code: 'scenario_binding_timeout',
+    });
+    vi.mocked(ports.reconcileStoppedScenario).mockImplementation(async (input) => {
+      trace.push('reconcile-stopped');
+      return {
+        ok: true,
+        revision: input.expectedRevision + 1,
+        disposition: 'projected',
+        additionalAgentCostNanoUsd: 0,
+      };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_late_binding', catalog }, ports);
+
+    expect(result.scenarios[0]?.status).toBe('stopped');
+    expect(trace.indexOf('drain')).toBeLessThan(trace.indexOf('reconcile-stopped'));
+    expect(trace.indexOf('reconcile-stopped')).toBeLessThan(trace.indexOf('stage'));
+    expect(ports.reconcileStoppedScenario).toHaveBeenCalledWith(
+      expect.objectContaining({ scenarioId: 'intex-eval-001', observedSessionId: null })
+    );
     expect(result.terminalAcknowledged).toBe(true);
   });
 
@@ -318,6 +405,8 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.exitCode).toBe(2);
     expect(result.failureCodes).toContain('lease_renewal_failed');
     expect(ports.executeTurn).not.toHaveBeenCalled();
+    expect(result.scenarios[0]?.status).toBe('not_run');
+    expect(ports.projectScenario).not.toHaveBeenCalled();
     expect(result.terminalAcknowledged).toBe(true);
   });
 
@@ -432,7 +521,12 @@ describe('sequential Matrix corpus state machine', () => {
     const ports = passingPorts([]);
     vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
       if (input.scenario.id === 'intex-eval-002') {
-        return { ok: false, kind: 'infrastructure_failure', code: 'matrix_sync_failed' };
+        return {
+          ok: false,
+          kind: 'infrastructure_failure',
+          code: 'matrix_sync_failed',
+          boundSessionId: `session_${input.scenario.id}`,
+        };
       }
       return {
         ok: true,
@@ -622,6 +716,11 @@ function passingPorts(trace: string[]): MatrixCorpusRunPorts {
       trace.push('activate');
       return { ok: true, value: undefined } as const;
     }),
+    projectRunning: vi.fn(async (input) => {
+      trace.push('project-running');
+      revision = input.expectedRevision + 1;
+      return { ok: true, revision } as const;
+    }),
     renewLease: vi.fn(async ({ scenarioId }) => {
       trace.push(`renew:${scenarioId}`);
       return { ok: true, value: undefined } as const;
@@ -650,6 +749,25 @@ function passingPorts(trace: string[]): MatrixCorpusRunPorts {
       revision = input.expectedRevision + 1;
       return { ok: true, revision } as const;
     }),
+    reconcileStoppedScenario: vi.fn(
+      async (input: { expectedRevision: number; observedSessionId: string | null }) => {
+        trace.push('reconcile-stopped');
+        if (input.observedSessionId === null)
+          return {
+            ok: true,
+            revision: input.expectedRevision,
+            disposition: 'not_bound',
+            additionalAgentCostNanoUsd: 0,
+          } as const;
+        revision = input.expectedRevision + 1;
+        return {
+          ok: true,
+          revision,
+          disposition: 'projected',
+          additionalAgentCostNanoUsd: 0,
+        } as const;
+      }
+    ),
     getProjectionRevision: vi.fn(async () => ({ ok: true, value: { revision } }) as const),
     quiesceRun: vi.fn(async () => {
       trace.push('quiesce');

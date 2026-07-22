@@ -3,6 +3,7 @@ import {
   canonicalMatrixCorpusIngressRequestV1,
   matrixCorpusCapabilityV1Schema,
   matrixCorpusCapabilityConsumeFactsV1Schema,
+  matrixCorpusRfc3339TimestampSchema,
   matrixCorpusSafeIdSchema,
   type MatrixCorpusParsedIngressFactsV1,
   type MatrixCorpusVisibleHeaderV1,
@@ -111,6 +112,8 @@ export class FirestoreMatrixCorpusIngress implements MatrixCorpusIngressPort {
         !matrixCorpusSafeIdSchema.safeParse(ingestOutboxId).success
       )
         return { code: 'NOT_READY' };
+      const ordinaryTimestamp = normalizeTransportTimestamp(input.timestamp);
+      if (ordinaryTimestamp === null) return { code: 'NOT_READY' };
 
       const payload = {
         version: 1 as const,
@@ -121,7 +124,7 @@ export class FirestoreMatrixCorpusIngress implements MatrixCorpusIngressPort {
           messageId: input.transportMessageId,
           text: input.message.textAfterHeaderRemoval,
           sourceType: 'whatsapp_text' as const,
-          timestamp: input.timestamp,
+          timestamp: ordinaryTimestamp,
         },
         context: {
           version: 1 as const,
@@ -165,7 +168,7 @@ export class FirestoreMatrixCorpusIngress implements MatrixCorpusIngressPort {
         pendingConfirmationId: stored.pendingConfirmationId,
         expectedDecision: stored.expectedDecision,
         ordinaryMessageId: input.transportMessageId,
-        ordinaryTimestamp: input.timestamp,
+        ordinaryTimestamp,
         ingestReceiptId,
         payloadDigest,
         ingestOutboxId,
@@ -189,6 +192,21 @@ export class FirestoreMatrixCorpusIngress implements MatrixCorpusIngressPort {
     } catch {
       return { code: 'NOT_READY' };
     }
+  }
+}
+
+function normalizeTransportTimestamp(timestamp: string): string | null {
+  const rfc3339 = matrixCorpusRfc3339TimestampSchema.safeParse(timestamp);
+  if (rfc3339.success) return rfc3339.data;
+  if (!/^(?:0|[1-9][0-9]{0,12})$/u.test(timestamp)) return null;
+  const milliseconds = Number(timestamp) * 1_000;
+  if (!Number.isSafeInteger(milliseconds)) return null;
+  try {
+    const normalized = new Date(milliseconds).toISOString();
+    const parsed = matrixCorpusRfc3339TimestampSchema.safeParse(normalized);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
   }
 }
 

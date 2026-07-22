@@ -86,6 +86,50 @@ describe('Firestore Matrix corpus ingress', () => {
     });
   });
 
+  it('normalizes the Unix-seconds timestamp delivered by Meta before attesting the ingest', async () => {
+    const current = ingressFixture(storedCapability());
+    const metaTimestamp = '1784675542';
+
+    await expect(
+      current.ingress.consumeReservedMessage({
+        ...startInput(),
+        timestamp: metaTimestamp,
+      })
+    ).resolves.toEqual({ code: 'INGEST_ENQUEUED' });
+
+    expect(current.consumeCapabilityAndEnqueueIngest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        facts: expect.objectContaining({
+          ingressRequest: expect.objectContaining({
+            ordinaryTimestamp: new Date(Number(metaTimestamp) * 1_000).toISOString(),
+          }),
+          payload: expect.objectContaining({
+            ordinaryIngest: expect.objectContaining({
+              timestamp: new Date(Number(metaTimestamp) * 1_000).toISOString(),
+            }),
+          }),
+        }),
+      })
+    );
+  });
+
+  it.each([
+    ['non-numeric transport timestamp', 'not-a-timestamp'],
+    ['unsafe Unix-seconds integer', '9999999999999'],
+    ['Unix-seconds timestamp outside the supported RFC3339 year range', '253402300800'],
+  ])('fails closed before consumption for %s', async (_description, invalidTimestamp) => {
+    const current = ingressFixture(storedCapability());
+
+    await expect(
+      current.ingress.consumeReservedMessage({
+        ...startInput(),
+        timestamp: invalidTimestamp,
+      })
+    ).resolves.toEqual({ code: 'NOT_READY' });
+
+    expect(current.consumeCapabilityAndEnqueueIngest).not.toHaveBeenCalled();
+  });
+
   it('fails closed before consumption for a prompt or identity mismatch', async () => {
     const fake = createFakeFirestore();
     fake.clear();

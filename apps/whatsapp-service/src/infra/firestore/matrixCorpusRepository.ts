@@ -3150,7 +3150,12 @@ export class FirestoreMatrixCorpusSignedEnvelopeStore
       const claimExpiresAt = parsed.data.claim?.expiresAt;
       if (
         claimExpiresAt === undefined ||
-        !hasLiveSigningAuthority(pair.current.expiresAt, claimExpiresAt, input.proposedIssuedAt)
+        !hasLiveTerminalSigningAuthority(
+          pair.current,
+          parsed.data,
+          claimExpiresAt,
+          input.proposedIssuedAt
+        )
       )
         throw authorityRejected();
 
@@ -3339,6 +3344,19 @@ function hasLiveSigningAuthority(
 ): boolean {
   const issuedAt = Date.parse(proposedIssuedAt);
   return issuedAt < Date.parse(leaseExpiresAt) && issuedAt < Date.parse(claimExpiresAt);
+}
+
+function hasLiveTerminalSigningAuthority(
+  lease: ReturnType<typeof matrixCorpusCurrentLeaseHistoryPairV1Schema.parse>['current'],
+  outbox: ReturnType<typeof matrixCorpusTerminalControlOutboxRecordV1Schema.parse>,
+  claimExpiresAt: string,
+  proposedIssuedAt: string
+): boolean {
+  const issuedAt = Date.parse(proposedIssuedAt);
+  const hasLiveLease = issuedAt < Date.parse(lease.expiresAt);
+  const isExpiredLeaseAbandonment =
+    lease.phase === 'abandon_pending' && outbox.kind === 'abandoned';
+  return issuedAt < Date.parse(claimExpiresAt) && (hasLiveLease || isExpiredLeaseAbandonment);
 }
 
 function ingestPreparation(

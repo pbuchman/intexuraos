@@ -67,6 +67,7 @@ export type MatrixCorpusTurnExecutionResult =
       readonly ok: false;
       readonly kind: 'infrastructure_failure' | 'safety_failure';
       readonly code: string;
+      readonly boundSessionId?: string;
     };
 
 export type MatrixCorpusJudgeResult =
@@ -89,6 +90,15 @@ export type MatrixCorpusProjectionMutationResult =
   | { readonly ok: true; readonly revision: number }
   | { readonly ok: false; readonly kind: 'revision_conflict' | 'failed'; readonly code: string };
 
+export type MatrixCorpusStoppedScenarioReconciliationResult =
+  | {
+      readonly ok: true;
+      readonly revision: number;
+      readonly disposition: 'projected' | 'not_bound';
+      readonly additionalAgentCostNanoUsd: number;
+    }
+  | { readonly ok: false; readonly kind: 'revision_conflict' | 'failed'; readonly code: string };
+
 export interface MatrixCorpusRunPorts {
   provisionRun(input: {
     runId: string;
@@ -109,6 +119,11 @@ export interface MatrixCorpusRunPorts {
     leaseFence: string;
   }): Promise<MatrixCorpusOperationResult<{ revision: number }>>;
   activateRun(input: { runId: string; leaseFence: string }): Promise<MatrixCorpusOperationResult>;
+  projectRunning(input: {
+    runId: string;
+    leaseFence: string;
+    expectedRevision: number;
+  }): Promise<MatrixCorpusProjectionMutationResult>;
   renewLease(input: {
     runId: string;
     leaseFence: string;
@@ -134,6 +149,13 @@ export interface MatrixCorpusRunPorts {
     lifecycle: 'running' | 'completed' | 'stopped';
     verdict: 'pending' | 'passed' | 'failed' | 'not_evaluated';
   }): Promise<MatrixCorpusProjectionMutationResult>;
+  reconcileStoppedScenario(input: {
+    runId: string;
+    leaseFence: string;
+    expectedRevision: number;
+    scenarioId: string;
+    observedSessionId: string | null;
+  }): Promise<MatrixCorpusStoppedScenarioReconciliationResult>;
   getProjectionRevision(input: {
     runId: string;
     leaseFence: string;
@@ -213,6 +235,11 @@ export async function runMatrixCorpus(
   let evaluatorCostNanoUsd = 0;
   let terminalAcknowledged = false;
   let cleanupCompleted = false;
+  let pendingStoppedScenario: {
+    readonly scenarioOffset: number;
+    readonly scenarioId: string;
+    readonly observedSessionId: string | null;
+  } | null = null;
 
   const provision = await safely(() => ports.provisionRun(input));
   if (!provision.ok) return earlyFailure(input.runId, scenarios, provision.code);
@@ -235,6 +262,18 @@ export async function runMatrixCorpus(
   const activation = await safely(() => ports.activateRun({ runId: input.runId, leaseFence }));
   if (!activation.ok) return await terminateAfterProvision(activation.code);
   active = true;
+  const runningProjection = await projectRunningWithRefetch({
+    ports,
+    runId: input.runId,
+    leaseFence,
+    revision,
+  });
+  if (!runningProjection.ok) {
+    failureCodes.push(runningProjection.code);
+    stopped = true;
+    return await terminalize();
+  }
+  revision = runningProjection.revision;
 
   for (const [scenarioOffset, entry] of input.catalog.scenarios.entries()) {
     const scenarioResult = scenarios[scenarioOffset];
@@ -244,7 +283,11 @@ export async function runMatrixCorpus(
     );
     if (!renewal.ok) {
       failureCodes.push(renewal.code);
-      scenarios[scenarioOffset] = { ...scenarioResult, status: 'stopped' };
+      pendingStoppedScenario = {
+        scenarioOffset,
+        scenarioId: entry.scenario.id,
+        observedSessionId: null,
+      };
       stopped = true;
       break;
     }
@@ -266,6 +309,7 @@ export async function runMatrixCorpus(
       );
       let portBehavioralFailureCode: string | undefined;
       if (!execution.ok && execution.kind !== 'behavioral_failure') {
+        sessionId ??= execution.boundSessionId ?? null;
         failureCodes.push(execution.code);
         scenarioStopped = true;
         stopped = true;
@@ -352,26 +396,41 @@ export async function runMatrixCorpus(
       revision = progress.revision;
     }
 
-    const nextStatus = scenarioStopped ? 'stopped' : scenarioFailed ? 'failed' : 'passed';
+    const nextStatus =
+      sessionId === null
+        ? 'not_run'
+        : scenarioStopped
+          ? 'stopped'
+          : scenarioFailed
+            ? 'failed'
+            : 'passed';
     scenarios[scenarioOffset] = {
       scenarioId: entry.scenario.id,
       status: nextStatus,
       completedTurns: scenarioCompletedTurns,
     };
-    const projected = await projectWithRefetch({
-      ports,
-      runId: input.runId,
-      leaseFence,
-      revision,
-      scenarioId: entry.scenario.id,
-      lifecycle: scenarioStopped ? 'stopped' : 'completed',
-      verdict: scenarioStopped ? 'not_evaluated' : scenarioFailed ? 'failed' : 'passed',
-    });
-    if (!projected.ok) {
-      failureCodes.push(projected.code);
-      stopped = true;
-    } else {
-      revision = projected.revision;
+    if (scenarioStopped) {
+      pendingStoppedScenario = {
+        scenarioOffset,
+        scenarioId: entry.scenario.id,
+        observedSessionId: sessionId,
+      };
+    } else if (sessionId !== null) {
+      const projected = await projectWithRefetch({
+        ports,
+        runId: input.runId,
+        leaseFence,
+        revision,
+        scenarioId: entry.scenario.id,
+        lifecycle: 'completed',
+        verdict: scenarioFailed ? 'failed' : 'passed',
+      });
+      if (!projected.ok) {
+        failureCodes.push(projected.code);
+        stopped = true;
+      } else {
+        revision = projected.revision;
+      }
     }
     if (stopped) break;
   }
@@ -396,6 +455,26 @@ export async function runMatrixCorpus(
     if (!quiesce.ok) return terminalFailure(quiesce.code);
     const drain = await safely(() => ports.waitForDrain({ runId: input.runId, leaseFence }));
     if (!drain.ok) return terminalFailure(drain.code);
+    if (pendingStoppedScenario !== null) {
+      const reconciled = await reconcileStoppedScenarioWithRefetch({
+        ports,
+        runId: input.runId,
+        leaseFence,
+        revision,
+        scenarioId: pendingStoppedScenario.scenarioId,
+        observedSessionId: pendingStoppedScenario.observedSessionId,
+      });
+      if (!reconciled.ok) return terminalFailure(reconciled.code);
+      revision = reconciled.revision;
+      agentCostNanoUsd += reconciled.additionalAgentCostNanoUsd;
+      const scenario = scenarios[pendingStoppedScenario.scenarioOffset];
+      if (scenario === undefined) return terminalFailure('stopped_scenario_missing');
+      scenarios[pendingStoppedScenario.scenarioOffset] = {
+        ...scenario,
+        status: reconciled.disposition === 'projected' ? 'stopped' : 'not_run',
+      };
+      pendingStoppedScenario = null;
+    }
     const staged = await safely(() =>
       ports.stageArtifacts({ runId: input.runId, leaseFence, outcome })
     );
@@ -458,6 +537,72 @@ export async function runMatrixCorpus(
       cleanupCompleted,
     };
   }
+}
+
+async function projectRunningWithRefetch(input: {
+  ports: MatrixCorpusRunPorts;
+  runId: string;
+  leaseFence: string;
+  revision: number;
+}): Promise<{ ok: true; revision: number } | { ok: false; code: string }> {
+  let revision = input.revision;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await safelyProjection(() =>
+      input.ports.projectRunning({
+        runId: input.runId,
+        leaseFence: input.leaseFence,
+        expectedRevision: revision,
+      })
+    );
+    if (result.ok) return result;
+    if (result.kind !== 'revision_conflict' || attempt === 1)
+      return { ok: false, code: result.code };
+    const current = await safely(() =>
+      input.ports.getProjectionRevision({ runId: input.runId, leaseFence: input.leaseFence })
+    );
+    if (!current.ok) return current;
+    revision = current.value.revision;
+  }
+  return { ok: false, code: 'running_projection_retry_exhausted' };
+}
+
+async function reconcileStoppedScenarioWithRefetch(input: {
+  ports: MatrixCorpusRunPorts;
+  runId: string;
+  leaseFence: string;
+  revision: number;
+  scenarioId: string;
+  observedSessionId: string | null;
+}): Promise<
+  | {
+      ok: true;
+      revision: number;
+      disposition: 'projected' | 'not_bound';
+      additionalAgentCostNanoUsd: number;
+    }
+  | { ok: false; code: string }
+> {
+  let revision = input.revision;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const result = await safelyStoppedScenarioReconciliation(() =>
+      input.ports.reconcileStoppedScenario({
+        runId: input.runId,
+        leaseFence: input.leaseFence,
+        expectedRevision: revision,
+        scenarioId: input.scenarioId,
+        observedSessionId: input.observedSessionId,
+      })
+    );
+    if (result.ok) return result;
+    if (result.kind !== 'revision_conflict' || attempt === 1)
+      return { ok: false, code: result.code };
+    const current = await safely(() =>
+      input.ports.getProjectionRevision({ runId: input.runId, leaseFence: input.leaseFence })
+    );
+    if (!current.ok) return current;
+    revision = current.value.revision;
+  }
+  return { ok: false, code: 'stopped_scenario_reconciliation_retry_exhausted' };
 }
 
 async function projectWithRefetch(input: {
@@ -733,6 +878,16 @@ async function safelyJudge(
 async function safelyProjection(
   operation: () => Promise<MatrixCorpusProjectionMutationResult>
 ): Promise<MatrixCorpusProjectionMutationResult> {
+  try {
+    return await operation();
+  } catch {
+    return { ok: false, kind: 'failed', code: 'unexpected_projection_failure' };
+  }
+}
+
+async function safelyStoppedScenarioReconciliation(
+  operation: () => Promise<MatrixCorpusStoppedScenarioReconciliationResult>
+): Promise<MatrixCorpusStoppedScenarioReconciliationResult> {
   try {
     return await operation();
   } catch {

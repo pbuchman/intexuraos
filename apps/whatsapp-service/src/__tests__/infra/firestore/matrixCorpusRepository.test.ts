@@ -3758,6 +3758,66 @@ describe('FirestoreMatrixCorpusSignedEnvelopeStore', () => {
     ).rejects.toThrow('MATRIX_CORPUS_SIGNED_ENVELOPE_CONFLICT');
   });
 
+  it('reserves expired-lease signing only for a claimed abandoned terminal control', async () => {
+    const issuedAfterLeaseExpiry = '2026-07-20T10:05:30.001Z';
+    const liveClaimExpiresAt = '2026-07-20T10:06:30.001Z';
+    const proposedExpiresAt = '2026-07-20T10:10:30.001Z';
+    const abandoned = terminalFixture();
+    await abandoned.firestore
+      .collection(MATRIX_CORPUS_TERMINAL_CONTROL_OUTBOX_COLLECTION)
+      .doc('terminal_1')
+      .set({
+        ...terminalOutbox(),
+        claim: {
+          ownerDigest,
+          purpose: 'publish',
+          claimedAt: issuedAfterLeaseExpiry,
+          expiresAt: liveClaimExpiresAt,
+        },
+      });
+
+    await expect(
+      abandoned.repo.prepareTerminal({
+        ...terminalAuthority({ expectedClaimExpiresAt: liveClaimExpiresAt }),
+        proposedIssuedAt: issuedAfterLeaseExpiry,
+        proposedExpiresAt,
+      })
+    ).resolves.toEqual({
+      kind: 'reserved',
+      generation: 1,
+      issuedAt: issuedAfterLeaseExpiry,
+      expiresAt: proposedExpiresAt,
+    });
+
+    const release = terminalFixture();
+    await persistLeasePair(release.firestore, {
+      ...terminalLease(),
+      phase: 'release_pending',
+    });
+    await release.firestore
+      .collection(MATRIX_CORPUS_TERMINAL_CONTROL_OUTBOX_COLLECTION)
+      .doc('terminal_1')
+      .set({
+        ...terminalOutbox(),
+        kind: 'release',
+        payload: { ...terminalOutbox().payload, kind: 'release' },
+        claim: {
+          ownerDigest,
+          purpose: 'publish',
+          claimedAt: issuedAfterLeaseExpiry,
+          expiresAt: liveClaimExpiresAt,
+        },
+      });
+
+    await expect(
+      release.repo.prepareTerminal({
+        ...terminalAuthority({ expectedClaimExpiresAt: liveClaimExpiresAt }),
+        proposedIssuedAt: issuedAfterLeaseExpiry,
+        proposedExpiresAt,
+      })
+    ).rejects.toThrow('MATRIX_CORPUS_SIGNED_ENVELOPE_AUTHORITY_REJECTED');
+  });
+
   it('rejects foreign terminal authority and replays only the exact completed terminal envelope', async () => {
     const mismatchedId = terminalFixture();
     await expect(

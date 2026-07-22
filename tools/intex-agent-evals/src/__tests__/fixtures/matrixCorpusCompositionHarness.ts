@@ -75,11 +75,21 @@ interface SharedState {
   terminalAcknowledged: boolean;
   readonly failArtifactReady: boolean;
   readonly failMiniMaxScenarioNumber: number | null;
+  readonly wrongPuppetScenarioNumber: number | null;
+  readonly advanceEventRevisionAfterBindingScenarioNumber: number | null;
+  readonly deferBindingUntilQuiesceScenarioNumber: number | null;
+  readonly scenarioStatusReads: Map<string, number>;
+  readonly conflictStoppedScenarioProjectionOnce: boolean;
+  stoppedScenarioProjectionConflictInjected: boolean;
 }
 
 export interface MatrixCorpusCompositionHarnessOptions {
   readonly failArtifactReady?: boolean;
   readonly failMiniMaxScenarioNumber?: number;
+  readonly wrongPuppetScenarioNumber?: number;
+  readonly advanceEventRevisionAfterBindingScenarioNumber?: number;
+  readonly deferBindingUntilQuiesceScenarioNumber?: number;
+  readonly conflictStoppedScenarioProjectionOnce?: boolean;
 }
 
 export interface MatrixCorpusCompositionMetrics {
@@ -88,6 +98,8 @@ export interface MatrixCorpusCompositionMetrics {
   deepSeekAgentCalls: number;
   confirmationAgentCalls: number;
   miniMaxJudgeCalls: number;
+  readonly scenarioProjectionSessions: string[];
+  readonly scenarioProjectionEventWatermarks: number[];
   productionExecutorResolutions: 0;
   productionExecutorAdmissions: 0;
 }
@@ -119,6 +131,8 @@ export async function createPassingMatrixCorpusCompositionHarness(
     deepSeekAgentCalls: 0,
     confirmationAgentCalls: 0,
     miniMaxJudgeCalls: 0,
+    scenarioProjectionSessions: [],
+    scenarioProjectionEventWatermarks: [],
     productionExecutorResolutions: 0,
     productionExecutorAdmissions: 0,
   };
@@ -141,6 +155,13 @@ export async function createPassingMatrixCorpusCompositionHarness(
     terminalAcknowledged: false,
     failArtifactReady: options.failArtifactReady ?? false,
     failMiniMaxScenarioNumber: options.failMiniMaxScenarioNumber ?? null,
+    wrongPuppetScenarioNumber: options.wrongPuppetScenarioNumber ?? null,
+    advanceEventRevisionAfterBindingScenarioNumber:
+      options.advanceEventRevisionAfterBindingScenarioNumber ?? null,
+    deferBindingUntilQuiesceScenarioNumber: options.deferBindingUntilQuiesceScenarioNumber ?? null,
+    scenarioStatusReads: new Map(),
+    conflictStoppedScenarioProjectionOnce: options.conflictStoppedScenarioProjectionOnce ?? false,
+    stoppedScenarioProjectionConflictInjected: false,
   };
 
   return {
@@ -278,7 +299,10 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
         eventId: `$matrix_reply_${String(state.metrics.matrixMessages.length + 1)}`,
         originServerTs: Date.parse(NOW) + state.metrics.matrixMessages.length,
         type: 'm.room.message',
-        sender: '@whatsapp_lid-private-puppet-sentinel:example.test',
+        sender:
+          entry.scenarioNumber === state.wrongPuppetScenarioNumber
+            ? '@whatsapp_lid-wrong-puppet-sentinel:example.test'
+            : '@whatsapp_lid-private-puppet-sentinel:example.test',
         content: { msgtype: 'm.text', body: reply },
       });
       state.metrics.matrixMessages.push(request.text);
@@ -414,10 +438,25 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
         if (expectedRevision !== state.revision) {
           return { ok: false, error: { code: 'rejected', httpStatus: 409 } };
         }
+        const scenario = request.command['scenario'];
+        if (
+          state.conflictStoppedScenarioProjectionOnce &&
+          !state.stoppedScenarioProjectionConflictInjected &&
+          scenario !== null &&
+          scenario !== undefined &&
+          (scenario as Readonly<Record<string, unknown>>)['lifecycle'] === 'stopped'
+        ) {
+          state.stoppedScenarioProjectionConflictInjected = true;
+          state.revision += 1;
+          return { ok: false, error: { code: 'rejected', httpStatus: 409 } };
+        }
         state.revision += 1;
         const command = request.command;
         if (command['retentionReconciled'] === true) state.retentionReconciled = true;
         if (command['scenario'] !== null && command['scenario'] !== undefined) {
+          const scenario = command['scenario'] as Readonly<Record<string, unknown>>;
+          state.metrics.scenarioProjectionSessions.push(String(scenario['sessionId']));
+          state.metrics.scenarioProjectionEventWatermarks.push(Number(scenario['eventWatermark']));
           state.lifecycle = 'running';
         }
       }
@@ -453,7 +492,20 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
       const entry = findEntry(state.catalog, input.scenarioId);
       const progress = state.progress.get(input.scenarioId);
       if (progress === undefined) return { ok: true, value: { kind: 'not_ready' } };
+      const priorReads = state.scenarioStatusReads.get(input.scenarioId) ?? 0;
+      state.scenarioStatusReads.set(input.scenarioId, priorReads + 1);
+      if (
+        entry.scenarioNumber === state.deferBindingUntilQuiesceScenarioNumber &&
+        state.transportPhase === 'active'
+      )
+        return { ok: true, value: { kind: 'not_ready' } };
       const nextTurn = entry.scenario.turns[progress.lastTurnIndex + 1];
+      const eventRevision = progress.eventRevision;
+      if (
+        entry.scenarioNumber === state.advanceEventRevisionAfterBindingScenarioNumber &&
+        priorReads === 0
+      )
+        progress.eventRevision += 1;
       return {
         ok: true,
         value: {
@@ -463,7 +515,7 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
           leaseFence: input.leaseFence,
           scenarioId: input.scenarioId,
           sessionId: progress.sessionId,
-          eventRevision: progress.eventRevision,
+          eventRevision,
           lifecycle: 'running',
           pendingConfirmationId:
             nextTurn?.kind === 'confirmation_button'
