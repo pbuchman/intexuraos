@@ -46,6 +46,7 @@ import type {
 } from '../../tools/intex-agent-evals/src/live/matrixClient.js';
 import type { MiniMaxEvaluator } from '../../tools/intex-agent-evals/src/minimaxJudge.js';
 import { loadCanonicalMatrixCorpus } from '../../tools/intex-agent-evals/src/matrixCorpus/catalog.js';
+import { MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX } from '../../tools/intex-agent-evals/src/matrixCorpus/correlation.js';
 import { createProductionMatrixCorpusExecutor } from '../../tools/intex-agent-evals/src/matrixCorpus/liveExecution.js';
 import { createNodeMatrixCorpusRetentionSagaPort } from '../../tools/intex-agent-evals/src/matrixCorpus/retentionExecution.js';
 import type { MatrixCorpusPreparedContext } from '../../tools/intex-agent-evals/src/matrixCorpus/liveRuntime.js';
@@ -230,12 +231,16 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
         async publishReplyWithReceipt(input) {
           metrics.replyPublications += 1;
           matrixState.eventOrdinal += 1;
+          const matrixBody =
+            input.buttons !== undefined && input.buttons.length > 0
+              ? `${input.message}${MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX}`
+              : input.message;
           matrixState.events.push({
             eventId: `$matrix_reply_${String(matrixState.eventOrdinal)}`,
             originServerTs: Date.parse(NOW) + matrixState.eventOrdinal,
             type: 'm.room.message',
             sender: MATRIX_PUPPET_ID,
-            content: { msgtype: 'm.text', body: input.message },
+            content: { msgtype: 'm.text', body: matrixBody },
           });
           return { publicationReceiptId: `reply_publication_${String(metrics.replyPublications)}` };
         },

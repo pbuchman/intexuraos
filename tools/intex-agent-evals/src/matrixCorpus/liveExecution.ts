@@ -990,6 +990,11 @@ async function executeLiveTurn(input: {
         scenarioId: input.scenario.id,
         turnIndex: input.turnIndex,
         sessionId: status.sessionId,
+        expectedReplyRendering: expectation.timeline.requiredEventTypes.includes(
+          'confirmation_requested'
+        )
+          ? 'whatsapp_confirmation_buttons'
+          : 'plain',
         signal,
         evidence: {
           async getTurnTerminal(): Promise<MatrixCorpusTurnTerminal> {
