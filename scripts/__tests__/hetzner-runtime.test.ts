@@ -121,15 +121,22 @@ describe('Hetzner nginx runtime config', () => {
   it('exposes only the required OIDC-protected production corpus evaluator prefixes', () => {
     const config = readRequired(nginxConfigPath);
     const verifier = readRequired(jwtVerifierPath);
+    const matrixCorpusRunner = 'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
     const testRunMutationPattern =
       '^/internal/evals/intex-agent/test-runs/[^/]+/(?:projection|artifact-delivery)$';
+    const outboundMatrixPath = '/internal/evals/whatsapp/whatsapp/private/outbound-matrix-messages';
+    const outboundMatrixPattern = `^${outboundMatrixPath}$`;
 
     expect(config).toContain('location ^~ /internal/evals/whatsapp/matrix-corpus/');
     expect(config).toContain('location ^~ /internal/evals/intex-agent/matrix-corpus/');
     expect(config).toContain('location ^~ /internal/evals/intex-agent/test-runs/');
+    expect(config).toContain(`location = ${outboundMatrixPath} {`);
     expect(config).toContain('proxy_pass http://whatsapp_service/internal/matrix-corpus/;');
     expect(config).toContain('proxy_pass http://intex_agent/internal/matrix-corpus/;');
     expect(config).toContain('proxy_pass http://intex_agent/internal/test-runs/;');
+    expect(config).toContain(
+      'proxy_pass http://whatsapp_service/internal/whatsapp/private/outbound-matrix-messages;'
+    );
     for (const prefix of ['whatsapp', 'intex-agent'] as const) {
       const start = config.indexOf(`location ^~ /internal/evals/${prefix}/matrix-corpus/ {`);
       const end = config.indexOf('\n    }', start);
@@ -140,17 +147,43 @@ describe('Hetzner nginx runtime config', () => {
     const testRunsEnd = config.indexOf('\n    }', testRunsStart);
     expect(testRunsStart).toBeGreaterThanOrEqual(0);
     expect(config.slice(testRunsStart, testRunsEnd)).toContain('access_log off;');
+    const outboundStart = config.indexOf(`location = ${outboundMatrixPath} {`);
+    const outboundEnd = config.indexOf('\n    }', outboundStart);
+    const outboundBlock = config.slice(outboundStart, outboundEnd);
+    expect(outboundStart).toBeGreaterThanOrEqual(0);
+    expect(outboundBlock).toContain('access_log off;');
+    expect(outboundBlock).toContain('access_by_lua_file /etc/nginx/lua/jwt-verify.lua;');
     expect(config).not.toContain('rewrite ^/internal/evals/');
     expect(verifier).toContain('^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)');
     expect(verifier).toContain(`pattern = [[${testRunMutationPattern}]]`);
+    expect(verifier).toContain(`pattern = [[${outboundMatrixPattern}]]`);
     expect(verifier).toContain('caller_role = "matrix_corpus_runner"');
-    expect(verifier).toContain('claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com');
+    expect(verifier).toContain(matrixCorpusRunner);
 
     const testRunPatternStart = verifier.indexOf(`pattern = [[${testRunMutationPattern}]]`);
     const testRunPatternEnd = verifier.indexOf('\n  },', testRunPatternStart);
     const testRunPatternBlock = verifier.slice(testRunPatternStart, testRunPatternEnd);
     expect(testRunPatternBlock).toContain('allowed_methods = { PUT = true }');
     expect(testRunPatternBlock).not.toContain('GET = true');
+    expect(
+      Array.from(
+        testRunPatternBlock.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/gu),
+        (match) => match[1]
+      )
+    ).toEqual([matrixCorpusRunner]);
+
+    const outboundPatternStart = verifier.indexOf(`pattern = [[${outboundMatrixPattern}]]`);
+    const outboundPatternEnd = verifier.indexOf('\n  },', outboundPatternStart);
+    const outboundPatternBlock = verifier.slice(outboundPatternStart, outboundPatternEnd);
+    expect(outboundPatternBlock).toContain('allowed_methods = { POST = true }');
+    expect(outboundPatternBlock).not.toContain('GET = true');
+    expect(outboundPatternBlock).not.toContain('PUT = true');
+    expect(
+      Array.from(
+        outboundPatternBlock.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/gu),
+        (match) => match[1]
+      )
+    ).toEqual([matrixCorpusRunner]);
 
     const testRunMutationMatcher = new RegExp(testRunMutationPattern);
     expect(
@@ -165,6 +198,9 @@ describe('Hetzner nginx runtime config', () => {
     expect(
       testRunMutationMatcher.test('/internal/evals/intex-agent/test-runs/eval-1/projection/extra')
     ).toBe(false);
+    const outboundMatrixMatcher = new RegExp(outboundMatrixPattern);
+    expect(outboundMatrixMatcher.test(outboundMatrixPath)).toBe(true);
+    expect(outboundMatrixMatcher.test(`${outboundMatrixPath}/extra`)).toBe(false);
 
     const allowFunction = verifier.slice(
       verifier.indexOf('local function is_service_account_allowed'),

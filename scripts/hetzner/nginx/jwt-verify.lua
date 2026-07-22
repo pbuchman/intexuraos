@@ -39,6 +39,14 @@ local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
     },
   },
   {
+    pattern = [[^/internal/evals/whatsapp/whatsapp/private/outbound-matrix-messages$]],
+    caller_role = "matrix_corpus_runner",
+    allowed_methods = { POST = true },
+    allowed_service_accounts = {
+      ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
     pattern = [[^/internal/evals/intex-agent/test-runs/[^/]+/(?:projection|artifact-delivery)$]],
     caller_role = "matrix_corpus_runner",
     allowed_methods = { PUT = true },
