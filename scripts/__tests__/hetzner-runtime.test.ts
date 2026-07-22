@@ -118,24 +118,71 @@ function upstreamName(serviceName: string): string {
 }
 
 describe('Hetzner nginx runtime config', () => {
-  it('exposes only the two OIDC-protected production corpus evaluator prefixes', () => {
+  it('exposes only the required OIDC-protected production corpus evaluator prefixes', () => {
     const config = readRequired(nginxConfigPath);
     const verifier = readRequired(jwtVerifierPath);
+    const testRunMutationPattern =
+      '^/internal/evals/intex-agent/test-runs/[^/]+/(?:projection|artifact-delivery)$';
 
     expect(config).toContain('location ^~ /internal/evals/whatsapp/matrix-corpus/');
     expect(config).toContain('location ^~ /internal/evals/intex-agent/matrix-corpus/');
+    expect(config).toContain('location ^~ /internal/evals/intex-agent/test-runs/');
     expect(config).toContain('proxy_pass http://whatsapp_service/internal/matrix-corpus/;');
     expect(config).toContain('proxy_pass http://intex_agent/internal/matrix-corpus/;');
+    expect(config).toContain('proxy_pass http://intex_agent/internal/test-runs/;');
     for (const prefix of ['whatsapp', 'intex-agent'] as const) {
       const start = config.indexOf(`location ^~ /internal/evals/${prefix}/matrix-corpus/ {`);
       const end = config.indexOf('\n    }', start);
       expect(start).toBeGreaterThanOrEqual(0);
       expect(config.slice(start, end)).toContain('access_log off;');
     }
+    const testRunsStart = config.indexOf('location ^~ /internal/evals/intex-agent/test-runs/ {');
+    const testRunsEnd = config.indexOf('\n    }', testRunsStart);
+    expect(testRunsStart).toBeGreaterThanOrEqual(0);
+    expect(config.slice(testRunsStart, testRunsEnd)).toContain('access_log off;');
     expect(config).not.toContain('rewrite ^/internal/evals/');
     expect(verifier).toContain('^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)');
+    expect(verifier).toContain(`pattern = [[${testRunMutationPattern}]]`);
     expect(verifier).toContain('caller_role = "matrix_corpus_runner"');
     expect(verifier).toContain('claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com');
+
+    const testRunPatternStart = verifier.indexOf(`pattern = [[${testRunMutationPattern}]]`);
+    const testRunPatternEnd = verifier.indexOf('\n  },', testRunPatternStart);
+    const testRunPatternBlock = verifier.slice(testRunPatternStart, testRunPatternEnd);
+    expect(testRunPatternBlock).toContain('allowed_methods = { PUT = true }');
+    expect(testRunPatternBlock).not.toContain('GET = true');
+
+    const testRunMutationMatcher = new RegExp(testRunMutationPattern);
+    expect(
+      testRunMutationMatcher.test('/internal/evals/intex-agent/test-runs/eval-1/projection')
+    ).toBe(true);
+    expect(
+      testRunMutationMatcher.test('/internal/evals/intex-agent/test-runs/eval-1/artifact-delivery')
+    ).toBe(true);
+    expect(
+      testRunMutationMatcher.test('/internal/evals/intex-agent/test-runs/eval-1/cleanup')
+    ).toBe(false);
+    expect(
+      testRunMutationMatcher.test('/internal/evals/intex-agent/test-runs/eval-1/projection/extra')
+    ).toBe(false);
+
+    const allowFunction = verifier.slice(
+      verifier.indexOf('local function is_service_account_allowed'),
+      verifier.indexOf('local auth_header')
+    );
+    const patternLookupIndex = allowFunction.indexOf('ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS');
+    const methodLookupIndex = allowFunction.indexOf('ngx.req.get_method()');
+    const evaluatorFailClosedIndex = allowFunction.indexOf('string.len(EVALUATOR_ROUTE_PREFIX)');
+    const evaluatorDenyIndex = allowFunction.indexOf('return false, nil', evaluatorFailClosedIndex);
+    const routePrefixLookupIndex = allowFunction.indexOf('ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS');
+    const globalLookupIndex = allowFunction.indexOf('GLOBAL_ALLOWED_SERVICE_ACCOUNTS[email]');
+    expect(verifier).toContain('local EVALUATOR_ROUTE_PREFIX = "/internal/evals/"');
+    expect(patternLookupIndex).toBeGreaterThanOrEqual(0);
+    expect(methodLookupIndex).toBeGreaterThan(patternLookupIndex);
+    expect(evaluatorFailClosedIndex).toBeGreaterThan(patternLookupIndex);
+    expect(evaluatorDenyIndex).toBeGreaterThan(evaluatorFailClosedIndex);
+    expect(routePrefixLookupIndex).toBeGreaterThan(evaluatorFailClosedIndex);
+    expect(globalLookupIndex).toBeGreaterThan(routePrefixLookupIndex);
   });
 
   it('serves only the exact deployment attestation path as uncached JSON', () => {
