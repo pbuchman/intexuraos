@@ -31,6 +31,13 @@ local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
 
 local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
   {
+    pattern = [[^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)]],
+    caller_role = "matrix_corpus_runner",
+    allowed_service_accounts = {
+      ["claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
     pattern = [[^/internal/whatsapp/private/accounts/[^/]+/erasure(?:/[^/]+)?$]],
     caller_role = "whatsapp_private_sync",
     allowed_service_accounts = {

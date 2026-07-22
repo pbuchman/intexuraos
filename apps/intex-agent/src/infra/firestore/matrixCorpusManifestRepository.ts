@@ -219,7 +219,7 @@ function isValidIdentity(value: MatrixCorpusRunManifestIdentity): boolean {
 function isValidManifest(value: MatrixCorpusRunManifestV1): boolean {
   return (
     (value as { version: number }).version === 1 &&
-    (value as { runtimeAudience: string }).runtimeAudience === 'home-dev' &&
+    (value as { runtimeAudience: string }).runtimeAudience === 'hetzner-prod' &&
     isValidIdentity(value) &&
     SHA_256_PATTERN.test(value.catalogDigest) &&
     value.scenarioBindings.length <= MAX_SCENARIO_BINDINGS &&

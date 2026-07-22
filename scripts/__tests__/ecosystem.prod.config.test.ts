@@ -67,6 +67,7 @@ const WAIT_SCRIPT = resolve(process.cwd(), 'scripts/pm2-wait-start.mjs');
 const REMOVED_OBSERVABILITY_PREFIX = ['INTEXURAOS', `DA${'SH0'}`].join('_');
 const MATRIX_CORPUS_ENV_NAMES = [
   'INTEXURAOS_MATRIX_CORPUS_ENABLED',
+  'INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME',
   'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE',
   'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
   'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
@@ -132,7 +133,7 @@ function loadProdConfigFailureMessage(env: Record<string, string | undefined>): 
 }
 
 describe('ecosystem.config.prod.cjs', () => {
-  it('pins Matrix corpus disabled and drops every ambient binding or key in production', () => {
+  it('enables the production Matrix corpus with exact per-service secret isolation', () => {
     const ambient = Object.fromEntries(
       MATRIX_CORPUS_ENV_NAMES.map((name, index) => [name, `ambient-${String(index)}`])
     );
@@ -140,33 +141,33 @@ describe('ecosystem.config.prod.cjs', () => {
     ambient['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'home-dev';
     const config = loadProdConfig({ ...PROD_ENV, ...ambient });
 
-    for (const app of config.apps) {
-      if (app.name === 'whatsapp-service' || app.name === 'intex-agent') {
-        expect(app.env.INTEXURAOS_MATRIX_CORPUS_ENABLED, app.name).toBe('false');
-        expect(app.env.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE, app.name).toBe('disabled');
-      } else {
-        expect(app.env.INTEXURAOS_MATRIX_CORPUS_ENABLED, app.name).toBeUndefined();
-        expect(app.env.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE, app.name).toBeUndefined();
-      }
-      for (const name of MATRIX_CORPUS_ENV_NAMES.slice(2)) {
-        expect(app.env[name], `${app.name} ${name}`).toBeUndefined();
-      }
+    const whatsapp = config.apps.find((app) => app.name === 'whatsapp-service');
+    const intex = config.apps.find((app) => app.name === 'intex-agent');
+    const user = config.apps.find((app) => app.name === 'user-service');
+    for (const app of [whatsapp, intex]) {
+      expect(app?.env.INTEXURAOS_MATRIX_CORPUS_ENABLED).toBe('true');
+      expect(app?.env.INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME).toBe('hetzner-prod');
+      expect(app?.env.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE).toBe('hetzner-prod');
     }
+    expect(whatsapp?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY).toBe('ambient-9');
+    expect(whatsapp?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY).toBeUndefined();
+    expect(intex?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY).toBe('ambient-10');
+    expect(intex?.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY).toBeUndefined();
+    expect(user?.env.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID).toBe('ambient-3');
   });
 
-  it('pins Test Runs reads disabled only for the two owning services in production', () => {
+  it('enables owner-gated Test Runs and the Intex model selector in production', () => {
     const config = loadProdConfig({
       ...PROD_ENV,
-      [TEST_RUNS_READ_FLAG]: 'true',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'auth0|evaluator',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'platform-key',
     });
 
-    for (const app of config.apps) {
-      if (app.name === 'user-service' || app.name === 'intex-agent') {
-        expect(app.env[TEST_RUNS_READ_FLAG], app.name).toBe('false');
-      } else {
-        expect(app.env[TEST_RUNS_READ_FLAG], app.name).toBeUndefined();
-      }
-    }
+    const user = config.apps.find((app) => app.name === 'user-service');
+    const intex = config.apps.find((app) => app.name === 'intex-agent');
+    expect(user?.env[TEST_RUNS_READ_FLAG]).toBe('true');
+    expect(intex?.env[TEST_RUNS_READ_FLAG]).toBe('true');
+    expect(user?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('auth0|evaluator');
   });
 
   it('refuses to load unless INTEXURAOS_ENVIRONMENT is prod', () => {
@@ -332,6 +333,7 @@ describe('ecosystem.config.prod.cjs', () => {
       INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET: 'github-oauth-secret',
       INTEXURAOS_GUEST_SESSION_SECRET: 'guest-session-secret',
       INTEXURAOS_INTERNAL_AUTH_TOKEN: 'internal-token',
+      INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID: 'evaluator-user',
       INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN: 'matrix-auth-token',
       INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL: 'https://matrix-adapter.example.test',
       INTEXURAOS_OPENAI_APP_API_KEY: 'openai-key',
@@ -374,9 +376,11 @@ describe('ecosystem.config.prod.cjs', () => {
     );
     expect(byName.get('user-service')?.env.INTEXURAOS_SENTRY_WEBHOOK_SECRET).toBeUndefined();
     expect(byName.get('user-service')?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe(
-      'disabled'
+      'evaluator-user'
     );
-    expect(byName.get('user-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(byName.get('user-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
     expect(byName.get('intex-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
     expect(byName.get('intex-agent')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe('internal-token');
     expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();

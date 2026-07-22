@@ -99,6 +99,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     const snapshot = await this.deps.firestore
       .collection(INTEX_AGENT_TEST_RUNS_COLLECTION)
       .where('userId', '==', userId)
+      .where('runtimeAudience', '==', 'hetzner-prod')
       .get();
     const records = snapshot.docs.map((document) => parseRecord(document.data()));
     if (records.some((record) => record === null)) return failure('CORRUPT_RECORD');
@@ -126,7 +127,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     const snapshot = await this.deps.firestore
       .collection(INTEX_AGENT_TEST_RUNS_COLLECTION)
       .where('userId', '==', userId)
-      .where('runtimeAudience', '==', 'home-dev')
+      .where('runtimeAudience', '==', 'hetzner-prod')
       .orderBy('startedAt', 'desc')
       .limit(limit)
       .get();
@@ -187,7 +188,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
     const retentionQuery = this.deps.firestore
       .collection(INTEX_AGENT_TEST_RUNS_COLLECTION)
       .where('userId', '==', input.currentIdentity.userId)
-      .where('runtimeAudience', '==', 'home-dev')
+      .where('runtimeAudience', '==', 'hetzner-prod')
       .orderBy('startedAt', 'desc')
       .limit(4);
 
@@ -760,7 +761,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
           this.deps.firestore
             .collection(INTEX_AGENT_TEST_RUNS_COLLECTION)
             .where('userId', '==', input.identity.userId)
-            .where('runtimeAudience', '==', 'home-dev')
+            .where('runtimeAudience', '==', 'hetzner-prod')
             .orderBy('startedAt', 'desc')
             .limit(TEST_RUN_RETENTION_QUERY_LIMIT)
         );
@@ -1191,7 +1192,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
       const tombstone = {
         version: 1 as const,
         status: 'finalized' as const,
-        runtimeAudience: 'home-dev' as const,
+        runtimeAudience: 'hetzner-prod' as const,
         runId: input.identity.runId,
         userId: input.identity.userId,
         leaseFence: input.identity.leaseFence,
@@ -1416,7 +1417,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         const tombstone = {
           version: 1 as const,
           status: 'finalized' as const,
-          runtimeAudience: 'home-dev' as const,
+          runtimeAudience: 'hetzner-prod' as const,
           runId: input.identity.runId,
           userId: input.identity.userId,
           leaseFence: input.identity.leaseFence,
@@ -1652,7 +1653,7 @@ function matchesCleanupChild(
     record['leaseFence'] === identity.leaseFence &&
     (!requireUserAndLane ||
       (record['userId'] === identity.userId &&
-        record['runtimeAudience'] === 'home-dev' &&
+        record['runtimeAudience'] === 'hetzner-prod' &&
         record['lane'] === 'matrix_corpus'))
   );
 }
@@ -1677,7 +1678,7 @@ function finalizationSuccess(
 
 interface AbandonedRecoveryReceipt extends TestRunIdentity {
   version: 1;
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   eventId: string;
   payloadDigest: string;
   outcome: Extract<
@@ -1693,7 +1694,7 @@ function createRecoveryReceipt(
 ): AbandonedRecoveryReceipt {
   return {
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     ...input.identity,
     eventId: input.command.eventId,
     payloadDigest: input.command.payloadDigest,
@@ -1720,7 +1721,7 @@ function parseRecoveryReceipt(value: unknown): AbandonedRecoveryReceipt | undefi
     return undefined;
   if (
     record['version'] !== 1 ||
-    record['runtimeAudience'] !== 'home-dev' ||
+    record['runtimeAudience'] !== 'hetzner-prod' ||
     typeof record['runId'] !== 'string' ||
     typeof record['userId'] !== 'string' ||
     typeof record['leaseFence'] !== 'string' ||

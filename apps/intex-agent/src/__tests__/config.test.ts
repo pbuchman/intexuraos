@@ -107,6 +107,26 @@ describe('loadConfig', () => {
     });
   });
 
+  it('parses the exact Hetzner production verification configuration', () => {
+    setEnabledMatrixCorpusEnv();
+    process.env['INTEXURAOS_ENVIRONMENT'] = 'prod';
+    process.env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] = 'hetzner-prod';
+    process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'hetzner-prod';
+
+    expect(loadConfig().matrixCorpus).toMatchObject({
+      enabled: true,
+      runtimeAudience: 'hetzner-prod',
+    });
+  });
+
+  it('rejects a mixed production and Home Dev runtime tuple', () => {
+    setEnabledMatrixCorpusEnv();
+    process.env['INTEXURAOS_ENVIRONMENT'] = 'prod';
+    process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'hetzner-prod';
+
+    expect(() => loadConfig()).toThrow('INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME');
+  });
+
   it('enables Test Runs reads only with the complete Home Dev Matrix corpus guard', () => {
     setEnabledMatrixCorpusEnv();
     process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'true';
@@ -166,8 +186,8 @@ describe('loadConfig', () => {
     }
   );
 
-  it.each(['prod', 'production', 'staging', 'unknown'])(
-    'rejects environment %s even with the Home Dev audience',
+  it.each(['production', 'staging', 'unknown'])(
+    'rejects unknown environment %s even with the Home Dev audience',
     (environment) => {
       setEnabledMatrixCorpusEnv();
       process.env['INTEXURAOS_ENVIRONMENT'] = environment;

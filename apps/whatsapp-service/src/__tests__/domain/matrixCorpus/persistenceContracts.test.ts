@@ -159,7 +159,7 @@ function issuanceReceipt() {
 function lease(overrides: Record<string, unknown> = {}) {
   return {
     version: 1,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId,
     userId,
     matrixRoomBindingDigest: digest,
@@ -281,7 +281,7 @@ function ingestPayload() {
     context: {
       version: 1 as const,
       kind: 'matrix_corpus' as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       leaseFence,
       ingestReceiptId: 'receipt_1',
       runId,
@@ -403,7 +403,7 @@ function terminalDeliveryAttestation(overrides: Record<string, unknown> = {}) {
 
 function acquireCommand(expiresAtValue: string) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId,
     userId,
     matrixRoomBindingDigest: digest,
@@ -421,7 +421,7 @@ function acquireCommand(expiresAtValue: string) {
 
 function renewCommand(expiresAtValue: string) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId,
     userId,
     leaseFence,
@@ -1306,7 +1306,7 @@ describe('Matrix corpus persistence contracts', () => {
     const replayedExpiry = '2026-07-19T00:01:00.000Z';
     const replayedNewExpiry = '2026-07-19T00:02:00.000Z';
     const common = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId,
       userId,
       leaseFence,
@@ -1688,7 +1688,7 @@ describe('Matrix corpus persistence contracts', () => {
 
   it('rejects cleanup commands that name an impossible progress revision', () => {
     const command = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       currentRunId: runId,
       userId,
       currentLeaseFence: leaseFence,
@@ -2031,7 +2031,7 @@ describe('Matrix corpus persistence contracts', () => {
       currentHistoryPair(provisioningCurrent('successor_run_1', '3', targetRunFenceDigest)),
     ];
     const command = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       currentRunId: runId,
       userId,
       currentLeaseFence: leaseFence,

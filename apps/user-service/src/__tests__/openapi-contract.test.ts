@@ -153,7 +153,7 @@ describe('user-service OpenAPI contract', () => {
         additionalProperties: false,
         properties: {
           status: { type: 'string', enum: ['available'] },
-          runtimeAudience: { type: 'string', enum: ['home-dev'] },
+          runtimeAudience: { type: 'string', enum: ['hetzner-prod'] },
         },
         required: ['status', 'runtimeAudience'],
       },

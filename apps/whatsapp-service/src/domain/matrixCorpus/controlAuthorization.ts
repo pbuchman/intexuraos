@@ -20,7 +20,7 @@ const AUTHORIZATION_TTL_MS = 30_000;
 
 const inputSchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     runId: matrixCorpusSafeIdSchema,
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,

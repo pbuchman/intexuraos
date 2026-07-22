@@ -937,7 +937,7 @@ export interface UserSettings {
   updatedAt: string;
   intexAgentCapabilities: {
     testRuns:
-      | { status: 'available'; runtimeAudience: 'home-dev' }
+      | { status: 'available'; runtimeAudience: 'hetzner-prod' }
       | { status: 'unavailable' };
   };
 }

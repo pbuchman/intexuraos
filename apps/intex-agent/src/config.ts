@@ -1,3 +1,9 @@
+import {
+  MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE,
+  MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE,
+  type MatrixCorpusRuntimeAudience,
+} from '@intexuraos/http-contracts';
+
 const DEFAULT_SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -6,7 +12,7 @@ export type IntexMatrixCorpusConfig =
   | { enabled: false; runtimeAudience: 'disabled' }
   | {
       enabled: true;
-      runtimeAudience: 'home-dev';
+      runtimeAudience: MatrixCorpusRuntimeAudience;
       signingKeyVersion: string;
       signingKeyMaterial: string;
       evaluatorUserId: string;
@@ -18,7 +24,7 @@ export type IntexAgentTestRunsReadConfig =
   | { enabled: false }
   | {
       enabled: true;
-      runtimeAudience: 'home-dev';
+      runtimeAudience: MatrixCorpusRuntimeAudience;
       evaluatorUserId: string;
     };
 
@@ -53,13 +59,18 @@ export function parseIntexMatrixCorpusConfig(
   const enabled = parseEnableFlag(env['INTEXURAOS_MATRIX_CORPUS_ENABLED']);
   if (!enabled) return DISABLED_MATRIX_CORPUS_CONFIG;
 
-  if (env['INTEXURAOS_ENVIRONMENT'] !== 'dev') {
+  const environment = env['INTEXURAOS_ENVIRONMENT'];
+  if (environment !== 'dev' && environment !== 'prod') {
     throw invalidConfig('INTEXURAOS_ENVIRONMENT');
   }
-  if (env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] !== 'home-dev') {
+  const expectedAudience =
+    environment === 'prod'
+      ? MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE
+      : MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE;
+  if (env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] !== expectedAudience) {
     throw invalidConfig('INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME');
   }
-  if (env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] !== 'home-dev') {
+  if (env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] !== expectedAudience) {
     throw invalidConfig('INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE');
   }
 
@@ -97,7 +108,7 @@ export function parseIntexMatrixCorpusConfig(
 
   return {
     enabled: true,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: expectedAudience,
     signingKeyVersion,
     signingKeyMaterial,
     evaluatorUserId,

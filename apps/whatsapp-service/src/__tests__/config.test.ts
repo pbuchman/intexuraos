@@ -349,6 +349,32 @@ describe('parseWhatsAppMatrixCorpusConfig', () => {
     });
   });
 
+  it('parses the exact Hetzner production configuration', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_ENVIRONMENT: 'prod',
+        INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'hetzner-prod',
+        INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
+      })
+    ).toMatchObject({ enabled: true, runtimeAudience: 'hetzner-prod' });
+  });
+
+  it('rejects a mixed production and Home Dev runtime tuple', async () => {
+    const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
+
+    expect(() =>
+      parseWhatsAppMatrixCorpusConfig({
+        ...enabledEnv,
+        INTEXURAOS_ENVIRONMENT: 'prod',
+        INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'home-dev',
+        INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE: 'hetzner-prod',
+      })
+    ).toThrow('INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME');
+  });
+
   it('accepts a canonical Auth0 Firebase subject for the Home Dev evaluator', async () => {
     const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
 
@@ -394,8 +420,8 @@ describe('parseWhatsAppMatrixCorpusConfig', () => {
     }
   );
 
-  it.each(['prod', 'production', 'staging', 'unknown'])(
-    'rejects environment %s even with the Home Dev audience',
+  it.each(['production', 'staging', 'unknown'])(
+    'rejects unknown environment %s even with the Home Dev audience',
     async (environment) => {
       const { parseWhatsAppMatrixCorpusConfig } = await import('../config.js');
 

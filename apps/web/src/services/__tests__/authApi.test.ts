@@ -14,7 +14,7 @@ const availableSettings = {
   createdAt: '2026-07-20T10:00:00.000Z',
   updatedAt: '2026-07-20T10:00:00.000Z',
   intexAgentCapabilities: {
-    testRuns: { status: 'available', runtimeAudience: 'home-dev' },
+    testRuns: { status: 'available', runtimeAudience: 'hetzner-prod' },
   },
 };
 
@@ -54,7 +54,8 @@ describe('authApi User Settings capability decoder', () => {
     ['private capability reason', { status: 'unavailable', reason: 'wrong-user' }],
     ['private configured identity', { status: 'unavailable', configuredUserId: 'private' }],
     ['available without audience', { status: 'available' }],
-    ['available in production', { status: 'available', runtimeAudience: 'production' }],
+    ['legacy Home Dev audience', { status: 'available', runtimeAudience: 'home-dev' }],
+    ['unknown production audience', { status: 'available', runtimeAudience: 'production' }],
   ])('fails closed for %s', async (_name, testRuns) => {
     const { apiRequest } = await import('../apiClient.js');
     vi.mocked(apiRequest).mockResolvedValue({

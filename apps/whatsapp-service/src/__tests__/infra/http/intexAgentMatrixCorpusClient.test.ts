@@ -100,11 +100,11 @@ describe('IntexAgentMatrixCorpusClient', () => {
       );
 
     await expect(
-      current.client.getCurrentAcceptance({ runtimeAudience: 'home-dev', userId })
+      current.client.getCurrentAcceptance({ runtimeAudience: 'hetzner-prod', userId })
     ).resolves.toEqual({ kind: 'admission_ready', current: 'absent' });
     await expect(
       current.client.getControlStatus({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId,
         userId,
         leaseFence,
@@ -131,7 +131,7 @@ describe('IntexAgentMatrixCorpusClient', () => {
       expect.objectContaining({ 'x-internal-auth': 'private-internal-auth-fixture' })
     );
     expect(JSON.parse(String(acceptanceInit.body))).toEqual({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       userId,
     });
 
@@ -143,7 +143,7 @@ describe('IntexAgentMatrixCorpusClient', () => {
     expect(statusInit.headers).toEqual(
       expect.objectContaining({
         'x-internal-auth': 'private-internal-auth-fixture',
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': userId,
         'x-matrix-corpus-lease-fence': leaseFence,
       })
@@ -164,11 +164,11 @@ describe('IntexAgentMatrixCorpusClient', () => {
     );
 
     await expect(
-      current.client.getCurrentAcceptance({ runtimeAudience: 'home-dev', userId })
+      current.client.getCurrentAcceptance({ runtimeAudience: 'hetzner-prod', userId })
     ).resolves.toEqual({ kind: 'not_ready' });
     await expect(
       current.client.getControlStatus({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId,
         userId,
         leaseFence,
@@ -202,14 +202,14 @@ describe('IntexAgentMatrixCorpusClient', () => {
     fetchMock.mockResolvedValue(failure());
 
     await expect(
-      current.client.getCurrentAcceptance({ runtimeAudience: 'home-dev', userId })
+      current.client.getCurrentAcceptance({ runtimeAudience: 'hetzner-prod', userId })
     ).resolves.toEqual({ kind: 'not_ready' });
     await expect(
-      current.client.getControlStatus({ runtimeAudience: 'home-dev', runId, userId, leaseFence })
+      current.client.getControlStatus({ runtimeAudience: 'hetzner-prod', runId, userId, leaseFence })
     ).resolves.toEqual({ kind: 'not_ready' });
     await expect(
       current.client.getTurnTerminal({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId,
         userId,
         leaseFence,
@@ -275,7 +275,7 @@ describe('IntexAgentMatrixCorpusClient', () => {
 
     await expect(
       current.client.getTurnTerminal({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId,
         userId,
         leaseFence,
@@ -348,7 +348,7 @@ describe('IntexAgentMatrixCorpusClient', () => {
 
     await expect(
       current.client.getControlStatus({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId,
         userId,
         leaseFence,
@@ -369,7 +369,7 @@ describe('IntexAgentMatrixCorpusClient', () => {
     fetchMock.mockResolvedValueOnce(success(response));
 
     await expect(
-      current.client.getControlStatus({ runtimeAudience: 'home-dev', runId, userId, leaseFence })
+      current.client.getControlStatus({ runtimeAudience: 'hetzner-prod', runId, userId, leaseFence })
     ).resolves.toEqual({ kind: 'not_ready' });
   });
 
@@ -433,9 +433,9 @@ describe('IntexAgentMatrixCorpusClient', () => {
     const privateTransportError = 'private-provider-error-fixture';
     fetchMock.mockRejectedValue(new Error(privateTransportError));
 
-    await current.client.getCurrentAcceptance({ runtimeAudience: 'home-dev', userId });
+    await current.client.getCurrentAcceptance({ runtimeAudience: 'hetzner-prod', userId });
     await current.client.getControlStatus({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId,
       userId,
       leaseFence,
@@ -544,7 +544,7 @@ function evidence(turnTerminals: readonly unknown[]) {
 
 function turnTerminalInput() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId,
     userId,
     leaseFence,

@@ -72,7 +72,7 @@ function registration(
   overrides: Readonly<Record<string, unknown>> = {}
 ): MatrixCorpusRunContextRegistrationInput {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'auth0:user_1',
     leaseFence: '7',
@@ -210,7 +210,7 @@ async function replaceLoadedOverlay(
     encryptedEffectivePromptContext: current.crypto.encrypt(JSON.stringify(payload), {
       version: 1,
       kind: 'scenario_prompt_context',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       ...current.identity,
     }),
   };
@@ -304,7 +304,7 @@ describe('Matrix corpus context service', () => {
         crypto.decrypt(stored.context.encryptedPromptContext, {
           version: 1,
           kind: 'run_prompt_context',
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           runId: 'run_1',
           userId: 'auth0:user_1',
           leaseFence: '7',
@@ -1360,7 +1360,7 @@ describe('Matrix corpus context service', () => {
       context: {
         version: 1,
         status: 'finalized',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: stored.context.runId,
         userId: stored.context.userId,
         leaseFence: stored.context.leaseFence,

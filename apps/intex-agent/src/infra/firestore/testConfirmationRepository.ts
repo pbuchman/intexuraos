@@ -95,7 +95,7 @@ export class FirestoreTestConfirmationRepository implements TestConfirmationRepo
       const confirmation: MatrixCorpusTestConfirmation = {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         ...input.identity,
         state: 'pending',
         toolName: input.toolName,
@@ -266,7 +266,7 @@ function classifyConfirmation(
   if (
     record['version'] !== 1 ||
     record['lane'] !== 'matrix_corpus' ||
-    record['runtimeAudience'] !== 'home-dev' ||
+    record['runtimeAudience'] !== 'hetzner-prod' ||
     !isSafeId(record['confirmationId']) ||
     !isSafeId(record['runId']) ||
     !isSafeId(record['scenarioId']) ||
@@ -397,7 +397,7 @@ function confirmationBinding(
   return {
     version: 1,
     kind: 'test_confirmation_tool_args',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     confirmationId: confirmation.confirmationId,
     runId: confirmation.runId,
     scenarioId: confirmation.scenarioId,

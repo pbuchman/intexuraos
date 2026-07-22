@@ -4,7 +4,7 @@ import type {
 } from '@intexuraos/http-contracts';
 
 export type SignedEnvelopeAuthority = Readonly<{
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   userId: string;
   leaseFence: string;

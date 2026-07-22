@@ -21,7 +21,7 @@ export const MATRIX_CORPUS_PREFLIGHT_FAILURE_CODES = [
   'REVISION_INVALID',
   'REVISION_MISMATCH',
   'IMPLEMENTATION_PATHS_DIRTY',
-  'HOME_DEV_REQUIRED',
+  'PRODUCTION_RUNTIME_REQUIRED',
   'SERVICES_NOT_READY',
   'USER_NOT_READY',
   'ACCOUNT_TUPLE_INVALID',
@@ -127,8 +127,8 @@ export async function runMatrixCorpusPreflight(input: {
     if (!snapshot.localCriticalPathsClean || !snapshot.remoteCriticalPathsClean) {
       return failed('IMPLEMENTATION_PATHS_DIRTY');
     }
-    if (snapshot.runtimeAudience !== 'home-dev' || snapshot.environmentAlias !== 'dev') {
-      return failed('HOME_DEV_REQUIRED');
+    if (snapshot.runtimeAudience !== 'hetzner-prod' || snapshot.environmentAlias !== 'prod') {
+      return failed('PRODUCTION_RUNTIME_REQUIRED');
     }
     if (!snapshot.servicesReady || !snapshot.protectedConfigReady || !snapshot.clocksReady) {
       return failed('SERVICES_NOT_READY');

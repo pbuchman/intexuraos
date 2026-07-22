@@ -26,7 +26,7 @@
     "eval:intex-agent:endpoint": "node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts endpoint",
     "eval:intex-agent": "node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts",
     "eval:intex-agent:matrix-smoke": "node --no-warnings --import tsx tools/intex-agent-evals/src/cli.ts matrix-smoke",
-    "eval:intex-agent:matrix-corpus": "scripts/run-intex-agent-evals-home-dev.sh matrix-corpus",
+    "eval:intex-agent:matrix-corpus": "scripts/run-intex-agent-evals-prod.sh matrix-corpus",
     "lint": "node scripts/lint-parallel.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

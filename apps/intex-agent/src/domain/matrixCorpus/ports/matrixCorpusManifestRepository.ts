@@ -27,7 +27,7 @@ export interface MatrixCorpusArtifactStageV1 {
 
 export interface MatrixCorpusRunManifestV1 {
   version: 1;
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   runId: string;
   userId: string;
   leaseFence: string;

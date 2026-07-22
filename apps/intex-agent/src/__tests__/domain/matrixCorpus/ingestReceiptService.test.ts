@@ -49,7 +49,7 @@ function payload(
     context: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       ingestReceiptId: 'receipt_1',
       runId: 'run_1',
@@ -85,7 +85,7 @@ function claims(payloadValue = payload()): IngestClaims {
     kind: 'matrix_corpus_ingest',
     issuer: 'whatsapp-service',
     audience: 'intex-agent',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     keyVersion: 'key_v1',
     eventId: payloadValue.context.ingestReceiptId,
     leaseFence: payloadValue.context.leaseFence,

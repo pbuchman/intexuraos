@@ -56,7 +56,7 @@ function ingestPayload(): MatrixCorpusAttestedIngestPayloadV1 {
     context: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       ingestReceiptId: 'receipt_1',
       runId: 'run_1',
@@ -125,7 +125,7 @@ async function signedIngest(
     kind: 'matrix_corpus_ingest',
     issuer: 'whatsapp-service',
     audience: 'intex-agent',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     keyVersion,
     eventId: payload.context.ingestReceiptId,
     leaseFence: payload.context.leaseFence,
@@ -159,7 +159,7 @@ describe('Intex Agent Matrix corpus attestation verifier', () => {
       kind: 'matrix_corpus_terminal_control',
       issuer: 'whatsapp-service',
       audience: 'intex-agent',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       keyVersion,
       eventId: terminal.eventId,
       leaseFence: terminal.leaseFence,
@@ -225,6 +225,18 @@ describe('Intex Agent Matrix corpus attestation verifier', () => {
         now: () => '2026-07-20T00:04:00.000Z',
       })
     ).resolves.toEqual({ ok: false, code: 'UNKNOWN_KEY_VERSION' });
+  });
+
+  it('rejects a correctly signed legacy Home Dev audience before accepting claims', async () => {
+    const trusted = await generateKeyPair('EdDSA');
+    const signed = await signedIngest(trusted.privateKey, { runtimeAudience: 'home-dev' });
+
+    await expect(
+      verifyMatrixCorpusAttestation(signed.envelope, {
+        keyring: new Map([[keyVersion, trusted.publicKey]]),
+        now: () => '2026-07-20T00:04:00.000Z',
+      })
+    ).resolves.toEqual({ ok: false, code: 'INVALID_CLAIMS' });
   });
 
   it('rejects an explicitly configured Ed448 verification key', async () => {
@@ -356,7 +368,7 @@ describe('Intex Agent Matrix corpus attestation verifier', () => {
       kind: 'matrix_corpus_control_mutation',
       issuer: 'whatsapp-service',
       audience: 'intex-agent',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       keyVersion,
       eventId: payload.eventId,
       leaseFence: payload.leaseFence,

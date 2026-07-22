@@ -51,15 +51,15 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID is required');
   });
 
-  it('enables Test Runs only for the exact Home Dev evaluator subject', () => {
+  it('enables Test Runs only for the exact Hetzner production evaluator subject', () => {
     process.env['INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID'] = 'disabled';
     process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'true';
-    process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'home-dev';
+    process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'hetzner-prod';
     process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'] = 'auth0|evaluator';
 
     expect(loadConfig().intexAgentTestRunsRead).toEqual({
       status: 'enabled',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       userId: 'auth0|evaluator',
     });
   });
@@ -70,10 +70,10 @@ describe('loadConfig', () => {
     process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'production';
     process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'] = 'auth0|evaluator';
     expect(() => loadConfig()).toThrow(
-      'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE must be home-dev'
+      'INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE must be hetzner-prod'
     );
 
-    process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'home-dev';
+    process.env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] = 'hetzner-prod';
     delete process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
     expect(() => loadConfig()).toThrow(
       'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID is required'

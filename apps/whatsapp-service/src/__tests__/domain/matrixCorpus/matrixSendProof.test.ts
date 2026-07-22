@@ -132,7 +132,7 @@ describe('Matrix corpus outbound send proof', () => {
 
 function validInput(): Parameters<MatrixCorpusControlPlane['recordMatrixSendProof']>[0] {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'configured_user',
     leaseFence: '7',

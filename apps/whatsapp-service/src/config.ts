@@ -6,7 +6,12 @@ import {
   DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   isConversationAssistantModel,
 } from '@intexuraos/llm-contract';
-import { matrixCorpusSafeIdSchema } from '@intexuraos/http-contracts';
+import {
+  MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE,
+  MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE,
+  matrixCorpusSafeIdSchema,
+  type MatrixCorpusRuntimeAudience,
+} from '@intexuraos/http-contracts';
 import { z } from 'zod';
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -15,7 +20,7 @@ export type WhatsAppMatrixCorpusConfig =
   | { enabled: false; runtimeAudience: 'disabled' }
   | {
       enabled: true;
-      runtimeAudience: 'home-dev';
+      runtimeAudience: MatrixCorpusRuntimeAudience;
       evaluatorBindingHmacKey: string;
       configuredEvaluatorUserId: string;
       matrixRoomBinding: string;
@@ -194,13 +199,18 @@ export function parseWhatsAppMatrixCorpusConfig(
   const enabled = parseEnableFlag(env['INTEXURAOS_MATRIX_CORPUS_ENABLED']);
   if (!enabled) return DISABLED_MATRIX_CORPUS_CONFIG;
 
-  if (env['INTEXURAOS_ENVIRONMENT'] !== 'dev') {
+  const environment = env['INTEXURAOS_ENVIRONMENT'];
+  if (environment !== 'dev' && environment !== 'prod') {
     throw invalidConfig('INTEXURAOS_ENVIRONMENT');
   }
-  if (env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] !== 'home-dev') {
+  const expectedAudience =
+    environment === 'prod'
+      ? MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE
+      : MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE;
+  if (env['INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME'] !== expectedAudience) {
     throw invalidConfig('INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME');
   }
-  if (env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] !== 'home-dev') {
+  if (env['INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE'] !== expectedAudience) {
     throw invalidConfig('INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE');
   }
 
@@ -223,7 +233,7 @@ export function parseWhatsAppMatrixCorpusConfig(
 
   return {
     enabled: true,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: expectedAudience,
     evaluatorBindingHmacKey: requireCanonicalValue(
       env,
       'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',

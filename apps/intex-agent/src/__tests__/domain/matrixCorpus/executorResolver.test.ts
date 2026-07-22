@@ -172,7 +172,7 @@ function matrixSession(): IntexAgentSession {
     matrixCorpusProfile: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       runId: 'run_1',
       scenarioId: 'scenario_1',

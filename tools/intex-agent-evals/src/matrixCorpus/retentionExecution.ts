@@ -120,7 +120,7 @@ export async function reconcileMatrixCorpusRetention(input: {
   let revision = input.currentRevision;
   for (const target of targets.values()) {
     const targetRunFenceDigest = matrixCorpusKeyedDigest(input.bindingHmacKey, 'imc-run-fence-v1', [
-      'home-dev',
+      'hetzner-prod',
       input.userId,
       target.runId,
     ]);

@@ -166,7 +166,7 @@ export function createMatrixCorpusMessageHandler(
       const profile: IntexAgentMatrixCorpusProfileV1 = {
         version: 1,
         kind: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         leaseFence: context.leaseFence,
         runId: context.runId,
         scenarioId: context.scenarioId,

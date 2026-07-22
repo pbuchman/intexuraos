@@ -49,7 +49,7 @@ const userSettingsDataSchema = {
               additionalProperties: false,
               properties: {
                 status: { type: 'string', enum: ['available'] },
-                runtimeAudience: { type: 'string', enum: ['home-dev'] },
+                runtimeAudience: { type: 'string', enum: ['hetzner-prod'] },
               },
               required: ['status', 'runtimeAudience'],
             },
@@ -239,7 +239,7 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         ...result.value,
         intexAgentCapabilities: {
           testRuns: testRunsAvailable
-            ? { status: 'available', runtimeAudience: 'home-dev' }
+            ? { status: 'available', runtimeAudience: 'hetzner-prod' }
             : { status: 'unavailable' },
         },
       });

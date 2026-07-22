@@ -34,7 +34,7 @@ import type { MatrixCorpusRepository } from './ports/matrixCorpusRepository.js';
 
 export { matrixCorpusCapabilityIssueRequestV1Schema } from '@intexuraos/http-contracts';
 
-export const MATRIX_CORPUS_RUNTIME_AUDIENCE = 'home-dev' as const;
+export const MATRIX_CORPUS_RUNTIME_AUDIENCE = 'hetzner-prod' as const;
 export const MATRIX_CORPUS_MAX_RENEW_RECEIPTS_PER_RUN = 400 as const;
 export const MATRIX_CORPUS_MAX_ISSUANCE_RECEIPTS_PER_RUN = 800 as const;
 export const MATRIX_CORPUS_MAX_TERMINAL_FAILURE_RECEIPTS_PER_CAPABILITY = 2 as const;

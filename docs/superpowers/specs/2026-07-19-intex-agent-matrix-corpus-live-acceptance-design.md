@@ -1,7 +1,9 @@
 # Intex Agent Matrix Corpus Live Acceptance Design
 
 **Date:** 2026-07-19
-**Status:** Written review pending; design direction approved by the user on 2026-07-19
+**Status:** Superseded for execution topology and command UX by
+[`2026-07-22-intex-agent-production-matrix-corpus-design.md`](./2026-07-22-intex-agent-production-matrix-corpus-design.md).
+The corpus behavior and evidence rules below remain applicable.
 **Companion specifications:**
 
 - [`2026-07-19-intex-agent-matrix-corpus-design.md`](./2026-07-19-intex-agent-matrix-corpus-design.md)
@@ -9,8 +11,9 @@
 
 ## Purpose
 
-Define the single repeatable live-acceptance workflow for the Intex Agent corpus on
-Home Dev. The workflow sends every tracked scenario through the real Matrix and
+Define the single repeatable live-acceptance workflow whose runner and protected Matrix
+credentials remain on Home Dev while the system under test runs exclusively in production
+on Hetzner. The workflow sends every tracked scenario through the real Matrix and
 WhatsApp transport, runs every agent call on DeepSeek V4 Flash, executes every product
 tool through the strict mock boundary, evaluates deterministic behavior and response
 semantics with MiniMax M3, and leaves privacy-safe evidence that can be reviewed in the
@@ -26,7 +29,7 @@ corpus design.
 One invocation of:
 
 ```bash
-scripts/run-intex-agent-evals-home-dev.sh matrix-corpus
+scripts/run-intex-agent-evals-prod.sh matrix-corpus
 ```
 
 must execute the canonical 20 scenarios, currently 59 catalog turns, sequentially on
@@ -60,7 +63,7 @@ the safe report.
 The following natural-language instruction has one unambiguous operational meaning:
 
 > “Odpal testy” means run
-> `scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exactly once.
+> `scripts/run-intex-agent-evals-prod.sh matrix-corpus` exactly once.
 
 It does not mean `endpoint`, `full`, `matrix-smoke`, or a sequence combining those
 commands. The command is live, sends real Matrix/WhatsApp messages, and incurs agent
@@ -945,7 +948,7 @@ At minimum, the implementation starts with tests for:
 
 The project goal is complete only when one fresh deployed run proves:
 
-- [ ] canonical command is `scripts/run-intex-agent-evals-home-dev.sh matrix-corpus`;
+- [ ] canonical command is `scripts/run-intex-agent-evals-prod.sh matrix-corpus`;
 - [ ] command reports the reviewed deployed SHA and Home Dev/dev environment;
 - [ ] safe account alias maps to one existing user and one Matrix/WhatsApp account tuple;
 - [ ] agent model is `or:deepseek/deepseek-v4-flash` for every endpoint and Matrix-corpus

@@ -136,7 +136,7 @@ describe('Intex Matrix corpus composition gate', () => {
     const createEnabled = vi.fn(() => runtime);
     const config = {
       enabled: true as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       signingKeyVersion: 'matrix-test-v1',
       signingKeyMaterial: 'synthetic-public-jwk',
       evaluatorUserId: 'auth0:user_1',
@@ -156,7 +156,7 @@ describe('Intex Matrix corpus composition gate', () => {
     const runtime = createIntexMatrixCorpusRuntime(
       {
         enabled: true,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         signingKeyVersion: 'matrix-test-v1',
         signingKeyMaterial: 'injected-in-this-test',
         evaluatorUserId: 'auth0:user_1',
@@ -213,7 +213,7 @@ describe('Intex Matrix corpus composition gate', () => {
     const runtime = createIntexMatrixCorpusRuntime(
       {
         enabled: true,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         signingKeyVersion: 'matrix-test-v1',
         signingKeyMaterial: 'injected-in-this-test',
         evaluatorUserId: 'auth0:user_1',
@@ -244,7 +244,7 @@ describe('Intex Matrix corpus composition gate', () => {
     );
     await expect(
       runtime.contextService.registerRun({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -274,7 +274,7 @@ describe('Intex Matrix corpus composition gate', () => {
       context: {
         version: 1 as const,
         kind: 'matrix_corpus' as const,
-        runtimeAudience: 'home-dev' as const,
+        runtimeAudience: 'hetzner-prod' as const,
         leaseFence: '7',
         ingestReceiptId: 'receipt_1',
         runId: 'run_1',
@@ -307,7 +307,7 @@ describe('Intex Matrix corpus composition gate', () => {
         kind: 'matrix_corpus_ingest',
         issuer: 'whatsapp-service',
         audience: 'intex-agent',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         keyVersion: 'key_v1',
         eventId: 'receipt_1',
         leaseFence: '7',
@@ -2089,7 +2089,7 @@ function matrixCorpusSession(profile: StrictToolMockProfileV1): IntexAgentSessio
     matrixCorpusProfile: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       runId: 'run_1',
       scenarioId: 'scenario_001',

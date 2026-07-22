@@ -652,7 +652,7 @@ function isValidProfile(value: unknown): value is IntexAgentMatrixCorpusProfileV
   return (
     value['version'] === 1 &&
     value['kind'] === 'matrix_corpus' &&
-    value['runtimeAudience'] === 'home-dev' &&
+    value['runtimeAudience'] === 'hetzner-prod' &&
     typeof value['leaseFence'] === 'string' &&
     FENCE_PATTERN.test(value['leaseFence']) &&
     typeof value['runId'] === 'string' &&

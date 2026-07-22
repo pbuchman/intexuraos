@@ -205,7 +205,7 @@ describe('Settings Routes', () => {
       expect(body.success).toBe(true);
       expect(body.data.userId).toBe('auth0|new-user');
       expect((body.data as unknown as { intexAgentCapabilities: unknown }).intexAgentCapabilities)
-        .toEqual({ testRuns: { status: 'available', runtimeAudience: 'home-dev' } });
+        .toEqual({ testRuns: { status: 'available', runtimeAudience: 'hetzner-prod' } });
     });
 
     it('returns existing settings', { timeout: 20000 }, async () => {

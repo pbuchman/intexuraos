@@ -5,6 +5,7 @@ import {
   MATRIX_CORPUS_MAX_HEADER_CODE_UNITS,
   MATRIX_CORPUS_MAX_VISIBLE_MESSAGE_CODE_UNITS,
   MATRIX_CORPUS_SCENARIO_TOTAL,
+  MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE,
   MATRIX_CORPUS_VISIBLE_VERSION,
   canonicalMatrixCorpusCapabilityIssueDigestInputV1,
   canonicalMatrixCorpusControlMutationV1,
@@ -31,6 +32,7 @@ import {
   matrixCorpusParsedIngressFactsV1Schema,
   matrixCorpusPromptDigestInputSchema,
   matrixCorpusRfc3339TimestampSchema,
+  matrixCorpusRuntimeAudienceSchema,
   matrixCorpusSafeIdSchema,
   matrixCorpusTransportMessageIdSchema,
   matrixCorpusSha256DigestSchema,
@@ -45,6 +47,15 @@ import {
   strictToolMockProfileV1Schema,
   type StrictToolMockProfileV1,
 } from '../index.js';
+
+describe('Matrix corpus runtime audience', () => {
+  it('accepts the production audience while retaining legacy decoding', () => {
+    expect(MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE).toBe('hetzner-prod');
+    expect(matrixCorpusRuntimeAudienceSchema.parse('hetzner-prod')).toBe('hetzner-prod');
+    expect(matrixCorpusRuntimeAudienceSchema.parse('home-dev')).toBe('home-dev');
+    expect(matrixCorpusRuntimeAudienceSchema.safeParse('prod')).toMatchObject({ success: false });
+  });
+});
 
 const capability = `imc1_${'A'.repeat(42)}A`;
 const digest = 'a'.repeat(64);

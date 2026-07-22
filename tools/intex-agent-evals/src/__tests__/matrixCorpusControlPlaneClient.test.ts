@@ -31,7 +31,7 @@ describe('Matrix corpus control-plane composition', () => {
     } as unknown as IntexAgentServiceClient;
     const client = createMatrixCorpusControlPlaneClient({ whatsapp, intex });
     const contextRequest = {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       userId: 'user_1',
       leaseFence: '7',
       catalogDigest: 'a'.repeat(64),
@@ -46,7 +46,7 @@ describe('Matrix corpus control-plane composition', () => {
       command: { expectedRevision: 1 },
     } as const;
     const finalizeRequest = {
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       userId: 'user_1',
       leaseFence: '7',
       expectedRevision: 2,
@@ -98,7 +98,7 @@ describe('Matrix corpus control-plane composition', () => {
       runId: 'run_1',
       leaseFence: '7',
       request: {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         userId: 'user_1',
         leaseFence: '7',
         catalogDigest: 'a'.repeat(64),

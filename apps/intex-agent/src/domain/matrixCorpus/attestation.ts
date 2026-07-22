@@ -183,6 +183,8 @@ export async function verifyMatrixCorpusAttestation(
   if (!parsedClaims.success) return { ok: false, code: 'INVALID_CLAIMS' };
   const claims = parsedClaims.data;
 
+  if (claims.runtimeAudience !== 'hetzner-prod')
+    return { ok: false, code: 'INVALID_CLAIMS' };
   if (claims.keyVersion !== unverifiedHeader.kid) return { ok: false, code: 'INVALID_CLAIMS' };
   if (
     claims.kind !== envelope.kind ||

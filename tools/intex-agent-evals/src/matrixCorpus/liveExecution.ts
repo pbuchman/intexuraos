@@ -60,9 +60,11 @@ import {
   type MatrixCorpusTurnObservation,
 } from './runMatrixCorpus.js';
 import type { CanonicalMatrixCorpus, CanonicalMatrixCorpusScenario } from './types.js';
+import { createProductionControlAuthorizationHeaderProvider } from './productionControlTransport.js';
 
-const INTEX_AGENT_BASE_URL = 'http://127.0.0.1:8134';
-const WHATSAPP_BASE_URL = 'http://127.0.0.1:8113';
+const PRODUCTION_ORIGIN = 'https://intexuraos.cloud';
+const INTEX_AGENT_EDGE_PREFIX = '/internal/evals/intex-agent';
+const WHATSAPP_EDGE_PREFIX = '/internal/evals/whatsapp';
 const CORRELATION_TIMEOUT_MS = 180_000;
 const POLL_INTERVAL_MS = 250;
 const CORPUS_VERSION = '2026-07-19';
@@ -148,21 +150,26 @@ export function createProductionMatrixCorpusExecutor(
     error: (): void => undefined,
     debug: (): void => undefined,
   };
+  const authorizationHeaderProvider = createProductionControlAuthorizationHeaderProvider();
   const intex =
     options.intex ??
     createIntexAgentServiceClient({
-      baseUrl: INTEX_AGENT_BASE_URL,
+      baseUrl: PRODUCTION_ORIGIN,
       internalAuthToken: env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
       defaultTimeoutMs: 15_000,
       logger,
+      pathPrefix: INTEX_AGENT_EDGE_PREFIX,
+      authorizationHeaderProvider,
     });
   const whatsapp =
     options.whatsapp ??
     createWhatsAppServiceClient({
-      baseUrl: WHATSAPP_BASE_URL,
+      baseUrl: PRODUCTION_ORIGIN,
       internalAuthToken: env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] ?? '',
       defaultTimeoutMs: 15_000,
       logger,
+      pathPrefix: WHATSAPP_EDGE_PREFIX,
+      authorizationHeaderProvider,
     });
   const evaluator =
     options.evaluator ??
@@ -259,7 +266,7 @@ function createRunPorts(input: {
         runId,
         leaseFence,
         request: {
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           userId: state.prepared.account.userId,
           leaseFence,
           catalogDigest: catalog.catalogDigest,
@@ -630,7 +637,7 @@ function createRunPorts(input: {
         runId: command.runId,
         leaseFence: command.leaseFence,
         request: {
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           userId: state.prepared.account.userId,
           leaseFence: command.leaseFence,
           expectedRevision: command.expectedRevision,
@@ -1234,7 +1241,7 @@ function createInitialProjectionRecord(
     corpusId: CORPUS_ID,
     corpusVersion: CORPUS_VERSION,
     catalogDigest: catalog.catalogDigest,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     transport: 'matrix_whatsapp',
     executionMode: 'strict_mock_tools',
     lifecycle: 'preflight',
@@ -1590,8 +1597,9 @@ function buildReport(
     requestedRevision: state.preflight.snapshot.requestedRevision,
     deployedRevision: state.preflight.snapshot.deployedRevision,
     accountAlias: state.prepared.accountAlias,
-    runtimeAudience: 'home-dev',
-    environmentAlias: 'dev',
+    runnerHost: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
+    environmentAlias: 'prod',
     catalog: {
       digest: state.catalog.catalogDigest,
       scenarioCount: 20,

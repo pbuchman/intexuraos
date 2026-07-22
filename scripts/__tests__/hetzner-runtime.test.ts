@@ -113,6 +113,26 @@ function upstreamName(serviceName: string): string {
 }
 
 describe('Hetzner nginx runtime config', () => {
+  it('exposes only the two OIDC-protected production corpus evaluator prefixes', () => {
+    const config = readRequired(nginxConfigPath);
+    const verifier = readRequired(jwtVerifierPath);
+
+    expect(config).toContain('location ^~ /internal/evals/whatsapp/matrix-corpus/');
+    expect(config).toContain('location ^~ /internal/evals/intex-agent/matrix-corpus/');
+    expect(config).toContain('proxy_pass http://whatsapp_service/internal/matrix-corpus/;');
+    expect(config).toContain('proxy_pass http://intex_agent/internal/matrix-corpus/;');
+    for (const prefix of ['whatsapp', 'intex-agent'] as const) {
+      const start = config.indexOf(`location ^~ /internal/evals/${prefix}/matrix-corpus/ {`);
+      const end = config.indexOf('\n    }', start);
+      expect(start).toBeGreaterThanOrEqual(0);
+      expect(config.slice(start, end)).toContain('access_log off;');
+    }
+    expect(config).not.toContain('rewrite ^/internal/evals/');
+    expect(verifier).toContain('^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)');
+    expect(verifier).toContain('caller_role = "matrix_corpus_runner"');
+    expect(verifier).toContain('claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com');
+  });
+
   it('serves only the exact deployment attestation path as uncached JSON', () => {
     const config = readRequired(nginxConfigPath);
     const deploymentLocationStart = config.indexOf('location = /deployment.json {');
@@ -363,6 +383,8 @@ describe('Hetzner nginx runtime config', () => {
     const hetznerMain = readRequired(terraformHetznerMainPath);
     const privateSyncServiceAccount =
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
+    const matrixCorpusRunnerServiceAccount =
+      'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
     const erasureRoutePattern = '^/internal/whatsapp/private/accounts/[^/]+/erasure(?:/[^/]+)?$';
 
     expect(config).toContain('set $edge_internal_caller_role "";');
@@ -385,15 +407,20 @@ describe('Hetzner nginx runtime config', () => {
       globalAllowlist.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/g),
       (match) => match[1]
     );
-    const patternServiceAccounts = Array.from(
-      patternAllowlist.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/g),
+    const erasurePatternBlock = patternAllowlist.slice(
+      patternAllowlist.indexOf(erasureRoutePattern),
+      patternAllowlist.indexOf('\n  },', patternAllowlist.indexOf(erasureRoutePattern))
+    );
+    const erasureServiceAccounts = Array.from(
+      erasurePatternBlock.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/g),
       (match) => match[1]
     );
 
     expect(globalServiceAccounts.length).toBeGreaterThan(0);
-    expect(patternServiceAccounts).toEqual([privateSyncServiceAccount]);
+    expect(erasureServiceAccounts).toEqual([privateSyncServiceAccount]);
+    expect(erasurePatternBlock).not.toContain(matrixCorpusRunnerServiceAccount);
     for (const serviceAccount of globalServiceAccounts) {
-      expect(patternAllowlist).not.toContain(`["${serviceAccount}"]`);
+      expect(erasurePatternBlock).not.toContain(`["${serviceAccount}"]`);
     }
 
     const allowFunction = verifier.slice(
@@ -544,6 +571,10 @@ describe('Hetzner web asset deployment', () => {
       script.indexOf('verify_runtime_readiness() {'),
       script.indexOf('\n}\n\nverify_deployment_attestation()')
     );
+    const backendReadinessFlow = script.slice(
+      script.indexOf('verify_backend_readiness() {'),
+      script.indexOf('\n}\n\npublish_deployment_metadata()')
+    );
     const attestationFlow = script.slice(
       script.indexOf('verify_deployment_attestation() {'),
       script.indexOf('\n}\n\nmain()')
@@ -568,6 +599,9 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('mv -f -- "${deployment_tmp}"');
     expect(cleanupFlow).toContain('withdraw_deployment_metadata');
     expect(readinessFlow.match(/\/api\/whatsapp\/health/g)).toHaveLength(2);
+    expect(readinessFlow).toContain('/api/intex-agent/health');
+    expect(backendReadinessFlow).toContain('verify-matrix-corpus-runtime.sh');
+    expect(backendReadinessFlow).toContain('/api/intex-agent/health');
     expect(readinessFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
     expect(attestationFlow.match(/\/deployment\.json/g)).toHaveLength(2);
     expect(attestationFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
@@ -1327,6 +1361,31 @@ describe('Hetzner async edge cutover', () => {
 });
 
 describe('Hetzner secret loader', () => {
+  it('declares and loads the complete production Matrix corpus secret inventory', () => {
+    const script = readRequired(loadSecretsPath);
+    const terraform = readRequired(terraformDevMainPath);
+    const hetznerRuntimeSecretsSection =
+      terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
+    const productionMatrixCorpusSecrets = [
+      'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+      'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+      'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+      'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+      'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+      'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+      'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+      'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+      'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+      'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+    ];
+
+    for (const secretName of productionMatrixCorpusSecrets) {
+      expect(terraform, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
+      expect(hetznerRuntimeSecretsSection, secretName).toContain(`"${secretName}",`);
+      expect(script, secretName).toContain(secretName);
+    }
+  });
+
   it('declares Grafana Cloud observability secrets without Terraform-managed values', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);

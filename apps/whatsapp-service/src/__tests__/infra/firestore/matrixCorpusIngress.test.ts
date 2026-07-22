@@ -364,7 +364,7 @@ function ingressDigests() {
 function storedCapability(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
     version: 1 as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     leaseFence: '7',
     userId: 'private_user_fixture',

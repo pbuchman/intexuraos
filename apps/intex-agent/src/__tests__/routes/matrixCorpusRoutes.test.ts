@@ -42,7 +42,7 @@ interface RouteFixture {
 
 function contextBody(): Readonly<Record<string, unknown>> {
   return {
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     userId: 'auth0:user_1',
     leaseFence: '7',
     catalogDigest: 'a'.repeat(64),
@@ -53,7 +53,7 @@ function contextBody(): Readonly<Record<string, unknown>> {
 }
 
 function finalizationBody(): Readonly<{
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   userId: string;
   leaseFence: string;
   expectedRevision: number;
@@ -71,7 +71,7 @@ function finalizationBody(): Readonly<{
   }>;
 }> {
   return {
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     userId: 'auth0:user_1',
     leaseFence: '7',
     expectedRevision: 1,
@@ -161,7 +161,7 @@ function fixture(): RouteFixture {
       context: {
         version: 1 as const,
         status: 'finalized' as const,
-        runtimeAudience: 'home-dev' as const,
+        runtimeAudience: 'hetzner-prod' as const,
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -176,7 +176,7 @@ function fixture(): RouteFixture {
       context: {
         version: 1 as const,
         status: 'active' as const,
-        runtimeAudience: 'home-dev' as const,
+        runtimeAudience: 'hetzner-prod' as const,
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -205,7 +205,7 @@ function fixture(): RouteFixture {
       ok: true as const,
       manifest: {
         version: 1 as const,
-        runtimeAudience: 'home-dev' as const,
+        runtimeAudience: 'hetzner-prod' as const,
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -388,7 +388,7 @@ function fixture(): RouteFixture {
           kind: 'matrix_corpus_control_mutation' as const,
           issuer: 'whatsapp-service' as const,
           audience: 'intex-agent' as const,
-          runtimeAudience: 'home-dev' as const,
+          runtimeAudience: 'hetzner-prod' as const,
           keyVersion: 'key_v1',
           eventId: input.eventId,
           leaseFence: input.leaseFence,
@@ -420,7 +420,7 @@ function fixture(): RouteFixture {
       kind: 'matrix_corpus_terminal_control' as const,
       issuer: 'whatsapp-service' as const,
       audience: 'intex-agent' as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       keyVersion: 'key_v1',
       eventId: isAbandoned ? 'abandoned_event_1' : 'terminal_event_1',
       leaseFence: '7',
@@ -496,7 +496,7 @@ describe('Matrix corpus private routes', () => {
       method: 'POST',
       url: '/internal/matrix-corpus/current-acceptance',
       headers: { 'x-internal-auth': internalAuthToken },
-      payload: { runtimeAudience: 'home-dev', userId: 'auth0:user_1' },
+      payload: { runtimeAudience: 'hetzner-prod', userId: 'auth0:user_1' },
     });
 
     expect(response.statusCode).toBe(404);
@@ -528,7 +528,7 @@ describe('Matrix corpus private routes', () => {
   });
 
   it.each([
-    ['POST', '/internal/matrix-corpus/current-acceptance', { runtimeAudience: 'home-dev', userId: 'auth0:user_1' }],
+    ['POST', '/internal/matrix-corpus/current-acceptance', { runtimeAudience: 'hetzner-prod', userId: 'auth0:user_1' }],
     ['POST', '/internal/matrix-corpus/runs/run_1/cleanup', { targetRunId: 'run_old', targetLeaseFence: '6', updatedAt: now }],
     ['POST', '/internal/matrix-corpus/runs/run_1/context/finalize', authorizedMutation('finalize_run', finalizationBody())],
     ['GET', '/internal/matrix-corpus/runs/run_1/retention-plan', undefined],
@@ -556,7 +556,7 @@ describe('Matrix corpus private routes', () => {
       method: 'POST',
       url: '/internal/matrix-corpus/current-acceptance',
       headers: { 'x-internal-auth': internalAuthToken },
-      payload: { runtimeAudience: 'home-dev', userId: 'auth0:user_1' },
+      payload: { runtimeAudience: 'hetzner-prod', userId: 'auth0:user_1' },
     });
 
     expect(response.statusCode).toBe(200);
@@ -578,19 +578,19 @@ describe('Matrix corpus private routes', () => {
       method: 'POST',
       url: '/internal/matrix-corpus/current-acceptance',
       headers: { 'x-internal-auth': internalAuthToken },
-      payload: { runtimeAudience: 'home-dev' },
+      payload: { runtimeAudience: 'hetzner-prod' },
     });
     const foreign = await app.inject({
       method: 'POST',
       url: '/internal/matrix-corpus/current-acceptance',
       headers: { 'x-internal-auth': internalAuthToken },
-      payload: { runtimeAudience: 'home-dev', userId: 'auth0:foreign' },
+      payload: { runtimeAudience: 'hetzner-prod', userId: 'auth0:foreign' },
     });
     const failed = await app.inject({
       method: 'POST',
       url: '/internal/matrix-corpus/current-acceptance',
       headers: { 'x-internal-auth': internalAuthToken },
-      payload: { runtimeAudience: 'home-dev', userId: 'auth0:user_1' },
+      payload: { runtimeAudience: 'hetzner-prod', userId: 'auth0:user_1' },
     });
 
     expect(malformed.statusCode).toBe(400);
@@ -815,7 +815,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/test-runs/run_1/artifact-delivery',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -844,7 +844,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_current/cleanup',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '8',
       },
@@ -888,7 +888,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_current/cleanup',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:foreign',
         'x-matrix-corpus-lease-fence': '8',
       },
@@ -911,7 +911,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/test-runs/run_1/artifact-delivery',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:foreign',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -935,7 +935,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/test-runs/run_1/artifact-delivery',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:foreign',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -958,7 +958,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/control-status',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -1008,7 +1008,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/control-status',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -1029,7 +1029,7 @@ describe('Matrix corpus private routes', () => {
       context: {
         version: 1,
         status: 'finalized',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -1052,7 +1052,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/control-status',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -1167,7 +1167,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/scenarios/scenario_001/evidence',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
         'x-matrix-corpus-session-id': 'session_private_1',
@@ -1244,7 +1244,7 @@ describe('Matrix corpus private routes', () => {
       ok: true,
       manifest: {
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -1293,7 +1293,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/scenarios/scenario_001/status',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -1317,7 +1317,7 @@ describe('Matrix corpus private routes', () => {
     await start(fixtureValue.dependencies);
     const headers = {
       'x-internal-auth': internalAuthToken,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '7',
     };
@@ -1350,7 +1350,7 @@ describe('Matrix corpus private routes', () => {
       ok: true,
       manifest: {
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -1494,7 +1494,7 @@ describe('Matrix corpus private routes', () => {
       ok: true,
       manifest: {
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -1523,7 +1523,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/finalization-readiness',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -1547,7 +1547,7 @@ describe('Matrix corpus private routes', () => {
     await start(fixtureValue.dependencies);
     const headers = {
       'x-internal-auth': internalAuthToken,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '7',
     };
@@ -1591,7 +1591,7 @@ describe('Matrix corpus private routes', () => {
       ok: true,
       manifest: {
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -1629,7 +1629,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/scenarios/scenario_001/evidence',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
         'x-matrix-corpus-session-id': 'session_private_1',
@@ -1677,7 +1677,7 @@ describe('Matrix corpus private routes', () => {
       url: '/internal/matrix-corpus/runs/run_1/retention-plan',
       headers: {
         'x-internal-auth': internalAuthToken,
-        'x-matrix-corpus-runtime-audience': 'home-dev',
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
         'x-matrix-corpus-user-id': 'auth0:user_1',
         'x-matrix-corpus-lease-fence': '7',
       },
@@ -1723,7 +1723,7 @@ describe('Matrix corpus private routes', () => {
     await start(fixtureValue.dependencies);
     const headers = {
       'x-internal-auth': internalAuthToken,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '7',
     };
@@ -1766,7 +1766,7 @@ describe('Matrix corpus private routes', () => {
     await start(fixtureValue.dependencies);
     const headers = {
       'x-internal-auth': internalAuthToken,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '8',
     };
@@ -1838,7 +1838,7 @@ describe('Matrix corpus private routes', () => {
     await start(fixtureValue.dependencies);
     const headers = {
       'x-internal-auth': internalAuthToken,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '7',
     };
@@ -1865,7 +1865,7 @@ describe('Matrix corpus private routes', () => {
       ok: true,
       manifest: {
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'auth0:user_1',
         leaseFence: '7',
@@ -1893,7 +1893,7 @@ describe('Matrix corpus private routes', () => {
     await start(fixtureValue.dependencies);
     const headers = {
       'x-internal-auth': internalAuthToken,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '7',
       'x-matrix-corpus-session-id': 'session_private_1',
@@ -1961,7 +1961,7 @@ describe('Matrix corpus private routes', () => {
 
     const controlHeaders = {
       ...auth,
-      'x-matrix-corpus-runtime-audience': 'home-dev',
+      'x-matrix-corpus-runtime-audience': 'hetzner-prod',
       'x-matrix-corpus-user-id': 'auth0:user_1',
       'x-matrix-corpus-lease-fence': '7',
     };

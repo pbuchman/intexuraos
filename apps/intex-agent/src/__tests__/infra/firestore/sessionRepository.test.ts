@@ -485,7 +485,7 @@ describe('FirestoreSessionRepository', () => {
         .set({
           version: 1,
           status: 'finalized',
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           runId: 'run_1',
           userId: 'user-1',
           leaseFence: '7',
@@ -722,7 +722,7 @@ describe('FirestoreSessionRepository', () => {
       const manifestRepo = new FirestoreMatrixCorpusManifestRepository({ firestore });
       await manifestRepo.createOrGet({
         version: 1,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'user-1',
         leaseFence: '7',
@@ -1092,7 +1092,7 @@ describe('FirestoreSessionRepository', () => {
       .set({
         version: 1,
         status: 'finalized',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'user-1',
         leaseFence: '7',
@@ -1190,7 +1190,7 @@ function matrixProfile(): IntexAgentMatrixCorpusProfileV1 {
   return {
     version: 1 as const,
     kind: 'matrix_corpus' as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     leaseFence: '7',
     runId: 'run_1',
     scenarioId: 'scenario_001',
@@ -1235,7 +1235,7 @@ async function createManifest(
 ): Promise<void> {
   await repository.createOrGet({
     version: 1,
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'user-1',
     leaseFence: '7',
@@ -1248,7 +1248,7 @@ async function createManifest(
   await firestore.collection('intex_agent_matrix_corpus_run_contexts').doc('run_1').set({
     version: 1,
     status: 'active',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     runId: 'run_1',
     userId: 'user-1',
     leaseFence: '7',

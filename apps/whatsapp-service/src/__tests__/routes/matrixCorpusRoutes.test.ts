@@ -38,7 +38,7 @@ function capabilityPayload() {
   } as const;
 }
 
-function dependencies(enabled = true, runtimeAudience = 'home-dev') {
+function dependencies(enabled = true, runtimeAudience = 'hetzner-prod') {
   return {
     gate: {
       enabled,
@@ -229,7 +229,7 @@ describe('Matrix corpus control routes', () => {
       expiresAt: '2026-07-20T10:05:00.000Z',
     });
     expect(deps.controlPlane.acquireProvisioningLease).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       matrixRoomBindingDigest: digest,
@@ -262,7 +262,7 @@ describe('Matrix corpus control routes', () => {
     for (const extra of [
       { userId: 'other_user' },
       { enabled: true },
-      { runtimeAudience: 'home-dev' },
+      { runtimeAudience: 'hetzner-prod' },
       { matrixRoomBindingDigest: digest },
     ]) {
       const response = await app.inject({
@@ -296,7 +296,7 @@ describe('Matrix corpus control routes', () => {
       activatedAt: '2026-07-20T10:01:00.000Z',
     });
     expect(deps.controlPlane.activateRun).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       leaseFence: '7',
@@ -344,7 +344,7 @@ describe('Matrix corpus control routes', () => {
     });
     expect(deps.controlPlane.issueCapability).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         userId: 'configured_user',
         matrixRoomBindingDigest: digest,
         whatsappAccountBindingDigest: 'b'.repeat(64),
@@ -384,7 +384,7 @@ describe('Matrix corpus control routes', () => {
     });
     expect(deps.controlPlane.recordMatrixSendProof).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'configured_user',
         matrixRoomBindingDigest: digest,
@@ -413,7 +413,7 @@ describe('Matrix corpus control routes', () => {
       drained: true,
     });
     expect(deps.controlPlane.getTransportStatus).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       leaseFence: '7',
@@ -469,7 +469,7 @@ describe('Matrix corpus control routes', () => {
       cleanedAt: '2026-07-20T10:04:00.000Z',
     });
     expect(deps.controlPlane.cleanupExactRun).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       leaseFence: '7',
@@ -498,7 +498,7 @@ describe('Matrix corpus control routes', () => {
       reconciledAt: '2026-07-20T10:03:30.000Z',
     });
     expect(deps.controlPlane.abortProvisioningRun).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       leaseFence: '7',
@@ -575,7 +575,7 @@ describe('Matrix corpus control routes', () => {
       operation: 'register_context',
       leaseFence: '7',
       request: {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         userId: 'configured_user',
         leaseFence: '7',
         catalogDigest: 'a'.repeat(64),
@@ -597,7 +597,7 @@ describe('Matrix corpus control routes', () => {
       leaseFence: '7',
     });
     expect(deps.issueControlAuthorization).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'configured_user',
       leaseFence: '7',
@@ -655,7 +655,7 @@ describe('Matrix corpus control routes', () => {
     const payload = {
       operation: 'register_context',
       leaseFence: '7',
-      request: { runtimeAudience: 'home-dev' },
+      request: { runtimeAudience: 'hetzner-prod' },
     };
     const expected = [
       [500, 'CORRUPT_STATE'],
@@ -820,7 +820,7 @@ describe('Matrix corpus control routes', () => {
         payload: {
           operation: 'register_context',
           leaseFence: '7',
-          request: { runtimeAudience: 'home-dev' },
+          request: { runtimeAudience: 'hetzner-prod' },
         },
       },
     ] as const;

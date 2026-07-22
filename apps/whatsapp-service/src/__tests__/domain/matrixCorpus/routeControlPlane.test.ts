@@ -6,7 +6,7 @@ import { MatrixCorpusRouteControlPlaneAdapter } from '../../../domain/matrixCorp
 const digest = (value: string): string => value.repeat(64);
 
 const authority = {
-  runtimeAudience: 'home-dev' as const,
+  runtimeAudience: 'hetzner-prod' as const,
   runId: 'run_1',
   userId: 'user_1',
   leaseFence: '7',
@@ -46,7 +46,7 @@ describe('MatrixCorpusRouteControlPlaneAdapter', () => {
     expect(fixture.authorization.authorizeCurrentLeaseBinding).toHaveBeenCalledTimes(7);
     expect(fixture.authorization.authorizeCurrentLeaseBinding).toHaveBeenCalledWith(authority);
     expect(fixture.controlPlane.activateRun).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '7',
@@ -63,7 +63,7 @@ describe('MatrixCorpusRouteControlPlaneAdapter', () => {
     );
     expect(fixture.controlPlane.quiesceRun).toHaveBeenCalledOnce();
     expect(fixture.controlPlane.abortProvisioningRun).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       observedRunId: 'run_1',
       observedUserId: 'user_1',
       observedLeaseFence: '7',
@@ -116,7 +116,7 @@ describe('MatrixCorpusRouteControlPlaneAdapter', () => {
 
     await expect(fixture.adapter.releaseRun(operation)).resolves.toEqual({ marker: 'release' });
     expect(fixture.controlPlane.releaseRun).toHaveBeenCalledWith({
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       runId: 'run_1',
       userId: 'user_1',
       leaseFence: '7',

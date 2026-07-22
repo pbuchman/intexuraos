@@ -37,7 +37,7 @@ function lifecycleRepository(firestore: Firestore) {
 
 function acquireLifecycleCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_lifecycle',
     userId: 'private_user_fixture',
     matrixRoomBindingDigest: '7'.repeat(64),
@@ -55,7 +55,7 @@ function acquireLifecycleCommand() {
 
 function activateLifecycleCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_lifecycle',
     userId: 'private_user_fixture',
     leaseFence: '1',
@@ -83,7 +83,7 @@ function activateLifecycleCommand() {
 
 function renewLifecycleCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_lifecycle',
     userId: 'private_user_fixture',
     leaseFence: '1',
@@ -138,7 +138,7 @@ function operationReceipt(operation: 'acquire' | 'activate') {
 function lease() {
   return {
     version: 1 as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     matrixRoomBindingDigest: '7'.repeat(64),
@@ -198,7 +198,7 @@ function ingestPayload() {
     context: {
       version: 1 as const,
       kind: 'matrix_corpus' as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       leaseFence: '7',
       ingestReceiptId: 'receipt_1',
       runId: 'run_1',
@@ -289,7 +289,7 @@ function publishedOutbox() {
 
 function authority(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -361,7 +361,7 @@ function terminalOutbox() {
 
 function terminalAuthority(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -439,7 +439,7 @@ function ingestClaimCommand(overrides: Readonly<Record<string, unknown>> = {}) {
 
 function ingestRenewCommand(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -458,7 +458,7 @@ function ingestRenewCommand(overrides: Readonly<Record<string, unknown>> = {}) {
 
 function ingestAcknowledgementCommand(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -488,7 +488,7 @@ function terminalClaimCommand(overrides: Readonly<Record<string, unknown>> = {})
 
 function terminalRenewCommand(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -508,7 +508,7 @@ function terminalRenewCommand(overrides: Readonly<Record<string, unknown>> = {})
 function terminalAcknowledgementCommand(overrides: Readonly<Record<string, unknown>> = {}) {
   const acknowledgedAt = '2026-07-20T10:00:30.000Z';
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -533,7 +533,7 @@ function terminalAcknowledgementCommand(overrides: Readonly<Record<string, unkno
 
 function releaseTerminalClaimCommand(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -551,7 +551,7 @@ function releaseTerminalClaimCommand(overrides: Readonly<Record<string, unknown>
 
 function releaseTerminalRenewCommand(overrides: Readonly<Record<string, unknown>> = {}) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -573,7 +573,7 @@ function releaseTerminalAcknowledgementCommand(
 ) {
   const acknowledgedAt = '2026-07-20T10:00:30.000Z';
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -623,7 +623,7 @@ describe('FirestoreMatrixCorpusRecoveryScanner', () => {
 
     expect(candidates.ingest).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'private_user_fixture',
         leaseFence: '7',
@@ -637,7 +637,7 @@ describe('FirestoreMatrixCorpusRecoveryScanner', () => {
     ]);
     expect(candidates.terminal).toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: 'run_1',
         userId: 'private_user_fixture',
         leaseFence: '7',
@@ -753,7 +753,7 @@ describe('FirestoreMatrixCorpusRecoveryScanner', () => {
     ).resolves.toEqual({
       ingest: [
         {
-          runtimeAudience: 'home-dev',
+          runtimeAudience: 'hetzner-prod',
           runId: 'run_1',
           userId: 'private_user_fixture',
           leaseFence: '7',
@@ -821,7 +821,7 @@ describe('FirestoreMatrixCorpusRecoveryScanner', () => {
       scanner.listExpiredLeaseCandidates({ now: '2026-07-20T10:06:00.000Z', limit: 32 })
     ).resolves.toEqual([
       {
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         observedRunId: 'run_1',
         observedUserId: 'private_user_fixture',
         observedLeaseFence: '7',
@@ -1088,7 +1088,7 @@ function capability() {
   const context = ingestPayload().context;
   return {
     version: 1 as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     leaseFence: '7',
     userId: 'private_user_fixture',
@@ -1239,7 +1239,7 @@ async function readCurrentLease(firestore: Firestore): Promise<Record<string, un
 
 function quiesceLifecycleCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -1256,7 +1256,7 @@ function releaseLifecycleCommand() {
   const terminalCandidateDigest = 'b'.repeat(64);
   const artifactStageDigest = 'c'.repeat(64);
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -1298,7 +1298,7 @@ function releaseLifecycleCommand() {
 
 function transportStatusLifecycleCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -1450,7 +1450,7 @@ async function fullCleanupFixture() {
 
 function cleanupCommand(currentRunFenceDigest: string) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     currentRunId: 'run_current',
     userId: 'private_user_fixture',
     currentLeaseFence: '8',
@@ -1468,7 +1468,7 @@ function cleanupCommand(currentRunFenceDigest: string) {
 
 function abandonLifecycleCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     observedRunId: 'run_1',
     observedUserId: 'private_user_fixture',
     observedLeaseFence: '7',
@@ -1494,7 +1494,7 @@ function abandonLifecycleCommand() {
 
 function displacedActivateCommand(idempotencyKeyDigest = '4'.repeat(64)) {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -1522,7 +1522,7 @@ function displacedActivateCommand(idempotencyKeyDigest = '4'.repeat(64)) {
 
 function displacedRenewCommand() {
   return {
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     runId: 'run_1',
     userId: 'private_user_fixture',
     leaseFence: '7',
@@ -3294,7 +3294,7 @@ describe('FirestoreMatrixCorpusRepository lifecycle', () => {
       leaseFence: '1',
     });
     const abort = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       observedRunId: 'run_lifecycle',
       observedUserId: 'private_user_fixture',
       observedLeaseFence: '1',
@@ -4105,7 +4105,7 @@ describe('FirestoreMatrixCorpusDeliveryRepository', () => {
       },
     });
     const exact = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',
@@ -4153,7 +4153,7 @@ describe('FirestoreMatrixCorpusDeliveryRepository', () => {
 
   it('fails lease authorization closed for digest and persisted-pair corruption', async () => {
     const exact = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',
@@ -4414,7 +4414,7 @@ describe('FirestoreMatrixCorpusDeliveryRepository', () => {
     const { firestore } = fixture();
     const repository = new FirestoreMatrixCorpusDeliveryRepository({ firestore });
     const command = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',
@@ -4524,7 +4524,7 @@ describe('FirestoreMatrixCorpusDeliveryRepository', () => {
     const { firestore } = fixture();
     const repository = new FirestoreMatrixCorpusDeliveryRepository({ firestore });
     const command = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',
@@ -4850,7 +4850,7 @@ describe('FirestoreMatrixCorpusDeliveryRepository', () => {
     const { firestore } = terminalFixture();
     const repository = new FirestoreMatrixCorpusDeliveryRepository({ firestore });
     const command = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',
@@ -4957,7 +4957,7 @@ describe('FirestoreMatrixCorpusDeliveryRepository', () => {
     const repository = new FirestoreMatrixCorpusDeliveryRepository({ firestore });
     const acknowledgedAt = '2026-07-20T10:00:30.000Z';
     const command = {
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       runId: 'run_1',
       userId: 'private_user_fixture',
       leaseFence: '7',

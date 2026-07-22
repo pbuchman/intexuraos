@@ -10,6 +10,8 @@ export interface IntexAgentServiceClientConfig {
   readonly internalAuthToken: string;
   readonly logger: InternalHttpClientLogger;
   readonly defaultTimeoutMs?: number;
+  readonly pathPrefix?: string;
+  readonly authorizationHeaderProvider?: () => Promise<string>;
 }
 
 export interface MatrixCorpusIdentityInput {
@@ -39,7 +41,7 @@ export type MatrixCorpusAdmissionResult =
   | { readonly kind: 'not_ready' };
 
 export interface MatrixCorpusRegisterContextRequest {
-  readonly runtimeAudience: 'home-dev';
+  readonly runtimeAudience: 'hetzner-prod';
   readonly userId: string;
   readonly leaseFence: string;
   readonly catalogDigest: string;
@@ -67,7 +69,7 @@ export interface MatrixCorpusContextResult {
 }
 
 export interface MatrixCorpusFinalizeRequest extends Record<string, unknown> {
-  readonly runtimeAudience: 'home-dev';
+  readonly runtimeAudience: 'hetzner-prod';
   readonly userId: string;
   readonly leaseFence: string;
   readonly expectedRevision: number;

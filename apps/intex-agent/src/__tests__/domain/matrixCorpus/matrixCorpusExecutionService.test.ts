@@ -87,7 +87,7 @@ function claims(
     context: {
       version: 1 as const,
       kind: 'matrix_corpus' as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       leaseFence: '7',
       ingestReceiptId: 'receipt_1',
       runId: 'run_1',
@@ -115,7 +115,7 @@ function claims(
     kind: 'matrix_corpus_ingest',
     issuer: 'whatsapp-service',
     audience: 'intex-agent',
-    runtimeAudience: 'home-dev',
+    runtimeAudience: 'hetzner-prod',
     keyVersion: 'key_v1',
     eventId: 'receipt_1',
     leaseFence: '7',
@@ -140,7 +140,7 @@ function fixture(runner: IntexAgentRunner) {
     matrixCorpusProfile: {
       version: 1,
       kind: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       runId: 'run_1',
       scenarioId: 'scenario_001',
@@ -245,7 +245,7 @@ function resolvedConfirmation(
     confirmation: {
       version: 1,
       lane: 'matrix_corpus',
-      runtimeAudience: 'home-dev',
+      runtimeAudience: 'hetzner-prod',
       confirmationId: 'confirmation_1',
       runId: 'run_1',
       scenarioId: 'scenario_001',
@@ -674,7 +674,7 @@ describe('Matrix corpus execution service', () => {
       confirmation: {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         confirmationId: expect.any(String) as unknown as string,
         runId: 'run_1',
         scenarioId: 'scenario_001',
@@ -736,7 +736,7 @@ describe('Matrix corpus execution service', () => {
       confirmation: {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         confirmationId: 'confirmation_1',
         runId: 'run_1',
         scenarioId: 'scenario_001',
@@ -820,7 +820,7 @@ describe('Matrix corpus execution service', () => {
       confirmation: {
         version: 1,
         lane: 'matrix_corpus',
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         confirmationId: 'confirmation_1',
         runId: 'run_1',
         scenarioId: 'scenario_001',

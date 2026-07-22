@@ -20,9 +20,98 @@ beforeEach(() => {
 
 afterEach(() => {
   nock.cleanAll();
+  vi.restoreAllMocks();
 });
 
 describe('createInternalHttpClient', () => {
+  it('uses the protected path prefix and async authorization header for evaluator control calls', async () => {
+    nock(BASE)
+      .get('/internal/evals/whatsapp/matrix-corpus/readiness')
+      .matchHeader('authorization', 'Bearer oidc-token')
+      .reply(200, { success: true, data: { status: 'ready' } });
+
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: '',
+      logger: noopLogger,
+      pathPrefix: '/internal/evals/whatsapp',
+      authorizationHeaderProvider: vi.fn().mockResolvedValue('Bearer oidc-token'),
+    });
+
+    await expect(
+      client.request<{ status: 'ready' }>({
+        method: 'GET',
+        path: '/internal/matrix-corpus/readiness',
+        privateRequest: true,
+      })
+    ).resolves.toEqual({ ok: true, value: { status: 'ready' } });
+  });
+
+  it('bounds a stalled edge authorization provider by the request timeout', async () => {
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: '',
+      logger: noopLogger,
+      authorizationHeaderProvider: async () => await new Promise<string>(() => undefined),
+    });
+
+    await expect(
+      client.request({ method: 'GET', path: '/never-sent', timeoutMs: 5 })
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'TIMEOUT', message: 'Request exceeded 5ms' },
+    });
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it('closes a rejected edge authorization provider without sending a request', async () => {
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: '',
+      logger: noopLogger,
+      authorizationHeaderProvider: async () => await Promise.reject(new Error('private')),
+    });
+
+    await expect(client.request({ method: 'GET', path: '/never-sent' })).resolves.toEqual({
+      ok: false,
+      error: { code: 'NETWORK_ERROR', message: 'edge authorization unavailable' },
+    });
+  });
+
+  it('fails before fetch when authorization consumes the complete request deadline', async () => {
+    vi.spyOn(Date, 'now').mockReturnValueOnce(100).mockReturnValueOnce(105);
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: '',
+      logger: noopLogger,
+      authorizationHeaderProvider: vi.fn().mockResolvedValue('Bearer oidc-token'),
+    });
+
+    await expect(
+      client.request({ method: 'GET', path: '/never-sent', timeoutMs: 5 })
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'TIMEOUT', message: 'Request exceeded 5ms' },
+    });
+  });
+
+  it('prefixes a non-internal edge path without stripping path segments', async () => {
+    nock(BASE)
+      .get('/internal/evals/whatsapp/health')
+      .reply(200, { success: true, data: { status: 'ready' } });
+    const client = createInternalHttpClient({
+      baseUrl: BASE,
+      token: '',
+      logger: noopLogger,
+      pathPrefix: '/internal/evals/whatsapp',
+    });
+
+    await expect(client.request({ method: 'GET', path: '/health' })).resolves.toEqual({
+      ok: true,
+      value: { status: 'ready' },
+    });
+  });
+
   it('200 OK: POSTs body, sends auth + content-type, unwraps envelope', async () => {
     nock(BASE)
       .post('/internal/foo', { q: 1 })

@@ -39,7 +39,7 @@ describe('Matrix corpus ingress composition', () => {
     const runtime = createIntexMatrixCorpusRuntime(
       {
         enabled: true,
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         signingKeyVersion: 'matrix-test-v1',
         signingKeyMaterial: 'injected-in-this-test',
         evaluatorUserId: USER_ID,
@@ -117,7 +117,7 @@ describe('Matrix corpus ingress composition', () => {
 
     await expect(
       runtime.contextService.registerRun({
-        runtimeAudience: 'home-dev',
+        runtimeAudience: 'hetzner-prod',
         runId: RUN_ID,
         userId: USER_ID,
         leaseFence: LEASE_FENCE,
@@ -267,7 +267,7 @@ function ingestClaims(): Extract<
     context: {
       version: 1 as const,
       kind: 'matrix_corpus' as const,
-      runtimeAudience: 'home-dev' as const,
+      runtimeAudience: 'hetzner-prod' as const,
       leaseFence: LEASE_FENCE,
       ingestReceiptId: INGEST_RECEIPT_ID,
       runId: RUN_ID,
@@ -298,7 +298,7 @@ function ingestClaims(): Extract<
     kind: 'matrix_corpus_ingest' as const,
     issuer: 'whatsapp-service' as const,
     audience: 'intex-agent' as const,
-    runtimeAudience: 'home-dev' as const,
+    runtimeAudience: 'hetzner-prod' as const,
     keyVersion: 'key_v1',
     eventId: INGEST_RECEIPT_ID,
     leaseFence: LEASE_FENCE,

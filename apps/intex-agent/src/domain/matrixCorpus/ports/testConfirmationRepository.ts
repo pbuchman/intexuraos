@@ -12,7 +12,7 @@ export interface MatrixCorpusTestConfirmationIdentity {
 export interface MatrixCorpusTestConfirmation extends MatrixCorpusTestConfirmationIdentity {
   version: 1;
   lane: 'matrix_corpus';
-  runtimeAudience: 'home-dev';
+  runtimeAudience: 'hetzner-prod';
   state: 'pending' | 'resolved';
   toolName: IntexAgentToolName;
   toolArgs: Record<string, unknown>;

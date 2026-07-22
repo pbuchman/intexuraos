@@ -160,8 +160,9 @@ export const MatrixCorpusReportV1Schema = z
       .min(1)
       .max(64)
       .regex(/^[A-Za-z0-9][A-Za-z0-9._ -]*$/u),
-    runtimeAudience: z.literal('home-dev'),
-    environmentAlias: z.literal('dev'),
+    runnerHost: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
+    environmentAlias: z.literal('prod'),
     catalog: z.object({ digest, scenarioCount: z.literal(20), turnCount: z.literal(59) }).strict(),
     agentModel: z.literal('or:deepseek/deepseek-v4-flash'),
     evaluatorModel: z.literal('or:minimax/minimax-m3'),

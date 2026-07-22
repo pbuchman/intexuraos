@@ -19,13 +19,13 @@ import {
 
 const currentAcceptanceInputSchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     userId: matrixCorpusSafeIdSchema,
   })
   .strict();
 const controlStatusInputSchema = z
   .object({
-    runtimeAudience: z.literal('home-dev'),
+    runtimeAudience: z.literal('hetzner-prod'),
     runId: matrixCorpusSafeIdSchema,
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
