@@ -221,6 +221,39 @@ describe('Hetzner nginx runtime config', () => {
     expect(globalLookupIndex).toBeGreaterThan(routePrefixLookupIndex);
   });
 
+  it('restores the Pub/Sub marker only for the verified Intex message push route', () => {
+    const config = readRequired(nginxConfigPath);
+    const verifier = readRequired(jwtVerifierPath);
+    const pushPath = '/internal/intex-agent/messages';
+    const pushPattern = `^${pushPath}$`;
+    const pushServiceAccount =
+      'intexuraos-intex-agent-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com';
+
+    expect(config).toContain('set $edge_pubsub_from "";');
+    expect(config).toContain('proxy_set_header From $edge_pubsub_from;');
+    expect(verifier).toContain(`pattern = [[${pushPattern}]]`);
+    expect(verifier).toContain(
+      'ngx.var.edge_pubsub_from = caller_role == "intex_message_ingest_pubsub" and "noreply@google.com" or ""'
+    );
+
+    const patternStart = verifier.indexOf(`pattern = [[${pushPattern}]]`);
+    const patternEnd = verifier.indexOf('\n  },', patternStart);
+    const patternBlock = verifier.slice(patternStart, patternEnd);
+    expect(patternStart).toBeGreaterThanOrEqual(0);
+    expect(patternBlock).toContain('caller_role = "intex_message_ingest_pubsub"');
+    expect(patternBlock).toContain('allowed_methods = { POST = true }');
+    expect(patternBlock).not.toContain('GET = true');
+    expect(patternBlock).not.toContain('PUT = true');
+    expect(
+      Array.from(patternBlock.matchAll(/\["([^"]+@[^"\]]+)"\]\s*=\s*true/gu), (match) => match[1])
+    ).toEqual([pushServiceAccount]);
+
+    const pushMatcher = new RegExp(pushPattern);
+    expect(pushMatcher.test(pushPath)).toBe(true);
+    expect(pushMatcher.test(`${pushPath}/extra`)).toBe(false);
+    expect(pushMatcher.test('/internal/intex-agent/messages-other')).toBe(false);
+  });
+
   it('serves only the exact deployment attestation path as uncached JSON', () => {
     const config = readRequired(nginxConfigPath);
     const deploymentLocationStart = config.indexOf('location = /deployment.json {');
@@ -259,8 +292,9 @@ describe('Hetzner nginx runtime config', () => {
     expect(config).toContain('location ~ ^/api/[a-z0-9-]+/internal(?:/|$)');
     expect(config).toContain('return 404;');
     expect(config).toContain('set $edge_internal_auth_token "";');
+    expect(config).toContain('set $edge_pubsub_from "";');
     expect(config).toContain('proxy_set_header X-Internal-Auth $edge_internal_auth_token;');
-    expect(config).toContain('proxy_set_header From "";');
+    expect(config).toContain('proxy_set_header From $edge_pubsub_from;');
     expect(config).toContain('proxy_set_header Cookie "";');
     expect(config).toContain('return 301 https://intexuraos.cloud$request_uri;');
     expect(config).toContain('if ($host != "intexuraos.cloud") {');
@@ -416,6 +450,9 @@ describe('Hetzner nginx runtime config', () => {
     expect(verifier).toContain('ngx.req.clear_header("Cookie")');
     expect(verifier).toContain('ngx.req.clear_header("From")');
     expect(verifier).toContain('ngx.var.edge_internal_auth_token = internal_auth_token');
+    expect(verifier).toContain(
+      'ngx.var.edge_pubsub_from = caller_role == "intex_message_ingest_pubsub" and "noreply@google.com" or ""'
+    );
     expect(verifier).not.toContain('ngx.req.set_header("X-Internal-Auth"');
     expect(verifier).toContain('/etc/intexuraos/internal-auth-token');
 

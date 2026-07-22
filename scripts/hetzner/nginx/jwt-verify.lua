@@ -32,6 +32,14 @@ local ROUTE_ALLOWED_SERVICE_ACCOUNTS = {
 
 local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
   {
+    pattern = [[^/internal/intex-agent/messages$]],
+    caller_role = "intex_message_ingest_pubsub",
+    allowed_methods = { POST = true },
+    allowed_service_accounts = {
+      ["intexuraos-intex-agent-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
     pattern = [[^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)]],
     caller_role = "matrix_corpus_runner",
     allowed_service_accounts = {
@@ -202,3 +210,4 @@ ngx.req.clear_header("Cookie")
 ngx.req.clear_header("From")
 ngx.var.edge_internal_auth_token = internal_auth_token
 ngx.var.edge_internal_caller_role = caller_role or ""
+ngx.var.edge_pubsub_from = caller_role == "intex_message_ingest_pubsub" and "noreply@google.com" or ""
