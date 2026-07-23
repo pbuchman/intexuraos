@@ -88,6 +88,10 @@ export interface OpenRouterConfig {
   userId: string;
   /** Request timeout in milliseconds. Default: 840000 (14 minutes) */
   timeoutMs?: number;
+  /** Maximum transient provider attempts. Default: 3. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared across provider calls. */
+  deadlineAtMs?: number;
   /** Pino logger for structured LLM usage logging */
   logger: Logger;
   /** Usage sink. Required — pass NoopUsageSink to explicitly opt out. */

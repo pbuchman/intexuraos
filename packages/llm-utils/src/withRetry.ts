@@ -31,6 +31,8 @@ export interface WithRetryOptions {
   maxDelayMs?: number;
   /** Sleep override for tests. Defaults to `setTimeout`-based promise. */
   sleep?: (ms: number) => Promise<void>;
+  /** Optional absolute wall-clock deadline shared by every attempt and backoff. */
+  deadlineAtMs?: number;
 }
 
 /**
@@ -64,6 +66,9 @@ export async function withRetry<T>(
 
   let last: Result<T, LLMError> | null = null;
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
+    if (last !== null && opts.deadlineAtMs !== undefined && Date.now() >= opts.deadlineAtMs) {
+      break;
+    }
     const res = await fn();
     if (res.ok) return res;
     last = res;
@@ -71,7 +76,11 @@ export async function withRetry<T>(
     if (attempt === opts.maxAttempts) break;
     const providerDelay = (res.error as { retryAfterMs?: number }).retryAfterMs;
     const expBackoff = Math.min(opts.baseDelayMs * 2 ** (attempt - 1), maxDelay);
-    const delay = providerDelay ?? expBackoff;
+    const requestedDelay = providerDelay ?? expBackoff;
+    const deadlineDelay =
+      opts.deadlineAtMs === undefined ? Number.POSITIVE_INFINITY : opts.deadlineAtMs - Date.now();
+    if (deadlineDelay <= 0) break;
+    const delay = Math.min(requestedDelay, deadlineDelay);
     await sleeper(delay);
   }
   return last as Result<T, LLMError>;

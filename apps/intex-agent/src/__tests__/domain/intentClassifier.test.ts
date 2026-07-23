@@ -946,6 +946,33 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     ).rejects.toThrowError('Matrix corpus intent classification failed');
   });
 
+  it('does not multiply provider-owned transient retries in the Matrix corpus lane', async () => {
+    const client = new FakeStructuredClient([
+      err({ code: 'TIMEOUT', message: 'bounded provider timeout' }),
+      ok(
+        generateResult({
+          outcome: 'tool',
+          allowedToolNames: ['create_note'],
+          confidence: 0.9,
+        })
+      ),
+    ]);
+
+    await expect(
+      createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() }).classify({
+        message: 'Create a note for me.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        matrixCorpusLlm: {
+          nextContext: (stage) => matrixContext(stage, 1),
+          recordProviderCall: vi.fn(async () => undefined),
+        },
+      })
+    ).rejects.toThrowError('Matrix corpus intent classification failed');
+
+    expect(client.calls).toHaveLength(1);
+  });
+
   it('retries transient classifier provider errors before falling back', async () => {
     const client = new FakeStructuredClient([
       err({ code: 'RATE_LIMITED', message: 'slow down', retryAfterMs: 0 } as LLMError & {

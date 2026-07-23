@@ -80,6 +80,12 @@ export interface LlmClientConfig {
    * Pass 'user' for calls initiated directly by a human (e.g. chat, code tasks).
    */
   ownerType?: OwnerType;
+  /** Optional provider request timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Optional transient provider attempt cap. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared by provider calls. */
+  deadlineAtMs?: number;
 }
 
 export interface ToolCallingClientConfig {
@@ -89,6 +95,12 @@ export interface ToolCallingClientConfig {
   logger: Logger;
   usageSink: UsageSink;
   ownerType?: OwnerType;
+  /** Optional provider request timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Optional transient provider attempt cap. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared by provider calls. */
+  deadlineAtMs?: number;
 }
 
 /**
@@ -283,6 +295,9 @@ export function createToolCallingClient(config: ToolCallingClientConfig): ToolCa
       logger: config.logger,
       usageSink: config.usageSink,
       ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
+      ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
+      ...(config.maxAttempts !== undefined && { maxAttempts: config.maxAttempts }),
+      ...(config.deadlineAtMs !== undefined && { deadlineAtMs: config.deadlineAtMs }),
       evidenceModelId: model,
     });
   }

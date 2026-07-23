@@ -488,6 +488,63 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('generate', () => {
+    it('aborts while a successful response body is still being consumed', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .delayBody(50)
+        .reply(200, {
+          id: 'chatcmpl-delayed-body',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'Too late.' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        timeoutMs: 10,
+        maxAttempts: 1,
+      });
+
+      const result = await client.generate('Write something', { promptType: 'test-prompt' });
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
+    });
+
+    it('honors a configured provider attempt cap', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation(async () => new Response('Service overloaded', { status: 503 }));
+      try {
+        const client = createOpenRouterClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          maxAttempts: 2,
+        } as Parameters<typeof createOpenRouterClient>[0]);
+
+        const result = await client.generate('Write something', { promptType: 'test-prompt' });
+
+        expect(result).toMatchObject({ ok: false, error: { code: 'OVERLOADED' } });
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
     it('does NOT append :online suffix for synthesis', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 
@@ -1046,6 +1103,30 @@ describe('createOpenRouterClient', () => {
   });
 
   describe('generateChat', () => {
+    it('fails before fetch when the shared deadline is already exhausted', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      try {
+        const client = createOpenRouterClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          maxAttempts: 1,
+          deadlineAtMs: Date.now() - 1,
+        });
+
+        const result = await client.generateChat([{ role: 'user', content: 'hello' }], {
+          promptType: 'test-chat',
+        });
+
+        expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
+        expect(fetchSpy).not.toHaveBeenCalled();
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
     it('returns provider-reported USD separately from normalized chat cost', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 

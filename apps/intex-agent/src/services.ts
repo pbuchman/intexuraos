@@ -114,6 +114,9 @@ export function composeIntexMatrixCorpusFeature<T>(
 }
 
 const RUNTIME_SETTINGS_LOOKUP_TIMEOUT_MS = 2_000;
+export const MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS = 45_000;
+export const MATRIX_CORPUS_MODEL_TURN_BUDGET_MS = 180_000;
+export const MATRIX_CORPUS_MODEL_MAX_ATTEMPTS = 2;
 
 export interface RuntimeSettingsDeadlineScheduler {
   setTimeout(callback: () => void, delayMs: number): unknown;
@@ -133,6 +136,9 @@ export interface CreateRuntimeBoundModelClientsInput {
   userId: string;
   logger: CreateTestConversationRunnerServiceInput['logger'];
   usageSink: HttpInternalAuthUsageSink;
+  timeoutMs?: number;
+  maxAttempts?: number;
+  deadlineAtMs?: number;
   createToolCallingClientFn?: typeof createToolCallingClient;
   createLlmClientFn?: typeof createLlmClient;
 }
@@ -148,6 +154,9 @@ export function createRuntimeBoundModelClients(input: CreateRuntimeBoundModelCli
     logger: input.logger,
     usageSink: input.usageSink,
     ownerType: 'user' as const,
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+    ...(input.maxAttempts === undefined ? {} : { maxAttempts: input.maxAttempts }),
+    ...(input.deadlineAtMs === undefined ? {} : { deadlineAtMs: input.deadlineAtMs }),
   };
   return {
     toolCallingClient: (input.createToolCallingClientFn ?? createToolCallingClient)(sharedConfig),
@@ -664,6 +673,9 @@ export async function initServices(config: ServiceConfig): Promise<void> {
           userId: input.userId,
           logger,
           usageSink,
+          timeoutMs: MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS,
+          maxAttempts: MATRIX_CORPUS_MODEL_MAX_ATTEMPTS,
+          deadlineAtMs: Date.now() + MATRIX_CORPUS_MODEL_TURN_BUDGET_MS,
         });
         return createMatrixCorpusRunner({
           execution: input.execution,

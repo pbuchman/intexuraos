@@ -6,6 +6,9 @@ import {
   composeIntexAgentExecutionServices,
   createIntexMatrixCorpusRuntime,
   createMatrixCorpusRunner,
+  MATRIX_CORPUS_MODEL_MAX_ATTEMPTS,
+  MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS,
+  MATRIX_CORPUS_MODEL_TURN_BUDGET_MS,
   createTestConversationRunnerService,
   createRuntimeBoundModelClients,
   resolveRuntimeSettingsWithDeadline,
@@ -50,6 +53,7 @@ import type {
 } from '../domain/sessions/types.js';
 import type { TestConversationRunner } from '../domain/testConversation/runTestConversation.js';
 import { FirestoreSessionRepository } from '../infra/firestore/sessionRepository.js';
+import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 describe('resolveRuntimeSettingsWithDeadline', () => {
   it('retains the successful closed User Service runtime DTO', async () => {
@@ -1191,6 +1195,124 @@ describe('createRuntimeBoundModelClients', () => {
     expect(createLlmClientFn).toHaveBeenCalledWith(
       expect.objectContaining({ model, apiKey: 'platform-key' })
     );
+  });
+
+  it('binds the Matrix corpus request policy to both DeepSeek clients', () => {
+    const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
+    const createLlmClientFn = vi.fn(() => fakeStructuredClient());
+
+    createRuntimeBoundModelClients({
+      runtimeSettings: Object.freeze({
+        status: 'available' as const,
+        effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+        explicitModel: IntexAgentModels.DeepSeekV4Flash,
+        source: 'explicit' as const,
+        revision: 1,
+        timeZone: 'Europe/Warsaw',
+      }),
+      apiKey: 'platform-key',
+      userId: 'user-1',
+      logger: silentLogger(),
+      usageSink: {} as CreateTestConversationRunnerServiceInput['usageSink'],
+      timeoutMs: MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS,
+      maxAttempts: MATRIX_CORPUS_MODEL_MAX_ATTEMPTS,
+      deadlineAtMs: MATRIX_CORPUS_MODEL_TURN_BUDGET_MS,
+      createToolCallingClientFn,
+      createLlmClientFn,
+    });
+
+    expect(MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS).toBe(45_000);
+    expect(MATRIX_CORPUS_MODEL_MAX_ATTEMPTS).toBe(2);
+    expect(MATRIX_CORPUS_MODEL_TURN_BUDGET_MS).toBe(180_000);
+    expect(createToolCallingClientFn).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 180_000 })
+    );
+    expect(createLlmClientFn).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 180_000 })
+    );
+  });
+
+  it('shares one absolute Matrix turn deadline across the real structured and tool clients', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T10:00:00.000Z'));
+    const startedAtMs = Date.now();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    fetchSpy.mockImplementationOnce(async () => {
+      vi.setSystemTime(startedAtMs + 15);
+      return new Response(
+        JSON.stringify({
+          id: 'chatcmpl-structured',
+          model: 'deepseek/deepseek-v4-flash',
+          created: 1,
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: '{}' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+    fetchSpy.mockImplementationOnce(
+      async (_url, init) =>
+        await new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('deadline reached', 'AbortError'));
+          });
+        })
+    );
+
+    try {
+      const clients = createRuntimeBoundModelClients({
+        runtimeSettings: Object.freeze({
+          status: 'available' as const,
+          effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+          explicitModel: IntexAgentModels.DeepSeekV4Flash,
+          source: 'explicit' as const,
+          revision: 1,
+          timeZone: 'Europe/Warsaw',
+        }),
+        apiKey: 'platform-key',
+        userId: 'user-1',
+        logger: silentLogger(),
+        usageSink: new FakeUsageSink() as never,
+        timeoutMs: 100,
+        deadlineAtMs: startedAtMs + 20,
+        maxAttempts: 2,
+      } as CreateRuntimeBoundModelClientsInput);
+
+      await expect(
+        clients.structuredClient.generate('Classify.', { promptType: 'matrix-classifier' })
+      ).resolves.toMatchObject({ ok: true });
+
+      const toolResultPromise = clients.toolCallingClient.run({
+        systemPrompt: 'Respond.',
+        messages: [{ role: 'user', content: 'Test.' }],
+        tools: [],
+        promptType: 'matrix-agent',
+      });
+      let settled = false;
+      void toolResultPromise.finally(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(5);
+
+      expect(settled).toBe(true);
+      await expect(toolResultPromise).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'TIMEOUT' },
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      await vi.runAllTimersAsync();
+      fetchSpy.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('does not retry or substitute a model when product client construction fails', () => {

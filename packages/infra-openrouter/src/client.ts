@@ -113,21 +113,27 @@ function nonNegativeProviderCost(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
+async function withRequestTimeout<T>(
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await operation(controller.signal);
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function resolveRequestTimeoutMs(timeoutMs: number, deadlineAtMs?: number): number {
+  if (deadlineAtMs === undefined) return timeoutMs;
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) throw new Error('OpenRouter request deadline timeout');
+  return Math.min(timeoutMs, remainingMs);
 }
 
 class OpenRouterApiError extends Error {
@@ -193,6 +199,8 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     model,
     userId,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxAttempts = 3,
+    deadlineAtMs,
     logger,
     usageSink,
     ownerType,
@@ -212,6 +220,30 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           ...(providerOrder !== undefined && { order: [...providerOrder] }),
           ...(allowFallbacks !== undefined && { allow_fallbacks: allowFallbacks }),
         };
+
+  async function postChatCompletion<T>(requestBody: Record<string, unknown>): Promise<T> {
+    return await withRequestTimeout(
+      resolveRequestTimeoutMs(timeoutMs, deadlineAtMs),
+      async (signal) => {
+        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://intexuraos.cloud',
+            'X-Title': APP_TITLE,
+          },
+          body: JSON.stringify(requestBody),
+          signal,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new OpenRouterApiError(response.status, errorText);
+        }
+        return (await response.json()) as T;
+      }
+    );
+  }
 
   function trackUsage(
     callType: CallType,
@@ -323,45 +355,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           temperature: 0.2,
         };
 
-        const response = await fetchWithTimeout(
-          `${API_BASE_URL}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://intexuraos.cloud',
-              'X-Title': APP_TITLE,
-            },
-            body: JSON.stringify(requestBody),
-          },
-          timeoutMs
-        );
-
-        if (!response.ok) {
-          const durationMs = Date.now() - start;
-          const errorText = await response.text();
-          const apiError = new OpenRouterApiError(response.status, errorText);
-          const emptyUsage: NormalizedUsage = {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            costUsd: 0,
-          };
-          trackUsage(
-            'research',
-            emptyUsage,
-            false,
-            durationMs,
-            toOpenRouterUsageErrorCategory(apiError),
-            undefined,
-            options?.promptType ?? RESEARCH_PROMPT_TYPE,
-            options?.correlation
-          );
-          return err(mapOpenRouterError(apiError));
-        }
-
-        const data = (await response.json()) as OpenRouterResponse;
+        const data = await postChatCompletion<OpenRouterResponse>(requestBody);
         const rawContent = data.choices[0]?.message.content;
         const content = typeof rawContent === 'string' ? rawContent : '';
         const { normalized, providerReportedUsd } = extractUsage(data.usage);
@@ -425,8 +419,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       options: GenerateOptions
     ): Promise<Result<GenerateResult, OpenRouterError>> {
       return await withRetry(() => generateOnce(prompt, options), {
-        maxAttempts: 3,
+        maxAttempts,
         baseDelayMs: 500,
+        ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
       });
     },
 
@@ -435,8 +430,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       options: GenerateChatOptions
     ): Promise<Result<GenerateChatResult, OpenRouterError>> {
       return await withRetry(() => generateChatOnce(messages, options), {
-        maxAttempts: 3,
+        maxAttempts,
         baseDelayMs: 500,
+        ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
       });
     },
 
@@ -450,26 +446,25 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
 
     async validateKey(key: string): Promise<Result<OpenRouterKeyInfo, OpenRouterError>> {
       try {
-        const response = await fetchWithTimeout(
-          `${API_BASE_URL}/key`,
-          {
-            method: 'GET',
-            headers: {
-              Authorization: `Bearer ${key}`,
-              'HTTP-Referer': 'https://intexuraos.cloud',
-              'X-Title': APP_TITLE,
-            },
-          },
-          10_000 // 10 second timeout for lightweight key check
+        const data = await withRequestTimeout(
+          resolveRequestTimeoutMs(10_000, deadlineAtMs),
+          async (signal) => {
+            const response = await fetch(`${API_BASE_URL}/key`, {
+              method: 'GET',
+              headers: {
+                Authorization: `Bearer ${key}`,
+                'HTTP-Referer': 'https://intexuraos.cloud',
+                'X-Title': APP_TITLE,
+              },
+              signal,
+            });
+            if (!response.ok) {
+              const errorText = await response.text();
+              throw new OpenRouterApiError(response.status, errorText);
+            }
+            return (await response.json()) as OpenRouterKeyInfo;
+          }
         );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          const apiError = new OpenRouterApiError(response.status, errorText);
-          return err(mapOpenRouterError(apiError));
-        }
-
-        const data = (await response.json()) as OpenRouterKeyInfo;
         return ok(data);
       } catch (error) {
         return err(mapOpenRouterError(error));
@@ -554,29 +549,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             }),
           };
 
-          const response = await fetchWithTimeout(
-            `${API_BASE_URL}/chat/completions`,
-            {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'https://intexuraos.cloud',
-                'X-Title': APP_TITLE,
-              },
-              body: JSON.stringify(requestBody),
-            },
-            timeoutMs
-          );
-
-          // Throw on HTTP error so measureLlmCall rethrows errors. The outer
-          // catch below maps the error and logs usage with measured duration.
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new OpenRouterApiError(response.status, errorText);
-          }
-
-          const data = (await response.json()) as OpenRouterResponse;
+          const data = await postChatCompletion<OpenRouterResponse>(requestBody);
           const firstChoice = data.choices[0];
           if (
             firstChoice === undefined ||
@@ -658,27 +631,27 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         }),
       };
 
-      const response = await fetchWithTimeout(
-        `${API_BASE_URL}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://intexuraos.cloud',
-            'X-Title': APP_TITLE,
-          },
-          body: JSON.stringify(requestBody),
-        },
-        timeoutMs
+      const streamResult = await withRequestTimeout(
+        resolveRequestTimeoutMs(timeoutMs, deadlineAtMs),
+        async (signal) => {
+          const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://intexuraos.cloud',
+              'X-Title': APP_TITLE,
+            },
+            body: JSON.stringify(requestBody),
+            signal,
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new OpenRouterApiError(response.status, errorText);
+          }
+          return await processChatStream(response, onEvent);
+        }
       );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new OpenRouterApiError(response.status, errorText);
-      }
-
-      const streamResult = await processChatStream(response, onEvent);
       const durationMs = Date.now() - start;
       trackUsage(
         'generate',
@@ -800,6 +773,9 @@ function mapOpenRouterError(error: unknown): OpenRouterError {
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
     if (error.status === 503) return { code: 'OVERLOADED', message };
     return { code: 'API_ERROR', message };
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return { code: 'TIMEOUT', message: error.message };
   }
   const message = getErrorMessage(error);
   // Check for timeout indicators in the error message
