@@ -189,8 +189,6 @@ describe('Matrix corpus reply correlation', () => {
   });
 
   it.each([
-    ['plain rendering policy', MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX, 'plain'],
-    ['missing interactive suffix', '', 'whatsapp_confirmation_buttons'],
     [
       'changed button label',
       '\n\n<Confirm> - <No>\nUse the WhatsApp app to click buttons',
@@ -230,6 +228,42 @@ describe('Matrix corpus reply correlation', () => {
     });
 
     expect(result).toEqual({ ok: false, code: 'unbound_reply' });
+  });
+
+  it.each([
+    ['expected confirmation but observed a plain reply', '', 'whatsapp_confirmation_buttons'],
+    [
+      'expected plain reply but observed confirmation buttons',
+      MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX,
+      'plain',
+    ],
+  ] as const)('correlates a digest-bound reply when %s', async (_label, suffix, rendering) => {
+    const assistantReply = 'What would you like me to save?';
+    const result = await collectCorrelatedReplies({
+      ...baseInput(
+        matrixWith([
+          {
+            ok: true,
+            nextBatch: 'cursor-2',
+            limited: false,
+            events: [reply('$reply-1', `${assistantReply}${suffix}`)],
+          },
+        ]),
+        evidenceWith([
+          {
+            status: 'completed',
+            replyCount: 1,
+            replyDigests: [digestMatrixReply(assistantReply, 0)],
+          },
+        ])
+      ),
+      expectedReplyRendering: rendering,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      replies: [{ body: assistantReply, digest: digestMatrixReply(assistantReply, 0) }],
+    });
   });
 
   it('rejects a confirmation mirror without a non-empty assistant body', async () => {
