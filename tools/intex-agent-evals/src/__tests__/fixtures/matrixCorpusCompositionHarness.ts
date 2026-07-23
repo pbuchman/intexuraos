@@ -106,6 +106,8 @@ export interface MatrixCorpusCompositionHarnessOptions {
 
 export interface MatrixCorpusCompositionMetrics {
   maxConcurrentTurns: number;
+  initialCursorCaptures: number;
+  readonly matrixSyncSince: (string | undefined)[];
   readonly matrixMessages: string[];
   readonly leaseRenewalKeys: string[];
   deepSeekAgentCalls: number;
@@ -145,6 +147,8 @@ export async function createPassingMatrixCorpusCompositionHarness(
   });
   const metrics: MatrixCorpusCompositionMetrics = {
     maxConcurrentTurns: 0,
+    initialCursorCaptures: 0,
+    matrixSyncSince: [],
     matrixMessages: [],
     leaseRenewalKeys: [],
     deepSeekAgentCalls: 0,
@@ -220,8 +224,10 @@ function createMatrixBoundary(state: SharedState): MatrixClient {
       return { ok: true, userId: '@private_user_sentinel:example.test' };
     },
     async syncTargetRoom(input) {
+      state.metrics.matrixSyncSince.push(input.since);
       cursor += 1;
       if (input.timeoutMs === 0) {
+        state.metrics.initialCursorCaptures += 1;
         if (state.hangInitialCursor) return await matrixTimeoutAfterAbort(input.signal);
         return { ok: true, nextBatch: `batch_${String(cursor)}`, limited: false, events: [] };
       }

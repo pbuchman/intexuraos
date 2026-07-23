@@ -104,6 +104,7 @@ interface LiveRunState {
   readonly startedAt: string;
   leaseFence: string | null;
   revision: number;
+  matrixCursor: string | null;
   turnsSent: number;
   turnsCorrelated: number;
   finalizedScenarioContextCount: number;
@@ -834,15 +835,18 @@ async function executeLiveTurn(input: {
     return { ok: false, kind: 'infrastructure_failure', code: 'turn_catalog_mismatch' };
   state.startedAt ??= input.now().toISOString();
 
-  const cursor = await runWithMatrixCorpusDeadline(
-    input.correlationTimeoutMs,
-    async (signal) =>
-      await captureMatrixCorpusCursor({
-        matrix: input.matrix,
-        context: input.state.prepared.account,
-        signal,
-      })
-  );
+  const cursor =
+    input.state.matrixCursor === null
+      ? await runWithMatrixCorpusDeadline(
+          input.correlationTimeoutMs,
+          async (signal) =>
+            await captureMatrixCorpusCursor({
+              matrix: input.matrix,
+              context: input.state.prepared.account,
+              signal,
+            })
+        )
+      : { ok: true as const, cursor: input.state.matrixCursor };
   if (!cursor.ok) return { ok: false, kind: 'infrastructure_failure', code: cursor.code };
 
   const before =
@@ -983,7 +987,8 @@ async function executeLiveTurn(input: {
       await collectCorrelatedReplies({
         matrix: input.matrix,
         context: input.state.prepared.account,
-        cursor: cursor.cursor,
+        cursor: observedProof.cursor,
+        initialEvents: observedProof.eventsAfterOutbound,
         matrixUserId: input.state.prepared.account.matrixUserId,
         expectedPuppetSender: input.state.prepared.expectedPuppetSender,
         runId: input.runId,
@@ -1037,6 +1042,7 @@ async function executeLiveTurn(input: {
     };
 
   input.state.turnsCorrelated += 1;
+  input.state.matrixCursor = correlated.cursor;
   state.whatsappIngress += 1;
   state.whatsappEgress += correlated.replies.length;
   state.matrixMirrors += correlated.replies.length;
@@ -1182,6 +1188,7 @@ function createState(
     startedAt: now().toISOString(),
     leaseFence: null,
     revision: 0,
+    matrixCursor: null,
     turnsSent: 0,
     turnsCorrelated: 0,
     finalizedScenarioContextCount: 0,
