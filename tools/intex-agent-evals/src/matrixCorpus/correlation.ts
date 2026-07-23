@@ -65,7 +65,11 @@ export type MatrixCorpusCorrelatedRepliesResult =
   | { readonly ok: false; readonly code: MatrixCorpusCorrelationFailureCode };
 
 export type MatrixCorpusOutboundProofResult =
-  | { readonly ok: true; readonly cursor: string }
+  | {
+      readonly ok: true;
+      readonly cursor: string;
+      readonly eventsAfterOutbound: readonly MatrixTimelineEvent[];
+    }
   | { readonly ok: false; readonly code: MatrixCorpusCorrelationFailureCode };
 
 export interface MatrixCorpusMatrixContext {
@@ -112,7 +116,7 @@ export async function proveMatrixCorpusOutboundEvent(input: {
     if (!sync.ok) return { ok: false, code: mapSyncFailure(sync.reason, input.signal) };
     if (sync.limited) return { ok: false, code: 'matrix_timeline_limited' };
     cursor = sync.nextBatch;
-    for (const event of sync.events) {
+    for (const [eventIndex, event] of sync.events.entries()) {
       const isExpectedId = event.eventId === input.matrixEventId;
       const isSameSelfAuthoredText =
         event.sender === input.matrixUserId && event.content?.body === input.messageText;
@@ -127,7 +131,11 @@ export async function proveMatrixCorpusOutboundEvent(input: {
         event.unsigned?.redacted_because !== undefined
       )
         return { ok: false, code: 'outbound_event_mismatch' };
-      return { ok: true, cursor };
+      return {
+        ok: true,
+        cursor,
+        eventsAfterOutbound: sync.events.slice(eventIndex + 1),
+      };
     }
   }
 }
@@ -137,6 +145,7 @@ export async function collectCorrelatedReplies(input: {
   evidence: MatrixCorpusReplyEvidencePort;
   context: MatrixCorpusMatrixContext;
   cursor: string;
+  initialEvents?: readonly MatrixTimelineEvent[];
   matrixUserId: string;
   expectedPuppetSender: string;
   runId: string;
@@ -151,20 +160,28 @@ export async function collectCorrelatedReplies(input: {
   const byEventId = new Map<string, CorrelatedMatrixReply>();
   const rawBodiesByEventId = new Map<string, string>();
   const redactedEventIds = new Set<string>();
+  let initialEvents = input.initialEvents;
 
   for (;;) {
     if (input.signal.aborted) return { ok: false, code: 'reply_timeout' };
-    const sync = await input.matrix.syncTargetRoom({
-      ...input.context,
-      since: cursor,
-      timeoutMs: 30_000,
-      signal: input.signal,
-    });
-    if (!sync.ok) return { ok: false, code: mapSyncFailure(sync.reason, input.signal) };
-    if (sync.limited) return { ok: false, code: 'matrix_timeline_limited' };
-    cursor = sync.nextBatch;
+    let events: readonly MatrixTimelineEvent[];
+    if (initialEvents === undefined) {
+      const sync = await input.matrix.syncTargetRoom({
+        ...input.context,
+        since: cursor,
+        timeoutMs: 30_000,
+        signal: input.signal,
+      });
+      if (!sync.ok) return { ok: false, code: mapSyncFailure(sync.reason, input.signal) };
+      if (sync.limited) return { ok: false, code: 'matrix_timeline_limited' };
+      cursor = sync.nextBatch;
+      events = sync.events;
+    } else {
+      events = initialEvents;
+      initialEvents = undefined;
+    }
 
-    for (const event of sync.events) {
+    for (const event of events) {
       if (event.type === 'm.room.redaction') {
         if (event.eventId === undefined || event.redacts === undefined) {
           return { ok: false, code: 'matrix_sync_invalid' };

@@ -43,7 +43,62 @@ describe('Matrix corpus reply correlation', () => {
         messageText,
         signal: signal(),
       })
-    ).resolves.toEqual({ ok: true, cursor: 'cursor-2' });
+    ).resolves.toEqual({ ok: true, cursor: 'cursor-2', eventsAfterOutbound: [] });
+  });
+
+  it('partitions a sync batch at the exact outbound and preserves only later reply events', async () => {
+    const messageText = 'exact outbound message';
+    const currentReply = reply('$reply-current', 'Current reply');
+    const matrix = matrixWith([
+      {
+        ok: true,
+        nextBatch: 'cursor-2',
+        limited: false,
+        events: [
+          reply('$reply-previous', 'Previous reply'),
+          reply('$sent-1', messageText, '@operator:home-dev'),
+          currentReply,
+        ],
+      },
+      { ok: true, nextBatch: 'cursor-3', limited: false, events: [] },
+    ]);
+
+    const proof = await proveMatrixCorpusOutboundEvent({
+      matrix,
+      context: CONTEXT,
+      cursor: 'cursor-1',
+      matrixUserId: '@operator:home-dev',
+      matrixEventId: '$sent-1',
+      messageText,
+      signal: signal(),
+    });
+    expect(proof).toEqual({
+      ok: true,
+      cursor: 'cursor-2',
+      eventsAfterOutbound: [currentReply],
+    });
+    if (!proof.ok) throw new Error('expected outbound proof');
+
+    await expect(
+      collectCorrelatedReplies({
+        ...baseInput(
+          matrix,
+          evidenceWith([
+            {
+              status: 'completed',
+              replyCount: 1,
+              replyDigests: [digestMatrixReply('Current reply')],
+            },
+          ])
+        ),
+        cursor: proof.cursor,
+        initialEvents: proof.eventsAfterOutbound,
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      cursor: 'cursor-2',
+      replies: [{ eventId: '$reply-current', body: 'Current reply' }],
+    });
   });
 
   it.each([

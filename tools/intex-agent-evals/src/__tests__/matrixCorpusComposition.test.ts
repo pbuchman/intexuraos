@@ -58,6 +58,11 @@ describe('production Matrix corpus composition', () => {
     expect(result.run.scenarios).toHaveLength(20);
     expect(result.run.scenarios.every((scenario) => scenario.status === 'passed')).toBe(true);
     expect(harness.metrics.maxConcurrentTurns).toBe(1);
+    expect(harness.metrics.initialCursorCaptures).toBe(1);
+    expect(harness.metrics.matrixSyncSince).toEqual([
+      undefined,
+      ...Array.from({ length: 118 }, (_, index) => `batch_${String(index + 1)}`),
+    ]);
     expect(harness.metrics.matrixMessages).toHaveLength(59);
     expect(
       harness.metrics.matrixMessages.filter((message) => message.startsWith('new session:'))
