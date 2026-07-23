@@ -172,6 +172,12 @@ preflight. Under a persistent “iterate until PASS” goal, exit `1` or `2` sta
 diagnosis/fix/review/PR/merge/deploy loop and then exactly one new invocation. The wrapper
 itself performs no pull, deploy, restart, or revision switch.
 
+For behavioral failures, the corpus runner records and judges the failed turn, skips only
+the remaining turns that depend on that scenario's now-divergent state, and continues
+with every later scenario through scenario 20. This produces one complete cross-scenario
+failure inventory per run instead of stopping at the first broken flow. A successful run
+still executes all 59 turns.
+
 ## Deliberately deferred hardening
 
 The runner is intentionally Home-Dev-specific, while the system under test is production

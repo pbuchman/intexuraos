@@ -995,6 +995,7 @@ describe('createIntexAgentRunner', () => {
       },
       message: 'yes, please',
       currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
     });
 
     expect(result).toEqual({
@@ -1014,6 +1015,7 @@ describe('createIntexAgentRunner', () => {
         },
         message: 'yes, please',
         currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
       },
     ]);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
@@ -1045,6 +1047,413 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_clarification',
       reply: 'Which one should I handle first?',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('uses the runtime time zone instead of forwarding a time-zone-only calendar clarification', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'INTEX-EVAL-002 dentist appointment INTEX-EVAL-002-F01',
+          start: '2026-08-18T14:30:00',
+          end: '2026-08-18T15:15:00',
+          timeZone: 'Europe/Warsaw',
+          location: 'Smile Clinic INTEX-EVAL-002-F02',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'What time zone should I use for the event?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['timeZone'],
+          candidateIntents: ['create_calendar_event'],
+          suggestedNextStep: 'Ask for the missing timezone detail.',
+          reason: 'Calendar event has every user-supplied detail.',
+          stylePreferenceAction: 'none',
+          languageOverride: 'en',
+          decisionEvidence: 'Create a dentist appointment on August 18 2026.',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'An earlier unrelated reference used UTC.' }),
+          event('assistant_message', { text: 'Noted.' }),
+        ],
+        message:
+          'Create a calendar event for INTEX-EVAL-002 dentist appointment INTEX-EVAL-002-F01 on August 18 2026 at 2:30 PM for 45 minutes at Smile Clinic INTEX-EVAL-002-F02.',
+        currentDateTime: '2026-07-16T10:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        start: '2026-08-18T14:30:00',
+        end: '2026-08-18T15:15:00',
+        timeZone: 'Europe/Warsaw',
+      },
+    });
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual([
+      'create_calendar_event',
+    ]);
+  });
+
+  it('preserves a time-zone clarification for an explicit zone in the current reply context', async () => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'Should I use US/Eastern or your account time zone?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['timeZone'],
+          candidateIntents: ['create_calendar_event'],
+          suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create that appointment at 2:30 PM for 45 minutes.',
+        replyContext: {
+          replyToWamid: 'wamid-explicit-zone',
+          source: 'inbound_user_message',
+          text: 'Dentist appointment on August 18 2026 in US/Eastern.',
+          truncated: false,
+        },
+        currentDateTime: '2026-07-16T10:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Should I use US/Eastern or your account time zone?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['timeZone'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    'America/New_York',
+    'US/Eastern',
+    'HST',
+    'hst',
+    'EST5EDT',
+    'est5edt',
+    'W-SU',
+    'Hawaii time',
+    'hawaii time',
+    'New York time',
+    'new york time',
+    'New York Time',
+    'Eastern Standard Time',
+    'Pacific Daylight Time',
+    'Hawaii Standard Time',
+    'New York local time',
+    'Central European Summer Time',
+    'British Summer Time',
+    'India Standard Time',
+    'Indian Standard Time',
+    'Japan Standard Time',
+    'China Standard Time',
+    'Korea Standard Time',
+    'New Zealand Standard Time',
+  ])(
+    'preserves a time-zone clarification when the user explicitly supplies %s',
+    async (explicitTimeZone) => {
+      const client = new FakeToolCallingClient([]);
+      const intentClassifier: IntexAgentIntentClassifier = {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: `Should I use ${explicitTimeZone} or your account time zone?`,
+            blockerReason: 'missing_required_details',
+            missingFields: ['timeZone'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+          };
+        },
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier,
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: explicitTimeZone.toLocaleLowerCase('en-US').endsWith(' time')
+            ? `Create a dentist appointment on August 18 2026 at 2:30 PM ${explicitTimeZone}.`
+            : `Create a dentist appointment on August 18 2026 at 2:30 PM in ${explicitTimeZone}.`,
+          currentDateTime: '2026-07-16T10:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: `Should I use ${explicitTimeZone} or your account time zone?`,
+        blockerReason: 'missing_required_details',
+        missingFields: ['timeZone'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it.each([
+    '2026-08-18T14:30:00-04:00',
+    '2026-08-18T14:30:00Z',
+    '14:30-04:00',
+    '14:30Z',
+  ])(
+    'preserves a time-zone clarification for an explicitly zoned ISO instant: %s',
+    async (explicitDateTime) => {
+      const client = new FakeToolCallingClient([]);
+      const intentClassifier: IntexAgentIntentClassifier = {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Should I use that explicit offset or your account time zone?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['timeZone'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+          };
+        },
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier,
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: `Create a dentist appointment on August 18 2026 starting at ${explicitDateTime}.`,
+          currentDateTime: '2026-07-16T10:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: 'Should I use that explicit offset or your account time zone?',
+        blockerReason: 'missing_required_details',
+        missingFields: ['timeZone'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it.each(['2 PM hst', '2pm hst'])(
+    'preserves a time-zone clarification for a lowercase alias after a short clock: %s',
+    async (explicitClockAndTimeZone) => {
+      const client = new FakeToolCallingClient([]);
+      const intentClassifier: IntexAgentIntentClassifier = {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Should I use hst or your account time zone?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['timeZone'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+          };
+        },
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier,
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: `Create a dentist appointment on August 18 2026 at ${explicitClockAndTimeZone}.`,
+          currentDateTime: '2026-07-16T10:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: 'Should I use hst or your account time zone?',
+        blockerReason: 'missing_required_details',
+        missingFields: ['timeZone'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it.each([
+    'docs/CET/archive',
+    'foo/UTC/bar',
+    'using local time',
+    'in no time',
+    'in real time',
+    'Local time',
+    'No time',
+    'Real time',
+    'What time',
+  ])(
+    'does not treat invalid timezone-like text as an explicit time zone: %s',
+    async (invalidTimeZoneText) => {
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'create_calendar_event',
+          args: {
+            summary: 'Dentist appointment',
+            start: '2026-08-18T14:30:00',
+            end: '2026-08-18T15:15:00',
+            timeZone: 'Europe/Warsaw',
+            location: invalidTimeZoneText,
+          },
+        },
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Ready for confirmation.',
+              toolName: 'create_calendar_event',
+            })
+          ),
+        ]
+      );
+      const intentClassifier: IntexAgentIntentClassifier = {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What time zone should I use for the event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['timeZone'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Ask for the missing timezone detail.',
+          };
+        },
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier,
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: `Create a dentist appointment on August 18 2026 at 2:30 PM for 45 minutes at ${invalidTimeZoneText}.`,
+          currentDateTime: '2026-07-16T10:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_confirmation',
+        toolName: 'create_calendar_event',
+        toolArgs: { timeZone: 'Europe/Warsaw' },
+      });
+    }
+  );
+
+  it.each([
+    {
+      source: 'the active user message',
+      payload: {
+        text: 'Create a dentist appointment on August 18 2026 in US/Eastern.',
+      },
+    },
+    {
+      source: 'an inbound reply context in the active user message',
+      payload: {
+        text: 'Schedule the quoted appointment.',
+        replyContext: {
+          replyToWamid: 'wamid-active-zone',
+          source: 'inbound_user_message',
+          text: 'Dentist appointment on August 18 2026 in US/Eastern.',
+          truncated: false,
+        },
+      },
+    },
+  ])('preserves an explicit time zone from $source', async ({ payload }) => {
+    const client = new FakeToolCallingClient([]);
+    const intentClassifier: IntexAgentIntentClassifier = {
+      async classify() {
+        return {
+          kind: 'needs_clarification',
+          question: 'Should I use US/Eastern or your account time zone?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['timeZone'],
+          candidateIntents: ['create_calendar_event'],
+          suggestedNextStep: 'Clarify the explicitly supplied time zone.',
+        };
+      },
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', payload),
+          event('clarification_requested', {
+            message: 'What time should I use?',
+            missingFields: ['time'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'What time should I use?' }),
+        ],
+        message: 'At 2:30 PM for 45 minutes.',
+        currentDateTime: '2026-07-16T10:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Should I use US/Eastern or your account time zone?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['timeZone'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Clarify the explicitly supplied time zone.',
     });
     expect(client.calls).toEqual([]);
   });
