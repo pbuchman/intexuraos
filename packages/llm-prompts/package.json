@@ -18,6 +18,7 @@
     "@intexuraos/common-core": "workspace:*",
     "@intexuraos/llm-utils": "workspace:*",
     "pino": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

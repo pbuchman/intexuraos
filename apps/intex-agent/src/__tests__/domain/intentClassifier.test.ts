@@ -971,6 +971,58 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls[1]?.options.promptType).toBe(INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE);
   });
 
+  it('requests strict structured output and normalizes provider nulls before validation', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult(
+          JSON.stringify({
+            outcome: 'tool',
+            confidence: 0.95,
+            allowedToolNames: ['create_calendar_event'],
+            question: null,
+            clarification: null,
+            reason: 'Explicit calendar creation request.',
+            blockerReason: null,
+            missingFields: null,
+            candidateIntents: null,
+            suggestedNextStep: null,
+            stylePreferenceAction: 'none',
+            languageOverride: null,
+            decisionEvidence: 'Create a calendar event.',
+          })
+        )
+      ),
+    ]);
+
+    await expect(
+      createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() }).classify({
+        message: 'Create a calendar event tomorrow at 10.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_calendar_event'],
+      reason: 'Explicit calendar creation request.',
+      decisionEvidence: 'Create a calendar event.',
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.options['responseFormat']).toMatchObject({
+      type: 'json_schema',
+      json_schema: {
+        name: 'intex_agent_intent_classifier',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: expect.any(Object),
+          required: expect.any(Array),
+          additionalProperties: false,
+        },
+      },
+    });
+  });
+
   it('warns and fails closed to clarification when the classifier response cannot be repaired', async () => {
     const malformedClient = new FakeStructuredClient([
       ok(generateResult('not json')),

@@ -16,6 +16,7 @@ export type {
   ConversationAssistantDateRange,
   GenerateChatReasoningEffort,
   GenerateChatReasoningOptions,
+  LlmResponseFormat,
   GenerateChatOptions,
   GenerateChatResult,
   GenerateChatStreamEvent,

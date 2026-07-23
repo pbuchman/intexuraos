@@ -1834,6 +1834,9 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 3.25.76
+      zod-to-json-schema:
+        specifier: ^3.25.1
+        version: 3.25.1(zod@3.25.76)
 
   packages/llm-utils:
     dependencies:

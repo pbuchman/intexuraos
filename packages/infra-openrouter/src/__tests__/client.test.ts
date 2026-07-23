@@ -958,6 +958,59 @@ describe('createOpenRouterClient', () => {
       expect(capturedBody).toHaveProperty('provider', { require_parameters: true });
     });
 
+    it('requires a provider that supports strict JSON Schema response formats', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+      const responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'classification',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { outcome: { type: 'string' } },
+            required: ['outcome'],
+            additionalProperties: false,
+          },
+        },
+      } as const;
+
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, {
+          id: 'test-id',
+          model: TEST_MODEL,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: { content: '{"outcome":"tool"}', role: 'assistant' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 20, total_tokens: 70 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      await client.generate('Return structured JSON', {
+        responseFormat,
+        promptType: 'test-prompt',
+      });
+
+      expect(capturedBody).toHaveProperty('response_format', responseFormat);
+      expect(capturedBody).toHaveProperty('provider', { require_parameters: true });
+    });
+
     it('does NOT include response_format in request body when no options are provided', async () => {
       let capturedBody: Record<string, unknown> | undefined;
 
@@ -1282,6 +1335,19 @@ describe('createOpenRouterClient', () => {
         },
       });
       const events: unknown[] = [];
+      const responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'streamed_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+            required: ['message'],
+            additionalProperties: false,
+          },
+        },
+      } as const;
 
       const result = await client.generateChatStream(
         [{ role: 'user', content: 'hello' }],
@@ -1289,7 +1355,7 @@ describe('createOpenRouterClient', () => {
           promptType: 'whatsapp-conversation-assistant',
           reasoning: { enabled: true },
           sessionId: 'session-123',
-          responseFormat: { type: 'json_object' },
+          responseFormat,
         },
         (event) => {
           events.push(event);
@@ -1299,7 +1365,7 @@ describe('createOpenRouterClient', () => {
       expect(result.ok).toBe(true);
       expect(capturedBody).toMatchObject({
         session_id: 'session-123',
-        response_format: { type: 'json_object' },
+        response_format: responseFormat,
         provider: {
           require_parameters: true,
           order: ['gmicloud', 'minimax', 'morph'],
@@ -1323,6 +1389,54 @@ describe('createOpenRouterClient', () => {
         expect(result.value.usage.totalTokens).toBe(5);
         expect(result.value.usage.providerReportedUsd).toBe(0.001);
       }
+    });
+
+    it('requires strict-schema support for streaming without configured provider routing', async () => {
+      let capturedBody: Record<string, unknown> | undefined;
+      nock(API_BASE_URL)
+        .post('/chat/completions', (body) => {
+          capturedBody = body as Record<string, unknown>;
+          return true;
+        })
+        .reply(200, openRouterSse(['[DONE]']), {
+          'Content-Type': 'text/event-stream',
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: 'deepseek/deepseek-v4-flash',
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+      const responseFormat = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'streamed_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+            required: ['message'],
+            additionalProperties: false,
+          },
+        },
+      } as const;
+
+      const result = await client.generateChatStream(
+        [{ role: 'user', content: 'hello' }],
+        {
+          promptType: 'test-strict-stream',
+          responseFormat,
+        },
+        vi.fn()
+      );
+
+      expect(result.ok).toBe(true);
+      expect(capturedBody).toMatchObject({
+        response_format: responseFormat,
+        provider: { require_parameters: true },
+      });
     });
 
     it('ignores streaming comments and buffers incomplete SSE frames', async () => {

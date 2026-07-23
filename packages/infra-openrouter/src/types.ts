@@ -6,7 +6,11 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import type { MatrixCorpusLlmCallContextV1, OwnerType } from '@intexuraos/llm-contract';
+import type {
+  LlmResponseFormat,
+  MatrixCorpusLlmCallContextV1,
+  OwnerType,
+} from '@intexuraos/llm-contract';
 
 export type {
   LLMError as OpenRouterError,
@@ -27,7 +31,7 @@ export type {
  */
 export interface GenerateOptions {
   /** Request a specific response format from the model (e.g., JSON mode). */
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: LlmResponseFormat;
   /** Semantic identifier for what the prompt was used for (e.g., 'linear-issue-title', 'code-worker-validation') */
   promptType: string;
   /**

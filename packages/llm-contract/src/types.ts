@@ -227,11 +227,22 @@ export interface GenerateChatReasoningOptions {
   exclude?: boolean;
 }
 
+export type LlmResponseFormat =
+  | { type: 'json_object' | 'text' }
+  | {
+      type: 'json_schema';
+      json_schema: {
+        name: string;
+        strict: boolean;
+        schema: Record<string, unknown>;
+      };
+    };
+
 export interface GenerateChatOptions {
   promptType: string;
   sessionId?: string;
   temperature?: number;
-  responseFormat?: { type: 'json_object' | 'text' };
+  responseFormat?: LlmResponseFormat;
   reasoning?: GenerateChatReasoningOptions;
   correlation?: LLMCorrelationOptions;
 }
