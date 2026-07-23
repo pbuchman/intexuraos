@@ -873,10 +873,10 @@ describe('test conversation sanitizer', () => {
     });
 
     expect(sanitizedReply[0]?.message).toBe(
-      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted]'
+      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted] [date-presentation: raw-record]'
     );
     expect(sanitizedEvent['intex_session_1']?.[0]?.payload['textPreview']).toBe(
-      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted]'
+      'Add this calendar event? Title: [redacted] Start: [redacted] End: [redacted] Location: [redacted] [date-presentation: raw-record]'
     );
     expect(JSON.stringify([sanitizedReply, sanitizedEvent])).not.toContain('INTEX-EVAL');
   });
@@ -944,7 +944,7 @@ describe('test conversation sanitizer', () => {
     ]);
 
     expect(sanitized[0]?.message).toBe(
-      'Here are the preferences. User Preferences: [redacted] [redacted-preference-item] [redacted-preference-item] Done.'
+      'Here are the preferences. User Preferences: [redacted] [redacted-preference-item] [redacted-preference-item] [redacted-preference-item]'
     );
     expect(sanitized[1]?.message).toBe(
       'User Preferences: [redacted] [redacted-preference-item] Normal line.'
@@ -952,6 +952,98 @@ describe('test conversation sanitizer', () => {
     expect(JSON.stringify(sanitized)).not.toContain('tajne haslo');
     expect(JSON.stringify(sanitized)).not.toContain('private tone');
     expect(JSON.stringify(sanitized)).not.toContain('hidden value');
+  });
+
+  it('covers sensitive continuations and every preference-block exit without exposing content', () => {
+    const sanitized = sanitizeAssistantReplies([
+      capturedReply(
+        [
+          'Title: private-title',
+          'private continuation',
+          'Content: private-content',
+        ].join('\n')
+      ),
+      capturedReply(
+        [
+          'User Preferences v5',
+          '1. private numbered item',
+          '',
+          'Ordinary visible line.',
+        ].join('\n')
+      ),
+      capturedReply(
+        [
+          'User Preferences v6',
+          'Ordinary-looking private continuation without a list marker',
+        ].join('\n')
+      ),
+    ]);
+
+    expect(sanitized.map((reply) => reply.message)).toEqual([
+      'Title: [redacted] Content: [redacted]',
+      'User Preferences: [redacted] [redacted-preference-item] Ordinary visible line.',
+      'User Preferences: [redacted] [redacted-preference-item]',
+    ]);
+    expect(JSON.stringify(sanitized)).not.toMatch(
+      /private-title|private continuation|private-content|private numbered item/u
+    );
+  });
+
+  it('keeps event-preview preference continuations redacted until a blank line', () => {
+    const sanitized = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-preferences',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'user_message',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: {
+            text: [
+              'User Preferences v7',
+              'private continuation without a list marker',
+              '',
+              'Ordinary visible line.',
+            ].join('\n'),
+          },
+        },
+      ],
+    });
+
+    expect(sanitized['intex_session_1']?.[0]?.payload['textPreview']).toBe(
+      'User Preferences: [redacted] [redacted-preference-item] Ordinary visible line.'
+    );
+    expect(JSON.stringify(sanitized)).not.toContain(
+      'private continuation without a list marker'
+    );
+  });
+
+  it('keeps event-preview sensitive-field continuations redacted', () => {
+    const sanitized = sanitizeEventsBySessionId({
+      intex_session_1: [
+        {
+          id: 'event-sensitive-details',
+          sessionId: 'intex_session_1',
+          userId: 'test-intex-agent-run',
+          type: 'user_message',
+          createdAt: '2026-07-01T10:00:00.000Z',
+          payload: {
+            text: [
+              'Title: private title',
+              'private continuation',
+              'Content: private content',
+            ].join('\n'),
+          },
+        },
+      ],
+    });
+
+    expect(sanitized['intex_session_1']?.[0]?.payload['textPreview']).toBe(
+      'Title: [redacted] Content: [redacted]'
+    );
+    expect(JSON.stringify(sanitized)).not.toMatch(
+      /private title|private continuation|private content/u
+    );
   });
 
   it('uses the closed result summary for completed timeline events', () => {

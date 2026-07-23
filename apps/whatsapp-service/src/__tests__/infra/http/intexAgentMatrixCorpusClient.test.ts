@@ -252,6 +252,13 @@ describe('IntexAgentMatrixCorpusClient', () => {
             totalTokens: 0,
             costNanoUsd: 0,
           },
+          sessionProof: {
+            status: 'waiting_for_user',
+            startReason: 'no_active_session',
+            userMessageCount: 1,
+            sessionStartedCount: 0,
+            supersededSessionCount: 0,
+          },
           turnTerminals: [
             {
               status: 'completed',
@@ -530,6 +537,13 @@ function evidence(turnTerminals: readonly unknown[]) {
     toolEvidence: [],
     agentUsage: [],
     agentUsageTotals: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costNanoUsd: 0 },
+    sessionProof: {
+      status: 'waiting_for_user',
+      startReason: 'no_active_session',
+      userMessageCount: 1,
+      sessionStartedCount: 0,
+      supersededSessionCount: 0,
+    },
     turnTerminals,
     strictMockProof: {
       version: 1,

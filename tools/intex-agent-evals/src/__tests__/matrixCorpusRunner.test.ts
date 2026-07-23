@@ -14,6 +14,7 @@ import {
   digestMatrixReply,
   MATRIX_CORPUS_MAX_REPLIES_PER_TURN,
 } from '../matrixCorpus/correlation.js';
+import type { IntexEvalScenario } from '../scenarioSchema.js';
 
 const scenariosDirectory = fileURLToPath(new URL('../../scenarios/', import.meta.url));
 
@@ -930,22 +931,13 @@ function passingPorts(trace: string[]): MatrixCorpusRunPorts {
 }
 
 function observation(
-  scenario: {
-    id: string;
-    title: string;
-    turns: readonly unknown[];
-    expected: {
-      turns: readonly {
-        replies: readonly { semanticCriteria: readonly string[] }[];
-        requiredToolCalls: readonly { toolName: string; count: number }[];
-      }[];
-    };
-  },
+  scenario: Pick<IntexEvalScenario, 'id' | 'title' | 'turns' | 'expected'>,
   turnIndex: number
 ): MatrixCorpusTurnObservation {
   const turn = scenario.turns[turnIndex] as { kind?: string } | undefined;
-  const replies = scenario.expected.turns[turnIndex]?.replies ?? [];
-  const requiredTools = scenario.expected.turns[turnIndex]?.requiredToolCalls ?? [];
+  const expectedTurn = scenario.expected.turns[turnIndex];
+  const replies = expectedTurn?.replies ?? [];
+  const requiredTools = expectedTurn?.requiredToolCalls ?? [];
   const expectedTools = requiredTools.flatMap((requirement) =>
     Array.from({ length: requirement.count }, (_, index) => ({
       toolName: requirement.toolName,
@@ -956,10 +948,19 @@ function observation(
   const confirmationTurn = turn as
     | { kind?: string; previousTurnIndex?: number; decision?: 'accept' | 'reject' }
     | undefined;
+  const zeroAgentCalls =
+    confirmationTurn?.kind === 'confirmation_button' ||
+    (expectedTurn?.sessionAfterTurn.startReason === 'user_requested_new_session' &&
+      expectedTurn.timeline.forbiddenEventTypes.includes('user_message'));
   return {
     sessionId: `session_${scenario.id}`,
     sessionEvidence: {
-      kind: turnIndex === 0 ? 'created' : 'continued',
+      kind:
+        expectedTurn?.transition.action === 'started'
+          ? 'created'
+          : expectedTurn?.transition.action === 'superseded_previous'
+            ? 'superseded'
+            : 'continued',
       scenarioLabel: scenario.title,
     },
     agentModel: 'or:deepseek/deepseek-v4-flash',
@@ -987,11 +988,11 @@ function observation(
           }
         : { kind: 'not_applicable' },
     agentUsage: {
-      logicalCalls: turn?.kind === 'confirmation_button' ? 0 : 1,
-      inputTokens: turn?.kind === 'confirmation_button' ? 0 : 1,
-      outputTokens: turn?.kind === 'confirmation_button' ? 0 : 1,
-      totalTokens: turn?.kind === 'confirmation_button' ? 0 : 2,
-      costNanoUsd: turn?.kind === 'confirmation_button' ? 0 : 1,
+      logicalCalls: zeroAgentCalls ? 0 : 1,
+      inputTokens: zeroAgentCalls ? 0 : 1,
+      outputTokens: zeroAgentCalls ? 0 : 1,
+      totalTokens: zeroAgentCalls ? 0 : 2,
+      costNanoUsd: zeroAgentCalls ? 0 : 1,
       providerCostReconciled: true,
     },
   };

@@ -11,6 +11,7 @@ import type {
   MatrixCorpusSessionIdentity,
   MatrixCorpusSessionRepository,
 } from '../ports/sessionRepository.js';
+import { detectSessionCommand } from '../messages/sessionCommands.js';
 import type {
   IntexAgentMatrixCorpusProfileV1,
   IntexAgentSessionEvent,
@@ -67,6 +68,25 @@ export interface CreateMatrixCorpusToolCallStartedRecorderInput {
   identity: MatrixCorpusSessionIdentity;
   ingestReceiptId: string;
   createdAt: string;
+}
+
+export function isMatrixCorpusIdleNewSessionStart(claims: IngestClaims): boolean {
+  const { context, ordinaryIngest } = claims.payload;
+  if (
+    context.phase !== 'start' ||
+    context.turnIndex !== 0 ||
+    !context.startNewSession
+  )
+    return false;
+  const command = detectSessionCommand(ordinaryIngest.text);
+  return command.kind === 'start_new' && command.requestText === null;
+}
+
+export function isMatrixCorpusExplicitSessionRestart(claims: IngestClaims): boolean {
+  const { context, ordinaryIngest } = claims.payload;
+  if (context.phase !== 'turn' || context.startNewSession) return false;
+  const command = detectSessionCommand(ordinaryIngest.text);
+  return command.kind === 'start_new' && command.requestText !== null;
 }
 
 export function createMatrixCorpusToolCallStartedRecorder(
@@ -186,6 +206,11 @@ export function createMatrixCorpusMessageHandler(
         ...scenarioIdentity,
         sessionId: input.stableKeys.sessionId,
       };
+      const idleNewSessionStart = isMatrixCorpusIdleNewSessionStart(claims);
+      const explicitSessionRestart = isMatrixCorpusExplicitSessionRestart(claims);
+      const startReason = idleNewSessionStart || explicitSessionRestart
+        ? ('user_requested_new_session' as const)
+        : ('no_active_session' as const);
 
       let sessionDisposition: 'applied' | 'already_applied';
       if (context.phase === 'start') {
@@ -198,7 +223,7 @@ export function createMatrixCorpusMessageHandler(
             status: 'active',
             startedAt: ordinaryIngest.timestamp,
             lastUserMessageAt: ordinaryIngest.timestamp,
-            startReason: 'no_active_session',
+            startReason,
             matrixCorpusProfile: profile,
             lastEventSequence: 0,
           },
@@ -212,6 +237,78 @@ export function createMatrixCorpusMessageHandler(
         if (stableJson(exact.session.matrixCorpusProfile) !== stableJson(profile))
           return failure('SESSION_PROFILE_MISMATCH');
         sessionDisposition = 'already_applied';
+      }
+
+      let sessionClosedDisposition: 'applied' | 'already_applied' = 'already_applied';
+      if (explicitSessionRestart) {
+        const sessionClosed = await deps.sessionRepository.appendMatrixCorpusEvent({
+          identity,
+          event: {
+            id: deterministicSessionClosedEventId(input.stableKeys.eventId),
+            sessionId: input.stableKeys.sessionId,
+            userId: ordinaryIngest.userId,
+            type: 'session_closed',
+            payload: {
+              reason: 'superseded_by_user',
+              status: 'superseded',
+            },
+            createdAt: ordinaryIngest.timestamp,
+          },
+          now: ordinaryIngest.timestamp,
+        });
+        if (!sessionClosed.ok) return failure('EVENT_REJECTED');
+        sessionClosedDisposition = sessionClosed.disposition;
+      }
+
+      let sessionStartedDisposition: 'applied' | 'already_applied' = 'already_applied';
+      let sessionStartedSequence = 0;
+      if (context.phase === 'start' || explicitSessionRestart) {
+        const sessionStarted = await deps.sessionRepository.appendMatrixCorpusEvent({
+          identity,
+          event: {
+            id: idleNewSessionStart
+              ? input.stableKeys.eventId
+              : explicitSessionRestart
+                ? deterministicRestartedEventId(input.stableKeys.eventId)
+                : deterministicSessionStartedEventId(input.stableKeys.eventId),
+            sessionId: input.stableKeys.sessionId,
+            userId: ordinaryIngest.userId,
+            type: 'session_started',
+            payload: {
+              reason: startReason,
+              explicit: idleNewSessionStart || explicitSessionRestart,
+            },
+            createdAt: ordinaryIngest.timestamp,
+          },
+          ...(explicitSessionRestart
+            ? {
+                sessionUpdate: {
+                  status: 'active' as const,
+                  startReason: 'user_requested_new_session' as const,
+                  lastUserMessageAt: ordinaryIngest.timestamp,
+                  activeTool: null,
+                },
+              }
+            : {}),
+          now: ordinaryIngest.timestamp,
+        });
+        if (!sessionStarted.ok) return failure('EVENT_REJECTED');
+        sessionStartedDisposition = sessionStarted.disposition;
+        sessionStartedSequence = sessionStarted.sequence;
+      }
+
+      if (idleNewSessionStart) {
+        return {
+          ok: true,
+          disposition:
+            scenarioDisposition === 'already_applied' &&
+            sessionDisposition === 'already_applied' &&
+            sessionStartedDisposition === 'already_applied'
+              ? 'already_applied'
+              : 'applied',
+          sessionId: input.stableKeys.sessionId,
+          eventSequence: sessionStartedSequence,
+        };
       }
 
       if (context.phase === 'confirmation') {
@@ -277,6 +374,8 @@ export function createMatrixCorpusMessageHandler(
         disposition:
           scenarioDisposition === 'already_applied' &&
           sessionDisposition === 'already_applied' &&
+          sessionClosedDisposition === 'already_applied' &&
+          sessionStartedDisposition === 'already_applied' &&
           appended.disposition === 'already_applied'
             ? 'already_applied'
             : 'applied',
@@ -285,6 +384,27 @@ export function createMatrixCorpusMessageHandler(
       };
     },
   };
+}
+
+function deterministicSessionClosedEventId(eventId: string): string {
+  return `imc_session_closed_${createHash('sha256')
+    .update(`matrix-corpus-session-closed-v1:${eventId}`, 'utf8')
+    .digest('hex')
+    .slice(0, 32)}`;
+}
+
+function deterministicRestartedEventId(eventId: string): string {
+  return `imc_session_restarted_${createHash('sha256')
+    .update(`matrix-corpus-session-restarted-v1:${eventId}`, 'utf8')
+    .digest('hex')
+    .slice(0, 32)}`;
+}
+
+function deterministicSessionStartedEventId(eventId: string): string {
+  return `imc_session_started_${createHash('sha256')
+    .update(`matrix-corpus-session-started-v1:${eventId}`, 'utf8')
+    .digest('hex')
+    .slice(0, 32)}`;
 }
 
 function hasValidPayloadDigest(claims: IngestClaims): boolean {

@@ -313,12 +313,23 @@ describe('Matrix corpus message handler', () => {
 
   it('creates the exact isolated session and first user event from a verified start ingest', async () => {
     const { contextService, sessionRepository, confirmationRepository, handler } = fixture();
+    sessionRepository.appendMatrixCorpusEvent
+      .mockResolvedValueOnce({
+        ok: true,
+        disposition: 'applied',
+        sequence: 1,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        disposition: 'applied',
+        sequence: 2,
+      });
 
     await expect(handler.prepareVerifiedIngest({ claims: claims(), stableKeys })).resolves.toEqual({
       ok: true,
       disposition: 'applied',
       sessionId: stableKeys.sessionId,
-      eventSequence: 1,
+      eventSequence: 2,
     });
     expect(contextService.registerScenario).toHaveBeenCalledWith({
       runId: 'run_1',
@@ -343,7 +354,19 @@ describe('Matrix corpus message handler', () => {
     });
     expect(sessionRepository.getMatrixCorpusSessionExact).not.toHaveBeenCalled();
     expect(confirmationRepository.resolveExact).not.toHaveBeenCalled();
-    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenCalledWith({
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenNthCalledWith(1, {
+      identity: expect.objectContaining({ sessionId: stableKeys.sessionId }),
+      event: expect.objectContaining({
+        id: expect.stringMatching(/^imc_session_started_[0-9a-f]{32}$/u),
+        type: 'session_started',
+        payload: {
+          reason: 'no_active_session',
+          explicit: false,
+        },
+      }),
+      now: operationTime,
+    });
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenNthCalledWith(2, {
       identity: expect.objectContaining({ sessionId: stableKeys.sessionId }),
       event: expect.objectContaining({
         id: stableKeys.eventId,
@@ -358,6 +381,163 @@ describe('Matrix corpus message handler', () => {
     });
     expect(sessionRepository.updateMatrixCorpusSessionExact).not.toHaveBeenCalled();
     expect(sessionRepository.listMatrixCorpusEventsExact).not.toHaveBeenCalled();
+  });
+
+  it('starts an idle explicit new session without recording the command as a user message', async () => {
+    const { sessionRepository, handler } = fixture();
+    const idlePayload = payload();
+    const idleClaims = claims({
+      ...idlePayload,
+      ordinaryIngest: {
+        ...idlePayload.ordinaryIngest,
+        text: 'new session',
+      },
+    });
+
+    await expect(
+      handler.prepareVerifiedIngest({ claims: idleClaims, stableKeys })
+    ).resolves.toEqual({
+      ok: true,
+      disposition: 'applied',
+      sessionId: stableKeys.sessionId,
+      eventSequence: 1,
+    });
+    expect(sessionRepository.createMatrixCorpusSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        session: expect.objectContaining({
+          startReason: 'user_requested_new_session',
+        }),
+      })
+    );
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenCalledOnce();
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenCalledWith({
+      identity: expect.objectContaining({ sessionId: stableKeys.sessionId }),
+      event: expect.objectContaining({
+        id: stableKeys.eventId,
+        type: 'session_started',
+        payload: {
+          reason: 'user_requested_new_session',
+          explicit: true,
+        },
+      }),
+      now: operationTime,
+    });
+  });
+
+  it('returns already applied when every idle new-session mutation is an exact replay', async () => {
+    const { contextService, sessionRepository, handler } = fixture();
+    contextService.registerScenario.mockResolvedValueOnce({
+      ok: true,
+      disposition: 'already_applied',
+      snapshot: {
+        baselinePromptPreferencesDigest: 'b'.repeat(64),
+        overlayVersion: 0,
+        overlayDigest: 'c'.repeat(64),
+        expiresAt: '2026-07-21T10:00:00.000Z',
+      },
+    });
+    sessionRepository.createMatrixCorpusSession.mockResolvedValueOnce({
+      ok: true,
+      disposition: 'already_applied',
+      session: existingSession({ startReason: 'user_requested_new_session' }),
+    });
+    sessionRepository.appendMatrixCorpusEvent.mockResolvedValueOnce({
+      ok: true,
+      disposition: 'already_applied',
+      sequence: 1,
+    });
+    const idlePayload = payload();
+    const idleClaims = claims({
+      ...idlePayload,
+      ordinaryIngest: {
+        ...idlePayload.ordinaryIngest,
+        text: 'new session',
+      },
+    });
+
+    await expect(
+      handler.prepareVerifiedIngest({ claims: idleClaims, stableKeys })
+    ).resolves.toEqual({
+      ok: true,
+      disposition: 'already_applied',
+      sessionId: stableKeys.sessionId,
+      eventSequence: 1,
+    });
+  });
+
+  it('records a logical supersession before processing an explicit prefixed restart request', async () => {
+    const { sessionRepository, handler } = fixture(
+      existingSession({ status: 'waiting_for_user', lastEventSequence: 4 })
+    );
+    sessionRepository.appendMatrixCorpusEvent
+      .mockResolvedValueOnce({ ok: true, disposition: 'applied', sequence: 5 })
+      .mockResolvedValueOnce({ ok: true, disposition: 'applied', sequence: 6 })
+      .mockResolvedValueOnce({ ok: true, disposition: 'applied', sequence: 7 });
+    const base = payload({
+      phase: 'turn',
+      turnIndex: 1,
+      startNewSession: false,
+      expectedSessionId: stableKeys.sessionId,
+    });
+    const restartPayload: MatrixCorpusAttestedIngestPayloadV1 = {
+      ...base,
+      ordinaryIngest: {
+        ...base.ordinaryIngest,
+        text: 'new session: remember the backup code',
+      },
+    };
+
+    await expect(
+      handler.prepareVerifiedIngest({ claims: claims(restartPayload), stableKeys })
+    ).resolves.toEqual({
+      ok: true,
+      disposition: 'applied',
+      sessionId: stableKeys.sessionId,
+      eventSequence: 7,
+    });
+
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenCalledTimes(3);
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        event: expect.objectContaining({
+          type: 'session_closed',
+          payload: {
+            reason: 'superseded_by_user',
+            status: 'superseded',
+          },
+        }),
+      })
+    );
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        event: expect.objectContaining({
+          type: 'session_started',
+          payload: {
+            reason: 'user_requested_new_session',
+            explicit: true,
+          },
+        }),
+        sessionUpdate: expect.objectContaining({
+          status: 'active',
+          startReason: 'user_requested_new_session',
+          activeTool: null,
+        }),
+      })
+    );
+    expect(sessionRepository.appendMatrixCorpusEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        event: expect.objectContaining({
+          type: 'user_message',
+          payload: expect.objectContaining({
+            text: 'new session: remember the backup code',
+            turnIndex: 1,
+          }),
+        }),
+      })
+    );
   });
 
   it('continues only the exact expected test session and reuses the committed event sequence', async () => {
@@ -695,6 +875,52 @@ describe('Matrix corpus message handler', () => {
     });
   });
 
+  it('rejects either failed event write in an explicit logical restart', async () => {
+    const base = payload({
+      phase: 'turn',
+      turnIndex: 1,
+      startNewSession: false,
+      expectedSessionId: stableKeys.sessionId,
+    });
+    const restartPayload: MatrixCorpusAttestedIngestPayloadV1 = {
+      ...base,
+      ordinaryIngest: {
+        ...base.ordinaryIngest,
+        text: 'new session: remember the backup code',
+      },
+    };
+
+    const failedClosure = fixture(
+      existingSession({ status: 'waiting_for_user', lastEventSequence: 4 })
+    );
+    failedClosure.sessionRepository.appendMatrixCorpusEvent.mockResolvedValueOnce({
+      ok: false,
+      code: 'SEQUENCE_CONFLICT',
+    });
+    await expect(
+      failedClosure.handler.prepareVerifiedIngest({
+        claims: claims(restartPayload),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: false, code: 'EVENT_REJECTED' });
+    expect(failedClosure.sessionRepository.appendMatrixCorpusEvent).toHaveBeenCalledOnce();
+
+    const failedUserMessage = fixture(
+      existingSession({ status: 'waiting_for_user', lastEventSequence: 4 })
+    );
+    failedUserMessage.sessionRepository.appendMatrixCorpusEvent
+      .mockResolvedValueOnce({ ok: true, disposition: 'applied', sequence: 5 })
+      .mockResolvedValueOnce({ ok: true, disposition: 'applied', sequence: 6 })
+      .mockResolvedValueOnce({ ok: false, code: 'SEQUENCE_CONFLICT' });
+    await expect(
+      failedUserMessage.handler.prepareVerifiedIngest({
+        claims: claims(restartPayload),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: false, code: 'EVENT_REJECTED' });
+    expect(failedUserMessage.sessionRepository.appendMatrixCorpusEvent).toHaveBeenCalledTimes(3);
+  });
+
   it('records a rejected confirmation and preserves applied disposition from any changed stage', async () => {
     const rejected = fixture();
     const rejectedClaims = claims(
@@ -733,16 +959,22 @@ describe('Matrix corpus message handler', () => {
       disposition: 'already_applied',
       session: existingSession(),
     });
-    replay.sessionRepository.appendMatrixCorpusEvent.mockResolvedValueOnce({
-      ok: true,
-      disposition: 'already_applied',
-      sequence: 1,
-    });
+    replay.sessionRepository.appendMatrixCorpusEvent
+      .mockResolvedValueOnce({
+        ok: true,
+        disposition: 'already_applied',
+        sequence: 1,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        disposition: 'already_applied',
+        sequence: 2,
+      });
     await expect(replay.handler.prepareVerifiedIngest({ claims: claims(), stableKeys })).resolves.toEqual({
       ok: true,
       disposition: 'already_applied',
       sessionId: stableKeys.sessionId,
-      eventSequence: 1,
+      eventSequence: 2,
     });
   });
 

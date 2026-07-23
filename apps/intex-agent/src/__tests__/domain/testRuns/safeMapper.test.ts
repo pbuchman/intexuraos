@@ -182,6 +182,373 @@ describe('Test Runs safe public mapper', () => {
     expect(dto.runRevision).toBe(3);
   });
 
+  it('keeps a production scenario readable when it contains a private execution boundary', () => {
+    const source = events();
+    const user = source[0];
+    if (user === undefined) throw new Error('user fixture missing');
+    const withBoundary: IntexAgentSessionEvent[] = [
+      { ...user, eventSequence: 1 },
+      {
+        ...user,
+        id: 'private_boundary',
+        type: 'matrix_corpus_execution_boundary',
+        payload: { capability: 'private-capability', requestDigest: 'private-digest' },
+        eventSequence: 2,
+      },
+      ...source.slice(1).map((event, index) => ({ ...event, eventSequence: index + 3 })),
+    ];
+
+    const dto = mapPublicTestScenario({
+      run: run(withBoundary.length),
+      projection: projection(withBoundary.length),
+      events: withBoundary,
+    });
+
+    expect(dto.timeline.map((event) => event.type)).toEqual([
+      'user_message',
+      'tool_selected',
+      'assistant_message',
+      'deterministic_evaluation',
+      'minimax_evaluation',
+    ]);
+    expect(JSON.stringify(dto)).not.toContain('private-capability');
+    expect(JSON.stringify(dto)).not.toContain('private-digest');
+  });
+
+  it('maps an idle new-session reply without inventing a public user message', () => {
+    const source = events();
+    const assistant = source[2];
+    if (assistant === undefined) throw new Error('assistant fixture missing');
+    const idleEvents: IntexAgentSessionEvent[] = [
+      {
+        ...assistant,
+        id: 'private_session_started',
+        type: 'session_started',
+        payload: { reason: 'user_requested_new_session', explicit: true },
+        eventSequence: 1,
+      },
+      {
+        ...assistant,
+        id: 'private_boundary',
+        type: 'matrix_corpus_execution_boundary',
+        payload: { resolution: 'no_executor_required' },
+        eventSequence: 2,
+      },
+      {
+        ...assistant,
+        id: 'private_idle_reply',
+        type: 'assistant_message',
+        payload: { text: 'What would you like me to help with?' },
+        eventSequence: 3,
+      },
+      {
+        ...assistant,
+        id: 'private_terminal',
+        type: 'turn_processing_completed',
+        payload: { turnIndex: 0, status: 'completed' },
+        eventSequence: 4,
+      },
+    ];
+
+    const dto = mapPublicTestScenario({
+      run: run(idleEvents.length),
+      projection: projection(idleEvents.length),
+      events: idleEvents,
+    });
+
+    expect(dto.timeline.map((event) => event.type)).toEqual([
+      'session_started',
+      'assistant_message',
+      'deterministic_evaluation',
+      'minimax_evaluation',
+    ]);
+    expect(dto.timeline[0]).toMatchObject({
+      type: 'session_started',
+      turnIndex: 0,
+      startReason: 'user_requested_new_session',
+      explicit: true,
+    });
+    expect(dto.timeline[1]).toMatchObject({
+      type: 'assistant_message',
+      turnIndex: 0,
+      replyIndex: 1,
+    });
+  });
+
+  it('sanitizes private assistant details before exposing the public timeline', () => {
+    const source = events().map((event) =>
+      event.type === 'assistant_message'
+        ? {
+            ...event,
+            payload: {
+              text:
+                'User Preferences\nprivate-project-sentinel\n\nTitle: private title\nStart: 2026-08-18T14:30:00.000Z\nURL: https://private.example/path',
+            },
+          }
+        : event
+    );
+
+    const dto = mapPublicTestScenario({
+      run: run(),
+      projection: projection(),
+      events: source,
+    });
+    const assistant = dto.timeline.find((event) => event.type === 'assistant_message');
+    expect(assistant).toMatchObject({
+      type: 'assistant_message',
+      text: expect.stringContaining('[date-presentation: raw-record]'),
+    });
+    const serialized = JSON.stringify(dto);
+    expect(serialized).not.toContain('private-project-sentinel');
+    expect(serialized).not.toContain('private title');
+    expect(serialized).not.toContain('2026-08-18');
+    expect(serialized).not.toContain('private.example');
+  });
+
+  it('rejects a contradictory explicit session-start proof', () => {
+    const source = events();
+    const assistant = source[2];
+    if (assistant === undefined) throw new Error('assistant fixture missing');
+    const contradictory: IntexAgentSessionEvent[] = [
+      {
+        ...assistant,
+        type: 'session_started',
+        payload: { reason: 'user_requested_new_session', explicit: false },
+        eventSequence: 1,
+      },
+      { ...assistant, eventSequence: 2 },
+    ];
+
+    expect(() =>
+      mapPublicTestScenario({
+        run: run(contradictory.length),
+        projection: {
+          ...projection(contradictory.length),
+          deterministicChecks: [],
+          replyEvaluations: [],
+        },
+        events: contradictory,
+      })
+    ).toThrow('TEST_RUN_INVALID_TIMELINE');
+  });
+
+  it('shows a closed-and-restarted lifecycle before the replacement user turn', () => {
+    const source = events();
+    const user = source[0];
+    const assistant = source[2];
+    if (user === undefined || assistant === undefined) throw new Error('fixture missing');
+    const lifecycle: IntexAgentSessionEvent[] = [
+      {
+        ...user,
+        type: 'session_started',
+        payload: { reason: 'no_active_session', explicit: false },
+        eventSequence: 1,
+      },
+      { ...user, payload: { text: 'First request', turnIndex: 0 }, eventSequence: 2 },
+      {
+        ...user,
+        type: 'session_closed',
+        payload: { reason: 'superseded_by_user', status: 'superseded' },
+        eventSequence: 3,
+      },
+      {
+        ...user,
+        type: 'session_started',
+        payload: { reason: 'user_requested_new_session', explicit: true },
+        eventSequence: 4,
+      },
+      { ...user, payload: { text: 'Replacement request', turnIndex: 1 }, eventSequence: 5 },
+      { ...assistant, payload: { text: 'Replacement ready' }, eventSequence: 6 },
+    ];
+
+    const dto = mapPublicTestScenario({
+      run: run(lifecycle.length),
+      projection: {
+        ...projection(lifecycle.length),
+        deterministicChecks: [],
+        replyEvaluations: [],
+      },
+      events: lifecycle,
+    });
+
+    expect(dto.timeline.map((event) => event.type)).toEqual([
+      'session_started',
+      'user_message',
+      'session_closed',
+      'session_started',
+      'user_message',
+      'assistant_message',
+    ]);
+    expect(dto.timeline[2]).toMatchObject({
+      type: 'session_closed',
+      turnIndex: 1,
+      endReason: 'superseded_by_user',
+      status: 'superseded',
+    });
+  });
+
+  it('rejects a closure that is not immediately followed by a replacement start', () => {
+    const source = events();
+    const user = source[0];
+    if (user === undefined) throw new Error('user fixture missing');
+    const invalidLifecycle: IntexAgentSessionEvent[] = [
+      { ...user, payload: { text: 'First request', turnIndex: 0 }, eventSequence: 1 },
+      {
+        ...user,
+        type: 'session_closed',
+        payload: { reason: 'superseded_by_user', status: 'superseded' },
+        eventSequence: 2,
+      },
+      { ...user, payload: { text: 'Replacement request', turnIndex: 1 }, eventSequence: 3 },
+    ];
+
+    expect(() =>
+      mapPublicTestScenario({
+        run: run(invalidLifecycle.length),
+        projection: {
+          ...projection(invalidLifecycle.length),
+          deterministicChecks: [],
+          replyEvaluations: [],
+        },
+        events: invalidLifecycle,
+      })
+    ).toThrow('TEST_RUN_INVALID_TIMELINE');
+  });
+
+  it('rejects a session start inside an open turn without a preceding closure', () => {
+    const source = events();
+    const user = source[0];
+    if (user === undefined) throw new Error('user fixture missing');
+    const invalidLifecycle: IntexAgentSessionEvent[] = [
+      { ...user, payload: { text: 'First request', turnIndex: 0 }, eventSequence: 1 },
+      {
+        ...user,
+        type: 'session_started',
+        payload: { reason: 'user_requested_new_session', explicit: true },
+        eventSequence: 2,
+      },
+    ];
+
+    expect(() =>
+      mapPublicTestScenario({
+        run: run(invalidLifecycle.length),
+        projection: {
+          ...projection(invalidLifecycle.length),
+          deterministicChecks: [],
+          replyEvaluations: [],
+        },
+        events: invalidLifecycle,
+      })
+    ).toThrow('TEST_RUN_INVALID_TIMELINE');
+  });
+
+  it.each([
+    {
+      name: 'closure before any turn',
+      events: (template: IntexAgentSessionEvent): IntexAgentSessionEvent[] => [
+        {
+          ...template,
+          type: 'session_closed',
+          payload: { reason: 'superseded_by_user', status: 'superseded' },
+          eventSequence: 1,
+        },
+      ],
+    },
+    {
+      name: 'closure after the maximum turn',
+      events: (template: IntexAgentSessionEvent): IntexAgentSessionEvent[] => [
+        {
+          ...template,
+          payload: { text: 'Last possible turn', turnIndex: 19 },
+          eventSequence: 1,
+        },
+        {
+          ...template,
+          type: 'session_closed',
+          payload: { reason: 'superseded_by_user', status: 'superseded' },
+          eventSequence: 2,
+        },
+      ],
+    },
+    {
+      name: 'unterminated closure',
+      events: (template: IntexAgentSessionEvent): IntexAgentSessionEvent[] => [
+        {
+          ...template,
+          payload: { text: 'First request', turnIndex: 0 },
+          eventSequence: 1,
+        },
+        {
+          ...template,
+          type: 'session_closed',
+          payload: { reason: 'superseded_by_user', status: 'superseded' },
+          eventSequence: 2,
+        },
+      ],
+    },
+  ])('rejects $name', ({ events: buildEvents }) => {
+    const template = events()[0];
+    if (template === undefined) throw new Error('user fixture missing');
+    const source = buildEvents(template);
+
+    expect(() =>
+      mapPublicTestScenario({
+        run: run(source.length),
+        projection: {
+          ...projection(source.length),
+          deterministicChecks: [],
+          replyEvaluations: [],
+        },
+        events: source,
+      })
+    ).toThrow('TEST_RUN_INVALID_TIMELINE');
+  });
+
+  it.each(['session_closed', 'session_started'] as const)(
+    'rejects an invalid timestamp on a %s lifecycle event',
+    (type) => {
+      const template = events()[0];
+      if (template === undefined) throw new Error('user fixture missing');
+      const source: IntexAgentSessionEvent[] =
+        type === 'session_closed'
+          ? [
+              {
+                ...template,
+                payload: { text: 'First request', turnIndex: 0 },
+                eventSequence: 1,
+              },
+              {
+                ...template,
+                type,
+                payload: { reason: 'superseded_by_user', status: 'superseded' },
+                createdAt: 'invalid',
+                eventSequence: 2,
+              },
+            ]
+          : [
+              {
+                ...template,
+                type,
+                payload: { reason: 'no_active_session', explicit: false },
+                createdAt: 'invalid',
+                eventSequence: 1,
+              },
+            ];
+
+      expect(() =>
+        mapPublicTestScenario({
+          run: run(source.length),
+          projection: {
+            ...projection(source.length),
+            deterministicChecks: [],
+            replyEvaluations: [],
+          },
+          events: source,
+        })
+      ).toThrow('TEST_RUN_INVALID_TIMELINE');
+    }
+  );
+
   it('fails closed for a mismatched binding, revision, gap, or malformed public event', () => {
     expect(() => mapPublicTestScenario({
       run: run(),

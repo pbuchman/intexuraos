@@ -397,8 +397,8 @@ export const MatrixCorpusReportV1Schema = z
         report.totals.turnsCorrelated === 59 &&
         report.totals.turnsCompleted === 59 &&
         report.totals.sessionsCreated === 20 &&
-        report.totals.sessionsContinued === 39 &&
-        report.totals.sessionsClosed === 0 &&
+        report.totals.sessionsContinued === 38 &&
+        report.totals.sessionsClosed === 1 &&
         report.totals.confirmationsRequested === 17 &&
         report.totals.confirmationsAccepted === 17 &&
         report.totals.confirmationsRejected === 0 &&
@@ -458,8 +458,9 @@ export const MatrixCorpusReportV1Schema = z
             entry.judge.usage.totalTokens > 0 &&
             entry.judge.usage.costComplete &&
             entry.judge.usage.costNanoUsd !== null &&
-            entry.agentUsage.logicalCalls > 0 &&
-            entry.agentUsage.totalTokens > 0 &&
+            (entry.ordinal === 9
+              ? entry.agentUsage.logicalCalls === 0 && entry.agentUsage.totalTokens === 0
+              : entry.agentUsage.logicalCalls > 0 && entry.agentUsage.totalTokens > 0) &&
             entry.agentUsage.costComplete &&
             entry.agentUsage.costNanoUsd !== null &&
             entry.strictMockProof.status === 'passed' &&

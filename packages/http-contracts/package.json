@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@intexuraos/llm-contract": "workspace:*",
+    "htmlparser2": "^10.0.0",
     "zod": "catalog:",
     "zod-to-json-schema": "^3.25.1"
   }

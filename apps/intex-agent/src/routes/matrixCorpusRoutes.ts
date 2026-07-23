@@ -641,11 +641,11 @@ const testRunSafeDeterministicEvidenceJsonSchema = closedJsonObject(
     actualCount: nullableJsonSchema({ ...safeIntegerJsonSchema, maximum: 20 }),
     expectedTransition: nullableJsonSchema({
       type: 'string',
-      enum: ['created', 'continued', 'completed', 'failed'],
+      enum: ['created', 'continued', 'superseded', 'completed', 'failed'],
     }),
     actualTransition: nullableJsonSchema({
       type: 'string',
-      enum: ['created', 'continued', 'completed', 'failed'],
+      enum: ['created', 'continued', 'superseded', 'completed', 'failed'],
     }),
     expectedFacts: {
       type: 'array',
@@ -663,7 +663,8 @@ const safeDeterministicCheckJsonSchema = closedJsonObject(
       type: 'string',
       enum: [
         'reply_count', 'tool_name', 'tool_count', 'tool_turn', 'tool_fact',
-        'session_transition', 'lifecycle_event', 'transport',
+        'session_transition', 'lifecycle_event', 'user_message_count',
+        'agent_usage_count', 'transport', 'reply_format',
       ],
     },
     status: { type: 'string', enum: ['pending', 'passed', 'failed'] },
@@ -1476,6 +1477,7 @@ const safeEvidenceResultJsonSchema = closedJsonObject(
     'toolEvidence',
     'agentUsage',
     'agentUsageTotals',
+    'sessionProof',
     'turnTerminals',
     'strictMockProof',
   ],
@@ -1485,6 +1487,7 @@ const safeEvidenceResultJsonSchema = closedJsonObject(
     'toolEvidence',
     'agentUsage',
     'agentUsageTotals',
+    'sessionProof',
     'turnTerminals',
     'strictMockProof',
   ],
@@ -1494,6 +1497,49 @@ const safeEvidenceResultJsonSchema = closedJsonObject(
     toolEvidence: { type: 'array', maxItems: 100, items: safeToolEvidenceJsonSchema },
     agentUsage: { type: 'array', maxItems: 60, items: safeAgentUsageJsonSchema },
     agentUsageTotals: safeAgentUsageTotalsJsonSchema,
+    sessionProof: closedJsonObject(
+      [
+        'status',
+        'startReason',
+        'userMessageCount',
+        'sessionStartedCount',
+        'supersededSessionCount',
+      ],
+      [
+        'status',
+        'startReason',
+        'userMessageCount',
+        'sessionStartedCount',
+        'supersededSessionCount',
+      ],
+      {
+        status: {
+          type: 'string',
+          enum: [
+            'active',
+            'waiting_for_user',
+            'completed',
+            'unsupported',
+            'expired',
+            'cancelled',
+            'superseded',
+          ],
+        },
+        startReason: {
+          type: 'string',
+          enum: [
+            'no_active_session',
+            'previous_completed',
+            'previous_expired',
+            'previous_superseded',
+            'user_requested_new_session',
+          ],
+        },
+        userMessageCount: { type: 'integer', minimum: 0, maximum: 20 },
+        sessionStartedCount: { type: 'integer', minimum: 0, maximum: 20 },
+        supersededSessionCount: { type: 'integer', minimum: 0, maximum: 20 },
+      }
+    ),
     turnTerminals: { type: 'array', maxItems: 20, items: safeTurnTerminalJsonSchema },
     strictMockProof: closedJsonObject(
       [

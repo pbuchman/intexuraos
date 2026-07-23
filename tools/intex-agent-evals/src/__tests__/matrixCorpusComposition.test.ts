@@ -57,6 +57,7 @@ describe('production Matrix corpus composition', () => {
     });
     expect(result.run.scenarios).toHaveLength(20);
     expect(result.run.scenarios.every((scenario) => scenario.status === 'passed')).toBe(true);
+    expect(new Set(harness.metrics.scenarioProjectionSessions).size).toBe(20);
     expect(harness.metrics.maxConcurrentTurns).toBe(1);
     expect(harness.metrics.initialCursorCaptures).toBe(1);
     expect(harness.metrics.matrixSyncSince).toEqual([
@@ -95,8 +96,21 @@ describe('production Matrix corpus composition', () => {
     expect(harness.metrics.deepSeekAgentCalls).toBeGreaterThan(0);
     expect(harness.metrics.confirmationAgentCalls).toBe(0);
     expect(harness.metrics.miniMaxJudgeCalls).toBe(59);
+    expect(harness.metrics.judgeAssistantTexts[0]).toContain('Content: [redacted]');
+    expect(harness.metrics.judgeAssistantTexts.join('\n')).not.toContain('INTEX-EVAL-001-F01');
     expect(harness.metrics.productionExecutorResolutions).toBe(0);
     expect(harness.metrics.productionExecutorAdmissions).toBe(0);
+    expect(
+      harness.metrics.scenarioProjectionDeterministicChecks
+        .flat()
+        .some(
+          (check) =>
+            check.code === 'session_transition' &&
+            check.status === 'passed' &&
+            check.evidence.expectedTransition === 'superseded' &&
+            check.evidence.actualTransition === 'superseded'
+        )
+    ).toBe(true);
     expect(harness.trace.slice(-8)).toEqual([
       'quiesce',
       'drain',
@@ -127,6 +141,8 @@ describe('production Matrix corpus composition', () => {
       toolSelections: 19,
       mockCompletions: 19,
       mockFailures: 0,
+      sessionsContinued: 38,
+      sessionsClosed: 1,
       productionExecutorResolutions: 0,
       productionExecutorAdmissions: 0,
     });
@@ -140,6 +156,52 @@ describe('production Matrix corpus composition', () => {
       expect(reportText).not.toContain(sentinel);
       expect(reportMarkdown).not.toContain(sentinel);
     }
+  });
+
+  it('fails the real live run when a Matrix reply contains an inline raw date record', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      rawDateReplyScenarioNumber: 2,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result.run).toMatchObject({
+      exitCode: 1,
+      effectiveKind: 'behavioral_failure',
+      failureCodes: ['deterministic_evidence_failed'],
+      totals: { completedTurns: 59 },
+    });
+    expect(result.run.scenarios[1]).toMatchObject({
+      scenarioId: 'intex-eval-002',
+      status: 'failed',
+    });
+    expect(
+      harness.metrics.scenarioProjectionDeterministicChecks
+        .flat()
+        .some((check) => check.code === 'reply_format' && check.status === 'failed')
+    ).toBe(true);
+    expect(harness.metrics.judgeAssistantTexts.join('\n')).toContain(
+      '[date-presentation: raw-record]'
+    );
+    expect(harness.metrics.judgeAssistantTexts.join('\n')).not.toContain('2026-08-18T14:30');
   });
 
   it('bounds the initial Matrix cursor with the configured correlation deadline', async () => {
@@ -177,6 +239,42 @@ describe('production Matrix corpus composition', () => {
       cleanupCompleted: true,
     });
     expect(harness.metrics.matrixMessages).toHaveLength(0);
+  });
+
+  it('waits for the prior ingest outbox before issuing capability for turn 26', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      transportBusyAfterMessageNumber: 25,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      correlationTimeoutMs: 50,
+      pollIntervalMs: 1,
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result.run).toMatchObject({
+      exitCode: 0,
+      effectiveKind: 'passed',
+      totals: { completedTurns: 59 },
+    });
+    expect(harness.metrics.matrixMessages).toHaveLength(59);
+    expect(harness.metrics.transportReadinessChecks).toBeGreaterThanOrEqual(3);
   });
 
   it('wires an explicit reply deadline override into the live executor', async () => {

@@ -2,12 +2,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  classifyIntexAgentReplyDatePresentation,
   INTEX_AGENT_TEST_RUN_SCENARIO_COUNT,
   publicTestRunHeaderV1Schema,
   safeAgentUsageV1Schema,
   safeDeterministicCheckV1Schema,
   safeExpectedToolFactV1Schema,
   safeReplyEvaluationV1Schema,
+  sanitizeIntexAgentReplyText,
   safeToolEvidenceV1Schema,
   testArtifactDeliveryV1Schema,
   testRunDtoV1Schema,
@@ -15,6 +17,291 @@ import {
 } from '../index.js';
 
 const now = '2026-07-20T10:00:00.000Z';
+
+describe('sanitizeIntexAgentReplyText', () => {
+  it('redacts structured confirmation fields, continuations, URLs, and synthetic markers', () => {
+    expect(
+      sanitizeIntexAgentReplyText(
+        'Add this event?\nTitle: Private INTEX-EVAL-002-F01\ncontinued detail\nStart: 2026-08-18\nURL: https://private.example/path'
+      )
+    ).toBe('Add this event?\nTitle: [redacted]\n\nStart: [redacted]\nURL: [redacted]');
+  });
+
+  it('redacts preference blocks and resumes ordinary text after a blank line', () => {
+    expect(
+      sanitizeIntexAgentReplyText(
+        'User Preferences\n- private first\n2) private second\n\nOrdinary [synthetic-marker] text INTEX-EVAL-017.'
+      )
+    ).toBe(
+      'User Preferences: [redacted]\n[redacted-preference-item]\n[redacted-preference-item]\n\nOrdinary [synthetic-marker] text [synthetic-marker].'
+    );
+  });
+
+  it('normalizes protected field separators and leaves ordinary lines unchanged', () => {
+    expect(sanitizeIntexAgentReplyText('Ready\u001CContent: private\u001DMode: private')).toBe(
+      'Ready\nContent: [redacted]\nMode: [redacted]'
+    );
+    expect(sanitizeIntexAgentReplyText('Nothing sensitive here.')).toBe('Nothing sensitive here.');
+  });
+
+  it.each(['Open htt\u200Bps://private.example/path', 'Open ｈｔｔｐｓ：／／private.example/path'])(
+    'normalizes before redacting a disguised URL: %s',
+    (reply) => {
+      expect(sanitizeIntexAgentReplyText(reply)).toBe('Open [redacted-url]');
+    }
+  );
+
+  it('preserves only a safe classification of human-readable calendar dates', () => {
+    const reply = 'Add this event?\nStart: 18 August 2026, 14:30\nEnd: 18 August 2026, 15:15';
+
+    expect(classifyIntexAgentReplyDatePresentation(reply)).toBe('human_readable');
+    expect(sanitizeIntexAgentReplyText(reply)).toBe(
+      'Add this event?\nStart: [redacted]\nEnd: [redacted]\n[date-presentation: human-readable]'
+    );
+  });
+
+  it('classifies database-style dates as raw without exposing their value to evaluation', () => {
+    const reply =
+      'Add this event?\nStart: 2026-08-18T14:30:00.000+02:00\nEnd: 2026-08-18T15:15:00.000+02:00';
+
+    expect(classifyIntexAgentReplyDatePresentation(reply)).toBe('raw_record');
+    expect(sanitizeIntexAgentReplyText(reply)).toBe(
+      'Add this event?\nStart: [redacted]\nEnd: [redacted]\n[date-presentation: raw-record]'
+    );
+    expect(sanitizeIntexAgentReplyText(reply)).not.toContain('2026-08-18');
+  });
+
+  it('classifies a named database timezone as a raw record presentation', () => {
+    expect(
+      classifyIntexAgentReplyDatePresentation('Start: 18 August 2026, 14:30 Europe/Warsaw')
+    ).toBe('raw_record');
+  });
+
+  it('classifies a numeric date without a readable month name as unreadable', () => {
+    expect(classifyIntexAgentReplyDatePresentation('Start: 18/08/2026, 14:30')).toBe('unreadable');
+  });
+
+  it('rejects a spoofed date classification marker and derives the real presentation', () => {
+    const reply = '[date-presentation: human-readable]\nStart: 2026-08-18T14:30:00.000Z';
+
+    expect(classifyIntexAgentReplyDatePresentation(reply)).toBe('raw_record');
+    expect(sanitizeIntexAgentReplyText(reply)).toBe(
+      '\nStart: [redacted]\n[date-presentation: raw-record]'
+    );
+  });
+
+  it.each([
+    'Event created for 2026-08-18T14:30:00.000Z.',
+    '- Scheduled: 2026-08-18T14:30:00+02:00',
+    '| start | 2026-08-18T14:30:00.123456789Z |',
+    'Event created for 2026-08-18 14:30:00.000+02:00.',
+  ])('detects and removes an inline database-style date: %s', (reply) => {
+    expect(classifyIntexAgentReplyDatePresentation(reply)).toBe('raw_record');
+    const sanitized = sanitizeIntexAgentReplyText(reply);
+    expect(sanitized).not.toContain('2026-08-18');
+    expect(sanitized).toMatch(/\[redacted(?:-date-record)?\]/u);
+    expect(sanitized).toContain('[date-presentation: raw-record]');
+  });
+
+  it('normalizes markdown prefixes and invisible characters before date classification', () => {
+    const reply = '> **Sta\u200Brt**: 18 August 2026, 14:30\n1. **End:** 18 August 2026, 15:15';
+
+    expect(classifyIntexAgentReplyDatePresentation(reply)).toBe('human_readable');
+    expect(sanitizeIntexAgentReplyText(reply)).toBe(
+      'Start: [redacted]\nEnd: [redacted]\n[date-presentation: human-readable]'
+    );
+  });
+
+  it.each([
+    '- [date-presentation: human-readable]',
+    '• date-presentation : private',
+    '> **date-presentation:** unreadable',
+    '`[date-presentation: human-readable]`',
+    '### [date-presentation: human-readable]',
+    '~~date-presentation: human-readable~~',
+  ])('removes every reserved date marker before deriving the safe marker: %s', (marker) => {
+    const sanitized = sanitizeIntexAgentReplyText(
+      `${marker}\nEvent created for 2026-08-18T14:30:00.000Z.`
+    );
+
+    expect(sanitized).not.toContain('human-readable');
+    expect(sanitized).not.toContain('private');
+    expect(sanitized).toContain('[date-presentation: raw-record]');
+  });
+
+  it('redacts every preference continuation until an explicit blank line', () => {
+    expect(
+      sanitizeIntexAgentReplyText(
+        '> **User Preferences v3**:\nprivate-project-sentinel\n• private bullet\n\nOrdinary text'
+      )
+    ).toBe(
+      'User Preferences: [redacted]\n[redacted-preference-item]\n[redacted-preference-item]\n\nOrdinary text'
+    );
+    const failClosed = sanitizeIntexAgentReplyText(
+      'User Preferences\nprivate-project-sentinel\nOrdinary-looking but still private'
+    );
+    expect(failClosed).not.toContain('private-project-sentinel');
+    expect(failClosed).not.toContain('Ordinary-looking');
+  });
+
+  it('redacts closing-markdown sensitive fields and rejects a database-style date', () => {
+    expect(sanitizeIntexAgentReplyText('**Title**: private-title-sentinel')).toBe(
+      'Title: [redacted]'
+    );
+    const date = '**Start**: 2026-08-18 14:30';
+    expect(classifyIntexAgentReplyDatePresentation(date)).toBe('raw_record');
+    expect(sanitizeIntexAgentReplyText(date)).toBe(
+      'Start: [redacted]\n[date-presentation: raw-record]'
+    );
+  });
+
+  it('redacts backtick-decorated preferences and sensitive fields', () => {
+    expect(
+      sanitizeIntexAgentReplyText(
+        '`User Preferences v3`:\n1. private-project-sentinel\n\nOrdinary text'
+      )
+    ).toBe('User Preferences: [redacted]\n[redacted-preference-item]\n\nOrdinary text');
+    expect(sanitizeIntexAgentReplyText('`Title`: private-title-sentinel')).toBe(
+      'Title: [redacted]'
+    );
+  });
+
+  it.each([
+    '***Title***: private-title-sentinel',
+    '### Title: private-title-sentinel',
+    '~~Title~~: private-title-sentinel',
+  ])('redacts sensitive labels independently of Markdown decoration: %s', (line) => {
+    expect(sanitizeIntexAgentReplyText(line)).toBe('Title: [redacted]');
+  });
+
+  it('redacts preference headers independently of Markdown decoration', () => {
+    expect(
+      sanitizeIntexAgentReplyText('***User Preferences v3***:\nprivate-project-sentinel')
+    ).toBe('User Preferences: [redacted]\n[redacted-preference-item]');
+  });
+
+  it.each(['| Title | private-title-sentinel |', '| Content | private-content-sentinel |'])(
+    'redacts sensitive Markdown table rows: %s',
+    (line) => {
+      const sanitized = sanitizeIntexAgentReplyText(line);
+      expect(sanitized).not.toContain('private-');
+      expect(sanitized).toContain('[redacted]');
+    }
+  );
+
+  it.each([
+    'Add this event? Title: private-title-sentinel',
+    'Create note? Content: private-content-sentinel',
+    '<strong>Title</strong>: private-html-sentinel',
+    '<table><tr><td>Title</td><td>private-html-table-sentinel</td></tr></table>',
+    '<dl><dt>Title</dt><dd>private-html-description-sentinel</dd></dl>',
+  ])('redacts sensitive fields embedded in prose or HTML: %s', (line) => {
+    const sanitized = sanitizeIntexAgentReplyText(line);
+    expect(sanitized).not.toContain('private-');
+    expect(sanitized).toContain('[redacted]');
+  });
+
+  it('redacts an inline preference block heading and its continuation', () => {
+    expect(
+      sanitizeIntexAgentReplyText(
+        'Here are User Preferences v3: private-project-sentinel\nprivate-continuation'
+      )
+    ).toBe('User Preferences: [redacted]\n[redacted-preference-item]');
+  });
+
+  it.each([
+    '<dl><dt>User Preferences</dt><dd>private-project-sentinel</dd></dl>',
+    '<table><tr><td>User Preferences</td><td>private-table-sentinel</td></tr></table>',
+    '<p>User Preferences</p><p>private-paragraph-sentinel</p>',
+  ])('redacts preference blocks expressed through structural HTML: %s', (reply) => {
+    const sanitized = sanitizeIntexAgentReplyText(reply);
+
+    expect(sanitized).toContain('User Preferences: [redacted]');
+    expect(sanitized).not.toContain('private-');
+  });
+
+  it.each([
+    ['Ti<strong>tle</strong>: private-split-title', 'private-split-title'],
+    ['User <em>Preferences</em>: private-split-pref', 'private-split-pref'],
+    ['INTEX-<span>EVAL-001</span> private-marker', 'INTEX-EVAL-001'],
+    ['Open htt<strong>ps</strong>://private.example/path', 'private.example'],
+    ['Open https:<span>//private.example/path</span>', 'private.example'],
+    ['Event 2026-08-<em>18</em>T14:30:00.000Z', '2026-08-18'],
+    ['Ti<!--x-->tle: private-comment-title', 'private-comment-title'],
+    ['User <!--x-->Preferences: private-comment-pref', 'private-comment-pref'],
+    ['Open htt<!--x-->ps://private-comment.example/path', 'private-comment.example'],
+    ['INTEX-<!--x-->EVAL-001 private-comment-marker', 'INTEX-EVAL-001'],
+    ['Ti&#116;le: private-entity-sentinel', 'private-entity-sentinel'],
+    ['Title&#58; private-colon-sentinel', 'private-colon-sentinel'],
+    ['Ti&amp;#116;le: private-nested-entity-sentinel', 'private-nested-entity-sentinel'],
+    ['Ti<span\nclass=x>tle: private-newline-tag-sentinel', 'private-newline-tag-sentinel'],
+    [
+      `Ti<span data-padding="${'x'.repeat(300)}">tle: private-long-tag-sentinel`,
+      'private-long-tag-sentinel',
+    ],
+    ['Ti&#x200B;tle: private-encoded-ignorable-title', 'private-encoded-ignorable-title'],
+    ['htt&#x200B;ps://private-encoded-ignorable.example/path', 'private-encoded-ignorable.example'],
+    ['INTEX-&#x200B;EVAL-001 private-encoded-marker', 'INTEX-EVAL-001'],
+    ['&#xff34;itle: private-encoded-fullwidth-title', 'private-encoded-fullwidth-title'],
+    [
+      '&#xff48;&#xff54;&#xff54;&#xff50;&#xff53;://private-fullwidth.example/path',
+      'private-fullwidth.example',
+    ],
+  ])('redacts protected content even when inline HTML splits its token: %s', (reply, secret) => {
+    expect(sanitizeIntexAgentReplyText(reply)).not.toContain(secret);
+  });
+
+  it('removes a structural HTML date marker and derives the real presentation', () => {
+    const sanitized = sanitizeIntexAgentReplyText(
+      '<table><tr><td>date-presentation</td><td>human-readable</td></tr></table>\nEvent 2026-08-18T14:30:00.000Z'
+    );
+
+    expect(sanitized).not.toContain('human-readable');
+    expect(sanitized).toContain('[date-presentation: raw-record]');
+  });
+
+  it('drops script and style content while preserving structural whitespace boundaries', () => {
+    const sanitized = sanitizeIntexAgentReplyText(
+      '<p>Visible first line</p>   <script>private-script-sentinel</script><style>private-style-sentinel</style><p>Visible second line</p>'
+    );
+
+    expect(sanitized).toContain('Visible first line');
+    expect(sanitized).toContain('Visible second line');
+    expect(sanitized).not.toContain('private-script-sentinel');
+    expect(sanitized).not.toContain('private-style-sentinel');
+  });
+
+  it.each(['1c', '1d', '1e', '1f'])(
+    'fails closed when an HTML entity decodes to protected control separator 0x%s',
+    (hex) => {
+      const sanitized = sanitizeIntexAgentReplyText(
+        `Ti&#x${hex};tle: private-encoded-control-${hex}`
+      );
+
+      expect(sanitized).not.toContain(`private-encoded-control-${hex}`);
+    }
+  );
+
+  it.each(['&#xE000;', '&#57344;'])(
+    'fails closed when an HTML entity injects the internal boundary value: %s',
+    (entity) => {
+      const sanitized = sanitizeIntexAgentReplyText(
+        `User Preferences${entity} ${entity}private-pua-preference-sentinel`
+      );
+
+      expect(sanitized).not.toContain('private-pua-preference-sentinel');
+    }
+  );
+
+  it('classifies and redacts a backtick-decorated unreadable date', () => {
+    const date = '`Start`: 2026-08-18 14:30';
+
+    expect(classifyIntexAgentReplyDatePresentation(date)).toBe('raw_record');
+    expect(sanitizeIntexAgentReplyText(date)).toBe(
+      'Start: [redacted]\n[date-presentation: raw-record]'
+    );
+  });
+});
 
 function totals() {
   return {
@@ -128,6 +415,11 @@ describe('Intex Agent Test Runs public contracts', () => {
       },
     };
     expect(safeDeterministicCheckV1Schema.safeParse(check).success).toBe(true);
+    expect(
+      ['user_message_count', 'agent_usage_count'].every(
+        (code) => safeDeterministicCheckV1Schema.safeParse({ ...check, code }).success
+      )
+    ).toBe(true);
     expect(safeDeterministicCheckV1Schema.safeParse({ ...check, turnIndex: 20 }).success).toBe(
       false
     );
@@ -177,6 +469,27 @@ describe('Intex Agent Test Runs public contracts', () => {
     };
     expect(safeAgentUsageV1Schema.safeParse(usage).success).toBe(true);
     expect(safeAgentUsageV1Schema.safeParse({ ...usage, turnIndex: 20 }).success).toBe(false);
+  });
+
+  it('requires scenarios to stay ordered and uniquely identified', () => {
+    const scenarios = Array.from({ length: 20 }, (_, index) => scenarioSummary(index + 1));
+    const outOfOrder = scenarios.map((scenario, index) =>
+      index === 0
+        ? { ...scenario, scenarioNumber: 2 }
+        : index === 1
+          ? { ...scenario, scenarioNumber: 1 }
+          : scenario
+    );
+    expect(testRunDtoV1Schema.safeParse({ run: header(), scenarios: outOfOrder }).success).toBe(
+      false
+    );
+
+    const duplicateId = scenarios.map((scenario, index) =>
+      index === 1 ? { ...scenario, scenarioId: scenarios[0]?.scenarioId } : scenario
+    );
+    expect(testRunDtoV1Schema.safeParse({ run: header(), scenarios: duplicateId }).success).toBe(
+      false
+    );
   });
 
   it('requires values only for equality tool-fact expectations', () => {
@@ -267,17 +580,26 @@ describe('Intex Agent Test Runs public contracts', () => {
       eventWatermark: 3,
       timeline: [
         {
-          type: 'user_message' as const,
+          type: 'session_started' as const,
           timelineIndex: 0,
           eventSequence: 1,
+          turnIndex: 0,
+          startReason: 'user_requested_new_session' as const,
+          explicit: true,
+          createdAt: now,
+        },
+        {
+          type: 'user_message' as const,
+          timelineIndex: 1,
+          eventSequence: 2,
           turnIndex: 1,
           text: 'Natural message',
           createdAt: now,
         },
         {
           type: 'tool_selected' as const,
-          timelineIndex: 1,
-          eventSequence: 2,
+          timelineIndex: 2,
+          eventSequence: 3,
           turnIndex: 1,
           ordinal: 1,
           toolName: 'create_note' as const,
@@ -286,7 +608,7 @@ describe('Intex Agent Test Runs public contracts', () => {
         },
         {
           type: 'minimax_evaluation' as const,
-          timelineIndex: 2,
+          timelineIndex: 3,
           evaluatorModel: 'or:minimax/minimax-m3' as const,
           evaluation: {
             turnIndex: 1,
@@ -328,7 +650,7 @@ describe('Intex Agent Test Runs public contracts', () => {
       }).success
     ).toBe(false);
 
-    const replyEvaluation = dto.timeline[2];
+    const replyEvaluation = dto.timeline[3];
     if (replyEvaluation === undefined) throw new Error('Test fixture is missing reply evaluation');
     const sixthReplyEvaluation = {
       ...replyEvaluation,

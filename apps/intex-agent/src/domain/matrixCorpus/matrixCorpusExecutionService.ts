@@ -6,6 +6,7 @@ import type {
 } from '@intexuraos/http-contracts';
 import type { WhatsAppInteractiveButton } from '@intexuraos/whatsapp-pubsub-client';
 
+import { buildNewSessionReadyText } from '../agent/capabilities.js';
 import type {
   IntexAgentRunner,
   IntexAgentRunnerResult,
@@ -22,7 +23,10 @@ import type {
   MatrixCorpusExecutionBoundaryResolution,
   MatrixCorpusExecutorExecutionContext,
 } from './executorResolver.js';
-import { createMatrixCorpusToolCallStartedRecorder } from './matrixCorpusMessageHandler.js';
+import {
+  createMatrixCorpusToolCallStartedRecorder,
+  isMatrixCorpusIdleNewSessionStart,
+} from './matrixCorpusMessageHandler.js';
 import type {
   IngestReceiptRepository,
   MatrixCorpusIngestReceipt,
@@ -126,7 +130,10 @@ export function createMatrixCorpusExecutionService(
       )
         return failure('PROFILE_REJECTED');
 
-      const previousEvents = eventsResult.events.filter(
+      const currentLogicalSessionEvents = eventsAfterLatestSessionStart(
+        eventsResult.events
+      );
+      const previousEvents = currentLogicalSessionEvents.filter(
         (event) => event.id !== input.stableKeys.eventId
       );
       const preferenceOverlay = deps.contextService.createPreferenceOverlay(scenarioIdentity);
@@ -137,7 +144,7 @@ export function createMatrixCorpusExecutionService(
           input,
           identity,
           session,
-          previousEvents: eventsResult.events,
+          previousEvents: currentLogicalSessionEvents,
           userPreferences: promptResult.promptContext,
           preferenceOverlay,
         });
@@ -151,20 +158,34 @@ export function createMatrixCorpusExecutionService(
         turnIndex: context.turnIndex,
         createdAt: ordinaryIngest.timestamp,
       });
+      const recordExecutionBoundary = createMatrixCorpusExecutionBoundaryRecorder({
+        sessionRepository: deps.sessionRepository,
+        identity,
+        ingestReceiptId: context.ingestReceiptId,
+        turnIndex: context.turnIndex,
+        mockProfileDigest: context.mockProfileDigest,
+        createdAt: ordinaryIngest.timestamp,
+      });
+      if (isMatrixCorpusIdleNewSessionStart(input.claims)) {
+        await recordExecutionBoundary('no_executor_required');
+        await usageRecorder.finalize('natural', 'complete');
+        return await persistAndPublishResult({
+          deps,
+          input,
+          identity,
+          result: {
+            outcome: 'no_action',
+            reply: buildNewSessionReadyText('en'),
+          },
+        });
+      }
       const execution = createExecutionContext({
         flow: 'normal',
         turnIndex: context.turnIndex,
         ingestReceiptId: context.ingestReceiptId,
         expectedSchedule: context.expectedToolSchedule,
         preferenceOverlay,
-        recordExecutionBoundary: createMatrixCorpusExecutionBoundaryRecorder({
-          sessionRepository: deps.sessionRepository,
-          identity,
-          ingestReceiptId: context.ingestReceiptId,
-          turnIndex: context.turnIndex,
-          mockProfileDigest: context.mockProfileDigest,
-          createdAt: ordinaryIngest.timestamp,
-        }),
+        recordExecutionBoundary,
         recordToolCallStarted: createMatrixCorpusToolCallStartedRecorder({
           sessionRepository: deps.sessionRepository,
           identity,
@@ -205,6 +226,16 @@ export function createMatrixCorpusExecutionService(
       return await recoverReservedReply({ deps, ...input });
     },
   };
+}
+
+function eventsAfterLatestSessionStart(
+  events: readonly IntexAgentSessionEvent[]
+): readonly IntexAgentSessionEvent[] {
+  let latestStartIndex = -1;
+  for (let index = 0; index < events.length; index += 1) {
+    if (events[index]?.type === 'session_started') latestStartIndex = index;
+  }
+  return latestStartIndex === -1 ? events : events.slice(latestStartIndex + 1);
 }
 
 async function recoverReservedReply(

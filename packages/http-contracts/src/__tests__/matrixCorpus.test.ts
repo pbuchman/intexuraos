@@ -235,6 +235,19 @@ describe('Matrix corpus shared contract', () => {
       }).success
     ).toBe(true);
     expect(
+      matrixCorpusVisibleStartHeaderV1Schema.safeParse({
+        kind: 'matrix_corpus',
+        version: 1,
+        phase: 'start',
+        scenarioNumber: 1,
+        scenarioTotal: 20,
+        capability,
+        naturalBody: 'new session',
+        textAfterHeaderRemoval: 'new session',
+        startNewSession: true,
+      }).success
+    ).toBe(true);
+    expect(
       matrixCorpusVisibleTurnHeaderV1Schema.safeParse({
         kind: 'matrix_corpus',
         version: 1,
@@ -295,6 +308,7 @@ describe('Matrix corpus shared contract', () => {
     }
     expect(matrixCorpusRfc3339TimestampSchema.safeParse(now).success).toBe(true);
     expect(matrixCorpusRfc3339TimestampSchema.safeParse('2026-07-19T00:00:00Z').success).toBe(true);
+    expect(matrixCorpusRfc3339TimestampSchema.safeParse('2026-07-19T00:00:00').success).toBe(false);
     expect(
       matrixCorpusRfc3339TimestampSchema.safeParse('2026-07-19T00:00:00.123+23:59').success
     ).toBe(true);
@@ -543,6 +557,42 @@ describe('Matrix corpus shared contract', () => {
         currentDateTime: '2026-07-19T00:00:00+24:00',
       }).success
     ).toBe(false);
+
+    const startContext = {
+      ...context,
+      phase: 'start' as const,
+      turnIndex: 0,
+      startNewSession: true,
+      expectedSessionId: null,
+      pendingConfirmationId: null,
+      expectedDecision: null,
+    };
+    expect(matrixCorpusIngestContextV1Schema.safeParse(startContext).success).toBe(true);
+    for (const invalid of [
+      { ...startContext, expectedSessionId: 'session_1' },
+      { ...startContext, pendingConfirmationId: 'confirmation_1' },
+      { ...startContext, expectedDecision: 'confirm' as const },
+    ]) {
+      expect(matrixCorpusIngestContextV1Schema.safeParse(invalid).success).toBe(false);
+    }
+
+    const confirmationContext = {
+      ...context,
+      phase: 'confirmation' as const,
+      startNewSession: false,
+      expectedSessionId: 'session_1',
+      pendingConfirmationId: 'confirmation_1',
+      expectedDecision: 'confirm' as const,
+    };
+    expect(matrixCorpusIngestContextV1Schema.safeParse(confirmationContext).success).toBe(true);
+    for (const invalid of [
+      { ...confirmationContext, startNewSession: true },
+      { ...confirmationContext, expectedSessionId: null },
+      { ...confirmationContext, pendingConfirmationId: null },
+      { ...confirmationContext, expectedDecision: null },
+    ]) {
+      expect(matrixCorpusIngestContextV1Schema.safeParse(invalid).success).toBe(false);
+    }
   });
 
   it('keeps ordinary ingress exact and cross-correlated with private context', () => {
@@ -578,6 +628,59 @@ describe('Matrix corpus shared contract', () => {
       matrixCorpusCapabilityIssueRequestV1Schema.safeParse({
         ...issueRequest,
         phase: 'confirmation',
+      }).success
+    ).toBe(false);
+
+    const startRequest = {
+      ...issueRequest,
+      phase: 'start' as const,
+      turnIndex: 0,
+      expectedSessionId: null,
+      pendingConfirmationId: null,
+      expectedDecision: null,
+    };
+    expect(matrixCorpusCapabilityIssueRequestV1Schema.safeParse(startRequest).success).toBe(true);
+    for (const invalid of [
+      { ...startRequest, expectedSessionId: 'session_1' },
+      { ...startRequest, pendingConfirmationId: 'confirmation_1' },
+      { ...startRequest, expectedDecision: 'confirm' as const },
+    ]) {
+      expect(matrixCorpusCapabilityIssueRequestV1Schema.safeParse(invalid).success).toBe(false);
+    }
+
+    const confirmationRequest = {
+      ...issueRequest,
+      phase: 'confirmation' as const,
+      expectedSessionId: 'session_1',
+      pendingConfirmationId: 'confirmation_1',
+      expectedDecision: 'confirm' as const,
+    };
+    expect(matrixCorpusCapabilityIssueRequestV1Schema.safeParse(confirmationRequest).success).toBe(
+      true
+    );
+    for (const invalid of [
+      { ...confirmationRequest, expectedSessionId: null },
+      { ...confirmationRequest, pendingConfirmationId: null },
+      { ...confirmationRequest, expectedDecision: null },
+    ]) {
+      expect(matrixCorpusCapabilityIssueRequestV1Schema.safeParse(invalid).success).toBe(false);
+    }
+    expect(
+      matrixCorpusCapabilityIssueRequestV1Schema.safeParse({
+        ...issueRequest,
+        expectedSessionId: null,
+      }).success
+    ).toBe(false);
+    expect(
+      matrixCorpusCapabilityIssueRequestV1Schema.safeParse({
+        ...issueRequest,
+        pendingConfirmationId: 'confirmation_1',
+      }).success
+    ).toBe(false);
+    expect(
+      matrixCorpusCapabilityIssueRequestV1Schema.safeParse({
+        ...issueRequest,
+        expectedDecision: 'confirm',
       }).success
     ).toBe(false);
     expect(

@@ -18,6 +18,13 @@ describe('parseMatrixCorpusVisibleMessage', () => {
     });
   });
 
+  it('does not duplicate an idle new-session command from the natural body', () => {
+    expect(parseMatrixCorpusVisibleMessage(`${startHeader}\n\nnew session`)).toEqual({
+      kind: 'matrix_corpus', version: 1, phase: 'start', scenarioNumber: 1, scenarioTotal: 20,
+      capability, naturalBody: 'new session', textAfterHeaderRemoval: 'new session', startNewSession: true,
+    });
+  });
+
   it('parses distinct turn and confirmation headers', () => {
     expect(parseMatrixCorpusVisibleMessage(`${turnHeader}\n\nbody`)).toMatchObject({
       kind: 'matrix_corpus', phase: 'turn', turnIndex: 2, turnTotal: 5, naturalBody: 'body', textAfterHeaderRemoval: 'body', startNewSession: false,

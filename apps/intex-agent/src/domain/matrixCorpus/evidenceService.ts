@@ -11,7 +11,11 @@ import type {
   MatrixCorpusSessionIdentity,
   MatrixCorpusSessionRepository,
 } from '../ports/sessionRepository.js';
-import type { IntexAgentSessionEvent } from '../sessions/types.js';
+import type {
+  IntexAgentSessionEvent,
+  IntexAgentSessionStartReason,
+  IntexAgentSessionStatus,
+} from '../sessions/types.js';
 import type { SafeToolFactNameV1, SafeToolFactV1 } from './safeEvidence.js';
 import type { SafeAgentUsageTotalsV1, SafeAgentUsageV1 } from './usageProjection.js';
 
@@ -29,6 +33,13 @@ export interface MatrixCorpusSafeEvidenceV1 {
   toolEvidence: SafeToolEvidenceV1[];
   agentUsage: SafeAgentUsageV1[];
   agentUsageTotals: SafeAgentUsageTotalsV1;
+  sessionProof: {
+    status: IntexAgentSessionStatus;
+    startReason: IntexAgentSessionStartReason;
+    userMessageCount: number;
+    sessionStartedCount: number;
+    supersededSessionCount: number;
+  };
   turnTerminals: SafeTurnTerminalV1[];
   strictMockProof: {
     version: 1;
@@ -118,6 +129,12 @@ export function createMatrixCorpusEvidenceService(
         events.some((event, index) => event.eventSequence !== index + 1)
       )
         return failure('CORRUPT_EVIDENCE');
+      const lifecycleProof = buildSessionLifecycleProof(
+        events,
+        sessionResult.session.startReason
+      );
+      if (lifecycleProof === null)
+        return failure('CORRUPT_EVIDENCE');
 
       const toolEvidence: SafeToolEvidenceV1[] = [];
       const agentUsage: SafeAgentUsageV1[] = [];
@@ -183,8 +200,20 @@ export function createMatrixCorpusEvidenceService(
         return failure('CORRUPT_EVIDENCE');
       if (!executionBoundariesMatchTerminals(executionBoundaries, turnTerminals))
         return failure('CORRUPT_EVIDENCE');
+      if (
+        sessionResult.session.startReason === 'user_requested_new_session' &&
+        events.every((event) => event.type !== 'user_message') &&
+        (executionBoundaries.length !== 1 ||
+          executionBoundaries[0]?.turnIndex !== 0 ||
+          executionBoundaries[0].resolution !== 'no_executor_required' ||
+          toolEvidence.length !== 0 ||
+          agentUsage.length !== 0)
+      )
+        return failure('CORRUPT_EVIDENCE');
       const agentUsageTotals = sumAgentUsage(agentUsage);
       if (agentUsageTotals === null) return failure('CORRUPT_EVIDENCE');
+      const userMessageCount = events.filter((event) => event.type === 'user_message').length;
+      if (userMessageCount > 20) return failure('CORRUPT_EVIDENCE');
       return {
         ok: true,
         evidence: {
@@ -193,6 +222,12 @@ export function createMatrixCorpusEvidenceService(
           toolEvidence,
           agentUsage,
           agentUsageTotals,
+          sessionProof: {
+            status: sessionResult.session.status,
+            startReason: sessionResult.session.startReason,
+            userMessageCount,
+            ...lifecycleProof,
+          },
           turnTerminals,
           strictMockProof: {
             version: 1,
@@ -207,6 +242,66 @@ export function createMatrixCorpusEvidenceService(
     },
   };
 }
+
+function buildSessionLifecycleProof(
+  events: readonly IntexAgentSessionEvent[],
+  startReason: IntexAgentSessionStartReason
+): Readonly<{
+  sessionStartedCount: number;
+  supersededSessionCount: number;
+}> | null {
+  const starts = events.filter((event) => event.type === 'session_started');
+  const closed = events.filter((event) => event.type === 'session_closed');
+  if (starts.length === 0)
+    return startReason === 'user_requested_new_session' || closed.length > 0
+      ? null
+      : { sessionStartedCount: 0, supersededSessionCount: 0 };
+  if (
+    starts.length !== closed.length + 1 ||
+    starts[0]?.eventSequence !== 1 ||
+    starts.some(
+      (event) =>
+        !hasExactKeys(event.payload, ['reason', 'explicit']) ||
+        !SESSION_START_REASONS.has(event.payload['reason']) ||
+        event.payload['explicit'] !==
+          (event.payload['reason'] === 'user_requested_new_session')
+    ) ||
+    closed.some(
+      (event) =>
+        !hasExactKeys(event.payload, ['reason', 'status']) ||
+        event.payload['reason'] !== 'superseded_by_user' ||
+        event.payload['status'] !== 'superseded'
+    )
+  )
+    return null;
+  for (let index = 0; index < closed.length; index += 1) {
+    const before = starts[index]?.eventSequence;
+    const closing = closed[index]?.eventSequence;
+    const after = starts[index + 1]?.eventSequence;
+    if (
+      before === undefined ||
+      closing === undefined ||
+      after === undefined ||
+      closing <= before ||
+      after !== closing + 1 ||
+      starts[index + 1]?.payload['reason'] !== 'user_requested_new_session'
+    )
+      return null;
+  }
+  if (starts.at(-1)?.payload['reason'] !== startReason) return null;
+  return {
+    sessionStartedCount: starts.length,
+    supersededSessionCount: closed.length,
+  };
+}
+
+const SESSION_START_REASONS = new Set<unknown>([
+  'no_active_session',
+  'previous_completed',
+  'previous_expired',
+  'previous_superseded',
+  'user_requested_new_session',
+]);
 
 function mapExecutionBoundary(
   payload: Readonly<Record<string, unknown>>,
@@ -295,7 +390,13 @@ function usageSummariesMatchCalls(
   calls: readonly SafeAgentUsageV1[],
   terminals: readonly SafeTurnTerminalV1[]
 ): boolean {
-  if (summaries.length !== terminals.length) return false;
+  if (
+    summaries.length !== terminals.length ||
+    calls.some(
+      (call) => !summaries.some((summary) => summary.turnIndex === call.turnIndex)
+    )
+  )
+    return false;
   for (const terminal of terminals) {
     const summary = summaries.find((candidate) => candidate.turnIndex === terminal.turnIndex);
     if (summary === undefined) return false;

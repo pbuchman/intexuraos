@@ -1,3 +1,4 @@
+import { ElementType, parseDocument } from 'htmlparser2';
 import { z } from 'zod';
 
 import {
@@ -17,6 +18,209 @@ export const INTEX_AGENT_TEST_RUN_MAX_REPLIES_PER_TURN = 5 as const;
 const safeIntegerSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
 const positiveSafeIntegerSchema = safeIntegerSchema.min(1);
 const nullableTimestampSchema = matrixCorpusRfc3339TimestampSchema.nullable();
+const evaluationUrlPattern = /\bhttps?:\/\/[^\s<>"')]+|\/#\/[^\s<>"')]+/giu;
+const evaluationSensitiveLinePattern =
+  /(?:^|[^\p{L}\p{N}])(url|source|zrodlo|źródło|title|tytuł|content|treść|tresc|start|początek|end|koniec|location|miejsce|attendees|uczestnicy|prompt|polecenie|mode|tryb|worker|typ workera|linear|new entry|nowy wpis|entry|wpis|before|wcześniej|przed|after|po zmianie|po)(?![\p{L}\p{N}])[^\p{L}\p{N}]*?(?::|\|)\s*.*$/iu;
+const evaluationPreferenceHeaderPattern =
+  /^\s*(?:(?:>|[-+*•‣◦▪]|\d+[.)])\s*)*[^\p{L}\p{N}]*(user preferences|prompt preferences|current preferences|rendered prompt block|preferencje|preferencje użytkownika)(?:\s+v\d+)?[^\p{L}\p{N}]*:?\s*$/iu;
+const evaluationInlinePreferencePattern =
+  /(?:^|[^\p{L}\p{N}])(user preferences|prompt preferences|current preferences|rendered prompt block|preferencje|preferencje użytkownika)(?:\s+v\d+)?(?![\p{L}\p{N}])[^\p{L}\p{N}]*(?::|\|)\s*.*$/iu;
+const evaluationSyntheticMarkerPattern =
+  /(?<![A-Z0-9-])INTEX-EVAL-[0-9]{3}(?:-F[0-9]{2})?(?![A-Z0-9-])/giu;
+const evaluationLineSeparatorPattern = /\r\n|[\n\v\f\r\u0085\u2028\u2029]/u;
+const evaluationDatePresentationMarkerPattern =
+  /(?:^|[^\p{L}\p{N}])date-presentation(?![\p{L}\p{N}])[^\p{L}\p{N}]*(?::|\|)\s*.*$/iu;
+const evaluationDateFieldPattern =
+  /(?:^|[^\p{L}\p{N}])(?:start|początek|end|koniec)(?![\p{L}\p{N}])[^\p{L}\p{N}]*?(?::|\|)\s*(.*?)\s*$/iu;
+const rawRecordIsoDatePattern =
+  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?/iu;
+const rawRecordIsoDateGlobalPattern =
+  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?/giu;
+const rawRecordDatePattern =
+  /\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|\.\d{3,9}\b|(?:Z|[+-]\d{2}:\d{2})\s*$|\b(?:UTC|GMT|Europe\/[A-Za-z_]+|America\/[A-Za-z_]+)\b/iu;
+const clockTimePattern = /\b\d{1,2}:\d{2}\b/u;
+const humanDatePattern = /\b\d{4}\b.*\b\d{1,2}:\d{2}\b|\b\d{1,2}:\d{2}\b.*\b\d{4}\b/u;
+const evaluationHtmlCellTags = new Set(['td', 'th', 'dt', 'dd']);
+const evaluationHtmlLineTags = new Set([
+  'address',
+  'article',
+  'aside',
+  'blockquote',
+  'br',
+  'div',
+  'dl',
+  'figcaption',
+  'figure',
+  'footer',
+  'form',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'header',
+  'hr',
+  'li',
+  'main',
+  'nav',
+  'ol',
+  'p',
+  'pre',
+  'section',
+  'table',
+  'tr',
+  'ul',
+]);
+const evaluationHtmlLineBoundary = Symbol('evaluation-html-line-boundary');
+const unsafeDecodedEvaluationSeparators = new Set([
+  '\u001C',
+  '\u001D',
+  '\u001E',
+  '\u001F',
+  '\uE000',
+]);
+
+export type IntexAgentReplyDatePresentation =
+  | 'not_present'
+  | 'human_readable'
+  | 'raw_record'
+  | 'unreadable';
+
+export function classifyIntexAgentReplyDatePresentation(
+  text: string
+): IntexAgentReplyDatePresentation {
+  const normalizedText = normalizeEvaluationText(text);
+  if (rawRecordIsoDatePattern.test(normalizedText)) return 'raw_record';
+  const values = normalizedText.split(evaluationLineSeparatorPattern).flatMap((line) => {
+    const value = evaluationDateFieldPattern.exec(stripEvaluationMarkup(line))?.[1];
+    return value !== undefined && clockTimePattern.test(value) ? [value] : [];
+  });
+  if (values.length === 0) return 'not_present';
+  if (values.some((value) => rawRecordDatePattern.test(value))) return 'raw_record';
+  return values.every((value) => humanDatePattern.test(value) && /\p{L}{3,}/u.test(value))
+    ? 'human_readable'
+    : 'unreadable';
+}
+
+export function sanitizeIntexAgentReplyText(text: string): string {
+  const datePresentation = classifyIntexAgentReplyDatePresentation(text);
+  let inPreferenceBlock = false;
+  let inSensitiveDetails = false;
+  const lines = normalizeEvaluationText(text)
+    .replace(evaluationUrlPattern, '[redacted-url]')
+    .replace(rawRecordIsoDateGlobalPattern, '[redacted-date-record]')
+    .split(evaluationLineSeparatorPattern);
+  const redacted = lines.map((line) => {
+    const matchingLine = stripEvaluationMarkup(line);
+    if (evaluationDatePresentationMarkerPattern.test(matchingLine)) return '';
+    if (
+      evaluationPreferenceHeaderPattern.test(matchingLine) ||
+      evaluationInlinePreferencePattern.test(matchingLine)
+    ) {
+      inPreferenceBlock = true;
+      return 'User Preferences: [redacted]';
+    }
+    if (inPreferenceBlock) {
+      if (line.trim() === '') {
+        inPreferenceBlock = false;
+        return line;
+      }
+      return '[redacted-preference-item]';
+    }
+    const sensitive = redactEvaluationLine(line);
+    if (inSensitiveDetails) return sensitive ?? '';
+    if (sensitive === null) return line;
+    inSensitiveDetails = true;
+    return sensitive;
+  });
+  const sanitized = redacted
+    .join('\n')
+    .replace(evaluationSyntheticMarkerPattern, '[synthetic-marker]');
+  if (datePresentation === 'not_present') return sanitized;
+  const safePresentation = datePresentation.replace('_', '-');
+  return `${sanitized}\n[date-presentation: ${safePresentation}]`;
+}
+
+function redactEvaluationLine(line: string): string | null {
+  const label = evaluationSensitiveLinePattern.exec(stripEvaluationMarkup(line))?.[1];
+  return label === undefined ? null : `${label}: [redacted]`;
+}
+
+function stripEvaluationMarkup(line: string): string {
+  return line.replace(/<[^>\r\n]{1,256}>/gu, ' | ');
+}
+
+function normalizeEvaluationText(text: string): string {
+  const normalized = text
+    .replaceAll('\u001C', '\n')
+    .replaceAll('\u001D', '\n')
+    .replaceAll('\u001E', '\n')
+    .replaceAll('\u001F', '\n')
+    .normalize('NFKC')
+    .replace(/\p{Default_Ignorable_Code_Point}/gu, '');
+  return normalizeEvaluationHtml(normalized);
+}
+
+type EvaluationHtmlNode =
+  | ReturnType<typeof parseDocument>
+  | ReturnType<typeof parseDocument>['children'][number];
+
+function normalizeEvaluationHtml(text: string): string {
+  let current = text;
+  let visible = normalizeDecodedEvaluationText(renderEvaluationHtml([parseDocument(current)]));
+  while (visible !== current) {
+    current = visible;
+    visible = normalizeDecodedEvaluationText(renderEvaluationHtml([parseDocument(current)]));
+  }
+  return visible;
+}
+
+function normalizeDecodedEvaluationText(text: string): string {
+  const normalized = text.normalize('NFKC').replace(/\p{Default_Ignorable_Code_Point}/gu, '');
+  for (const separator of unsafeDecodedEvaluationSeparators) {
+    if (normalized.includes(separator)) return '[redacted-encoded-separator-content]';
+  }
+  return normalized;
+}
+
+type EvaluationHtmlRenderPart = string | typeof evaluationHtmlLineBoundary;
+
+function renderEvaluationHtml(nodes: readonly EvaluationHtmlNode[]): string {
+  const parts = renderEvaluationHtmlParts(nodes);
+  let rendered = '';
+  let pendingBoundary = false;
+  for (const part of parts) {
+    if (part === evaluationHtmlLineBoundary) {
+      pendingBoundary = true;
+      continue;
+    }
+    if (pendingBoundary) {
+      if (part.trim() === '') continue;
+      rendered += '\n';
+      pendingBoundary = false;
+    }
+    rendered += part;
+  }
+  return pendingBoundary ? `${rendered}\n` : rendered;
+}
+
+function renderEvaluationHtmlParts(
+  nodes: readonly EvaluationHtmlNode[]
+): EvaluationHtmlRenderPart[] {
+  return nodes.flatMap((node): EvaluationHtmlRenderPart[] => {
+    if (node.type === ElementType.Text) return [node.data];
+    if (!('children' in node)) return [];
+    if ('name' in node && (node.name === 'script' || node.name === 'style')) return [];
+    const content = renderEvaluationHtmlParts(node.children);
+    if (!('name' in node)) return content;
+    if (evaluationHtmlCellTags.has(node.name)) return [' | ', ...content, ' | '];
+    if (evaluationHtmlLineTags.has(node.name)) {
+      return [evaluationHtmlLineBoundary, ...content, evaluationHtmlLineBoundary];
+    }
+    return content;
+  });
+}
 
 export const testRunLifecycleSchema = z.enum([
   'preflight',
@@ -269,7 +473,13 @@ export const safeToolEvidenceV1Schema = z
   .strict();
 export type SafeToolEvidenceV1 = z.infer<typeof safeToolEvidenceV1Schema>;
 
-const deterministicTransitionV1Schema = z.enum(['created', 'continued', 'completed', 'failed']);
+const deterministicTransitionV1Schema = z.enum([
+  'created',
+  'continued',
+  'superseded',
+  'completed',
+  'failed',
+]);
 export const safeDeterministicEvidenceV1Schema = z
   .object({
     expectedToolName: intexAgentToolNameV1Schema.nullable(),
@@ -294,8 +504,11 @@ export const safeDeterministicCheckV1Schema = z
       'tool_count',
       'tool_turn',
       'tool_fact',
+      'reply_format',
       'session_transition',
       'lifecycle_event',
+      'user_message_count',
+      'agent_usage_count',
       'transport',
     ]),
     status: z.enum(['pending', 'passed', 'failed']),
@@ -412,6 +625,28 @@ const sourceTimelineBase = {
 };
 
 export const publicTestTimelineEventV1Schema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('session_started'),
+      ...sourceTimelineBase,
+      startReason: z.enum([
+        'no_active_session',
+        'previous_completed',
+        'previous_expired',
+        'previous_superseded',
+        'user_requested_new_session',
+      ]),
+      explicit: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('session_closed'),
+      ...sourceTimelineBase,
+      endReason: z.literal('superseded_by_user'),
+      status: z.literal('superseded'),
+    })
+    .strict(),
   z
     .object({
       type: z.literal('user_message'),

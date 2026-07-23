@@ -535,6 +535,49 @@ describe('Intex Agent Test Run foundation types', () => {
         [{ ...baseProjection, completedTurns: 1, agentUsage: [agentUsage] }]
       )?.cost
     ).toEqual({ agentNanoUsd: 1, evaluatorNanoUsd: null, totalNanoUsd: null });
+    const zeroAgentUsageCheck = {
+      code: 'agent_usage_count' as const,
+      status: 'passed' as const,
+      turnIndex: 0,
+      replyIndex: null,
+      evidence: {
+        ...emptyDeterministicEvidence(),
+        expectedCount: 0,
+        actualCount: 0,
+      },
+    };
+    expect(
+      deriveTestRunEvidenceTotals(
+        [{ ...completedScenario, deterministicVerdict: 'passed' }],
+        [
+          {
+            ...baseProjection,
+            completedTurns: 1,
+            deterministicChecks: [zeroAgentUsageCheck],
+          },
+        ]
+      )?.cost
+    ).toEqual({ agentNanoUsd: 0, evaluatorNanoUsd: null, totalNanoUsd: null });
+    expect(
+      deriveTestRunEvidenceTotals(
+        [
+          {
+            ...completedScenario,
+            verdict: 'failed',
+            deterministicVerdict: 'failed',
+            semanticVerdict: 'not_evaluated',
+          },
+        ],
+        [
+          {
+            ...baseProjection,
+            completedTurns: 1,
+            verdict: 'failed',
+            deterministicChecks: [{ ...zeroAgentUsageCheck, status: 'failed' as const }],
+          },
+        ]
+      )?.cost
+    ).toEqual({ agentNanoUsd: null, evaluatorNanoUsd: null, totalNanoUsd: null });
     expect(
       deriveTestRunEvidenceTotals(
         [{ ...completedScenario, semanticVerdict: 'passed' }],

@@ -187,6 +187,25 @@ export interface MatrixCorpusEvidenceResult {
     readonly totalTokens: number;
     readonly costNanoUsd: number;
   };
+  readonly sessionProof: {
+    readonly status:
+      | 'active'
+      | 'waiting_for_user'
+      | 'completed'
+      | 'unsupported'
+      | 'expired'
+      | 'cancelled'
+      | 'superseded';
+    readonly startReason:
+      | 'no_active_session'
+      | 'previous_completed'
+      | 'previous_expired'
+      | 'previous_superseded'
+      | 'user_requested_new_session';
+    readonly userMessageCount: number;
+    readonly sessionStartedCount: number;
+    readonly supersededSessionCount: number;
+  };
   readonly turnTerminals: readonly MatrixCorpusSafeTurnTerminal[];
   readonly strictMockProof: {
     readonly version: 1;

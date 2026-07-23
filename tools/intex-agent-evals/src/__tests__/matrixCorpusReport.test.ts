@@ -126,8 +126,8 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
       turnsCompleted: 59,
       sessionsExpected: 20,
       sessionsCreated: 20,
-      sessionsContinued: 39,
-      sessionsClosed: 0,
+      sessionsContinued: 38,
+      sessionsClosed: 1,
       confirmationsRequested: 17,
       confirmationsAccepted: 17,
       confirmationsRejected: 0,
@@ -141,7 +141,7 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
       productionExecutorResolutions: 0,
       productionExecutorAdmissions: 0,
     },
-    usage: { agent: usage(20), evaluator: usage(59), totalCostNanoUsd: 79, costComplete: true },
+    usage: { agent: usage(19), evaluator: usage(59), totalCostNanoUsd: 78, costComplete: true },
     scenarios: Array.from({ length: 20 }, (_, offset) => {
       const scenarioId = `intex-eval-${String(offset + 1).padStart(3, '0')}`;
       const plannedTurns = PASS_TURN_COUNTS[offset] ?? 0;
@@ -178,7 +178,7 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
           criteriaFailed: 0,
           usage: usage(plannedTurns),
         },
-        agentUsage: usage(1),
+        agentUsage: usage(offset === 8 ? 0 : 1),
         strictMockProof: {
           version: 1 as const,
           status: 'passed' as const,

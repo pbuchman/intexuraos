@@ -30,7 +30,7 @@ export interface InternalHttpClientLogger {
 export interface InternalHttpClientConfig {
   baseUrl: string;
   token: string;
-  logger: InternalHttpClientLogger;
+  logger: Pick<InternalHttpClientLogger, 'warn'>;
   defaultTimeoutMs?: number;
   /** Prefix used by an authenticated edge that rewrites to a service's private routes. */
   pathPrefix?: string;

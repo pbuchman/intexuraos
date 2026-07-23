@@ -343,6 +343,13 @@ function fixture(): RouteFixture {
           totalTokens: 7,
           costNanoUsd: 42,
         },
+        sessionProof: {
+          status: 'waiting_for_user' as const,
+          startReason: 'no_active_session' as const,
+          userMessageCount: 1,
+          sessionStartedCount: 0,
+          supersededSessionCount: 0,
+        },
         turnTerminals: [
           {
             status: 'completed' as const,
@@ -1215,6 +1222,13 @@ describe('Matrix corpus private routes', () => {
         totalTokens: 7,
         costNanoUsd: 42,
       },
+      sessionProof: {
+        status: 'waiting_for_user',
+        startReason: 'no_active_session',
+        userMessageCount: 1,
+        sessionStartedCount: 0,
+        supersededSessionCount: 0,
+      },
       turnTerminals: [
         {
           status: 'completed',
@@ -2038,6 +2052,7 @@ describe('Matrix corpus private routes', () => {
     }
 
     const projection = spec.paths?.['/internal/test-runs/{runId}/projection']?.['put'];
+    expect(JSON.stringify(projection?.requestBody)).toContain('"reply_format"');
     const requestBody = jsonObject(projection?.requestBody);
     const content = jsonObject(requestBody['content']);
     const media = jsonObject(content['application/json']);
