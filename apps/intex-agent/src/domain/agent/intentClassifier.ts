@@ -1,5 +1,6 @@
 import {
-  IntexAgentIntentClassifierOutputSchema,
+  IntexAgentIntentClassifierProviderOutputSchema,
+  INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT,
   IntexAgentIntentClassifierToolNameSchema,
   IntexAgentBlockerReasonSchema,
   intexAgentIntentClassifierPrompt,
@@ -139,11 +140,14 @@ export function createLlmIntexAgentIntentClassifier(deps: {
       // multiplying those attempts inside the lease-bounded Matrix corpus lane.
       const retryingClient =
         matrixCorpusLlm === undefined ? createRetryingStructuredClient(deps.client) : deps.client;
-      const result = await generateStructured({
+      const result = await generateStructured<IntexAgentIntentClassifierOutput>({
         client: retryingClient,
         prompt,
         schema: classifierSchemaFor(activeClarification),
         promptType: INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE,
+        options: {
+          responseFormat: INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT,
+        },
         repairBuilder: (raw, error) =>
           intexAgentIntentClassifierRepairPrompt.build({
             originalPrompt: prompt,
@@ -332,17 +336,17 @@ interface ActiveClarificationContext {
 }
 
 type IntentClassifierSchema =
-  | typeof IntexAgentIntentClassifierOutputSchema
-  | ReturnType<typeof IntexAgentIntentClassifierOutputSchema.superRefine>;
+  | typeof IntexAgentIntentClassifierProviderOutputSchema
+  | ReturnType<typeof IntexAgentIntentClassifierProviderOutputSchema.superRefine>;
 
 function classifierSchemaFor(
   activeClarification: ActiveClarificationContext | undefined
 ): IntentClassifierSchema {
   if (activeClarification === undefined) {
-    return IntexAgentIntentClassifierOutputSchema;
+    return IntexAgentIntentClassifierProviderOutputSchema;
   }
 
-  return IntexAgentIntentClassifierOutputSchema.superRefine((output, context) => {
+  return IntexAgentIntentClassifierProviderOutputSchema.superRefine((output, context) => {
     if (
       output.outcome === 'needs_clarification' &&
       (output.candidateIntents === undefined || output.candidateIntents.length === 0)

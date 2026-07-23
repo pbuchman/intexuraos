@@ -49,6 +49,7 @@ import {
   type LLMError,
   type LLMModel,
   type LlmChatMessage,
+  type LlmResponseFormat,
   type OpenRouterToolCallingModel,
   type ToolCallingClient,
   type ToolCallingModel,
@@ -126,6 +127,8 @@ export interface GenerateResult {
 export interface GenerateOptions {
   /** Semantic identifier for the prompt type (e.g., 'linear-issue-title', 'code-worker-validation') */
   promptType: string;
+  /** Optional provider-enforced response shape. */
+  responseFormat?: LlmResponseFormat;
   /**
    * Optional per-call correlation overrides. Threaded through to the
    * usage event's `correlation` block so attribution to a specific

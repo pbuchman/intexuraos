@@ -5,7 +5,9 @@ import type {
   ToolCallingMessage,
 } from '@intexuraos/llm-contract';
 import {
+  IntexAgentRunnerProviderOutputSchema,
   IntexAgentRunnerOutputSchema,
+  INTEX_AGENT_RUNNER_RESPONSE_FORMAT,
   intexAgentRunnerOutputRepairPrompt,
   type IntexAgentBlockerReason,
   type IntexAgentRunnerOutput,
@@ -1090,81 +1092,58 @@ function isConversationIntent(
 async function validateRunnerOutput(
   input: RunnerOutputValidationInput
 ): Promise<IntexAgentRunnerOutput | null> {
-  const matrixCorpusLlm = input.matrixCorpusLlm;
-  const firstResponseClient = createFirstResponseThenRepairClient(
-    input.content,
-    input.repairClient
-  );
-  const result = await generateStructured({
-    client: firstResponseClient,
+  const originalResult = await generateStructured<IntexAgentRunnerOutput>({
+    client: createStructuredContentClient(input.content),
     prompt: 'Validate the Intex Agent runner response.',
     schema: IntexAgentRunnerOutputSchema,
     promptType: INTEX_AGENT_RUNNER_PROMPT_TYPE,
-    ...(input.repairClient !== undefined
-      ? {
-          repairBuilder: (raw, error): string =>
-            intexAgentRunnerOutputRepairPrompt.build({
-              systemPrompt: input.systemPrompt,
-              messages: input.messages,
-              invalidResponse: raw,
-              errorMessage: formatZodErrors(error),
-            }),
-          maxRepairAttempts: 1,
-        }
-      : { maxRepairAttempts: 0 }),
-    ...(matrixCorpusLlm === undefined
+    maxRepairAttempts: 0,
+  });
+  if (originalResult.ok) return originalResult.value.data;
+  if (input.repairClient === undefined || originalResult.error.kind !== 'validation') return null;
+
+  const repairResult = await generateStructured<IntexAgentRunnerOutput>({
+    client: input.repairClient,
+    prompt: intexAgentRunnerOutputRepairPrompt.build({
+      systemPrompt: input.systemPrompt,
+      messages: input.messages,
+      invalidResponse: originalResult.error.raw,
+      errorMessage: formatZodErrors(originalResult.error.zodError),
+    }),
+    schema: IntexAgentRunnerProviderOutputSchema,
+    promptType: INTEX_AGENT_RUNNER_PROMPT_TYPE,
+    options: {
+      responseFormat: INTEX_AGENT_RUNNER_RESPONSE_FORMAT,
+      ...(input.matrixCorpusLlm === undefined
+        ? {}
+        : {
+            matrixCorpusContext:
+              input.matrixCorpusLlm.nextContext('response_schema_repair'),
+          }),
+    },
+    maxRepairAttempts: 0,
+    ...(input.matrixCorpusLlm === undefined
       ? {}
       : {
-          optionsForAttempt: (attempt: number): Record<string, unknown> =>
-            attempt === 0
-              ? {}
-              : {
-                  matrixCorpusContext: matrixCorpusLlm.nextContext('response_schema_repair'),
-                },
           onProviderCall: async (call: MatrixCorpusProviderCallUsageV1): Promise<void> => {
-            await matrixCorpusLlm.recordProviderCall(call);
+            await input.matrixCorpusLlm?.recordProviderCall(call);
           },
         }),
   });
 
-  return result.ok ? result.value.data : null;
+  return repairResult.ok ? repairResult.value.data : null;
 }
 
-function createFirstResponseThenRepairClient(
-  content: string,
-  repairClient: StructuredClient | undefined
-): StructuredClient {
-  if (repairClient === undefined) {
-    return {
-      generate(): ReturnType<StructuredClient['generate']> {
-        return Promise.resolve({
-          ok: true,
-          value: {
-            content,
-            usage: emptyStructuredUsage(),
-          },
-        });
-      },
-    };
-  }
-
-  let didReturnOriginalContent = false;
+function createStructuredContentClient(content: string): StructuredClient {
   return {
-    generate(
-      prompt: string,
-      options: Parameters<StructuredClient['generate']>[1]
-    ): ReturnType<StructuredClient['generate']> {
-      if (!didReturnOriginalContent) {
-        didReturnOriginalContent = true;
-        return Promise.resolve({
-          ok: true,
-          value: {
-            content,
-            usage: emptyStructuredUsage(),
-          },
-        });
-      }
-      return repairClient.generate(prompt, options);
+    generate(): ReturnType<StructuredClient['generate']> {
+      return Promise.resolve({
+        ok: true,
+        value: {
+          content,
+          usage: emptyStructuredUsage(),
+        },
+      });
     },
   };
 }

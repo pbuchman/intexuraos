@@ -33,6 +33,13 @@ export {
 } from './runnerOutputSchemas.js';
 
 export {
+  INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT,
+  INTEX_AGENT_RUNNER_RESPONSE_FORMAT,
+  IntexAgentIntentClassifierProviderOutputSchema,
+  IntexAgentRunnerProviderOutputSchema,
+} from './structuredOutput.js';
+
+export {
   intexAgentRunnerOutputRepairPrompt,
   type IntexAgentRunnerOutputRepairPromptDeps,
   type IntexAgentRunnerOutputRepairPromptInput,

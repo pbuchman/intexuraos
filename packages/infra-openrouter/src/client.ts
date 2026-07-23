@@ -221,6 +221,16 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           ...(allowFallbacks !== undefined && { allow_fallbacks: allowFallbacks }),
         };
 
+  function providerRequestFor(
+    responseFormat: GenerateChatOptions['responseFormat']
+  ): Record<string, unknown> | undefined {
+    if (responseFormat?.type !== 'json_schema') return providerRequest;
+    return {
+      ...(providerRequest ?? {}),
+      require_parameters: true,
+    };
+  }
+
   async function postChatCompletion<T>(requestBody: Record<string, unknown>): Promise<T> {
     return await withRequestTimeout(
       resolveRequestTimeoutMs(timeoutMs, deadlineAtMs),
@@ -535,6 +545,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           cachedTokens?: number;
           cacheWriteTokens?: number;
         }> => {
+          const requestProvider = providerRequestFor(options.responseFormat);
           const requestBody = {
             model, // No :online suffix for synthesis
             messages,
@@ -543,7 +554,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
             ...(options.responseFormat !== undefined && {
               response_format: options.responseFormat,
             }),
-            ...(providerRequest !== undefined && { provider: providerRequest }),
+            ...(requestProvider !== undefined && { provider: requestProvider }),
             ...(toOpenRouterReasoning(options.reasoning) !== undefined && {
               reasoning: toOpenRouterReasoning(options.reasoning),
             }),
@@ -616,6 +627,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
   ): Promise<Result<GenerateChatResult, OpenRouterError>> {
     const start = Date.now();
     try {
+      const requestProvider = providerRequestFor(options.responseFormat);
       const requestBody = {
         model,
         messages,
@@ -625,7 +637,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         ...(options.responseFormat !== undefined && {
           response_format: options.responseFormat,
         }),
-        ...(providerRequest !== undefined && { provider: providerRequest }),
+        ...(requestProvider !== undefined && { provider: requestProvider }),
         ...(toOpenRouterReasoning(options.reasoning) !== undefined && {
           reasoning: toOpenRouterReasoning(options.reasoning),
         }),

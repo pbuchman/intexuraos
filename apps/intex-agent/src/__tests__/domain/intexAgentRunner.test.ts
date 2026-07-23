@@ -2792,6 +2792,44 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('repairs conflicting runner-only fields instead of hiding a false tool completion', async () => {
+    const client = new FakeToolCallingClient([
+      ok({
+        content: JSON.stringify({
+          outcome: 'no_action',
+          reply: 'Saved the note.',
+          toolName: 'create_note',
+        }),
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'no_action', reply: 'I did not create a note.' })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'something weird',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'I did not create a note.',
+    });
+
+    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(responseRepairClient.calls[0]?.prompt).toContain('"toolName":"create_note"');
+  });
+
   it('repairs malformed final runner output through the structured repair prompt', async () => {
     const client = new FakeToolCallingClient([
       ok({
@@ -2827,6 +2865,110 @@ describe('createIntexAgentRunner', () => {
     expect(responseRepairClient.calls[0]?.options.promptType).toBe(
       INTEX_AGENT_RUNNER_PROMPT_TYPE
     );
+  });
+
+  it('normalizes strict structured runner repair nulls before domain validation', async () => {
+    const client = new FakeToolCallingClient([
+      ok({
+        content: 'not json',
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          reply: 'Which date?',
+          summary: null,
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          suggestedNextStep: null,
+          clarification: null,
+          candidateIntents: ['create_calendar_event'],
+          errorCategory: null,
+          isRetryable: null,
+          attemptedAction: null,
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'create dentist appointment',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Which date?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+    });
+    expect(responseRepairClient.calls[0]?.options['responseFormat']).toMatchObject({
+      type: 'json_schema',
+      json_schema: {
+        name: 'intex_agent_runner_output',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: expect.any(Object),
+          required: expect.any(Array),
+          additionalProperties: false,
+        },
+      },
+    });
+  });
+
+  it('rejects a false tool completion embedded in a strict runner repair response', async () => {
+    const client = new FakeToolCallingClient([
+      ok({
+        content: 'not json',
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'no_action',
+          reply: 'Saved the note.',
+          toolName: 'create_note',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'something weird',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What would you like me to do with this?',
+      blockerReason: 'not_enough_context',
+      suggestedNextStep: 'Ask the user to restate the action.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
+    });
+
+    expect(responseRepairClient.calls).toHaveLength(1);
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
