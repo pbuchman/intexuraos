@@ -61,6 +61,7 @@ export interface IntexAgentIntentClassifierInput {
   message: string;
   events: IntexAgentSessionEvent[];
   currentDateTime: string;
+  timeZone: string;
   replyContext?: IntexIncomingMessageReplyContext;
   matrixCorpusLlm?: MatrixCorpusLlmRecorder;
 }
@@ -133,6 +134,7 @@ export function createLlmIntexAgentIntentClassifier(deps: {
       const activeClarification = readActiveClarificationContext(input.events);
       const prompt = intexAgentIntentClassifierPrompt.build({
         currentDateTime: input.currentDateTime,
+        timeZone: input.timeZone,
         messages: buildClassifierMessages(input.events, input.message, input.replyContext),
         ...(activeClarification !== undefined ? { activeClarification } : {}),
       });

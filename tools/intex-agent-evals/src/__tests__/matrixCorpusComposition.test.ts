@@ -187,7 +187,7 @@ describe('production Matrix corpus composition', () => {
       exitCode: 1,
       effectiveKind: 'behavioral_failure',
       failureCodes: ['deterministic_evidence_failed'],
-      totals: { completedTurns: 59 },
+      totals: { completedTurns: 58 },
     });
     expect(result.run.scenarios[1]).toMatchObject({
       scenarioId: 'intex-eval-002',
@@ -432,7 +432,7 @@ describe('production Matrix corpus composition', () => {
       },
     });
     expect(result).not.toHaveProperty('relativeReportDirectory');
-    expect(result.run.scenarios[0]).toMatchObject({ status: 'failed', completedTurns: 2 });
+    expect(result.run.scenarios[0]).toMatchObject({ status: 'failed', completedTurns: 1 });
     expect(result.run.scenarios.slice(1).every((scenario) => scenario.status === 'passed')).toBe(
       true
     );

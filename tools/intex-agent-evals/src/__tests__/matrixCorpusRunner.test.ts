@@ -79,7 +79,7 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.cleanupCompleted).toBe(true);
   });
 
-  it('continues behavioral failures through scenario 20 and returns exit 1', async () => {
+  it('skips dependent turns after a behavioral failure but still runs through scenario 20', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const trace: string[] = [];
     const ports = passingPorts(trace);
@@ -87,7 +87,7 @@ describe('sequential Matrix corpus state machine', () => {
       ok: true,
       observation: {
         ...observation(input.scenario, input.turnIndex),
-        deterministicPassed: input.scenario.id !== 'intex-eval-002',
+        deterministicPassed: !(input.scenario.id === 'intex-eval-002' && input.turnIndex === 0),
       },
     }));
 
@@ -95,8 +95,18 @@ describe('sequential Matrix corpus state machine', () => {
 
     expect(result.exitCode).toBe(1);
     expect(result.scenarios[1]?.status).toBe('failed');
+    expect(result.scenarios[1]?.completedTurns).toBe(1);
     expect(result.scenarios[19]?.status).toBe('passed');
-    expect(result.totals.completedTurns).toBe(59);
+    expect(
+      vi
+        .mocked(ports.executeTurn)
+        .mock.calls.map(([input]) => input)
+        .filter(({ scenario }) => scenario.id === 'intex-eval-002')
+        .map(({ turnIndex }) => turnIndex)
+    ).toEqual([0]);
+    expect(result.totals.completedTurns).toBe(
+      59 - ((catalog.scenarios[1]?.scenario.turns.length ?? 1) - 1)
+    );
   });
 
   it('stops immediately on safety failure, marks later scenarios not run, and still terminalizes', async () => {
@@ -294,8 +304,9 @@ describe('sequential Matrix corpus state machine', () => {
     const result = await runMatrixCorpus({ runId: 'run_behavioral', catalog }, ports);
 
     expect(result.exitCode).toBe(1);
-    expect(ports.judgeReply).toHaveBeenCalled();
-    expect(result.totals.completedTurns).toBe(59);
+    expect(ports.judgeReply).toHaveBeenCalledTimes(20);
+    expect(result.totals.completedTurns).toBe(20);
+    expect(result.scenarios.every(({ status }) => status === 'failed')).toBe(true);
   });
 
   it('judges a bounded extra correlated reply and classifies it as behavioral', async () => {

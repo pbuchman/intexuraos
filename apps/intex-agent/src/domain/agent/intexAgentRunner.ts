@@ -81,6 +81,13 @@ const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
   'update_user_preference',
   'delete_user_preference',
 ]);
+const RUNTIME_TIME_ZONE_MISSING_FIELDS = new Set([
+  'timezone',
+  'ianatimezone',
+  'usertimezone',
+  'eventtimezone',
+  'strefaczasowa',
+]);
 
 const OPAQUE_REFERENCE_PATTERN =
   /(?<![\p{L}\p{N}_-])(?=[\p{L}\p{N}_-]*\p{L})(?=[\p{L}\p{N}_-]*\p{N})[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+(?![\p{L}\p{N}_-])/gu;
@@ -152,6 +159,20 @@ const CALENDAR_ORDINAL_DATE_SIGNAL_PATTERN =
 
 const CALENDAR_CONTEXTUAL_MONTH_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?)(?=$|[^\p{L}\p{N}])/iu;
+const EXPLICIT_IANA_TIME_ZONE_CANDIDATE_PATTERN =
+  /(?<![\p{L}\p{N}_])([a-z](?:[a-z0-9._+-]*[a-z0-9_+-])?(?:\/[a-z](?:[a-z0-9._+-]*[a-z0-9_+-])?)+)(?![\p{L}\p{N}_])/giu;
+const EXPLICIT_STANDALONE_TIME_ZONE_CANDIDATE_PATTERN =
+  /(?<![\p{L}\p{N}_/])([A-Z][A-Z0-9]*(?:[-+][A-Z0-9]+)*)(?![\p{L}\p{N}_/])/gu;
+const EXPLICIT_CONTEXTUAL_TIME_ZONE_CANDIDATE_PATTERN =
+  /(?:(?<![\p{L}\p{N}_])(?:in|using|timezone|time\s+zone)\s+|(?<!\d)(?:\d{1,2}:\d{2}(?:\s*(?:am|pm))?|\d{1,2}\s*(?:am|pm))\s+(?:in\s+)?)([a-z][a-z0-9]*(?:[-+][a-z0-9]+)*)(?![\p{L}\p{N}_/])/giu;
+const EXPLICIT_ISO_TIME_ZONE_PATTERN =
+  /(?<![\p{L}\p{N}_])(?:\d{4}-\d{2}-\d{2}t)?\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:z|[+-]\d{2}:\d{2})(?![\p{L}\p{N}_])/iu;
+const EXPLICIT_NATURAL_TIME_ZONE_CANDIDATE_PATTERN =
+  /(?<![\p{L}\p{N}_])([\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*){0,3})\s+time(?![\p{L}\p{N}_])/giu;
+const EXPLICIT_TIME_ZONE_TOKEN_PATTERN =
+  /(?<![\p{L}\p{N}_/])(?:(?:utc|gmt)\s*[+-]\s*\d{1,2}(?::?\d{2})?|[+-]\d{2}:\d{2}|utc|gmt|cet|cest|eet|eest|est|edt|cst|cdt|mst|mdt|pst|pdt)(?![\p{L}\p{N}_/])/iu;
+const NATURAL_TIME_ZONE_QUALIFIERS = new Set(['daylight', 'local', 'standard', 'summer']);
+const NATURAL_TIME_ZONE_NAMES = buildNaturalTimeZoneNames();
 
 const CLASSIFIER_UNSUPPORTED_REPLIES: Record<
   IntexAgentReplyLanguage,
@@ -362,18 +383,25 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
-      const intent =
+      const classifiedIntent =
         config.intentClassifier === undefined
           ? classifyIntexAgentIntent(input.message)
           : await config.intentClassifier.classify({
               message: input.message,
               events: input.events,
-            currentDateTime: input.currentDateTime,
-            ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
-            ...(config.matrixCorpusLlm !== undefined
-              ? { matrixCorpusLlm: config.matrixCorpusLlm }
-              : {}),
-          });
+              currentDateTime: input.currentDateTime,
+              timeZone: input.timeZone,
+              ...(input.replyContext !== undefined ? { replyContext: input.replyContext } : {}),
+              ...(config.matrixCorpusLlm !== undefined
+                ? { matrixCorpusLlm: config.matrixCorpusLlm }
+                : {}),
+            });
+      const intent = applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
+        timeZone: input.timeZone,
+        message: input.message,
+        events: input.events,
+        replyContext: input.replyContext,
+      });
       const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
         return normalizeClassifierUnsupportedIntent(intent, replyLanguage);
@@ -524,6 +552,203 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       };
     },
   };
+}
+
+function applyRuntimeTimeZoneToCalendarIntent(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    timeZone: string;
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): IntexAgentIntentClassification {
+  if (
+    context.timeZone.trim() === '' ||
+    hasExplicitTimeZoneContext(context) ||
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length === 0 ||
+    !intent.missingFields.every(isRuntimeTimeZoneMissingField) ||
+    intent.candidateIntents === undefined ||
+    intent.candidateIntents.length === 0 ||
+    !intent.candidateIntents.every((candidate) => candidate === 'create_calendar_event')
+  ) {
+    return intent;
+  }
+
+  return {
+    kind: 'tool',
+    allowedToolNames: ['create_calendar_event'],
+    ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
+    ...(intent.stylePreferenceAction !== undefined
+      ? { stylePreferenceAction: intent.stylePreferenceAction }
+      : {}),
+    ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
+    ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
+function isRuntimeTimeZoneMissingField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return RUNTIME_TIME_ZONE_MISSING_FIELDS.has(canonical);
+}
+
+function hasExplicitTimeZoneContext(context: {
+  message: string;
+  events: readonly IntexAgentSessionEvent[];
+  replyContext: IntexIncomingMessageReplyContext | undefined;
+}): boolean {
+  if (containsExplicitTimeZoneSignal(context.message)) return true;
+  if (
+    context.replyContext?.source === 'inbound_user_message' &&
+    containsExplicitTimeZoneSignal(context.replyContext.text)
+  ) {
+    return true;
+  }
+
+  for (let index = context.events.length - 1; index >= 0; index -= 1) {
+    const event = context.events[index];
+    if (event?.type === 'user_message') return false;
+    if (event?.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) return false;
+    return activeCalendarClarificationChainContainsTimeZone(context.events, index);
+  }
+
+  return false;
+}
+
+function activeCalendarClarificationChainContainsTimeZone(
+  events: readonly IntexAgentSessionEvent[],
+  latestClarificationIndex: number
+): boolean {
+  let expectsUserMessage = true;
+
+  for (let index = latestClarificationIndex - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event === undefined) continue;
+
+    if (expectsUserMessage) {
+      if (event.type === 'clarification_requested') return false;
+      if (event.type !== 'user_message') continue;
+
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string' && containsExplicitTimeZoneSignal(priorMessage)) {
+        return true;
+      }
+      const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
+      if (
+        priorReplyContext?.source === 'inbound_user_message' &&
+        containsExplicitTimeZoneSignal(priorReplyContext.text)
+      ) {
+        return true;
+      }
+      expectsUserMessage = false;
+      continue;
+    }
+
+    if (event.type === 'user_message') return false;
+    if (event.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) return false;
+    expectsUserMessage = true;
+  }
+
+  return false;
+}
+
+function containsExplicitTimeZoneSignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
+  if (
+    EXPLICIT_ISO_TIME_ZONE_PATTERN.test(normalized) ||
+    EXPLICIT_TIME_ZONE_TOKEN_PATTERN.test(normalized)
+  ) {
+    return true;
+  }
+  for (const match of normalized.matchAll(EXPLICIT_IANA_TIME_ZONE_CANDIDATE_PATTERN)) {
+    const candidate = match[1];
+    if (candidate !== undefined && isValidExplicitTimeZone(candidate)) return true;
+  }
+  for (const match of normalized.matchAll(EXPLICIT_STANDALONE_TIME_ZONE_CANDIDATE_PATTERN)) {
+    const candidate = match[1];
+    if (candidate !== undefined && isValidExplicitTimeZone(candidate)) return true;
+  }
+  for (const match of normalized.matchAll(EXPLICIT_CONTEXTUAL_TIME_ZONE_CANDIDATE_PATTERN)) {
+    const candidate = match[1];
+    if (candidate !== undefined && isValidExplicitTimeZone(candidate)) return true;
+  }
+  for (const match of normalized.matchAll(EXPLICIT_NATURAL_TIME_ZONE_CANDIDATE_PATTERN)) {
+    const candidate = match[1];
+    if (candidate !== undefined && isKnownNaturalTimeZoneName(candidate)) return true;
+  }
+  return false;
+}
+
+function buildNaturalTimeZoneNames(): ReadonlySet<string> {
+  const names = new Set([
+    'alaska',
+    'atlantic',
+    'central',
+    'central european',
+    'eastern',
+    'eastern european',
+    'greenwich',
+    'hawaii',
+    'indian standard',
+    'korea standard',
+    'mountain',
+    'pacific',
+    'western european',
+  ]);
+  for (const timeZone of Intl.supportedValuesOf('timeZone')) {
+    const leaf = timeZone.slice(timeZone.lastIndexOf('/') + 1);
+    names.add(normalizeNaturalTimeZoneName(leaf));
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'long',
+    });
+    for (const timestamp of [Date.UTC(2026, 0, 15, 12), Date.UTC(2026, 6, 15, 12)]) {
+      for (const part of formatter.formatToParts(timestamp)) {
+        if (part.type !== 'timeZoneName') continue;
+        names.add(normalizeNaturalTimeZoneName(part.value).replace(/\s+time$/u, ''));
+      }
+    }
+  }
+  return names;
+}
+
+function isKnownNaturalTimeZoneName(value: string): boolean {
+  const words = normalizeNaturalTimeZoneName(value).split(' ');
+  if (hasKnownNaturalTimeZoneNameSuffix(words)) return true;
+  while (
+    words.length > 0 &&
+    NATURAL_TIME_ZONE_QUALIFIERS.has(words[words.length - 1] as string)
+  ) {
+    words.pop();
+  }
+  return hasKnownNaturalTimeZoneNameSuffix(words);
+}
+
+function hasKnownNaturalTimeZoneNameSuffix(words: string[]): boolean {
+  return words.some((_word, index) => NATURAL_TIME_ZONE_NAMES.has(words.slice(index).join(' ')));
+}
+
+function normalizeNaturalTimeZoneName(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .replace(/[_-]+/gu, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function isValidExplicitTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function matrixProviderCallKey(call: MatrixCorpusProviderCallUsageV1): string {
