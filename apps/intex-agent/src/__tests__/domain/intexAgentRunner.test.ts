@@ -1706,7 +1706,7 @@ describe('createIntexAgentRunner', () => {
     expect(addUserPreferenceCalls).toBe(0);
   });
 
-  it('uses a schema-validated scenario 017 preview when runner output remains malformed after repair', async () => {
+  it('skips response repair after one valid mutating preview and builds deterministic confirmation', async () => {
     let addUserPreferenceCalls = 0;
     const client = new ToolExecutingFakeToolCallingClient(
       {
@@ -1758,7 +1758,7 @@ describe('createIntexAgentRunner', () => {
         expectedVersion: 0,
       },
     });
-    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(responseRepairClient.calls).toHaveLength(0);
     expect(client.calls[0]?.toolChoice).toBe('required');
     expect(addUserPreferenceCalls).toBe(0);
   });
@@ -1776,9 +1776,16 @@ describe('createIntexAgentRunner', () => {
         }),
       ]
     );
+    const responseRepairClient = new FakeStructuredClient([
+      ok({
+        content: 'still malformed after repair',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['get_user_preferences']),
+      responseRepairClient,
       toolExecutor: fakeToolExecutor({
         getUserPreferences: async () => {
           getUserPreferencesCalls += 1;
@@ -1802,6 +1809,7 @@ describe('createIntexAgentRunner', () => {
       fallbackReason: 'runner_output_malformed',
       fallbackSourceOutcome: 'raw_response',
     });
+    expect(responseRepairClient.calls).toHaveLength(1);
     expect(getUserPreferencesCalls).toBe(1);
   });
 

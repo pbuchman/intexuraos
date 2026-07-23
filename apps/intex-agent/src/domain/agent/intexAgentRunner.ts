@@ -875,8 +875,12 @@ async function parseRunnerContent(
       reply: '',
     };
   }
-  const parsed = await validateRunnerOutput(input);
   const toolExecution = getCompletedToolExecution(toolExecutions);
+  const parsed = await validateRunnerOutput(
+    toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)
+      ? { ...input, repairClient: undefined }
+      : input
+  );
   if (toolExecution?.error !== undefined) {
     const failureMetadata = toolFailureMetadata(toolExecution.toolName, toolExecution.error);
     return {
