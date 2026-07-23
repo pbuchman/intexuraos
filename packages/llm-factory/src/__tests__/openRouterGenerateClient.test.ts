@@ -303,4 +303,19 @@ describe('createOpenRouterGenerateClient', () => {
       expect(callArg?.['ownerType']).toBeUndefined();
     });
   });
+
+  it('forwards the bounded request policy to the OpenRouter client', async () => {
+    const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
+
+    createOpenRouterGenerateClient({
+      ...baseConfig,
+      timeoutMs: 45_000,
+      maxAttempts: 2,
+      deadlineAtMs: 123_456,
+    });
+
+    expect(createOpenRouterClient).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 123_456 })
+    );
+  });
 });

@@ -18,6 +18,7 @@ import {
   type ToolDefinition,
 } from '@intexuraos/llm-contract';
 import { createUsageLogger, type UsageSink } from '@intexuraos/llm-pricing';
+import { withRetry } from '@intexuraos/llm-utils';
 import type { Logger } from '@intexuraos/common-core';
 import { normalizeUsage } from './costCalculator.js';
 import type { OpenRouterUsage } from './types.js';
@@ -30,6 +31,10 @@ export interface OpenRouterToolCallingConfig {
   usageSink: UsageSink;
   ownerType?: OwnerType;
   timeoutMs?: number;
+  /** Maximum transient attempts for each provider iteration. Default: 1. */
+  maxAttempts?: number;
+  /** Optional absolute wall-clock deadline shared by all iterations and retries. */
+  deadlineAtMs?: number;
   evidenceModelId?: string;
 }
 
@@ -86,20 +91,33 @@ class OpenRouterApiError extends Error {
   }
 }
 
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number
-): Promise<Response> {
+async function withRequestTimeout<T>(
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await operation(controller.signal);
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+function resolveRequestTimeoutMs(timeoutMs: number, deadlineAtMs?: number): number {
+  if (deadlineAtMs === undefined) return timeoutMs;
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) throw new Error('OpenRouter request deadline timeout');
+  return Math.min(timeoutMs, remainingMs);
+}
+
+class OpenRouterLlmError extends Error {
+  constructor(public readonly llmError: LLMError) {
+    super(llmError.message);
+    this.name = 'OpenRouterLlmError';
   }
 }
 
@@ -114,9 +132,37 @@ export function createOpenRouterToolCallingClient(
     usageSink,
     ownerType,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxAttempts = 1,
+    deadlineAtMs,
     evidenceModelId = model,
   } = config;
   const usageLogger = createUsageLogger({ logger, sink: usageSink });
+
+  async function postChatCompletion(
+    requestBody: Record<string, unknown>
+  ): Promise<OpenRouterToolCallingResponse> {
+    return await withRequestTimeout(
+      resolveRequestTimeoutMs(timeoutMs, deadlineAtMs),
+      async (signal) => {
+        const response = await fetch(`${API_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://intexuraos.cloud',
+            'X-Title': APP_TITLE,
+          },
+          body: JSON.stringify(requestBody),
+          signal,
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new OpenRouterApiError(response.status, errorText);
+        }
+        return (await response.json()) as OpenRouterToolCallingResponse;
+      }
+    );
+  }
 
   function trackUsage(
     usage: NormalizedUsage,
@@ -230,27 +276,22 @@ export function createOpenRouterToolCallingClient(
               toolChoice
             );
 
-            const response = await fetchWithTimeout(
-              `${API_BASE_URL}/chat/completions`,
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${apiKey}`,
-                  'Content-Type': 'application/json',
-                  'HTTP-Referer': 'https://intexuraos.cloud',
-                  'X-Title': APP_TITLE,
-                },
-                body: JSON.stringify(requestBody),
+            const responseResult = await withRetry(
+              async () => {
+                try {
+                  return ok(await postChatCompletion(requestBody));
+                } catch (error) {
+                  return err(mapOpenRouterError(error));
+                }
               },
-              timeoutMs
+              {
+                maxAttempts,
+                baseDelayMs: 500,
+                ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
+              }
             );
-
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new OpenRouterApiError(response.status, errorText);
-            }
-
-            const data = (await response.json()) as OpenRouterToolCallingResponse;
+            if (!responseResult.ok) throw new OpenRouterLlmError(responseResult.error);
+            const data = responseResult.value;
             const message = data.choices[0]?.message;
             const usage = extractUsage(data.usage);
             if (params.matrixCorpusContext !== undefined) {
@@ -533,12 +574,17 @@ function addUsage(a: NormalizedUsage, b: NormalizedUsage): NormalizedUsage {
 }
 
 function mapOpenRouterError(error: unknown): LLMError {
+  if (error instanceof OpenRouterLlmError) return error.llmError;
   if (error instanceof OpenRouterApiError) {
     const message = error.message;
     if (error.status === 401) return { code: 'INVALID_KEY', message };
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
     if (error.status === 503) return { code: 'OVERLOADED', message };
     return { code: 'API_ERROR', message };
+  }
+
+  if (error instanceof Error && error.name === 'AbortError') {
+    return { code: 'TIMEOUT', message: error.message };
   }
 
   const message = getErrorMessage(error);

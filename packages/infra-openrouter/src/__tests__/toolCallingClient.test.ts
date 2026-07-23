@@ -1250,4 +1250,69 @@ describe('createOpenRouterToolCallingClient', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('TIMEOUT');
   });
+
+  it('fails before fetch when the shared deadline is already exhausted', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    try {
+      const result = await createClientWithConfig({ deadlineAtMs: Date.now() - 1 }).run({
+        systemPrompt: 'Test',
+        messages: [{ role: 'user', content: 'test' }],
+        tools: [],
+        promptType: 'github-agent-pr-triage',
+      });
+
+      expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('aborts while a successful response body is still being consumed', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .delayBody(50)
+      .reply(200, {
+        id: 'chatcmpl-delayed-body',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [{ message: { role: 'assistant', content: 'Too late.' } }],
+      });
+
+    const result = await createClientWithConfig({ timeoutMs: 10 }).run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      promptType: 'github-agent-pr-triage',
+    });
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
+  });
+
+  it('retries a transient provider response up to the configured attempt cap', async () => {
+    nock(API_BASE_URL).post('/chat/completions').reply(503, 'Service overloaded');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        id: 'chatcmpl-recovered',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [{ message: { role: 'assistant', content: 'Recovered.' } }],
+      });
+
+    const client = createClientWithConfig({ maxAttempts: 2 } as Partial<
+      Parameters<typeof createOpenRouterToolCallingClient>[0]
+    >);
+    const result = await client.run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'test' }],
+      tools: [],
+      promptType: 'github-agent-pr-triage',
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { content: 'Recovered.' } });
+    expect(nock.isDone()).toBe(true);
+  });
 });

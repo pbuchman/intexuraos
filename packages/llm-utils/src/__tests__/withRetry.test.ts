@@ -143,4 +143,26 @@ describe('withRetry', () => {
       vi.useRealTimers();
     }
   });
+
+  it('does not start another attempt after the shared deadline is reached', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-20T10:00:00.000Z'));
+    try {
+      const fn = vi
+        .fn<() => Promise<Result<string, LLMError>>>()
+        .mockResolvedValue(err({ code: 'TIMEOUT', message: 'provider timeout' }));
+      const promise = withRetry(fn, {
+        maxAttempts: 3,
+        baseDelayMs: 100,
+        deadlineAtMs: Date.now() + 50,
+      } as Parameters<typeof withRetry>[1]);
+
+      await vi.runAllTimersAsync();
+
+      await expect(promise).resolves.toEqual(err({ code: 'TIMEOUT', message: 'provider timeout' }));
+      expect(fn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

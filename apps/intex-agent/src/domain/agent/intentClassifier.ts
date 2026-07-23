@@ -132,7 +132,10 @@ export function createLlmIntexAgentIntentClassifier(deps: {
         messages: buildClassifierMessages(input.events, input.message, input.replyContext),
         ...(activeClarification !== undefined ? { activeClarification } : {}),
       });
-      const retryingClient = createRetryingStructuredClient(deps.client);
+      // The production OpenRouter client already retries transient failures. Avoid
+      // multiplying those attempts inside the lease-bounded Matrix corpus lane.
+      const retryingClient =
+        matrixCorpusLlm === undefined ? createRetryingStructuredClient(deps.client) : deps.client;
       const result = await generateStructured({
         client: retryingClient,
         prompt,

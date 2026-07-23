@@ -353,6 +353,25 @@ describe('llmClientFactory', () => {
         );
       }
     );
+
+    it('forwards the bounded OpenRouter policy through the generation boundary', async () => {
+      const { createOpenRouterGenerateClient } = await import('../openRouterGenerateClient.js');
+
+      createLlmClient({
+        apiKey: 'test-key',
+        model: IntexAgentModels.DeepSeekV4Flash,
+        userId: 'user-123',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        timeoutMs: 45_000,
+        maxAttempts: 2,
+        deadlineAtMs: 123_456,
+      });
+
+      expect(createOpenRouterGenerateClient).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 123_456 })
+      );
+    });
   });
 
   describe('createToolCallingClient', () => {
@@ -391,6 +410,25 @@ describe('llmClientFactory', () => {
           usageSink: mockUsageSink,
           ownerType: 'user',
         })
+      );
+    });
+
+    it('forwards the bounded OpenRouter policy through the tool-calling boundary', async () => {
+      const { createOpenRouterToolCallingClient } = await import('@intexuraos/infra-openrouter');
+
+      createToolCallingClient({
+        apiKey: 'test-key',
+        model: IntexAgentModels.DeepSeekV4Flash,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        timeoutMs: 45_000,
+        maxAttempts: 2,
+        deadlineAtMs: 123_456,
+      });
+
+      expect(createOpenRouterToolCallingClient).toHaveBeenCalledWith(
+        expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 123_456 })
       );
     });
 

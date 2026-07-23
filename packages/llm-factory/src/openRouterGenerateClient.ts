@@ -28,6 +28,9 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
     logger: config.logger,
     usageSink: config.usageSink,
     ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
+    ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
+    ...(config.maxAttempts !== undefined && { maxAttempts: config.maxAttempts }),
+    ...(config.deadlineAtMs !== undefined && { deadlineAtMs: config.deadlineAtMs }),
     evidenceModelId: config.model as string,
   });
 
