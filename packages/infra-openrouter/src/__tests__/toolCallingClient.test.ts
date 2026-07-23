@@ -310,7 +310,7 @@ describe('createOpenRouterToolCallingClient', () => {
 
     expect(result).toEqual({
       ok: false,
-      error: { code: 'API_ERROR', message: 'Matrix provider call failed' },
+      error: { code: 'OVERLOADED', message: 'Matrix provider call failed' },
     });
     expect(onProviderCall).toHaveBeenCalledTimes(1);
     expect(onProviderCall).toHaveBeenCalledWith(
@@ -1189,8 +1189,9 @@ describe('createOpenRouterToolCallingClient', () => {
   it.each([
     { status: 401, code: 'INVALID_KEY' },
     { status: 429, code: 'RATE_LIMITED' },
+    { status: 400, code: 'API_ERROR' },
     { status: 503, code: 'OVERLOADED' },
-    { status: 500, code: 'API_ERROR' },
+    { status: 500, code: 'OVERLOADED' },
   ] as const)('maps HTTP $status to $code', async ({ status, code }) => {
     nock(API_BASE_URL).post('/chat/completions').reply(status, 'provider error');
 
@@ -1290,8 +1291,8 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result).toMatchObject({ ok: false, error: { code: 'TIMEOUT' } });
   });
 
-  it('retries a transient provider response up to the configured attempt cap', async () => {
-    nock(API_BASE_URL).post('/chat/completions').reply(503, 'Service overloaded');
+  it('retries a transient provider HTTP 500 up to the configured attempt cap', async () => {
+    nock(API_BASE_URL).post('/chat/completions').reply(500, 'Server error');
     nock(API_BASE_URL)
       .post('/chat/completions')
       .reply(200, {
