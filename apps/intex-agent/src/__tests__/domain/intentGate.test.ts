@@ -26,6 +26,89 @@ describe('classifyIntexAgentIntent', () => {
   });
 
   it.each([
+    'Remember that the garage code is 7241.',
+    'Remember INTEX-EVAL-006 the garage remote is in the desk drawer.',
+    'Also remember parking is on level P3.',
+    'new session: remember that the backup code is 9988',
+    'Zapamiętaj, że kod do bramy to 7241.',
+    'Pamiętaj, że pilot do garażu jest w szufladzie.',
+    'Remember that I like oat milk.',
+    'Remember that I prefer aisle seats.',
+    'Pamiętaj, że lubię mleko owsiane.',
+    'Pamiętaj, że wolę miejsce przy przejściu.',
+    'Keep this for later: my passport expires in November 2029.',
+  ])('routes an explicit English fact-memory request to note creation: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_note'],
+    });
+  });
+
+  it.each([
+    'Remember this for this session, but do not save it.',
+    "Remember this, but don't persist it; only retain this context.",
+    'Context fragment: green folder. Do not save yet; only retain this context.',
+    'Remember the garage code only for this session.',
+    'Remember this just for this session.',
+    'Remember this temporarily for this session.',
+    'Remember the garage code temporarily.',
+    'Remember the garage code for now.',
+    'Zapamiętaj kod do bramy tylko w tej sesji.',
+    'Zapamiętaj kod do bramy tymczasowo.',
+    'Zapamiętaj kod do bramy na razie.',
+  ])('does not persist explicitly temporary memory as a note: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'conversation',
+    });
+  });
+
+  it.each([
+    'Remember that I prefer concise replies.',
+    'Remember that I like concise replies.',
+    'Remember that I want you to answer briefly.',
+    'Remember: keep your replies short.',
+    'Remember that your answers should always be concise.',
+    'Remember that you should keep replies concise.',
+    'Remember that I want you to be concise.',
+    'Remember that I prefer you to use Polish.',
+    'Remember that I like when you are concise.',
+    'Remember that I want you to use bullet points.',
+    'Remember that I need you to cite sources.',
+    'Remember that I prefer you to cite sources.',
+    'Remember that I prefer bullet points.',
+    'Remember that I want you to call me Pat.',
+    'Remember to reply shorter.',
+    'Zapamiętaj, że wolę krótkie odpowiedzi.',
+    'Pamiętaj, że lubię krótkie odpowiedzi.',
+    'Zapamiętaj, że chcę, żebyś odpowiadał krótko.',
+    'Pamiętaj, aby twoje odpowiedzi były krótkie.',
+    'Pamiętaj, że chcę, żebyś był zwięzły.',
+    'Pamiętaj, że chcę, żebyś cytował źródła.',
+    'Pamiętaj, że wolę, żebyś mówił do mnie Pat.',
+    'Pamiętaj, że wolę listy punktowane.',
+    'Pamiętaj, żeby zawsze odpowiadać po polsku.',
+  ])('leaves durable assistant behavior on the preference-classification path: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'conversation',
+    });
+  });
+
+  it.each([
+    'Remember the PIN and create a calendar event tomorrow at 9.',
+    'Remember the garage code and show me tomorrow calendar events.',
+    'Remember the PIN and put a dentist appointment on my calendar tomorrow at 9.',
+    'Zapamiętaj kod i utwórz wydarzenie w kalendarzu jutro o 9.',
+    'Zapamiętaj PIN i wpisz wizytę do kalendarza jutro o 9.',
+  ])('leaves competing memory and tool actions on the LLM classification path: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'conversation',
+    });
+  });
+
+  it.each([
     'Create a note: gate code is 4938',
     'Hi, create a note: gate code is 4938',
     'Zapisz notatke: kod do bramy to 4938',

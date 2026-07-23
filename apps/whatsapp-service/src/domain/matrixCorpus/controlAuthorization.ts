@@ -168,6 +168,6 @@ function phaseAllows(
   if (operation === 'register_context' || operation === 'create_projection')
     return phase === 'provisioning';
   if (operation === 'advance_projection')
-    return phase === 'provisioning' || phase === 'active';
+    return phase === 'provisioning' || phase === 'active' || (phase === 'quiescing' && drained);
   return phase === 'quiescing' && drained;
 }

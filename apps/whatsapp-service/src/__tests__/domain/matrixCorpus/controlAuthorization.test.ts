@@ -136,6 +136,20 @@ describe('Matrix corpus control authorization issuer', () => {
     expect(projection.sign).toHaveBeenCalledOnce();
   });
 
+  it('allows terminal projection advances only after a quiescing transport is fully drained', async () => {
+    const inFlight = fixture('quiescing', false);
+    const drained = fixture('quiescing', true);
+
+    await expect(inFlight.issuer(input('advance_projection'))).resolves.toEqual({
+      code: 'NOT_READY',
+    });
+    await expect(drained.issuer(input('advance_projection'))).resolves.toMatchObject({
+      code: 'AUTHORIZED',
+    });
+    expect(inFlight.sign).not.toHaveBeenCalled();
+    expect(drained.sign).toHaveBeenCalledOnce();
+  });
+
   it('fails closed when the transport status cannot be trusted', async () => {
     const { issuer, getTransportStatus, sign } = fixture('active', false);
     getTransportStatus.mockResolvedValueOnce({ code: 'NOT_FOUND' });
