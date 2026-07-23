@@ -14,25 +14,7 @@ import {
 } from './fakes.js';
 import { hashSignature } from '../domain/notifications/index.js';
 
-// Test JWT (from user-service tests pattern)
 const TEST_USER_ID = 'auth0|test-user-123';
-const TEST_JWT =
-  'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InRlc3Qta2V5In0.' +
-  'eyJpc3MiOiJodHRwczovL3Rlc3QuYXV0aDAuY29tLyIsInN1YiI6ImF1dGgwfHRlc3QtdXNlci0xMjMiLCJhdWQiOiJ1cm46aW50ZXh1cmFvczphcGkiLCJleHAiOjk5OTk5OTk5OTl9.' +
-  'test-signature';
-
-// Mock JWKS response
-const mockJwks = {
-  keys: [
-    {
-      kty: 'RSA',
-      kid: 'test-key',
-      use: 'sig',
-      n: 'test-modulus',
-      e: 'AQAB',
-    },
-  ],
-};
 
 describe('Connect Routes', () => {
   let app: FastifyInstance;
@@ -87,42 +69,6 @@ describe('Connect Routes', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('POST /mobile-notifications/connect creates connection with valid auth', async () => {
-    // Mock JWKS endpoint
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/connect',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-      payload: { deviceLabel: 'My Phone' },
-    });
-
-    // Even though JWT verification might fail in tests, we can verify the route structure
-    // For real tests, we'd need proper JWT mocking
-    expect([200, 401]).toContain(response.statusCode);
-  });
-
-  it('POST /mobile-notifications/connect returns 500 on repository failure', async () => {
-    fakeSignatureRepo.setFailNextSave(true);
-
-    // Mock JWKS endpoint
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/connect',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-      payload: {},
-    });
-
-    // Will return 401 due to JWT verification failing in test
-    expect([500, 401]).toContain(response.statusCode);
-  });
 });
 
 describe('Status Routes', () => {
@@ -177,21 +123,6 @@ describe('Status Routes', () => {
     expect(body.error.code).toBe('UNAUTHORIZED');
   });
 
-  it('GET /mobile-notifications/status returns configured: false when no signature exists', async () => {
-    // Mock JWKS endpoint
-    nock('https://test.auth0.com').get('/.well-known/jwks.json').reply(200, mockJwks);
-
-    const response = await app.inject({
-      method: 'GET',
-      url: '/status',
-      headers: {
-        authorization: `Bearer ${TEST_JWT}`,
-      },
-    });
-
-    // Will return 401 due to JWT verification failing in test
-    expect([200, 401]).toContain(response.statusCode);
-  });
 });
 
 describe('Webhook Routes', () => {

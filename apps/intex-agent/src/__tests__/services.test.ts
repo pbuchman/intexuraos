@@ -1197,7 +1197,7 @@ describe('createRuntimeBoundModelClients', () => {
     );
   });
 
-  it('binds the Matrix corpus request policy to both DeepSeek clients', () => {
+  it('gives both DeepSeek clients three attempts within the Matrix turn budget', () => {
     const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
     const createLlmClientFn = vi.fn(() => fakeStructuredClient());
 
@@ -1222,13 +1222,13 @@ describe('createRuntimeBoundModelClients', () => {
     });
 
     expect(MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS).toBe(45_000);
-    expect(MATRIX_CORPUS_MODEL_MAX_ATTEMPTS).toBe(2);
+    expect(MATRIX_CORPUS_MODEL_MAX_ATTEMPTS).toBe(3);
     expect(MATRIX_CORPUS_MODEL_TURN_BUDGET_MS).toBe(180_000);
     expect(createToolCallingClientFn).toHaveBeenCalledWith(
-      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 180_000 })
+      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 3, deadlineAtMs: 180_000 })
     );
     expect(createLlmClientFn).toHaveBeenCalledWith(
-      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 2, deadlineAtMs: 180_000 })
+      expect.objectContaining({ timeoutMs: 45_000, maxAttempts: 3, deadlineAtMs: 180_000 })
     );
   });
 
