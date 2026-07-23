@@ -384,8 +384,8 @@ describe('createOpenRouterToolCallingClient', () => {
     );
   });
 
-  it('characterizes required tool choice when the provider returns final text without a tool call', async () => {
-    let capturedBody: Record<string, unknown> | undefined;
+  it('retries required tool choice when the provider returns final text without a tool call', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
     const runTool = vi
       .fn()
       .mockResolvedValue(
@@ -393,7 +393,7 @@ describe('createOpenRouterToolCallingClient', () => {
       );
     nock(API_BASE_URL)
       .post('/chat/completions', (body) => {
-        capturedBody = body as Record<string, unknown>;
+        capturedBodies.push(body as Record<string, unknown>);
         return true;
       })
       .reply(200, {
@@ -412,6 +412,50 @@ describe('createOpenRouterToolCallingClient', () => {
           },
         ],
         usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18, cost: 0.00012 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_required_retry',
+                  type: 'function',
+                  function: {
+                    name: 'add_user_preference',
+                    arguments: JSON.stringify({ text: 'Be concise.', expectedVersion: 0 }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 13, completion_tokens: 5, total_tokens: 18, cost: 0.00013 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: JSON.stringify({
+                outcome: 'completed',
+                reply: 'Preference prepared.',
+                toolName: 'add_user_preference',
+              }),
+            },
+          },
+        ],
+        usage: { prompt_tokens: 15, completion_tokens: 6, total_tokens: 21, cost: 0.00014 },
       });
 
     const result = await createClient().run({
@@ -439,12 +483,25 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value).toMatchObject({
-      content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
-      toolCallsMade: 0,
-      iterationCount: 1,
+      toolCallsMade: 1,
+      iterationCount: 3,
     });
-    expect(capturedBody?.['tool_choice']).toBe('required');
-    expect(runTool).not.toHaveBeenCalled();
+    expect(capturedBodies[0]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[2]?.['tool_choice']).toBe('auto');
+    expect(capturedBodies[1]?.['messages']).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'assistant',
+          content: JSON.stringify({ outcome: 'no_action', reply: 'No action needed.' }),
+        },
+        {
+          role: 'user',
+          content: expect.stringContaining('Call one of the provided tools'),
+        },
+      ])
+    );
+    expect(runTool).toHaveBeenCalledWith({ text: 'Be concise.', expectedVersion: 0 });
   });
 
   it('logs ownerType and zero usage when OpenRouter omits usage metadata', async () => {

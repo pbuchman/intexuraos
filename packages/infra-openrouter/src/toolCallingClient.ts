@@ -67,6 +67,8 @@ const API_BASE_URL = 'https://openrouter.ai/api/v1';
 const APP_TITLE = 'IntexuraOS';
 const DEFAULT_TIMEOUT_MS = 840_000;
 const DEFAULT_MAX_ITERATIONS = 5;
+const REQUIRED_TOOL_RETRY_MESSAGE =
+  'Call one of the provided tools now. A tool call is required for this request; do not return final text before calling a tool.';
 const MATRIX_PROVIDER_FAILURE_CODE = 'MATRIX_PROVIDER_CALL_FAILED';
 const MATRIX_PROVIDER_FAILURE_MESSAGE = 'Matrix provider call failed';
 
@@ -328,6 +330,12 @@ export function createOpenRouterToolCallingClient(
                 promptType
               );
               return err({ code: 'API_ERROR', message: 'Empty response from model' });
+            }
+            if (tools.length > 0 && toolChoice === 'required' && totalToolCalls === 0) {
+              conversation.push({ role: 'assistant', content: finalText });
+              conversation.push({ role: 'user', content: REQUIRED_TOOL_RETRY_MESSAGE });
+              logger.info({ iteration }, 'OpenRouter tool calling: retrying required tool choice');
+              continue;
             }
 
             logger.info(

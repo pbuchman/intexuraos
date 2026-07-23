@@ -183,10 +183,7 @@ export async function collectCorrelatedReplies(input: {
       if (previousRawBody !== undefined && previousRawBody !== candidate.reply.body) {
         return { ok: false, code: 'unbound_reply' };
       }
-      const canonicalBody = canonicalMatrixReplyBody(
-        candidate.reply.body,
-        input.expectedReplyRendering
-      );
+      const canonicalBody = canonicalMatrixReplyBody(candidate.reply.body);
       if (canonicalBody === undefined) return { ok: false, code: 'unbound_reply' };
       const previous = byEventId.get(candidate.reply.eventId);
       if (previous !== undefined) {
@@ -239,12 +236,8 @@ export async function collectCorrelatedReplies(input: {
   }
 }
 
-function canonicalMatrixReplyBody(
-  body: string,
-  expectedRendering: MatrixCorpusExpectedReplyRendering
-): string | undefined {
-  if (expectedRendering === 'plain') return body;
-  if (!body.endsWith(MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX)) return undefined;
+function canonicalMatrixReplyBody(body: string): string | undefined {
+  if (!body.endsWith(MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX)) return body;
   const canonicalBody = body.slice(0, -MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX.length);
   return canonicalBody.length === 0 ? undefined : canonicalBody;
 }
