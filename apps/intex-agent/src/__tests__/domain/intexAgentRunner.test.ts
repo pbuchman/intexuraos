@@ -1829,9 +1829,16 @@ describe('createIntexAgentRunner', () => {
         }),
       ]
     );
+    const responseRepairClient = new FakeStructuredClient([
+      ok({
+        content: 'still malformed after repair',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['add_user_preference']),
+      responseRepairClient,
       toolExecutor: fakeToolExecutor({
         addUserPreference: async () => {
           addUserPreferenceCalls += 1;
@@ -1855,6 +1862,7 @@ describe('createIntexAgentRunner', () => {
       fallbackReason: 'runner_output_malformed',
       fallbackSourceOutcome: 'raw_response',
     });
+    expect(responseRepairClient.calls).toHaveLength(1);
     expect(addUserPreferenceCalls).toBe(0);
   });
 
