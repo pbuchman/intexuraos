@@ -116,7 +116,7 @@ export function composeIntexMatrixCorpusFeature<T>(
 const RUNTIME_SETTINGS_LOOKUP_TIMEOUT_MS = 2_000;
 export const MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS = 45_000;
 export const MATRIX_CORPUS_MODEL_TURN_BUDGET_MS = 180_000;
-export const MATRIX_CORPUS_MODEL_MAX_ATTEMPTS = 2;
+export const MATRIX_CORPUS_MODEL_MAX_ATTEMPTS = 3;
 
 export interface RuntimeSettingsDeadlineScheduler {
   setTimeout(callback: () => void, delayMs: number): unknown;
