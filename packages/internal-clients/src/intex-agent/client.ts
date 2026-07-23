@@ -250,6 +250,29 @@ const evidenceSchema = z
         costNanoUsd: safeInteger,
       })
       .strict(),
+    sessionProof: z
+      .object({
+        status: z.enum([
+          'active',
+          'waiting_for_user',
+          'completed',
+          'unsupported',
+          'expired',
+          'cancelled',
+          'superseded',
+        ]),
+        startReason: z.enum([
+          'no_active_session',
+          'previous_completed',
+          'previous_expired',
+          'previous_superseded',
+          'user_requested_new_session',
+        ]),
+        userMessageCount: z.number().int().min(0).max(20),
+        sessionStartedCount: z.number().int().min(0).max(20),
+        supersededSessionCount: z.number().int().min(0).max(20),
+      })
+      .strict(),
     turnTerminals: z
       .array(
         z.discriminatedUnion('status', [

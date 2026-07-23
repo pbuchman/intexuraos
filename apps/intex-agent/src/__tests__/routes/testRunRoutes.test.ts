@@ -50,7 +50,7 @@ function visibleRun(): ReturnType<typeof testRunRecord> {
       index === 0
         ? {
             scenarioRevision: 1,
-            eventWatermark: 2,
+            eventWatermark: 3,
             lifecycle: 'running',
             completedTurns: 1,
             completedReplies: 1,
@@ -75,7 +75,7 @@ function projection(): TestRunScenarioProjectionV1 {
     scenarioLabel: 'Scenario 001/020',
     runRevision: 3,
     scenarioRevision: 1,
-    eventWatermark: 2,
+    eventWatermark: 3,
     lifecycle: 'running',
     verdict: 'pending',
     plannedTurns: 1,
@@ -102,10 +102,19 @@ function events(): IntexAgentSessionEvent[] {
       id: 'private_event_2',
       sessionId: 'private_session_1',
       userId: 'auth0:user_1',
+      type: 'matrix_corpus_execution_boundary',
+      payload: { capability: 'private', requestDigest: 'private' },
+      createdAt: testRunNow,
+      eventSequence: 2,
+    },
+    {
+      id: 'private_event_3',
+      sessionId: 'private_session_1',
+      userId: 'auth0:user_1',
       type: 'assistant_message',
       payload: { text: 'Natural reply', providerRequestId: 'private-provider' },
       createdAt: testRunNow,
-      eventSequence: 2,
+      eventSequence: 3,
     },
   ];
 }

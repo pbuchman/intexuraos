@@ -84,6 +84,11 @@ const OPAQUE_REFERENCE_PATTERN =
   /(?<![\p{L}\p{N}_-])(?=[\p{L}\p{N}_-]*\p{L})(?=[\p{L}\p{N}_-]*\p{N})[\p{L}\p{N}]+(?:[-_][\p{L}\p{N}]+)+(?![\p{L}\p{N}_-])/gu;
 const EXPLICIT_REFERENCE_EXCLUSION_PREFIX_PATTERN =
   /(?<!\p{L})(?:(?:do not|don['’]?t)\s+(?:include|copy|keep|repeat|save)|(?:omit|exclude|remove|without)|nie\s+(?:uwzględniaj|uwzgledniaj|dodawaj|kopiuj|zapisuj|powtarzaj)|(?:pomiń|pomin|wyklucz|usuń|usun|bez))\s*(?:(?:the|this|ten|tego|tę|ta)\s+)?(?:(?:code|reference|identifier|token|kod|referencję|referencje|identyfikator)\s*)?(?:[:=-]\s*)?$/iu;
+const REPLY_RAW_DATE_PATTERN =
+  /(^|[\s([{"'“„])(\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?)?)(?=$|[\s,.;!?)}\]"'”])/gimu;
+const RAW_REPLY_DATE_TIME_PATTERN = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/u;
+const STRICT_REPLY_DATE_TIME_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?$/u;
 type LocalizedText = Record<IntexAgentReplyLanguage, string>;
 interface ClassifierUnsupportedReplyMap {
   unsupported_capability: string;
@@ -492,7 +497,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         }
       }
 
-      return await parseRunnerContent(
+      const runnerResult = await parseRunnerContent(
         {
           content: result.value.content,
           repairClient: config.responseRepairClient,
@@ -511,6 +516,10 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         replyLanguage,
         input.timeZone
       );
+      return {
+        ...runnerResult,
+        reply: formatReplyDateRecords(runnerResult.reply, input.timeZone, replyLanguage),
+      };
     },
   };
 }
@@ -1545,6 +1554,65 @@ function formatCalendarConfirmationDateTime(
     hourCycle: 'h23',
   }).format(displayInstant);
   return `${date}, ${time}`;
+}
+
+function formatReplyDateRecords(
+  reply: string,
+  runtimeTimeZone: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  return reply.replace(REPLY_RAW_DATE_PATTERN, (_match, prefix: string, value: string) => {
+    if (RAW_REPLY_DATE_TIME_PATTERN.test(value)) {
+      if (!isValidReplyDateTime(value)) {
+        return `${prefix}${replyLanguage === 'pl' ? 'nieprawidłowa data' : 'invalid date'}`;
+      }
+      return `${prefix}${formatCalendarConfirmationDateTime(
+        value,
+        undefined,
+        runtimeTimeZone,
+        replyLanguage
+      )}`;
+    }
+
+    const instant = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(instant.getTime()) || instant.toISOString().slice(0, 10) !== value) {
+      return `${prefix}${replyLanguage === 'pl' ? 'nieprawidłowa data' : 'invalid date'}`;
+    }
+    const formatted = new Intl.DateTimeFormat(replyLanguage === 'pl' ? 'pl-PL' : 'en-GB', {
+      timeZone: 'UTC',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(instant);
+    return `${prefix}${formatted}`;
+  });
+}
+
+function isValidReplyDateTime(value: string): boolean {
+  const match = STRICT_REPLY_DATE_TIME_PATTERN.exec(value) as RegExpExecArray;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6] ?? '0');
+  if (month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+  const civil = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+  if (
+    civil.getUTCFullYear() !== year ||
+    civil.getUTCMonth() !== month - 1 ||
+    civil.getUTCDate() !== day ||
+    civil.getUTCHours() !== hour ||
+    civil.getUTCMinutes() !== minute ||
+    civil.getUTCSeconds() !== second
+  ) {
+    return false;
+  }
+  const offset = match[7];
+  if (offset === undefined || offset === 'Z') return true;
+  return Number(offset.slice(1, 3)) <= 23 && Number(offset.slice(4, 6)) <= 59;
 }
 
 function dateFromIsoWallClock(value: string): Date {

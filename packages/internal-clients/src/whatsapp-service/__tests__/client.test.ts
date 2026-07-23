@@ -336,16 +336,21 @@ describe('createWhatsAppServiceClient', () => {
       .reply(503, { success: false })
       .get('/internal/matrix-corpus/readiness')
       .reply(200, { private: 'malformed-envelope' });
-    const client = createWhatsAppServiceClient({
+    const timeoutClient = createWhatsAppServiceClient({
       baseUrl: BASE_URL,
       internalAuthToken: 'secret',
       logger,
       defaultTimeoutMs: 5,
     });
 
-    await expect(client.getMatrixCorpusReadiness()).resolves.toEqual({
+    await expect(timeoutClient.getMatrixCorpusReadiness()).resolves.toEqual({
       ok: false,
       error: { code: 'timeout' },
+    });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
     });
     await expect(client.getMatrixCorpusReadiness()).resolves.toEqual({
       ok: false,

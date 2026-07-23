@@ -23,10 +23,7 @@ async function parseImageResponse<T>(
     baseUrl: config.baseUrl,
     token: config.internalAuthToken,
     logger: {
-      info: () => undefined,
       warn: () => undefined,
-      error: () => undefined,
-      debug: () => undefined,
     },
   });
 

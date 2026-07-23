@@ -10,7 +10,9 @@ import {
   type WhatsAppServiceClient,
 } from '@intexuraos/internal-clients';
 import {
+  classifyIntexAgentReplyDatePresentation,
   safeAgentUsageV1Schema,
+  sanitizeIntexAgentReplyText,
   safeToolFactNameV1Schema,
   safeToolEvidenceV1Schema,
   type IntexAgentToolNameV1,
@@ -78,6 +80,8 @@ interface ScenarioExecutionState {
   finishedAt: string | null;
   sessionId: string | null;
   eventRevision: number;
+  sessionStartedCount: number;
+  supersededSessionCount: number;
   projectionRevision: number;
   completedTurns: number;
   observedReplies: number;
@@ -397,7 +401,9 @@ function createRunPorts(input: {
 
     async judgeReply({ model, reply }): Promise<MatrixCorpusJudgeResult> {
       const started = Date.now();
-      const result = await input.evaluator.judgeReplies([reply]);
+      const result = await input.evaluator.judgeReplies([
+        { ...reply, assistantText: sanitizeIntexAgentReplyText(reply.assistantText) },
+      ]);
       if (!result.ok) return { ok: false, code: result.code };
       const verdict = result.verdicts[0];
       const nanoUsd = toNanoUsd(result.usage.providerReportedUsd);
@@ -807,6 +813,45 @@ export async function sendMatrixMessageWithReconciliation(
   return null;
 }
 
+export async function issueMatrixCorpusCapabilityWithReconciliation(
+  input: Readonly<{
+    whatsapp: Pick<
+      WhatsAppServiceClient,
+      'issueMatrixCorpusCapability' | 'getMatrixCorpusTransportStatus'
+    >;
+    request: Parameters<WhatsAppServiceClient['issueMatrixCorpusCapability']>[0];
+    timeoutMs: number;
+    pollIntervalMs: number;
+  }>
+): Promise<Awaited<ReturnType<WhatsAppServiceClient['issueMatrixCorpusCapability']>>> {
+  const first = await input.whatsapp.issueMatrixCorpusCapability(input.request);
+  if (first.ok || first.error.code !== 'rejected' || first.error.httpStatus !== 409) return first;
+
+  const initialStatus = await input.whatsapp.getMatrixCorpusTransportStatus({
+    runId: input.request.runId,
+    leaseFence: input.request.leaseFence,
+  });
+  if (!initialStatus.ok || initialStatus.value.phase !== 'active') return first;
+  if (initialStatus.value.nonterminalIngestOutboxCount === 0)
+    return await input.whatsapp.issueMatrixCorpusCapability(input.request);
+
+  const boundary = await poll(
+    async () => {
+      const status = await input.whatsapp.getMatrixCorpusTransportStatus({
+        runId: input.request.runId,
+        leaseFence: input.request.leaseFence,
+      });
+      if (!status.ok || status.value.phase !== 'active') return false;
+      return status.value.nonterminalIngestOutboxCount === 0 ? true : undefined;
+    },
+    input.timeoutMs,
+    input.pollIntervalMs
+  );
+  return boundary === true
+    ? await input.whatsapp.issueMatrixCorpusCapability(input.request)
+    : first;
+}
+
 type MatrixCorpusPortReturn<TKey extends keyof MatrixCorpusRunPorts> = ReturnType<
   MatrixCorpusRunPorts[TKey]
 >;
@@ -869,7 +914,7 @@ async function executeLiveTurn(input: {
     input.runId,
     `${input.scenario.id}:${String(input.turnIndex)}:matrix-send`
   );
-  const issued = await input.whatsapp.issueMatrixCorpusCapability({
+  const capabilityRequest = {
     runId: input.runId,
     leaseFence: input.leaseFence,
     idempotencyKey: matrixIdempotencyKey,
@@ -895,6 +940,12 @@ async function executeLiveTurn(input: {
     expectedToolSchedule: entry.expectedToolSchedule,
     currentDateTime: input.scenario.currentDateTime,
     timeZone: input.scenario.timeZone,
+  } as const;
+  const issued = await issueMatrixCorpusCapabilityWithReconciliation({
+    whatsapp: input.whatsapp,
+    request: capabilityRequest,
+    timeoutMs: input.correlationTimeoutMs,
+    pollIntervalMs: input.pollIntervalMs,
   });
   if (!issued.ok)
     return { ok: false, kind: 'infrastructure_failure', code: 'capability_issue_failed' };
@@ -1089,11 +1140,40 @@ async function executeLiveTurn(input: {
   const unexpectedKnownToolCount = toolEvidence.filter(
     (item) => item.event === 'unexpected_known_no_execution'
   ).length;
+  const replyFormatViolationCount = countIntexAgentReplyFormatViolations(
+    correlated.replies.map((reply) => reply.body)
+  );
+  const expectedIdleSession =
+    expectation.sessionAfterTurn.startReason === 'user_requested_new_session' &&
+    expectation.timeline.forbiddenEventTypes.includes('user_message');
+  const idleSessionProofPassed =
+    !expectedIdleSession ||
+    (evidence.sessionProof.startReason === 'user_requested_new_session' &&
+      evidence.sessionProof.status === 'waiting_for_user' &&
+      evidence.sessionProof.userMessageCount === 0 &&
+      evidence.sessionProof.sessionStartedCount === 1 &&
+      evidence.sessionProof.supersededSessionCount === 0);
+  const expectedTransition = catalogSessionTransition(expectation.transition.action);
+  const actualTransition = observedSessionTransition({
+    previousStartedCount: state.sessionStartedCount,
+    previousSupersededCount: state.supersededSessionCount,
+    actualStartedCount: evidence.sessionProof.sessionStartedCount,
+    actualSupersededCount: evidence.sessionProof.supersededSessionCount,
+  });
+  const sessionTransitionPassed = actualTransition === expectedTransition;
+  const idleAgentUsagePassed =
+    !expectedIdleSession ||
+    (safeAgentUsage.length === 0 &&
+      Object.values(evidence.agentUsageTotals).every((value) => value === 0));
   const deterministicPassed =
     correlated.replies.length === expectation.replies.length &&
     sameToolSchedule(selected, expectation.requiredToolCalls) &&
     outcomes.every((item) => item.status === 'completed') &&
-    unexpectedKnownToolCount === 0;
+    unexpectedKnownToolCount === 0 &&
+    replyFormatViolationCount === 0 &&
+    idleSessionProofPassed &&
+    idleAgentUsagePassed &&
+    sessionTransitionPassed;
   const technicalFacts = buildTechnicalFacts(
     input.scenario,
     input.turnIndex,
@@ -1116,7 +1196,7 @@ async function executeLiveTurn(input: {
   const observation: MatrixCorpusTurnObservation = {
     sessionId: status.sessionId,
     sessionEvidence: {
-      kind: input.expectedSessionId === null ? 'created' : 'continued',
+      kind: actualTransition === 'failed' ? expectedTransition : actualTransition,
       scenarioLabel: entry.scenarioLabel,
     },
     agentModel: input.state.catalog.agentModel,
@@ -1148,6 +1228,8 @@ async function executeLiveTurn(input: {
   };
   state.sessionId = status.sessionId;
   state.eventRevision = evidence.eventRevision;
+  state.sessionStartedCount = evidence.sessionProof.sessionStartedCount;
+  state.supersededSessionCount = evidence.sessionProof.supersededSessionCount;
   state.completedTurns += 1;
   state.strictMockProofTurns += 1;
   state.observedReplies += correlated.replies.length;
@@ -1160,9 +1242,14 @@ async function executeLiveTurn(input: {
       turnIndex: input.turnIndex,
       expectation,
       actualReplyCount: correlated.replies.length,
-      expectedTransition: input.expectedSessionId === null ? 'created' : 'continued',
-      actualTransition: observation.sessionEvidence.kind,
+      actualReplyFormatViolationCount: replyFormatViolationCount,
+      expectedTransition,
+      actualTransition,
       actualLifecycle: observation.transportEvidence.turnTerminal,
+      expectedUserMessageCount: expectedIdleSession ? 0 : null,
+      actualUserMessageCount: evidence.sessionProof.userMessageCount,
+      expectedAgentUsageCount: expectedIdleSession ? 0 : null,
+      actualAgentUsageCount: safeAgentUsage.length,
       toolEvidence,
     })
   );
@@ -1213,6 +1300,8 @@ function createState(
           finishedAt: null,
           sessionId: null,
           eventRevision: 0,
+          sessionStartedCount: 0,
+          supersededSessionCount: 0,
           projectionRevision: 0,
           completedTurns: 0,
           observedReplies: 0,
@@ -1680,9 +1769,16 @@ function buildReport(
       sessionsContinued: Math.max(
         0,
         run.totals.completedTurns -
-          [...state.scenarios.values()].filter((scenario) => scenario.sessionId !== null).length
+          [...state.scenarios.values()].filter((scenario) => scenario.sessionId !== null).length -
+          [...state.scenarios.values()].reduce(
+            (sum, scenario) => sum + scenario.supersededSessionCount,
+            0
+          )
       ),
-      sessionsClosed: 0,
+      sessionsClosed: [...state.scenarios.values()].reduce(
+        (sum, scenario) => sum + scenario.supersededSessionCount,
+        0
+      ),
       confirmationsRequested: executedConfirmationTurns,
       confirmationsAccepted: [...state.scenarios.values()].reduce(
         (sum, scenario) =>
@@ -2035,9 +2131,14 @@ export function buildMatrixCorpusTurnChecks(
     turnIndex: number;
     expectation: IntexEvalScenario['expected']['turns'][number];
     actualReplyCount: number;
-    expectedTransition: 'created' | 'continued';
-    actualTransition: 'created' | 'continued';
+    actualReplyFormatViolationCount: number;
+    expectedTransition: MatrixSessionTransition;
+    actualTransition: MatrixSessionTransition | 'failed';
     actualLifecycle: 'completed' | 'failed';
+    expectedUserMessageCount: number | null;
+    actualUserMessageCount: number;
+    expectedAgentUsageCount: number | null;
+    actualAgentUsageCount: number;
     toolEvidence: readonly SafeToolEvidenceV1[];
   }>
 ): SafeDeterministicCheckV1[] {
@@ -2070,7 +2171,40 @@ export function buildMatrixCorpusTurnChecks(
       input.turnIndex,
       evidence({ expectedCount: expectedReplyCount, actualCount: input.actualReplyCount })
     ),
+    check(
+      'reply_format',
+      input.actualReplyFormatViolationCount === 0,
+      input.turnIndex,
+      evidence({
+        expectedCount: 0,
+        actualCount: input.actualReplyFormatViolationCount,
+      })
+    ),
   ];
+  if (input.expectedUserMessageCount !== null)
+    checks.push(
+      check(
+        'user_message_count',
+        input.actualUserMessageCount === input.expectedUserMessageCount,
+        input.turnIndex,
+        evidence({
+          expectedCount: input.expectedUserMessageCount,
+          actualCount: input.actualUserMessageCount,
+        })
+      )
+    );
+  if (input.expectedAgentUsageCount !== null)
+    checks.push(
+      check(
+        'agent_usage_count',
+        input.actualAgentUsageCount === input.expectedAgentUsageCount,
+        input.turnIndex,
+        evidence({
+          expectedCount: input.expectedAgentUsageCount,
+          actualCount: input.actualAgentUsageCount,
+        })
+      )
+    );
 
   const required = input.expectation.requiredToolCalls[0];
   const unexpected = input.toolEvidence.find(
@@ -2160,6 +2294,49 @@ export function buildMatrixCorpusTurnChecks(
     }
   }
   return checks;
+}
+
+export function countIntexAgentReplyFormatViolations(replies: readonly string[]): number {
+  return replies.filter((reply) => {
+    const presentation = classifyIntexAgentReplyDatePresentation(reply);
+    return presentation === 'raw_record' || presentation === 'unreadable';
+  }).length;
+}
+
+type MatrixSessionTransition = 'created' | 'continued' | 'superseded';
+
+function catalogSessionTransition(
+  action: IntexEvalScenario['expected']['turns'][number]['transition']['action']
+): MatrixSessionTransition {
+  if (action === 'started') return 'created';
+  if (action === 'superseded_previous') return 'superseded';
+  return 'continued';
+}
+
+function observedSessionTransition(
+  input: Readonly<{
+    previousStartedCount: number;
+    previousSupersededCount: number;
+    actualStartedCount: number;
+    actualSupersededCount: number;
+  }>
+): MatrixSessionTransition | 'failed' {
+  if (
+    input.actualStartedCount === input.previousStartedCount + 1 &&
+    input.actualSupersededCount === input.previousSupersededCount
+  )
+    return 'created';
+  if (
+    input.actualStartedCount === input.previousStartedCount + 1 &&
+    input.actualSupersededCount === input.previousSupersededCount + 1
+  )
+    return 'superseded';
+  if (
+    input.actualStartedCount === input.previousStartedCount &&
+    input.actualSupersededCount === input.previousSupersededCount
+  )
+    return 'continued';
+  return 'failed';
 }
 
 function check(

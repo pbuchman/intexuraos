@@ -15,7 +15,7 @@ export type MatrixCorpusOperationResult<T = undefined> =
 export interface MatrixCorpusTurnObservation {
   readonly sessionId: string;
   readonly sessionEvidence: {
-    readonly kind: 'created' | 'continued';
+    readonly kind: 'created' | 'continued' | 'superseded';
     readonly scenarioLabel: string;
   };
   readonly agentModel: string;
@@ -726,7 +726,12 @@ function reconcileTurnEvidence(input: {
   if (turn === undefined || expected === undefined)
     return { ok: false, code: 'TURN_CATALOG_EVIDENCE_MISSING' };
 
-  const expectedBinding = input.expectedSessionId === null ? 'created' : 'continued';
+  const expectedBinding =
+    expected.transition.action === 'started'
+      ? 'created'
+      : expected.transition.action === 'superseded_previous'
+        ? 'superseded'
+        : 'continued';
   if (observation.sessionId.length === 0) return { ok: false, code: 'TURN_SESSION_ID_MISSING' };
   if (input.expectedSessionId !== null && observation.sessionId !== input.expectedSessionId)
     return { ok: false, code: 'TURN_SESSION_ID_MISMATCH' };
@@ -739,8 +744,12 @@ function reconcileTurnEvidence(input: {
   if (!validUsage(observation.agentUsage)) return { ok: false, code: 'TURN_AGENT_USAGE_INVALID' };
   if (!observation.agentUsage.providerCostReconciled)
     return { ok: false, code: 'TURN_AGENT_COST_UNRECONCILED' };
+  const expectsZeroAgentCalls =
+    turn.kind === 'confirmation_button' ||
+    (expected.sessionAfterTurn.startReason === 'user_requested_new_session' &&
+      expected.timeline.forbiddenEventTypes.includes('user_message'));
   if (
-    turn.kind === 'confirmation_button'
+    expectsZeroAgentCalls
       ? observation.agentUsage.logicalCalls !== 0
       : observation.agentUsage.logicalCalls < 1
   )

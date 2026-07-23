@@ -59,10 +59,7 @@ const PROVIDER_KEYS: Record<LlmProvider, string> = {
 };
 
 const runtimeSettingsTransportLogger = {
-  info: (): void => undefined,
   warn: (): void => undefined,
-  error: (): void => undefined,
-  debug: (): void => undefined,
 };
 
 function hasOnlyOwnKeys(value: object, expectedKeys: readonly string[]): boolean {

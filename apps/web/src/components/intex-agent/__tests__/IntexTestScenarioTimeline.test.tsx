@@ -18,6 +18,34 @@ describe('IntexTestScenarioTimeline', () => {
     expect(screen.getByText('Confirmed')).toBeInTheDocument();
   });
 
+  it('shows the safe session-start lifecycle and reason', () => {
+    const fixture = testScenarioDto();
+    render(
+      <IntexTestScenarioTimeline
+        detail={{
+          ...fixture,
+          eventWatermark: 1,
+          timeline: [
+            {
+              type: 'session_started',
+              timelineIndex: 0,
+              eventSequence: 1,
+              turnIndex: 0,
+              startReason: 'user_requested_new_session',
+              explicit: true,
+              createdAt: '2026-07-20T10:00:00.000Z',
+            },
+          ],
+        }}
+        loading={false}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: 'Session started' })).toBeInTheDocument();
+    expect(screen.getByText(/User requested new session/)).toBeInTheDocument();
+    expect(screen.getByText(/Explicit start/)).toBeInTheDocument();
+  });
+
   it('renders deterministic checks and one MiniMax card per observed reply', () => {
     render(<IntexTestScenarioTimeline detail={testScenarioDto()} loading={false} />);
 

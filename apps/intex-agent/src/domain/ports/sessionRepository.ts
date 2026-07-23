@@ -65,6 +65,9 @@ export type SessionRepositorySessionUpdate = Partial<
   activeTool?: IntexAgentToolName | null;
 };
 
+export type MatrixCorpusSessionUpdate = SessionRepositorySessionUpdate &
+  Partial<Pick<IntexAgentSession, 'startReason'>>;
+
 export interface SessionRepository {
   listSessions(userId: string): Promise<IntexAgentSession[]>;
   getSession(sessionId: string, userId: string): Promise<IntexAgentSession | null>;
@@ -90,13 +93,13 @@ export interface MatrixCorpusSessionRepository {
   ): Promise<MatrixCorpusSessionGetResult>;
   updateMatrixCorpusSessionExact(input: Readonly<{
     identity: MatrixCorpusSessionIdentity;
-    update: SessionRepositorySessionUpdate;
+    update: MatrixCorpusSessionUpdate;
     now: string;
   }>): Promise<MatrixCorpusSessionMutationResult>;
   appendMatrixCorpusEvent(input: Readonly<{
     identity: MatrixCorpusSessionIdentity;
     event: IntexAgentSessionEvent;
-    sessionUpdate?: SessionRepositorySessionUpdate;
+    sessionUpdate?: MatrixCorpusSessionUpdate;
     now: string;
   }>): Promise<MatrixCorpusEventMutationResult>;
   listMatrixCorpusEventsExact(

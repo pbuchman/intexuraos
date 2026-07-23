@@ -8,6 +8,8 @@ import {
   activateMatrixCorpusRunWithReconciliation,
   buildMatrixCorpusTurnChecks,
   buildMatrixCorpusTechnicalFacts,
+  countIntexAgentReplyFormatViolations,
+  issueMatrixCorpusCapabilityWithReconciliation,
   PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS,
   PRODUCTION_MATRIX_CORPUS_LEASE_TTL_MS,
   PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS,
@@ -93,6 +95,11 @@ describe('production Matrix corpus technical facts', () => {
       actualReplyCount: 1,
       actualTransition: 'continued',
       actualLifecycle: 'completed',
+      actualReplyFormatViolationCount: 0,
+      expectedUserMessageCount: null,
+      actualUserMessageCount: 1,
+      expectedAgentUsageCount: null,
+      actualAgentUsageCount: 1,
       toolEvidence: [
         {
           event: 'selected',
@@ -152,8 +159,63 @@ describe('production Matrix corpus technical facts', () => {
             actualTransition: 'continued',
           }),
         }),
+        expect.objectContaining({
+          code: 'reply_format',
+          status: 'passed',
+          evidence: expect.objectContaining({ expectedCount: 0, actualCount: 0 }),
+        }),
       ])
     );
+  });
+
+  it('fails closed deterministic checks for raw record dates and an idle-session user event', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const scenario = catalog.scenarios[8]?.scenario;
+    const expectation = scenario?.expected.turns[0];
+    if (expectation === undefined) throw new Error('missing idle-session fixture expectation');
+
+    const checks = buildMatrixCorpusTurnChecks({
+      turnIndex: 0,
+      expectation,
+      actualReplyCount: 1,
+      actualReplyFormatViolationCount: 1,
+      expectedTransition: 'created',
+      actualTransition: 'failed',
+      actualLifecycle: 'completed',
+      expectedUserMessageCount: 0,
+      actualUserMessageCount: 1,
+      expectedAgentUsageCount: 0,
+      actualAgentUsageCount: 1,
+      toolEvidence: [],
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'reply_format', status: 'failed' }),
+        expect.objectContaining({ code: 'session_transition', status: 'failed' }),
+        expect.objectContaining({
+          code: 'user_message_count',
+          status: 'failed',
+          evidence: expect.objectContaining({ expectedCount: 0, actualCount: 1 }),
+        }),
+        expect.objectContaining({
+          code: 'agent_usage_count',
+          status: 'failed',
+          evidence: expect.objectContaining({ expectedCount: 0, actualCount: 1 }),
+        }),
+      ])
+    );
+  });
+
+  it('counts inline, list, and table raw dates through the live reply-format path', () => {
+    expect(
+      countIntexAgentReplyFormatViolations([
+        'Event created for 2026-08-18T14:30:00.000Z.',
+        '- Scheduled: 2026-08-18T14:30:00+02:00',
+        '| start | 2026-08-18T14:30:00.123456789Z |',
+        'Start: 18 August 2026, 14:30',
+      ])
+    ).toBe(3);
   });
 
   it('never copies catalog expectations into fields not exposed by safe live evidence', async () => {
@@ -287,10 +349,124 @@ describe('Matrix outbound send reconciliation', () => {
   });
 });
 
+describe('Matrix capability issue reconciliation', () => {
+  const request: Parameters<WhatsAppServiceClient['issueMatrixCorpusCapability']>[0] = {
+    runId: 'run_1',
+    leaseFence: '7',
+    idempotencyKey: 'capability_key_1',
+    capability: `imc1_${'a'.repeat(43)}`,
+    scenarioId: 'scenario_001',
+    scenarioNumber: 1,
+    scenarioLabel: 'Scenario 001/020',
+    promptNormalizationVersion: 1,
+    promptDigest: 'b'.repeat(64),
+    phase: 'start',
+    turnIndex: 0,
+    expectedSessionId: null,
+    pendingConfirmationId: null,
+    expectedDecision: null,
+    mockProfile: {
+      version: 1,
+      calls: [],
+      forbiddenSelections: [],
+      unexpectedKnownToolPolicy: 'behavioral_failure_no_execution',
+    },
+    mockProfileDigest: 'c'.repeat(64),
+    expectedToolSchedule: [],
+    currentDateTime: '2026-07-20T10:00:00.000Z',
+    timeZone: 'Europe/Warsaw',
+  };
+
+  it('retries the identical capability once when the active outbox is already drained', async () => {
+    const issueMatrixCorpusCapability = vi
+      .fn()
+      .mockResolvedValueOnce(capabilityConflict())
+      .mockResolvedValueOnce(capabilityIssued());
+    const getMatrixCorpusTransportStatus = vi.fn(async () =>
+      transportStatus('active', { nonterminalIngestOutboxCount: 0 })
+    );
+
+    await expect(
+      issueMatrixCorpusCapabilityWithReconciliation({
+        whatsapp: { issueMatrixCorpusCapability, getMatrixCorpusTransportStatus },
+        request,
+        timeoutMs: 20,
+        pollIntervalMs: 0,
+      })
+    ).resolves.toEqual(capabilityIssued());
+    expect(issueMatrixCorpusCapability).toHaveBeenNthCalledWith(1, request);
+    expect(issueMatrixCorpusCapability).toHaveBeenNthCalledWith(2, request);
+  });
+
+  it('does not wait or retry a conflict after the run has left the active phase', async () => {
+    const conflict = capabilityConflict();
+    const issueMatrixCorpusCapability = vi.fn(async () => conflict);
+    const getMatrixCorpusTransportStatus = vi.fn(async () => transportStatus('quiescing'));
+
+    await expect(
+      issueMatrixCorpusCapabilityWithReconciliation({
+        whatsapp: { issueMatrixCorpusCapability, getMatrixCorpusTransportStatus },
+        request,
+        timeoutMs: 3 * 60 * 1000,
+        pollIntervalMs: 1_000,
+      })
+    ).resolves.toEqual(conflict);
+    expect(issueMatrixCorpusCapability).toHaveBeenCalledOnce();
+    expect(getMatrixCorpusTransportStatus).toHaveBeenCalledOnce();
+  });
+
+  it('stops polling when an initially busy active run becomes unavailable', async () => {
+    const conflict = capabilityConflict();
+    const issueMatrixCorpusCapability = vi.fn(async () => conflict);
+    const getMatrixCorpusTransportStatus = vi
+      .fn()
+      .mockResolvedValueOnce(transportStatus('active', { nonterminalIngestOutboxCount: 1 }))
+      .mockResolvedValueOnce(transportStatus('quiescing'));
+
+    await expect(
+      issueMatrixCorpusCapabilityWithReconciliation({
+        whatsapp: { issueMatrixCorpusCapability, getMatrixCorpusTransportStatus },
+        request,
+        timeoutMs: 20,
+        pollIntervalMs: 0,
+      })
+    ).resolves.toEqual(conflict);
+    expect(issueMatrixCorpusCapability).toHaveBeenCalledOnce();
+    expect(getMatrixCorpusTransportStatus).toHaveBeenCalledTimes(2);
+  });
+});
+
 function activationFailure(): Awaited<
   ReturnType<WhatsAppServiceClient['activateMatrixCorpusRun']>
 > {
   return { ok: false as const, error: { code: 'timeout' as const } };
+}
+
+function capabilityConflict(): Awaited<
+  ReturnType<WhatsAppServiceClient['issueMatrixCorpusCapability']>
+> {
+  return {
+    ok: false as const,
+    error: { code: 'rejected' as const, httpStatus: 409 },
+  };
+}
+
+function capabilityIssued(): Awaited<
+  ReturnType<WhatsAppServiceClient['issueMatrixCorpusCapability']>
+> {
+  return {
+    ok: true as const,
+    value: {
+      code: 'CAPABILITY_ISSUED',
+      runId: 'run_1',
+      leaseFence: '7',
+      scenarioId: 'scenario_001',
+      phase: 'start',
+      turnIndex: 0,
+      issuedAt: '2026-07-20T10:00:00.000Z',
+      expiresAt: '2026-07-20T10:05:00.000Z',
+    },
+  };
 }
 
 function transportStatus(
@@ -301,7 +477,10 @@ function transportStatus(
     | 'release_pending'
     | 'abandon_pending'
     | 'released'
-    | 'abandoned'
+    | 'abandoned',
+  overrides: Readonly<{
+    nonterminalIngestOutboxCount?: number;
+  }> = {}
 ): Awaited<ReturnType<WhatsAppServiceClient['getMatrixCorpusTransportStatus']>> {
   return {
     ok: true as const,
@@ -314,7 +493,7 @@ function transportStatus(
       terminalIntexMarkerCount: 0,
       terminalOutboxCount: 0,
       replyOrDeliveryWorkInFlight: 0,
-      nonterminalIngestOutboxCount: 0,
+      nonterminalIngestOutboxCount: overrides.nonterminalIngestOutboxCount ?? 0,
       drained: false,
     },
   };

@@ -159,6 +159,13 @@ describe('Intex Agent Matrix corpus internal client', () => {
           toolEvidence: [],
           agentUsage: [],
           agentUsageTotals: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costNanoUsd: 0 },
+          sessionProof: {
+            status: 'waiting_for_user',
+            startReason: 'no_active_session',
+            userMessageCount: 1,
+            sessionStartedCount: 0,
+            supersededSessionCount: 0,
+          },
           turnTerminals: [],
           strictMockProof: {
             version: 1,
@@ -535,6 +542,13 @@ describe('Intex Agent Matrix corpus internal client', () => {
           toolEvidence: [],
           agentUsage: [],
           agentUsageTotals: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costNanoUsd: 0 },
+          sessionProof: {
+            status: 'waiting_for_user',
+            startReason: 'no_active_session',
+            userMessageCount: 1,
+            sessionStartedCount: 0,
+            supersededSessionCount: 0,
+          },
           turnTerminals: [],
           strictMockProof: {
             version: 1,
@@ -654,17 +668,18 @@ describe('Intex Agent Matrix corpus internal client', () => {
       .reply(503, { success: false })
       .post('/internal/matrix-corpus/current-acceptance')
       .reply(200, { private: 'malformed-envelope' });
-    const client = createIntexAgentServiceClient({
+    const timeoutClient = createIntexAgentServiceClient({
       baseUrl: BASE_URL,
       internalAuthToken: 'secret',
       logger,
       defaultTimeoutMs: 5,
     });
 
-    await expect(client.getMatrixCorpusCurrentAcceptance('user_1')).resolves.toEqual({
+    await expect(timeoutClient.getMatrixCorpusCurrentAcceptance('user_1')).resolves.toEqual({
       ok: false,
       error: { code: 'timeout' },
     });
+    const client = createClient();
     await expect(client.getMatrixCorpusCurrentAcceptance('user_1')).resolves.toEqual({
       ok: false,
       error: { code: 'unavailable' },

@@ -144,7 +144,7 @@ describe('Matrix corpus ingress composition', () => {
       leaseFence: LEASE_FENCE,
     };
     const session = await sessionRepository.getMatrixCorpusSessionExact(identity);
-    expect(session).toMatchObject({ ok: true, session: { lastEventSequence: 8 } });
+    expect(session).toMatchObject({ ok: true, session: { lastEventSequence: 9 } });
     if (!session.ok) throw new Error('expected composed Matrix corpus session');
 
     const evidence = await runtime.evidenceService.getExact({
@@ -155,7 +155,7 @@ describe('Matrix corpus ingress composition', () => {
       ok: true,
       evidence: {
         version: 1,
-        eventRevision: 8,
+        eventRevision: 9,
         toolEvidence: [
           {
             event: 'selected',
@@ -194,6 +194,13 @@ describe('Matrix corpus ingress composition', () => {
           outputTokens: 20,
           totalTokens: 30,
           costNanoUsd: 1_000_000,
+        },
+        sessionProof: {
+          status: 'waiting_for_user',
+          startReason: 'no_active_session',
+          userMessageCount: 1,
+          sessionStartedCount: 1,
+          supersededSessionCount: 0,
         },
         turnTerminals: [
           {

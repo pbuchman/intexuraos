@@ -15,6 +15,7 @@ import {
   safeToolFactNameV1Schema,
   safeToolFactV1Schema,
   type MatrixCorpusSignedControlMutationV1,
+  type SafeDeterministicCheckV1,
   type SafeToolFactV1,
 } from '@intexuraos/http-contracts';
 
@@ -90,6 +91,9 @@ interface SharedState {
   stoppedScenarioProjectionConflictInjected: boolean;
   readonly hangInitialCursor: boolean;
   readonly dropReplyScenarioNumber: number | null;
+  readonly rawDateReplyScenarioNumber: number | null;
+  readonly transportBusyAfterMessageNumber: number | null;
+  transportBusyReadsRemaining: number;
   readonly onReplyWaitStarted: () => void;
 }
 
@@ -102,6 +106,8 @@ export interface MatrixCorpusCompositionHarnessOptions {
   readonly conflictStoppedScenarioProjectionOnce?: boolean;
   readonly hangInitialCursor?: boolean;
   readonly dropReplyScenarioNumber?: number;
+  readonly rawDateReplyScenarioNumber?: number;
+  readonly transportBusyAfterMessageNumber?: number;
 }
 
 export interface MatrixCorpusCompositionMetrics {
@@ -115,6 +121,9 @@ export interface MatrixCorpusCompositionMetrics {
   miniMaxJudgeCalls: number;
   readonly scenarioProjectionSessions: string[];
   readonly scenarioProjectionEventWatermarks: number[];
+  readonly scenarioProjectionDeterministicChecks: SafeDeterministicCheckV1[][];
+  readonly judgeAssistantTexts: string[];
+  transportReadinessChecks: number;
   productionExecutorResolutions: 0;
   productionExecutorAdmissions: 0;
 }
@@ -156,6 +165,9 @@ export async function createPassingMatrixCorpusCompositionHarness(
     miniMaxJudgeCalls: 0,
     scenarioProjectionSessions: [],
     scenarioProjectionEventWatermarks: [],
+    scenarioProjectionDeterministicChecks: [],
+    judgeAssistantTexts: [],
+    transportReadinessChecks: 0,
     productionExecutorResolutions: 0,
     productionExecutorAdmissions: 0,
   };
@@ -187,6 +199,9 @@ export async function createPassingMatrixCorpusCompositionHarness(
     stoppedScenarioProjectionConflictInjected: false,
     hangInitialCursor: options.hangInitialCursor ?? false,
     dropReplyScenarioNumber: options.dropReplyScenarioNumber ?? null,
+    rawDateReplyScenarioNumber: options.rawDateReplyScenarioNumber ?? null,
+    transportBusyAfterMessageNumber: options.transportBusyAfterMessageNumber ?? null,
+    transportBusyReadsRemaining: 0,
     onReplyWaitStarted: () => resolveReplyWaitStarted?.(),
   };
 
@@ -305,6 +320,9 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
       };
     },
     async issueMatrixCorpusCapability(input) {
+      if (state.transportBusyReadsRemaining > 0) {
+        return { ok: false, error: { code: 'rejected' as const, httpStatus: 409 } };
+      }
       state.issued = {
         scenarioId: input.scenarioId,
         turnIndex: input.turnIndex,
@@ -332,7 +350,12 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
         state.progress.get(issued.scenarioId) ??
         createScenarioProgress(entry, state.progress.size + 1);
       state.progress.set(issued.scenarioId, progress);
-      const reply = `Scenario ${String(entry.scenarioNumber).padStart(3, '0')} turn ${String(issued.turnIndex + 1)} completed.`;
+      const reply =
+        entry.scenarioNumber === state.rawDateReplyScenarioNumber && issued.turnIndex === 0
+          ? 'Event created for 2026-08-18T14:30:00.000Z.'
+          : entry.scenarioNumber === 1 && issued.turnIndex === 0
+            ? 'Add this note?\n\nContent: private INTEX-EVAL-001-F01 content'
+            : `Scenario ${String(entry.scenarioNumber).padStart(3, '0')} turn ${String(issued.turnIndex + 1)} completed.`;
       const expectedTurn = entry.scenario.expected.turns[issued.turnIndex];
       if (expectedTurn === undefined) throw new Error('turn expectation is missing');
       const matrixReply = expectedTurn.timeline.requiredEventTypes.includes(
@@ -365,12 +388,15 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
         });
       }
       state.metrics.matrixMessages.push(request.text);
+      if (state.metrics.matrixMessages.length === state.transportBusyAfterMessageNumber) {
+        state.transportBusyReadsRemaining = 1;
+      }
       state.activeTurns += 1;
       state.metrics.maxConcurrentTurns = Math.max(
         state.metrics.maxConcurrentTurns,
         state.activeTurns
       );
-      if (issued.phase === 'confirmation') {
+      if (issued.phase === 'confirmation' || isIdleNewSessionTurn(entry, issued.turnIndex)) {
         state.metrics.confirmationAgentCalls += 0;
       } else {
         state.metrics.deepSeekAgentCalls += 1;
@@ -401,6 +427,9 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
       };
     },
     async getMatrixCorpusTransportStatus({ runId, leaseFence }) {
+      state.metrics.transportReadinessChecks += 1;
+      const transportBusy = state.transportBusyReadsRemaining > 0;
+      if (transportBusy) state.transportBusyReadsRemaining -= 1;
       if (state.transportPhase === 'quiescing') state.trace.push('drain');
       return {
         ok: true,
@@ -413,7 +442,7 @@ function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
           terminalIntexMarkerCount: state.transportPhase === 'released' ? 1 : 0,
           terminalOutboxCount: state.transportPhase === 'released' ? 1 : 0,
           replyOrDeliveryWorkInFlight: 0,
-          nonterminalIngestOutboxCount: 0,
+          nonterminalIngestOutboxCount: transportBusy ? 1 : 0,
           drained: state.transportPhase === 'quiescing' || state.transportPhase === 'released',
         },
       };
@@ -516,6 +545,10 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
           const scenario = command['scenario'] as Readonly<Record<string, unknown>>;
           state.metrics.scenarioProjectionSessions.push(String(scenario['sessionId']));
           state.metrics.scenarioProjectionEventWatermarks.push(Number(scenario['eventWatermark']));
+          const projection = scenario['projection'] as Readonly<Record<string, unknown>>;
+          state.metrics.scenarioProjectionDeterministicChecks.push(
+            structuredClone(projection['deterministicChecks'] as SafeDeterministicCheckV1[])
+          );
           state.lifecycle = 'running';
         }
       }
@@ -731,6 +764,7 @@ function createMiniMaxBoundary(state: SharedState): MiniMaxEvaluator {
       return { ok: true };
     },
     async judgeReplies(inputs) {
+      state.metrics.judgeAssistantTexts.push(...inputs.map((input) => input.assistantText));
       state.metrics.miniMaxJudgeCalls += inputs.length;
       for (const input of inputs) {
         state.trace.push(`judge:${input.scenarioId}:${String(input.turnIndex)}`);
@@ -808,7 +842,7 @@ function evidenceFor(
         });
       }
     }
-    if (turn.kind !== 'confirmation_button') {
+    if (turn.kind !== 'confirmation_button' && !isIdleNewSessionTurn(entry, turnIndex)) {
       agentUsage.push({
         turnIndex,
         stage: 'agent_generation',
@@ -845,6 +879,21 @@ function evidenceFor(
     toolEvidence,
     agentUsage,
     agentUsageTotals: totals,
+    sessionProof: {
+      status: 'waiting_for_user',
+      startReason:
+        entry.scenarioNumber === 9 || (entry.scenarioNumber === 4 && progress.lastTurnIndex >= 1)
+          ? 'user_requested_new_session'
+          : 'no_active_session',
+      userMessageCount:
+        entry.scenarioNumber === 9
+          ? 0
+          : entry.scenario.turns
+              .slice(0, progress.lastTurnIndex + 1)
+              .filter((turn) => turn.kind === 'message').length,
+      sessionStartedCount: entry.scenarioNumber === 4 && progress.lastTurnIndex >= 1 ? 2 : 1,
+      supersededSessionCount: entry.scenarioNumber === 4 && progress.lastTurnIndex >= 1 ? 1 : 0,
+    },
     turnTerminals,
     strictMockProof: {
       version: 1,
@@ -855,6 +904,14 @@ function evidenceFor(
       productionExecutorAdmissions: 0,
     },
   };
+}
+
+function isIdleNewSessionTurn(entry: CanonicalMatrixCorpusScenario, turnIndex: number): boolean {
+  const expectation = entry.scenario.expected.turns[turnIndex];
+  return (
+    expectation?.sessionAfterTurn.startReason === 'user_requested_new_session' &&
+    expectation.timeline.forbiddenEventTypes.includes('user_message')
+  );
 }
 
 function passingSafeFacts(

@@ -5,6 +5,7 @@ import {
   publicTestRunScenarioSummaryV1Schema,
   publicTestTimelineEventV1Schema,
   safeToolFactV1Schema,
+  sanitizeIntexAgentReplyText,
   testRunDtoV1Schema,
   testScenarioDtoV1Schema,
   type PublicTestRunHeaderV1,
@@ -136,9 +137,18 @@ function mapTimeline(
   const timeline: PublicTestTimelineEventV1[] = [];
   const confirmations = new Map<string, { toolName: string; turnIndex: number }>();
   let currentTurnIndex: number | null = null;
+  let restartPending = false;
   const replyCounts = new Map<number, number>();
 
   for (const event of events) {
+    if (restartPending && event.type !== 'session_started')
+      throw new Error('TEST_RUN_INVALID_TIMELINE');
+    if (
+      !restartPending &&
+      currentTurnIndex !== null &&
+      event.type === 'session_started'
+    )
+      throw new Error('TEST_RUN_INVALID_TIMELINE');
     const sequence = event.eventSequence as number;
     const mapped = mapSourceEvent({
       event,
@@ -153,8 +163,19 @@ function mapTimeline(
       currentTurnIndex = mapped.turnIndex;
       timeline.push(mapped.event);
     }
+    if (mapped.kind === 'context') {
+      currentTurnIndex = mapped.turnIndex;
+      timeline.push(mapped.event);
+      restartPending = false;
+    }
+    if (mapped.kind === 'closed') {
+      currentTurnIndex = mapped.turnIndex;
+      restartPending = true;
+      timeline.push(mapped.event);
+    }
     if (mapped.kind === 'event') timeline.push(mapped.event);
   }
+  if (restartPending) throw new Error('TEST_RUN_INVALID_TIMELINE');
 
   if (projection.deterministicChecks.length > 0) {
     timeline.push({
@@ -180,6 +201,16 @@ function mapTimeline(
 type SourceMapResult =
   | Readonly<{ kind: 'ignored' }>
   | Readonly<{ kind: 'invalid' }>
+  | Readonly<{
+      kind: 'context';
+      turnIndex: number;
+      event: PublicTestTimelineEventV1;
+    }>
+  | Readonly<{
+      kind: 'closed';
+      turnIndex: number;
+      event: PublicTestTimelineEventV1;
+    }>
   | Readonly<{ kind: 'user'; turnIndex: number; event: PublicTestTimelineEventV1 }>
   | Readonly<{ kind: 'event'; event: PublicTestTimelineEventV1 }>;
 
@@ -192,6 +223,58 @@ function mapSourceEvent(input: Readonly<{
   replyCounts: Map<number, number>;
 }>): SourceMapResult {
   const { event, sequence, timelineIndex } = input;
+  if (event.type === 'session_closed') {
+    const nextTurnIndex =
+      input.currentTurnIndex === null ? null : readTurnIndex(input.currentTurnIndex + 1);
+    if (
+      nextTurnIndex === null ||
+      Object.keys(event.payload).length !== 2 ||
+      event.payload['reason'] !== 'superseded_by_user' ||
+      event.payload['status'] !== 'superseded'
+    )
+      return { kind: 'invalid' };
+    const mapped = parseTimelineEvent({
+      type: 'session_closed',
+      timelineIndex,
+      eventSequence: sequence,
+      turnIndex: nextTurnIndex,
+      endReason: 'superseded_by_user',
+      status: 'superseded',
+      createdAt: event.createdAt,
+    });
+    return mapped === null
+      ? { kind: 'invalid' }
+      : { kind: 'closed', turnIndex: nextTurnIndex, event: mapped };
+  }
+  if (event.type === 'session_started') {
+    const reason = event.payload['reason'];
+    const initial = sequence === 1 && input.currentTurnIndex === null;
+    const restarted =
+      sequence !== 1 &&
+      input.currentTurnIndex !== null &&
+      reason === 'user_requested_new_session';
+    if (
+      (!initial && !restarted) ||
+      Object.keys(event.payload).length !== 2 ||
+      typeof event.payload['explicit'] !== 'boolean' ||
+      !SESSION_START_REASONS.has(reason) ||
+      event.payload['explicit'] !== (reason === 'user_requested_new_session')
+    )
+      return { kind: 'invalid' };
+    const turnIndex = input.currentTurnIndex ?? 0;
+    const mapped = parseTimelineEvent({
+      type: 'session_started',
+      timelineIndex,
+      eventSequence: sequence,
+      turnIndex,
+      startReason: reason,
+      explicit: event.payload['explicit'],
+      createdAt: event.createdAt,
+    });
+    return mapped === null
+      ? { kind: 'invalid' }
+      : { kind: 'context', turnIndex, event: mapped };
+  }
   if (event.type === 'user_message') {
     const turnIndex = readTurnIndex(event.payload['turnIndex']);
     const text = readText(event.payload['text']);
@@ -218,7 +301,7 @@ function mapSourceEvent(input: Readonly<{
       eventSequence: sequence,
       turnIndex: input.currentTurnIndex,
       replyIndex,
-      text,
+      text: sanitizeIntexAgentReplyText(text),
       createdAt: event.createdAt,
     });
   }
@@ -336,15 +419,22 @@ function readTurnIndex(value: unknown): number | null {
 }
 
 const IGNORED_SOURCE_EVENT_TYPES = new Set<IntexAgentSessionEvent['type']>([
-  'session_started',
-  'session_closed',
   'agent_fallback',
   'clarification_requested',
   'llm_call_usage',
   'llm_usage_summary',
+  'matrix_corpus_execution_boundary',
   'turn_processing_completed',
   'turn_processing_failed',
   'unsupported_request',
+]);
+
+const SESSION_START_REASONS = new Set<unknown>([
+  'no_active_session',
+  'previous_completed',
+  'previous_expired',
+  'previous_superseded',
+  'user_requested_new_session',
 ]);
 
 function readPositiveIndex(value: unknown, maximum: number): number | null {

@@ -492,7 +492,10 @@ export function deriveTestRunEvidenceTotals(
   );
   if (agentNanoUsd === null || evaluatorNanoUsd === null) return null;
   const hasAgentCoverage = projections.every(
-    (projection) => projection.completedTurns === 0 || projection.agentUsage.length > 0
+    (projection) =>
+      projection.completedTurns === 0 ||
+      projection.agentUsage.length > 0 ||
+      hasExactZeroAgentUsageProof(projection)
   );
   const hasEvaluatorCoverage = projections.every(
     (projection) =>
@@ -541,6 +544,16 @@ export function deriveTestRunEvidenceTotals(
     },
     cost: { agentNanoUsd: agentCost, evaluatorNanoUsd: evaluatorCost, totalNanoUsd },
   };
+}
+
+function hasExactZeroAgentUsageProof(projection: TestRunScenarioProjectionV1): boolean {
+  return projection.deterministicChecks.some(
+    (check) =>
+      check.code === 'agent_usage_count' &&
+      check.status === 'passed' &&
+      check.evidence.expectedCount === 0 &&
+      check.evidence.actualCount === 0
+  );
 }
 
 export function isScenarioProjectionEvidenceConsistent(

@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import { calendarListEventsRequestSchema } from '@intexuraos/http-contracts';
+import {
+  calendarListEventsRequestSchema,
+  sanitizeIntexAgentReplyText,
+} from '@intexuraos/http-contracts';
 import type { IntexAgentSessionEvent, IntexAgentToolName } from '../sessions/types.js';
 import type {
   BehavioralTranscript,
@@ -26,7 +29,6 @@ const SENSITIVE_REPLY_LINE_PATTERN =
   /^\s*(?:(?:>|[-+*•‣◦▪]|\d+[.)])\s+)?(?:[*_]{1,2})?\s*(url|source|zrodlo|źródło|title|tytuł|content|treść|tresc|start|początek|end|koniec|location|miejsce|attendees|uczestnicy|prompt|polecenie|mode|tryb|worker|typ workera|linear|new entry|nowy wpis|entry|wpis|before|wcześniej|przed|after|po zmianie|po)\s*:\s*(?:[*_]{1,2})?(?:\s*.*)?$/iu;
 const PREFERENCE_BLOCK_HEADER_PATTERN =
   /^\s*(user preferences|prompt preferences|current preferences|rendered prompt block|preferencje|preferencje użytkownika)\b/iu;
-const PREFERENCE_BLOCK_ITEM_PATTERN = /^\s*(?:[-*]|\d+[).])\s+\S/u;
 const TEXT_PREVIEW_LIMIT = 220;
 const REPLY_MESSAGE_LIMIT = 4000;
 const SYNTHETIC_MARKER_PATTERN =
@@ -93,7 +95,7 @@ export function sanitizeAssistantReplies(
   return replies.map((reply) => ({
     userId: reply.userId,
     message: truncateTo(
-      redactSyntheticMarkers(redactSensitiveText(reply.message)),
+      sanitizeIntexAgentReplyText(reply.message),
       REPLY_MESSAGE_LIMIT
     ),
     replyToMessageId: reply.replyToMessageId,
@@ -405,7 +407,14 @@ function sanitizeEventPayload(event: IntexAgentSessionEvent): Record<string, unk
 
   const text = readFirstString(payload, ['text', 'message']);
   if (text !== undefined) {
-    const textPreview = previewText(redactSyntheticMarkers(text));
+    const textPreview =
+      event.type === 'user_message'
+        ? previewText(redactSyntheticMarkers(text))
+        : truncate(
+            sanitizeIntexAgentReplyText(text)
+              .trim()
+              .replace(/\s+/gu, ' ')
+          );
     if (textPreview !== '') {
       sanitized['textPreview'] = textPreview;
     }
@@ -639,14 +648,13 @@ function redactSensitiveText(text: string): string {
         inPreferenceBlock = true;
         return 'User Preferences: [redacted]';
       }
-      if (inPreferenceBlock && PREFERENCE_BLOCK_ITEM_PATTERN.test(line)) {
+      if (inPreferenceBlock) {
+        if (line.trim() === '') {
+          inPreferenceBlock = false;
+          return line;
+        }
         return '[redacted-preference-item]';
       }
-      if (inPreferenceBlock && line.trim() === '') {
-        inPreferenceBlock = false;
-        return line;
-      }
-      inPreferenceBlock = false;
       const redactedSensitiveLine = redactSensitiveReplyLine(line);
       if (redactedSensitiveLine === null) {
         return line;

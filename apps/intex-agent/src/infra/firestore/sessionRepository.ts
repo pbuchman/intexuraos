@@ -15,6 +15,7 @@ import type {
   MatrixCorpusSessionIdentity,
   MatrixCorpusSessionMutationResult,
   MatrixCorpusSessionRepository,
+  MatrixCorpusSessionUpdate,
   SessionRepository,
   SessionRepositorySessionDraft,
   SessionRepositorySessionUpdate,
@@ -389,7 +390,7 @@ export class FirestoreSessionRepository
 
   async updateMatrixCorpusSessionExact(input: Readonly<{
     identity: MatrixCorpusSessionIdentity;
-    update: SessionRepositorySessionUpdate;
+    update: MatrixCorpusSessionUpdate;
     now: string;
   }>): Promise<MatrixCorpusSessionMutationResult> {
     if (!isValidMatrixIdentity(input.identity) || !isRfc3339(input.now))
@@ -426,7 +427,7 @@ export class FirestoreSessionRepository
   async appendMatrixCorpusEvent(input: Readonly<{
     identity: MatrixCorpusSessionIdentity;
     event: IntexAgentSessionEvent;
-    sessionUpdate?: SessionRepositorySessionUpdate;
+    sessionUpdate?: MatrixCorpusSessionUpdate;
     now: string;
   }>): Promise<MatrixCorpusEventMutationResult> {
     if (
@@ -785,7 +786,7 @@ function isActiveRunContext(
 
 function applyMatrixSessionUpdate(
   session: MatrixCorpusSession,
-  update: SessionRepositorySessionUpdate
+  update: MatrixCorpusSessionUpdate
 ): MatrixCorpusSession {
   const updated = { ...session, ...update };
   if (update.activeTool === null) {

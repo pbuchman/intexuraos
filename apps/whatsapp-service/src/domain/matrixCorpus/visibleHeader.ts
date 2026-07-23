@@ -88,9 +88,11 @@ export function parseMatrixCorpusVisibleMessage(
     if (scenarioNumber < 1 || scenarioNumber > MATRIX_CORPUS_SCENARIO_TOTAL || capability === undefined) {
       return reservedMalformed('malformed_header');
     }
+    const isIdleNewSessionCommand = split.body.trim().toLowerCase() === 'new session';
     return matrixCorpusVisibleStartHeaderV1Schema.parse({
       kind: 'matrix_corpus', version: 1, phase: 'start', scenarioNumber, scenarioTotal: 20,
-      capability, naturalBody: split.body, textAfterHeaderRemoval: `new session: ${split.body}`,
+      capability, naturalBody: split.body,
+      textAfterHeaderRemoval: isIdleNewSessionCommand ? 'new session' : `new session: ${split.body}`,
       startNewSession: true,
     });
   }

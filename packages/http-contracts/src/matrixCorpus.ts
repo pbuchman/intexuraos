@@ -136,6 +136,12 @@ function hasLegalVisibleSourceLength(header: string, naturalBody: string): boole
   return header.length + 2 + naturalBody.length <= MATRIX_CORPUS_MAX_VISIBLE_MESSAGE_CODE_UNITS;
 }
 
+function hasCanonicalStartText(naturalBody: string, textAfterHeaderRemoval: string): boolean {
+  const idleNewSession =
+    naturalBody.trim().toLowerCase() === 'new session' && textAfterHeaderRemoval === 'new session';
+  return idleNewSession || textAfterHeaderRemoval === `new session: ${naturalBody}`;
+}
+
 const matrixCorpusHeaderBaseSchema = z
   .object({
     kind: z.literal('matrix_corpus'),
@@ -152,7 +158,7 @@ export const matrixCorpusVisibleStartHeaderV1Schema = matrixCorpusHeaderBaseSche
   .extend({ phase: z.literal('start'), startNewSession: z.literal(true) })
   .refine(
     (value) =>
-      value.textAfterHeaderRemoval === `new session: ${value.naturalBody}` &&
+      hasCanonicalStartText(value.naturalBody, value.textAfterHeaderRemoval) &&
       hasLegalVisibleSourceLength(
         `new session: 🧪 Scenario ${scenarioFraction(value.scenarioNumber)} · Matrix corpus · tools mocked · ${value.capability}`,
         value.naturalBody

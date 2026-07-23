@@ -68,6 +68,15 @@ function profile(toolName: 'create_note' | 'query_calendar_events'): StrictToolM
   };
 }
 
+function emptyProfile(): StrictToolMockProfileV1 {
+  return {
+    version: 1,
+    calls: [],
+    forbiddenSelections: [],
+    unexpectedKnownToolPolicy: 'behavioral_failure_no_execution',
+  };
+}
+
 function claims(
   toolName: 'create_note' | 'query_calendar_events',
   overrides: Readonly<Record<string, unknown>> = {}
@@ -126,9 +135,52 @@ function claims(
   };
 }
 
+function idleNewSessionClaims(): IngestClaims {
+  const strictMockProfile = emptyProfile();
+  const base = claims('create_note');
+  const payload = {
+    ...base.payload,
+    ordinaryIngest: {
+      ...base.payload.ordinaryIngest,
+      text: 'new session',
+    },
+    context: {
+      ...base.payload.context,
+      scenarioId: 'intex-eval-009',
+      scenarioNumber: 9,
+      scenarioLabel: 'Scenario 009/020',
+      mockProfile: strictMockProfile,
+      mockProfileDigest: sha256(
+        canonicalMatrixCorpusStrictToolMockProfileV1(strictMockProfile)
+      ),
+      expectedToolSchedule: [],
+    },
+  };
+  return {
+    ...base,
+    payloadDigest: sha256(canonicalMatrixCorpusIngestPayloadV1(payload)),
+    payload,
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- inferred mocks are asserted directly
-function fixture(runner: IntexAgentRunner) {
-  const mockProfile = profile('query_calendar_events');
+function fixture(
+  runner: IntexAgentRunner,
+  options: Readonly<{
+    mockProfile?: StrictToolMockProfileV1;
+    expectedToolSchedule?: NonNullable<
+      IntexAgentSession['matrixCorpusProfile']
+    >['expectedToolSchedule'];
+    scenarioId?: string;
+    scenarioNumber?: number;
+    scenarioLabel?: string;
+    sessionOverrides?: Partial<IntexAgentSession>;
+  }> = {}
+) {
+  const mockProfile = options.mockProfile ?? profile('query_calendar_events');
+  const expectedToolSchedule = options.expectedToolSchedule ?? [
+    { turnIndex: 0, toolName: 'query_calendar_events' as const, ordinal: 1 },
+  ];
   const session: IntexAgentSession = {
     id: stableKeys.sessionId,
     userId: 'auth0:user_1',
@@ -143,9 +195,9 @@ function fixture(runner: IntexAgentRunner) {
       runtimeAudience: 'hetzner-prod',
       leaseFence: '7',
       runId: 'run_1',
-      scenarioId: 'scenario_001',
-      scenarioNumber: 1,
-      scenarioLabel: 'Scenario 001/020',
+      scenarioId: options.scenarioId ?? 'scenario_001',
+      scenarioNumber: options.scenarioNumber ?? 1,
+      scenarioLabel: options.scenarioLabel ?? 'Scenario 001/020',
       executionMode: 'strict_mock_tools',
       agentModel: 'or:deepseek/deepseek-v4-flash',
       evaluatorModel: 'or:minimax/minimax-m3',
@@ -154,9 +206,10 @@ function fixture(runner: IntexAgentRunner) {
       userTimeZone: 'Europe/Warsaw',
       mockProfile,
       mockProfileDigest: sha256(canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile)),
-      expectedToolSchedule: [{ turnIndex: 0, toolName: 'query_calendar_events', ordinal: 1 }],
+      expectedToolSchedule,
     },
     lastEventSequence: 1,
+    ...options.sessionOverrides,
   };
   const sessionRepository = {
     getMatrixCorpusSessionExact: vi.fn<
@@ -313,6 +366,78 @@ function matrixProfile(
 }
 
 describe('Matrix corpus execution service', () => {
+  it('answers an idle explicit new-session command deterministically without constructing an LLM runner', async () => {
+    const runner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(),
+    };
+    const { service, sessionRepository, createRunner, replyPublisher } = fixture(runner, {
+      mockProfile: emptyProfile(),
+      expectedToolSchedule: [],
+      scenarioId: 'intex-eval-009',
+      scenarioNumber: 9,
+      scenarioLabel: 'Scenario 009/020',
+      sessionOverrides: {
+        status: 'active',
+        startReason: 'user_requested_new_session',
+      },
+    });
+    sessionRepository.listMatrixCorpusEventsExact.mockResolvedValue({
+      ok: true,
+      events: [
+        {
+          id: stableKeys.eventId,
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'session_started',
+          payload: { reason: 'user_requested_new_session', explicit: true },
+          createdAt: now,
+          eventSequence: 1,
+        },
+      ],
+    });
+
+    await expect(
+      service.executeVerifiedIngest({
+        claims: idleNewSessionClaims(),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(createRunner).not.toHaveBeenCalled();
+    expect(runner.run).not.toHaveBeenCalled();
+    expect(
+      sessionRepository.appendMatrixCorpusEvent.mock.calls.map(
+        (call) => call[0].event.type
+      )
+    ).toEqual([
+      'matrix_corpus_execution_boundary',
+      'llm_usage_summary',
+      'assistant_message',
+    ]);
+    expect(
+      sessionRepository.appendMatrixCorpusEvent.mock.calls[0]?.[0].event.payload
+    ).toMatchObject({
+      resolution: 'no_executor_required',
+      productionExecutorResolutions: 0,
+      productionExecutorAdmissions: 0,
+    });
+    expect(
+      sessionRepository.appendMatrixCorpusEvent.mock.calls[1]?.[0].event.payload
+    ).toMatchObject({
+      status: 'complete',
+      expectedCallCount: 0,
+      reportedCallCount: 0,
+      totalTokens: 0,
+      costNanoUsd: 0,
+    });
+    expect(replyPublisher.publishReplyWithReceipt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('What would you like me to help with?'),
+      })
+    );
+  });
+
   it('runs a verified normal turn through the catalog-bound Matrix runner and persists its reply', async () => {
     const runner = {
       run: vi.fn(async () => ({
@@ -378,6 +503,98 @@ describe('Matrix corpus execution service', () => {
       expect.objectContaining({
         replyIndex: 0,
         publicationReceiptDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      })
+    );
+  });
+
+  it('isolates runner history after the latest logical session start', async () => {
+    const runner = {
+      run: vi.fn(async () => ({
+        outcome: 'completed' as const,
+        reply: 'No events.',
+        toolName: 'query_calendar_events' as const,
+        toolResult: { toolName: 'query_calendar_events', status: 'completed', count: 0 },
+        toolSelection: { turnIndex: 0, ordinal: 1 },
+      })),
+      executeConfirmed: vi.fn(),
+    };
+    const { service, sessionRepository } = fixture(runner, {
+      sessionOverrides: { startReason: 'user_requested_new_session' },
+    });
+    sessionRepository.listMatrixCorpusEventsExact.mockResolvedValue({
+      ok: true,
+      events: [
+        {
+          id: 'initial_start',
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'session_started',
+          payload: { reason: 'no_active_session', explicit: false },
+          createdAt: now,
+          eventSequence: 1,
+        },
+        {
+          id: 'old_user',
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'user_message',
+          payload: { text: 'Old calendar request' },
+          createdAt: now,
+          eventSequence: 2,
+        },
+        {
+          id: 'old_assistant',
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'assistant_message',
+          payload: { text: 'Which date?' },
+          createdAt: now,
+          eventSequence: 3,
+        },
+        {
+          id: 'old_closed',
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'session_closed',
+          payload: { reason: 'superseded_by_user', status: 'superseded' },
+          createdAt: now,
+          eventSequence: 4,
+        },
+        {
+          id: 'replacement_start',
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'session_started',
+          payload: { reason: 'user_requested_new_session', explicit: true },
+          createdAt: now,
+          eventSequence: 5,
+        },
+        {
+          id: stableKeys.eventId,
+          sessionId: stableKeys.sessionId,
+          userId: 'auth0:user_1',
+          type: 'user_message',
+          payload: { text: 'Synthetic Matrix request' },
+          createdAt: now,
+          eventSequence: 6,
+        },
+      ],
+    });
+    const verified = claims('query_calendar_events', {
+      phase: 'turn',
+      turnIndex: 1,
+      startNewSession: false,
+      expectedSessionId: stableKeys.sessionId,
+    });
+
+    await expect(
+      service.executeVerifiedIngest({ claims: verified, stableKeys })
+    ).resolves.toEqual({ ok: true });
+
+    expect(runner.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: [],
+        message: 'Synthetic Matrix request',
       })
     );
   });

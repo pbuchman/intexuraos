@@ -75,6 +75,68 @@ type PreviewToolName =
   | 'add_user_preference';
 
 describe('createIntexAgentRunner', () => {
+  it('renders raw database date records as readable local dates in Polish replies', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply:
+            'Spotkanie zaczyna się 2026-08-18T14:30:00.123Z, kończy 2026-08-18T17:00:00.000+02:00, kolejny termin to 2026-08-19, a termin bez strefy to 2026-08-20T09:15:00. Błędne rekordy: 2026-99-99T25:61:00.000Z, 2026-99-99T25:61:00, 2026-02-30T09:15:00, 2026-02-30 oraz 2026-04-31T09:15:00+02:00. Link: https://example.com/2026-08-20. Zachowaj CASE-2026-08-21, invoice-2026-08-22-001, urn:example:2026-08-23 i www.example.com/archive/2026-08-24.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: conversationIntentClassifier(),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Kiedy mam te spotkania?',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toEqual({
+      outcome: 'no_action',
+      reply:
+        'Spotkanie zaczyna się 18 sierpnia 2026, 16:30, kończy 18 sierpnia 2026, 17:00, kolejny termin to 19 sierpnia 2026, a termin bez strefy to 20 sierpnia 2026, 09:15. Błędne rekordy: nieprawidłowa data, nieprawidłowa data, nieprawidłowa data, nieprawidłowa data oraz nieprawidłowa data. Link: https://example.com/2026-08-20. Zachowaj CASE-2026-08-21, invoice-2026-08-22-001, urn:example:2026-08-23 i www.example.com/archive/2026-08-24.',
+    });
+  });
+
+  it('renders date-only and minute-precision records in English and rejects invalid records', async () => {
+    const client = new FakeToolCallingClient([
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply:
+            'Dates: 2026-08-18, 2026-99-99, 2026-02-30, 2026-08-18T09:15Z, and 2026-99-99T25:61.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: conversationIntentClassifier(),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'When are these dates?',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply:
+        'Dates: 18 August 2026, invalid date, invalid date, 18 August 2026, 11:15, and invalid date.',
+    });
+  });
+
   it('uses the versioned prompt, transcript messages, and supported tools', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_note',

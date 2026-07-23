@@ -110,6 +110,13 @@ describe('Matrix corpus evidence service', () => {
           totalTokens: 12,
           costNanoUsd: 99,
         },
+        sessionProof: {
+          status: 'waiting_for_user',
+          startReason: 'no_active_session',
+          userMessageCount: 1,
+          sessionStartedCount: 0,
+          supersededSessionCount: 0,
+        },
         turnTerminals: [
           {
             status: 'completed',
@@ -141,6 +148,250 @@ describe('Matrix corpus evidence service', () => {
     ]) {
       expect(serialized).not.toContain(sentinel);
     }
+  });
+
+  it('proves an idle user-requested session without exposing or inventing a user message', async () => {
+    const repository = repositoryFixture(
+      [
+        event(1, 'session_started', {
+          reason: 'user_requested_new_session',
+          explicit: true,
+        }),
+        event(2, 'matrix_corpus_execution_boundary', {
+          ...boundaryPayload(),
+          resolution: 'no_executor_required',
+        }),
+        event(3, 'llm_usage_summary', {
+          turnIndex: 0,
+          status: 'complete',
+          expectedCallCount: 0,
+          reportedCallCount: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costNanoUsd: 0,
+        }),
+        event(4, 'assistant_message', { text: 'PRIVATE_ASSISTANT_MESSAGE' }),
+        event(5, 'turn_processing_completed', {
+          turnIndex: 0,
+          status: 'completed',
+          replyCount: 1,
+          replyDigests: ['d'.repeat(64)],
+        }),
+      ],
+      {
+        startReason: 'user_requested_new_session',
+        status: 'waiting_for_user',
+      }
+    );
+    const service = createMatrixCorpusEvidenceService({ sessionRepository: repository });
+
+    const result = await service.getExact({ identity, expectedEventRevision: 5 });
+
+    expect(result).toMatchObject({
+      ok: true,
+      evidence: {
+        sessionProof: {
+          status: 'waiting_for_user',
+          startReason: 'user_requested_new_session',
+          userMessageCount: 0,
+          sessionStartedCount: 1,
+          supersededSessionCount: 0,
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('PRIVATE_ASSISTANT_MESSAGE');
+  });
+
+  it.each([
+    {
+      name: 'missing session_started event',
+      mutate: (events: ReturnType<typeof event>[]): ReturnType<typeof event>[] =>
+        events.slice(1).map((candidate, index) => ({ ...candidate, eventSequence: index + 1 })),
+    },
+    {
+      name: 'mismatched start reason',
+      mutate: (events: ReturnType<typeof event>[]): ReturnType<typeof event>[] =>
+        events.map((candidate, index) =>
+          index === 0
+            ? { ...candidate, payload: { reason: 'no_active_session', explicit: true } }
+            : candidate
+        ),
+    },
+    {
+      name: 'non-explicit user request',
+      mutate: (events: ReturnType<typeof event>[]): ReturnType<typeof event>[] =>
+        events.map((candidate, index) =>
+          index === 0
+            ? {
+                ...candidate,
+                payload: { reason: 'user_requested_new_session', explicit: false },
+              }
+            : candidate
+        ),
+    },
+    {
+      name: 'extra private session-start field',
+      mutate: (events: ReturnType<typeof event>[]): ReturnType<typeof event>[] =>
+        events.map((candidate, index) =>
+          index === 0
+            ? {
+                ...candidate,
+                payload: {
+                  reason: 'user_requested_new_session',
+                  explicit: true,
+                  private: true,
+                },
+              }
+            : candidate
+        ),
+    },
+    {
+      name: 'duplicate session_started event',
+      mutate: (events: ReturnType<typeof event>[]): ReturnType<typeof event>[] =>
+        [
+          events[0] as ReturnType<typeof event>,
+          {
+            ...(events[0] as ReturnType<typeof event>),
+            id: 'event_duplicate',
+            eventSequence: 2,
+          },
+          ...events.slice(1).map((candidate, index) => ({
+            ...candidate,
+            eventSequence: index + 3,
+          })),
+        ],
+    },
+  ])('rejects idle session proof with $name', async ({ mutate }) => {
+    const events = mutate(idleSessionEvents());
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events, {
+        startReason: 'user_requested_new_session',
+        status: 'waiting_for_user',
+      }),
+    });
+
+    await expect(
+      service.getExact({ identity, expectedEventRevision: events.length })
+    ).resolves.toEqual({ ok: false, code: 'CORRUPT_EVIDENCE' });
+  });
+
+  it('rejects an orphan provider call outside every summarized terminal turn', async () => {
+    const events = [
+      event(1, 'session_started', {
+        reason: 'user_requested_new_session',
+        explicit: true,
+      }),
+      event(
+        2,
+        'matrix_corpus_execution_boundary',
+        boundaryPayload({ resolution: 'no_executor_required' })
+      ),
+      event(3, 'llm_usage_summary', summaryPayload({ expectedCallCount: 0 })),
+      event(4, 'llm_call_usage', { ...usagePayload(), turnIndex: 1 }),
+      event(5, 'assistant_message', { text: 'PRIVATE_ASSISTANT_MESSAGE' }),
+      event(6, 'turn_processing_completed', {
+        turnIndex: 0,
+        status: 'completed',
+        replyCount: 1,
+        replyDigests: ['d'.repeat(64)],
+      }),
+    ];
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events, {
+        startReason: 'user_requested_new_session',
+        status: 'waiting_for_user',
+      }),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 6 })).resolves.toEqual({
+      ok: false,
+      code: 'CORRUPT_EVIDENCE',
+    });
+  });
+
+  it('requires the no-executor boundary for an idle user-requested session', async () => {
+    const events = idleSessionEvents().map((candidate) =>
+      candidate.type === 'matrix_corpus_execution_boundary'
+        ? {
+            ...candidate,
+            payload: boundaryPayload({ resolution: 'strict_mock_executor_resolved' }),
+          }
+        : candidate
+    );
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events, {
+        startReason: 'user_requested_new_session',
+        status: 'waiting_for_user',
+      }),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 5 })).resolves.toEqual({
+      ok: false,
+      code: 'CORRUPT_EVIDENCE',
+    });
+  });
+
+  it('proves one validated logical supersession without exposing session identity', async () => {
+    const events = [
+      event(1, 'session_started', { reason: 'no_active_session', explicit: false }),
+      event(2, 'user_message', { text: 'private first request' }),
+      event(3, 'session_closed', {
+        reason: 'superseded_by_user',
+        status: 'superseded',
+      }),
+      event(4, 'session_started', {
+        reason: 'user_requested_new_session',
+        explicit: true,
+      }),
+      event(5, 'user_message', { text: 'private replacement request' }),
+    ];
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events, {
+        startReason: 'user_requested_new_session',
+        status: 'waiting_for_user',
+      }),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 5 })).resolves.toMatchObject({
+      ok: true,
+      evidence: {
+        sessionProof: {
+          startReason: 'user_requested_new_session',
+          userMessageCount: 2,
+          sessionStartedCount: 2,
+          supersededSessionCount: 1,
+        },
+      },
+    });
+  });
+
+  it('rejects events inserted between session closure and replacement start', async () => {
+    const events = [
+      event(1, 'session_started', { reason: 'no_active_session', explicit: false }),
+      event(2, 'user_message', { text: 'private first request' }),
+      event(3, 'session_closed', {
+        reason: 'superseded_by_user',
+        status: 'superseded',
+      }),
+      event(4, 'assistant_message', { text: 'must not exist inside restart boundary' }),
+      event(5, 'session_started', {
+        reason: 'user_requested_new_session',
+        explicit: true,
+      }),
+      event(6, 'user_message', { text: 'private replacement request' }),
+    ];
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events, {
+        startReason: 'user_requested_new_session',
+        status: 'waiting_for_user',
+      }),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 6 })).resolves.toEqual({
+      ok: false,
+      code: 'CORRUPT_EVIDENCE',
+    });
   });
 
   it.each([
@@ -245,6 +496,91 @@ describe('Matrix corpus evidence service', () => {
     ];
     const service = createMatrixCorpusEvidenceService({
       sessionRepository: repositoryFixture(events),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 2 })).resolves.toEqual({
+      ok: false,
+      code: 'CORRUPT_EVIDENCE',
+    });
+  });
+
+  it('rejects provider usage whose individually valid turn totals overflow across the session', async () => {
+    const events = [
+      event(1, 'matrix_corpus_execution_boundary', boundaryPayload()),
+      event(2, 'llm_call_usage', {
+        ...usagePayload(),
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        totalTokens: Number.MAX_SAFE_INTEGER,
+        costNanoUsd: 0,
+      }),
+      event(3, 'llm_usage_summary', {
+        ...summaryPayload(),
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        totalTokens: Number.MAX_SAFE_INTEGER,
+        costNanoUsd: 0,
+      }),
+      event(4, 'turn_processing_completed', completedTerminalPayload()),
+      event(5, 'matrix_corpus_execution_boundary', boundaryPayload({ turnIndex: 1 })),
+      event(6, 'llm_call_usage', {
+        ...usagePayload(),
+        turnIndex: 1,
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        totalTokens: Number.MAX_SAFE_INTEGER,
+        costNanoUsd: 0,
+      }),
+      event(7, 'llm_usage_summary', {
+        ...summaryPayload(),
+        turnIndex: 1,
+        inputTokens: Number.MAX_SAFE_INTEGER,
+        outputTokens: 0,
+        totalTokens: Number.MAX_SAFE_INTEGER,
+        costNanoUsd: 0,
+      }),
+      event(8, 'turn_processing_completed', {
+        ...completedTerminalPayload(),
+        turnIndex: 1,
+        replyDigests: ['d'.repeat(64)],
+      }),
+    ];
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 8 })).resolves.toEqual({
+      ok: false,
+      code: 'CORRUPT_EVIDENCE',
+    });
+  });
+
+  it('rejects a session containing more than the maximum twenty user messages', async () => {
+    const events = Array.from({ length: 21 }, (_, index) =>
+      event(index + 1, 'user_message', {
+        text: `private message ${String(index + 1)}`,
+        turnIndex: index % 20,
+      })
+    );
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events),
+    });
+
+    await expect(service.getExact({ identity, expectedEventRevision: 21 })).resolves.toEqual({
+      ok: false,
+      code: 'CORRUPT_EVIDENCE',
+    });
+  });
+
+  it('rejects a lifecycle whose final session-start reason disagrees with the session record', async () => {
+    const events = [
+      event(1, 'session_started', { reason: 'no_active_session', explicit: false }),
+      event(2, 'user_message', { text: 'private request', turnIndex: 0 }),
+    ];
+    const service = createMatrixCorpusEvidenceService({
+      sessionRepository: repositoryFixture(events, {
+        startReason: 'user_requested_new_session',
+      }),
     });
 
     await expect(service.getExact({ identity, expectedEventRevision: 2 })).resolves.toEqual({
@@ -749,6 +1085,28 @@ function completedTerminalPayload(): Record<string, unknown> {
   };
 }
 
+function idleSessionEvents(): ReturnType<typeof event>[] {
+  return [
+    event(1, 'session_started', {
+      reason: 'user_requested_new_session',
+      explicit: true,
+    }),
+    event(
+      2,
+      'matrix_corpus_execution_boundary',
+      boundaryPayload({ resolution: 'no_executor_required' })
+    ),
+    event(3, 'llm_usage_summary', summaryPayload({ expectedCallCount: 0 })),
+    event(4, 'assistant_message', { text: 'PRIVATE_ASSISTANT_MESSAGE' }),
+    event(5, 'turn_processing_completed', {
+      turnIndex: 0,
+      status: 'completed',
+      replyCount: 1,
+      replyDigests: ['d'.repeat(64)],
+    }),
+  ];
+}
+
 function boundaryPayload(
   overrides: Readonly<Record<string, unknown>> = {}
 ): Record<string, unknown> {
@@ -764,7 +1122,13 @@ function boundaryPayload(
   };
 }
 
-function repositoryFixture(events: ReturnType<typeof event>[]): MatrixCorpusSessionRepository {
+function repositoryFixture(
+  events: ReturnType<typeof event>[],
+  sessionOverrides: Readonly<{
+    status?: 'active' | 'waiting_for_user';
+    startReason?: 'no_active_session' | 'user_requested_new_session';
+  }> = {}
+): MatrixCorpusSessionRepository {
   return {
     createMatrixCorpusSession: vi.fn(),
     getMatrixCorpusSessionExact: vi.fn(async () => ({
@@ -773,10 +1137,10 @@ function repositoryFixture(events: ReturnType<typeof event>[]): MatrixCorpusSess
         id: identity.sessionId,
         userId: identity.userId,
         channel: 'whatsapp' as const,
-        status: 'waiting_for_user' as const,
+        status: sessionOverrides.status ?? ('waiting_for_user' as const),
         startedAt: '2026-07-20T10:00:00.000Z',
         lastUserMessageAt: '2026-07-20T10:00:00.000Z',
-        startReason: 'no_active_session' as const,
+        startReason: sessionOverrides.startReason ?? ('no_active_session' as const),
         lastEventSequence: events.length,
         matrixCorpusProfile: {
           version: 1 as const,

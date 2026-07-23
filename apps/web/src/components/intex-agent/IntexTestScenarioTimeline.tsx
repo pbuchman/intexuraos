@@ -81,6 +81,10 @@ function DeterministicEvidence({
 
 function TimelineCard({ event }: { event: PublicTestTimelineEventV1 }): React.JSX.Element {
   switch (event.type) {
+    case 'session_started':
+      return <article className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 dark:border-indigo-900 dark:bg-indigo-950/20"><h4 className="font-semibold">Session started</h4><p className="mt-1 text-sm">{formatClosedLabel(event.startReason)} · {event.explicit ? 'Explicit start' : 'Automatic start'} · Turn {String(event.turnIndex + 1)}</p></article>;
+    case 'session_closed':
+      return <article className="rounded-lg border border-slate-300 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/40"><h4 className="font-semibold">Previous session closed</h4><p className="mt-1 text-sm">{formatClosedLabel(event.endReason)} · {formatClosedLabel(event.status)} · Turn {String(event.turnIndex + 1)}</p></article>;
     case 'user_message':
       return <article className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"><h4 className="font-semibold">User · Turn {String(event.turnIndex + 1)}</h4><p className="mt-2 whitespace-pre-wrap break-words">{event.text}</p></article>;
     case 'assistant_message':
