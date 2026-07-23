@@ -471,7 +471,7 @@ function mapPerplexityError(error: unknown): PerplexityError {
     const message = error.message;
     if (error.status === 401) return { code: 'INVALID_KEY', message };
     if (error.status === 429) return { code: 'RATE_LIMITED', message };
-    if (error.status === 503) return { code: 'OVERLOADED', message };
+    if (error.status >= 500) return { code: 'OVERLOADED', message };
     return { code: 'API_ERROR', message };
   }
   if (error instanceof Error && error.name === 'AbortError') {

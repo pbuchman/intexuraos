@@ -345,7 +345,7 @@ describe('createOpenRouterClient', () => {
       }
     });
 
-    it('handles 500 API error', async () => {
+    it('handles 500 overloaded error', async () => {
       nock(API_BASE_URL).post('/chat/completions').reply(500, 'Server error');
 
       const client = createOpenRouterClient({
@@ -360,7 +360,7 @@ describe('createOpenRouterClient', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.code).toBe('OVERLOADED');
       }
     });
 
@@ -539,6 +539,38 @@ describe('createOpenRouterClient', () => {
         const result = await client.generate('Write something', { promptType: 'test-prompt' });
 
         expect(result).toMatchObject({ ok: false, error: { code: 'OVERLOADED' } });
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('retries a provider HTTP 500 within the configured attempt cap', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(new Response('Server error', { status: 500 }))
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { role: 'assistant', content: 'Recovered.' } }],
+              usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          )
+        );
+      try {
+        const client = createOpenRouterClient({
+          apiKey: 'test-key',
+          model: TEST_MODEL,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          maxAttempts: 2,
+        });
+
+        const result = await client.generate('Write something', { promptType: 'test-prompt' });
+
+        expect(result).toMatchObject({ ok: true, value: { content: 'Recovered.' } });
         expect(fetchSpy).toHaveBeenCalledTimes(2);
       } finally {
         fetchSpy.mockRestore();
@@ -741,8 +773,8 @@ describe('createOpenRouterClient', () => {
       );
     });
 
-    it('handles API error', async () => {
-      nock(API_BASE_URL).post('/chat/completions').reply(500, 'Internal error');
+    it('handles non-retriable API error', async () => {
+      nock(API_BASE_URL).post('/chat/completions').reply(400, 'Invalid request');
 
       const client = createOpenRouterClient({
         apiKey: 'test-key',
@@ -2111,7 +2143,7 @@ describe('createOpenRouterClient', () => {
       }
     });
 
-    it('handles 500 API error', async () => {
+    it('handles 500 overloaded error', async () => {
       nock(API_BASE_URL).get('/key').reply(500, 'Internal server error');
 
       const client = createOpenRouterClient({
@@ -2126,7 +2158,7 @@ describe('createOpenRouterClient', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
+        expect(result.error.code).toBe('OVERLOADED');
       }
     });
 
