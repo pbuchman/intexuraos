@@ -122,7 +122,10 @@ export function createLlmIntexAgentIntentClassifier(deps: {
       const matrixCorpusLlm = input.matrixCorpusLlm;
       const replyLanguage = classifierReplyLanguage(input);
       const directIntent = classifyIntexAgentIntent(input.message);
-      if (directIntent.kind === 'no_action' && directIntent.reason === 'greeting') {
+      if (
+        (directIntent.kind === 'no_action' && directIntent.reason === 'greeting') ||
+        (directIntent.kind === 'tool' && directIntent.allowedToolNames.includes('create_note'))
+      ) {
         return directIntent;
       }
 

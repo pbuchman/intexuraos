@@ -56,6 +56,114 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('keeps explicit fact-memory note requests local when the provider would call them conversation', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'conversation',
+          confidence: 0.9,
+          reason: 'Provider treated the memory request as conversation.',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Remember that the garage code is 7241.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_note'],
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('keeps remembered assistant behavior on the LLM preference-classification path', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'tool',
+          confidence: 0.95,
+          allowedToolNames: ['add_user_preference'],
+          stylePreferenceAction: 'save_new',
+          reason: 'The user requested durable assistant behavior.',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Remember that I prefer concise replies.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['add_user_preference'],
+      reason: 'The user requested durable assistant behavior.',
+      stylePreferenceAction: 'save_new',
+    });
+    expect(client.calls).toHaveLength(1);
+  });
+
+  it('keeps session-only fact memory on the LLM retain-context classification path', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'retain_context',
+          confidence: 0.95,
+          reason: 'The user limited memory to the current session.',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Remember the garage code only for this session.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      kind: 'no_action',
+      reason: 'retain_context',
+    });
+    expect(client.calls).toHaveLength(1);
+  });
+
+  it('keeps competing memory and calendar actions on the LLM clarification path', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.9,
+          question: 'Should I save the PIN or create the calendar event first?',
+          blockerReason: 'multiple_possible_intents',
+          candidateIntents: ['create_note', 'create_calendar_event'],
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Remember the PIN and create a calendar event tomorrow at 9.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      kind: 'needs_clarification',
+      question: 'Should I save the PIN or create the calendar event first?',
+      blockerReason: 'multiple_possible_intents',
+      candidateIntents: ['create_note', 'create_calendar_event'],
+    });
+    expect(client.calls).toHaveLength(1);
+  });
+
   it('sends greeting-prefixed action requests to the LLM classifier', async () => {
     const client = new FakeStructuredClient([
       ok(
