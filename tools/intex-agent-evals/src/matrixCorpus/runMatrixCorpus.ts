@@ -432,7 +432,6 @@ export async function runMatrixCorpus(
         break;
       }
       revision = progress.revision;
-      if (scenarioFailed) break;
     }
 
     const nextStatus =
