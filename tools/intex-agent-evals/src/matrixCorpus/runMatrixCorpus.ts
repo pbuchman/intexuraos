@@ -766,10 +766,12 @@ function reconcileTurnEvidence(input: {
     turn.kind === 'confirmation_button' ||
     (expected.sessionAfterTurn.startReason === 'user_requested_new_session' &&
       expected.timeline.forbiddenEventTypes.includes('user_message'));
+  const allowsZeroAgentCalls =
+    turn.kind === 'message' && isExplicitSessionOnlyRetentionTurn(turn.text);
   if (
     expectsZeroAgentCalls
       ? observation.agentUsage.logicalCalls !== 0
-      : observation.agentUsage.logicalCalls < 1
+      : !allowsZeroAgentCalls && observation.agentUsage.logicalCalls < 1
   )
     return { ok: false, code: 'TURN_AGENT_CALL_COUNT_MISMATCH' };
   if (
@@ -832,6 +834,46 @@ function reconcileTurnEvidence(input: {
       observation.observedReplyCount === expected.replies.length &&
       toolsPassed,
   };
+}
+
+function isExplicitSessionOnlyRetentionTurn(text: string): boolean {
+  const normalized = text.normalize('NFKC').toLowerCase();
+  if (/https?:\/\//u.test(normalized)) return false;
+
+  const noSaveMatch =
+    /\b(?:do not|don['’]?t)\s+(?:save|store|persist)\b/u.exec(normalized) ??
+    /\bnie\s+(?:zapisuj|utrwalaj)\b/u.exec(normalized);
+  const retainOnlyMatch =
+    /\b(?:only|just)\s+(?:retain|hold|keep)\s+(?:(?:this|the|provided)\s+)?context\s*[.!?]*\s*$/u.exec(
+      normalized
+    ) ??
+    /\b(?:retain|hold|keep)\s+(?:(?:this|the|provided)\s+)?context\s+(?:only|just)\s*[.!?]*\s*$/u.exec(
+      normalized
+    ) ??
+    /\btylko\s+(?:zachowaj|zapamiętaj|przechowaj)\s+(?:(?:ten|podany)\s+)?kontekst\s*[.!?]*\s*$/u.exec(
+      normalized
+    ) ??
+    /\b(?:zachowaj|zapamiętaj|przechowaj)\s+(?:(?:ten|podany)\s+)?kontekst\s+tylko\s*[.!?]*\s*$/u.exec(
+      normalized
+    );
+
+  if (
+    noSaveMatch === null ||
+    retainOnlyMatch === null ||
+    noSaveMatch.index >= retainOnlyMatch.index
+  ) {
+    return false;
+  }
+
+  const prefix = normalized.slice(0, retainOnlyMatch.index);
+  return !(
+    /\b(?:calculate|compute|translate|rewrite|quote|explain|analy[sz]e|summari[sz]e)\b/u.test(
+      prefix
+    ) ||
+    /\b(?:oblicz|policz|przetłumacz(?:yć)?|przetlumacz(?:yc)?|przeformułuj|zacytuj|wyjaśnij|wyjasnij|przeanalizuj|streść|stresc)(?!\p{L})/u.test(
+      prefix
+    )
+  );
 }
 
 function validToolEvidence(evidence: MatrixCorpusTurnObservation['toolEvidence']): boolean {

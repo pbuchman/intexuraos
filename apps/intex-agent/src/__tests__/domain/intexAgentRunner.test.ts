@@ -829,6 +829,557 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('uses the accepted calendar title from the active clarification chain', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01',
+          start: '2026-09-10T15:00:00+02:00',
+          end: '2026-09-10T16:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What should the event title be?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Ask for the event title.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [
+        event('user_message', {
+          text: 'new session: Put INTEX-EVAL-008 project review INTEX-EVAL-008-F01 on my calendar for September 10 2026.',
+        }),
+        event('llm_usage_summary', {
+          logicalCalls: 2,
+          totalTokens: 400,
+          providerCostReconciled: true,
+        }),
+        event('clarification_requested', {
+          message: 'What time should the event start and end?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['start', 'end'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', {
+          text: 'What time should the event start and end?',
+        }),
+        event('llm_usage_summary', {
+          logicalCalls: 2,
+          totalTokens: 400,
+          providerCostReconciled: true,
+        }),
+        event('turn_processing_completed', {
+          turnIndex: 0,
+        }),
+      ],
+      message: '3 PM for one hour for INTEX-EVAL-008.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01',
+        start: '2026-09-10T15:00:00+02:00',
+        end: '2026-09-10T16:00:00+02:00',
+      },
+    });
+    expect(client.calls[0]?.toolChoice).toBe('required');
+  });
+
+  it('keeps calendar-summary clarification when the active chain has no actual title', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'What should the event title be?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event' as const],
+            suggestedNextStep: 'Ask for the event title.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Put an event on my calendar for September 10 2026.',
+          }),
+          event('clarification_requested', {
+            message: 'What time should the event start and end?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', {
+            text: 'What time should the event start and end?',
+          }),
+        ],
+        message: '3 PM for one hour.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What should the event title be?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['summary'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Ask for the event title.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    {
+      label: 'there is no active clarification',
+      events: [
+        event('user_message', {
+          text: 'Put Quarterly review on my calendar for September 10 2026.',
+        }),
+      ],
+    },
+    {
+      label: 'two clarification events are consecutive',
+      events: [
+        event('user_message', {
+          text: 'Put Quarterly review on my calendar for September 10 2026.',
+        }),
+        event('clarification_requested', {
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('clarification_requested', {
+          missingFields: ['start', 'end'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+    {
+      label: 'two user messages are adjacent inside the chain',
+      events: [
+        event('user_message', {
+          text: 'Put Quarterly review on my calendar for September 10 2026.',
+        }),
+        event('user_message', {
+          text: 'September 10 2026.',
+        }),
+        event('clarification_requested', {
+          missingFields: ['start', 'end'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+    {
+      label: 'the preceding clarification is for a different tool',
+      events: [
+        event('user_message', {
+          text: 'Put Quarterly review on my calendar for September 10 2026.',
+        }),
+        event('clarification_requested', {
+          missingFields: ['content'],
+          candidateIntents: ['create_note'],
+        }),
+        event('assistant_message', { text: 'What should the note contain?' }),
+        event('user_message', { text: 'September 10 2026.' }),
+        event('clarification_requested', {
+          missingFields: ['start', 'end'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+    {
+      label: 'the earlier user request has no explicit calendar-title pattern',
+      events: [
+        event('user_message', {
+          text: 'Please arrange something for September 10 2026.',
+        }),
+        event('clarification_requested', {
+          missingFields: ['start', 'end'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+  ])('keeps calendar-summary clarification when $label', async ({ events }) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'What should the event title be?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event' as const],
+            suggestedNextStep: 'Ask for the event title.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events,
+        message: 'September 10 2026 at 3 PM for one hour.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'What should the event title be?',
+      missingFields: ['summary'],
+      candidateIntents: ['create_calendar_event'],
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('finds an accepted calendar title across a multi-clarification chain', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Quarterly review',
+          start: '2026-09-10T15:00:00+02:00',
+          end: '2026-09-10T16:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'What should the event title be?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event' as const],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Put Quarterly review on my calendar.',
+          }),
+          event('clarification_requested', {
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which date?' }),
+          event('user_message', { text: 'September 10 2026.' }),
+          event('clarification_requested', {
+            missingFields: ['start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which time?' }),
+        ],
+        message: '3 PM for one hour.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it('uses an explicit calendar title from inbound reply context in the active chain', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Quarterly review',
+          start: '2026-09-10T15:00:00+02:00',
+          end: '2026-09-10T16:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'What should the event title be?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event' as const],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Please use the quoted calendar request.',
+            replyContext: {
+              replyToWamid: 'wamid-calendar-request',
+              source: 'inbound_user_message',
+              text: 'Put Quarterly review on my calendar for September 10 2026.',
+              truncated: false,
+            },
+          }),
+          event('clarification_requested', {
+            missingFields: ['start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which time?' }),
+        ],
+        message: '3 PM for one hour.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it('does not require a separate title for a complete code-task prompt', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_code_task',
+        args: {
+          prompt:
+            'Investigate synthetic cache behavior with markers INTEX-EVAL-014 and INTEX-EVAL-014-F01.',
+          workerType: 'minimax',
+          taskMode: 'planning',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_code_task',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What should be the title of the code task?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['title'],
+            candidateIntents: ['create_code_task'],
+            suggestedNextStep: 'Provide a title for the code task.',
+            reason: 'The task prompt is complete.',
+            stylePreferenceAction: 'none',
+            languageOverride: 'en',
+            decisionEvidence: 'The user supplied the investigation objective.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message:
+        'new session: Create a MiniMax planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_code_task',
+    });
+    expect(client.calls[0]?.toolChoice).toBe('required');
+  });
+
+  it('keeps code-task clarification when the substantive summary is missing', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'What should the code task investigate?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['summary'],
+            candidateIntents: ['create_code_task' as const],
+            suggestedNextStep: 'Provide the task objective.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Create a MiniMax planning code task.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'What should the code task investigate?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['summary'],
+      candidateIntents: ['create_code_task'],
+      suggestedNextStep: 'Provide the task objective.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    'preference_key_or_target',
+    'preference_key',
+    'key',
+    'target',
+    'scope',
+    'preference_scope',
+  ])('reads all preferences without requiring optional field %s', async (missingField) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok({
+          content: '',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Which specific preference would you like to see?',
+            blockerReason: 'missing_required_details',
+            missingFields: [missingField],
+            candidateIntents: ['get_user_preferences'],
+            suggestedNextStep: 'Ask for a preference key.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: '' }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'new session: Show my saved Intex Agent preferences for INTEX-EVAL-016.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'No Intex Agent preferences are defined yet.',
+      toolName: 'get_user_preferences',
+      toolResult: { status: 'completed', currentVersion: 0, promptBlock: '' },
+    });
+    expect(client.calls[0]?.toolChoice).toBe('required');
+  });
+
+  it('keeps preference clarification for a genuinely scoped read request', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'Which project preference scope do you mean?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['preference_key_or_target'],
+            candidateIntents: ['get_user_preferences' as const],
+            suggestedNextStep: 'Clarify the preference scope.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Show my saved Intex Agent preferences for project Atlas.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which project preference scope do you mean?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['preference_key_or_target'],
+      candidateIntents: ['get_user_preferences'],
+      suggestedNextStep: 'Clarify the preference scope.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
   it('executes a bounded read-only calendar query when the relative date and runtime timezone are known', async () => {
     const timeMin = '2026-06-25T00:00:00.000+02:00';
     const timeMax = '2026-06-26T00:00:00.000+02:00';

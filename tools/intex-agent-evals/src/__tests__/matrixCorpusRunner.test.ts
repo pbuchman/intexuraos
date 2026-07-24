@@ -320,6 +320,99 @@ describe('sequential Matrix corpus state machine', () => {
     expect(ports.judgeReply).not.toHaveBeenCalled();
   });
 
+  it('accepts zero agent calls for explicit session-only context retention turns', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      if (input.scenario.id !== 'intex-eval-020' || input.turnIndex !== 0) {
+        return { ok: true, observation: valid };
+      }
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          agentUsage: {
+            logicalCalls: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costNanoUsd: 0,
+            providerCostReconciled: true,
+          },
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus(
+      { runId: 'run_retain_only_zero_agent_calls', catalog },
+      ports
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.failureCodes).not.toContain('turn_evidence_mismatch');
+    expect(result.scenarios[19]).toMatchObject({
+      scenarioId: 'intex-eval-020',
+      status: 'passed',
+      completedTurns: 20,
+    });
+  });
+
+  it('rejects zero agent calls for a mixed calculation and retention turn', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const mixedEntry = catalog.scenarios[19];
+    expect(mixedEntry?.scenario.id).toBe('intex-eval-020');
+    if (mixedEntry === undefined) return;
+
+    const turns = [...mixedEntry.scenario.turns];
+    turns[0] = {
+      kind: 'message',
+      text: "Calculate 2+2, but don't save it; only keep this context.",
+      sourceType: 'whatsapp_text',
+    };
+    const scenarios = [...catalog.scenarios];
+    scenarios[19] = {
+      ...mixedEntry,
+      scenario: { ...mixedEntry.scenario, turns },
+    };
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      if (input.scenario.id !== 'intex-eval-020' || input.turnIndex !== 0) {
+        return { ok: true, observation: valid };
+      }
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          agentUsage: {
+            logicalCalls: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costNanoUsd: 0,
+            providerCostReconciled: true,
+          },
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus(
+      {
+        runId: 'run_mixed_retention_zero_agent_calls',
+        catalog: { ...catalog, scenarios },
+      },
+      ports
+    );
+
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('TURN_AGENT_CALL_COUNT_MISMATCH');
+    expect(result.scenarios[19]).toMatchObject({
+      scenarioId: 'intex-eval-020',
+      status: 'stopped',
+    });
+  });
+
   it('judges correlated replies even when the execution port reports a behavioral failure', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const ports = passingPorts([]);

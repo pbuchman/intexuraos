@@ -142,7 +142,7 @@ function isExplicitFactMemoryRequest(text: string): boolean {
     /(?:^|\b(?:prosze|i|rowniez|dodatkowo|nowa sesja)\s+)(?:zapamietaj|pamietaj)\s+.+/u.test(
       text
     ) ||
-    /^(?:please\s+)?keep\s+this\s+for\s+later\b.+/u.test(text)
+    /^(?:(?:new session)\s+)?(?:please\s+)?keep\s+this\s+for\s+later\b.+/u.test(text)
   );
 }
 
