@@ -44,6 +44,14 @@ export interface ToolDefinition {
   /** JSON Schema for the tool's parameters */
   parameters: Record<string, unknown>;
   /**
+   * End the current model loop immediately after this callback resolves.
+   *
+   * Use this when the callback itself completes the current turn boundary and a
+   * follow-up model response would only be redundant. A rejected callback still
+   * follows the ordinary repair loop.
+   */
+  stopAfterRun?: boolean;
+  /**
    * Execute the tool. Called by the agent loop when the LLM invokes this tool.
    * Returns a JSON string that is sent back to the LLM as a functionResponse.
    */

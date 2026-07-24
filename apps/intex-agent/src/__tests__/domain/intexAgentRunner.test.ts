@@ -213,6 +213,7 @@ describe('createIntexAgentRunner', () => {
       { role: 'user', content: 'remember the door code' },
     ]);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
+    expect(client.calls[0]?.tools[0]?.stopAfterRun).toBe(true);
     expect(client.calls[0]?.toolChoice).toBe('required');
     expect(client.calls[0]?.promptType).toBe(INTEX_AGENT_RUNNER_PROMPT_TYPE);
   });

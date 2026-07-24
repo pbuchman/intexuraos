@@ -13,6 +13,7 @@ export const INTEX_AGENT_TEST_RUN_MAX_TOOL_FACTS = 16 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS = 240 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_REPLY_EVALUATIONS = 100 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_AGENT_USAGE = 60 as const;
+export const INTEX_AGENT_TEST_RUN_MAX_AGENT_CALL_ORDINAL = 5 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_REPLIES_PER_TURN = 5 as const;
 
 const safeIntegerSchema = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -583,7 +584,7 @@ export const safeAgentUsageV1Schema = z
   .object({
     turnIndex: safeIntegerSchema.max(19),
     stage: z.enum(['intent_classification', 'agent_generation', 'response_schema_repair']),
-    callOrdinal: positiveSafeIntegerSchema.max(3),
+    callOrdinal: positiveSafeIntegerSchema.max(INTEX_AGENT_TEST_RUN_MAX_AGENT_CALL_ORDINAL),
     inputTokens: safeIntegerSchema,
     outputTokens: safeIntegerSchema,
     totalTokens: safeIntegerSchema,
