@@ -333,6 +333,29 @@ describe('Matrix corpus context service', () => {
     expect(JSON.stringify(result)).not.toContain(privatePreference);
   });
 
+  it('registers MiniMax M3 when the immutable run request matches effective runtime settings', async () => {
+    const current = fixture();
+    current.runtimeSettingsClient.resolveIntexAgentRuntimeSettings.mockResolvedValue(
+      ok({
+        status: 'available' as const,
+        effectiveModel: IntexAgentModels.MiniMaxM3,
+        explicitModel: IntexAgentModels.MiniMaxM3,
+        source: 'explicit' as const,
+        revision: 1,
+        timeZone: 'Europe/Warsaw',
+      })
+    );
+
+    const result = await current.service.registerRun(
+      registration({ agentModel: 'or:minimax/minimax-m3' })
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      snapshot: { agentModel: 'or:minimax/minimax-m3' },
+    });
+  });
+
   it('starts preference-mutation scenarios from an isolated pristine overlay', async () => {
     const current = fixture();
     await current.service.registerRun(registration());
@@ -393,11 +416,18 @@ describe('Matrix corpus context service', () => {
     await expect(
       service.registerRun(registration({ catalogDigest: 'd'.repeat(64) }))
     ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+    await expect(
+      service.registerRun(registration({ agentModel: 'or:minimax/minimax-m3' }))
+    ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
     expect(promptPreferencesRepository.getCurrent).toHaveBeenCalledOnce();
   });
 
   it.each([
-    ['wrong requested agent model', { agentModel: 'or:minimax/minimax-m3' }, undefined],
+    [
+      'wrong requested agent model',
+      { agentModel: 'or:google/gemini-3-flash-preview' },
+      undefined,
+    ],
     ['wrong evaluator model', { evaluatorModel: 'or:google/gemini-3-flash-preview' }, undefined],
     ['wrong expected time zone', { expectedTimeZone: 'UTC' }, undefined],
     [

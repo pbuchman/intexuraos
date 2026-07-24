@@ -471,6 +471,33 @@ describe('Intex Agent Matrix corpus internal client', () => {
     ).resolves.toEqual({ ok: false, error: { code: 'invalid_response' } });
   });
 
+  it('rejects a context response correlated to another agent model', async () => {
+    nock(BASE_URL)
+      .post('/internal/matrix-corpus/runs/run_1/context')
+      .reply(200, {
+        success: true,
+        data: {
+          disposition: 'applied',
+          runId: 'run_1',
+          userId: 'user_1',
+          leaseFence: '7',
+          promptPreferencesVersion: 0,
+          promptPreferencesDigest: DIGEST,
+          agentModel: 'or:minimax/minimax-m3',
+          userTimeZone: 'Europe/Warsaw',
+          expiresAt: NOW,
+        },
+      });
+
+    await expect(
+      createClient().registerMatrixCorpusContext({
+        runId: 'run_1',
+        authorization,
+        request: contextRequest(),
+      })
+    ).resolves.toEqual({ ok: false, error: { code: 'invalid_response' } });
+  });
+
   it('rejects every miscorrelated read projection', async () => {
     nock(BASE_URL)
       .get('/internal/matrix-corpus/runs/run_1/control-status')

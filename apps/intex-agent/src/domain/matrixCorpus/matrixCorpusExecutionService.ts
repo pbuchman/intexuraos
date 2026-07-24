@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type {
   MatrixCorpusAttestationClaimsV1,
+  MatrixCorpusAgentModel,
   MatrixCorpusExpectedToolScheduleV1,
 } from '@intexuraos/http-contracts';
 import type { WhatsAppInteractiveButton } from '@intexuraos/whatsapp-pubsub-client';
@@ -88,6 +89,7 @@ export interface MatrixCorpusExecutionServiceDeps {
   createRunner(
     input: Readonly<{
       execution: MatrixCorpusExecutorExecutionContext;
+      agentModel: MatrixCorpusAgentModel;
       userId: string;
       userPreferences: string | null;
     }>
@@ -201,6 +203,7 @@ export function createMatrixCorpusExecutionService(
       });
       const runner = deps.createRunner({
         execution,
+        agentModel: session.matrixCorpusProfile.agentModel,
         userId: ordinaryIngest.userId,
         userPreferences: promptResult.promptContext,
       });
@@ -435,6 +438,7 @@ async function executeConfirmation(
   });
   const runner = input.deps.createRunner({
     execution,
+    agentModel: input.session.matrixCorpusProfile.agentModel,
     userId: ordinaryIngest.userId,
     userPreferences: input.userPreferences,
   });

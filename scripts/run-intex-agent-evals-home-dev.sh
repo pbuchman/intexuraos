@@ -52,8 +52,13 @@ case "${1-}" in
     production_matrix_corpus_required
     ;;
   __production-matrix-corpus)
-    [[ $# -eq 1 ]] || usage_error
-    cli_arguments=('matrix-corpus')
+    [[ $# -ge 1 && $# -le 2 ]] || usage_error
+    if [[ $# -eq 2 ]]; then
+      [[ $2 == '--agent-model=or:minimax/minimax-m3' || $2 == '--agent-model=or:deepseek/deepseek-v4-flash' ]] || usage_error
+      cli_arguments=('matrix-corpus' "$2")
+    else
+      cli_arguments=('matrix-corpus')
+    fi
     ;;
   *)
     usage_error

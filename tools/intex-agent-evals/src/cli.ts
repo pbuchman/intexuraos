@@ -3,6 +3,11 @@ import { createInterface } from 'node:readline/promises';
 import { Writable } from 'node:stream';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
+  MATRIX_CORPUS_DEFAULT_AGENT_MODEL,
+  matrixCorpusAgentModelSchema,
+  type MatrixCorpusAgentModel,
+} from '@intexuraos/http-contracts';
+import {
   evaluateDeterministically,
   type DeterministicEvaluation,
 } from './deterministicEvaluator.js';
@@ -73,7 +78,7 @@ export type CliCommand =
   | { kind: 'full' }
   | { kind: 'scenario'; scenarioId: string }
   | { kind: 'matrix-smoke' }
-  | { kind: 'matrix-corpus' };
+  | { kind: 'matrix-corpus'; agentModel?: MatrixCorpusAgentModel };
 
 export type CliParseResult =
   | { ok: true; command: CliCommand }
@@ -117,9 +122,10 @@ export interface CliDependencies {
   preflight(): Promise<PreflightResult>;
   runEndpoint(scenarios: readonly IntexEvalScenario[]): Promise<TimedEndpointCorpusResult>;
   runMatrixSmoke(): Promise<MatrixSmokeResult>;
-  matrixCorpusPreflight(): Promise<MatrixCorpusPreflightResult>;
+  matrixCorpusPreflight(agentModel: MatrixCorpusAgentModel): Promise<MatrixCorpusPreflightResult>;
   runMatrixCorpus(input: {
     runId: string;
+    agentModel: MatrixCorpusAgentModel;
     preflight: Extract<MatrixCorpusPreflightResult, { ok: true }>;
   }): Promise<MatrixCorpusCommandResult>;
   writeReport(report: EvaluationReportV1): Promise<ReportWriteResult>;
@@ -272,6 +278,20 @@ export function parseCliArgs(argv: readonly string[]): CliParseResult {
     }
   }
 
+  const explicitAgentModelArgument = argv[1] ?? '';
+  if (
+    argv.length === 2 &&
+    argv[0] === 'matrix-corpus' &&
+    explicitAgentModelArgument.startsWith('--agent-model=')
+  ) {
+    const agentModel = matrixCorpusAgentModelSchema.safeParse(
+      explicitAgentModelArgument.slice('--agent-model='.length)
+    );
+    if (agentModel.success) {
+      return { ok: true, command: { kind: 'matrix-corpus', agentModel: agentModel.data } };
+    }
+  }
+
   const scenarioId = argv[1];
   if (
     argv.length === 2 &&
@@ -302,7 +322,7 @@ export async function runCli(
       case 'preflight':
         return await runPreflightCommand(dependencies);
       case 'matrix-corpus':
-        return await runMatrixCorpusCommand(dependencies);
+        return await runMatrixCorpusCommand(parsed.command, dependencies);
       case 'scenario': {
         const scenarioId = parsed.command.scenarioId;
         const scenarios = await dependencies.loadScenarios();
@@ -327,10 +347,14 @@ export async function runCli(
   }
 }
 
-async function runMatrixCorpusCommand(dependencies: CliDependencies): Promise<ExitCode> {
+async function runMatrixCorpusCommand(
+  command: Extract<CliCommand, { kind: 'matrix-corpus' }>,
+  dependencies: CliDependencies
+): Promise<ExitCode> {
+  const agentModel = command.agentModel ?? MATRIX_CORPUS_DEFAULT_AGENT_MODEL;
   let preflight: MatrixCorpusPreflightResult;
   try {
-    preflight = await dependencies.matrixCorpusPreflight();
+    preflight = await dependencies.matrixCorpusPreflight(agentModel);
   } catch {
     dependencies.output.stderr('preflight result FAIL PREFLIGHT_UNEXPECTED_FAILURE');
     return 2;
@@ -349,7 +373,7 @@ async function runMatrixCorpusCommand(dependencies: CliDependencies): Promise<Ex
   dependencies.output.stdout(`evaluation run ${runId} command matrix-corpus`);
   let result: MatrixCorpusCommandResult;
   try {
-    result = await dependencies.runMatrixCorpus({ runId, preflight });
+    result = await dependencies.runMatrixCorpus({ runId, agentModel, preflight });
   } catch {
     dependencies.output.stderr('evaluation result INFRASTRUCTURE_FAILURE exit 2');
     return 2;
@@ -1223,7 +1247,7 @@ export function createProductionCliDependencies(): CliDependencies {
   let matrix: MatrixClient | undefined;
   let miniMax: MiniMaxEvaluator | undefined;
   let matrixSmokeRunner: (() => Promise<MatrixSmokeResult>) | undefined;
-  let matrixCorpusRuntime: MatrixCorpusLiveRuntime | undefined;
+  const matrixCorpusRuntimes = new Map<MatrixCorpusAgentModel, MatrixCorpusLiveRuntime>();
   let reportWriter: ((report: EvaluationReportV1) => Promise<ReportWriteResult>) | undefined;
 
   function getMatrix(): MatrixClient {
@@ -1251,9 +1275,11 @@ export function createProductionCliDependencies(): CliDependencies {
     return reportWriter;
   }
 
-  function getMatrixCorpusRuntime(): MatrixCorpusLiveRuntime {
-    matrixCorpusRuntime ??= createMatrixCorpusLiveRuntime({
-      loadCatalog: createProductionMatrixCorpusCatalogLoader(),
+  function getMatrixCorpusRuntime(agentModel: MatrixCorpusAgentModel): MatrixCorpusLiveRuntime {
+    const existing = matrixCorpusRuntimes.get(agentModel);
+    if (existing !== undefined) return existing;
+    const runtime = createMatrixCorpusLiveRuntime({
+      loadCatalog: createProductionMatrixCorpusCatalogLoader(agentModel),
       read: createProductionMatrixCorpusLiveReadPort({
         matrix: getMatrix(),
         repositoryRoot: process.cwd(),
@@ -1263,7 +1289,8 @@ export function createProductionCliDependencies(): CliDependencies {
         repositoryRoot: process.cwd(),
       }),
     });
-    return matrixCorpusRuntime;
+    matrixCorpusRuntimes.set(agentModel, runtime);
+    return runtime;
   }
 
   const dependencies: CliDependencies = {
@@ -1310,8 +1337,9 @@ export function createProductionCliDependencies(): CliDependencies {
       return { result, scenarioDurationMs };
     },
     runMatrixSmoke: async () => await getMatrixSmokeRunner()(),
-    matrixCorpusPreflight: async () => await getMatrixCorpusRuntime().preflight(),
-    runMatrixCorpus: async (input) => await getMatrixCorpusRuntime().execute(input),
+    matrixCorpusPreflight: async (agentModel) =>
+      await getMatrixCorpusRuntime(agentModel).preflight(),
+    runMatrixCorpus: async (input) => await getMatrixCorpusRuntime(input.agentModel).execute(input),
     writeReport: async (report) => await getReportWriter()(report),
   };
   return dependencies;

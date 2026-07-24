@@ -480,7 +480,8 @@ function isValidActiveRunContext(context: MatrixCorpusPrivateRunContextV1): bool
     runtime['runtimeAudience'] === 'hetzner-prod' &&
     isValidIdentity(context) &&
     SHA_256_PATTERN.test(context.catalogDigest) &&
-    runtime['agentModel'] === 'or:deepseek/deepseek-v4-flash' &&
+    (runtime['agentModel'] === 'or:deepseek/deepseek-v4-flash' ||
+      runtime['agentModel'] === 'or:minimax/minimax-m3') &&
     runtime['evaluatorModel'] === 'or:minimax/minimax-m3' &&
     Number.isInteger(context.promptPreferencesVersion) &&
     context.promptPreferencesVersion >= 0 &&

@@ -667,7 +667,8 @@ function isValidProfile(value: unknown): value is IntexAgentMatrixCorpusProfileV
     scenarioLabel.length <= 128 &&
     scenarioLabel.trim() === scenarioLabel &&
     value['executionMode'] === 'strict_mock_tools' &&
-    value['agentModel'] === 'or:deepseek/deepseek-v4-flash' &&
+    (value['agentModel'] === 'or:deepseek/deepseek-v4-flash' ||
+      value['agentModel'] === 'or:minimax/minimax-m3') &&
     value['evaluatorModel'] === 'or:minimax/minimax-m3' &&
     Number.isInteger(value['promptPreferencesVersion']) &&
     Number(value['promptPreferencesVersion']) >= 0 &&

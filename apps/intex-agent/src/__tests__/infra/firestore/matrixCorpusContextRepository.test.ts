@@ -144,6 +144,11 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
     expect(parseMatrixCorpusRunContextDocument(runContext())).toEqual(runContext());
     expect(
       parseMatrixCorpusRunContextDocument(
+        runContext({ agentModel: 'or:minimax/minimax-m3' })
+      )
+    ).toEqual(runContext({ agentModel: 'or:minimax/minimax-m3' }));
+    expect(
+      parseMatrixCorpusRunContextDocument(
         runContext({ encryptedPromptContext: encryptedRunPrompt('') })
       )
     ).toBeDefined();
@@ -158,7 +163,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
       runContext({ userId: '' }),
       runContext({ leaseFence: '0' }),
       runContext({ catalogDigest: 'invalid' }),
-      runContext({ agentModel: 'or:minimax/minimax-m3' }),
+      runContext({ agentModel: 'or:google/gemini-3-flash-preview' }),
       runContext({ evaluatorModel: 'or:deepseek/deepseek-v4-flash' }),
       runContext({ promptPreferencesVersion: 1.5 }),
       runContext({ promptPreferencesVersion: -1 }),

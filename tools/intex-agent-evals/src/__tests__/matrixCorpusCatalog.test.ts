@@ -24,6 +24,18 @@ describe('canonical Matrix corpus catalog', () => {
     expect(Math.max(...catalog.scenarios.map(({ scenario }) => scenario.turns.length))).toBe(20);
   });
 
+  it('builds the same canonical corpus with MiniMax M3 as the immutable agent model', async () => {
+    const deepSeek = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const miniMax = await loadCanonicalMatrixCorpus(scenariosDirectory, 'or:minimax/minimax-m3');
+
+    expect(miniMax.agentModel).toBe('or:minimax/minimax-m3');
+    expect(miniMax.evaluatorModel).toBe('or:minimax/minimax-m3');
+    expect(miniMax.scenarioCount).toBe(20);
+    expect(miniMax.turnCount).toBe(59);
+    expect(miniMax.scenarios).toEqual(deepSeek.scenarios);
+    expect(miniMax.catalogDigest).not.toBe(deepSeek.catalogDigest);
+  });
+
   it('builds closed, digest-stable profiles without duplicating the scenario content', async () => {
     const first = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const second = await loadCanonicalMatrixCorpus(scenariosDirectory);
