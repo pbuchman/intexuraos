@@ -221,6 +221,11 @@ const CONFIRMATION_INTROS: Record<MutatingIntexAgentToolName, LocalizedText> = {
   },
 };
 
+const LINK_CONFIRMATION_ACTION_HINT: LocalizedText = {
+  en: 'Confirm to save it, or cancel to leave it unchanged.',
+  pl: 'Potwierdź, aby go zapisać, albo anuluj, aby niczego nie zmieniać.',
+};
+
 const CONFIRMATION_LABELS = {
   title: { en: 'Title', pl: 'Tytuł' },
   content: { en: 'Content', pl: 'Treść' },
@@ -401,12 +406,14 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
                 ? { matrixCorpusLlm: config.matrixCorpusLlm }
                 : {}),
             });
-      const intent = applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
-        timeZone: input.timeZone,
-        message: input.message,
-        events: input.events,
-        replyContext: input.replyContext,
-      });
+      const intent = applyOptionalNoteFieldClarification(
+        applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
+          timeZone: input.timeZone,
+          message: input.message,
+          events: input.events,
+          replyContext: input.replyContext,
+        })
+      );
       const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
         return normalizeClassifierUnsupportedIntent(intent, replyLanguage);
@@ -601,6 +608,38 @@ function applyRuntimeTimeZoneToCalendarIntent(
     ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
     ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
   };
+}
+
+function applyOptionalNoteFieldClarification(
+  intent: IntexAgentIntentClassification
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'create_note' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length === 0 ||
+    !intent.missingFields.every(isOptionalNoteField)
+  ) {
+    return intent;
+  }
+
+  return {
+    kind: 'tool',
+    allowedToolNames: ['create_note'],
+    ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
+    ...(intent.stylePreferenceAction !== undefined
+      ? { stylePreferenceAction: intent.stylePreferenceAction }
+      : {}),
+    ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
+    ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
+function isOptionalNoteField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return canonical === 'title' || canonical === 'tags' || canonical === 'sourcemessageids';
 }
 
 function isRuntimeTimeZoneMissingField(field: string): boolean {
@@ -1696,7 +1735,11 @@ function buildConfirmationReply(
   }
 
   if (toolName === 'create_link') {
-    const lines = [CONFIRMATION_INTROS.create_link[replyLanguage]];
+    const lines = [
+      CONFIRMATION_INTROS.create_link[replyLanguage],
+      LINK_CONFIRMATION_ACTION_HINT[replyLanguage],
+      '',
+    ];
     appendConfirmationLine(lines, 'URL', readRawString(args, 'url'));
     appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'title'));
     return lines.join('\n');
@@ -1909,11 +1952,13 @@ function buildCompletedReply(
 
   if (isPreferenceToolName(toolName)) {
     const promptBlock = readRawString(result, 'promptBlock');
+    const renderedPromptBlock =
+      promptBlock !== undefined && promptBlock.trim() !== '' ? promptBlock : undefined;
+    const overlayBlock =
+      toolName === 'get_user_preferences' ? renderPreferenceOverlayItems(result) : undefined;
     return {
       reply:
-        promptBlock !== undefined && promptBlock.trim() !== ''
-          ? promptBlock
-          : COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
+        renderedPromptBlock ?? overlayBlock ?? COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
     };
   }
 
@@ -2035,6 +2080,30 @@ function isPreferenceVersionConflictMessage(errorMessage: string): boolean {
 function readRawString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function renderPreferenceOverlayItems(result: Record<string, unknown>): string | undefined {
+  const currentVersion = result['currentVersion'];
+  const items = result['items'];
+  if (
+    !Number.isSafeInteger(currentVersion) ||
+    (currentVersion as number) < 0 ||
+    !Array.isArray(items) ||
+    items.length === 0
+  ) {
+    return undefined;
+  }
+
+  const renderedItems: string[] = [];
+  for (const [index, item] of items.entries()) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) return undefined;
+    const record = item as Record<string, unknown>;
+    const id = readString(record, 'id');
+    const text = readString(record, 'text');
+    if (id === undefined || text === undefined) return undefined;
+    renderedItems.push(`${String(index + 1)}. (id: ${id}) ${JSON.stringify(text)}`);
+  }
+  return [`User Preferences v${String(currentVersion)}:`, ...renderedItems].join('\n');
 }
 
 function readString(record: Record<string, unknown>, key: string): string | undefined {

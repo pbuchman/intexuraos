@@ -249,6 +249,53 @@ describe('strict Matrix corpus tool-mock executor', () => {
     expect(overlay.mutate).not.toHaveBeenCalled();
   });
 
+  it('returns the dynamic encrypted overlay snapshot instead of the fixed catalog placeholder', async () => {
+    const configured = resultFor('get_user_preferences');
+    const overlayResult: StrictMockResultV1 = {
+      toolName: 'get_user_preferences',
+      status: 'completed',
+      currentVersion: 2,
+      items: [{ id: 'mock_pref_existing', text: 'Use concise replies.' }],
+    };
+    const overlay = preferenceOverlay({ readResult: overlayResult });
+    const executor = executorFor([successCall('get_user_preferences', 1, configured)], {
+      preferenceOverlay: overlay,
+    });
+
+    await expect(executor.getUserPreferences()).resolves.toBe(JSON.stringify(overlayResult));
+    expect(overlay.read).toHaveBeenCalledWith({
+      ingestReceiptId: 'receipt_1',
+      toolName: 'get_user_preferences',
+      turnIndex: 0,
+      ordinal: 1,
+      configuredResult: configured,
+    });
+  });
+
+  it.each([
+    ['a different tool result', resultFor('create_note')],
+    [
+      'a malformed preference result',
+      {
+        toolName: 'get_user_preferences',
+        status: 'completed',
+        currentVersion: -1,
+        items: [],
+      } as unknown as StrictMockResultV1,
+    ],
+  ])('fails closed when the preference overlay returns %s', async (_label, readResult) => {
+    const configured = resultFor('get_user_preferences');
+    const overlay = preferenceOverlay({ readResult });
+    const executor = executorFor([successCall('get_user_preferences', 1, configured)], {
+      preferenceOverlay: overlay,
+    });
+
+    await expect(executor.getUserPreferences()).rejects.toMatchObject({
+      category: 'safety_stop',
+      code: 'PREFERENCE_OVERLAY_RESULT_MISMATCH',
+    });
+  });
+
   it('fails closed when a preference tool has no encrypted scenario overlay', async () => {
     const executor = executorFor([
       successCall('get_user_preferences', 1, resultFor('get_user_preferences')),
@@ -302,6 +349,23 @@ describe('strict Matrix corpus tool-mock executor', () => {
     >;
     const overlay = preferenceOverlay({
       mutateResult: { ...expected, currentVersion: 2 },
+    });
+    const executor = executorFor([successCall('add_user_preference', 1, expected)], {
+      preferenceOverlay: overlay,
+    });
+
+    await expect(
+      executor.addUserPreference({ text: 'Short replies', expectedVersion: 0 })
+    ).rejects.toMatchObject({
+      category: 'safety_stop',
+      code: 'PREFERENCE_OVERLAY_RESULT_MISMATCH',
+    });
+  });
+
+  it('fails closed when a mutation overlay returns a non-object result', async () => {
+    const expected = resultFor('add_user_preference');
+    const overlay = preferenceOverlay({
+      mutateResult: [] as unknown as StrictMockResultV1,
     });
     const executor = executorFor([successCall('add_user_preference', 1, expected)], {
       preferenceOverlay: overlay,

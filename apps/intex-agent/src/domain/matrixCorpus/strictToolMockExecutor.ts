@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 
-import type {
-  IntexAgentToolNameV1,
-  StrictMockResultV1,
+import {
+  strictMockResultV1Schema,
+  type IntexAgentToolNameV1,
+  type StrictMockResultV1,
 } from '@intexuraos/http-contracts';
 
 import type {
@@ -275,7 +276,7 @@ export function createStrictToolMockExecutor(
         ordinal,
         configuredResult,
       });
-      return encodeMatchingOverlayResult(actual, configuredResult);
+      return encodePreferenceOverlayReadResult(actual);
     }
     if (isPreferenceMutationTool(toolName)) {
       const overlay = requirePreferenceOverlay(input.preferenceOverlay);
@@ -380,6 +381,17 @@ function encodeMatchingOverlayResult(
     );
   }
   return JSON.stringify(expected);
+}
+
+function encodePreferenceOverlayReadResult(actual: StrictMockResultV1): string {
+  const parsed = strictMockResultV1Schema.safeParse(actual);
+  if (!parsed.success || parsed.data.toolName !== 'get_user_preferences') {
+    throw new MatrixCorpusStrictToolMockError(
+      'safety_stop',
+      'PREFERENCE_OVERLAY_RESULT_MISMATCH'
+    );
+  }
+  return JSON.stringify(parsed.data);
 }
 
 export function matrixCorpusPreferenceMutationReceipt(

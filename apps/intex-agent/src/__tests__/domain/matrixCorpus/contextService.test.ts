@@ -983,7 +983,7 @@ describe('Matrix corpus context service', () => {
     ).resolves.toEqual({ ok: false, code: 'CONTEXT_DECRYPTION_FAILED' });
   });
 
-  it('rejects a preference-overlay read whose configured value differs from private state', async () => {
+  it('returns private preference-overlay state when the catalog contains a fixed read placeholder', async () => {
     const current = await preferenceOverlayFixture();
     await expect(
       current.overlay.read({
@@ -996,6 +996,28 @@ describe('Matrix corpus context service', () => {
           status: 'completed',
           currentVersion: 99,
           items: [],
+        },
+      })
+    ).resolves.toEqual({
+      toolName: 'get_user_preferences',
+      status: 'completed',
+      currentVersion: 2,
+      items: [{ id: syntheticPreferenceId, text: privatePreference }],
+    });
+  });
+
+  it('rejects a preference-overlay read whose catalog result names another tool', async () => {
+    const current = await preferenceOverlayFixture();
+    await expect(
+      current.overlay.read({
+        ingestReceiptId: 'receipt_wrong_read_tool',
+        toolName: 'get_user_preferences',
+        turnIndex: 0,
+        ordinal: 1,
+        configuredResult: {
+          toolName: 'create_note',
+          status: 'completed',
+          message: 'Synthetic note result',
         },
       })
     ).rejects.toMatchObject({ code: 'PREFERENCE_OVERLAY_REJECTED' });
