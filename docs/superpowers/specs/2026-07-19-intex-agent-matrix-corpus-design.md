@@ -451,13 +451,22 @@ load the exact scenario context plus the matching session profile; no user-only 
 permitted. The signed ingest attestation proves the current fence for each load, so Intex
 Agent never reads WhatsApp-owned lease storage directly.
 
-Every scenario starts from the same immutable baseline. `get_user_preferences` reads only
-the decrypted scenario overlay. Successful mocked add/update/delete preference calls
-update only that encrypted overlay in an Intex-owned transaction keyed by ingest receipt,
-tool name, turn, and ordinal; an exact retry returns the prior overlay version, while an
-out-of-order or conflicting mutation fails closed. Rejected confirmations do not mutate
-the overlay. The runner never rereads or writes the real preference repository during
-corpus execution.
+Every scenario without a scheduled preference mutation starts from the same immutable
+account snapshot. A scenario whose signed expected-tool schedule contains
+`add_user_preference`, `update_user_preference`, or `delete_user_preference` instead starts
+from a reviewed synthetic pristine version-0 overlay. This narrow exception makes the
+committed mutation scenarios deterministic on an existing account without exposing or
+changing that account's preference rows. The mode is derived only from the signed
+catalog-owned schedule; the evaluator cannot supply preference content.
+`get_user_preferences` reads only the decrypted scenario overlay. Successful mocked
+add/update/delete preference calls update only that encrypted overlay in an Intex-owned
+transaction keyed by ingest receipt, tool name, turn, and ordinal; an exact retry returns
+the prior overlay version, while an out-of-order or conflicting mutation fails closed.
+For the first pristine update/delete, the request identifier remains argument evidence
+while only the signed mock result identifier may enter overlay state; subsequent
+mutations require exact stored-identifier equality.
+Rejected confirmations do not mutate the overlay. The runner never rereads or writes the
+real preference repository during corpus execution.
 
 Exact-run context finalization is one fenced Intex-owned transaction: it verifies the run
 context and the run-manifest-recorded closed set of at most 20 scenario contexts, deletes
@@ -759,6 +768,12 @@ requires no more than five expected replies. An additional correlated reply with
 bound is a behavioral count failure, not transport ambiguity. A duplicate transport
 event is idempotently ignored; a contradictory/unbound reply or a sixth reply exceeds
 the safety bound and stops the run.
+
+Confirmation text is normalized to the WhatsApp interactive-body limit before the
+assistant event, digest, and transport publication are created. Oversized previews keep
+their leading structured fields and end with a human-readable notice that the full tool
+argument will be used after confirmation. WhatsApp must therefore never silently truncate
+different text than the durable reply evidence.
 
 Each scenario starts a new session. Later turns must retain the exact session ID. The
 evaluator rejects:

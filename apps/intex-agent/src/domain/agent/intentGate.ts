@@ -2,13 +2,17 @@ import type { IntexAgentToolName } from '../sessions/types.js';
 
 export type IntexAgentIntentDecision =
   | { kind: 'tool'; allowedToolNames: IntexAgentToolName[] }
-  | { kind: 'no_action'; reason: 'greeting' | 'conversation' };
+  | { kind: 'no_action'; reason: 'greeting' | 'conversation' | 'retain_context' };
 
 export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision {
   const normalized = normalizeIntentText(text);
 
   if (isGreeting(normalized)) {
     return { kind: 'no_action', reason: 'greeting' };
+  }
+
+  if (isExplicitRetainOnlyRequest(text)) {
+    return { kind: 'no_action', reason: 'retain_context' };
   }
 
   if (isBareUrl(text)) {
@@ -20,6 +24,29 @@ export function classifyIntexAgentIntent(text: string): IntexAgentIntentDecision
   }
 
   return { kind: 'no_action', reason: 'conversation' };
+}
+
+function isExplicitRetainOnlyRequest(text: string): boolean {
+  const normalized = text.normalize('NFKC').toLowerCase();
+  if (/https?:\/\//u.test(normalized)) return false;
+  const englishRetainOnly =
+    /\b(?:do not|don['’]?t)\s+(?:save|store|persist)\b[\s\S]*\b(?:only|just)\s+(?:retain|hold|keep)\s+(?:(?:this|the|provided)\s+)?context\s*[.!?]*\s*$/u.exec(
+      normalized
+    );
+  const polishRetainOnly =
+    /\bnie\s+(?:zapisuj|utrwalaj)(?:\s+\S+){0,3}\b[\s\S]*\btylko\s+(?:zachowaj|zapamiętaj|przechowaj)\s+(?:(?:ten|podany)\s+)?kontekst\s*[.!?]*\s*$/u.exec(
+      normalized
+    );
+  const retainClause = englishRetainOnly ?? polishRetainOnly;
+  if (retainClause === null) return false;
+
+  const prefix = normalized.slice(0, retainClause.index);
+  return !(
+    /\b(?:translate|rewrite|quote|explain|analy[sz]e|summari[sz]e)\b/u.test(prefix) ||
+    /\b(?:przetłumacz(?:yć)?|przetlumacz(?:yc)?|przeformułuj|zacytuj|wyjaśnij|wyjasnij|przeanalizuj|streść|stresc)(?!\p{L})/u.test(
+      prefix
+    )
+  );
 }
 
 function isGreeting(text: string): boolean {

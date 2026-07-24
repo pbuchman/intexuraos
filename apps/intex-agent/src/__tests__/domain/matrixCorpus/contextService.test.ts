@@ -333,6 +333,54 @@ describe('Matrix corpus context service', () => {
     expect(JSON.stringify(result)).not.toContain(privatePreference);
   });
 
+  it('starts preference-mutation scenarios from an isolated pristine overlay', async () => {
+    const current = fixture();
+    await current.service.registerRun(registration());
+    const identity = {
+      runId: 'run_1',
+      scenarioId: 'scenario_preference_mutation',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+    } as const;
+
+    await expect(
+      current.service.registerScenario({
+        ...identity,
+        preferenceOverlayMode: 'pristine_v0',
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      disposition: 'applied',
+      snapshot: { overlayVersion: 0 },
+    });
+    await expect(current.service.loadScenarioPromptContext(identity)).resolves.toMatchObject({
+      ok: true,
+      promptContext: '{"version":1,"userPreferences":null}',
+      overlayVersion: 0,
+    });
+
+    const overlay = current.service.createPreferenceOverlay(identity);
+    await expect(
+      overlay.read({
+        ingestReceiptId: 'receipt_read_pristine',
+        toolName: 'get_user_preferences',
+        turnIndex: 0,
+        ordinal: 1,
+        configuredResult: {
+          toolName: 'get_user_preferences',
+          status: 'completed',
+          currentVersion: 99,
+          items: [],
+        },
+      })
+    ).resolves.toEqual({
+      toolName: 'get_user_preferences',
+      status: 'completed',
+      currentVersion: 0,
+      items: [],
+    });
+  });
+
   it('replays an exact registration without rereading user data and rejects changed reuse', async () => {
     const { service, promptPreferencesRepository, runtimeSettingsClient } = fixture();
     const first = await service.registerRun(registration());
@@ -710,30 +758,36 @@ describe('Matrix corpus context service', () => {
     expect(promptPreferencesRepository.getCurrent).toHaveBeenCalledOnce();
   });
 
-  it.each(['update_user_preference', 'delete_user_preference'] as const)(
-    'uses the signed mock result as the synthetic pristine-overlay seed for %s',
-    async (toolName) => {
+  it.each([
+    {
+      toolName: 'update_user_preference',
+      scenarioId: 'intex-eval-018',
+      inputItemId: 'pref_INTEX-EVAL-018-F01',
+      changedItemId: 'mock_pref_intex_eval_018_1',
+    },
+    {
+      toolName: 'delete_user_preference',
+      scenarioId: 'intex-eval-019',
+      inputItemId: 'pref_INTEX-EVAL-019_INTEX-EVAL-019-F01',
+      changedItemId: 'mock_pref_intex_eval_019_1',
+    },
+  ] as const)(
+    'maps the exact $scenarioId input identifier to the signed pristine-overlay result',
+    async ({ changedItemId, inputItemId, scenarioId, toolName }) => {
       const current = fixture();
-      current.promptPreferencesRepository.getCurrent.mockResolvedValueOnce({
-        ...preferences(),
-        currentVersion: 0,
-        items: [],
-        renderedPromptBlock: '',
-        createdAt: null,
-        updatedAt: null,
-        updatedBy: null,
-      });
       await current.service.registerRun(registration());
       const identity = {
         runId: 'run_1',
-        scenarioId: `scenario_${toolName}`,
+        scenarioId,
         userId: 'auth0:user_1',
         leaseFence: '7',
       } as const;
-      await current.service.registerScenario(identity);
+      await current.service.registerScenario({
+        ...identity,
+        preferenceOverlayMode: 'pristine_v0',
+      });
       const overlay = current.service.createPreferenceOverlay(identity);
       const ingestReceiptId = `receipt_${toolName}`;
-      const changedItemId = `mock_pref_${toolName}`;
       const configuredResult = {
         toolName,
         status: 'completed' as const,
@@ -755,8 +809,8 @@ describe('Matrix corpus context service', () => {
           ordinal: 1,
           args:
             toolName === 'update_user_preference'
-              ? { itemId: changedItemId, text: 'Synthetic replacement.', expectedVersion: 0 }
-              : { itemId: changedItemId, expectedVersion: 0 },
+              ? { itemId: inputItemId, text: 'Synthetic replacement.', expectedVersion: 0 }
+              : { itemId: inputItemId, expectedVersion: 0 },
           configuredResult,
         })
       ).resolves.toEqual(configuredResult);
@@ -799,6 +853,18 @@ describe('Matrix corpus context service', () => {
 
   it('rejects invalid scenario/profile identities and absent scenario context', async () => {
     const { service } = fixture();
+    await expect(
+      service.registerScenario({
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        userId: 'auth0:user_1',
+        leaseFence: '7',
+        preferenceOverlayMode: 'invalid' as 'pristine_v0',
+      })
+    ).resolves.toEqual({
+      ok: false,
+      code: 'INVALID_INPUT',
+    });
     for (const identity of [
       { runId: '', scenarioId: 'scenario_001', userId: 'auth0:user_1', leaseFence: '7' },
       { runId: 'run_1', scenarioId: '', userId: 'auth0:user_1', leaseFence: '7' },
@@ -1211,7 +1277,7 @@ describe('Matrix corpus context service', () => {
           toolName: 'update_user_preference',
           status: 'completed',
           currentVersion: 3,
-          changedItemId: 'missing',
+          changedItemId: 'mock_pref_mismatch',
         },
       },
     ],
@@ -1257,7 +1323,7 @@ describe('Matrix corpus context service', () => {
           toolName: 'delete_user_preference',
           status: 'completed',
           currentVersion: 3,
-          changedItemId: 'missing',
+          changedItemId: 'mock_pref_mismatch',
         },
       },
     ],

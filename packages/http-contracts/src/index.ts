@@ -251,3 +251,5 @@ export {
   type PublicTestTimelineEventV1,
   type TestScenarioDtoV1,
 } from './intexAgentTestRuns.js';
+
+export { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from './whatsapp.js';

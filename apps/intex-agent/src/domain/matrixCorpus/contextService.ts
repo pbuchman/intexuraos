@@ -95,6 +95,13 @@ export interface MatrixCorpusScenarioContextInput extends MatrixCorpusContextIde
   scenarioId: string;
 }
 
+export interface MatrixCorpusScenarioContextRegistrationInput
+  extends MatrixCorpusScenarioContextInput {
+  preferenceOverlayMode?: 'account_snapshot' | 'pristine_v0';
+}
+
+const PREFERENCE_OVERLAY_MODES = new Set(['account_snapshot', 'pristine_v0']);
+
 export type MatrixCorpusContextServiceFailureCode =
   | 'INVALID_INPUT'
   | 'CORRELATED_REPLAY_CONFLICT'
@@ -163,7 +170,7 @@ export interface MatrixCorpusContextService {
     input: MatrixCorpusRunContextRegistrationInput
   ): Promise<MatrixCorpusRunRegistrationResult>;
   registerScenario(
-    input: MatrixCorpusScenarioContextInput
+    input: MatrixCorpusScenarioContextRegistrationInput
   ): Promise<MatrixCorpusScenarioRegistrationResult>;
   loadScenarioPromptContext(
     input: MatrixCorpusScenarioContextInput
@@ -292,7 +299,7 @@ export function createMatrixCorpusContextService(
     },
 
     async registerScenario(input): Promise<MatrixCorpusScenarioRegistrationResult> {
-      if (!isValidScenarioInput(input)) return serviceFailure('INVALID_INPUT');
+      if (!isValidScenarioRegistrationInput(input)) return serviceFailure('INVALID_INPUT');
       const operationTime = deps.now();
       const runResult = await deps.contextRepository.getRunContext({
         ...input,
@@ -312,7 +319,12 @@ export function createMatrixCorpusContextService(
       } catch {
         return serviceFailure('CONTEXT_DECRYPTION_FAILED');
       }
-      const overlayDigest = sha256(stableJson(promptPayload.preferenceOverlay));
+      const effectivePromptPayload =
+        input.preferenceOverlayMode === 'pristine_v0'
+          ? pristinePreferencePromptPayload()
+          : promptPayload;
+      const effectivePromptContext = JSON.stringify(effectivePromptPayload);
+      const overlayDigest = sha256(stableJson(effectivePromptPayload.preferenceOverlay));
       const context: MatrixCorpusPrivateScenarioContextV1 = {
         version: 1,
         runtimeAudience: 'hetzner-prod',
@@ -324,7 +336,7 @@ export function createMatrixCorpusContextService(
         overlayVersion: 0,
         overlayDigest,
         encryptedEffectivePromptContext: deps.crypto.encrypt(
-          promptContext,
+          effectivePromptContext,
           scenarioBinding(input)
         ),
         lastAppliedMutationReceipt: null,
@@ -429,6 +441,19 @@ function initialPreferenceOverlay(
       text: normalizePromptPreferenceText(item.text),
     })),
     mutations: [],
+  };
+}
+
+function pristinePreferencePromptPayload(): MatrixCorpusEncryptedPromptPayloadV1 {
+  return {
+    version: 1,
+    userPreferences: null,
+    preferenceOverlay: {
+      version: 1,
+      currentVersion: 0,
+      items: [],
+      mutations: [],
+    },
   };
 }
 
@@ -598,24 +623,24 @@ function applyPreferenceMutation(
     if (typeof itemId !== 'string') throw overlayRejected();
     const index = items.findIndex((item) => item.id === itemId);
     const existing = items[index];
-    if (configuredResult.changedItemId !== itemId) throw overlayRejected();
     const text = normalizePreferenceMutationText(request.args.text);
     if (existing === undefined) {
       if (!isSignedPristineOverlaySeed(overlay, configuredResult)) throw overlayRejected();
-      items.push({ id: itemId, text });
+      items.push({ id: configuredResult.changedItemId, text });
     } else {
+      if (configuredResult.changedItemId !== itemId) throw overlayRejected();
       if (text === existing.text) throw overlayRejected();
       items[index] = { ...existing, text };
     }
   } else {
     if (!('itemId' in request.args)) throw overlayRejected();
     const itemId = request.args.itemId;
-    if (typeof itemId !== 'string' || configuredResult.changedItemId !== itemId)
-      throw overlayRejected();
+    if (typeof itemId !== 'string') throw overlayRejected();
     const index = items.findIndex((item) => item.id === itemId);
     if (index < 0) {
       if (!isSignedPristineOverlaySeed(overlay, configuredResult)) throw overlayRejected();
     } else {
+      if (configuredResult.changedItemId !== itemId) throw overlayRejected();
       items.splice(index, 1);
     }
   }
@@ -859,6 +884,16 @@ function isValidRunRegistration(input: MatrixCorpusRunContextRegistrationInput):
 
 function isValidScenarioInput(input: MatrixCorpusScenarioContextInput): boolean {
   return isValidIdentity(input) && SAFE_ID_PATTERN.test(input.scenarioId);
+}
+
+function isValidScenarioRegistrationInput(
+  input: MatrixCorpusScenarioContextRegistrationInput
+): boolean {
+  return (
+    isValidScenarioInput(input) &&
+    (input.preferenceOverlayMode === undefined ||
+      PREFERENCE_OVERLAY_MODES.has(input.preferenceOverlayMode))
+  );
 }
 
 function isValidIdentity(input: MatrixCorpusContextIdentity): boolean {
