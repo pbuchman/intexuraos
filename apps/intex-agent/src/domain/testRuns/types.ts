@@ -121,7 +121,8 @@ export const testRunScenarioFoundationV1Schema = publicTestRunScenarioSummaryV1S
       context.addIssue({ code: z.ZodIssueCode.custom, message: 'Completed turns exceed plan' });
     if (
       scenario.lifecycle === 'completed' &&
-      (scenario.completedTurns !== scenario.plannedTurns ||
+      ((scenario.completedTurns !== scenario.plannedTurns &&
+        (scenario.verdict !== 'failed' || scenario.deterministicVerdict !== 'failed')) ||
         (scenario.verdict !== 'passed' && scenario.verdict !== 'failed') ||
         (scenario.deterministicVerdict !== 'passed' &&
           scenario.deterministicVerdict !== 'failed') ||
@@ -596,14 +597,35 @@ export function isScenarioProjectionEvidenceConsistent(
       : deterministicVerdict === 'passed' && semanticVerdict === 'passed'
         ? 'passed'
         : 'pending';
+  const executionEvidenceComplete =
+    scenario.completedTurns === scenario.plannedTurns ||
+    (verdict === 'failed' && hasMissingConfirmationBlocker(scenario, projection));
   return (
-    scenario.completedTurns === scenario.plannedTurns &&
+    executionEvidenceComplete &&
     projection.replyEvaluations.length === scenario.completedReplies &&
     scenario.startedAt !== null &&
     scenario.finishedAt !== null &&
     scenario.durationMs !== null &&
     scenario.verdict === verdict &&
     projection.verdict === verdict
+  );
+}
+
+function hasMissingConfirmationBlocker(
+  scenario: PublicTestRunScenarioSummaryV1,
+  projection: TestRunScenarioProjectionV1
+): boolean {
+  return (
+    scenario.completedTurns < scenario.plannedTurns &&
+    projection.deterministicChecks.some(
+      (check) =>
+        check.code === 'confirmation_count' &&
+        check.status === 'failed' &&
+        check.turnIndex === scenario.completedTurns &&
+        check.replyIndex === null &&
+        check.evidence.expectedCount === 1 &&
+        check.evidence.actualCount === 0
+    )
   );
 }
 
@@ -643,8 +665,12 @@ export function isTerminalOutcomeCompatible(
     (scenario) =>
       scenario.lifecycle === 'completed' &&
       (scenario.verdict === 'passed' || scenario.verdict === 'failed') &&
-      scenario.completedTurns === scenario.plannedTurns &&
-      scenario.completedReplies === scenario.expectedReplies &&
+      ((scenario.completedTurns === scenario.plannedTurns &&
+        scenario.completedReplies === scenario.expectedReplies) ||
+        (scenario.completedTurns < scenario.plannedTurns &&
+          scenario.completedReplies <= scenario.expectedReplies &&
+          scenario.verdict === 'failed' &&
+          scenario.deterministicVerdict === 'failed')) &&
       (scenario.deterministicVerdict === 'passed' ||
         scenario.deterministicVerdict === 'failed') &&
       (scenario.semanticVerdict === 'passed' ||

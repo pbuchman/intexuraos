@@ -532,6 +532,129 @@ describe('Test Run foundation state machine', () => {
     ).toEqual({ ok: false, code: 'INVALID_TRANSITION' });
   });
 
+  it('closes a partially executed scenario as failed when deterministic evidence proves the blocker', () => {
+    const runningScenario = testRunScenario(1, {
+      scenarioRevision: 1,
+      eventWatermark: 1,
+      lifecycle: 'running',
+      plannedTurns: 2,
+      completedTurns: 1,
+      expectedReplies: 2,
+      completedReplies: 1,
+      deterministicVerdict: 'passed',
+      semanticVerdict: 'passed',
+      startedAt: later,
+      sessionId: 'matrix_session_1',
+      sessionBindingDigest: '9'.repeat(64),
+    });
+    const current = testRunRecord({
+      lifecycle: 'running',
+      revision: 2,
+      scenarios: [
+        runningScenario,
+        ...Array.from({ length: 19 }, (_, index) => testRunScenario(index + 2)),
+      ],
+    });
+    const deterministicCheck = {
+      code: 'confirmation_count' as const,
+      status: 'failed' as const,
+      turnIndex: 1,
+      replyIndex: null,
+      evidence: {
+        ...emptyDeterministicEvidence(),
+        expectedCount: 1,
+        actualCount: 0,
+      },
+    };
+    const summary = {
+      ...runningScenario,
+      scenarioRevision: 2,
+      eventWatermark: 2,
+      lifecycle: 'completed' as const,
+      verdict: 'failed' as const,
+      deterministicVerdict: 'failed' as const,
+      semanticVerdict: 'passed' as const,
+      finishedAt: later,
+      durationMs: 0,
+    };
+
+    const result = applyTestRunProjectionCas(current, {
+        expectedRevision: 2,
+        nextLifecycle: 'running',
+        updatedAt: later,
+        scenario: {
+          scenarioId: summary.scenarioId,
+          expectedScenarioRevision: 1,
+          eventWatermark: 2,
+          lifecycle: 'completed',
+          verdict: 'failed',
+          sessionId: 'matrix_session_1',
+          sessionBindingDigest: '9'.repeat(64),
+          summary,
+          projection: {
+            schemaVersion: 1,
+            runId: 'run_1',
+            userId: 'auth0:user_1',
+            sessionId: 'matrix_session_1',
+            sessionBindingDigest: '9'.repeat(64),
+            scenarioId: summary.scenarioId,
+            scenarioNumber: 1,
+            scenarioLabel: summary.scenarioLabel,
+            runRevision: 3,
+            scenarioRevision: 2,
+            eventWatermark: 2,
+            lifecycle: 'completed',
+            verdict: 'failed',
+            plannedTurns: 2,
+            completedTurns: 1,
+            toolEvidence: [],
+            deterministicChecks: [deterministicCheck],
+            replyEvaluations: [
+              {
+                turnIndex: 0,
+                replyIndex: 0,
+                verdict: 'passed',
+                score: 5,
+                criteria: {
+                  understoodIntent: true,
+                  helpful: true,
+                  conciseAndClear: true,
+                  professionalTone: true,
+                  noPassiveAggression: true,
+                },
+                failureCodes: [],
+                latencyMs: 1,
+                usage: {
+                  logicalCalls: 1,
+                  repairCount: 0,
+                  inputTokens: 1,
+                  outputTokens: 1,
+                  totalTokens: 2,
+                  costNanoUsd: 1,
+                },
+              },
+            ],
+            agentUsage: [],
+          },
+        },
+        finalization: null,
+      });
+    expect(result).toMatchObject({
+      ok: true,
+      record: {
+        revision: 3,
+        lifecycle: 'running',
+      },
+    });
+    if (!result.ok) throw new Error('partial failed scenario projection was rejected');
+    expect(result.record.scenarios[0]).toMatchObject({
+      lifecycle: 'completed',
+      verdict: 'failed',
+      completedTurns: 1,
+      plannedTurns: 2,
+    });
+  });
+
   it('rejects every changed scenario and projection correlation field', () => {
     const current = testRunRecord({
       lifecycle: 'running',
@@ -673,6 +796,162 @@ describe('Test Run foundation state machine', () => {
       ok: true,
       disposition: 'already_applied',
       record: { lifecycle: 'completed', verdict: 'passed', terminalWinner: { kind: 'release' } },
+    });
+  });
+
+  it('finalizes a failed run after an evidence-backed scenario ends before its last dependent turn', () => {
+    const passedScenarios = Array.from({ length: 19 }, (_, index) =>
+      testRunScenario(index + 1, {
+        lifecycle: 'completed',
+        verdict: 'passed',
+        completedTurns: 1,
+        completedReplies: 1,
+        deterministicVerdict: 'passed',
+        semanticVerdict: 'passed',
+        startedAt: later,
+        finishedAt: later,
+        durationMs: 1,
+      })
+    );
+    const runningFinalScenario = testRunScenario(20, {
+      scenarioRevision: 1,
+      eventWatermark: 1,
+      lifecycle: 'running',
+      plannedTurns: 2,
+      completedTurns: 1,
+      expectedReplies: 2,
+      completedReplies: 1,
+      deterministicVerdict: 'passed',
+      semanticVerdict: 'passed',
+      startedAt: later,
+      sessionId: 'matrix_session_20',
+      sessionBindingDigest: '9'.repeat(64),
+    });
+    const current = testRunRecord({
+      lifecycle: 'running',
+      revision: 2,
+      scenarios: [...passedScenarios, runningFinalScenario],
+      cost: { agentNanoUsd: 10, evaluatorNanoUsd: 5, totalNanoUsd: 15 },
+    });
+    const failedSummary = {
+      ...runningFinalScenario,
+      scenarioRevision: 2,
+      eventWatermark: 2,
+      lifecycle: 'completed' as const,
+      verdict: 'failed' as const,
+      deterministicVerdict: 'failed' as const,
+      finishedAt: later,
+      durationMs: 1,
+    };
+    const projected = applyTestRunProjectionCas(current, {
+      expectedRevision: 2,
+      nextLifecycle: 'running',
+      updatedAt: later,
+      scenario: {
+        scenarioId: failedSummary.scenarioId,
+        expectedScenarioRevision: 1,
+        eventWatermark: 2,
+        lifecycle: 'completed',
+        verdict: 'failed',
+        sessionId: 'matrix_session_20',
+        sessionBindingDigest: '9'.repeat(64),
+        summary: failedSummary,
+        projection: {
+          schemaVersion: 1,
+          runId: 'run_1',
+          userId: 'auth0:user_1',
+          sessionId: 'matrix_session_20',
+          sessionBindingDigest: '9'.repeat(64),
+          scenarioId: failedSummary.scenarioId,
+          scenarioNumber: 20,
+          scenarioLabel: failedSummary.scenarioLabel,
+          runRevision: 3,
+          scenarioRevision: 2,
+          eventWatermark: 2,
+          lifecycle: 'completed',
+          verdict: 'failed',
+          plannedTurns: 2,
+          completedTurns: 1,
+          toolEvidence: [],
+          deterministicChecks: [
+            {
+              code: 'confirmation_count',
+              status: 'failed',
+              turnIndex: 1,
+              replyIndex: null,
+              evidence: {
+                ...emptyDeterministicEvidence(),
+                expectedCount: 1,
+                actualCount: 0,
+              },
+            },
+          ],
+          replyEvaluations: [
+            {
+              turnIndex: 0,
+              replyIndex: 0,
+              verdict: 'passed',
+              score: 5,
+              criteria: {
+                understoodIntent: true,
+                helpful: true,
+                conciseAndClear: true,
+                professionalTone: true,
+                noPassiveAggression: true,
+              },
+              failureCodes: [],
+              latencyMs: 1,
+              usage: {
+                logicalCalls: 1,
+                repairCount: 0,
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 2,
+                costNanoUsd: 1,
+              },
+            },
+          ],
+          agentUsage: [],
+        },
+      },
+      finalization: null,
+    });
+    if (!projected.ok) throw new Error('partial failed scenario projection was rejected');
+    const staged = applyArtifactDeliveryTransition(projected.record, {
+      expectedRevision: 3,
+      updatedAt: later,
+      next: {
+        status: 'staged',
+        jsonCandidateDigest: '1'.repeat(64),
+        markdownCandidateDigest: '2'.repeat(64),
+      },
+    });
+    if (!staged.ok || staged.record.artifactStageDigest === null)
+      throw new Error('artifact staging was rejected');
+    const failedCandidate = {
+      ...candidate,
+      outcome: 'completed_failed' as const,
+      artifactStageRevision: 4,
+      artifactCandidateDigest: staged.record.artifactStageDigest,
+    };
+    expect(
+      applyTestRunProjectionCas(staged.record, {
+        expectedRevision: 4,
+        nextLifecycle: 'finalizing',
+        updatedAt: later,
+        scenario: null,
+        finalization: {
+          tombstoneDigest: 'd'.repeat(64),
+          artifactStageDigest: staged.record.artifactStageDigest,
+          terminalCandidate: failedCandidate,
+        },
+      })
+    ).toMatchObject({
+      ok: true,
+      record: {
+        lifecycle: 'finalizing',
+        terminalCandidate: { outcome: 'completed_failed' },
+      },
     });
   });
 

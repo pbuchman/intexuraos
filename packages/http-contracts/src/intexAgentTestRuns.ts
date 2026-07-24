@@ -10,7 +10,7 @@ import {
 export const INTEX_AGENT_TEST_RUN_SCENARIO_COUNT = 20 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_TOOL_EVIDENCE = 100 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_TOOL_FACTS = 16 as const;
-export const INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS = 128 as const;
+export const INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS = 240 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_REPLY_EVALUATIONS = 100 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_AGENT_USAGE = 60 as const;
 export const INTEX_AGENT_TEST_RUN_MAX_REPLIES_PER_TURN = 5 as const;
@@ -509,6 +509,7 @@ export const safeDeterministicCheckV1Schema = z
       'lifecycle_event',
       'user_message_count',
       'agent_usage_count',
+      'confirmation_count',
       'transport',
     ]),
     status: z.enum(['pending', 'passed', 'failed']),

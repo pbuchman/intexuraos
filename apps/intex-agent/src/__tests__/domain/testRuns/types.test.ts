@@ -293,6 +293,115 @@ describe('Intex Agent Test Run foundation types', () => {
     expect(isIntexAgentTestRunRecordV1(testRunRecord({ scenarios }))).toBe(false);
   });
 
+  it('accepts a terminal failed scenario with partial turns only when deterministic evidence proves the blocker', () => {
+    const failedCheck = {
+      code: 'confirmation_count' as const,
+      status: 'failed' as const,
+      turnIndex: 1,
+      replyIndex: null,
+      evidence: {
+        ...emptyDeterministicEvidence(),
+        expectedCount: 1,
+        actualCount: 0,
+      },
+    };
+    const partialFailure = testRunScenario(1, {
+      scenarioRevision: 1,
+      eventWatermark: 1,
+      lifecycle: 'completed',
+      verdict: 'failed',
+      plannedTurns: 2,
+      completedTurns: 1,
+      expectedReplies: 2,
+      completedReplies: 1,
+      deterministicVerdict: 'failed',
+      semanticVerdict: 'passed',
+      startedAt: '2026-07-20T10:00:00.000Z',
+      finishedAt: '2026-07-20T10:01:00.000Z',
+      durationMs: 60_000,
+      sessionId: 'matrix_session_1',
+      sessionBindingDigest: '9'.repeat(64),
+    });
+    const partialProjection: TestRunScenarioProjectionV1 = {
+      ...projectionFixture(),
+      lifecycle: 'completed',
+      verdict: 'failed',
+      plannedTurns: 2,
+      completedTurns: 1,
+      deterministicChecks: [failedCheck],
+      replyEvaluations: [
+        {
+          turnIndex: 0,
+          replyIndex: 0,
+          verdict: 'passed',
+          score: 5,
+          criteria: {
+            understoodIntent: true,
+            helpful: true,
+            conciseAndClear: true,
+            professionalTone: true,
+            noPassiveAggression: true,
+          },
+          failureCodes: [],
+          latencyMs: 1,
+          usage: {
+            logicalCalls: 1,
+            repairCount: 0,
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2,
+            costNanoUsd: 1,
+          },
+        },
+      ],
+    };
+
+    expect(testRunScenarioFoundationV1Schema.safeParse(partialFailure).success).toBe(true);
+    expect(isScenarioProjectionEvidenceConsistent(partialFailure, partialProjection)).toBe(true);
+    expect(
+      isScenarioProjectionEvidenceConsistent(partialFailure, {
+        ...partialProjection,
+        deterministicChecks: [
+          {
+            ...failedCheck,
+            code: 'reply_count',
+            turnIndex: 0,
+          },
+        ],
+      })
+    ).toBe(false);
+    expect(
+      isTerminalOutcomeCompatible(
+        [
+          partialFailure,
+          ...Array.from({ length: 19 }, (_, index) =>
+            testRunScenario(index + 2, {
+              lifecycle: 'completed',
+              verdict: 'failed',
+              completedTurns: 1,
+              completedReplies: 1,
+              deterministicVerdict: 'failed',
+              semanticVerdict: 'not_evaluated',
+              startedAt: '2026-07-20T10:00:00.000Z',
+              finishedAt: '2026-07-20T10:01:00.000Z',
+              durationMs: 60_000,
+            })
+          ),
+        ],
+        { agentNanoUsd: 1, evaluatorNanoUsd: 1, totalNanoUsd: 2 },
+        'completed_failed'
+      )
+    ).toBe(true);
+    expect(
+      testRunScenarioFoundationV1Schema.safeParse({
+        ...partialFailure,
+        verdict: 'passed',
+        deterministicVerdict: 'passed',
+        semanticVerdict: 'passed',
+      }).success
+    ).toBe(false);
+  });
+
   it('checks every completed-scenario verdict combination', () => {
     const completed = testRunScenario(1, {
       lifecycle: 'completed',

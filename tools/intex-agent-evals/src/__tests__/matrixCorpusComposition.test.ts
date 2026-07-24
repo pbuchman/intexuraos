@@ -204,6 +204,65 @@ describe('production Matrix corpus composition', () => {
     expect(harness.metrics.judgeAssistantTexts.join('\n')).not.toContain('2026-08-18T14:30');
   });
 
+  it('persists a missing-confirmation failure, closes only that scenario, and reaches scenario 20', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      missingConfirmationScenarioNumber: 14,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result.run).toMatchObject({
+      exitCode: 1,
+      effectiveKind: 'behavioral_failure',
+      failureCodes: expect.arrayContaining([
+        'deterministic_evidence_failed',
+        'required_confirmation_missing',
+      ]),
+      totals: { completedTurns: 58 },
+    });
+    expect(result.run.scenarios[13]).toMatchObject({
+      scenarioId: 'intex-eval-014',
+      status: 'failed',
+      completedTurns: 1,
+    });
+    expect(result.run.scenarios[19]).toMatchObject({
+      scenarioId: 'intex-eval-020',
+      status: 'passed',
+      completedTurns: 20,
+    });
+    expect(harness.metrics.matrixMessages.at(-1)).toContain('Scenario 020/020');
+    expect(
+      harness.metrics.scenarioProjectionDeterministicChecks
+        .flat()
+        .some(
+          (check) =>
+            check.code === 'confirmation_count' &&
+            check.status === 'failed' &&
+            check.turnIndex === 1 &&
+            check.evidence.expectedCount === 1 &&
+            check.evidence.actualCount === 0
+        )
+    ).toBe(true);
+  });
+
   it('bounds the initial Matrix cursor with the configured correlation deadline', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {

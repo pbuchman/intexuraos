@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import {
   canonicalMatrixCorpusControlRequestDigestInputV1,
+  INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS,
   matrixCorpusDecimalFenceSchema,
   matrixCorpusRfc3339TimestampSchema,
   matrixCorpusSafeIdSchema,
@@ -664,7 +665,7 @@ const safeDeterministicCheckJsonSchema = closedJsonObject(
       enum: [
         'reply_count', 'tool_name', 'tool_count', 'tool_turn', 'tool_fact',
         'session_transition', 'lifecycle_event', 'user_message_count',
-        'agent_usage_count', 'transport', 'reply_format',
+        'agent_usage_count', 'confirmation_count', 'transport', 'reply_format',
       ],
     },
     status: { type: 'string', enum: ['pending', 'passed', 'failed'] },
@@ -759,7 +760,7 @@ const scenarioProjectionJsonSchema = closedJsonObject(
     toolEvidence: { type: 'array', maxItems: 100, items: testRunSafeToolEvidenceJsonSchema },
     deterministicChecks: {
       type: 'array',
-      maxItems: 128,
+      maxItems: INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS,
       items: safeDeterministicCheckJsonSchema,
     },
     replyEvaluations: { type: 'array', maxItems: 100, items: safeReplyEvaluationJsonSchema },

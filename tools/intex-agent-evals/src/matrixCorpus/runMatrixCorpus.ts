@@ -66,6 +66,12 @@ export type MatrixCorpusTurnExecutionResult =
     }
   | {
       readonly ok: false;
+      readonly kind: 'scenario_behavioral_failure';
+      readonly code: string;
+      readonly boundSessionId: string;
+    }
+  | {
+      readonly ok: false;
       readonly kind: 'infrastructure_failure' | 'safety_failure';
       readonly code: string;
       readonly boundSessionId?: string;
@@ -327,6 +333,13 @@ export async function runMatrixCorpus(
           expectedSessionId: sessionId,
         })
       );
+      if (!execution.ok && execution.kind === 'scenario_behavioral_failure') {
+        sessionId ??= execution.boundSessionId;
+        failureCodes.push(execution.code);
+        scenarioFailed = true;
+        behavioralFailure = true;
+        break;
+      }
       let portBehavioralFailureCode: string | undefined;
       if (!execution.ok && execution.kind !== 'behavioral_failure') {
         sessionId ??= execution.boundSessionId ?? null;

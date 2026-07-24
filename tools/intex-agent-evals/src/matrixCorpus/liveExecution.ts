@@ -59,6 +59,7 @@ import {
   type MatrixCorpusRunPorts,
   type MatrixCorpusRunResult,
   type MatrixCorpusStoppedScenarioReconciliationResult,
+  type MatrixCorpusTurnExecutionResult,
   type MatrixCorpusTurnObservation,
 } from './runMatrixCorpus.js';
 import type { CanonicalMatrixCorpus, CanonicalMatrixCorpusScenario } from './types.js';
@@ -852,6 +853,68 @@ export async function issueMatrixCorpusCapabilityWithReconciliation(
     : first;
 }
 
+export function evaluateMatrixCorpusTurnPrecondition(
+  input: Readonly<{
+    expectedSessionId: string | null;
+    confirmationTurn: boolean;
+    turnIndex: number;
+    status: Pick<
+      Extract<MatrixCorpusScenarioStatusResult, { kind: 'status' }>,
+      'sessionId' | 'pendingConfirmationId'
+    > | null;
+  }>
+):
+  | Readonly<{ kind: 'ready' }>
+  | (Extract<MatrixCorpusTurnExecutionResult, { kind: 'scenario_behavioral_failure' }> &
+      Readonly<{ deterministicCheck: SafeDeterministicCheckV1 }>)
+  | Readonly<{
+      ok: false;
+      kind: 'infrastructure_failure' | 'safety_failure';
+      code: string;
+      boundSessionId?: string;
+    }> {
+  if (input.expectedSessionId === null) return { kind: 'ready' };
+  if (input.status === null)
+    return {
+      ok: false,
+      kind: 'infrastructure_failure',
+      code: 'scenario_status_unavailable',
+    };
+  if (input.status.sessionId !== input.expectedSessionId)
+    return {
+      ok: false,
+      kind: 'safety_failure',
+      code: 'scenario_status_mismatch',
+      boundSessionId: input.status.sessionId,
+    };
+  if (input.confirmationTurn && input.status.pendingConfirmationId === null)
+    return {
+      ok: false,
+      kind: 'scenario_behavioral_failure',
+      code: 'required_confirmation_missing',
+      boundSessionId: input.status.sessionId,
+      deterministicCheck: {
+        code: 'confirmation_count',
+        status: 'failed',
+        turnIndex: input.turnIndex,
+        replyIndex: null,
+        evidence: {
+          expectedToolName: null,
+          actualToolName: null,
+          expectedTurnIndex: null,
+          actualTurnIndex: null,
+          expectedCount: 1,
+          actualCount: 0,
+          expectedTransition: null,
+          actualTransition: null,
+          expectedFacts: [],
+          actualFacts: [],
+        },
+      },
+    };
+  return { kind: 'ready' };
+}
+
 type MatrixCorpusPortReturn<TKey extends keyof MatrixCorpusRunPorts> = ReturnType<
   MatrixCorpusRunPorts[TKey]
 >;
@@ -898,12 +961,20 @@ async function executeLiveTurn(input: {
     input.expectedSessionId === null
       ? null
       : await readScenarioStatus(input.intex, input.state, input.scenario.id, input.leaseFence);
-  if (
-    input.expectedSessionId !== null &&
-    (before?.sessionId !== input.expectedSessionId ||
-      (turn.kind === 'confirmation_button' && before.pendingConfirmationId === null))
-  )
-    return { ok: false, kind: 'safety_failure', code: 'scenario_status_mismatch' };
+  const precondition = evaluateMatrixCorpusTurnPrecondition({
+    expectedSessionId: input.expectedSessionId,
+    confirmationTurn: turn.kind === 'confirmation_button',
+    turnIndex: input.turnIndex,
+    status: before,
+  });
+  if (precondition.kind !== 'ready') {
+    if (precondition.kind === 'scenario_behavioral_failure') {
+      state.deterministicChecks.push(precondition.deterministicCheck);
+      state.deterministicPassed = false;
+      state.failureCodes.push(precondition.code);
+    }
+    return precondition;
+  }
 
   const visible = visibleTurn(entry, turn, input.turnIndex);
   const capability = `imc1_${randomBytes(32).toString('base64url')}`;
@@ -1032,6 +1103,9 @@ async function executeLiveTurn(input: {
     };
 
   const evidenceCapture: { value: MatrixCorpusEvidenceResult | null } = { value: null };
+  const terminalStatusCapture: {
+    value: Extract<MatrixCorpusScenarioStatusResult, { kind: 'status' }> | null;
+  } = { value: null };
   const correlated = await runWithMatrixCorpusDeadline(
     input.replyTimeoutMs,
     async (signal) =>
@@ -1073,6 +1147,7 @@ async function executeLiveTurn(input: {
               (candidate) => candidate.turnIndex === input.turnIndex
             );
             if (terminal === undefined) return { status: 'pending' };
+            terminalStatusCapture.value = current;
             return terminal.status === 'completed'
               ? {
                   status: 'completed',
@@ -1084,7 +1159,7 @@ async function executeLiveTurn(input: {
         },
       })
   );
-  if (!correlated.ok || evidenceCapture.value === null)
+  if (!correlated.ok || evidenceCapture.value === null || terminalStatusCapture.value === null)
     return {
       ok: false,
       kind: 'infrastructure_failure',
@@ -1161,6 +1236,15 @@ async function executeLiveTurn(input: {
     actualSupersededCount: evidence.sessionProof.supersededSessionCount,
   });
   const sessionTransitionPassed = actualTransition === expectedTransition;
+  const expectedPendingConfirmationCount = expectation.timeline.requiredEventTypes.includes(
+    'confirmation_requested'
+  )
+    ? 1
+    : 0;
+  const actualPendingConfirmationCount =
+    terminalStatusCapture.value.pendingConfirmationId === null ? 0 : 1;
+  const confirmationStatePassed =
+    expectedPendingConfirmationCount === actualPendingConfirmationCount;
   const idleAgentUsagePassed =
     !expectedIdleSession ||
     (safeAgentUsage.length === 0 &&
@@ -1173,7 +1257,8 @@ async function executeLiveTurn(input: {
     replyFormatViolationCount === 0 &&
     idleSessionProofPassed &&
     idleAgentUsagePassed &&
-    sessionTransitionPassed;
+    sessionTransitionPassed &&
+    confirmationStatePassed;
   const technicalFacts = buildTechnicalFacts(
     input.scenario,
     input.turnIndex,
@@ -1250,6 +1335,8 @@ async function executeLiveTurn(input: {
       actualUserMessageCount: evidence.sessionProof.userMessageCount,
       expectedAgentUsageCount: expectedIdleSession ? 0 : null,
       actualAgentUsageCount: safeAgentUsage.length,
+      expectedPendingConfirmationCount,
+      actualPendingConfirmationCount,
       toolEvidence,
     })
   );
@@ -1689,7 +1776,7 @@ function buildReport(
         productionExecutorResolutions: 0 as const,
         productionExecutorAdmissions: 0 as const,
       },
-      failureCodes: execution.failureCodes,
+      failureCodes: execution.failureCodes.map(safeFailureCode),
     };
   });
   const allAgentUsage = [...state.scenarios.values()].flatMap((scenario) => scenario.agentUsage);
@@ -2139,6 +2226,8 @@ export function buildMatrixCorpusTurnChecks(
     actualUserMessageCount: number;
     expectedAgentUsageCount: number | null;
     actualAgentUsageCount: number;
+    expectedPendingConfirmationCount: number;
+    actualPendingConfirmationCount: number;
     toolEvidence: readonly SafeToolEvidenceV1[];
   }>
 ): SafeDeterministicCheckV1[] {
@@ -2178,6 +2267,15 @@ export function buildMatrixCorpusTurnChecks(
       evidence({
         expectedCount: 0,
         actualCount: input.actualReplyFormatViolationCount,
+      })
+    ),
+    check(
+      'confirmation_count',
+      input.expectedPendingConfirmationCount === input.actualPendingConfirmationCount,
+      input.turnIndex,
+      evidence({
+        expectedCount: input.expectedPendingConfirmationCount,
+        actualCount: input.actualPendingConfirmationCount,
       })
     ),
   ];
