@@ -174,6 +174,12 @@ const CALENDAR_UNTIL_CLOCK_PATTERN =
   /(?<![\p{L}\p{N}])until\s+(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
 const CALENDAR_CLOCK_RANGE_PATTERN =
   /(?<![\p{L}\p{N}])(?:from\s+)?(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)\s*(?:-|–|to)\s*(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
+const CALENDAR_NEGATED_CLOCK_PATTERN =
+  /(?:\b(?:do\s+not|don['’]?t)\s+(?:use|schedule|book|set)\s+(?:at\s+)?(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)|\b(?:any\s+time\s+)?(?:except|other\s+than)\s+(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)|\bnot\s+at\s+(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)|\bnie\s+(?:używaj|uzywaj|ustawiaj|planuj)\s+(?:o\s+|na\s+)?(?:południe|poludnie|północ|polnoc|\d{1,2}(?::\d{2})?)|\b(?:dowolna\s+godzina|dowolnej\s+porze)\s+poza\s+(?:południem|poludniem|północą|polnoca|\d{1,2}(?::\d{2})?))(?![\p{L}\p{N}])/iu;
+const CALENDAR_NEGATED_DURATION_PATTERN =
+  /(?:\b(?:but\s+)?not\s+for\s+(?:\d+|an?|one|two|three|half\s+an?)\s+(?:hours?|minutes?)|\b(?:ale\s+)?nie\s+na\s+(?:\d+\s+)?(?:godzin(?:ę|y|a)|minut(?:ę|y)?))(?![\p{L}\p{N}])/iu;
+const CALENDAR_PRIOR_TIME_WITHDRAWAL_PATTERN =
+  /(?:\b(?:that|this|the)\s+time\s+(?:(?:no\s+longer|does(?:\s+not|n['’]?t)|will\s+not|won['’]?t)\s+(?:work|fit|suit)|is\s+no\s+longer\s+(?:valid|available))|\b(?:ta|ten)\s+(?:godzina|czas)\s+(?:już|juz)\s+(?:nie\s+)?(?:pasuje|działa|dziala)\b)/iu;
 const EXPLICIT_IANA_TIME_ZONE_CANDIDATE_PATTERN =
   /(?<![\p{L}\p{N}_])([a-z](?:[a-z0-9._+-]*[a-z0-9_+-])?(?:\/[a-z](?:[a-z0-9._+-]*[a-z0-9_+-])?)+)(?![\p{L}\p{N}_])/giu;
 const EXPLICIT_STANDALONE_TIME_ZONE_CANDIDATE_PATTERN =
@@ -812,12 +818,11 @@ function hasCalendarSignal(
   activeClarificationIndex: number,
   containsSignal: (message: string) => boolean
 ): boolean {
+  if (containsCalendarTimeWithdrawalSignal(context.message)) return false;
   if (containsSignal(context.message)) return true;
-  if (
-    context.replyContext?.source === 'inbound_user_message' &&
-    containsSignal(context.replyContext.text)
-  ) {
-    return true;
+  if (context.replyContext?.source === 'inbound_user_message') {
+    if (containsCalendarTimeWithdrawalSignal(context.replyContext.text)) return false;
+    if (containsSignal(context.replyContext.text)) return true;
   }
   return activeCalendarClarificationChainContainsSignal(
     context.events,
@@ -835,20 +840,23 @@ function activeCalendarClarificationChainContainsSignal(
 
   for (let index = latestClarificationIndex - 1; index >= 0; index -= 1) {
     const event = events[index];
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires a fallback despite the bounded array index @preserve */
     if (event === undefined) continue;
+    /* v8 ignore stop @preserve */
 
     if (expectsUserMessage) {
       if (event.type === 'clarification_requested') return false;
       if (event.type !== 'user_message') continue;
 
       const priorMessage = event.payload['text'];
-      if (typeof priorMessage === 'string' && containsSignal(priorMessage)) return true;
+      if (typeof priorMessage === 'string') {
+        if (containsCalendarTimeWithdrawalSignal(priorMessage)) return false;
+        if (containsSignal(priorMessage)) return true;
+      }
       const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
-      if (
-        priorReplyContext?.source === 'inbound_user_message' &&
-        containsSignal(priorReplyContext.text)
-      ) {
-        return true;
+      if (priorReplyContext?.source === 'inbound_user_message') {
+        if (containsCalendarTimeWithdrawalSignal(priorReplyContext.text)) return false;
+        if (containsSignal(priorReplyContext.text)) return true;
       }
       expectsUserMessage = false;
       continue;
@@ -1093,6 +1101,15 @@ function containsExplicitCalendarSummarySignal(message: string): boolean {
       'coś',
       'cos',
     ]).has(summary)
+  );
+}
+
+function containsCalendarTimeWithdrawalSignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
+  return (
+    CALENDAR_NEGATED_CLOCK_PATTERN.test(normalized) ||
+    CALENDAR_NEGATED_DURATION_PATTERN.test(normalized) ||
+    CALENDAR_PRIOR_TIME_WITHDRAWAL_PATTERN.test(normalized)
   );
 }
 
@@ -2180,7 +2197,9 @@ function resolveCurrentPreferenceVersion(userPreferences: string | null | undefi
 function isMatrixPromptContextEnvelope(
   value: unknown
 ): value is Readonly<{ version: 1; userPreferences: string | null }> {
+  /* v8 ignore start -- upstream: the leading object-token guard before JSON.parse guarantees a non-null, non-array object @preserve */
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  /* v8 ignore stop @preserve */
   const keys = Object.keys(value);
   if (
     keys.length !== 2 ||

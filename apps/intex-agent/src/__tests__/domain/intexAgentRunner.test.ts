@@ -1074,6 +1074,865 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
+  it('uses an inbound reply context to complete repeated calendar fields', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-28T15:00:00+02:00',
+          end: '2026-07-28T16:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat every calendar field.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta.' }),
+          event('clarification_requested', {
+            message: 'Which date and time should I use?',
+            missingFields: ['date', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which date and time should I use?' }),
+        ],
+        message: 'Next Tuesday.',
+        replyContext: {
+          replyToWamid: 'wamid-calendar-clock',
+          source: 'inbound_user_message',
+          text: 'At 3 PM for one hour.',
+          truncated: false,
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it('uses a prior inbound reply clock signal from the active calendar chain', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-28T15:00:00+02:00',
+          end: '2026-07-28T16:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat every calendar field.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Add lunch with Marta.',
+            replyContext: {
+              replyToWamid: 'wamid-prior-calendar-clock',
+              source: 'inbound_user_message',
+              text: 'At 3 PM for one hour.',
+              truncated: false,
+            },
+          }),
+          event('clarification_requested', {
+            message: 'Which date should I use?',
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it('uses a prior direct clock signal across an intervening assistant event', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-28T15:00:00+02:00',
+          end: '2026-07-28T16:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat every calendar field.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta at 3 PM for one hour.' }),
+          event('assistant_message', { text: 'Let me clarify the date.' }),
+          event('clarification_requested', {
+            message: 'Which date should I use?',
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it('walks the complete alternating calendar clarification chain for older clock signals', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-28T15:00:00+02:00',
+          end: '2026-07-28T16:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat every calendar field.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
+          event('clarification_requested', {
+            message: 'How long should it last?',
+            missingFields: ['end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'How long should it last?' }),
+          event('user_message', { text: 'For one hour.' }),
+          event('clarification_requested', {
+            message: 'Which date should I use?',
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it.each([
+    {
+      label: 'two clarification requests are adjacent',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
+        event('clarification_requested', {
+          message: 'How long should it last?',
+          missingFields: ['end'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('clarification_requested', {
+          message: 'Which date should I use?',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+    {
+      label: 'two user messages are adjacent',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
+        event('user_message', { text: 'No other detail.' }),
+        event('clarification_requested', {
+          message: 'Which date should I use?',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+    {
+      label: 'an earlier clarification belongs to a different tool',
+      events: [
+        event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
+        event('clarification_requested', {
+          message: 'What should the note contain?',
+          missingFields: ['content'],
+          candidateIntents: ['create_note'],
+        }),
+        event('assistant_message', { text: 'What should the note contain?' }),
+        event('user_message', { text: 'No other detail.' }),
+        event('clarification_requested', {
+          message: 'Which date should I use?',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+      ],
+    },
+  ])('stops calendar-chain completion when $label', async ({ events }) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat the calendar summary and start time.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events,
+        message: 'Next Tuesday.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Repeat the calendar summary and start time.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    'Next Tuesday at 3 PM for one hour.',
+    'Next Tuesday at 3 na godzinę.',
+    'Next Tuesday at 3 na 2 godziny.',
+    'Next Tuesday at 3 PM until 4 PM.',
+    'Next Tuesday from 3 PM-4 PM.',
+  ])('accepts a validated calendar clock and end signal: %s', async (message) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-28T15:00:00+02:00',
+          end: '2026-07-28T16:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat every calendar field.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta.' }),
+          event('clarification_requested', {
+            message: 'Which date and time should I use?',
+            missingFields: ['date', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it.each([
+    'Next Tuesday at 24 for one hour.',
+    'Next Tuesday at 0 PM for one hour.',
+    'Next Tuesday at 13 PM for one hour.',
+  ])('rejects an invalid calendar clock: %s', async (message) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a valid start time.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'start'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta.' }),
+          event('clarification_requested', {
+            message: 'Which date and time should I use?',
+            missingFields: ['date', 'start'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a valid start time.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    'Next Tuesday. Do not use 3 PM.',
+    'Next Tuesday. Any time except 3 PM.',
+    'Next Tuesday. Not at 3 for one hour.',
+    'Next Tuesday. Nie używaj 15:00.',
+    'Next Tuesday. Dowolna godzina poza 15:00.',
+  ])('does not treat a negated calendar clock as a supplied start: %s', async (message) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a replacement start time.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta.' }),
+          event('clarification_requested', {
+            message: 'Which date and time should I use?',
+            missingFields: ['date', 'start'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a replacement start time.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each([
+    'Next Tuesday at 3 PM, but not for one hour.',
+    'Next Tuesday at 15:00, ale nie na godzinę.',
+  ])('does not treat a negated calendar duration as a supplied end: %s', async (message) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a replacement end time or duration.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['end', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta.' }),
+          event('clarification_requested', {
+            message: 'Which date, time, and duration should I use?',
+            missingFields: ['date', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a replacement end time or duration.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('does not accept a negated duration from the inbound reply context', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a replacement end time or duration.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['end', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta.' }),
+          event('clarification_requested', {
+            message: 'Which date, time, and duration should I use?',
+            missingFields: ['date', 'start', 'end'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday at 3 PM.',
+        replyContext: {
+          replyToWamid: 'wamid-negated-calendar-duration',
+          source: 'inbound_user_message',
+          text: 'Not for one hour.',
+          truncated: false,
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a replacement end time or duration.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it.each(['Not for one hour.', 'Nie na godzinę.'])(
+    'does not restore an older duration after the user says: %s',
+    async (withdrawalMessage) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification',
+              question: 'Provide a replacement end time or duration.',
+              blockerReason: 'missing_required_details',
+              missingFields: ['end', 'summary'],
+              candidateIntents: ['create_calendar_event'],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: 'Add lunch with Marta at 3 PM for one hour.',
+            }),
+            event('clarification_requested', {
+              message: 'Which date should I use?',
+              missingFields: ['date'],
+              candidateIntents: ['create_calendar_event'],
+            }),
+            event('assistant_message', { text: 'Which date should I use?' }),
+            event('user_message', { text: withdrawalMessage }),
+            event('clarification_requested', {
+              message: 'Which date and replacement duration should I use?',
+              missingFields: ['date', 'end'],
+              candidateIntents: ['create_calendar_event'],
+            }),
+          ],
+          message: 'Next Tuesday at 3 PM.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        reply: 'Provide a replacement end time or duration.',
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it.each(['That time no longer works.', 'Ta godzina już nie pasuje.'])(
+    'does not restore an older clock after the user says: %s',
+    async (withdrawalMessage) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a replacement start time.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
+          event('clarification_requested', {
+            message: 'Which date should I use?',
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which date should I use?' }),
+          event('user_message', { text: withdrawalMessage }),
+          event('clarification_requested', {
+            message: 'Which date and replacement time should I use?',
+            missingFields: ['date', 'start'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a replacement start time.',
+    });
+    expect(client.calls).toEqual([]);
+    }
+  );
+
+  it('does not accept a negated clock from the inbound reply context', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a replacement start time.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta at 4 PM.' }),
+          event('clarification_requested', {
+            message: 'Which date should I use?',
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        replyContext: {
+          replyToWamid: 'wamid-negated-calendar-clock',
+          source: 'inbound_user_message',
+          text: 'Do not use 3 PM.',
+          truncated: false,
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a replacement start time.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('falls back to the active chain when the inbound reply context has no clock decision', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Lunch with Marta',
+          start: '2026-07-28T16:00:00+02:00',
+          end: '2026-07-28T17:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Repeat every calendar field.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', { text: 'Add lunch with Marta at 4 PM.' }),
+          event('clarification_requested', {
+            message: 'Which date should I use?',
+            missingFields: ['date'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        replyContext: {
+          replyToWamid: 'wamid-neutral-calendar-context',
+          source: 'inbound_user_message',
+          text: 'Use the original schedule.',
+          truncated: false,
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
+  });
+
+  it.each([
+    {
+      label: 'the prior user-message text is not a string',
+      payload: { text: 123 },
+    },
+    {
+      label: 'the prior inbound reply withdraws its clock',
+      payload: {
+        text: 'Add lunch with Marta.',
+        replyContext: {
+          replyToWamid: 'wamid-prior-negated-clock',
+          source: 'inbound_user_message',
+          text: 'Do not use 3 PM.',
+          truncated: false,
+        },
+      },
+    },
+    {
+      label: 'the prior inbound reply has no clock decision',
+      payload: {
+        text: 'Add lunch with Marta.',
+        replyContext: {
+          replyToWamid: 'wamid-prior-neutral-clock',
+          source: 'inbound_user_message',
+          text: 'No replacement selected.',
+          truncated: false,
+        },
+      },
+    },
+  ])('keeps clarification when $label', async ({ payload }) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Provide a replacement start time.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'summary'],
+            candidateIntents: ['create_calendar_event'],
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('user_message', payload),
+          event('clarification_requested', {
+            message: 'Which date and time should I use?',
+            missingFields: ['date', 'start'],
+            candidateIntents: ['create_calendar_event'],
+          }),
+        ],
+        message: 'Next Tuesday.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      reply: 'Provide a replacement start time.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
   it('keeps calendar-summary clarification when the active chain has no actual title', async () => {
     const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({
@@ -3610,6 +4469,15 @@ describe('createIntexAgentRunner', () => {
     {
       label: 'the Matrix envelope is malformed JSON',
       userPreferences: '{"version":1,"userPreferences":null',
+    },
+    {
+      label: 'the rendered preference block has no version metadata',
+      userPreferences: 'Keep replies concise.',
+    },
+    {
+      label: 'the rendered preference version is outside the safe integer range',
+      userPreferences:
+        'User Preferences v99999999999999999999999:\nUse expectedVersion 99999999999999999999999 for preference mutation tools.',
     },
   ])('does not guess a preference version when $label', async ({ userPreferences }) => {
     const client = new ToolExecutingFakeToolCallingClient(
