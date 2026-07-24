@@ -416,13 +416,21 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
                 ? { matrixCorpusLlm: config.matrixCorpusLlm }
                 : {}),
             });
-      const normalizedIntent = applyOptionalNoteFieldClarification(
-        applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
-          timeZone: input.timeZone,
-          message: input.message,
-          events: input.events,
-          replyContext: input.replyContext,
-        })
+      const normalizedIntent = applyOptionalPreferenceReadFieldClarification(
+        applyOptionalCodeTaskFieldClarification(
+          applyAvailableCalendarSummaryContext(
+            applyOptionalNoteFieldClarification(
+              applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
+                timeZone: input.timeZone,
+                message: input.message,
+                events: input.events,
+                replyContext: input.replyContext,
+              })
+            ),
+            input.events
+          )
+        ),
+        input.message
       );
       const queryNormalizedIntent = applyDerivedCalendarQueryContext(normalizedIntent, {
         message: input.message,
@@ -658,6 +666,142 @@ function applyOptionalNoteFieldClarification(
   };
 }
 
+function applyAvailableCalendarSummaryContext(
+  intent: IntexAgentIntentClassification,
+  events: readonly IntexAgentSessionEvent[]
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'create_calendar_event' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length === 0 ||
+    !intent.missingFields.every(isCalendarSummaryField)
+  ) {
+    return intent;
+  }
+
+  const activeClarification = findActiveClarificationEvent(events);
+  const previouslyMissingFields = activeClarification?.event.payload['missingFields'];
+  if (
+    activeClarification === undefined ||
+    !isCalendarClarification(activeClarification.event) ||
+    !Array.isArray(previouslyMissingFields) ||
+    previouslyMissingFields.length === 0 ||
+    previouslyMissingFields.some(
+      (field) => typeof field !== 'string' || isCalendarSummaryField(field)
+    ) ||
+    !activeCalendarClarificationChainContainsSummary(events, activeClarification.index)
+  ) {
+    return intent;
+  }
+
+  return clarificationToToolIntent(intent, 'create_calendar_event');
+}
+
+function applyOptionalCodeTaskFieldClarification(
+  intent: IntexAgentIntentClassification
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'create_code_task' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length === 0 ||
+    !intent.missingFields.every(isOptionalCodeTaskField)
+  ) {
+    return intent;
+  }
+
+  return clarificationToToolIntent(intent, 'create_code_task');
+}
+
+function applyOptionalPreferenceReadFieldClarification(
+  intent: IntexAgentIntentClassification,
+  message: string
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'get_user_preferences' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length === 0 ||
+    !intent.missingFields.every(isOptionalPreferenceReadField) ||
+    !isExplicitUnscopedPreferenceRead(message)
+  ) {
+    return intent;
+  }
+
+  return clarificationToToolIntent(intent, 'get_user_preferences');
+}
+
+function clarificationToToolIntent(
+  intent: Extract<IntexAgentIntentClassification, { kind: 'needs_clarification' }>,
+  toolName: IntexAgentToolName
+): IntexAgentIntentClassification {
+  return {
+    kind: 'tool',
+    allowedToolNames: [toolName],
+    ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
+    ...(intent.stylePreferenceAction !== undefined
+      ? { stylePreferenceAction: intent.stylePreferenceAction }
+      : {}),
+    ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
+    ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
+function findActiveClarificationEvent(
+  events: readonly IntexAgentSessionEvent[]
+): Readonly<{ event: IntexAgentSessionEvent; index: number }> | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index] as IntexAgentSessionEvent;
+    if (event.type === 'user_message') return undefined;
+    if (event.type === 'clarification_requested') return { event, index };
+  }
+  return undefined;
+}
+
+function activeCalendarClarificationChainContainsSummary(
+  events: readonly IntexAgentSessionEvent[],
+  latestClarificationIndex: number
+): boolean {
+  let expectsUserMessage = true;
+
+  for (let index = latestClarificationIndex - 1; index >= 0; index -= 1) {
+    const event = events[index] as IntexAgentSessionEvent;
+
+    if (expectsUserMessage) {
+      if (event.type === 'clarification_requested') return false;
+      if (event.type !== 'user_message') continue;
+
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string' && containsExplicitCalendarSummarySignal(priorMessage)) {
+        return true;
+      }
+      const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
+      if (
+        priorReplyContext?.source === 'inbound_user_message' &&
+        containsExplicitCalendarSummarySignal(priorReplyContext.text)
+      ) {
+        return true;
+      }
+      expectsUserMessage = false;
+      continue;
+    }
+
+    if (event.type === 'user_message') return false;
+    if (event.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) return false;
+    expectsUserMessage = true;
+  }
+
+  return false;
+}
+
 function applyDerivedCalendarQueryContext(
   intent: IntexAgentIntentClassification,
   context: Readonly<{
@@ -729,6 +873,72 @@ function applyMissingCalendarDateClarification(
 function isOptionalNoteField(field: string): boolean {
   const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
   return canonical === 'title' || canonical === 'tags' || canonical === 'sourcemessageids';
+}
+
+function isCalendarSummaryField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return canonical === 'summary' || canonical === 'title' || canonical === 'eventtitle';
+}
+
+function isOptionalCodeTaskField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return canonical === 'title' || canonical === 'name' || canonical === 'tasktitle';
+}
+
+function isOptionalPreferenceReadField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return (
+    canonical === 'preferencekeyortarget' ||
+    canonical === 'preferencekey' ||
+    canonical === 'key' ||
+    canonical === 'target' ||
+    canonical === 'scope' ||
+    canonical === 'preferencescope'
+  );
+}
+
+function containsExplicitCalendarSummarySignal(message: string): boolean {
+  const match =
+    /\b(?:put|add|place|schedule)\s+(.+?)\s+(?:on|in|to)\s+(?:(?:my|the)\s+)?calendar\b/iu.exec(
+      message.normalize('NFKC')
+    );
+  if (match === null) return false;
+
+  const summary = match[1]?.trim().toLocaleLowerCase('en-US').replace(/\s+/gu, ' ');
+  return (
+    summary !== undefined &&
+    summary.length > 0 &&
+    !new Set([
+      'it',
+      'this',
+      'that',
+      'something',
+      'event',
+      'an event',
+      'calendar event',
+      'a calendar event',
+      'meeting',
+      'a meeting',
+      'appointment',
+      'an appointment',
+    ]).has(summary)
+  );
+}
+
+function isExplicitUnscopedPreferenceRead(message: string): boolean {
+  const withoutTrailingOpaqueQualifier = message.replace(
+    /\s+\bfor\s+[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+(?=[.!?]?\s*$)/u,
+    ''
+  );
+  const normalized = withoutTrailingOpaqueQualifier
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .replace(/[.!?,:;]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return /^(?:new session\s+)?(?:show|list|display|read)\s+(?:me\s+)?(?:all\s+(?:of\s+)?)?my\s+(?:saved\s+)?intex agent preferences$/u.test(
+    normalized
+  );
 }
 
 function isDerivedCalendarQueryField(field: string): boolean {

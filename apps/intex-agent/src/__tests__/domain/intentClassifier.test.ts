@@ -545,6 +545,25 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls).toHaveLength(0);
   });
 
+  it('short-circuits the exact scenario-007 fact-memory request to note creation', async () => {
+    const client = new FakeStructuredClient([]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message:
+          'new session: Keep this for later: INTEX-EVAL-007 passport expires in November 2029 INTEX-EVAL-007-F01.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_note'],
+    });
+    expect(client.calls).toHaveLength(0);
+  });
+
   it('formats classifier context from current reply context and historical events', async () => {
     const client = new FakeStructuredClient([
       ok(

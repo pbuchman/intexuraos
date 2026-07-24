@@ -37,6 +37,7 @@ describe('classifyIntexAgentIntent', () => {
     'Pamiętaj, że lubię mleko owsiane.',
     'Pamiętaj, że wolę miejsce przy przejściu.',
     'Keep this for later: my passport expires in November 2029.',
+    'new session: Keep this for later: INTEX-EVAL-007 passport expires in November 2029 INTEX-EVAL-007-F01.',
   ])('routes an explicit English fact-memory request to note creation: %s', (text) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
       kind: 'tool',
