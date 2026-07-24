@@ -2285,6 +2285,86 @@ describe('createIntexAgentRunner', () => {
     expect(getUserPreferencesCalls).toBe(1);
   });
 
+  it('finishes an empty preference read from the tool result without another model iteration', async () => {
+    let getUserPreferencesCalls = 0;
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok({
+          content: '',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['get_user_preferences']),
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () => {
+          getUserPreferencesCalls += 1;
+          return JSON.stringify({ status: 'completed', currentVersion: 0, promptBlock: '' });
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Show my saved Intex Agent preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'No Intex Agent preferences are defined yet.',
+      toolName: 'get_user_preferences',
+      toolResult: { status: 'completed', currentVersion: 0, promptBlock: '' },
+    });
+    expect(getUserPreferencesCalls).toBe(1);
+    expect(
+      client.calls[0]?.tools.find((tool) => tool.name === 'get_user_preferences')?.stopAfterRun
+    ).toBe(true);
+  });
+
+  it('keeps an empty terminal response fail-closed when the preference read fails', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok({
+          content: '',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['get_user_preferences']),
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: () => {
+          throw new Error('Preference backend unavailable');
+        },
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Show my saved Intex Agent preferences.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'tool_failed',
+      toolName: 'get_user_preferences',
+      error: 'Preference backend unavailable',
+    });
+    expect(result.reply.trim()).not.toBe('');
+  });
+
   it('keeps malformed runner output fail-closed when mutating preview arguments fail validation', async () => {
     let addUserPreferenceCalls = 0;
     const client = new ToolExecutingFakeToolCallingClient(
@@ -5844,7 +5924,7 @@ describe('createIntexAgentRunner', () => {
       category: 'behavioral_failure',
       code: 'FORBIDDEN_TOOL_SELECTED',
       toolSelection: { turnIndex: 4, ordinal: 1 },
-      reply: '',
+      reply: "I couldn't complete that request because the selected action is not allowed.",
     });
     expect(executorCalls).toBe(0);
     expect(repairClient.calls).toHaveLength(0);
