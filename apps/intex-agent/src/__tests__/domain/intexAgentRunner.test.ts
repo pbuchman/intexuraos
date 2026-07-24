@@ -1,4 +1,5 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
+import { sanitizeIntexAgentReplyText } from '@intexuraos/http-contracts';
 import type {
   LLMError,
   ToolCallingClient,
@@ -12,7 +13,10 @@ import {
   INTEX_AGENT_RUNNER_PROMPT_TYPE,
   INTEX_AGENT_SYSTEM_PROMPT,
 } from '../../domain/agent/systemPrompt.js';
-import type { IntexAgentIntentClassifier } from '../../domain/agent/intentClassifier.js';
+import type {
+  IntexAgentIntentClassification,
+  IntexAgentIntentClassifier,
+} from '../../domain/agent/intentClassifier.js';
 import type {
   IntexAgentSession,
   IntexAgentSessionEvent,
@@ -259,6 +263,143 @@ describe('createIntexAgentRunner', () => {
     expect(createNoteCalls).toBe(0);
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
   });
+
+  it('does not clarify for an optional note title when the note content is already known', async () => {
+    const content = 'Passport expires in November 2029.';
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args: { content } },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'Please provide a title or confirm.',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['title'],
+            candidateIntents: ['create_note' as const],
+            suggestedNextStep: 'Ask for a title.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: `Keep this for later: ${content}`,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: `Add this note?\nContent: ${content}`,
+      toolName: 'create_note',
+      toolArgs: { content },
+    });
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
+  });
+
+  it('preserves classifier metadata when only optional note fields are missing', async () => {
+    const content = 'Passport expires in November 2029.';
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'create_note', args: { content } },
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'Please provide optional note metadata.',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['tags', 'sourceMessageIds'],
+            candidateIntents: ['create_note' as const],
+            suggestedNextStep: 'Ask for optional metadata.',
+            reason: 'The note content is complete.',
+            stylePreferenceAction: 'none' as const,
+            languageOverride: 'en',
+            decisionEvidence: 'Keep this passport-expiry detail for later.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: `Keep this for later: ${content}`,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_note',
+      toolArgs: { content },
+    });
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_note']);
+  });
+
+  it.each([
+    {
+      label: 'a required content field is also missing',
+      blockerReason: 'missing_required_details',
+      missingFields: ['title', 'content'],
+      candidateIntents: ['create_note'],
+    },
+    {
+      label: 'more than one candidate intent remains',
+      blockerReason: 'missing_required_details',
+      missingFields: ['title'],
+      candidateIntents: ['create_note', 'create_link'],
+    },
+    {
+      label: 'the blocker is not missing required details',
+      blockerReason: 'not_enough_context',
+      missingFields: ['title'],
+      candidateIntents: ['create_note'],
+    },
+  ] as const)(
+    'keeps note clarification when $label',
+    async ({ blockerReason, missingFields, candidateIntents }) => {
+      const client = new FakeToolCallingClient([]);
+      const classification: IntexAgentIntentClassification = {
+        kind: 'needs_clarification',
+        question: 'Please clarify the note request.',
+        blockerReason,
+        missingFields: [...missingFields],
+        candidateIntents: [...candidateIntents],
+        suggestedNextStep: 'Ask for the missing information.',
+      };
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: { classify: async () => classification },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Keep this for later.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: 'Please clarify the note request.',
+        blockerReason,
+        missingFields: [...missingFields],
+        candidateIntents: [...candidateIntents],
+        suggestedNextStep: 'Ask for the missing information.',
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
 
   it('restores every exact current-message opaque reference in note confirmation arguments', async () => {
     const client = new ToolExecutingFakeToolCallingClient(
@@ -616,6 +757,33 @@ describe('createIntexAgentRunner', () => {
       });
     }
   );
+
+  it('keeps the bookmark confirmation action visible after production reply sanitization', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_link',
+        args: { url: 'https://example.com/private', title: 'Private bookmark title' },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'create_link' }))]
+    );
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Save link https://example.com/private',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(sanitizeIntexAgentReplyText(result.reply)).toBe(
+      [
+        'Save this bookmark?',
+        'Confirm to save it, or cancel to leave it unchanged.',
+        '',
+        'URL: [redacted]',
+        'Title: [redacted]',
+      ].join('\n')
+    );
+  });
 
   it.each([
     {
@@ -3685,6 +3853,17 @@ describe('createIntexAgentRunner', () => {
         'Czy utworzyć szkic researchu?\n\nTytuł: Research topic\nPolecenie: Research this topic.',
     },
     {
+      toolName: 'create_link' as const,
+      message: 'Zapisz ten link jako bookmark.',
+      expectedReply: [
+        'Czy zapisać bookmark?',
+        'Potwierdź, aby go zapisać, albo anuluj, aby niczego nie zmieniać.',
+        '',
+        'URL: https://example.com',
+        'Tytuł: Example',
+      ].join('\n'),
+    },
+    {
       toolName: 'create_code_task' as const,
       message: 'Utwórz zadanie programistyczne execution dla Linear LIN-123.',
       expectedReply: [
@@ -5430,6 +5609,100 @@ describe('createIntexAgentRunner', () => {
     ]);
   });
 
+  it('renders non-empty preference items returned by the isolated Matrix overlay', async () => {
+    const overlayResult = {
+      toolName: 'get_user_preferences',
+      status: 'completed',
+      currentVersion: 2,
+      items: [
+        { id: 'mock_pref_concise', text: 'Use concise replies.' },
+        { id: 'mock_pref_language', text: 'Reply in Polish by default.' },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok({
+          content: '',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['get_user_preferences']),
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () => JSON.stringify(overlayResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Show my saved Intex Agent preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: [
+        'User Preferences v2:',
+        '1. (id: mock_pref_concise) "Use concise replies."',
+        '2. (id: mock_pref_language) "Reply in Polish by default."',
+      ].join('\n'),
+      toolName: 'get_user_preferences',
+      toolResult: overlayResult,
+    });
+  });
+
+  it.each([
+    ['a scalar item', ['invalid']],
+    ['a null item', [null]],
+    ['an array item', [[]]],
+    ['a missing id', [{ text: 'Use concise replies.' }]],
+    ['a missing text', [{ id: 'mock_pref_concise' }]],
+  ])('falls back safely when the Matrix preference overlay contains %s', async (_label, items) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok({
+          content: '',
+          toolCallsMade: 1,
+          iterationCount: 1,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['get_user_preferences']),
+      toolExecutor: fakeToolExecutor({
+        getUserPreferences: async () =>
+          JSON.stringify({
+            toolName: 'get_user_preferences',
+            status: 'completed',
+            currentVersion: 2,
+            items,
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Show my saved Intex Agent preferences.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'No Intex Agent preferences are defined yet.',
+      toolName: 'get_user_preferences',
+    });
+  });
+
   it('returns the completed preference result when the final model envelope says no_action', async () => {
     const promptBlock =
       'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub@gmail.com."';
@@ -6059,7 +6332,13 @@ function expectedConfirmationReplyFor(toolName: PreviewToolName): string {
     return 'Create this research draft?\n\nTitle: Research topic\nPrompt: Research this topic.';
   }
   if (toolName === 'create_link') {
-    return 'Save this bookmark?\n\nURL: https://example.com\nTitle: Example';
+    return [
+      'Save this bookmark?',
+      'Confirm to save it, or cancel to leave it unchanged.',
+      '',
+      'URL: https://example.com',
+      'Title: Example',
+    ].join('\n');
   }
   if (toolName === 'create_code_task') {
     return [

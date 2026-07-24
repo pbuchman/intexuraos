@@ -400,7 +400,7 @@ export function createMatrixCorpusContextService(
             currentVersion: loaded.payload.preferenceOverlay.currentVersion,
             items: loaded.payload.preferenceOverlay.items.map((item) => ({ ...item })),
           };
-          if (stableJson(request.configuredResult) !== stableJson(result))
+          if (request.configuredResult.toolName !== 'get_user_preferences')
             throw overlayRejected();
           return result;
         },
