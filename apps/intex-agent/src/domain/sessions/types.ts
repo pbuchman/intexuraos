@@ -65,8 +65,8 @@ export interface IntexAgentMatrixCorpusProfileV1 {
   scenarioNumber: number;
   scenarioLabel: string;
   executionMode: 'strict_mock_tools';
-  agentModel: 'or:deepseek/deepseek-v4-flash';
-  evaluatorModel: 'or:minimax/minimax-m3';
+  agentModel: MatrixCorpusAgentModel;
+  evaluatorModel: MatrixCorpusEvaluatorModel;
   promptPreferencesVersion: number;
   promptPreferencesDigest: string;
   userTimeZone: string;
@@ -104,6 +104,8 @@ export interface IntexAgentSessionEvent {
   eventSequence?: number;
 }
 import type {
+  MatrixCorpusAgentModel,
+  MatrixCorpusEvaluatorModel,
   MatrixCorpusExpectedToolScheduleV1,
   StrictToolMockProfileV1,
 } from '@intexuraos/http-contracts';

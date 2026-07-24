@@ -219,6 +219,21 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
   };
 }
 
+describe('Matrix corpus report agent model', () => {
+  it('accepts MiniMax M3 independently for both agent and evaluator roles', () => {
+    const parsed = MatrixCorpusReportV1Schema.parse({
+      ...report('ready'),
+      agentModel: 'or:minimax/minimax-m3',
+    });
+
+    expect(parsed.agentModel).toBe('or:minimax/minimax-m3');
+    expect(parsed.evaluatorModel).toBe('or:minimax/minimax-m3');
+    const markdown = renderMatrixCorpusReportMarkdown(parsed);
+    expect(markdown).toContain('- Agent: or:minimax/minimax-m3');
+    expect(markdown).toContain('- Evaluator: or:minimax/minimax-m3');
+  });
+});
+
 function artifactHarness(): {
   order: string[];
   files: MatrixCorpusArtifactPort;

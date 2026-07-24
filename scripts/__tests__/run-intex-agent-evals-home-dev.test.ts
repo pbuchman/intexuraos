@@ -697,6 +697,13 @@ describe('run-intex-agent-evals-home-dev wrapper', () => {
       tty: '-T',
       payload: matrixCorpusPayload(0),
     },
+    {
+      selector: 'private production MiniMax M3 matrix-corpus transport',
+      arguments_: ['__production-matrix-corpus', '--agent-model=or:minimax/minimax-m3'],
+      cliArguments: ['matrix-corpus', '--agent-model=or:minimax/minimax-m3'],
+      tty: '-T',
+      payload: matrixCorpusPayload(0),
+    },
   ])(
     'accepts the exact $selector selector',
     ({ arguments_, cliArguments, tty, payload }) => {

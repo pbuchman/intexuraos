@@ -5,7 +5,11 @@ import { homedir, hostname, platform } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { intexAgentToolNameV1Schema } from '@intexuraos/http-contracts';
+import {
+  MATRIX_CORPUS_DEFAULT_AGENT_MODEL,
+  intexAgentToolNameV1Schema,
+  type MatrixCorpusAgentModel,
+} from '@intexuraos/http-contracts';
 import {
   createIntexAgentServiceClient,
   createWhatsAppServiceClient,
@@ -646,9 +650,11 @@ export async function inspectHomeDevRuntime(
   }
 }
 
-export function createProductionMatrixCorpusCatalogLoader(): () => Promise<CanonicalMatrixCorpus> {
+export function createProductionMatrixCorpusCatalogLoader(
+  agentModel: MatrixCorpusAgentModel = MATRIX_CORPUS_DEFAULT_AGENT_MODEL
+): () => Promise<CanonicalMatrixCorpus> {
   const directory = new URL('../../scenarios/', import.meta.url);
-  return async () => await loadCanonicalMatrixCorpus(fileURLToPath(directory));
+  return async () => await loadCanonicalMatrixCorpus(fileURLToPath(directory), agentModel);
 }
 
 function hasCapabilityBoundary(env: NodeJS.ProcessEnv): boolean {

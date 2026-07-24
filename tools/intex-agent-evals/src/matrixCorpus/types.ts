@@ -1,11 +1,12 @@
 import type {
+  MatrixCorpusAgentModel,
+  MatrixCorpusEvaluatorModel,
   MatrixCorpusExpectedToolScheduleV1,
   StrictToolMockProfileV1,
 } from '@intexuraos/http-contracts';
 import type { IntexEvalScenario } from '../scenarioSchema.js';
 
-export type MatrixCorpusAgentModel = 'or:deepseek/deepseek-v4-flash';
-export type MatrixCorpusEvaluatorModel = 'or:minimax/minimax-m3';
+export type { MatrixCorpusAgentModel, MatrixCorpusEvaluatorModel };
 
 export interface CanonicalMatrixCorpusScenario {
   readonly scenario: IntexEvalScenario;

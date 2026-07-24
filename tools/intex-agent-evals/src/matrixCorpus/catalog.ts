@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto';
 import {
+  MATRIX_CORPUS_DEFAULT_AGENT_MODEL,
+  MATRIX_CORPUS_EVALUATOR_MODEL,
   canonicalMatrixCorpusStrictToolMockProfileV1,
   matrixCorpusExpectedToolScheduleV1Schema,
   strictToolMockProfileV1Schema,
   type IntexAgentToolNameV1,
+  type MatrixCorpusAgentModel,
   type StrictMockResultV1,
   type StrictToolMockProfileV1,
 } from '@intexuraos/http-contracts';
@@ -11,8 +14,8 @@ import { loadScenarioCatalog } from '../scenarioCatalog.js';
 import type { IntexEvalScenario } from '../scenarioSchema.js';
 import type { CanonicalMatrixCorpus, CanonicalMatrixCorpusScenario } from './types.js';
 
-export const MATRIX_CORPUS_AGENT_MODEL = 'or:deepseek/deepseek-v4-flash' as const;
-export const MATRIX_CORPUS_JUDGE_MODEL = 'or:minimax/minimax-m3' as const;
+export const MATRIX_CORPUS_AGENT_MODEL = MATRIX_CORPUS_DEFAULT_AGENT_MODEL;
+export const MATRIX_CORPUS_JUDGE_MODEL = MATRIX_CORPUS_EVALUATOR_MODEL;
 
 const EXPECTED_IDS = Array.from(
   { length: 20 },
@@ -20,7 +23,8 @@ const EXPECTED_IDS = Array.from(
 );
 
 export async function loadCanonicalMatrixCorpus(
-  scenariosDirectory: string
+  scenariosDirectory: string,
+  agentModel: MatrixCorpusAgentModel = MATRIX_CORPUS_AGENT_MODEL
 ): Promise<CanonicalMatrixCorpus> {
   const scenarios = await loadScenarioCatalog(scenariosDirectory);
   const observedIds = scenarios.map(({ id }) => id);
@@ -39,7 +43,7 @@ export async function loadCanonicalMatrixCorpus(
   const catalogDigest = sha256(
     canonicalize({
       version: 1,
-      agentModel: MATRIX_CORPUS_AGENT_MODEL,
+      agentModel,
       evaluatorModel: MATRIX_CORPUS_JUDGE_MODEL,
       scenarios: entries.map((entry) => ({
         scenarioNumber: entry.scenarioNumber,
@@ -50,7 +54,7 @@ export async function loadCanonicalMatrixCorpus(
   );
 
   return Object.freeze({
-    agentModel: MATRIX_CORPUS_AGENT_MODEL,
+    agentModel,
     evaluatorModel: MATRIX_CORPUS_JUDGE_MODEL,
     scenarioCount: 20,
     turnCount: 59,

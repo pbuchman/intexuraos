@@ -21,6 +21,14 @@ describe('Intex Agent Test Run foundation types', () => {
     expect(isIntexAgentTestRunRecordV1(testRunRecord())).toBe(true);
   });
 
+  it('accepts MiniMax M3 as the immutable agent model', () => {
+    expect(
+      isIntexAgentTestRunRecordV1(
+        testRunRecord({ agentModel: 'or:minimax/minimax-m3' as never })
+      )
+    ).toBe(true);
+  });
+
   it.each([
     ['wrong agent model', { agentModel: 'or:google/gemini-3-flash-preview' }],
     ['wrong evaluator model', { evaluatorModel: 'or:anthropic/claude-sonnet' }],

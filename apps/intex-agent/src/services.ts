@@ -6,6 +6,7 @@ import {
   type OpenRouterCatalogClient,
 } from '@intexuraos/infra-openrouter';
 import { getFirestore } from '@intexuraos/infra-firestore';
+import type { MatrixCorpusAgentModel } from '@intexuraos/http-contracts';
 import {
   createBookmarksAgentServiceClient,
   createCalendarAgentServiceClient,
@@ -20,6 +21,7 @@ import {
 import { createLlmClient, createToolCallingClient } from '@intexuraos/llm-factory';
 import {
   IntexAgentModels,
+  type IntexAgentModel,
   type MatrixCorpusLlmCallContextV1,
   type MatrixCorpusLlmStageV1,
   type ToolCallingClient,
@@ -117,6 +119,17 @@ const RUNTIME_SETTINGS_LOOKUP_TIMEOUT_MS = 2_000;
 export const MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS = 45_000;
 export const MATRIX_CORPUS_MODEL_TURN_BUDGET_MS = 180_000;
 export const MATRIX_CORPUS_MODEL_MAX_ATTEMPTS = 3;
+
+const MATRIX_CORPUS_RUNTIME_MODELS = {
+  'or:deepseek/deepseek-v4-flash': IntexAgentModels.DeepSeekV4Flash,
+  'or:minimax/minimax-m3': IntexAgentModels.MiniMaxM3,
+} as const satisfies Readonly<Record<MatrixCorpusAgentModel, IntexAgentModel>>;
+
+export function resolveMatrixCorpusRuntimeModel(
+  agentModel: MatrixCorpusAgentModel
+): IntexAgentModel {
+  return MATRIX_CORPUS_RUNTIME_MODELS[agentModel];
+}
 
 export interface RuntimeSettingsDeadlineScheduler {
   setTimeout(callback: () => void, delayMs: number): unknown;
@@ -659,10 +672,11 @@ export async function initServices(config: ServiceConfig): Promise<void> {
             webAppUrl: config.webAppUrl,
           });
         }
+        const agentModel = resolveMatrixCorpusRuntimeModel(input.agentModel);
         const runtimeSettings: IntexAgentRuntimeSnapshot = {
           status: 'available',
-          effectiveModel: IntexAgentModels.DeepSeekV4Flash,
-          explicitModel: IntexAgentModels.DeepSeekV4Flash,
+          effectiveModel: agentModel,
+          explicitModel: agentModel,
           source: 'explicit',
           revision: 0,
           timeZone: 'Europe/Warsaw',

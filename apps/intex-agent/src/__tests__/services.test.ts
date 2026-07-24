@@ -12,6 +12,7 @@ import {
   createTestConversationRunnerService,
   createRuntimeBoundModelClients,
   resolveRuntimeSettingsWithDeadline,
+  resolveMatrixCorpusRuntimeModel,
   startCatalogNonBlocking,
   type AgentRunnerFactory,
   type CreateRuntimeBoundModelClientsInput,
@@ -123,6 +124,13 @@ describe('resolveRuntimeSettingsWithDeadline', () => {
 });
 
 describe('Intex Matrix corpus composition gate', () => {
+  it.each([
+    ['or:deepseek/deepseek-v4-flash', IntexAgentModels.DeepSeekV4Flash],
+    ['or:minimax/minimax-m3', IntexAgentModels.MiniMaxM3],
+  ] as const)('binds Matrix corpus selector %s to its runtime model', (selector, model) => {
+    expect(resolveMatrixCorpusRuntimeModel(selector)).toBe(model);
+  });
+
   it('does not construct a key, verifier, or receipt service while disabled', () => {
     const createEnabled = vi.fn(() => ({ enabled: true as const }));
 

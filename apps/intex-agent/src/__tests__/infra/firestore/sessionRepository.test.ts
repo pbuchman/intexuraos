@@ -67,7 +67,13 @@ describe('FirestoreSessionRepository', () => {
       { ...base, matrixCorpusProfile: { ...profile, scenarioLabel: '' } },
       { ...base, matrixCorpusProfile: { ...profile, scenarioLabel: 'x'.repeat(129) } },
       { ...base, matrixCorpusProfile: { ...profile, executionMode: 'real_tools' } },
-      { ...base, matrixCorpusProfile: { ...profile, agentModel: 'or:minimax/minimax-m3' } },
+      {
+        ...base,
+        matrixCorpusProfile: {
+          ...profile,
+          agentModel: 'or:google/gemini-3-flash-preview',
+        },
+      },
       { ...base, matrixCorpusProfile: { ...profile, evaluatorModel: 'or:deepseek/deepseek-v4-flash' } },
       { ...base, matrixCorpusProfile: { ...profile, promptPreferencesVersion: 1.5 } },
       { ...base, matrixCorpusProfile: { ...profile, promptPreferencesVersion: -1 } },

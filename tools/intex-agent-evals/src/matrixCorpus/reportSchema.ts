@@ -1,4 +1,8 @@
-import { intexAgentToolNameV1Schema } from '@intexuraos/http-contracts';
+import {
+  intexAgentToolNameV1Schema,
+  matrixCorpusAgentModelSchema,
+  matrixCorpusEvaluatorModelSchema,
+} from '@intexuraos/http-contracts';
 import { z } from 'zod';
 import { MATRIX_CORPUS_PREFLIGHT_CHECKS } from './preflight.js';
 
@@ -164,8 +168,8 @@ export const MatrixCorpusReportV1Schema = z
     runtimeAudience: z.literal('hetzner-prod'),
     environmentAlias: z.literal('prod'),
     catalog: z.object({ digest, scenarioCount: z.literal(20), turnCount: z.literal(59) }).strict(),
-    agentModel: z.literal('or:deepseek/deepseek-v4-flash'),
-    evaluatorModel: z.literal('or:minimax/minimax-m3'),
+    agentModel: matrixCorpusAgentModelSchema,
+    evaluatorModel: matrixCorpusEvaluatorModelSchema,
     executionMode: z.literal('real_matrix_whatsapp_strict_mock_tools'),
     startedAt: z.string().datetime({ offset: true }),
     completedAt: z.string().datetime({ offset: true }),

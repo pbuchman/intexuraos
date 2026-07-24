@@ -40,7 +40,9 @@ interface RouteFixture {
   verifyAttestation: TestMock;
 }
 
-function contextBody(): Readonly<Record<string, unknown>> {
+function contextBody(
+  overrides: Readonly<Record<string, unknown>> = {}
+): Readonly<Record<string, unknown>> {
   return {
     runtimeAudience: 'hetzner-prod',
     userId: 'auth0:user_1',
@@ -49,6 +51,7 @@ function contextBody(): Readonly<Record<string, unknown>> {
     agentModel: 'or:deepseek/deepseek-v4-flash',
     evaluatorModel: 'or:minimax/minimax-m3',
     expectedTimeZone: 'Europe/Warsaw',
+    ...overrides,
   };
 }
 
@@ -144,17 +147,21 @@ const abandonedEnvelope = {
 
 function fixture(): RouteFixture {
   const contextService = {
-    registerRun: vi.fn(async () => ({
-      ok: true as const,
-      disposition: 'applied' as const,
-      snapshot: {
-        promptPreferencesVersion: 2,
-        promptPreferencesDigest: 'b'.repeat(64),
-        agentModel: 'or:deepseek/deepseek-v4-flash' as const,
-        userTimeZone: 'Europe/Warsaw',
-        expiresAt: '2026-07-21T10:00:00.000Z',
-      },
-    })),
+    registerRun: vi.fn(
+      async (input: {
+        agentModel: 'or:deepseek/deepseek-v4-flash' | 'or:minimax/minimax-m3';
+      }) => ({
+        ok: true as const,
+        disposition: 'applied' as const,
+        snapshot: {
+          promptPreferencesVersion: 2,
+          promptPreferencesDigest: 'b'.repeat(64),
+          agentModel: input.agentModel,
+          userTimeZone: 'Europe/Warsaw',
+          expiresAt: '2026-07-21T10:00:00.000Z',
+        },
+      })
+    ),
     finalizeRun: vi.fn(async () => ({
       ok: true as const,
       disposition: 'applied' as const,
@@ -633,6 +640,40 @@ describe('Matrix corpus private routes', () => {
       agentModel: 'or:deepseek/deepseek-v4-flash',
     });
     expect(invalid.statusCode).toBe(400);
+    expect(fixtureValue.contextService.registerRun).toHaveBeenCalledOnce();
+  });
+
+  it('accepts MiniMax M3 as the immutable Matrix corpus agent model', async () => {
+    const fixtureValue = fixture();
+    await start(fixtureValue.dependencies);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/matrix-corpus/runs/run_1/context',
+      headers: { 'x-internal-auth': internalAuthToken },
+      payload: authorizedMutation(
+        'register_context',
+        contextBody({ agentModel: 'or:minimax/minimax-m3' })
+      ),
+    });
+    const unsupported = await app.inject({
+      method: 'POST',
+      url: '/internal/matrix-corpus/runs/run_1/context',
+      headers: { 'x-internal-auth': internalAuthToken },
+      payload: authorizedMutation(
+        'register_context',
+        contextBody({ agentModel: 'or:google/gemini-3-flash-preview' })
+      ),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      agentModel: 'or:minimax/minimax-m3',
+    });
+    expect(unsupported.statusCode).toBe(400);
+    expect(fixtureValue.contextService.registerRun).toHaveBeenCalledWith(
+      expect.objectContaining({ agentModel: 'or:minimax/minimax-m3' })
+    );
     expect(fixtureValue.contextService.registerRun).toHaveBeenCalledOnce();
   });
 

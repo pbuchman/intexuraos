@@ -1,3 +1,7 @@
+import type {
+  MatrixCorpusAgentModel,
+  MatrixCorpusEvaluatorModel,
+} from '@intexuraos/http-contracts';
 import type { MatrixCorpusEncryptedValueV1 } from '../contextCrypto.js';
 import type { MatrixCorpusRunManifestV1 } from './matrixCorpusManifestRepository.js';
 
@@ -9,8 +13,8 @@ export interface MatrixCorpusPrivateRunContextV1 {
   userId: string;
   leaseFence: string;
   catalogDigest: string;
-  agentModel: 'or:deepseek/deepseek-v4-flash';
-  evaluatorModel: 'or:minimax/minimax-m3';
+  agentModel: MatrixCorpusAgentModel;
+  evaluatorModel: MatrixCorpusEvaluatorModel;
   promptPreferencesVersion: number;
   promptPreferencesDigest: string;
   encryptedPromptContext: MatrixCorpusEncryptedValueV1;

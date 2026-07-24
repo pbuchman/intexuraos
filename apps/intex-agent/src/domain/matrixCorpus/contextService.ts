@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 
 import {
+  MATRIX_CORPUS_EVALUATOR_MODEL,
+  matrixCorpusAgentModelSchema,
   strictMockResultV1Schema,
+  type MatrixCorpusAgentModel,
+  type MatrixCorpusEvaluatorModel,
   type StrictMockResultV1,
 } from '@intexuraos/http-contracts';
 import type { IntexAgentRuntimeSettingsClient } from '@intexuraos/internal-clients';
@@ -32,8 +36,7 @@ import {
 } from './strictToolMockExecutor.js';
 
 const CONTEXT_TTL_MS = 24 * 60 * 60 * 1000;
-const AGENT_MODEL = 'or:deepseek/deepseek-v4-flash' as const;
-const EVALUATOR_MODEL = 'or:minimax/minimax-m3' as const;
+const EVALUATOR_MODEL = MATRIX_CORPUS_EVALUATOR_MODEL;
 const BASELINE_CATALOG_TIME_ZONE = 'Europe/Warsaw';
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/u;
 const SHA_256_PATTERN = /^[0-9a-f]{64}$/u;
@@ -86,8 +89,8 @@ type MatrixCorpusEncryptedPromptPayloadV1 = z.infer<typeof encryptedPromptPayloa
 export interface MatrixCorpusRunContextRegistrationInput extends MatrixCorpusContextIdentity {
   runtimeAudience: 'hetzner-prod';
   catalogDigest: string;
-  agentModel: typeof AGENT_MODEL;
-  evaluatorModel: typeof EVALUATOR_MODEL;
+  agentModel: MatrixCorpusAgentModel;
+  evaluatorModel: MatrixCorpusEvaluatorModel;
   expectedTimeZone: string;
 }
 
@@ -123,7 +126,7 @@ export type MatrixCorpusRunRegistrationResult =
       snapshot: Readonly<{
         promptPreferencesVersion: number;
         promptPreferencesDigest: string;
-        agentModel: typeof AGENT_MODEL;
+        agentModel: MatrixCorpusAgentModel;
         userTimeZone: string;
         expiresAt: string;
       }>;
@@ -158,8 +161,8 @@ export type MatrixCorpusSessionProfileSnapshotResult =
       snapshot: Readonly<{
         promptPreferencesVersion: number;
         promptPreferencesDigest: string;
-        agentModel: typeof AGENT_MODEL;
-        evaluatorModel: typeof EVALUATOR_MODEL;
+        agentModel: MatrixCorpusAgentModel;
+        evaluatorModel: MatrixCorpusEvaluatorModel;
         userTimeZone: string;
       }>;
     }>
@@ -229,7 +232,7 @@ export function createMatrixCorpusContextService(
       const runtime = runtimeResult.value;
       if (runtime.status !== 'available') return serviceFailure('RUNTIME_SETTINGS_UNAVAILABLE');
       if (
-        runtime.effectiveModel !== AGENT_MODEL ||
+        runtime.effectiveModel !== input.agentModel ||
         runtime.timeZone !== input.expectedTimeZone
       )
         return serviceFailure('RUNTIME_SETTINGS_MISMATCH');
@@ -263,7 +266,7 @@ export function createMatrixCorpusContextService(
         userId: input.userId,
         leaseFence: input.leaseFence,
         catalogDigest: input.catalogDigest,
-        agentModel: AGENT_MODEL,
+        agentModel: input.agentModel,
         evaluatorModel: EVALUATOR_MODEL,
         promptPreferencesVersion: promptPreferences.currentVersion,
         promptPreferencesDigest,
@@ -815,6 +818,7 @@ function matchesRegistration(
     context.userId === input.userId &&
     context.leaseFence === input.leaseFence &&
     context.catalogDigest === input.catalogDigest &&
+    context.agentModel === input.agentModel &&
     context.userTimeZone === input.expectedTimeZone
   );
 }
@@ -876,7 +880,7 @@ function isValidRunRegistration(input: MatrixCorpusRunContextRegistrationInput):
     raw['runtimeAudience'] === 'hetzner-prod' &&
     isValidIdentity(input) &&
     SHA_256_PATTERN.test(input.catalogDigest) &&
-    raw['agentModel'] === AGENT_MODEL &&
+    matrixCorpusAgentModelSchema.safeParse(raw['agentModel']).success &&
     raw['evaluatorModel'] === EVALUATOR_MODEL &&
     input.expectedTimeZone === BASELINE_CATALOG_TIME_ZONE
   );

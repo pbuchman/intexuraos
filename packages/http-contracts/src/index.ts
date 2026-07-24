@@ -125,6 +125,10 @@ export {
   MATRIX_CORPUS_MAX_JWS_PAYLOAD_SEGMENT_CODE_UNITS,
   MATRIX_CORPUS_MAX_COMPACT_JWS_CODE_UNITS,
   MATRIX_CORPUS_SCENARIO_TOTAL,
+  MATRIX_CORPUS_DEFAULT_AGENT_MODEL,
+  MATRIX_CORPUS_MINIMAX_AGENT_MODEL,
+  MATRIX_CORPUS_AGENT_MODELS,
+  MATRIX_CORPUS_EVALUATOR_MODEL,
   MATRIX_CORPUS_LEGACY_RUNTIME_AUDIENCE,
   MATRIX_CORPUS_PRODUCTION_RUNTIME_AUDIENCE,
   MATRIX_CORPUS_VISIBLE_VERSION,
@@ -137,6 +141,8 @@ export {
   matrixCorpusRfc3339TimestampSchema,
   matrixCorpusIanaTimeZoneSchema,
   matrixCorpusRuntimeAudienceSchema,
+  matrixCorpusAgentModelSchema,
+  matrixCorpusEvaluatorModelSchema,
   matrixCorpusPromptDigestInputSchema,
   matrixCorpusVisibleConfirmationHeaderV1Schema,
   matrixCorpusVisibleStartHeaderV1Schema,
@@ -196,6 +202,8 @@ export {
   type MatrixCorpusVisibleMessageParseResult,
   type MatrixCorpusVisiblePhase,
   type MatrixCorpusRuntimeAudience,
+  type MatrixCorpusAgentModel,
+  type MatrixCorpusEvaluatorModel,
 } from './matrixCorpus.js';
 
 export {

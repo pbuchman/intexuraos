@@ -9,6 +9,17 @@ export const matrixCorpusRuntimeAudienceSchema = z.enum([
 ]);
 export type MatrixCorpusRuntimeAudience = z.infer<typeof matrixCorpusRuntimeAudienceSchema>;
 export const MATRIX_CORPUS_SCENARIO_TOTAL = 20 as const;
+export const MATRIX_CORPUS_DEFAULT_AGENT_MODEL = 'or:deepseek/deepseek-v4-flash' as const;
+export const MATRIX_CORPUS_MINIMAX_AGENT_MODEL = 'or:minimax/minimax-m3' as const;
+export const MATRIX_CORPUS_AGENT_MODELS = [
+  MATRIX_CORPUS_DEFAULT_AGENT_MODEL,
+  MATRIX_CORPUS_MINIMAX_AGENT_MODEL,
+] as const;
+export const matrixCorpusAgentModelSchema = z.enum(MATRIX_CORPUS_AGENT_MODELS);
+export type MatrixCorpusAgentModel = z.infer<typeof matrixCorpusAgentModelSchema>;
+export const MATRIX_CORPUS_EVALUATOR_MODEL = MATRIX_CORPUS_MINIMAX_AGENT_MODEL;
+export const matrixCorpusEvaluatorModelSchema = z.literal(MATRIX_CORPUS_EVALUATOR_MODEL);
+export type MatrixCorpusEvaluatorModel = z.infer<typeof matrixCorpusEvaluatorModelSchema>;
 export const MATRIX_CORPUS_MAX_VISIBLE_MESSAGE_CODE_UNITS = 4096 as const;
 export const MATRIX_CORPUS_MAX_HEADER_CODE_UNITS = 256 as const;
 export const MATRIX_CORPUS_MAX_CAPABILITY_TTL_MILLISECONDS = 300_000 as const;

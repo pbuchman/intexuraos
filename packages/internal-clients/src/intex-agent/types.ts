@@ -1,4 +1,6 @@
 import type {
+  MatrixCorpusAgentModel,
+  MatrixCorpusEvaluatorModel,
   MatrixCorpusSignedControlMutationV1,
   MatrixCorpusSignedTerminalControlV1,
 } from '@intexuraos/http-contracts';
@@ -45,8 +47,8 @@ export interface MatrixCorpusRegisterContextRequest {
   readonly userId: string;
   readonly leaseFence: string;
   readonly catalogDigest: string;
-  readonly agentModel: 'or:deepseek/deepseek-v4-flash';
-  readonly evaluatorModel: 'or:minimax/minimax-m3';
+  readonly agentModel: MatrixCorpusAgentModel;
+  readonly evaluatorModel: MatrixCorpusEvaluatorModel;
   readonly expectedTimeZone: 'Europe/Warsaw';
 }
 
@@ -63,7 +65,7 @@ export interface MatrixCorpusContextResult {
   readonly leaseFence: string;
   readonly promptPreferencesVersion: number;
   readonly promptPreferencesDigest: string;
-  readonly agentModel: 'or:deepseek/deepseek-v4-flash';
+  readonly agentModel: MatrixCorpusAgentModel;
   readonly userTimeZone: string;
   readonly expiresAt: string;
 }

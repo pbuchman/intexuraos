@@ -98,6 +98,10 @@ describe('parseCliArgs', () => {
     },
     { argv: ['matrix-smoke'] as const, command: { kind: 'matrix-smoke' } },
     { argv: ['matrix-corpus'] as const, command: { kind: 'matrix-corpus' } },
+    {
+      argv: ['matrix-corpus', '--agent-model=or:minimax/minimax-m3'] as const,
+      command: { kind: 'matrix-corpus', agentModel: 'or:minimax/minimax-m3' },
+    },
   ])('accepts only the closed row $argv', ({ argv, command }) => {
     expect(parseCliArgs(argv)).toEqual({ ok: true, command });
   });
@@ -118,6 +122,9 @@ describe('parseCliArgs', () => {
     ['setup', 'extra'],
     ['preflight', 'extra'],
     ['matrix-smoke', 'extra'],
+    ['matrix-corpus', '--agent-model=or:google/gemini-3-flash-preview'],
+    ['matrix-corpus', '--agent-model='],
+    ['matrix-corpus', '--agent-model=or:minimax/minimax-m3', 'extra'],
     ['scenario', 'intex-eval-003', 'scenario', 'intex-eval-004'],
   ])('rejects argv %j without reflecting its value', (...argv) => {
     expect(parseCliArgs(argv)).toEqual({ ok: false, code: 'INVALID_COMMAND' });
@@ -479,60 +486,78 @@ describe('runCli setup and preflight', () => {
 });
 
 describe('runCli evaluation orchestration and projection', () => {
-  it('keeps matrix-corpus preflight before run identity and every mutating execution port', async () => {
-    const order: string[] = [];
-    const matrixCorpusPreflight = vi.fn(async () => {
-      order.push('preflight');
-      return {
-        ok: true,
-        exitCode: 0,
-        checks: [],
-        snapshot: {},
-        catalog: {},
-      } as unknown as Extract<MatrixCorpusPreflightResult, { ok: true }>;
-    });
-    const createReportRunId = vi.fn(() => {
-      order.push('run-id');
-      return 'eval-123e4567-e89b-12d3-a456-426614174000';
-    });
-    const runMatrixCorpus = vi.fn(async ({ runId }: { runId: string }) => {
-      order.push('execute');
-      return {
-        run: {
-          runId,
-          effectiveKind: 'passed' as const,
-          exitCode: 0 as const,
-          failureCodes: [],
-          scenarios: [
-            { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
-          ],
-          totals: {
-            completedTurns: 59,
-            judgedReplies: 59,
-            agentCostNanoUsd: 1,
-            evaluatorCostNanoUsd: 1,
+  it.each([
+    {
+      label: 'default DeepSeek',
+      argv: ['matrix-corpus'] as const,
+      agentModel: 'or:deepseek/deepseek-v4-flash' as const,
+    },
+    {
+      label: 'explicit MiniMax M3',
+      argv: ['matrix-corpus', '--agent-model=or:minimax/minimax-m3'] as const,
+      agentModel: 'or:minimax/minimax-m3' as const,
+    },
+  ])(
+    'keeps $label model selection through preflight and every mutating execution port',
+    async ({ argv, agentModel }) => {
+      const order: string[] = [];
+      const matrixCorpusPreflight = vi.fn(async () => {
+        order.push('preflight');
+        return {
+          ok: true,
+          exitCode: 0,
+          checks: [],
+          snapshot: {},
+          catalog: {},
+        } as unknown as Extract<MatrixCorpusPreflightResult, { ok: true }>;
+      });
+      const createReportRunId = vi.fn(() => {
+        order.push('run-id');
+        return 'eval-123e4567-e89b-12d3-a456-426614174000';
+      });
+      const runMatrixCorpus = vi.fn(async ({ runId }: { runId: string }) => {
+        order.push('execute');
+        return {
+          run: {
+            runId,
+            effectiveKind: 'passed' as const,
+            exitCode: 0 as const,
+            failureCodes: [],
+            scenarios: [
+              { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
+            ],
+            totals: {
+              completedTurns: 59,
+              judgedReplies: 59,
+              agentCostNanoUsd: 1,
+              evaluatorCostNanoUsd: 1,
+            },
+            terminalAcknowledged: true,
+            cleanupCompleted: true,
           },
-          terminalAcknowledged: true,
-          cleanupCompleted: true,
-        },
-        reportReady: true,
-        relativeReportDirectory: `.artifacts/intex-agent-evals/${runId}`,
-      };
-    });
-    const harness = createHarness({ matrixCorpusPreflight, createReportRunId, runMatrixCorpus });
+          reportReady: true,
+          relativeReportDirectory: `.artifacts/intex-agent-evals/${runId}`,
+        };
+      });
+      const harness = createHarness({ matrixCorpusPreflight, createReportRunId, runMatrixCorpus });
 
-    await expect(runCli(['matrix-corpus'], harness.dependencies)).resolves.toBe(0);
+      await expect(runCli(argv, harness.dependencies)).resolves.toBe(0);
 
-    expect(order).toEqual(['preflight', 'run-id', 'execute']);
-    expect(harness.loadScenarios).not.toHaveBeenCalled();
-    expect(harness.stdout.mock.calls).toEqual([
-      ['preflight result PASS'],
-      ['evaluation run eval-123e4567-e89b-12d3-a456-426614174000 command matrix-corpus'],
-      ['scenario intex-eval-001 PASS'],
-      ['evaluation result PASS exit 0'],
-      ['evaluation report .artifacts/intex-agent-evals/eval-123e4567-e89b-12d3-a456-426614174000'],
-    ]);
-  });
+      expect(order).toEqual(['preflight', 'run-id', 'execute']);
+      expect(matrixCorpusPreflight).toHaveBeenCalledWith(agentModel);
+      expect(runMatrixCorpus).toHaveBeenCalledWith(expect.objectContaining({ agentModel }));
+      expect(harness.loadScenarios).not.toHaveBeenCalled();
+      expect(harness.stdout.mock.calls).toEqual([
+        ['preflight result PASS'],
+        ['evaluation run eval-123e4567-e89b-12d3-a456-426614174000 command matrix-corpus'],
+        ['scenario intex-eval-001 PASS'],
+        ['evaluation result PASS exit 0'],
+        [
+          'evaluation report .artifacts/intex-agent-evals/eval-123e4567-e89b-12d3-a456-426614174000',
+        ],
+      ]);
+    }
+  );
 
   it('returns infrastructure exit two and suppresses the report path when publication is not ready', async () => {
     const runId = 'eval-123e4567-e89b-12d3-a456-426614174000';

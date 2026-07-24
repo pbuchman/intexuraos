@@ -2,10 +2,13 @@ import { createHash } from 'node:crypto';
 
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import {
+  MATRIX_CORPUS_AGENT_MODELS,
   canonicalMatrixCorpusControlRequestDigestInputV1,
   INTEX_AGENT_TEST_RUN_MAX_AGENT_CALL_ORDINAL,
   INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS,
   matrixCorpusDecimalFenceSchema,
+  matrixCorpusAgentModelSchema,
+  matrixCorpusEvaluatorModelSchema,
   matrixCorpusRfc3339TimestampSchema,
   matrixCorpusSafeIdSchema,
   matrixCorpusSha256DigestSchema,
@@ -37,8 +40,8 @@ const contextRegistrationSchema = z
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
     catalogDigest: matrixCorpusSha256DigestSchema,
-    agentModel: z.literal('or:deepseek/deepseek-v4-flash'),
-    evaluatorModel: z.literal('or:minimax/minimax-m3'),
+    agentModel: matrixCorpusAgentModelSchema,
+    evaluatorModel: matrixCorpusEvaluatorModelSchema,
     expectedTimeZone: z.literal('Europe/Warsaw'),
   })
   .strict();
@@ -230,7 +233,7 @@ const contextRegistrationRequestJsonSchema = closedJsonObject(
   {
     ...contextIdentityJsonProperties,
     catalogDigest: digestJsonSchema,
-    agentModel: { type: 'string', enum: ['or:deepseek/deepseek-v4-flash'] },
+    agentModel: { type: 'string', enum: [...MATRIX_CORPUS_AGENT_MODELS] },
     evaluatorModel: { type: 'string', enum: ['or:minimax/minimax-m3'] },
     expectedTimeZone: { type: 'string', enum: ['Europe/Warsaw'] },
   }
@@ -548,7 +551,7 @@ const testRunRecordJsonSchema = closedJsonObject(
     },
     verdict: { type: 'string', enum: ['pending', 'passed', 'failed', 'not_evaluated'] },
     artifactDelivery: artifactDeliveryJsonSchema,
-    agentModel: { type: 'string', enum: ['or:deepseek/deepseek-v4-flash'] },
+    agentModel: { type: 'string', enum: [...MATRIX_CORPUS_AGENT_MODELS] },
     evaluatorModel: { type: 'string', enum: ['or:minimax/minimax-m3'] },
     startedAt: timestampJsonSchema,
     updatedAt: timestampJsonSchema,
@@ -1040,7 +1043,7 @@ const contextRegistrationResultJsonSchema = closedJsonObject(
       maximum: Number.MAX_SAFE_INTEGER,
     },
     promptPreferencesDigest: digestJsonSchema,
-    agentModel: { type: 'string', enum: ['or:deepseek/deepseek-v4-flash'] },
+    agentModel: { type: 'string', enum: [...MATRIX_CORPUS_AGENT_MODELS] },
     userTimeZone: { type: 'string', minLength: 1, maxLength: 128 },
     expiresAt: timestampJsonSchema,
   }

@@ -1,5 +1,7 @@
 import {
   intexAgentToolNameV1Schema,
+  matrixCorpusAgentModelSchema,
+  matrixCorpusEvaluatorModelSchema,
   matrixCorpusDecimalFenceSchema,
   matrixCorpusRfc3339TimestampSchema,
   matrixCorpusSafeIdSchema,
@@ -66,8 +68,8 @@ const registerContextSchema = z
     userId: matrixCorpusSafeIdSchema,
     leaseFence: matrixCorpusDecimalFenceSchema,
     catalogDigest: digest,
-    agentModel: z.literal('or:deepseek/deepseek-v4-flash'),
-    evaluatorModel: z.literal('or:minimax/minimax-m3'),
+    agentModel: matrixCorpusAgentModelSchema,
+    evaluatorModel: matrixCorpusEvaluatorModelSchema,
     expectedTimeZone: z.literal('Europe/Warsaw'),
   })
   .strict();
@@ -79,7 +81,7 @@ const contextResultSchema = z
     leaseFence: matrixCorpusDecimalFenceSchema,
     promptPreferencesVersion: safeInteger,
     promptPreferencesDigest: digest,
-    agentModel: z.literal('or:deepseek/deepseek-v4-flash'),
+    agentModel: matrixCorpusAgentModelSchema,
     userTimeZone: z.string().min(1).max(128),
     expiresAt: timestamp,
   })
@@ -477,7 +479,8 @@ export function createIntexAgentServiceClient(
         result.ok &&
         (result.value.runId !== input.runId ||
           result.value.userId !== input.request.userId ||
-          result.value.leaseFence !== input.request.leaseFence)
+          result.value.leaseFence !== input.request.leaseFence ||
+          result.value.agentModel !== input.request.agentModel)
       )
         return invalidInputResponse();
       return result;

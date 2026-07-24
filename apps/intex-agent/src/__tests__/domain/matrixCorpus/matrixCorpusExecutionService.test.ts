@@ -174,6 +174,7 @@ function fixture(
     scenarioId?: string;
     scenarioNumber?: number;
     scenarioLabel?: string;
+    agentModel?: string;
     sessionOverrides?: Partial<IntexAgentSession>;
   }> = {}
 ) {
@@ -199,7 +200,7 @@ function fixture(
       scenarioNumber: options.scenarioNumber ?? 1,
       scenarioLabel: options.scenarioLabel ?? 'Scenario 001/020',
       executionMode: 'strict_mock_tools',
-      agentModel: 'or:deepseek/deepseek-v4-flash',
+      agentModel: (options.agentModel ?? 'or:deepseek/deepseek-v4-flash') as never,
       evaluatorModel: 'or:minimax/minimax-m3',
       promptPreferencesVersion: 0,
       promptPreferencesDigest: 'a'.repeat(64),
@@ -503,6 +504,28 @@ describe('Matrix corpus execution service', () => {
       expect.objectContaining({
         replyIndex: 0,
         publicationReceiptDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      })
+    );
+  });
+
+  it('passes the immutable MiniMax agent model from the session profile to the runner factory', async () => {
+    const runner = {
+      run: vi.fn(async () => ({ outcome: 'no_action' as const, reply: 'No action.' })),
+      executeConfirmed: vi.fn(),
+    };
+    const { service, createRunner } = fixture(runner, {
+      agentModel: 'or:minimax/minimax-m3',
+    });
+
+    await expect(
+      service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: true });
+    expect(createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentModel: 'or:minimax/minimax-m3',
       })
     );
   });
@@ -1022,7 +1045,9 @@ describe('Matrix corpus execution service', () => {
           reply: 'The confirmed action no longer requires a tool.',
         }),
     };
-    const { service, session, confirmationRepository, createRunner } = fixture(runner);
+    const { service, session, confirmationRepository, createRunner } = fixture(runner, {
+      agentModel: 'or:minimax/minimax-m3',
+    });
     const noteProfile = profile('create_note');
     if (session.matrixCorpusProfile === undefined) throw new Error('missing profile');
     session.matrixCorpusProfile.mockProfile = noteProfile;
@@ -1072,6 +1097,7 @@ describe('Matrix corpus execution service', () => {
     ).resolves.toEqual({ ok: true });
     expect(createRunner).toHaveBeenCalledWith(
       expect.objectContaining({
+        agentModel: 'or:minimax/minimax-m3',
         execution: expect.objectContaining({
           flow: 'confirmation',
           preauthorizedSelection: {
