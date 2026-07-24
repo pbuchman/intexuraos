@@ -125,7 +125,8 @@ export function createLlmIntexAgentIntentClassifier(deps: {
       const replyLanguage = classifierReplyLanguage(input);
       const directIntent = classifyIntexAgentIntent(input.message);
       if (
-        (directIntent.kind === 'no_action' && directIntent.reason === 'greeting') ||
+        (directIntent.kind === 'no_action' &&
+          (directIntent.reason === 'greeting' || directIntent.reason === 'retain_context')) ||
         (directIntent.kind === 'tool' && directIntent.allowedToolNames.includes('create_note'))
       ) {
         return directIntent;

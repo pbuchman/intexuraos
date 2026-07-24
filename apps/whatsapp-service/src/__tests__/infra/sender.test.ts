@@ -1,6 +1,7 @@
 /**
  * Tests for WhatsAppCloudApiSender.
  */
+import { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from '@intexuraos/http-contracts';
 import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WhatsAppCloudApiSender } from '../../infra/whatsapp/sender.js';
@@ -330,7 +331,7 @@ describe('WhatsAppCloudApiSender', () => {
 
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
-      expect(body.interactive.body.text.length).toBe(1024);
+      expect(body.interactive.body.text.length).toBe(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
     });
 
     it('does not truncate body text at exactly 1024 characters for interactive message', async () => {
@@ -341,14 +342,14 @@ describe('WhatsAppCloudApiSender', () => {
       });
       vi.stubGlobal('fetch', mockFetch);
 
-      const exactMessage = 'd'.repeat(1024);
+      const exactMessage = 'd'.repeat(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
       await sender.sendInteractiveMessage('+1234567890', exactMessage, [
         { type: 'reply' as const, reply: { id: 'btn-1', title: 'OK' } },
       ]);
 
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
-      expect(body.interactive.body.text.length).toBe(1024);
+      expect(body.interactive.body.text.length).toBe(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
       expect(body.interactive.body.text).toBe(exactMessage);
     });
 
@@ -512,7 +513,7 @@ describe('WhatsAppCloudApiSender', () => {
 
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
-      expect(body.interactive.body.text.length).toBe(1024);
+      expect(body.interactive.body.text.length).toBe(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
     });
 
     it('does not truncate body text at exactly 1024 characters for CTA URL message', async () => {
@@ -523,12 +524,12 @@ describe('WhatsAppCloudApiSender', () => {
       });
       vi.stubGlobal('fetch', mockFetch);
 
-      const exactMessage = 'f'.repeat(1024);
+      const exactMessage = 'f'.repeat(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
       await sender.sendCtaUrlMessage('+1234567890', exactMessage, ctaUrl);
 
       const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
       const body = JSON.parse(callArgs[1].body as string) as { interactive: { body: { text: string } } };
-      expect(body.interactive.body.text.length).toBe(1024);
+      expect(body.interactive.body.text.length).toBe(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
       expect(body.interactive.body.text).toBe(exactMessage);
     });
 

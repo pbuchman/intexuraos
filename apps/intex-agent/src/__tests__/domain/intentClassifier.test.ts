@@ -493,7 +493,7 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     ],
     [
       'retain-context metadata',
-      'do not save this; only retain this context',
+      'Please keep that context available only for the current conversation.',
       {
         outcome: 'retain_context',
         confidence: 0.96,
@@ -525,6 +525,25 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       ).resolves.toEqual(expected);
     }
   );
+
+  it('short-circuits an explicit retain-only fragment without calling the model', async () => {
+    const client = new FakeStructuredClient([]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message:
+          'INTEX-EVAL context fragment: Project Atlas uses a green folder. Do not save yet; only retain this context.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'no_action',
+      reason: 'retain_context',
+    });
+    expect(client.calls).toHaveLength(0);
+  });
 
   it('formats classifier context from current reply context and historical events', async () => {
     const client = new FakeStructuredClient([

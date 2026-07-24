@@ -4,6 +4,7 @@
  */
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
+import { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from '@intexuraos/http-contracts';
 import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { WhatsAppMessageSender, WhatsAppInteractiveButton } from '../../domain/whatsapp/index.js';
 import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
@@ -11,7 +12,6 @@ import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
 const REQUEST_TIMEOUT_MS = 30000;
 const MAX_TEXT_BODY_LENGTH = 4096;
-const MAX_INTERACTIVE_BODY_LENGTH = 1024;
 
 const logger = createAppLogger({ name: 'whatsapp-sender' });
 
@@ -74,7 +74,12 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       },
     }));
 
-    const truncatedMessage = truncateBody(message, MAX_INTERACTIVE_BODY_LENGTH, 'interactive', phoneNumber);
+    const truncatedMessage = truncateBody(
+      message,
+      WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH,
+      'interactive',
+      phoneNumber
+    );
 
     const interactiveBody = {
       type: 'interactive' as const,
@@ -93,7 +98,12 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     message: string,
     ctaUrl: { displayText: string; url: string }
   ): Promise<Result<{ wamid: string }, WhatsAppError>> {
-    const truncatedMessage = truncateBody(message, MAX_INTERACTIVE_BODY_LENGTH, 'CTA URL', phoneNumber);
+    const truncatedMessage = truncateBody(
+      message,
+      WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH,
+      'CTA URL',
+      phoneNumber
+    );
 
     const ctaUrlBody = {
       type: 'interactive' as const,

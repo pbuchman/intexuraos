@@ -1,4 +1,5 @@
 import { getErrorMessage } from '@intexuraos/common-core';
+import { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from '@intexuraos/http-contracts';
 import type {
   MatrixCorpusProviderCallUsageV1,
   ToolCallingClient,
@@ -222,8 +223,13 @@ const CONFIRMATION_INTROS: Record<MutatingIntexAgentToolName, LocalizedText> = {
 };
 
 const LINK_CONFIRMATION_ACTION_HINT: LocalizedText = {
-  en: 'Confirm to save it, or cancel to leave it unchanged.',
-  pl: 'Potwierdź, aby go zapisać, albo anuluj, aby niczego nie zmieniać.',
+  en: 'Use the buttons below to confirm or cancel.',
+  pl: 'Użyj przycisków poniżej, aby potwierdzić albo anulować.',
+};
+
+const CONFIRMATION_PREVIEW_TRUNCATION_NOTICE: LocalizedText = {
+  en: 'Preview shortened. The full content will be used after confirmation.',
+  pl: 'Podgląd został skrócony. Po potwierdzeniu zostanie użyta pełna treść.',
 };
 
 const CONFIRMATION_LABELS = {
@@ -260,6 +266,10 @@ const COMPLETED_REPLIES = {
   preferencesEmpty: {
     en: 'No Intex Agent preferences are defined yet.',
     pl: 'Nie zdefiniowano jeszcze preferencji agenta Intex.',
+  },
+  preferenceUpdatedState: {
+    en: 'User Preferences:\n- Updated preference entry.',
+    pl: 'Preferencje:\n- Zaktualizowany wpis.',
   },
   linkUrl: { en: 'Saved the link.', pl: 'Zapisałem link.' },
 } satisfies Record<string, LocalizedText>;
@@ -406,7 +416,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
                 ? { matrixCorpusLlm: config.matrixCorpusLlm }
                 : {}),
             });
-      const intent = applyOptionalNoteFieldClarification(
+      const normalizedIntent = applyOptionalNoteFieldClarification(
         applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
           timeZone: input.timeZone,
           message: input.message,
@@ -414,6 +424,17 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           replyContext: input.replyContext,
         })
       );
+      const queryNormalizedIntent = applyDerivedCalendarQueryContext(normalizedIntent, {
+        message: input.message,
+        events: input.events,
+        replyContext: input.replyContext,
+      });
+      const intent = applyMissingCalendarDateClarification(queryNormalizedIntent, {
+        message: input.message,
+        events: input.events,
+        replyContext: input.replyContext,
+        replyLanguage: replyLanguageForIntent(queryNormalizedIntent, detectedReplyLanguage),
+      });
       const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
         return normalizeClassifierUnsupportedIntent(intent, replyLanguage);
@@ -637,9 +658,91 @@ function applyOptionalNoteFieldClarification(
   };
 }
 
+function applyDerivedCalendarQueryContext(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'query_calendar_events' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length === 0 ||
+    !intent.missingFields.every(isDerivedCalendarQueryField) ||
+    !hasCalendarDateSignal(context.message, context.events, context.replyContext)
+  ) {
+    return intent;
+  }
+
+  return {
+    kind: 'tool',
+    allowedToolNames: ['query_calendar_events'],
+    ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
+    ...(intent.stylePreferenceAction !== undefined
+      ? { stylePreferenceAction: intent.stylePreferenceAction }
+      : {}),
+    ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
+    ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
+function applyMissingCalendarDateClarification(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+    replyLanguage: IntexAgentReplyLanguage;
+  }>
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'create_calendar_event' ||
+    hasCalendarDateSignal(context.message, context.events, context.replyContext)
+  ) {
+    return intent;
+  }
+
+  const question = CALENDAR_DATE_CLARIFICATION_REPLIES[context.replyLanguage];
+  return {
+    kind: 'needs_clarification',
+    question,
+    blockerReason: 'missing_required_details',
+    missingFields: ['date'],
+    candidateIntents: ['create_calendar_event'],
+    suggestedNextStep: CALENDAR_DATE_CLARIFICATION_NEXT_STEPS[context.replyLanguage],
+    ...(intent.stylePreferenceAction !== undefined
+      ? { stylePreferenceAction: intent.stylePreferenceAction }
+      : {}),
+    ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
+    ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
+    ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
 function isOptionalNoteField(field: string): boolean {
   const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
   return canonical === 'title' || canonical === 'tags' || canonical === 'sourcemessageids';
+}
+
+function isDerivedCalendarQueryField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return (
+    canonical === 'start' ||
+    canonical === 'end' ||
+    canonical === 'timemin' ||
+    canonical === 'timemax' ||
+    canonical === 'timezone' ||
+    canonical === 'date' ||
+    canonical === 'daterange' ||
+    canonical === 'range'
+  );
 }
 
 function isRuntimeTimeZoneMissingField(field: string): boolean {
@@ -1677,6 +1780,25 @@ function buildConfirmationReply(
   replyLanguage: IntexAgentReplyLanguage,
   runtimeTimeZone: string
 ): string {
+  return limitConfirmationReply(
+    buildUnboundedConfirmationReply(
+      toolName,
+      args,
+      userPreferences,
+      replyLanguage,
+      runtimeTimeZone
+    ),
+    replyLanguage
+  );
+}
+
+function buildUnboundedConfirmationReply(
+  toolName: MutatingIntexAgentToolName,
+  args: Record<string, unknown>,
+  userPreferences: string | null,
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
+): string {
   if (toolName === 'create_note') {
     const lines = [CONFIRMATION_INTROS.create_note[replyLanguage]];
     const title = readRawString(args, 'title');
@@ -1793,6 +1915,22 @@ function buildConfirmationReply(
     findPreferenceText(userPreferences, itemId)
   );
   return lines.join('\n');
+}
+
+function limitConfirmationReply(
+  reply: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  if (reply.length <= WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH) return reply;
+  const suffix = `\n\n…\n${CONFIRMATION_PREVIEW_TRUNCATION_NOTICE[replyLanguage]}`;
+  const headLimit = WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH - suffix.length;
+  const candidate = reply.slice(0, headLimit).trimEnd();
+  const wordBoundary = Math.max(candidate.lastIndexOf('\n'), candidate.lastIndexOf(' '));
+  const head =
+    wordBoundary >= Math.floor(headLimit * 0.75)
+      ? candidate.slice(0, wordBoundary).trimEnd()
+      : candidate;
+  return `${head}${suffix}`;
 }
 
 function appendConfirmationLine(lines: string[], label: string, value: string | undefined): void {
@@ -1958,7 +2096,11 @@ function buildCompletedReply(
       toolName === 'get_user_preferences' ? renderPreferenceOverlayItems(result) : undefined;
     return {
       reply:
-        renderedPromptBlock ?? overlayBlock ?? COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
+        renderedPromptBlock ??
+        overlayBlock ??
+        (toolName === 'get_user_preferences' || toolName === 'delete_user_preference'
+          ? COMPLETED_REPLIES.preferencesEmpty[replyLanguage]
+          : COMPLETED_REPLIES.preferenceUpdatedState[replyLanguage]),
     };
   }
 

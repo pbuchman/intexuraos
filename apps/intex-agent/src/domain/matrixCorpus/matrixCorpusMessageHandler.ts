@@ -4,6 +4,7 @@ import {
   canonicalMatrixCorpusIngestPayloadV1,
   canonicalMatrixCorpusStrictToolMockProfileV1,
   matrixCorpusAttestationClaimsV1Schema,
+  type IntexAgentToolNameV1,
   type MatrixCorpusAttestationClaimsV1,
 } from '@intexuraos/http-contracts';
 
@@ -28,6 +29,12 @@ type IngestClaims = Extract<
   MatrixCorpusAttestationClaimsV1,
   Readonly<{ kind: 'matrix_corpus_ingest' }>
 >;
+
+const PREFERENCE_MUTATION_TOOL_NAMES = new Set<IntexAgentToolNameV1>([
+  'add_user_preference',
+  'update_user_preference',
+  'delete_user_preference',
+]);
 
 export type MatrixCorpusMessageHandlerFailureCode =
   | 'INVALID_CLAIMS'
@@ -170,7 +177,14 @@ export function createMatrixCorpusMessageHandler(
 
       let scenarioDisposition: 'applied' | 'already_applied' = 'already_applied';
       if (context.phase === 'start') {
-        const registered = await deps.contextService.registerScenario(scenarioIdentity);
+        const registered = await deps.contextService.registerScenario({
+          ...scenarioIdentity,
+          preferenceOverlayMode: context.expectedToolSchedule.some(
+            ({ toolName }) => PREFERENCE_MUTATION_TOOL_NAMES.has(toolName)
+          )
+            ? 'pristine_v0'
+            : 'account_snapshot',
+        });
         if (
           !registered.ok ||
           registered.snapshot.baselinePromptPreferencesDigest !==

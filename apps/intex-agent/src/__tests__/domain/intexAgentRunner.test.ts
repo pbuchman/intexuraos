@@ -1,5 +1,8 @@
 import { err, ok, type Result } from '@intexuraos/common-core';
-import { sanitizeIntexAgentReplyText } from '@intexuraos/http-contracts';
+import {
+  sanitizeIntexAgentReplyText,
+  WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH,
+} from '@intexuraos/http-contracts';
 import type {
   LLMError,
   ToolCallingClient,
@@ -777,11 +780,351 @@ describe('createIntexAgentRunner', () => {
     expect(sanitizeIntexAgentReplyText(result.reply)).toBe(
       [
         'Save this bookmark?',
-        'Confirm to save it, or cancel to leave it unchanged.',
+        'Use the buttons below to confirm or cancel.',
         '',
         'URL: [redacted]',
         'Title: [redacted]',
       ].join('\n')
+    );
+  });
+
+  it('corrects a classifier clarification that overlooks the missing calendar date', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What should the event title be?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Ask for the event title.',
+            reason: 'Calendar request with an omitted date.',
+            stylePreferenceAction: 'none',
+            languageOverride: 'en',
+            decisionEvidence: 'The request names a time but no day or date.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Schedule dentist at 4 PM.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which day or date should I use for this calendar event?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Provide the day or date for the calendar event.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('executes a bounded read-only calendar query when the relative date and runtime timezone are known', async () => {
+    const timeMin = '2026-06-25T00:00:00.000+02:00';
+    const timeMax = '2026-06-26T00:00:00.000+02:00';
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: { mode: 'list', timeMin, timeMax },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'No calendar events were found for tomorrow, 25 June 2026.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    let queryCalls = 0;
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Should I check tomorrow?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'end', 'timeZone'],
+            candidateIntents: ['query_calendar_events'],
+            suggestedNextStep: 'Confirm the date range.',
+            reason: 'The relative date supplies the bounded query range.',
+            stylePreferenceAction: 'none',
+            languageOverride: 'en',
+            decisionEvidence: 'Tomorrow and the runtime timezone provide the derived bounds.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => {
+          queryCalls += 1;
+          return JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 0,
+            timeMin,
+            timeMax,
+            events: [],
+          });
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'List my calendar events tomorrow.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'No calendar events were found for tomorrow, 25 June 2026.',
+      toolName: 'query_calendar_events',
+    });
+    expect(queryCalls).toBe(1);
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+  });
+
+  it('normalizes calendar classifier outputs when optional metadata is absent', async () => {
+    const queryClient = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00.000+02:00',
+          timeMax: '2026-06-26T00:00:00.000+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'No events tomorrow.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    const queryRunner = createIntexAgentRunner({
+      client: queryClient,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Which range?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['start', 'end', 'timeZone'],
+            candidateIntents: ['query_calendar_events'],
+            suggestedNextStep: 'Provide the range.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({ status: 'completed', mode: 'list', count: 0, events: [] }),
+      }),
+    });
+    await expect(
+      queryRunner.run({
+        session: session(),
+        events: [],
+        message: 'List my calendar events tomorrow.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'completed', toolName: 'query_calendar_events' });
+
+    const clarificationClient = new FakeToolCallingClient([]);
+    const clarificationRunner = createIntexAgentRunner({
+      client: clarificationClient,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What is the title?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Provide the title.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+    await expect(
+      clarificationRunner.run({
+        session: session(),
+        events: [],
+        message: 'Schedule dentist at 4 PM.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+    });
+    expect(clarificationClient.calls).toEqual([]);
+  });
+
+  it.each([
+    {
+      label: 'no date signal',
+      message: 'List my calendar events.',
+      blockerReason: 'missing_required_details',
+      missingFields: ['start', 'end', 'timeZone'],
+      candidateIntents: ['query_calendar_events'],
+    },
+    {
+      label: 'a non-derived missing field',
+      message: 'List my calendar events tomorrow.',
+      blockerReason: 'missing_required_details',
+      missingFields: ['start', 'end', 'calendarId'],
+      candidateIntents: ['query_calendar_events'],
+    },
+    {
+      label: 'multiple candidate tools',
+      message: 'List my calendar events tomorrow.',
+      blockerReason: 'missing_required_details',
+      missingFields: ['start', 'end'],
+      candidateIntents: ['query_calendar_events', 'create_calendar_event'],
+    },
+    {
+      label: 'a non-missing-details blocker',
+      message: 'List my calendar events tomorrow.',
+      blockerReason: 'not_enough_context',
+      missingFields: ['start', 'end', 'timeZone'],
+      candidateIntents: ['query_calendar_events'],
+    },
+  ] as const)(
+    'keeps a calendar-query clarification fail-closed for $label',
+    async ({ blockerReason, candidateIntents, message, missingFields }) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification',
+              question: 'Which calendar range should I check?',
+              blockerReason,
+              missingFields: [...missingFields],
+              candidateIntents: [...candidateIntents],
+              suggestedNextStep: 'Provide the missing calendar query details.',
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        reply: 'Which calendar range should I check?',
+        blockerReason,
+        missingFields: [...missingFields],
+        candidateIntents: [...candidateIntents],
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
+  it('keeps a long note confirmation within the WhatsApp interactive-body limit', async () => {
+    const content = Array.from({ length: 18 }, (_, index) => {
+      const marker = `INTEX-EVAL-020-F${String(index + 1).padStart(2, '0')}`;
+      return `${marker} retained context fragment with enough synthetic detail to exercise the bounded preview.`;
+    }).join('\n');
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { title: 'INTEX-EVAL-020 Atlas Readiness Brief', content },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Save the retained Atlas context as one note.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_note',
+      toolArgs: { title: 'INTEX-EVAL-020 Atlas Readiness Brief', content },
+    });
+    expect(result.reply.length).toBeLessThanOrEqual(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
+    expect(result.reply).toContain('Content: INTEX-EVAL-020-F01');
+    expect(result.reply).not.toContain('INTEX-EVAL-020-F18');
+    expect(result.reply).toContain('Preview shortened. The full content will be used after confirmation.');
+  });
+
+  it('keeps an exactly-at-limit confirmation unchanged', async () => {
+    const prefix = 'Add this note?\n\nTitle: X\nContent: ';
+    const content = 'x'.repeat(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH - prefix.length);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { title: 'X', content },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Save this exact-size note.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result.reply).toBe(`${prefix}${content}`);
+    expect(result.reply).toHaveLength(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
+    expect(result.reply).not.toContain('Preview shortened.');
+  });
+
+  it('hard-cuts an oversized unbroken confirmation before adding the truncation notice', async () => {
+    const content = 'x'.repeat(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH * 2);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Save this unbroken note.',
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(result.reply).toHaveLength(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
+    expect(result.reply).toMatch(
+      /^Add this note\?\nContent: x+\n\n…\nPreview shortened\. The full content will be used after confirmation\.$/u
     );
   });
 
@@ -2114,6 +2457,73 @@ describe('createIntexAgentRunner', () => {
         content: 'Now save one note containing all context retained in this session.',
       },
     ]);
+  });
+
+  it('carries all 18 retained scenario-020 fragments into the final save and confirmation turn', async () => {
+    const fragments = Array.from({ length: 18 }, (_, index) => {
+      const position = index + 1;
+      const marker = `INTEX-EVAL-020-F${String(position).padStart(2, '0')}`;
+      return `INTEX-EVAL-020 context fragment ${String(position)} of 18: synthetic Atlas detail ${marker}. Do not save yet; only retain this context.`;
+    });
+    const retainedReply = 'Noted for this session only. No note or other resource was created.';
+    const events = fragments.flatMap((text) => [
+      event('user_message', { text }),
+      event('assistant_message', { text: retainedReply }),
+    ]);
+    const noteContent = fragments.join('\n');
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: {
+          title: 'INTEX-EVAL-020 Atlas Readiness Brief',
+          content: noteContent,
+        },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      toolExecutor: fakeToolExecutor({
+        createNote: async () =>
+          JSON.stringify({
+            status: 'completed',
+            message: 'Saved synthetic scenario-020 note.',
+          }),
+      }),
+    });
+    const finalMessage =
+      'Now save one note titled INTEX-EVAL-020 Atlas Readiness Brief containing all 18 context fragments from this session.';
+
+    const preview = await runner.run({
+      session: session(),
+      events,
+      message: finalMessage,
+      currentDateTime: CURRENT_DATE_TIME,
+    });
+
+    expect(preview.outcome).toBe('needs_confirmation');
+    if (preview.outcome !== 'needs_confirmation') throw new Error('Expected note confirmation');
+    expect(client.calls[0]?.messages).toHaveLength(37);
+    expect(client.calls[0]?.messages.at(-1)).toEqual({ role: 'user', content: finalMessage });
+    for (let position = 1; position <= 18; position += 1) {
+      const marker = `INTEX-EVAL-020-F${String(position).padStart(2, '0')}`;
+      expect(JSON.stringify(client.calls[0]?.messages)).toContain(marker);
+      expect(String(preview.toolArgs['content'])).toContain(marker);
+    }
+    expect(preview.reply.length).toBeLessThanOrEqual(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
+    expect(preview.reply).toContain('Preview shortened.');
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        toolName: preview.toolName,
+        toolArgs: preview.toolArgs,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      toolName: 'create_note',
+    });
   });
 
   it.each([
@@ -3857,7 +4267,7 @@ describe('createIntexAgentRunner', () => {
       message: 'Zapisz ten link jako bookmark.',
       expectedReply: [
         'Czy zapisać bookmark?',
-        'Potwierdź, aby go zapisać, albo anuluj, aby niczego nie zmieniać.',
+        'Użyj przycisków poniżej, aby potwierdzić albo anulować.',
         '',
         'URL: https://example.com',
         'Tytuł: Example',
@@ -5992,6 +6402,67 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it.each([
+    [
+      'add_user_preference',
+      { text: 'Prefer concise replies.', expectedVersion: 0 },
+      'User Preferences:\n- Updated preference entry.',
+    ],
+    [
+      'update_user_preference',
+      { itemId: 'pref_synthetic', text: 'Prefer concise replies.', expectedVersion: 0 },
+      'User Preferences:\n- Updated preference entry.',
+    ],
+    [
+      'delete_user_preference',
+      { itemId: 'pref_synthetic', expectedVersion: 0 },
+      'No Intex Agent preferences are defined yet.',
+    ],
+  ] as const)(
+    'reports a successful %s strict-mock mutation even when the result has no prompt block',
+    async (toolName, toolArgs, expectedReply) => {
+      const runner = createIntexAgentRunner({
+        client: new FakeToolCallingClient([]),
+        toolExecutor: fakeToolExecutor({
+          addUserPreference: async () =>
+            JSON.stringify({
+              toolName: 'add_user_preference',
+              status: 'completed',
+              currentVersion: 1,
+              changedItemId: 'pref_synthetic',
+            }),
+          updateUserPreference: async () =>
+            JSON.stringify({
+              toolName: 'update_user_preference',
+              status: 'completed',
+              currentVersion: 1,
+              changedItemId: 'pref_synthetic',
+            }),
+          deleteUserPreference: async () =>
+            JSON.stringify({
+              toolName: 'delete_user_preference',
+              status: 'completed',
+              currentVersion: 1,
+              changedItemId: 'pref_synthetic',
+            }),
+        }),
+      });
+
+      await expect(
+        runner.executeConfirmed({
+          session: session(),
+          toolName,
+          toolArgs,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'completed',
+        reply: expectedReply,
+        toolName,
+      });
+    }
+  );
+
   it('injects rendered user preferences into the system prompt when configured', async () => {
     const client = new FakeToolCallingClient([
       ok(toolResult({ outcome: 'no_action', reply: 'Got it.' })),
@@ -6334,7 +6805,7 @@ function expectedConfirmationReplyFor(toolName: PreviewToolName): string {
   if (toolName === 'create_link') {
     return [
       'Save this bookmark?',
-      'Confirm to save it, or cancel to leave it unchanged.',
+      'Use the buttons below to confirm or cancel.',
       '',
       'URL: https://example.com',
       'Title: Example',

@@ -45,9 +45,30 @@ describe('classifyIntexAgentIntent', () => {
   });
 
   it.each([
-    'Remember this for this session, but do not save it.',
     "Remember this, but don't persist it; only retain this context.",
     'Context fragment: green folder. Do not save yet; only retain this context.',
+    'Fragment kontekstu: zielony folder. Nie zapisuj jeszcze; tylko zachowaj ten kontekst.',
+  ])('routes explicitly temporary memory to deterministic session retention: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'retain_context',
+    });
+  });
+
+  it.each([
+    'Bookmark https://example.com. Do not save it; only retain this context.',
+    'Translate into Polish: Do not save yet; only retain this context.',
+    'Przetłumacz to: Nie zapisuj jeszcze; tylko zachowaj ten kontekst.',
+    'Do not save this; only retain this context and create a note.',
+  ])('keeps mixed retain-only shapes on the classifier path: %s', (text) => {
+    expect(classifyIntexAgentIntent(text)).toEqual({
+      kind: 'no_action',
+      reason: 'conversation',
+    });
+  });
+
+  it.each([
+    'Remember this for this session, but do not save it.',
     'Remember the garage code only for this session.',
     'Remember this just for this session.',
     'Remember this temporarily for this session.',
@@ -56,7 +77,7 @@ describe('classifyIntexAgentIntent', () => {
     'Zapamiętaj kod do bramy tylko w tej sesji.',
     'Zapamiętaj kod do bramy tymczasowo.',
     'Zapamiętaj kod do bramy na razie.',
-  ])('does not persist explicitly temporary memory as a note: %s', (text) => {
+  ])('keeps other temporary-memory wording on the classifier path: %s', (text) => {
     expect(classifyIntexAgentIntent(text)).toEqual({
       kind: 'no_action',
       reason: 'conversation',

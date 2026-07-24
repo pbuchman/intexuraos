@@ -336,6 +336,7 @@ describe('Matrix corpus message handler', () => {
       scenarioId: 'scenario_001',
       userId: 'auth0:user_1',
       leaseFence: '7',
+      preferenceOverlayMode: 'account_snapshot',
     });
     expect(sessionRepository.createMatrixCorpusSession).toHaveBeenCalledWith({
       identity: {
@@ -382,6 +383,54 @@ describe('Matrix corpus message handler', () => {
     expect(sessionRepository.updateMatrixCorpusSessionExact).not.toHaveBeenCalled();
     expect(sessionRepository.listMatrixCorpusEventsExact).not.toHaveBeenCalled();
   });
+
+  it.each([
+    'add_user_preference',
+    'update_user_preference',
+    'delete_user_preference',
+  ] as const)(
+    'requests a pristine preference overlay when the signed schedule contains %s',
+    async (toolName) => {
+    const profile: StrictToolMockProfileV1 = {
+      ...mockProfile(),
+      calls: [
+        {
+          turnIndex: 1,
+          toolName,
+          ordinal: 1,
+          outcome: {
+            kind: 'success',
+            result: {
+              toolName,
+              status: 'completed',
+              currentVersion: 1,
+              changedItemId: 'mock_pref_synthetic',
+            },
+          },
+        },
+      ],
+    };
+    const mutationPayload = payload({
+      mockProfile: profile,
+      mockProfileDigest: sha256(canonicalMatrixCorpusStrictToolMockProfileV1(profile)),
+      expectedToolSchedule: [
+        { turnIndex: 1, toolName, ordinal: 1 },
+      ],
+    });
+    const { contextService, handler } = fixture();
+
+    await expect(
+      handler.prepareVerifiedIngest({ claims: claims(mutationPayload), stableKeys })
+    ).resolves.toMatchObject({ ok: true });
+    expect(contextService.registerScenario).toHaveBeenCalledWith({
+      runId: 'run_1',
+      scenarioId: 'scenario_001',
+      userId: 'auth0:user_1',
+      leaseFence: '7',
+      preferenceOverlayMode: 'pristine_v0',
+    });
+    }
+  );
 
   it('starts an idle explicit new session without recording the command as a user message', async () => {
     const { sessionRepository, handler } = fixture();
