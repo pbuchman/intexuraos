@@ -108,6 +108,7 @@ export function sanitizeIntexAgentReplyText(text: string): string {
   const datePresentation = classifyIntexAgentReplyDatePresentation(text);
   let inPreferenceBlock = false;
   let inSensitiveDetails = false;
+  const seenSensitiveLabels = new Set<string>();
   const lines = normalizeEvaluationText(text)
     .replace(evaluationUrlPattern, '[redacted-url]')
     .replace(rawRecordIsoDateGlobalPattern, '[redacted-date-record]')
@@ -130,10 +131,12 @@ export function sanitizeIntexAgentReplyText(text: string): string {
       return '[redacted-preference-item]';
     }
     const sensitive = redactEvaluationLine(line);
-    if (inSensitiveDetails) return sensitive ?? '';
+    if (sensitive !== null && seenSensitiveLabels.has(sensitive.canonicalLabel)) return '';
+    if (sensitive !== null) seenSensitiveLabels.add(sensitive.canonicalLabel);
+    if (inSensitiveDetails) return sensitive?.redacted ?? '';
     if (sensitive === null) return line;
     inSensitiveDetails = true;
-    return sensitive;
+    return sensitive.redacted;
   });
   const sanitized = redacted
     .join('\n')
@@ -143,9 +146,11 @@ export function sanitizeIntexAgentReplyText(text: string): string {
   return `${sanitized}\n[date-presentation: ${safePresentation}]`;
 }
 
-function redactEvaluationLine(line: string): string | null {
+function redactEvaluationLine(line: string): { canonicalLabel: string; redacted: string } | null {
   const label = evaluationSensitiveLinePattern.exec(stripEvaluationMarkup(line))?.[1];
-  return label === undefined ? null : `${label}: [redacted]`;
+  return label === undefined
+    ? null
+    : { canonicalLabel: label.toLocaleLowerCase('en-US'), redacted: `${label}: [redacted]` };
 }
 
 function stripEvaluationMarkup(line: string): string {
