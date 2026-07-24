@@ -289,6 +289,8 @@ verdict request using another model.
 
 - A behavioral failure marks the scenario failed but continues through scenario 020 so
   the full corpus remains observable on WhatsApp.
+- Behavioral fixes are prepared only after the run reaches scenario 020; the complete
+  failure inventory is corrected as one reviewed batch before the next production run.
 - An infrastructure or safety failure stops the current run immediately, then enters the
   autonomous diagnosis/fix/review/PR/merge/deployment/new-run loop.
 - An ambiguous Matrix send is never repeated.

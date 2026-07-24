@@ -92,6 +92,7 @@ interface SharedState {
   readonly hangInitialCursor: boolean;
   readonly dropReplyScenarioNumber: number | null;
   readonly rawDateReplyScenarioNumber: number | null;
+  readonly missingConfirmationScenarioNumber: number | null;
   readonly transportBusyAfterMessageNumber: number | null;
   transportBusyReadsRemaining: number;
   readonly onReplyWaitStarted: () => void;
@@ -107,6 +108,7 @@ export interface MatrixCorpusCompositionHarnessOptions {
   readonly hangInitialCursor?: boolean;
   readonly dropReplyScenarioNumber?: number;
   readonly rawDateReplyScenarioNumber?: number;
+  readonly missingConfirmationScenarioNumber?: number;
   readonly transportBusyAfterMessageNumber?: number;
 }
 
@@ -200,6 +202,7 @@ export async function createPassingMatrixCorpusCompositionHarness(
     hangInitialCursor: options.hangInitialCursor ?? false,
     dropReplyScenarioNumber: options.dropReplyScenarioNumber ?? null,
     rawDateReplyScenarioNumber: options.rawDateReplyScenarioNumber ?? null,
+    missingConfirmationScenarioNumber: options.missingConfirmationScenarioNumber ?? null,
     transportBusyAfterMessageNumber: options.transportBusyAfterMessageNumber ?? null,
     transportBusyReadsRemaining: 0,
     onReplyWaitStarted: () => resolveReplyWaitStarted?.(),
@@ -610,7 +613,8 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
           eventRevision,
           lifecycle: 'running',
           pendingConfirmationId:
-            nextTurn?.kind === 'confirmation_button'
+            nextTurn?.kind === 'confirmation_button' &&
+            entry.scenarioNumber !== state.missingConfirmationScenarioNumber
               ? `confirmation_${entry.scenarioNumber}`
               : null,
         },

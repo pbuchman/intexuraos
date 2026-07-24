@@ -9,6 +9,7 @@ import {
   buildMatrixCorpusTurnChecks,
   buildMatrixCorpusTechnicalFacts,
   countIntexAgentReplyFormatViolations,
+  evaluateMatrixCorpusTurnPrecondition,
   issueMatrixCorpusCapabilityWithReconciliation,
   PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS,
   PRODUCTION_MATRIX_CORPUS_LEASE_TTL_MS,
@@ -20,6 +21,66 @@ import {
 const scenariosDirectory = fileURLToPath(new URL('../../scenarios/', import.meta.url));
 
 describe('production Matrix corpus technical facts', () => {
+  it('classifies a missing required confirmation as a scenario-local behavioral failure', () => {
+    expect(
+      evaluateMatrixCorpusTurnPrecondition({
+        expectedSessionId: 'session_1',
+        confirmationTurn: true,
+        turnIndex: 1,
+        status: {
+          sessionId: 'session_1',
+          pendingConfirmationId: null,
+        },
+      })
+    ).toEqual({
+      ok: false,
+      kind: 'scenario_behavioral_failure',
+      code: 'required_confirmation_missing',
+      boundSessionId: 'session_1',
+      deterministicCheck: {
+        code: 'confirmation_count',
+        status: 'failed',
+        turnIndex: 1,
+        replyIndex: null,
+        evidence: expect.objectContaining({
+          expectedCount: 1,
+          actualCount: 0,
+        }),
+      },
+    });
+  });
+
+  it('keeps unavailable or mismatched continuation status fail-closed', () => {
+    expect(
+      evaluateMatrixCorpusTurnPrecondition({
+        expectedSessionId: 'session_1',
+        confirmationTurn: true,
+        turnIndex: 1,
+        status: null,
+      })
+    ).toEqual({
+      ok: false,
+      kind: 'infrastructure_failure',
+      code: 'scenario_status_unavailable',
+    });
+    expect(
+      evaluateMatrixCorpusTurnPrecondition({
+        expectedSessionId: 'session_1',
+        confirmationTurn: true,
+        turnIndex: 1,
+        status: {
+          sessionId: 'session_2',
+          pendingConfirmationId: 'confirmation_1',
+        },
+      })
+    ).toEqual({
+      ok: false,
+      kind: 'safety_failure',
+      code: 'scenario_status_mismatch',
+      boundSessionId: 'session_2',
+    });
+  });
+
   it('gives slow DeepSeek replies more time without outliving a renewed production lease', () => {
     expect(PRODUCTION_MATRIX_CORPUS_CORRELATION_TIMEOUT_MS).toBe(3 * 60 * 1000);
     expect(PRODUCTION_MATRIX_CORPUS_REPLY_TIMEOUT_MS).toBe(4 * 60 * 1000);
@@ -100,6 +161,8 @@ describe('production Matrix corpus technical facts', () => {
       actualUserMessageCount: 1,
       expectedAgentUsageCount: null,
       actualAgentUsageCount: 1,
+      expectedPendingConfirmationCount: 0,
+      actualPendingConfirmationCount: 0,
       toolEvidence: [
         {
           event: 'selected',
@@ -164,6 +227,45 @@ describe('production Matrix corpus technical facts', () => {
           status: 'passed',
           evidence: expect.objectContaining({ expectedCount: 0, actualCount: 0 }),
         }),
+        expect.objectContaining({
+          code: 'confirmation_count',
+          status: 'passed',
+          evidence: expect.objectContaining({ expectedCount: 0, actualCount: 0 }),
+        }),
+      ])
+    );
+  });
+
+  it('fails deterministic evidence when an expected confirmation was not created', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const scenario = catalog.scenarios[13]?.scenario;
+    const expectation = scenario?.expected.turns[0];
+    if (expectation === undefined) throw new Error('missing code-task fixture expectation');
+
+    const checks = buildMatrixCorpusTurnChecks({
+      turnIndex: 0,
+      expectation,
+      actualReplyCount: 1,
+      actualReplyFormatViolationCount: 0,
+      expectedTransition: 'created',
+      actualTransition: 'created',
+      actualLifecycle: 'completed',
+      expectedUserMessageCount: null,
+      actualUserMessageCount: 1,
+      expectedAgentUsageCount: null,
+      actualAgentUsageCount: 1,
+      expectedPendingConfirmationCount: 1,
+      actualPendingConfirmationCount: 0,
+      toolEvidence: [],
+    });
+
+    expect(checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'confirmation_count',
+          status: 'failed',
+          evidence: expect.objectContaining({ expectedCount: 1, actualCount: 0 }),
+        }),
       ])
     );
   });
@@ -186,6 +288,8 @@ describe('production Matrix corpus technical facts', () => {
       actualUserMessageCount: 1,
       expectedAgentUsageCount: 0,
       actualAgentUsageCount: 1,
+      expectedPendingConfirmationCount: 0,
+      actualPendingConfirmationCount: 0,
       toolEvidence: [],
     });
 

@@ -176,7 +176,9 @@ For behavioral failures, the corpus runner records and judges the failed turn, s
 the remaining turns that depend on that scenario's now-divergent state, and continues
 with every later scenario through scenario 20. This produces one complete cross-scenario
 failure inventory per run instead of stopping at the first broken flow. A successful run
-still executes all 59 turns.
+still executes all 59 turns. Do not implement behavioral fixes between scenarios: finish
+the run, review the complete inventory, and correct the collected behavioral failures as
+one batch before the next production run.
 
 ## Deliberately deferred hardening
 

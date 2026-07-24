@@ -107,6 +107,40 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.totals.completedTurns).toBe(59);
   });
 
+  it('ends only the current scenario when a dependent turn cannot run after behavioral failure', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const trace: string[] = [];
+    const ports = passingPorts(trace);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      if (input.scenario.id === 'intex-eval-003' && input.turnIndex === 1) {
+        return {
+          ok: false,
+          kind: 'scenario_behavioral_failure',
+          code: 'required_confirmation_missing',
+          boundSessionId: 'session_intex-eval-003',
+        } as unknown as MatrixCorpusTurnExecutionResult;
+      }
+      return { ok: true, observation: observation(input.scenario, input.turnIndex) };
+    });
+
+    const result = await runMatrixCorpus({ runId: 'run_1', catalog }, ports);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.failureCodes).toContain('required_confirmation_missing');
+    expect(result.scenarios[2]).toMatchObject({ status: 'failed', completedTurns: 1 });
+    expect(result.scenarios[3]?.status).toBe('passed');
+    expect(result.scenarios[19]?.status).toBe('passed');
+    expect(
+      vi
+        .mocked(ports.executeTurn)
+        .mock.calls.map(([input]) => input)
+        .filter(({ scenario }) => scenario.id === 'intex-eval-003')
+        .map(({ turnIndex }) => turnIndex)
+    ).toEqual([0, 1]);
+    expect(result.totals.completedTurns).toBe(57);
+    expect(ports.reconcileStoppedScenario).not.toHaveBeenCalled();
+  });
+
   it('stops immediately on safety failure, marks later scenarios not run, and still terminalizes', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const trace: string[] = [];

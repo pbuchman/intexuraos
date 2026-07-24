@@ -416,7 +416,7 @@ describe('Intex Agent Test Runs public contracts', () => {
     };
     expect(safeDeterministicCheckV1Schema.safeParse(check).success).toBe(true);
     expect(
-      ['user_message_count', 'agent_usage_count'].every(
+      ['user_message_count', 'agent_usage_count', 'confirmation_count'].every(
         (code) => safeDeterministicCheckV1Schema.safeParse({ ...check, code }).success
       )
     ).toBe(true);
