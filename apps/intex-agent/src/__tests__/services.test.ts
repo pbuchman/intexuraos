@@ -939,6 +939,100 @@ describe('Matrix corpus runner composition', () => {
     expect(recordConfirmedBoundary).toHaveBeenCalledWith('strict_mock_executor_resolved');
   });
 
+  it('normalizes a stale preference-add version from the exact production Matrix prompt envelope', async () => {
+    const profile = strictProfile({
+      calls: [
+        {
+          turnIndex: 1,
+          toolName: 'add_user_preference',
+          ordinal: 1,
+          outcome: {
+            kind: 'success',
+            result: {
+              toolName: 'add_user_preference',
+              status: 'completed',
+              currentVersion: 1,
+              changedItemId: 'mock_pref_1',
+            },
+          },
+        },
+      ],
+    });
+    const client = {
+      run: vi.fn(
+        async (
+          params: Parameters<
+            import('@intexuraos/llm-contract').ToolCallingClient['run']
+          >[0]
+        ) => {
+          const tool = params.tools.find(
+            (candidate) => candidate.name === 'add_user_preference'
+          );
+          if (tool === undefined || params.matrixCorpusContext === undefined) {
+            throw new Error('strict preference preview or provider context missing');
+          }
+          await tool.run({
+            text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+            expectedVersion: 1,
+          });
+          return ok({
+            content: 'malformed runner output',
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0.0001 },
+            providerCalls: [
+              {
+                context: params.matrixCorpusContext,
+                modelId: 'or:deepseek/deepseek-v4-flash',
+                inputTokens: 1,
+                outputTokens: 1,
+                totalTokens: 2,
+                providerReportedUsd: 0.0001,
+              },
+            ],
+          });
+        }
+      ),
+    };
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_preference_preview',
+        expectedSchedule: [{ turnIndex: 1, toolName: 'add_user_preference', ordinal: 1 }],
+        recordExecutionBoundary: vi.fn(async () => undefined),
+        recordToolCallStarted: vi.fn(async () => undefined),
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall: vi.fn(async () => undefined),
+      },
+      client,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool' as const, allowedToolNames: ['add_user_preference'] };
+        },
+      },
+      userPreferences: '{"version":1,"userPreferences":null}',
+    });
+
+    await expect(
+      runner.run({
+        session: matrixCorpusSession(profile),
+        events: [],
+        message: 'Add the synthetic durable preference.',
+        currentDateTime: '2026-07-20T10:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'add_user_preference',
+      toolArgs: {
+        text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+        expectedVersion: 0,
+      },
+      toolSelection: { turnIndex: 1, ordinal: 1 },
+    });
+  });
+
   it('fails before executor construction for a cross-lane ordinary session', async () => {
     const profile = strictProfile();
     const recordExecutionBoundary = vi.fn(async () => undefined);

@@ -160,6 +160,20 @@ const CALENDAR_ORDINAL_DATE_SIGNAL_PATTERN =
 
 const CALENDAR_CONTEXTUAL_MONTH_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?)(?=$|[^\p{L}\p{N}])/iu;
+const CALENDAR_COLON_CLOCK_PATTERN =
+  /(?<![\p{L}\p{N}])(\d{1,2}):(\d{2})(?:\s*(am|pm))?(?![\p{L}\p{N}])/iu;
+const CALENDAR_MERIDIEM_CLOCK_PATTERN =
+  /(?<![\p{L}\p{N}])(\d{1,2})\s*(am|pm)(?![\p{L}\p{N}])/iu;
+const CALENDAR_CONTEXTUAL_HOUR_PATTERN =
+  /(?<![\p{L}\p{N}])(?:at|o)\s+(\d{1,2})(?![\p{L}\p{N}:])/iu;
+const CALENDAR_ENGLISH_DURATION_PATTERN =
+  /(?<![\p{L}\p{N}])for\s+(\d+|an?|one|two|three|half\s+an?)\s+(hours?|minutes?)(?![\p{L}\p{N}])/iu;
+const CALENDAR_POLISH_DURATION_PATTERN =
+  /(?<![\p{L}\p{N}])na\s+(?:(\d+)\s+)?(?:godzin(?:ę|y|a)|minut(?:ę|y)?)(?![\p{L}\p{N}])/iu;
+const CALENDAR_UNTIL_CLOCK_PATTERN =
+  /(?<![\p{L}\p{N}])until\s+(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
+const CALENDAR_CLOCK_RANGE_PATTERN =
+  /(?<![\p{L}\p{N}])(?:from\s+)?(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)\s*(?:-|–|to)\s*(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
 const EXPLICIT_IANA_TIME_ZONE_CANDIDATE_PATTERN =
   /(?<![\p{L}\p{N}_])([a-z](?:[a-z0-9._+-]*[a-z0-9_+-])?(?:\/[a-z](?:[a-z0-9._+-]*[a-z0-9_+-])?)+)(?![\p{L}\p{N}_])/giu;
 const EXPLICIT_STANDALONE_TIME_ZONE_CANDIDATE_PATTERN =
@@ -418,16 +432,24 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             });
       const normalizedIntent = applyOptionalPreferenceReadFieldClarification(
         applyOptionalCodeTaskFieldClarification(
-          applyAvailableCalendarSummaryContext(
-            applyOptionalNoteFieldClarification(
-              applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
-                timeZone: input.timeZone,
-                message: input.message,
-                events: input.events,
-                replyContext: input.replyContext,
-              })
+          applyCompleteCalendarClarificationContext(
+            applyAvailableCalendarSummaryContext(
+              applyOptionalNoteFieldClarification(
+                applyRuntimeTimeZoneToCalendarIntent(classifiedIntent, {
+                  timeZone: input.timeZone,
+                  message: input.message,
+                  events: input.events,
+                  replyContext: input.replyContext,
+                })
+              ),
+              input.events
             ),
-            input.events
+            {
+              timeZone: input.timeZone,
+              message: input.message,
+              events: input.events,
+              replyContext: input.replyContext,
+            }
           )
         ),
         input.message
@@ -506,7 +528,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         createTrackingToolExecutor(
           createConfirmationPreviewExecutor(config.toolExecutor),
           toolExecutions,
-          config.toolSelectionGate
+          config.toolSelectionGate,
+          resolveCurrentPreferenceVersion(config.userPreferences)
         )
       )
         .filter(
@@ -698,6 +721,146 @@ function applyAvailableCalendarSummaryContext(
   }
 
   return clarificationToToolIntent(intent, 'create_calendar_event');
+}
+
+function applyCompleteCalendarClarificationContext(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    timeZone: string;
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'create_calendar_event' ||
+    intent.missingFields === undefined ||
+    intent.missingFields.length < 2
+  ) {
+    return intent;
+  }
+
+  const activeClarification = findActiveClarificationEvent(context.events);
+  if (
+    activeClarification === undefined ||
+    !isCalendarClarification(activeClarification.event) ||
+    !intent.missingFields.every((field) =>
+      isSatisfiedCalendarClarificationField(field, context, activeClarification.index)
+    )
+  ) {
+    return intent;
+  }
+
+  return clarificationToToolIntent(intent, 'create_calendar_event');
+}
+
+function isSatisfiedCalendarClarificationField(
+  field: string,
+  context: Readonly<{
+    timeZone: string;
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>,
+  activeClarificationIndex: number
+): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  if (isCalendarSummaryField(field)) {
+    return activeCalendarClarificationChainContainsSummary(
+      context.events,
+      activeClarificationIndex
+    );
+  }
+  if (canonical === 'date' || canonical === 'eventdate' || canonical === 'startdate') {
+    return hasCalendarDateSignal(context.message, context.events, context.replyContext);
+  }
+  if (
+    canonical === 'start' ||
+    canonical === 'starttime' ||
+    canonical === 'startdatetime' ||
+    canonical === 'time'
+  ) {
+    return hasCalendarSignal(
+      context,
+      activeClarificationIndex,
+      containsCalendarClockTimeSignal
+    );
+  }
+  if (
+    canonical === 'end' ||
+    canonical === 'endtime' ||
+    canonical === 'enddatetime' ||
+    canonical === 'duration'
+  ) {
+    return hasCalendarSignal(context, activeClarificationIndex, containsCalendarEndTimeSignal);
+  }
+  if (isRuntimeTimeZoneMissingField(field)) {
+    return context.timeZone.trim() !== '' || hasExplicitTimeZoneContext(context);
+  }
+  return false;
+}
+
+function hasCalendarSignal(
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>,
+  activeClarificationIndex: number,
+  containsSignal: (message: string) => boolean
+): boolean {
+  if (containsSignal(context.message)) return true;
+  if (
+    context.replyContext?.source === 'inbound_user_message' &&
+    containsSignal(context.replyContext.text)
+  ) {
+    return true;
+  }
+  return activeCalendarClarificationChainContainsSignal(
+    context.events,
+    activeClarificationIndex,
+    containsSignal
+  );
+}
+
+function activeCalendarClarificationChainContainsSignal(
+  events: readonly IntexAgentSessionEvent[],
+  latestClarificationIndex: number,
+  containsSignal: (message: string) => boolean
+): boolean {
+  let expectsUserMessage = true;
+
+  for (let index = latestClarificationIndex - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event === undefined) continue;
+
+    if (expectsUserMessage) {
+      if (event.type === 'clarification_requested') return false;
+      if (event.type !== 'user_message') continue;
+
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string' && containsSignal(priorMessage)) return true;
+      const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
+      if (
+        priorReplyContext?.source === 'inbound_user_message' &&
+        containsSignal(priorReplyContext.text)
+      ) {
+        return true;
+      }
+      expectsUserMessage = false;
+      continue;
+    }
+
+    if (event.type === 'user_message') return false;
+    if (event.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) return false;
+    expectsUserMessage = true;
+  }
+
+  return false;
 }
 
 function applyOptionalCodeTaskFieldClarification(
@@ -898,9 +1061,13 @@ function isOptionalPreferenceReadField(field: string): boolean {
 }
 
 function containsExplicitCalendarSummarySignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
   const match =
     /\b(?:put|add|place|schedule)\s+(.+?)\s+(?:on|in|to)\s+(?:(?:my|the)\s+)?calendar\b/iu.exec(
-      message.normalize('NFKC')
+      normalized
+    ) ??
+    /\b(?:put|add|place|schedule|dodaj|zaplanuj)\s+(.+?)(?=\s+(?:at|for|on|next|tomorrow|today|o|na|w)\b|[.!?]|$)/iu.exec(
+      normalized
     );
   if (match === null) return false;
 
@@ -921,8 +1088,78 @@ function containsExplicitCalendarSummarySignal(message: string): boolean {
       'a meeting',
       'appointment',
       'an appointment',
+      'wydarzenie',
+      'spotkanie',
+      'coś',
+      'cos',
     ]).has(summary)
   );
+}
+
+function containsCalendarClockTimeSignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
+  if (/(?<![\p{L}\p{N}])(?:noon|midnight)(?![\p{L}\p{N}])/iu.test(normalized)) {
+    return true;
+  }
+
+  const colonClock = CALENDAR_COLON_CLOCK_PATTERN.exec(normalized);
+  if (colonClock !== null) {
+    return isValidCalendarClock(
+      Number(colonClock[1]),
+      Number(colonClock[2]),
+      colonClock[3]
+    );
+  }
+
+  const meridiemClock = CALENDAR_MERIDIEM_CLOCK_PATTERN.exec(normalized);
+  if (meridiemClock !== null) {
+    return isValidCalendarClock(Number(meridiemClock[1]), 0, meridiemClock[2]);
+  }
+
+  const contextualHour = CALENDAR_CONTEXTUAL_HOUR_PATTERN.exec(normalized);
+  return (
+    contextualHour !== null &&
+    isValidCalendarClock(Number(contextualHour[1]), 0, undefined)
+  );
+}
+
+function containsCalendarEndTimeSignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
+  const englishDuration = CALENDAR_ENGLISH_DURATION_PATTERN.exec(normalized);
+  if (englishDuration !== null) {
+    const quantity = englishDuration[1]?.toLocaleLowerCase('en-US');
+    return quantity !== undefined && (Number.isNaN(Number(quantity)) || Number(quantity) > 0);
+  }
+
+  const polishDuration = CALENDAR_POLISH_DURATION_PATTERN.exec(normalized);
+  if (polishDuration !== null) {
+    const numericQuantity = polishDuration[1];
+    return numericQuantity === undefined || Number(numericQuantity) > 0;
+  }
+
+  const untilClock = CALENDAR_UNTIL_CLOCK_PATTERN.exec(normalized);
+  if (untilClock?.[1] !== undefined) {
+    return containsCalendarClockTimeSignal(untilClock[1]);
+  }
+
+  const range = CALENDAR_CLOCK_RANGE_PATTERN.exec(normalized);
+  return (
+    range?.[1] !== undefined &&
+    range[2] !== undefined &&
+    containsCalendarClockTimeSignal(range[1]) &&
+    containsCalendarClockTimeSignal(range[2])
+  );
+}
+
+function isValidCalendarClock(
+  hour: number,
+  minute: number,
+  meridiem: string | undefined
+): boolean {
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) {
+    return false;
+  }
+  return meridiem === undefined ? hour >= 0 && hour <= 23 : hour >= 1 && hour <= 12;
 }
 
 function isExplicitUnscopedPreferenceRead(message: string): boolean {
@@ -1807,7 +2044,8 @@ function isMutatingToolName(toolName: IntexAgentToolName): toolName is MutatingI
 function createTrackingToolExecutor(
   executor: IntexAgentToolExecutor,
   toolExecutions: IntexAgentToolExecution[],
-  toolSelectionGate?: IntexAgentRunnerConfig['toolSelectionGate']
+  toolSelectionGate?: IntexAgentRunnerConfig['toolSelectionGate'],
+  currentPreferenceVersion?: number
 ): IntexAgentToolExecutor {
   async function track(
     toolName: IntexAgentToolName,
@@ -1891,10 +2129,14 @@ function createTrackingToolExecutor(
       return await track('get_user_preferences', {}, async () => await executor.getUserPreferences());
     },
     async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
+      const normalizedArgs =
+        currentPreferenceVersion === undefined
+          ? args
+          : { ...args, expectedVersion: currentPreferenceVersion };
       return await track(
         'add_user_preference',
-        toRecord(args),
-        async () => await executor.addUserPreference(args)
+        toRecord(normalizedArgs),
+        async () => await executor.addUserPreference(normalizedArgs)
       );
     },
     async updateUserPreference(args: UpdateUserPreferenceToolArgs): Promise<string> {
@@ -1912,6 +2154,59 @@ function createTrackingToolExecutor(
       );
     },
   };
+}
+
+function resolveCurrentPreferenceVersion(userPreferences: string | null | undefined): number | undefined {
+  if (userPreferences === undefined) return undefined;
+  if (userPreferences === null) return 0;
+
+  const normalized = userPreferences.trim();
+  if (normalized === '') return undefined;
+  if (normalized.startsWith('{')) {
+    let envelope: unknown;
+    try {
+      envelope = JSON.parse(normalized);
+    } catch {
+      return undefined;
+    }
+    if (!isMatrixPromptContextEnvelope(envelope)) return undefined;
+    return envelope.userPreferences === null
+      ? 0
+      : resolveRenderedPreferenceVersion(envelope.userPreferences);
+  }
+  return resolveRenderedPreferenceVersion(normalized);
+}
+
+function isMatrixPromptContextEnvelope(
+  value: unknown
+): value is Readonly<{ version: 1; userPreferences: string | null }> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  if (
+    keys.length !== 2 ||
+    !keys.includes('version') ||
+    !keys.includes('userPreferences')
+  ) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    record['version'] === 1 &&
+    (record['userPreferences'] === null || typeof record['userPreferences'] === 'string')
+  );
+}
+
+function resolveRenderedPreferenceVersion(userPreferences: string): number | undefined {
+  const explicitInstruction =
+    /(?:^|\n)Use expectedVersion (\d+) for (?:add_user_preference|preference mutation tools)\.(?:\n|$)/u.exec(
+      userPreferences
+    );
+  const header = /^User Preferences v(\d+):(?:\n|$)/u.exec(userPreferences);
+  const rawVersion = explicitInstruction?.[1] ?? header?.[1];
+  if (rawVersion === undefined) return undefined;
+
+  const version = Number(rawVersion);
+  return Number.isSafeInteger(version) && version >= 0 ? version : undefined;
 }
 
 function errorCategory(error: unknown): string | undefined {

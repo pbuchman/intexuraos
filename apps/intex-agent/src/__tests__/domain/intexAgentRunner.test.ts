@@ -911,6 +911,169 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.toolChoice).toBe('required');
   });
 
+  it('uses the complete active calendar chain when the classifier repeats already satisfied fields', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01',
+          start: '2026-07-28T12:00:00+02:00',
+          end: '2026-07-28T13:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What exact title, date, start time, end time, and time zone should I use?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['summary', 'date', 'start', 'end', 'timeZone'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Ask for every calendar field again.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [
+        event('user_message', {
+          text: 'Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 at noon.',
+        }),
+        event('clarification_requested', {
+          message: 'Which day or date should I use for this calendar event?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', {
+          text: 'Which day or date should I use for this calendar event?',
+        }),
+      ],
+      message: 'Next Tuesday at noon for one hour for INTEX-EVAL-003.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01',
+        start: '2026-07-28T12:00:00+02:00',
+        end: '2026-07-28T13:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+    });
+    expect(client.calls[0]?.toolChoice).toBe('required');
+  });
+
+  it.each([
+    {
+      label: 'the end time is absent',
+      message: 'Next Tuesday at noon.',
+      missingFields: ['summary', 'end'],
+      timeZone: 'Europe/Warsaw',
+    },
+    {
+      label: 'the clock is invalid',
+      message: 'Next Tuesday at 99:99 for one hour.',
+      missingFields: ['summary', 'start'],
+      timeZone: 'Europe/Warsaw',
+      priorMessage: 'Add lunch with Marta.',
+    },
+    {
+      label: 'the duration is zero',
+      message: 'Next Tuesday at noon for 0 minutes.',
+      missingFields: ['summary', 'end'],
+      timeZone: 'Europe/Warsaw',
+    },
+    {
+      label: 'the start time is absent',
+      message: 'Next Tuesday for one hour.',
+      missingFields: ['summary', 'start'],
+      timeZone: 'Europe/Warsaw',
+      priorMessage: 'Add lunch with Marta.',
+    },
+    {
+      label: 'the runtime time zone is absent',
+      message: 'Next Tuesday at noon for one hour.',
+      missingFields: ['summary', 'timeZone'],
+      timeZone: '',
+    },
+    {
+      label: 'the classifier field is unknown',
+      message: 'Next Tuesday at noon for one hour.',
+      missingFields: ['summary', 'calendarId'],
+      timeZone: 'Europe/Warsaw',
+    },
+  ])(
+    'keeps a repeated calendar clarification when $label',
+    async ({ message, missingFields, priorMessage, timeZone }) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification',
+              question: 'More calendar information is required.',
+              blockerReason: 'missing_required_details',
+              missingFields,
+              candidateIntents: ['create_calendar_event'],
+              suggestedNextStep: 'Ask for the genuinely missing field.',
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: priorMessage ?? 'Add lunch with Marta at noon.',
+            }),
+            event('clarification_requested', {
+              message: 'Which day or date should I use for this calendar event?',
+              blockerReason: 'missing_required_details',
+              missingFields: ['date'],
+              candidateIntents: ['create_calendar_event'],
+            }),
+            event('assistant_message', {
+              text: 'Which day or date should I use for this calendar event?',
+            }),
+          ],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        reply: 'More calendar information is required.',
+        missingFields,
+        candidateIntents: ['create_calendar_event'],
+      });
+      expect(client.calls).toEqual([]);
+    }
+  );
+
   it('keeps calendar-summary clarification when the active chain has no actual title', async () => {
     const client = new FakeToolCallingClient([]);
     const runner = createIntexAgentRunner({
@@ -3362,6 +3525,132 @@ describe('createIntexAgentRunner', () => {
     expect(responseRepairClient.calls).toHaveLength(0);
     expect(client.calls[0]?.toolChoice).toBe('required');
     expect(addUserPreferenceCalls).toBe(0);
+  });
+
+  it.each([
+    {
+      userPreferences: null,
+      currentVersion: 0,
+    },
+    {
+      userPreferences: '{"version":1,"userPreferences":null}',
+      currentVersion: 0,
+    },
+    {
+      userPreferences: JSON.stringify({
+        version: 1,
+        userPreferences:
+          'User Preferences v2:\n1. (id: pref_focus) "Prefer focus blocks before noon."\nUse expectedVersion 2 for preference mutation tools.',
+      }),
+      currentVersion: 2,
+    },
+    {
+      userPreferences:
+        'User Preferences v3:\n1. (id: pref_focus) "Prefer focus blocks before noon."\nUse expectedVersion 3 for preference mutation tools.',
+      currentVersion: 3,
+    },
+  ])(
+    'uses authoritative preference version $currentVersion when the model supplies a stale add version',
+    async ({ currentVersion, userPreferences }) => {
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'add_user_preference',
+          args: {
+            text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+            expectedVersion: 1,
+          },
+        },
+        [
+          ok({
+            content: 'malformed runner output',
+            toolCallsMade: 1,
+            iterationCount: 2,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+          }),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['add_user_preference']),
+        toolExecutor: fakeToolExecutor(),
+        userPreferences,
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: SCENARIO_017_MESSAGE,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_confirmation',
+        toolName: 'add_user_preference',
+        toolArgs: {
+          text: 'reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
+          expectedVersion: currentVersion,
+        },
+      });
+    }
+  );
+
+  it.each([
+    {
+      label: 'the optional context is undefined',
+      userPreferences: undefined,
+    },
+    {
+      label: 'the Matrix envelope has an unsupported version',
+      userPreferences: '{"version":2,"userPreferences":null}',
+    },
+    {
+      label: 'the Matrix envelope contains additional fields',
+      userPreferences: '{"version":1,"userPreferences":null,"currentVersion":0}',
+    },
+    {
+      label: 'the Matrix envelope is malformed JSON',
+      userPreferences: '{"version":1,"userPreferences":null',
+    },
+  ])('does not guess a preference version when $label', async ({ userPreferences }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'add_user_preference',
+        args: {
+          text: 'Prefer concise replies.',
+          expectedVersion: 7,
+        },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['add_user_preference']),
+      toolExecutor: fakeToolExecutor(),
+      ...(userPreferences !== undefined ? { userPreferences } : {}),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Add a durable preference to keep replies concise.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'add_user_preference',
+      toolArgs: {
+        text: 'Prefer concise replies.',
+        expectedVersion: 7,
+      },
+    });
   });
 
   it('keeps malformed runner output fail-closed after a read-only tool execution', async () => {
