@@ -259,6 +259,11 @@ const COMPLETED_REPLIES = {
   linkUrl: { en: 'Saved the link.', pl: 'Zapisałem link.' },
 } satisfies Record<string, LocalizedText>;
 
+const TOOL_SELECTION_REJECTED_REPLIES = {
+  en: "I couldn't complete that request because the selected action is not allowed.",
+  pl: 'Nie mogę zrealizować tej prośby, ponieważ wybrana akcja jest niedozwolona.',
+} satisfies LocalizedText;
+
 const CTA_LABELS = {
   openNote: { en: 'Open note', pl: 'Otwórz notatkę' },
   openResearch: { en: 'Open research', pl: 'Otwórz research' },
@@ -474,7 +479,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
         )
         .map((tool) =>
-          isMutatingToolName(tool.name as IntexAgentToolName)
+          isMutatingToolName(tool.name as IntexAgentToolName) ||
+          tool.name === 'get_user_preferences'
             ? { ...tool, stopAfterRun: true }
             : tool
         );
@@ -1115,10 +1121,26 @@ async function parseRunnerContent(
       category: rejectedSelection.selectionRejection.category,
       code: rejectedSelection.selectionRejection.code,
       toolSelection: rejectedSelection.selectionMetadata,
-      reply: '',
+      reply: TOOL_SELECTION_REJECTED_REPLIES[replyLanguage],
     };
   }
   const toolExecution = getCompletedToolExecution(toolExecutions);
+  if (
+    toolExecution?.toolName === 'get_user_preferences' &&
+    toolExecution.error === undefined &&
+    toolExecution.result !== undefined &&
+    input.content.trim() === ''
+  ) {
+    return buildCompletedToolExecutionResult(
+      toolExecution.toolName,
+      toolExecution.result,
+      '',
+      undefined,
+      webAppUrl,
+      replyLanguage,
+      toolExecution.selectionMetadata
+    );
+  }
   const parsed = await validateRunnerOutput(
     toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)
       ? { ...input, repairClient: undefined }
