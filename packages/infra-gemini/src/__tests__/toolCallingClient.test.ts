@@ -166,6 +166,78 @@ describe('createGeminiToolCallingClient', () => {
     expect(result.value.usage).toEqual(expect.objectContaining({ totalTokens: 23 }));
   });
 
+  it('stops after a terminal tool callback without another model iteration', async () => {
+    const terminalRun = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    mockGenerateContent.mockResolvedValueOnce(
+      functionCallResponse('create_note', { content: 'Door code' }, 7, 3)
+    );
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'save a note' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note preview.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: terminalRun,
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 1,
+        providerCalls: [
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 1 }) }),
+        ],
+      }),
+    });
+    expect(terminalRun).toHaveBeenCalledTimes(1);
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops after a terminal tool callback without Matrix corpus evidence', async () => {
+    const terminalRun = vi.fn().mockResolvedValue('preview ready');
+    mockGenerateContent.mockResolvedValueOnce(
+      functionCallResponse('create_note', { content: 'Door code' }, 7, 3)
+    );
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'save a note' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note preview.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: terminalRun,
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.not.objectContaining({ providerCalls: expect.anything() }),
+    });
+    expect(terminalRun).toHaveBeenCalledTimes(1);
+    expect(mockGenerateContent).toHaveBeenCalledTimes(1);
+  });
+
   it('omits Matrix tool arguments, results, and thrown errors from logs and Sentry', async () => {
     mockGenerateContent
       .mockResolvedValueOnce(
@@ -173,7 +245,7 @@ describe('createGeminiToolCallingClient', () => {
       )
       .mockResolvedValueOnce(textResponse('Done.'));
 
-    await createClient().run({
+    const result = await createClient().run({
       systemPrompt: 'Test',
       messages: [{ role: 'user', content: 'test' }],
       tools: [
@@ -181,6 +253,7 @@ describe('createGeminiToolCallingClient', () => {
           name: 'request_review',
           description: 'Review.',
           parameters: { type: 'object' },
+          stopAfterRun: true,
           run: vi.fn(async () => {
             throw new Error('PRIVATE_THROWN_ERROR_SENTINEL');
           }),
@@ -197,6 +270,15 @@ describe('createGeminiToolCallingClient', () => {
       },
     });
 
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        content: 'Done.',
+        iterationCount: 2,
+        providerCalls: [{ context: { callOrdinal: 1 } }, { context: { callOrdinal: 2 } }],
+      },
+    });
+    expect(mockGenerateContent).toHaveBeenCalledTimes(2);
     const logs = JSON.stringify([
       vi.mocked(mockLogger.info).mock.calls,
       vi.mocked(mockLogger.warn).mock.calls,

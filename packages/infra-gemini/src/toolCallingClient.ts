@@ -187,6 +187,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               // Find matching tool definition
               const toolDef = toolMap.get(resolvedName);
               let toolResponse: string;
+              let toolRunSucceeded = false;
 
               if (toolDef === undefined) {
                 // Hallucinated tool name — send error back for self-correction.
@@ -208,6 +209,7 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
               } else {
                 try {
                   toolResponse = await toolDef.run(resolvedArgs);
+                  toolRunSucceeded = true;
                 } catch (runError: unknown) {
                   const runErrorMsg = getErrorMessage(runError);
                   toolResponse = JSON.stringify({
@@ -252,6 +254,32 @@ export function createGeminiToolCallingClient(config: ToolCallingClientConfig): 
                 },
                 'Tool calling: iteration with tool call'
               );
+
+              if (toolRunSucceeded && toolDef?.stopAfterRun === true) {
+                const terminalTextPart = parts.find((part) => part.text !== undefined);
+                const terminalContent = terminalTextPart?.text ?? '';
+                logger.info(
+                  {
+                    iteration,
+                    totalToolCalls,
+                    usage: {
+                      inputTokens: aggregatedUsage.inputTokens,
+                      outputTokens: aggregatedUsage.outputTokens,
+                      costUsd: aggregatedUsage.costUsd,
+                    },
+                    durationMs: Date.now() - iterationStart,
+                  },
+                  'Tool calling: stopped after terminal tool callback'
+                );
+                trackUsage(aggregatedUsage, true, Date.now() - runStart, undefined, promptType);
+                return ok({
+                  content: terminalContent,
+                  toolCallsMade: totalToolCalls,
+                  iterationCount: iteration,
+                  usage: aggregatedUsage,
+                  ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
+                });
+              }
 
               // Append the model's function call and our response to conversation
               contents.push({

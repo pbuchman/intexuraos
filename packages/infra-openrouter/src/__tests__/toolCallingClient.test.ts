@@ -199,6 +199,133 @@ describe('createOpenRouterToolCallingClient', () => {
     ]);
   });
 
+  it('stops after a terminal tool callback without asking the model to call it again', async () => {
+    const terminalRun = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    const laterRun = vi.fn().mockResolvedValue('{}');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_terminal',
+                  type: 'function',
+                  function: { name: 'create_note', arguments: '{"content":"Door code"}' },
+                },
+                {
+                  id: 'call_later',
+                  type: 'function',
+                  function: { name: 'save_external', arguments: '{}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'save a note' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note preview.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: terminalRun,
+        },
+        {
+          name: 'save_external',
+          description: 'Save externally.',
+          parameters: { type: 'object' },
+          run: laterRun,
+        },
+      ],
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: 'session_1',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 1,
+        providerCalls: [
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 1 }) }),
+        ],
+      }),
+    });
+    expect(terminalRun).toHaveBeenCalledTimes(1);
+    expect(laterRun).not.toHaveBeenCalled();
+    expect(nock.isDone()).toBe(true);
+  });
+
+  it('returns terminal assistant content without Matrix corpus evidence', async () => {
+    const terminalRun = vi.fn().mockResolvedValue('preview ready');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'I prepared the note preview.',
+              tool_calls: [
+                {
+                  id: 'call_terminal',
+                  type: 'function',
+                  function: { name: 'create_note', arguments: '{"content":"Door code"}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Test',
+      messages: [{ role: 'user', content: 'save a note' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note preview.',
+          parameters: { type: 'object' },
+          stopAfterRun: true,
+          run: terminalRun,
+        },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'I prepared the note preview.',
+        toolCallsMade: 1,
+        iterationCount: 1,
+      }),
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: expect.not.objectContaining({ providerCalls: expect.anything() }),
+    });
+    expect(terminalRun).toHaveBeenCalledTimes(1);
+    expect(nock.isDone()).toBe(true);
+  });
+
   it('never logs or sends to Sentry Matrix tool arguments, results, or thrown errors', async () => {
     nock(API_BASE_URL)
       .post('/chat/completions')
@@ -228,7 +355,7 @@ describe('createOpenRouterToolCallingClient', () => {
         usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, cost: 0.0001 },
       });
 
-    await createClient().run({
+    const result = await createClient().run({
       systemPrompt: 'Test',
       messages: [{ role: 'user', content: 'test' }],
       tools: [
@@ -236,6 +363,7 @@ describe('createOpenRouterToolCallingClient', () => {
           name: 'note',
           description: 'Note.',
           parameters: { type: 'object' },
+          stopAfterRun: true,
           run: vi.fn(async () => {
             throw new Error('PRIVATE_THROWN_ERROR_SENTINEL');
           }),
@@ -252,6 +380,15 @@ describe('createOpenRouterToolCallingClient', () => {
       },
     });
 
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        content: 'Done.',
+        iterationCount: 2,
+        providerCalls: [{ context: { callOrdinal: 1 } }, { context: { callOrdinal: 2 } }],
+      },
+    });
+    expect(nock.isDone()).toBe(true);
     const logs = JSON.stringify([
       vi.mocked(mockLogger.info).mock.calls,
       vi.mocked(mockLogger.warn).mock.calls,

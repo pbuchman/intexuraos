@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { logIncomingRequest, validateInternalAuth } from '@intexuraos/common-http';
 import {
   canonicalMatrixCorpusControlRequestDigestInputV1,
+  INTEX_AGENT_TEST_RUN_MAX_AGENT_CALL_ORDINAL,
   INTEX_AGENT_TEST_RUN_MAX_DETERMINISTIC_CHECKS,
   matrixCorpusDecimalFenceSchema,
   matrixCorpusRfc3339TimestampSchema,
@@ -721,7 +722,11 @@ const testRunSafeAgentUsageJsonSchema = closedJsonObject(
       type: 'string',
       enum: ['intent_classification', 'agent_generation', 'response_schema_repair'],
     },
-    callOrdinal: { type: 'integer', minimum: 1, maximum: 3 },
+    callOrdinal: {
+      type: 'integer',
+      minimum: 1,
+      maximum: INTEX_AGENT_TEST_RUN_MAX_AGENT_CALL_ORDINAL,
+    },
     inputTokens: safeIntegerJsonSchema,
     outputTokens: safeIntegerJsonSchema,
     totalTokens: safeIntegerJsonSchema,

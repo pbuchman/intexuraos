@@ -467,10 +467,17 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           toolExecutions,
           config.toolSelectionGate
         )
-      ).filter(
-        (tool) =>
-          intent.kind === 'tool' && intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
-      );
+      )
+        .filter(
+          (tool) =>
+            intent.kind === 'tool' &&
+            intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
+        )
+        .map((tool) =>
+          isMutatingToolName(tool.name as IntexAgentToolName)
+            ? { ...tool, stopAfterRun: true }
+            : tool
+        );
       const exposedToolNames = tools.map((tool) => tool.name as IntexAgentToolName);
       const systemPrompt = buildIntexAgentSystemPrompt.build({
         currentDateTime: input.currentDateTime,
@@ -481,11 +488,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const matrixCorpusLlm = config.matrixCorpusLlm;
       const recordedProviderCalls = new Map<string, string>();
       const recordProviderCallOnce = async (
+        recorder: MatrixCorpusLlmRecorder,
         providerCall: MatrixCorpusProviderCallUsageV1
       ): Promise<void> => {
-        /* v8 ignore start -- upstream: this callback is attached to the client only when matrixCorpusLlm is defined; the closure guard cannot be false through the caller contract @preserve */
-        if (matrixCorpusLlm === undefined) return;
-        /* v8 ignore stop @preserve */
         const key = matrixProviderCallKey(providerCall);
         const serialized = JSON.stringify(providerCall);
         const existing = recordedProviderCalls.get(key);
@@ -494,7 +499,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             throw new Error('Matrix corpus provider usage replay conflict');
           return;
         }
-        await matrixCorpusLlm.recordProviderCall(providerCall);
+        await recorder.recordProviderCall(providerCall);
         recordedProviderCalls.set(key, serialized);
       };
       const result = await config.client.run({
@@ -508,7 +513,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           ? {}
           : {
               matrixCorpusContext: matrixCorpusLlm.nextContext('agent_generation'),
-              onMatrixCorpusProviderCall: recordProviderCallOnce,
+              onMatrixCorpusProviderCall: async (providerCall): Promise<void> => {
+                await recordProviderCallOnce(matrixCorpusLlm, providerCall);
+              },
             }),
       });
 
@@ -523,7 +530,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           throw new Error('Matrix corpus provider usage is incomplete');
         }
         for (const providerCall of result.value.providerCalls) {
-          await recordProviderCallOnce(providerCall);
+          await recordProviderCallOnce(matrixCorpusLlm, providerCall);
         }
       }
 

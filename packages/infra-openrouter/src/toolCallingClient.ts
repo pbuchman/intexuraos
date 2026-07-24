@@ -321,7 +321,6 @@ export function createOpenRouterToolCallingClient(
 
             const toolCalls = message?.tool_calls ?? [];
             if (toolCalls.length > 0) {
-              totalToolCalls += toolCalls.length;
               conversation.push({
                 role: 'assistant',
                 content: message?.content ?? null,
@@ -336,12 +335,45 @@ export function createOpenRouterToolCallingClient(
                   iteration,
                   params.matrixCorpusContext !== undefined
                 );
+                totalToolCalls++;
                 conversation.push({
                   role: 'tool',
                   tool_call_id: toolCall.id ?? `call_${String(iteration)}_${String(index)}`,
                   name: toolCall.function?.name ?? '',
-                  content: toolResponse,
+                  content: toolResponse.content,
                 });
+                if (toolResponse.stopAfterRun) {
+                  const terminalContent =
+                    typeof message?.content === 'string' ? message.content : '';
+                  logger.info(
+                    {
+                      iteration,
+                      totalToolCalls,
+                      usage: {
+                        inputTokens: aggregatedUsage.inputTokens,
+                        outputTokens: aggregatedUsage.outputTokens,
+                        costUsd: aggregatedUsage.costUsd,
+                      },
+                      durationMs: Date.now() - iterationStart,
+                    },
+                    'OpenRouter tool calling: stopped after terminal tool callback'
+                  );
+                  trackUsage(
+                    completeUsage(),
+                    true,
+                    Date.now() - runStart,
+                    undefined,
+                    completeProviderReportedUsd(),
+                    promptType
+                  );
+                  return ok({
+                    content: terminalContent,
+                    toolCallsMade: totalToolCalls,
+                    iterationCount: iteration,
+                    usage: completeUsage(),
+                    ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
+                  });
+                }
               }
 
               logger.info(
@@ -512,7 +544,7 @@ async function runToolCall(
   logger: Logger,
   iteration: number,
   matrixCorpus: boolean
-): Promise<string> {
+): Promise<Readonly<{ content: string; stopAfterRun: boolean }>> {
   const toolName = toolCall.function?.name ?? '';
   const toolArgs = parseToolArgs(toolCall.function?.arguments);
   const toolDef = toolMap.get(toolName);
@@ -527,11 +559,19 @@ async function runToolCall(
         : { iteration, toolName, _skipSentry: true },
       'OpenRouter tool calling: hallucinated tool name'
     );
-    return JSON.stringify({ error: matrixCorpus ? 'Unknown tool' : `Unknown tool: ${toolName}` });
+    return {
+      content: JSON.stringify({
+        error: matrixCorpus ? 'Unknown tool' : `Unknown tool: ${toolName}`,
+      }),
+      stopAfterRun: false,
+    };
   }
 
   try {
-    return await toolDef.run(toolArgs);
+    return {
+      content: await toolDef.run(toolArgs),
+      stopAfterRun: toolDef.stopAfterRun === true,
+    };
   } catch (error: unknown) {
     const errorMsg = getErrorMessage(error);
     logger.warn(
@@ -540,7 +580,10 @@ async function runToolCall(
         : { iteration, toolName, error: errorMsg },
       'OpenRouter tool calling: run callback threw'
     );
-    return JSON.stringify({ error: matrixCorpus ? 'Tool execution failed' : errorMsg });
+    return {
+      content: JSON.stringify({ error: matrixCorpus ? 'Tool execution failed' : errorMsg }),
+      stopAfterRun: false,
+    };
   }
 }
 
