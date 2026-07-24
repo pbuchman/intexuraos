@@ -27,6 +27,23 @@ describe('sanitizeIntexAgentReplyText', () => {
     ).toBe('Add this event?\nTitle: [redacted]\n\nStart: [redacted]\nURL: [redacted]');
   });
 
+  it('deduplicates repeated sensitive labels without exposing their values', () => {
+    const reply = [
+      'Add this note?',
+      'Title: private-primary-title',
+      'Content: private-content',
+      'title: private-title-shaped-content-continuation',
+      'Content: private-repeated-content-label',
+    ].join('\n');
+
+    const sanitized = sanitizeIntexAgentReplyText(reply);
+
+    expect(sanitized).toBe('Add this note?\nTitle: [redacted]\nContent: [redacted]\n\n');
+    expect(sanitized).not.toContain('private-');
+    expect(sanitized.match(/Title: \[redacted\]/giu)).toHaveLength(1);
+    expect(sanitized.match(/Content: \[redacted\]/giu)).toHaveLength(1);
+  });
+
   it('redacts preference blocks and resumes ordinary text after a blank line', () => {
     expect(
       sanitizeIntexAgentReplyText(

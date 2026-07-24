@@ -67,6 +67,8 @@ const TONE_EVIDENCE_RULE =
   'Judge tone only from concrete wording observable in assistantReply, in any language; do not infer hostility or intent from brevity or missing social niceties. A concise direct question or confirmation request—including second-person address or imperative grammar—is professional and non-passive-aggressive by default. Unless assistantReply contains a concrete textual cue of hostility, sarcasm, blame, resentment, guilt-tripping, indirect reproach, abuse, vulgarity, or disrespect, set criteria.professionalTone=true and criteria.noPassiveAggression=true and do not include bad_tone. If such a cue is present, set every affected tone criterion to false and include bad_tone.';
 const EXTERNAL_SAVE_ACTION_RULE =
   'Only when technicalFacts.toolOutcome.toolName=save_external and technicalFacts.toolOutcome.status=completed, the action is saving or sending content to an external system. A completion reply such as "Saved externally", "Sent to the external system", "Wysłano do zewnętrznego systemu.", or a clear equivalent identifies that action and is not a bare acknowledgement. This equivalence never applies when technicalFacts.toolOutcome.status=failed. "Done" or "Saved" alone do not identify the save_external action. For a completed save_external, when assistantReply instead claims that a note, bookmark, link, or different resource completed, set criteria.understoodIntent=false and include misunderstood_intent; do not use only missing_information or unhelpful. When technicalFacts.toolOutcome.status=failed and assistantReply nevertheless claims the external save completed, set criteria.helpful=false and include unsupported_claim. If assistantReply names the external-save action correctly, do not set criteria.understoodIntent=false solely because the technical outcome failed.';
+const CANONICAL_COMPLETION_RULE =
+  'Mandatory canonical completion mapping: when technicalFacts.turnPassed=true, technicalFacts.failureCodes is empty, technicalFacts.confirmationAction=accepted, and technicalFacts.toolOutcome.status=completed, the following exact concise replies identify their completed actions and are understood, helpful, concise, and clear for semanticCriteria whose only substantive requirement is communicating that the matched action succeeded: create_link with "Saved the bookmark."; save_external with "Saved externally"; create_note with "Saved the note.". Do not classify any of those exact tool-matched replies as a bare acknowledgement, missing information, misunderstood intent, unhelpful, or unclear for that success-only criterion. Evaluate every additional semanticCriteria requirement independently; the mapping does not satisfy a requirement to communicate other information absent from assistantReply. This mapping does not apply when any listed technical condition is absent, when the tool name does not match, or when assistantReply contains additional contradictory, hostile, unsupported, or unsafe content.';
 const SANITIZED_CONFIRMATION_RULE =
   'When technicalFacts.confirmationAction=requested and assistantReply contains a clear confirmation question plus the action-relevant primary structured labels with [redacted] values, treat those values as present, complete, and reviewable even when semanticCriteria does not explicitly mention sanitization. In particular, "Save this bookmark?" with "URL: [redacted]" is a helpful and concise create-link confirmation, and "Add this note?" with "Content: [redacted]" plus "Title: [redacted]" when a title is shown is a helpful and concise create-note confirmation. Never treat [redacted] as missing information. Sanitizer-produced blank lines, repeated redacted labels, a preview-truncation notice, or a trailing [date-presentation: ...] evaluator annotation do not by themselves make an otherwise clear confirmation unhelpful, verbose, or unclear. This rule does not excuse a missing primary label required by semanticCriteria, a wrong action, contradictory wording, or an unsupported completion claim.';
 
@@ -80,6 +82,7 @@ For a success criterion covered by the completed-action rule, a bare acknowledge
 ${EXTERNAL_SAVE_ACTION_RULE}
 ${TONE_EVIDENCE_RULE}
 ${SANITIZED_CONFIRMATION_RULE}
+${CANONICAL_COMPLETION_RULE}
 Redacted or raw tool arguments are intentionally unavailable. Never guess them and never penalize their absence.
 Return only one strict JSON object with no Markdown and no additional keys.
 Required compact JSON skeleton (replace values, never keys): ${VERDICT_JSON_SKELETON}
@@ -267,7 +270,7 @@ describe('MiniMax judge schema and prompts', () => {
   it('locks every prompt name, version, and initial rendering', () => {
     expect({ name: miniMaxJudgePrompt.name, version: miniMaxJudgePrompt.version }).toEqual({
       name: 'intex-agent-eval-minimax-judge',
-      version: '12.0.0',
+      version: '13.0.0',
     });
     expect(miniMaxJudgePrompt.build({})).toBe(JUDGE_SYSTEM_PROMPT);
 
@@ -332,6 +335,24 @@ describe('MiniMax judge schema and prompts', () => {
     expect(prompt).toContain('Never treat [redacted] as missing information');
     expect(prompt).toContain('Sanitizer-produced blank lines, repeated redacted labels');
     expect(prompt).toContain('This rule does not excuse a missing primary label');
+  });
+
+  it('locks exact safe completion replies to their completed tool actions', () => {
+    const prompt = miniMaxJudgePrompt.build({});
+
+    expect(prompt).toContain(CANONICAL_COMPLETION_RULE);
+    expect(prompt).toContain('create_link with "Saved the bookmark."');
+    expect(prompt).toContain('save_external with "Saved externally"');
+    expect(prompt).toContain('create_note with "Saved the note."');
+    expect(prompt).toContain(
+      'Evaluate every additional semanticCriteria requirement independently'
+    );
+    expect(prompt).toContain(
+      'does not satisfy a requirement to communicate other information absent from assistantReply'
+    );
+    expect(prompt).toContain(
+      'This mapping does not apply when any listed technical condition is absent'
+    );
   });
 
   it('keeps the full verdict contract self-contained in initial, Matrix, and repair prompts', () => {
@@ -475,6 +496,105 @@ describe('MiniMax judge happy path', () => {
   });
 });
 
+describe('MiniMax judge negative-verdict quorum', () => {
+  it('overturns one negative verdict only when two independent MiniMax votes pass', async () => {
+    const initialFailure = verdictWithFailure('unhelpful', { helpful: false });
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse(JSON.stringify(initialFailure)),
+      successfulResponse(JSON.stringify(validVerdict())),
+      successfulResponse(JSON.stringify(validVerdict()))
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toMatchObject({
+      ok: true,
+      verdicts: [{ ...validVerdict() }],
+      usage: { logicalCalls: 3, repairCount: 0 },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(3);
+    expect(generateChat.mock.calls[1]).toEqual(generateChat.mock.calls[0]);
+    expect(generateChat.mock.calls[2]).toEqual(generateChat.mock.calls[0]);
+  });
+
+  it('keeps the first negative verdict when two of three MiniMax votes fail', async () => {
+    const firstFailure = verdictWithFailure('unhelpful', { helpful: false });
+    const secondFailure = verdictWithFailure('unclear', { conciseAndClear: false });
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse(JSON.stringify(firstFailure)),
+      successfulResponse(JSON.stringify(validVerdict())),
+      successfulResponse(JSON.stringify(secondFailure))
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toMatchObject({
+      ok: true,
+      verdicts: [{ ...firstFailure }],
+      usage: { logicalCalls: 3, repairCount: 0 },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns the negative quorum immediately when the first two votes fail', async () => {
+    const firstFailure = verdictWithFailure('unhelpful', { helpful: false });
+    const secondFailure = verdictWithFailure('unclear', { conciseAndClear: false });
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse(JSON.stringify(firstFailure)),
+      successfulResponse(JSON.stringify(secondFailure)),
+      failedResponse('TIMEOUT')
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toMatchObject({
+      ok: true,
+      verdicts: [{ ...firstFailure }],
+      usage: { logicalCalls: 2, repairCount: 0, providerReportedUsdComplete: true },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed when an independent quorum vote cannot be obtained', async () => {
+    const initialFailure = verdictWithFailure('unhelpful', { helpful: false });
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse(JSON.stringify(initialFailure)),
+      failedResponse('API_ERROR')
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'MINIMAX_JUDGE_PROVIDER_FAILED',
+      failedReply: { scenarioId: INPUT.scenarioId, turnIndex: INPUT.turnIndex, replyIndex: 1 },
+      completedVerdicts: [],
+      usage: { logicalCalls: 2, repairCount: 0, providerReportedUsdComplete: false },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails closed when the third quorum vote times out after a passing second vote', async () => {
+    const initialFailure = verdictWithFailure('unhelpful', { helpful: false });
+    const { evaluator, generateChat } = evaluatorWithResponses(
+      successfulResponse(JSON.stringify(initialFailure)),
+      successfulResponse(JSON.stringify(validVerdict())),
+      failedResponse('TIMEOUT')
+    );
+
+    const result = await evaluator.judgeReplies([INPUT]);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'MINIMAX_JUDGE_TIMEOUT',
+      failedReply: { scenarioId: INPUT.scenarioId, turnIndex: INPUT.turnIndex, replyIndex: 1 },
+      completedVerdicts: [],
+      usage: { logicalCalls: 3, repairCount: 0, providerReportedUsdComplete: false },
+    });
+    expect(generateChat).toHaveBeenCalledTimes(3);
+  });
+});
+
 describe('MiniMax judge strict parsing and one repair', () => {
   it.each(FAILURE_CRITERION_CASES)(
     'repairs the $failure criterion contradiction exactly once',
@@ -483,6 +603,7 @@ describe('MiniMax judge strict parsing and one repair', () => {
       const repaired = verdictWithFailure(failure, repairedCriteria);
       const { evaluator, generateChat } = evaluatorWithResponses(
         successfulResponse(JSON.stringify(contradictory)),
+        successfulResponse(JSON.stringify(repaired)),
         successfulResponse(JSON.stringify(repaired))
       );
 
@@ -491,9 +612,9 @@ describe('MiniMax judge strict parsing and one repair', () => {
       expect(result).toMatchObject({
         ok: true,
         verdicts: [{ ...repaired }],
-        usage: { logicalCalls: 2, repairCount: 1 },
+        usage: { logicalCalls: 3, repairCount: 1 },
       });
-      expect(generateChat).toHaveBeenCalledTimes(2);
+      expect(generateChat).toHaveBeenCalledTimes(3);
       expect(generateChat.mock.calls[1]?.[0][3]?.content).toBe(
         REPAIR_PROMPT_PREFIX + `${issuePath.join('.')}:custom`
       );
@@ -561,8 +682,10 @@ describe('MiniMax judge strict parsing and one repair', () => {
   ] as const)(
     'derives redundant pass locally when MiniMax returns %s',
     async (_label, invalidVerdict, expectedPass) => {
+      const normalizedResponse = successfulResponse(JSON.stringify(invalidVerdict));
       const { evaluator, generateChat } = evaluatorWithResponses(
-        successfulResponse(JSON.stringify(invalidVerdict))
+        normalizedResponse,
+        ...(expectedPass ? [] : [normalizedResponse])
       );
 
       const result = await evaluator.judgeReplies([INPUT]);
@@ -570,9 +693,9 @@ describe('MiniMax judge strict parsing and one repair', () => {
       expect(result).toMatchObject({
         ok: true,
         verdicts: [{ pass: expectedPass }],
-        usage: { logicalCalls: 1, repairCount: 0 },
+        usage: { logicalCalls: expectedPass ? 1 : 2, repairCount: 0 },
       });
-      expect(generateChat).toHaveBeenCalledOnce();
+      expect(generateChat).toHaveBeenCalledTimes(expectedPass ? 1 : 2);
     }
   );
 
@@ -1006,6 +1129,13 @@ describe('MiniMax judge usage and batch contract', () => {
         costUsd: 0,
         providerReportedUsd: 0.25,
       }),
+      successfulResponse(JSON.stringify(passFalseVerdict), {
+        inputTokens: 3,
+        outputTokens: 3,
+        totalTokens: 6,
+        costUsd: 0,
+        providerReportedUsd: 0.5,
+      }),
       successfulResponse(JSON.stringify(validVerdict()), {
         inputTokens: 3,
         outputTokens: 3,
@@ -1034,16 +1164,16 @@ describe('MiniMax judge usage and batch contract', () => {
         },
       ],
       usage: {
-        logicalCalls: 3,
+        logicalCalls: 4,
         repairCount: 1,
-        inputTokens: 6,
-        outputTokens: 6,
-        totalTokens: 12,
-        providerReportedUsd: 0.875,
+        inputTokens: 9,
+        outputTokens: 9,
+        totalTokens: 18,
+        providerReportedUsd: 1.375,
         providerReportedUsdComplete: true,
       },
     });
-    expect(generateChat).toHaveBeenCalledTimes(3);
+    expect(generateChat).toHaveBeenCalledTimes(4);
     expect(createClient).toHaveBeenCalledOnce();
   });
 
