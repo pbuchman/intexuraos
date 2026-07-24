@@ -401,7 +401,12 @@ export type TestRunArtifactDeliveryCommandV1 = Readonly<{
     | { status: 'staged'; jsonCandidateDigest: string; markdownCandidateDigest: string }
     | {
         status: 'failed';
-        failureCode: 'REPORT_STAGING_FAILED' | 'REPORT_VALIDATION_FAILED';
+        failureCode: 'REPORT_STAGING_FAILED';
+      }
+    | {
+        status: 'failed';
+        failureCode: 'REPORT_VALIDATION_FAILED';
+        terminalControlEventId?: string | undefined;
       }
     | {
         status: 'failed';

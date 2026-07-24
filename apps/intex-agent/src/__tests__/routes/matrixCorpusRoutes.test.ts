@@ -843,6 +843,38 @@ describe('Matrix corpus private routes', () => {
     });
   });
 
+  it('accepts a terminal-bound report validation failure without leaving delivery staged', async () => {
+    const fixtureValue = fixture();
+    await start(fixtureValue.dependencies);
+    const command = {
+      expectedRevision: 4,
+      next: {
+        status: 'failed',
+        failureCode: 'REPORT_VALIDATION_FAILED',
+        terminalControlEventId: 'terminal_event_1',
+      },
+      updatedAt: now,
+    };
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/internal/test-runs/run_1/artifact-delivery',
+      headers: {
+        'x-internal-auth': internalAuthToken,
+        'x-matrix-corpus-runtime-audience': 'hetzner-prod',
+        'x-matrix-corpus-user-id': 'auth0:user_1',
+        'x-matrix-corpus-lease-fence': '7',
+      },
+      payload: command,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fixtureValue.testRunRepository.applyArtifactDelivery).toHaveBeenCalledWith({
+      identity: { runId: 'run_1', userId: 'auth0:user_1', leaseFence: '7' },
+      command,
+    });
+  });
+
   it('cleans up one terminal run using the current provisioning identity and exact target fence', async () => {
     const fixtureValue = fixture();
     await start(fixtureValue.dependencies);

@@ -26,6 +26,7 @@ import {
 
 import type { ReplyEvaluationInput, ReplyTechnicalFacts } from '../deterministicEvaluator.js';
 import { createMiniMaxEvaluator, type MiniMaxEvaluator } from '../minimaxJudge.js';
+import type { JudgeUsageSummary } from '../runEndpointScenario.js';
 import type { IntexEvalScenario } from '../scenarioSchema.js';
 import type { MatrixClient } from '../live/matrixClient.js';
 import {
@@ -92,6 +93,7 @@ interface ScenarioExecutionState {
   matrixMirrors: number;
   readonly replies: ReplyEvaluationInput[];
   readonly replyEvaluations: SafeReplyEvaluationV1[];
+  readonly judgeUsage: MatrixCorpusReportV1['usage']['evaluator'][];
   toolEvidence: SafeToolEvidenceV1[];
   agentUsage: SafeAgentUsageV1[];
   readonly deterministicChecks: SafeDeterministicCheckV1[];
@@ -405,16 +407,32 @@ function createRunPorts(input: {
       const result = await input.evaluator.judgeReplies([
         { ...reply, assistantText: sanitizeIntexAgentReplyText(reply.assistantText) },
       ]);
-      if (!result.ok) return { ok: false, code: result.code };
-      const verdict = result.verdicts[0];
+      state.scenarios
+        .get(reply.scenarioId)
+        ?.judgeUsage.push(reportUsageFromJudgeResult(result.usage));
       const nanoUsd = toNanoUsd(result.usage.providerReportedUsd);
+      const runUsage =
+        result.usage.providerReportedUsdComplete && nanoUsd !== null
+          ? {
+              logicalCalls: result.usage.logicalCalls,
+              repairCount: result.usage.repairCount,
+              inputTokens: result.usage.inputTokens,
+              outputTokens: result.usage.outputTokens,
+              totalTokens: result.usage.totalTokens,
+              costNanoUsd: nanoUsd,
+            }
+          : undefined;
+      if (!result.ok)
+        return runUsage === undefined
+          ? { ok: false, code: result.code }
+          : { ok: false, code: result.code, usage: runUsage };
+      const verdict = result.verdicts[0];
       if (
         verdict?.scenarioId !== reply.scenarioId ||
         verdict.turnIndex !== reply.turnIndex ||
         verdict.replyIndex !== reply.replyIndex ||
         !isJudgeScore(verdict.score) ||
-        !result.usage.providerReportedUsdComplete ||
-        nanoUsd === null
+        runUsage === undefined
       )
         return { ok: false, code: 'MINIMAX_JUDGE_USAGE_INVALID' };
       const safeEvaluation = toSafeReplyEvaluation(
@@ -423,7 +441,7 @@ function createRunPorts(input: {
         result.usage.inputTokens,
         result.usage.outputTokens,
         result.usage.totalTokens,
-        nanoUsd,
+        runUsage.costNanoUsd,
         Math.max(0, Date.now() - started)
       );
       state.scenarios.get(reply.scenarioId)?.replyEvaluations.push(safeEvaluation);
@@ -431,14 +449,7 @@ function createRunPorts(input: {
         ok: true,
         pass: verdict.pass,
         model,
-        usage: {
-          logicalCalls: result.usage.logicalCalls,
-          repairCount: result.usage.repairCount,
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-          totalTokens: result.usage.totalTokens,
-          costNanoUsd: nanoUsd,
-        },
+        usage: runUsage,
       };
     },
 
@@ -1398,6 +1409,7 @@ function createState(
           matrixMirrors: 0,
           replies: [],
           replyEvaluations: [],
+          judgeUsage: [],
           toolEvidence: [],
           agentUsage: [],
           deterministicChecks: [],
@@ -1640,8 +1652,7 @@ function createDeliveryPort(
       });
     },
     async markFailed({ code }): ReturnType<MatrixCorpusArtifactDeliveryPort['markFailed']> {
-      if (code === 'REPORT_PUBLICATION_FAILED') {
-        if (state.terminalControlEventId === null) return;
+      if (state.terminalControlEventId !== null) {
         await mutate({
           status: 'failed',
           failureCode: code,
@@ -1709,7 +1720,7 @@ function buildReport(
       };
     });
     const agentUsage = reportUsageFromAgent(execution.agentUsage);
-    const judgeUsage = reportUsageFromJudges(execution.replyEvaluations);
+    const judgeUsage = sumJudgeUsage(execution.judgeUsage);
     const criteria = execution.replyEvaluations.flatMap((evaluation) =>
       Object.values(evaluation.criteria)
     );
@@ -1780,12 +1791,14 @@ function buildReport(
     };
   });
   const allAgentUsage = [...state.scenarios.values()].flatMap((scenario) => scenario.agentUsage);
-  const allJudgeUsage = [...state.scenarios.values()].flatMap(
-    (scenario) => scenario.replyEvaluations
-  );
+  const allJudgeUsage = [...state.scenarios.values()].flatMap((scenario) => scenario.judgeUsage);
   const agentUsage = reportUsageFromAgent(allAgentUsage);
-  const evaluatorUsage = reportUsageFromJudges(allJudgeUsage);
-  const totalCostNanoUsd = agentUsage.costNanoUsd + evaluatorUsage.costNanoUsd;
+  const evaluatorUsage = sumJudgeUsage(allJudgeUsage);
+  const totalCostNanoUsd =
+    evaluatorUsage.costNanoUsd === null
+      ? null
+      : agentUsage.costNanoUsd + evaluatorUsage.costNanoUsd;
+  const costComplete = evaluatorUsage.costComplete && totalCostNanoUsd !== null;
   const expectedReplies = state.catalog.scenarios.reduce(
     (sum, entry) =>
       sum + entry.scenario.expected.turns.reduce((turns, turn) => turns + turn.replies.length, 0),
@@ -1904,7 +1917,7 @@ function buildReport(
       agent: agentUsage,
       evaluator: evaluatorUsage,
       totalCostNanoUsd,
-      costComplete: true,
+      costComplete,
     },
     scenarios,
     cleanup: {
@@ -2520,15 +2533,37 @@ function reportUsageFromAgent(entries: readonly SafeAgentUsageV1[]): CompleteUsa
   };
 }
 
-function reportUsageFromJudges(entries: readonly SafeReplyEvaluationV1[]): CompleteUsageReport {
+function reportUsageFromJudgeResult(
+  usage: JudgeUsageSummary
+): MatrixCorpusReportV1['usage']['evaluator'] {
+  const costNanoUsd = usage.providerReportedUsdComplete
+    ? toNanoUsd(usage.providerReportedUsd)
+    : null;
   return {
-    logicalCalls: entries.length,
-    repairCount: entries.reduce((sum, entry) => sum + entry.usage.repairCount, 0),
-    inputTokens: entries.reduce((sum, entry) => sum + entry.usage.inputTokens, 0),
-    outputTokens: entries.reduce((sum, entry) => sum + entry.usage.outputTokens, 0),
-    totalTokens: entries.reduce((sum, entry) => sum + entry.usage.totalTokens, 0),
-    costNanoUsd: entries.reduce((sum, entry) => sum + entry.usage.costNanoUsd, 0),
-    costComplete: true,
+    logicalCalls: Math.max(0, usage.logicalCalls - usage.repairCount),
+    repairCount: usage.repairCount,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    costNanoUsd,
+    costComplete: usage.providerReportedUsdComplete && costNanoUsd !== null,
+  };
+}
+
+function sumJudgeUsage(
+  entries: readonly MatrixCorpusReportV1['usage']['evaluator'][]
+): MatrixCorpusReportV1['usage']['evaluator'] {
+  const costComplete = entries.every((entry) => entry.costComplete && entry.costNanoUsd !== null);
+  return {
+    logicalCalls: entries.reduce((sum, entry) => sum + entry.logicalCalls, 0),
+    repairCount: entries.reduce((sum, entry) => sum + entry.repairCount, 0),
+    inputTokens: entries.reduce((sum, entry) => sum + entry.inputTokens, 0),
+    outputTokens: entries.reduce((sum, entry) => sum + entry.outputTokens, 0),
+    totalTokens: entries.reduce((sum, entry) => sum + entry.totalTokens, 0),
+    costNanoUsd: costComplete
+      ? entries.reduce((sum, entry) => sum + (entry.costNanoUsd ?? 0), 0)
+      : null,
+    costComplete,
   };
 }
 

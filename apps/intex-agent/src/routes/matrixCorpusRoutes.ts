@@ -98,7 +98,14 @@ const artifactDeliveryCommandSchema = z
       z
         .object({
           status: z.literal('failed'),
-          failureCode: z.enum(['REPORT_STAGING_FAILED', 'REPORT_VALIDATION_FAILED']),
+          failureCode: z.literal('REPORT_STAGING_FAILED'),
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('failed'),
+          failureCode: z.literal('REPORT_VALIDATION_FAILED'),
+          terminalControlEventId: matrixCorpusSafeIdSchema.optional(),
         })
         .strict(),
       z
@@ -899,11 +906,17 @@ const artifactDeliveryBodyJsonSchema = closedJsonObject(
         ),
         closedJsonObject(['status', 'failureCode'], ['status', 'failureCode'], {
           status: { type: 'string', enum: ['failed'] },
-          failureCode: {
-            type: 'string',
-            enum: ['REPORT_STAGING_FAILED', 'REPORT_VALIDATION_FAILED'],
-          },
+          failureCode: { type: 'string', enum: ['REPORT_STAGING_FAILED'] },
         }),
+        closedJsonObject(
+          ['status', 'failureCode', 'terminalControlEventId'],
+          ['status', 'failureCode'],
+          {
+            status: { type: 'string', enum: ['failed'] },
+            failureCode: { type: 'string', enum: ['REPORT_VALIDATION_FAILED'] },
+            terminalControlEventId: safeIdJsonSchema,
+          }
+        ),
         closedJsonObject(
           ['status', 'failureCode', 'terminalControlEventId'],
           ['status', 'failureCode', 'terminalControlEventId'],

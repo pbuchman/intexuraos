@@ -497,6 +497,143 @@ describe('production Matrix corpus composition', () => {
     );
   });
 
+  it('publishes a valid stopped report when MiniMax infrastructure fails after a completed turn', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      failMiniMaxScenarioNumber: 3,
+      failMiniMaxInfrastructureScenarioNumber: 12,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result).toMatchObject({
+      reportReady: true,
+      relativeReportDirectory: `.artifacts/intex-agent-evals/${harness.runId}`,
+      run: {
+        effectiveKind: 'infrastructure_failure',
+        exitCode: 2,
+        failureCodes: ['MINIMAX_JUDGE_INVALID_OUTPUT'],
+        terminalAcknowledged: true,
+        cleanupCompleted: true,
+        totals: {
+          completedTurns: 25,
+          judgedReplies: 24,
+          evaluatorCostNanoUsd: 26_000,
+        },
+      },
+    });
+    expect(result.run.scenarios[11]).toMatchObject({
+      scenarioId: 'intex-eval-012',
+      status: 'stopped',
+      completedTurns: 1,
+    });
+    expect(result.run.scenarios[2]).toMatchObject({
+      scenarioId: 'intex-eval-003',
+      status: 'failed',
+      completedTurns: 3,
+    });
+    expect(result.run.scenarios.slice(12).every((scenario) => scenario.status === 'not_run')).toBe(
+      true
+    );
+    const report = MatrixCorpusReportV1Schema.parse(
+      JSON.parse(
+        await readFile(
+          `${harness.repositoryRoot}/.artifacts/intex-agent-evals/${harness.runId}/report.json`,
+          'utf8'
+        )
+      )
+    );
+    expect(report.artifactDelivery).toMatchObject({ status: 'ready', failureCode: null });
+    expect(report.totals.turnsCompleted).toBe(25);
+    expect(report.scenarios[11]).toMatchObject({
+      lifecycle: 'stopped',
+      verdict: 'not_evaluated',
+      completedTurns: 1,
+      judge: {
+        status: 'not_run',
+        usage: {
+          logicalCalls: 1,
+          repairCount: 1,
+          inputTokens: 20,
+          outputTokens: 10,
+          totalTokens: 30,
+          costNanoUsd: 2_000,
+          costComplete: true,
+        },
+      },
+    });
+    expect(report.usage.evaluator).toEqual({
+      logicalCalls: 25,
+      repairCount: 1,
+      inputTokens: 260,
+      outputTokens: 130,
+      totalTokens: 390,
+      costNanoUsd: 26_000,
+      costComplete: true,
+    });
+  });
+
+  it('terminally marks delivery failed when the ready report does not validate', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {
+      finalizedScenarioContextCount: 19,
+    });
+    cleanup.push(harness.cleanup);
+    const execute = createProductionMatrixCorpusExecutor({
+      repositoryRoot: harness.repositoryRoot,
+      matrix: harness.matrix,
+      whatsapp: harness.whatsapp,
+      intex: harness.intex,
+      evaluator: harness.evaluator,
+      env: {
+        INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY:
+          'composition-harness-binding-key-with-at-least-thirty-two-bytes',
+      },
+      now: harness.now,
+    });
+
+    const result = await execute({
+      runId: harness.runId,
+      preflight: harness.preflight,
+      prepared: harness.prepared,
+    });
+
+    expect(result).toMatchObject({
+      reportReady: false,
+      run: {
+        effectiveKind: 'infrastructure_failure',
+        exitCode: 2,
+        failureCodes: ['REPORT_VALIDATION_FAILED'],
+        terminalAcknowledged: true,
+        cleanupCompleted: true,
+      },
+    });
+    expect(harness.metrics.artifactDeliveryStatus).toBe('failed');
+    expect(harness.metrics.artifactDeliveryFailureCode).toBe('REPORT_VALIDATION_FAILED');
+    expect(harness.metrics.artifactDeliveryTransitions.at(-1)).toEqual({
+      status: 'failed',
+      failureCode: 'REPORT_VALIDATION_FAILED',
+      terminalControlEventId: 'terminal_event_1',
+    });
+  });
+
   it('terminalizes a persisted session binding when Matrix correlation fails before observation', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const harness = await createPassingMatrixCorpusCompositionHarness(catalog, {

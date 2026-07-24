@@ -77,21 +77,23 @@ export type MatrixCorpusTurnExecutionResult =
       readonly boundSessionId?: string;
     };
 
+export interface MatrixCorpusJudgeUsage {
+  readonly logicalCalls: number;
+  readonly repairCount: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+  readonly costNanoUsd: number;
+}
+
 export type MatrixCorpusJudgeResult =
   | {
       readonly ok: true;
       readonly pass: boolean;
       readonly model: string;
-      readonly usage: {
-        readonly logicalCalls: number;
-        readonly repairCount: number;
-        readonly inputTokens: number;
-        readonly outputTokens: number;
-        readonly totalTokens: number;
-        readonly costNanoUsd: number;
-      };
+      readonly usage: MatrixCorpusJudgeUsage;
     }
-  | { readonly ok: false; readonly code: string };
+  | { readonly ok: false; readonly code: string; readonly usage?: MatrixCorpusJudgeUsage };
 
 export type MatrixCorpusProjectionMutationResult =
   | { readonly ok: true; readonly revision: number }
@@ -387,6 +389,8 @@ export async function runMatrixCorpus(
         behavioralFailure = true;
       }
 
+      scenarioCompletedTurns += 1;
+      completedTurns += 1;
       for (const [replyOffset, reply] of observation.replyEvaluations.entries()) {
         if (replyOffset % MATRIX_CORPUS_JUDGE_CALLS_PER_LEASE_RENEWAL === 0) {
           const judgeRenewal = await safely(() =>
@@ -414,6 +418,9 @@ export async function runMatrixCorpus(
           judged.model !== input.catalog.evaluatorModel ||
           !validJudgeUsage(judged.usage)
         ) {
+          if (!judged.ok && judged.usage !== undefined && validJudgeUsage(judged.usage)) {
+            evaluatorCostNanoUsd += judged.usage.costNanoUsd;
+          }
           failureCodes.push(judged.ok ? 'judge_evidence_mismatch' : judged.code);
           scenarioStopped = true;
           stopped = true;
@@ -427,8 +434,6 @@ export async function runMatrixCorpus(
         }
       }
       if (scenarioStopped) break;
-      scenarioCompletedTurns += 1;
-      completedTurns += 1;
       const progress = await projectWithRefetch({
         ports,
         runId: input.runId,
@@ -880,7 +885,7 @@ function validUsage(usage: MatrixCorpusTurnObservation['agentUsage']): boolean {
   );
 }
 
-function validJudgeUsage(usage: Extract<MatrixCorpusJudgeResult, { ok: true }>['usage']): boolean {
+function validJudgeUsage(usage: MatrixCorpusJudgeUsage): boolean {
   return (
     usage.logicalCalls === usage.repairCount + 1 &&
     (usage.repairCount === 0 || usage.repairCount === 1) &&

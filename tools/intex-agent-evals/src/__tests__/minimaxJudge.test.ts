@@ -504,19 +504,8 @@ describe('MiniMax judge strict parsing and one repair', () => {
       }),
     ],
     [
-      'pass true with a false criterion',
-      JSON.stringify({
-        ...validVerdict(),
-        criteria: { ...validVerdict().criteria, helpful: false },
-      }),
-    ],
-    [
       'pass true with a failure',
       JSON.stringify({ ...validVerdict(), failures: ['unsupported_claim'] }),
-    ],
-    [
-      'pass false with all criteria true and no failures',
-      JSON.stringify({ ...validVerdict(), pass: false }),
     ],
     [
       'duplicate failure enums',
@@ -538,6 +527,39 @@ describe('MiniMax judge strict parsing and one repair', () => {
     expect(result.ok).toBe(true);
     expect(generateChat).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    [
+      'false when every criterion passes and failures are empty',
+      { ...validVerdict(), pass: false },
+      true,
+    ],
+    [
+      'true when a criterion fails',
+      {
+        ...validVerdict(),
+        pass: true,
+        criteria: { ...validVerdict().criteria, helpful: false },
+      },
+      false,
+    ],
+  ] as const)(
+    'derives redundant pass locally when MiniMax returns %s',
+    async (_label, invalidVerdict, expectedPass) => {
+      const { evaluator, generateChat } = evaluatorWithResponses(
+        successfulResponse(JSON.stringify(invalidVerdict))
+      );
+
+      const result = await evaluator.judgeReplies([INPUT]);
+
+      expect(result).toMatchObject({
+        ok: true,
+        verdicts: [{ pass: expectedPass }],
+        usage: { logicalCalls: 1, repairCount: 0 },
+      });
+      expect(generateChat).toHaveBeenCalledOnce();
+    }
+  );
 
   it('repairs an invalid failure enum into a valid strict verdict', async () => {
     const invalidEnumVerdict = JSON.stringify({
@@ -1296,7 +1318,8 @@ describe('MiniMax Matrix-smoke judge seam', () => {
   });
 
   it('shares strict coherence, one repair, exact options, and aggregate accounting', async () => {
-    const contradictory = JSON.stringify({ ...validVerdict(), pass: false });
+    const contradictory = JSON.stringify(verdictWithFailure('unhelpful'));
+    const repaired = verdictWithFailure('unhelpful', { helpful: false });
     const { evaluator, generateChat, createClient } = evaluatorWithResponses(
       successfulResponse(contradictory, {
         inputTokens: 2,
@@ -1305,7 +1328,7 @@ describe('MiniMax Matrix-smoke judge seam', () => {
         costUsd: 123,
         providerReportedUsd: 0.125,
       }),
-      successfulResponse(JSON.stringify(validVerdict()), {
+      successfulResponse(JSON.stringify(repaired), {
         inputTokens: 4,
         outputTokens: 5,
         totalTokens: 9,
@@ -1326,12 +1349,12 @@ describe('MiniMax Matrix-smoke judge seam', () => {
       { role: 'assistant', content: contradictory },
       {
         role: 'user',
-        content: REPAIR_PROMPT_PREFIX + 'pass:custom',
+        content: REPAIR_PROMPT_PREFIX + 'criteria.helpful:custom',
       },
     ]);
     expect(result).toEqual({
       ok: true,
-      verdict: validVerdict(),
+      verdict: repaired,
       usage: {
         logicalCalls: 2,
         repairCount: 1,

@@ -1131,6 +1131,17 @@ describe('Test Run foundation state machine', () => {
       ok: true,
       record: { lifecycle: 'running', artifactDelivery: { status: 'failed' } },
     });
+    expect(
+      applyArtifactDeliveryTransition(testRunRecord({ lifecycle: 'running' }), {
+        expectedRevision: 0,
+        updatedAt: later,
+        next: {
+          status: 'failed',
+          failureCode: 'REPORT_VALIDATION_FAILED',
+          terminalControlEventId: 'terminal_event_1',
+        },
+      })
+    ).toEqual({ ok: false, code: 'INVALID_TRANSITION' });
 
     const terminal = testRunRecord({
       lifecycle: 'completed',
@@ -1175,6 +1186,54 @@ describe('Test Run foundation state machine', () => {
         artifactDelivery: { status: 'failed', failureCode: 'REPORT_PUBLICATION_FAILED' },
       },
     });
+    expect(
+      applyArtifactDeliveryTransition(terminal, {
+        expectedRevision: 4,
+        updatedAt: later,
+        next: {
+          status: 'failed',
+          failureCode: 'REPORT_VALIDATION_FAILED',
+          terminalControlEventId: 'terminal_event_1',
+        },
+      })
+    ).toMatchObject({
+      ok: true,
+      record: {
+        lifecycle: 'completed',
+        verdict: 'passed',
+        artifactDelivery: { status: 'failed', failureCode: 'REPORT_VALIDATION_FAILED' },
+      },
+    });
+    for (const terminalControlEventId of [undefined, 'wrong_terminal_event'] as const) {
+      expect(
+        applyArtifactDeliveryTransition(terminal, {
+          expectedRevision: 4,
+          updatedAt: later,
+          next: {
+            status: 'failed',
+            failureCode: 'REPORT_VALIDATION_FAILED',
+            ...(terminalControlEventId === undefined ? {} : { terminalControlEventId }),
+          },
+        })
+      ).toEqual({ ok: false, code: 'INVALID_TRANSITION' });
+    }
+    expect(
+      applyArtifactDeliveryTransition(
+        testRunRecord({
+          lifecycle: 'finalizing',
+          revision: 4,
+          artifactDelivery: { status: 'staged', failureCode: null, updatedAt: later },
+          contextFinalizationTombstoneDigest: 'd'.repeat(64),
+          artifactStageDigest: 'e'.repeat(64),
+          terminalCandidate: candidate,
+        }),
+        {
+          expectedRevision: 4,
+          updatedAt: later,
+          next: { status: 'failed', failureCode: 'REPORT_VALIDATION_FAILED' },
+        }
+      )
+    ).toEqual({ ok: false, code: 'INVALID_TRANSITION' });
   });
 
   it('fails closed for every invalid artifact transition gate and allows terminal timeout', () => {

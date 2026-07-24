@@ -83,6 +83,8 @@ interface SharedState {
   terminalAcknowledged: boolean;
   readonly failArtifactReady: boolean;
   readonly failMiniMaxScenarioNumber: number | null;
+  readonly failMiniMaxInfrastructureScenarioNumber: number | null;
+  readonly finalizedScenarioContextCount: number;
   readonly wrongPuppetScenarioNumber: number | null;
   readonly advanceEventRevisionAfterBindingScenarioNumber: number | null;
   readonly deferBindingUntilQuiesceScenarioNumber: number | null;
@@ -101,6 +103,8 @@ interface SharedState {
 export interface MatrixCorpusCompositionHarnessOptions {
   readonly failArtifactReady?: boolean;
   readonly failMiniMaxScenarioNumber?: number;
+  readonly failMiniMaxInfrastructureScenarioNumber?: number;
+  readonly finalizedScenarioContextCount?: number;
   readonly wrongPuppetScenarioNumber?: number;
   readonly advanceEventRevisionAfterBindingScenarioNumber?: number;
   readonly deferBindingUntilQuiesceScenarioNumber?: number;
@@ -126,6 +130,14 @@ export interface MatrixCorpusCompositionMetrics {
   readonly scenarioProjectionDeterministicChecks: SafeDeterministicCheckV1[][];
   readonly judgeAssistantTexts: string[];
   transportReadinessChecks: number;
+  artifactDeliveryStatus: 'pending' | 'staged' | 'ready' | 'failed';
+  artifactDeliveryFailureCode:
+    | 'REPORT_STAGING_INTERRUPTED'
+    | 'REPORT_STAGING_FAILED'
+    | 'REPORT_VALIDATION_FAILED'
+    | 'REPORT_PUBLICATION_FAILED'
+    | null;
+  readonly artifactDeliveryTransitions: Readonly<Record<string, unknown>>[];
   productionExecutorResolutions: 0;
   productionExecutorAdmissions: 0;
 }
@@ -170,6 +182,9 @@ export async function createPassingMatrixCorpusCompositionHarness(
     scenarioProjectionDeterministicChecks: [],
     judgeAssistantTexts: [],
     transportReadinessChecks: 0,
+    artifactDeliveryStatus: 'pending',
+    artifactDeliveryFailureCode: null,
+    artifactDeliveryTransitions: [],
     productionExecutorResolutions: 0,
     productionExecutorAdmissions: 0,
   };
@@ -192,6 +207,9 @@ export async function createPassingMatrixCorpusCompositionHarness(
     terminalAcknowledged: false,
     failArtifactReady: options.failArtifactReady ?? false,
     failMiniMaxScenarioNumber: options.failMiniMaxScenarioNumber ?? null,
+    failMiniMaxInfrastructureScenarioNumber:
+      options.failMiniMaxInfrastructureScenarioNumber ?? null,
+    finalizedScenarioContextCount: options.finalizedScenarioContextCount ?? 20,
     wrongPuppetScenarioNumber: options.wrongPuppetScenarioNumber ?? null,
     advanceEventRevisionAfterBindingScenarioNumber:
       options.advanceEventRevisionAfterBindingScenarioNumber ?? null,
@@ -641,6 +659,7 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
       if (status !== 'staged' && status !== 'ready' && status !== 'failed') {
         return { ok: false, error: { code: 'invalid_request' } };
       }
+      state.metrics.artifactDeliveryTransitions.push(structuredClone(record));
       if (status === 'ready' && state.failArtifactReady) {
         return { ok: false, error: { code: 'rejected', httpStatus: 409 } };
       }
@@ -669,9 +688,12 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
           return { ok: false, error: { code: 'invalid_request' } };
         }
         artifactDelivery = { status, failureCode, updatedAt: NOW };
+        state.metrics.artifactDeliveryFailureCode = failureCode;
       } else {
         artifactDelivery = { status, failureCode: null, updatedAt: NOW };
+        state.metrics.artifactDeliveryFailureCode = null;
       }
+      state.metrics.artifactDeliveryStatus = status;
       return {
         ok: true,
         value: {
@@ -713,7 +735,7 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
           userId: input.request.userId,
           leaseFence: input.request.leaseFence,
           tombstoneDigest: state.contextTombstoneDigest,
-          scenarioContextCount: 20,
+          scenarioContextCount: state.finalizedScenarioContextCount,
           finalizedAt: NOW,
         },
       };
@@ -772,6 +794,32 @@ function createMiniMaxBoundary(state: SharedState): MiniMaxEvaluator {
       state.metrics.miniMaxJudgeCalls += inputs.length;
       for (const input of inputs) {
         state.trace.push(`judge:${input.scenarioId}:${String(input.turnIndex)}`);
+      }
+      const failedInput = inputs.find(
+        (input) =>
+          findEntry(state.catalog, input.scenarioId).scenarioNumber ===
+          state.failMiniMaxInfrastructureScenarioNumber
+      );
+      if (failedInput !== undefined) {
+        return {
+          ok: false,
+          code: 'MINIMAX_JUDGE_INVALID_OUTPUT',
+          failedReply: {
+            scenarioId: failedInput.scenarioId,
+            turnIndex: failedInput.turnIndex,
+            replyIndex: failedInput.replyIndex,
+          },
+          completedVerdicts: [],
+          usage: {
+            logicalCalls: 2,
+            repairCount: 1,
+            inputTokens: 20,
+            outputTokens: 10,
+            totalTokens: 30,
+            providerReportedUsd: 0.000002,
+            providerReportedUsdComplete: true,
+          },
+        };
       }
       return {
         ok: true,

@@ -283,14 +283,22 @@ export function applyArtifactDeliveryTransition(
     artifactDelivery = { status: 'staged', failureCode: null, updatedAt: command.updatedAt };
   } else if (command.next.status === 'failed') {
     const preterminal = current.lifecycle === 'preflight' || current.lifecycle === 'running';
+    const terminal = current.lifecycle === 'completed' || current.lifecycle === 'stopped';
+    const terminalControlEventId =
+      'terminalControlEventId' in command.next
+        ? command.next.terminalControlEventId
+        : undefined;
     if (
+      (!preterminal && !terminal) ||
       (preterminal &&
         (current.artifactDelivery.status !== 'pending' ||
-          command.next.failureCode === 'REPORT_PUBLICATION_FAILED')) ||
+          command.next.failureCode === 'REPORT_PUBLICATION_FAILED' ||
+          terminalControlEventId !== undefined)) ||
       (!preterminal &&
         (current.artifactDelivery.status !== 'staged' ||
-          command.next.failureCode !== 'REPORT_PUBLICATION_FAILED' ||
-          current.terminalWinner?.eventId !== command.next.terminalControlEventId))
+          command.next.failureCode === 'REPORT_STAGING_FAILED' ||
+          terminalControlEventId === undefined ||
+          current.terminalWinner?.eventId !== terminalControlEventId))
     )
       return failure('INVALID_TRANSITION');
     artifactDelivery = {
