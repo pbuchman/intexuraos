@@ -495,6 +495,16 @@ describe('production Matrix corpus composition', () => {
     expect(result.run.scenarios.slice(1).every((scenario) => scenario.status === 'passed')).toBe(
       true
     );
+    expect(
+      harness.metrics.scenarioProjectionReplyEvaluations
+        .flat()
+        .some(
+          (evaluation) =>
+            evaluation.verdict === 'failed' &&
+            evaluation.usage.logicalCalls === 2 &&
+            evaluation.usage.repairCount === 1
+        )
+    ).toBe(true);
   });
 
   it('publishes a valid stopped report when MiniMax infrastructure fails after a completed turn', async () => {
@@ -535,7 +545,7 @@ describe('production Matrix corpus composition', () => {
         totals: {
           completedTurns: 25,
           judgedReplies: 24,
-          evaluatorCostNanoUsd: 26_000,
+          evaluatorCostNanoUsd: 32_000,
         },
       },
     });
@@ -580,12 +590,12 @@ describe('production Matrix corpus composition', () => {
       },
     });
     expect(report.usage.evaluator).toEqual({
-      logicalCalls: 25,
-      repairCount: 1,
-      inputTokens: 260,
-      outputTokens: 130,
-      totalTokens: 390,
-      costNanoUsd: 26_000,
+      logicalCalls: 28,
+      repairCount: 4,
+      inputTokens: 320,
+      outputTokens: 160,
+      totalTokens: 480,
+      costNanoUsd: 32_000,
       costComplete: true,
     });
   });

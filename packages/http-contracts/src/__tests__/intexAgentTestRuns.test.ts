@@ -471,6 +471,39 @@ describe('Intex Agent Test Runs public contracts', () => {
       },
     };
     expect(safeReplyEvaluationV1Schema.safeParse(evaluation).success).toBe(true);
+    expect(
+      safeReplyEvaluationV1Schema.safeParse({
+        ...evaluation,
+        usage: { ...evaluation.usage, logicalCalls: 3, repairCount: 3 },
+      }).success
+    ).toBe(true);
+    const failedEvaluation = {
+      ...evaluation,
+      verdict: 'failed' as const,
+      score: 2 as const,
+      criteria: { ...evaluation.criteria, helpful: false },
+      failureCodes: ['helpful' as const],
+      usage: { ...evaluation.usage, logicalCalls: 2, repairCount: 1 },
+    };
+    expect(safeReplyEvaluationV1Schema.safeParse(failedEvaluation).success).toBe(true);
+    expect(
+      safeReplyEvaluationV1Schema.safeParse({
+        ...evaluation,
+        usage: { ...evaluation.usage, logicalCalls: 2 },
+      }).success
+    ).toBe(false);
+    expect(
+      safeReplyEvaluationV1Schema.safeParse({
+        ...failedEvaluation,
+        usage: { ...failedEvaluation.usage, logicalCalls: 1, repairCount: 0 },
+      }).success
+    ).toBe(false);
+    expect(
+      safeReplyEvaluationV1Schema.safeParse({
+        ...evaluation,
+        usage: { ...evaluation.usage, repairCount: 2 },
+      }).success
+    ).toBe(false);
     expect(safeReplyEvaluationV1Schema.safeParse({ ...evaluation, turnIndex: 20 }).success).toBe(
       false
     );
@@ -769,6 +802,7 @@ describe('Intex Agent Test Runs public contracts', () => {
       score: 1 as const,
       criteria: { ...passed.criteria, helpful: false },
       failureCodes: ['helpful' as const],
+      usage: { ...passed.usage, logicalCalls: 2 as const },
     };
 
     expect(safeReplyEvaluationV1Schema.safeParse(passed).success).toBe(true);

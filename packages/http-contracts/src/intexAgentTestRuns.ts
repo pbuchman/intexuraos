@@ -545,8 +545,8 @@ const minimaxCriteriaSchema = z
   .strict();
 const usageTokensSchema = z
   .object({
-    logicalCalls: z.literal(1),
-    repairCount: z.union([z.literal(0), z.literal(1)]),
+    logicalCalls: positiveSafeIntegerSchema.max(3),
+    repairCount: safeIntegerSchema.max(3),
     inputTokens: safeIntegerSchema,
     outputTokens: safeIntegerSchema,
     totalTokens: safeIntegerSchema,
@@ -581,6 +581,16 @@ export const safeReplyEvaluationV1Schema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'MiniMax verdict, criteria, and failure codes must agree',
+      });
+    const decisionCallsMatchVerdict =
+      evaluation.verdict === 'passed'
+        ? evaluation.usage.logicalCalls === 1 || evaluation.usage.logicalCalls === 3
+        : evaluation.usage.logicalCalls === 2 || evaluation.usage.logicalCalls === 3;
+    if (!decisionCallsMatchVerdict || evaluation.usage.repairCount > evaluation.usage.logicalCalls)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['usage'],
+        message: 'MiniMax quorum calls and repairs must agree with the verdict',
       });
   });
 export type SafeReplyEvaluationV1 = z.infer<typeof safeReplyEvaluationV1Schema>;

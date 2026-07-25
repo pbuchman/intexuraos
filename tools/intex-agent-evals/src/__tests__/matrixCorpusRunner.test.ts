@@ -690,7 +690,7 @@ describe('sequential Matrix corpus state machine', () => {
       pass: true,
       model: 'or:minimax/minimax-m3',
       usage: {
-        logicalCalls: 2,
+        logicalCalls: 4,
         repairCount: 0,
         inputTokens: 1,
         outputTokens: 1,
@@ -747,6 +747,83 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.failureCodes).not.toContain('judge_evidence_mismatch');
     expect(result.scenarios.every(({ status }) => status === 'passed')).toBe(true);
   });
+
+  it.each([
+    ['two-vote negative quorum', false, 2, 0, 1],
+    ['three-vote positive tie breaker', true, 3, 0, 0],
+    ['two-vote negative quorum with one repaired response', false, 3, 1, 1],
+    ['three-vote positive tie breaker with three repaired responses', true, 6, 3, 0],
+  ] as const)(
+    'accepts MiniMax %s as valid judge evidence',
+    async (_label, pass, logicalCalls, repairCount, expectedExitCode) => {
+      const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+      const ports = passingPorts([]);
+      vi.mocked(ports.judgeReply).mockResolvedValue({
+        ok: true,
+        pass,
+        model: 'or:minimax/minimax-m3',
+        usage: {
+          logicalCalls,
+          repairCount,
+          inputTokens: logicalCalls,
+          outputTokens: logicalCalls,
+          totalTokens: logicalCalls * 2,
+          costNanoUsd: logicalCalls,
+        },
+      });
+
+      const result = await runMatrixCorpus(
+        {
+          runId: `run_judge_quorum_${String(logicalCalls)}_${String(repairCount)}`,
+          catalog,
+        },
+        ports
+      );
+
+      expect(result.exitCode).toBe(expectedExitCode);
+      expect(result.failureCodes).not.toContain('judge_evidence_mismatch');
+      expect(result.scenarios.every(({ status }) => status === (pass ? 'passed' : 'failed'))).toBe(
+        true
+      );
+    }
+  );
+
+  it.each([
+    ['a passing verdict after two decision votes', true, 2, 0],
+    ['four decision votes', true, 4, 0],
+    ['more repairs than decision votes', true, 3, 2],
+    ['zero decision votes', true, 0, 0],
+  ] as const)(
+    'rejects MiniMax evidence with %s',
+    async (_label, pass, logicalCalls, repairCount) => {
+      const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+      const ports = passingPorts([]);
+      vi.mocked(ports.judgeReply).mockResolvedValue({
+        ok: true,
+        pass,
+        model: 'or:minimax/minimax-m3',
+        usage: {
+          logicalCalls,
+          repairCount,
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          costNanoUsd: 1,
+        },
+      });
+
+      const result = await runMatrixCorpus(
+        {
+          runId: `run_invalid_judge_evidence_${String(logicalCalls)}_${String(repairCount)}`,
+          catalog,
+        },
+        ports
+      );
+
+      expect(result.exitCode).toBe(2);
+      expect(result.failureCodes).toContain('judge_evidence_mismatch');
+    }
+  );
 
   it('rejects reuse of one created session across two scenarios before judging the second', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);

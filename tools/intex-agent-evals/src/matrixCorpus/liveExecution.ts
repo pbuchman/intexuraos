@@ -437,6 +437,7 @@ function createRunPorts(input: {
         return { ok: false, code: 'MINIMAX_JUDGE_USAGE_INVALID' };
       const safeEvaluation = toSafeReplyEvaluation(
         { ...verdict, score: verdict.score },
+        result.usage.logicalCalls,
         result.usage.repairCount,
         result.usage.inputTokens,
         result.usage.outputTokens,
@@ -2191,6 +2192,7 @@ function toSafeReplyEvaluation(
     score: 1 | 2 | 3 | 4 | 5;
     criteria: SafeReplyEvaluationV1['criteria'];
   },
+  logicalCalls: number,
   repairCount: number,
   inputTokens: number,
   outputTokens: number,
@@ -2207,6 +2209,7 @@ function toSafeReplyEvaluation(
       'noPassiveAggression',
     ] as const
   ).filter((criterion) => !verdict.criteria[criterion]);
+  const decisionCalls = logicalCalls - repairCount;
   return {
     turnIndex: verdict.turnIndex,
     replyIndex: verdict.replyIndex + 1,
@@ -2216,8 +2219,8 @@ function toSafeReplyEvaluation(
     failureCodes,
     latencyMs,
     usage: {
-      logicalCalls: 1,
-      repairCount: repairCount === 0 ? 0 : 1,
+      logicalCalls: decisionCalls,
+      repairCount,
       inputTokens,
       outputTokens,
       totalTokens,

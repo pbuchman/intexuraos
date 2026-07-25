@@ -416,7 +416,7 @@ export async function runMatrixCorpus(
         if (
           !judged.ok ||
           judged.model !== input.catalog.evaluatorModel ||
-          !validJudgeUsage(judged.usage)
+          !validJudgeUsage(judged.usage, judged.pass)
         ) {
           if (!judged.ok && judged.usage !== undefined && validJudgeUsage(judged.usage)) {
             evaluatorCostNanoUsd += judged.usage.costNanoUsd;
@@ -927,10 +927,21 @@ function validUsage(usage: MatrixCorpusTurnObservation['agentUsage']): boolean {
   );
 }
 
-function validJudgeUsage(usage: MatrixCorpusJudgeUsage): boolean {
+function validJudgeUsage(usage: MatrixCorpusJudgeUsage, pass?: boolean): boolean {
+  const decisionCalls = usage.logicalCalls - usage.repairCount;
+  const verdictCallsValid =
+    pass === undefined ||
+    (pass
+      ? decisionCalls === 1 || decisionCalls === 3
+      : decisionCalls === 2 || decisionCalls === 3);
   return (
-    usage.logicalCalls === usage.repairCount + 1 &&
-    (usage.repairCount === 0 || usage.repairCount === 1) &&
+    Number.isSafeInteger(usage.logicalCalls) &&
+    Number.isSafeInteger(usage.repairCount) &&
+    decisionCalls >= 1 &&
+    decisionCalls <= 3 &&
+    usage.repairCount >= 0 &&
+    usage.repairCount <= decisionCalls &&
+    verdictCallsValid &&
     validTokenUsage(usage) &&
     Number.isSafeInteger(usage.costNanoUsd) &&
     usage.costNanoUsd >= 0

@@ -689,8 +689,8 @@ const safeUsageJsonSchema = closedJsonObject(
   ['logicalCalls', 'repairCount', 'inputTokens', 'outputTokens', 'totalTokens', 'costNanoUsd'],
   ['logicalCalls', 'repairCount', 'inputTokens', 'outputTokens', 'totalTokens', 'costNanoUsd'],
   {
-    logicalCalls: { type: 'integer', enum: [1] },
-    repairCount: { type: 'integer', enum: [0, 1] },
+    logicalCalls: { type: 'integer', minimum: 1, maximum: 3 },
+    repairCount: { type: 'integer', minimum: 0, maximum: 3 },
     inputTokens: safeIntegerJsonSchema,
     outputTokens: safeIntegerJsonSchema,
     totalTokens: safeIntegerJsonSchema,

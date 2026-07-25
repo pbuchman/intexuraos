@@ -427,7 +427,10 @@ export const MatrixCorpusReportV1Schema = z
         report.usage.agent.totalTokens > 0 &&
         report.usage.agent.costComplete &&
         report.usage.agent.costNanoUsd !== null &&
-        report.usage.evaluator.logicalCalls === 59 &&
+        report.usage.evaluator.logicalCalls >= 59 &&
+        report.usage.evaluator.logicalCalls <= 59 * 3 &&
+        (report.usage.evaluator.logicalCalls - 59) % 2 === 0 &&
+        report.usage.evaluator.repairCount <= report.usage.evaluator.logicalCalls &&
         report.usage.evaluator.totalTokens > 0 &&
         report.usage.evaluator.costComplete &&
         report.usage.evaluator.costNanoUsd !== null &&
@@ -458,7 +461,10 @@ export const MatrixCorpusReportV1Schema = z
             entry.judge.passed === true &&
             entry.judge.criteriaPassed > 0 &&
             entry.judge.criteriaFailed === 0 &&
-            entry.judge.usage.logicalCalls === entry.plannedTurns &&
+            entry.judge.usage.logicalCalls >= entry.plannedTurns &&
+            entry.judge.usage.logicalCalls <= entry.plannedTurns * 3 &&
+            (entry.judge.usage.logicalCalls - entry.plannedTurns) % 2 === 0 &&
+            entry.judge.usage.repairCount <= entry.judge.usage.logicalCalls &&
             entry.judge.usage.totalTokens > 0 &&
             entry.judge.usage.costComplete &&
             entry.judge.usage.costNanoUsd !== null &&
