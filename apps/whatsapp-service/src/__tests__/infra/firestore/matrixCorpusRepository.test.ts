@@ -1308,7 +1308,7 @@ function transportStatusLifecycleCommand() {
   };
 }
 
-async function cleanupFixture(renewReceiptCount = 1) {
+async function cleanupFixture(renewReceiptCount = 1, includeSecondTarget = false) {
   const fakeFirestore = createFakeFirestore();
   fakeFirestore.clear();
   const firestore = fakeFirestore as unknown as Firestore;
@@ -1353,12 +1353,64 @@ async function cleanupFixture(renewReceiptCount = 1) {
     status: 'published' as const,
     acknowledgedAt: timestamp,
   };
+  const secondRunFenceDigest = '2'.repeat(64);
+  const secondTerminalControlId = 'terminal_cleanup_2';
+  const secondTarget = {
+    ...target,
+    runId: 'run_2',
+    runFenceDigest: secondRunFenceDigest,
+    leaseFence: '6',
+    fenceEpoch: '6',
+    operationReceipts: {
+      ...target.operationReceipts,
+      acquire: {
+        ...target.operationReceipts.acquire,
+        replayProjection: {
+          ...target.operationReceipts.acquire.replayProjection,
+          runId: 'run_2',
+          leaseFence: '6',
+        },
+      },
+      activate: {
+        ...target.operationReceipts.activate,
+        replayProjection: {
+          ...target.operationReceipts.activate.replayProjection,
+          runId: 'run_2',
+          leaseFence: '6',
+        },
+      },
+    },
+    renewReceiptIds: [],
+    terminalControlOutboxIds: [secondTerminalControlId],
+    terminalWinner: {
+      ...target.terminalWinner,
+      eventId: secondTerminalControlId,
+    },
+  };
+  const secondTargetTerminal = {
+    ...targetTerminal,
+    terminalControlId: secondTerminalControlId,
+    eventId: secondTerminalControlId,
+    runId: 'run_2',
+    leaseFence: '6',
+    payload: {
+      ...targetTerminal.payload,
+      eventId: secondTerminalControlId,
+      runId: 'run_2',
+      leaseFence: '6',
+    },
+  };
   fakeFirestore.seedCollection(MATRIX_CORPUS_RUN_LEASES_COLLECTION, [
     { id: leaseSlotDigest, data: target },
   ]);
   fakeFirestore.seedCollection(
     `${MATRIX_CORPUS_RUN_LEASES_COLLECTION}/${leaseSlotDigest}/runs`,
-    [{ id: runFenceDigest, data: { ...target, leaseSlotDigest } }]
+    [
+      { id: runFenceDigest, data: { ...target, leaseSlotDigest } },
+      ...(includeSecondTarget
+        ? [{ id: secondRunFenceDigest, data: { ...secondTarget, leaseSlotDigest } }]
+        : []),
+    ]
   );
   fakeFirestore.seedCollection(
     `${MATRIX_CORPUS_RUN_LEASES_COLLECTION}/${leaseSlotDigest}/runs/${runFenceDigest}/renew_receipts`,
@@ -1387,6 +1439,9 @@ async function cleanupFixture(renewReceiptCount = 1) {
   );
   fakeFirestore.seedCollection(MATRIX_CORPUS_TERMINAL_CONTROL_OUTBOX_COLLECTION, [
     { id: terminalControlId, data: targetTerminal },
+    ...(includeSecondTarget
+      ? [{ id: secondTerminalControlId, data: secondTargetTerminal }]
+      : []),
   ]);
   const repository = lifecycleRepository(firestore);
   const currentRunFenceDigest = 'c'.repeat(64);
@@ -1399,7 +1454,14 @@ async function cleanupFixture(renewReceiptCount = 1) {
     now: '2026-07-20T10:06:00.000Z',
     expiresAt: '2026-07-20T10:11:00.000Z',
   });
-  return { firestore, repository, currentRunFenceDigest, terminalControlId };
+  return {
+    firestore,
+    repository,
+    currentRunFenceDigest,
+    terminalControlId,
+    secondRunFenceDigest,
+    secondTerminalControlId,
+  };
 }
 
 async function fullCleanupFixture() {
@@ -3024,6 +3086,127 @@ describe('FirestoreMatrixCorpusRepository lifecycle', () => {
         .get()
         .then((snapshot) => snapshot.exists)
     ).resolves.toBe(false);
+  });
+
+  it('cleans two exact predecessors under one provisioning lease and replays both receipts', async () => {
+    const { firestore, repository, currentRunFenceDigest, secondRunFenceDigest } = await cleanupFixture(
+      1,
+      true
+    );
+    const first = cleanupCommand(currentRunFenceDigest);
+    const second = {
+      ...first,
+      targetRunId: 'run_2',
+      targetLeaseFence: '6',
+      targetRunFenceDigest: secondRunFenceDigest,
+      idempotencyKeyDigest: '1'.repeat(64),
+      canonicalRequestDigest: '2'.repeat(64),
+      now: '2026-07-20T10:06:02.000Z',
+    };
+
+    await expect(repository.cleanupExactRun(first)).resolves.toMatchObject({
+      code: 'RUN_CLEANED',
+      targetRunId: 'run_1',
+      finalRevision: 1,
+    });
+    await expect(
+      repository.cleanupExactRun({
+        ...second,
+        idempotencyKeyDigest: first.idempotencyKeyDigest,
+      })
+    ).resolves.toEqual({ code: 'IDEMPOTENCY_CONFLICT' });
+    await expect(repository.cleanupExactRun(second)).resolves.toMatchObject({
+      code: 'RUN_CLEANED',
+      targetRunId: 'run_2',
+      finalRevision: 1,
+    });
+    await expect(repository.cleanupExactRun(first)).resolves.toMatchObject({
+      code: 'ALREADY_APPLIED',
+      targetRunId: 'run_1',
+    });
+    await expect(repository.cleanupExactRun(second)).resolves.toMatchObject({
+      code: 'ALREADY_APPLIED',
+      targetRunId: 'run_2',
+    });
+
+    const current = (await readCurrentLease(firestore)) as MatrixCorpusLeaseV1;
+    const secondReceipt = current.finalCleanupReceipt;
+    if (
+      secondReceipt === null ||
+      secondReceipt.replayProjection.operation !== 'cleanup' ||
+      secondReceipt.replayProjection.result !== 'cleaned'
+    )
+      throw new Error('second cleanup must retain a final receipt');
+    const saturated = {
+      ...current,
+      priorFinalCleanupReceipts: [
+        ...(current.priorFinalCleanupReceipts ?? []),
+        secondReceipt,
+      ],
+      finalCleanupReceipt: {
+        ...secondReceipt,
+        idempotencyKeyDigest: '3'.repeat(64),
+        canonicalRequestDigest: '4'.repeat(64),
+        replayProjection: {
+          ...secondReceipt.replayProjection,
+          targetRunId: 'run_3',
+          targetLeaseFence: '5',
+          targetRunFenceDigest: '3'.repeat(64),
+          cleanedAt: '2026-07-20T10:06:03.000Z',
+        },
+        recordedAt: '2026-07-20T10:06:03.000Z',
+      },
+    } satisfies MatrixCorpusLeaseV1;
+    const slotRef = firestore
+      .collection(MATRIX_CORPUS_RUN_LEASES_COLLECTION)
+      .doc(leaseSlotDigest);
+    await slotRef.set(saturated);
+    await slotRef
+      .collection('runs')
+      .doc(currentRunFenceDigest)
+      .set({ ...saturated, leaseSlotDigest });
+    await expect(
+      repository.cleanupExactRun({
+        ...first,
+        targetRunId: 'run_4',
+        targetLeaseFence: '4',
+        targetRunFenceDigest: '4'.repeat(64),
+        idempotencyKeyDigest: '5'.repeat(64),
+        canonicalRequestDigest: '6'.repeat(64),
+        now: '2026-07-20T10:06:04.000Z',
+      })
+    ).resolves.toEqual({ code: 'PHASE_CONFLICT', actualPhase: 'provisioning' });
+  });
+
+  it('cleans a predecessor from a legacy provisioning lease without receipt history', async () => {
+    const { firestore, repository, currentRunFenceDigest } = await cleanupFixture();
+    const current = (await readCurrentLease(firestore)) as MatrixCorpusLeaseV1;
+    const { priorFinalCleanupReceipts: _omitted, ...legacyCurrent } = current;
+    const slotRef = firestore
+      .collection(MATRIX_CORPUS_RUN_LEASES_COLLECTION)
+      .doc(leaseSlotDigest);
+    await slotRef.set(legacyCurrent);
+    await slotRef
+      .collection('runs')
+      .doc(currentRunFenceDigest)
+      .set({ ...legacyCurrent, leaseSlotDigest });
+
+    await expect(
+      repository.cleanupExactRun(cleanupCommand(currentRunFenceDigest))
+    ).resolves.toMatchObject({
+      code: 'RUN_CLEANED',
+      targetRunId: 'run_1',
+    });
+    await expect(readCurrentLease(firestore)).resolves.toMatchObject({
+      priorFinalCleanupReceipts: [],
+      finalCleanupReceipt: {
+        replayProjection: {
+          operation: 'cleanup',
+          result: 'cleaned',
+          targetRunId: 'run_1',
+        },
+      },
+    });
   });
 
   it('cleans every exact child kind produced by a complete strict-mock run', async () => {

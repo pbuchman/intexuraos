@@ -19,6 +19,7 @@ const MAX_CLEANUP_CHUNKS = 10_000;
 const TRANSIENT_RETRY_LIMIT = 3;
 const RETENTION_SAGA_VERSION = 1;
 const MAX_RETENTION_SAGAS = 4;
+const MAX_RETENTION_EVICTIONS = 3;
 
 export interface MatrixCorpusRetentionSaga {
   readonly version: 1;
@@ -111,7 +112,7 @@ export async function reconcileMatrixCorpusRetention(input: {
     targets.set(saga.targetRunId, fromPlan ?? sagaRecord(saga));
   }
   for (const target of selection.evict) targets.set(target.runId, target);
-  if (targets.size > 1 || selection.evict.length > 1) {
+  if (targets.size > MAX_RETENTION_EVICTIONS) {
     stats.runs.failed = targets.size;
     stats.artifacts.failed = targets.size;
     return failed(stats);

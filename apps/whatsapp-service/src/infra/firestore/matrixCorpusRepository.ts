@@ -391,6 +391,7 @@ export class FirestoreMatrixCorpusRepository
           },
           terminalWinner: null,
           cleanupProgress: null,
+          priorFinalCleanupReceipts: [],
           finalCleanupReceipt: null,
         });
         const history = matrixCorpusLeaseHistoryV1Schema.parse({
@@ -486,6 +487,7 @@ export class FirestoreMatrixCorpusRepository
           phase: 'active',
           activatedAt: command.data.now,
           operationReceipts: { ...lease.operationReceipts, activate: receipt },
+          priorFinalCleanupReceipts: [],
           finalCleanupReceipt: null,
         });
         const history = matrixCorpusLeaseHistoryV1Schema.parse({
@@ -1742,6 +1744,7 @@ export class FirestoreMatrixCorpusRepository
           terminalWinner: null,
           releasedAt: null,
           abandonedAt: null,
+          priorFinalCleanupReceipts: [],
           finalCleanupReceipt: lease.phase === 'provisioning' ? null : lease.finalCleanupReceipt,
           drain: { ...lease.drain, drained: false },
         });
@@ -1843,8 +1846,11 @@ export class FirestoreMatrixCorpusRepository
         )
           return { code: 'STALE_FENCE' as const };
 
-        if (lease.finalCleanupReceipt !== null) {
-          const receipt = lease.finalCleanupReceipt;
+        const finalCleanupReceipts = [
+          ...(lease.priorFinalCleanupReceipts ?? []),
+          ...(lease.finalCleanupReceipt === null ? [] : [lease.finalCleanupReceipt]),
+        ];
+        for (const receipt of finalCleanupReceipts) {
           const projection = receipt.replayProjection;
           const digest = this.digestReplayProjection(projection);
           if (digest === null || digest !== receipt.resultDigest)
@@ -1852,14 +1858,28 @@ export class FirestoreMatrixCorpusRepository
               code: 'CORRUPT_STATE' as const,
               recordKind: digest === null ? ('dependency_result' as const) : ('cleanup_progress' as const),
             };
-          if (receipt.idempotencyKeyDigest !== command.data.idempotencyKeyDigest)
+        }
+        const finalReplayReceipt = finalCleanupReceipts.find(
+          (receipt) => {
+            const projection = receipt.replayProjection;
+            return (
+              projection.operation === 'cleanup' &&
+              projection.result === 'cleaned' &&
+              projection.targetRunFenceDigest === command.data.targetRunFenceDigest
+            );
+          }
+        );
+        if (finalReplayReceipt !== undefined) {
+          const projection = finalReplayReceipt.replayProjection;
+          if (finalReplayReceipt.idempotencyKeyDigest !== command.data.idempotencyKeyDigest)
             return { code: 'PHASE_CONFLICT' as const, actualPhase: lease.phase };
           if (
-            receipt.canonicalRequestDigest !== command.data.canonicalRequestDigest ||
-            receipt.expectedRevision !== command.data.expectedRevision ||
+            finalReplayReceipt.canonicalRequestDigest !== command.data.canonicalRequestDigest ||
+            finalReplayReceipt.expectedRevision !== command.data.expectedRevision ||
             projection.operation !== 'cleanup' ||
             projection.result !== 'cleaned' ||
-            projection.targetRunFenceDigest !== command.data.targetRunFenceDigest
+            projection.targetRunId !== command.data.targetRunId ||
+            projection.targetLeaseFence !== command.data.targetLeaseFence
           )
             return { code: 'IDEMPOTENCY_CONFLICT' as const };
           return parseLifecycleResult(cleanupResultSchema, {
@@ -1873,6 +1893,15 @@ export class FirestoreMatrixCorpusRepository
             cleanedAt: projection.cleanedAt,
           });
         }
+        if (
+          finalCleanupReceipts.some(
+            (receipt) =>
+              receipt.idempotencyKeyDigest === command.data.idempotencyKeyDigest
+          )
+        )
+          return { code: 'IDEMPOTENCY_CONFLICT' as const };
+        if (finalCleanupReceipts.length >= 3)
+          return { code: 'PHASE_CONFLICT' as const, actualPhase: lease.phase };
         if (lease.phase !== 'provisioning')
           return { code: 'PHASE_CONFLICT' as const, actualPhase: lease.phase };
 
@@ -2065,6 +2094,10 @@ export class FirestoreMatrixCorpusRepository
         });
         const updatedCurrent = matrixCorpusLeaseV1Schema.parse({
           ...lease,
+          priorFinalCleanupReceipts: [
+            ...(lease.priorFinalCleanupReceipts ?? []),
+            ...(lease.finalCleanupReceipt === null ? [] : [lease.finalCleanupReceipt]),
+          ],
           finalCleanupReceipt: receipt,
         });
         const updatedCurrentHistory = matrixCorpusLeaseHistoryV1Schema.parse({

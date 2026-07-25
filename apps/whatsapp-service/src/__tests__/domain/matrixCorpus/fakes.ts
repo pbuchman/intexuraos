@@ -276,6 +276,7 @@ export interface FakeMatrixCorpusCoreLeaseSummary {
   readonly terminalControlOutboxIds: readonly string[];
   readonly terminalWinner: MatrixCorpusTerminalAuthoritativeWinnerV1 | null;
   readonly cleanupProgress: MatrixCorpusCleanupProgressV1 | null;
+  readonly priorFinalCleanupReceipts: readonly MatrixCorpusCleanupChunkReceiptV1[];
   readonly finalCleanupReceipt: MatrixCorpusCleanupChunkReceiptV1 | null;
   readonly drain: Readonly<{
     consumedCapabilityCount: number;
@@ -562,6 +563,7 @@ function leaseSummary(lease: MatrixCorpusLeaseV1): FakeMatrixCorpusCoreLeaseSumm
     terminalControlOutboxIds: [...lease.terminalControlOutboxIds],
     terminalWinner: structuredClone(lease.terminalWinner),
     cleanupProgress: structuredClone(lease.cleanupProgress),
+    priorFinalCleanupReceipts: structuredClone(lease.priorFinalCleanupReceipts ?? []),
     finalCleanupReceipt: structuredClone(lease.finalCleanupReceipt),
     drain: lease.drain,
   };
@@ -1623,8 +1625,13 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
       }
     }
 
-    const finalReceipt = currentPair.data.current.finalCleanupReceipt;
-    if (finalReceipt !== null) {
+    const finalReceipts = [
+      ...(currentPair.data.current.priorFinalCleanupReceipts ?? []),
+      ...(currentPair.data.current.finalCleanupReceipt === null
+        ? []
+        : [currentPair.data.current.finalCleanupReceipt]),
+    ];
+    for (const finalReceipt of finalReceipts) {
       const projection = finalReceipt.replayProjection;
       if (
         projection.operation !== 'cleanup' ||
@@ -1761,6 +1768,7 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
         },
         terminalWinner: null,
         cleanupProgress: null,
+        priorFinalCleanupReceipts: [],
         finalCleanupReceipt: null,
       } satisfies MatrixCorpusLeaseV1;
       const pair = this.buildCurrentPair(command.data.leaseSlotDigest, lease);
@@ -1867,6 +1875,7 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
         phase: 'active' as const,
         activatedAt: command.data.now,
         operationReceipts: { ...lease.operationReceipts, activate: receipt.data },
+        priorFinalCleanupReceipts: [],
         finalCleanupReceipt: null,
       } satisfies MatrixCorpusLeaseV1;
       const pair = this.buildCurrentPair(command.data.leaseSlotDigest, updated);
@@ -3060,6 +3069,7 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
         terminalWinner: null,
         releasedAt: null,
         abandonedAt: null,
+        priorFinalCleanupReceipts: [],
         finalCleanupReceipt: lease.phase === 'provisioning' ? null : lease.finalCleanupReceipt,
         drain: { ...lease.drain, drained: false },
       } satisfies MatrixCorpusLeaseV1;
@@ -3151,8 +3161,27 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
       )
         return { kind: 'read_only', result: { code: 'STALE_FENCE' } };
 
-      const finalReceipt = lease.finalCleanupReceipt;
-      if (finalReceipt !== null) {
+      const finalReceipts = [
+        ...(lease.priorFinalCleanupReceipts ?? []),
+        ...(lease.finalCleanupReceipt === null ? [] : [lease.finalCleanupReceipt]),
+      ];
+      const finalReplayReceipt = finalReceipts.find((receipt) => {
+        const projection = receipt.replayProjection;
+        return (
+          projection.operation === 'cleanup' &&
+          projection.result === 'cleaned' &&
+          projection.targetRunFenceDigest === command.data.targetRunFenceDigest
+        );
+      });
+      if (
+        finalReplayReceipt !== undefined &&
+        finalReplayReceipt.idempotencyKeyDigest !== command.data.idempotencyKeyDigest
+      )
+        return {
+          kind: 'read_only',
+          result: { code: 'PHASE_CONFLICT', actualPhase: lease.phase },
+        };
+      for (const finalReceipt of finalReceipts) {
         const parsed = matrixCorpusCleanupChunkReceiptV1Schema.safeParse(finalReceipt);
         if (
           !parsed.success ||
@@ -3160,8 +3189,6 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
           parsed.data.replayProjection.result !== 'cleaned'
         )
           return { kind: 'read_only', result: { code: 'CORRUPT_STATE', recordKind: 'cleanup_progress' } };
-        if (parsed.data.idempotencyKeyDigest !== command.data.idempotencyKeyDigest)
-          return { kind: 'read_only', result: { code: 'PHASE_CONFLICT', actualPhase: lease.phase } };
         const storedDigest = this.digestProjection(parsed.data.replayProjection);
         if (storedDigest === null || storedDigest !== parsed.data.resultDigest)
           return {
@@ -3170,6 +3197,18 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
               code: 'CORRUPT_STATE',
               recordKind: storedDigest === null ? 'dependency_result' : 'cleanup_progress',
             },
+          };
+      }
+      if (finalReplayReceipt !== undefined) {
+        const parsed = matrixCorpusCleanupChunkReceiptV1Schema.safeParse(finalReplayReceipt);
+        if (
+          !parsed.success ||
+          parsed.data.replayProjection.operation !== 'cleanup' ||
+          parsed.data.replayProjection.result !== 'cleaned'
+        )
+          return {
+            kind: 'read_only',
+            result: { code: 'CORRUPT_STATE', recordKind: 'cleanup_progress' },
           };
         const projection = parsed.data.replayProjection;
         if (
@@ -3194,6 +3233,17 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
           ? { kind: 'read_only', result: replay.data }
           : { kind: 'read_only', result: { code: 'CORRUPT_STATE', recordKind: 'repository_result' } };
       }
+      if (
+        finalReceipts.some(
+          (receipt) => receipt.idempotencyKeyDigest === command.data.idempotencyKeyDigest
+        )
+      )
+        return { kind: 'read_only', result: { code: 'IDEMPOTENCY_CONFLICT' } };
+      if (finalReceipts.length >= 3)
+        return {
+          kind: 'read_only',
+          result: { code: 'PHASE_CONFLICT', actualPhase: lease.phase },
+        };
       if (lease.phase !== 'provisioning')
         return { kind: 'read_only', result: { code: 'PHASE_CONFLICT', actualPhase: lease.phase } };
 
@@ -3435,6 +3485,10 @@ export class FakeMatrixCorpusRepository implements MatrixCorpusRepository {
       this.throwAt('cleanup_after_child_deletes_draft');
       const pair = this.buildCurrentPair(command.data.leaseSlotDigest, {
         ...lease,
+        priorFinalCleanupReceipts: [
+          ...(lease.priorFinalCleanupReceipts ?? []),
+          ...(lease.finalCleanupReceipt === null ? [] : [lease.finalCleanupReceipt]),
+        ],
         finalCleanupReceipt: receipt.data,
       });
       if (pair === null)

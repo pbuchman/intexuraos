@@ -1122,6 +1122,7 @@ const leaseRecordShape = {
   drain: booleanDrainSchema,
   terminalWinner: matrixCorpusTerminalAuthoritativeWinnerV1Schema.nullable(),
   cleanupProgress: matrixCorpusCleanupProgressV1Schema.nullable(),
+  priorFinalCleanupReceipts: z.array(matrixCorpusCleanupChunkReceiptV1Schema).max(2).optional(),
   finalCleanupReceipt: matrixCorpusCleanupChunkReceiptV1Schema.nullable(),
 } as const;
 
@@ -1188,21 +1189,47 @@ function refineMatrixCorpusLeaseRecord(
     lease.terminalControlOutboxIds.length;
   if (cleanupReferenceCount > MATRIX_CORPUS_MAX_CLEANUP_REFERENCES_PER_RUN)
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Lease cleanup reference bound exceeded' });
+  const finalCleanupReceipts = [
+    ...(lease.priorFinalCleanupReceipts ?? []),
+    ...(lease.finalCleanupReceipt === null ? [] : [lease.finalCleanupReceipt]),
+  ];
   if (
-    lease.finalCleanupReceipt !== null &&
-    (lease.finalCleanupReceipt.replayProjection.operation !== 'cleanup' ||
-      lease.finalCleanupReceipt.replayProjection.result !== 'cleaned')
+    finalCleanupReceipts.some(
+      (receipt) =>
+        receipt.replayProjection.operation !== 'cleanup' ||
+        receipt.replayProjection.result !== 'cleaned'
+    )
   )
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Final cleanup receipt must be terminal cleanup' });
-  if (lease.finalCleanupReceipt !== null && lease.phase !== 'provisioning')
+  if (finalCleanupReceipts.length > 0 && lease.phase !== 'provisioning')
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Final cleanup receipt requires provisioning lease' });
-  const finalCleanupProjection = lease.finalCleanupReceipt?.replayProjection;
+  if ((lease.priorFinalCleanupReceipts?.length ?? 0) > 0 && lease.finalCleanupReceipt === null)
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Prior cleanup receipts require a final receipt' });
+  const cleanupTargetDigests = finalCleanupReceipts.flatMap((receipt) => {
+    const projection = receipt.replayProjection;
+    return projection.operation === 'cleanup' && projection.result === 'cleaned'
+      ? [projection.targetRunFenceDigest]
+      : [];
+  });
+  const cleanupIdempotencyDigests = finalCleanupReceipts.map(
+    (receipt) => receipt.idempotencyKeyDigest
+  );
   if (
-    finalCleanupProjection?.operation === 'cleanup' &&
-    finalCleanupProjection.result === 'cleaned' &&
-    (finalCleanupProjection.targetRunId === lease.runId ||
-      finalCleanupProjection.targetLeaseFence === lease.leaseFence ||
-      finalCleanupProjection.targetRunFenceDigest === lease.runFenceDigest)
+    !hasUniqueItems(cleanupTargetDigests) ||
+    !hasUniqueItems(cleanupIdempotencyDigests)
+  )
+    context.addIssue({ code: z.ZodIssueCode.custom, message: 'Final cleanup receipts must be unique' });
+  if (
+    finalCleanupReceipts.some((receipt) => {
+      const projection = receipt.replayProjection;
+      return (
+        projection.operation === 'cleanup' &&
+        projection.result === 'cleaned' &&
+        (projection.targetRunId === lease.runId ||
+          projection.targetLeaseFence === lease.leaseFence ||
+          projection.targetRunFenceDigest === lease.runFenceDigest)
+      );
+    })
   )
     context.addIssue({ code: z.ZodIssueCode.custom, message: 'Cleanup target identity must differ from current lease' });
   const drained =

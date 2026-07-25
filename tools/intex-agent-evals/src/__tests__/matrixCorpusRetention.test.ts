@@ -360,9 +360,8 @@ describe('matrix corpus exact-ID retention', () => {
     expect(removeExactPrivateDirectory).toHaveBeenCalledWith('/private/artifacts/.run_old.staging');
   });
 
-  it('fails closed before owner mutation when bounded history would require two evictions', async () => {
-    const cleanupMatrixCorpusRun = vi.fn();
-    const records = [
+  it('reconciles a bounded backlog through separately authorized exact-run cleanups', async () => {
+    const firstPlan = [
       record('run_current', {
         startedAt: '2026-07-20T10:00:00.000Z',
         lifecycle: 'preflight',
@@ -375,6 +374,103 @@ describe('matrix corpus exact-ID retention', () => {
       record('run_old_1', { startedAt: '2026-07-20T08:00:00.000Z', verdict: 'failed' }),
       record('run_old_2', { startedAt: '2026-07-20T07:00:00.000Z', verdict: 'failed' }),
     ];
+    const getMatrixCorpusRetentionPlan = vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        kind: 'retention_plan' as const,
+        runId: 'run_current',
+        userId: 'user_1',
+        leaseFence: '11',
+        records: firstPlan,
+      },
+    }));
+    const cleanupWhatsApp = vi.fn(
+      async (input: {
+        targetRunId: string;
+        targetLeaseFence: string;
+        targetRunFenceDigest: string;
+        expectedRevision: number;
+      }) => ({
+        ok: true as const,
+        value: {
+          code: 'RUN_CLEANED' as const,
+          targetRunId: input.targetRunId,
+          targetLeaseFence: input.targetLeaseFence,
+          targetRunFenceDigest: input.targetRunFenceDigest,
+          state: 'cleaned' as const,
+          finalRevision: input.expectedRevision + 1,
+          cleanedAt: '2026-07-20T10:00:01.000Z',
+        },
+      })
+    );
+    let currentRevision = 1;
+    const cleanupIntex = vi.fn(async (_input: { request: { targetRunId: string } }) => ({
+      ok: true as const,
+      value: {
+        disposition: 'applied' as const,
+        runId: 'run_current',
+        userId: 'user_1',
+        leaseFence: '11',
+        currentRevision: ++currentRevision,
+        retentionReconciled: true as const,
+        removed: {
+          runs: 1,
+          sessions: 0,
+          events: 0,
+          confirmations: 0,
+          ingestReceipts: 0,
+          scenarioProjections: 0,
+          scenarioContexts: 0,
+          runContexts: 1,
+          manifests: 1,
+        },
+      },
+    }));
+    const removeExactPrivateDirectory = vi.fn(async (_path: string) => 'removed' as const);
+    const result = await reconcileMatrixCorpusRetention({
+      runId: 'run_current',
+      userId: 'user_1',
+      leaseFence: '11',
+      currentRevision: 1,
+      bindingHmacKey: 'h'.repeat(32),
+      artifactRoot: '/private/artifacts',
+      files: { removeExactPrivateDirectory },
+      sagas: sagaPort(),
+      intex: {
+        getMatrixCorpusRetentionPlan,
+        cleanupMatrixCorpusRun: cleanupIntex,
+      },
+      whatsapp: { cleanupMatrixCorpusRun: cleanupWhatsApp },
+      now: () => new Date('2026-07-20T10:00:00.000Z'),
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      revision: 3,
+      stats: {
+        status: 'passed',
+        runs: { considered: 4, retained: 2, removed: 2, failed: 0 },
+        artifacts: { considered: 4, retained: 2, removed: 2, failed: 0 },
+      },
+    });
+    expect(getMatrixCorpusRetentionPlan).toHaveBeenCalledTimes(1);
+    expect(cleanupWhatsApp.mock.calls.map(([input]) => input.targetRunId)).toEqual([
+      'run_old_1',
+      'run_old_2',
+    ]);
+    expect(cleanupIntex.mock.calls.map(([input]) => input.request.targetRunId)).toEqual([
+      'run_old_1',
+      'run_old_2',
+    ]);
+    expect(removeExactPrivateDirectory.mock.calls.map(([path]) => path)).toEqual([
+      '/private/artifacts/run_old_1',
+      '/private/artifacts/.run_old_1.staging',
+      '/private/artifacts/run_old_2',
+      '/private/artifacts/.run_old_2.staging',
+    ]);
+  });
+
+  it('fails closed before mutation when persisted cleanup work exceeds the receipt bound', async () => {
+    const cleanupMatrixCorpusRun = vi.fn();
     const result = await reconcileMatrixCorpusRetention({
       runId: 'run_current',
       userId: 'user_1',
@@ -383,7 +479,16 @@ describe('matrix corpus exact-ID retention', () => {
       bindingHmacKey: 'h'.repeat(32),
       artifactRoot: '/private/artifacts',
       files: { removeExactPrivateDirectory: vi.fn() },
-      sagas: sagaPort(),
+      sagas: sagaPort(
+        Array.from({ length: 4 }, (_, index) => ({
+          version: 1 as const,
+          targetRunId: `run_old_${String(index + 1)}`,
+          targetLeaseFence: String(index + 1),
+          targetRunFenceDigest: String(index + 1).repeat(64),
+          stage: 'whatsapp_pending' as const,
+          whatsappRevision: 0,
+        }))
+      ),
       intex: {
         getMatrixCorpusRetentionPlan: vi.fn(async () => ({
           ok: true as const,
@@ -392,7 +497,15 @@ describe('matrix corpus exact-ID retention', () => {
             runId: 'run_current',
             userId: 'user_1',
             leaseFence: '11',
-            records,
+            records: [
+              record('run_current', {
+                lifecycle: 'preflight',
+                verdict: 'pending',
+                artifactDelivery: 'pending',
+                completedAt: null,
+                isCurrent: true,
+              }),
+            ],
           },
         })),
         cleanupMatrixCorpusRun,
@@ -400,7 +513,15 @@ describe('matrix corpus exact-ID retention', () => {
       whatsapp: { cleanupMatrixCorpusRun },
       now: () => new Date('2026-07-20T10:00:00.000Z'),
     });
-    expect(result).toMatchObject({ ok: false, code: 'retention_cleanup_failed' });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'retention_cleanup_failed',
+      stats: {
+        runs: { failed: 4 },
+        artifacts: { failed: 4 },
+      },
+    });
     expect(cleanupMatrixCorpusRun).not.toHaveBeenCalled();
   });
 

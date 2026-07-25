@@ -194,10 +194,10 @@ timeline field through the privacy-safe evidence DTO; those fields remain `not_o
 rather than being inferred from expectations. Extending that DTO is the remaining path to
 full internal-transition attestation.
 
-Steady-state retention removes at most one old exact run per new provisioning lease. A
-pre-existing backlog requiring more than one owner cleanup fails closed before mutation
-and requires an explicit recovery operation; the runner never falls back to a user-wide
-delete.
+Steady-state retention reconciles every superseded run returned by the bounded four-run
+plan during the new provisioning lease. Each target is removed through its own
+owner-authorized exact-run/fence cleanup before the next target starts; any failure stops
+the sequence, and the runner never falls back to a user-wide delete.
 
 ## Exit codes and triage
 
