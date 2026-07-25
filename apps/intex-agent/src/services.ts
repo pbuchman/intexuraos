@@ -84,6 +84,7 @@ import { createMatrixCorpusContextService } from './domain/matrixCorpus/contextS
 import { createMatrixCorpusMessageHandler } from './domain/matrixCorpus/matrixCorpusMessageHandler.js';
 import {
   createMatrixCorpusExecutionService,
+  MATRIX_CORPUS_MODEL_TURN_BUDGET_MS,
   type MatrixCorpusExecutionServiceDeps,
 } from './domain/matrixCorpus/matrixCorpusExecutionService.js';
 import {
@@ -118,8 +119,8 @@ export function composeIntexMatrixCorpusFeature<T>(
 
 const RUNTIME_SETTINGS_LOOKUP_TIMEOUT_MS = 2_000;
 export const MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS = 45_000;
-export const MATRIX_CORPUS_MODEL_TURN_BUDGET_MS = 180_000;
 export const MATRIX_CORPUS_MODEL_MAX_ATTEMPTS = 3;
+export { MATRIX_CORPUS_MODEL_TURN_BUDGET_MS };
 
 const MATRIX_CORPUS_RUNTIME_MODELS = {
   'or:deepseek/deepseek-v4-flash': IntexAgentModels.DeepSeekV4Flash,
@@ -255,6 +256,7 @@ export function createIntexMatrixCorpusRuntime(
     receiptRepository,
     createRunner: dependencies.createRunner,
     replyPublisher: dependencies.replyPublisher,
+    nowMs: () => Date.parse(dependencies.now()),
     waitForZeroEvidenceRetry: async (delayMs) => {
       await wait(delayMs);
     },
@@ -693,7 +695,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
           usageSink,
           timeoutMs: MATRIX_CORPUS_MODEL_REQUEST_TIMEOUT_MS,
           maxAttempts: MATRIX_CORPUS_MODEL_MAX_ATTEMPTS,
-          deadlineAtMs: Date.now() + MATRIX_CORPUS_MODEL_TURN_BUDGET_MS,
+          deadlineAtMs: input.deadlineAtMs,
         });
         return createMatrixCorpusRunner({
           execution: input.execution,

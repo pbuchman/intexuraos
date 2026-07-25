@@ -92,14 +92,17 @@ export interface MatrixCorpusExecutionServiceDeps {
       agentModel: MatrixCorpusAgentModel;
       userId: string;
       userPreferences: string | null;
+      deadlineAtMs: number;
     }>
   ): IntexAgentRunner;
   replyPublisher: Pick<MatrixCorpusWhatsAppReplyPublisher, 'publishReplyWithReceipt'>;
+  nowMs(): number;
   waitForZeroEvidenceRetry(delayMs: number): Promise<void>;
 }
 
-const MATRIX_CORPUS_ZERO_EVIDENCE_RUNNER_ATTEMPTS = 3;
-const MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS = [5_000, 20_000] as const;
+export const MATRIX_CORPUS_MODEL_TURN_BUDGET_MS = 180_000;
+const MATRIX_CORPUS_ZERO_EVIDENCE_RUNNER_ATTEMPTS = 4;
+const MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS = [5_000, 20_000, 60_000] as const;
 const MATRIX_CORPUS_RETRIABLE_ZERO_EVIDENCE_ERRORS = new Set([
   'Error: Matrix corpus agent generation failed',
   'Error: Matrix corpus intent classification failed',
@@ -133,6 +136,9 @@ export function createMatrixCorpusExecutionService(
       if (!promptResult.ok) return failure('CONTEXT_REJECTED');
       const promptContext = promptResult.promptContext;
       const session = sessionResult.session;
+      const startedAtMs = deps.nowMs();
+      if (!Number.isFinite(startedAtMs)) throw new Error('Invalid Matrix corpus model clock');
+      const deadlineAtMs = startedAtMs + MATRIX_CORPUS_MODEL_TURN_BUDGET_MS;
       if (
         stableJson(session.matrixCorpusProfile.expectedToolSchedule) !==
           stableJson(context.expectedToolSchedule) ||
@@ -158,6 +164,7 @@ export function createMatrixCorpusExecutionService(
           previousEvents: currentLogicalSessionEvents,
           userPreferences: promptResult.promptContext,
           preferenceOverlay,
+          deadlineAtMs,
         });
       }
 
@@ -226,6 +233,7 @@ export function createMatrixCorpusExecutionService(
           agentModel: session.matrixCorpusProfile.agentModel,
           userId: ordinaryIngest.userId,
           userPreferences: promptContext,
+          deadlineAtMs,
         });
         let result: IntexAgentRunnerResult;
         try {
@@ -247,8 +255,14 @@ export function createMatrixCorpusExecutionService(
             const retryDelayMs = MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS[
               runnerAttempt - 1
             ] as (typeof MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS)[number];
-            await deps.waitForZeroEvidenceRetry(retryDelayMs);
-            return await executeNaturalAttempt(runnerAttempt + 1);
+            const retryClockMs = deps.nowMs();
+            if (
+              Number.isFinite(retryClockMs) &&
+              retryDelayMs < deadlineAtMs - retryClockMs
+            ) {
+              await deps.waitForZeroEvidenceRetry(retryDelayMs);
+              return await executeNaturalAttempt(runnerAttempt + 1);
+            }
           }
           await usageRecorder.finalize('natural', 'failed');
           throw error;
@@ -382,6 +396,7 @@ async function executeConfirmation(
     previousEvents: readonly IntexAgentSessionEvent[];
     userPreferences: string;
     preferenceOverlay: ReturnType<MatrixCorpusContextService['createPreferenceOverlay']>;
+    deadlineAtMs: number;
   }>
 ): Promise<MatrixCorpusExecutionResult> {
   const { context, ordinaryIngest } = input.input.claims.payload;
@@ -474,6 +489,7 @@ async function executeConfirmation(
     agentModel: input.session.matrixCorpusProfile.agentModel,
     userId: ordinaryIngest.userId,
     userPreferences: input.userPreferences,
+    deadlineAtMs: input.deadlineAtMs,
   });
   let result: IntexAgentRunnerResult;
   try {

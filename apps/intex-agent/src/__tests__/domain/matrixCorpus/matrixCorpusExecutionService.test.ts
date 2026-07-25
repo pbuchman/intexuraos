@@ -271,6 +271,7 @@ function fixture(
   const replyPublisher = {
     publishReplyWithReceipt: vi.fn(async () => ({ publicationReceiptId: 'pubsub_message_1' })),
   };
+  const nowMs = vi.fn(() => 1_000_000);
   const waitForZeroEvidenceRetry = vi.fn(async (_delayMs: number) => undefined);
   const deps = {
     contextService,
@@ -279,6 +280,7 @@ function fixture(
     receiptRepository,
     createRunner,
     replyPublisher,
+    nowMs,
     waitForZeroEvidenceRetry,
   } as unknown as MatrixCorpusExecutionServiceDeps;
   return {
@@ -289,6 +291,7 @@ function fixture(
     receiptRepository,
     createRunner,
     replyPublisher,
+    nowMs,
     waitForZeroEvidenceRetry,
     service: createMatrixCorpusExecutionService(deps),
   };
@@ -950,7 +953,7 @@ describe('Matrix corpus execution service', () => {
     });
   });
 
-  it('stops after three zero-evidence provider failures and persists one failed summary', async () => {
+  it('stops after four zero-evidence provider failures with extended backoff and persists one failed summary', async () => {
     const fallbackRunner = {
       run: vi.fn(),
       executeConfirmed: vi.fn(),
@@ -979,8 +982,11 @@ describe('Matrix corpus execution service', () => {
       })
     ).rejects.toThrow('Matrix corpus intent classification failed');
 
-    expect(current.createRunner).toHaveBeenCalledTimes(3);
-    expect(current.waitForZeroEvidenceRetry.mock.calls).toEqual([[5_000], [20_000]]);
+    expect(current.createRunner).toHaveBeenCalledTimes(4);
+    expect(current.waitForZeroEvidenceRetry.mock.calls).toEqual([[5_000], [20_000], [60_000]]);
+    expect(
+      current.createRunner.mock.calls.map(([input]) => input.deadlineAtMs)
+    ).toEqual([1_180_000, 1_180_000, 1_180_000, 1_180_000]);
     const summaries = current.sessionRepository.appendMatrixCorpusEvent.mock.calls
       .map(([input]) => input.event)
       .filter(({ type }) => type === 'llm_usage_summary');
@@ -995,6 +1001,59 @@ describe('Matrix corpus execution service', () => {
       totalTokens: 0,
       costNanoUsd: 0,
     });
+  });
+
+  it('does not start a zero-evidence backoff that cannot finish before the shared deadline', async () => {
+    const fallbackRunner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(),
+    };
+    const current = fixture(fallbackRunner as unknown as IntexAgentRunner);
+    current.nowMs.mockReturnValueOnce(1_000_000).mockReturnValueOnce(1_179_000);
+    current.createRunner.mockImplementation((runnerInput) => ({
+      executeConfirmed: vi.fn(),
+      run: vi.fn(async () => {
+        runnerInput.execution.registerExpectedProviderCall({
+          version: 1,
+          runId: 'run_1',
+          scenarioId: 'scenario_001',
+          sessionId: stableKeys.sessionId,
+          turnIndex: 0,
+          stage: 'intent_classification',
+          callOrdinal: 1,
+        });
+        throw new Error('Matrix corpus intent classification failed');
+      }),
+    }));
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow('Matrix corpus intent classification failed');
+
+    expect(current.createRunner).toHaveBeenCalledOnce();
+    expect(current.waitForZeroEvidenceRetry).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before runner construction when the shared deadline clock is invalid', async () => {
+    const fallbackRunner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(),
+    };
+    const current = fixture(fallbackRunner as unknown as IntexAgentRunner);
+    current.nowMs.mockReturnValue(Number.NaN);
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow('Invalid Matrix corpus model clock');
+
+    expect(current.createRunner).not.toHaveBeenCalled();
+    expect(current.waitForZeroEvidenceRetry).not.toHaveBeenCalled();
   });
 
   it('does not retry a generic provider failure after a provider response was observed', async () => {
