@@ -520,6 +520,11 @@ function buildRequestBody(
   totalToolCalls: number,
   toolChoice: 'auto' | 'required'
 ): Record<string, unknown> {
+  const onlyTool = tools.length === 1 ? tools[0] : undefined;
+  const initialToolChoice =
+    toolChoice === 'required' && onlyTool !== undefined
+      ? { type: 'function', function: { name: onlyTool.name } }
+      : toolChoice;
   return {
     model,
     messages,
@@ -533,7 +538,7 @@ function buildRequestBody(
           parameters: tool.parameters,
         },
       })),
-      tool_choice: totalToolCalls === 0 ? toolChoice : 'auto',
+      tool_choice: totalToolCalls === 0 ? initialToolChoice : 'auto',
     }),
   };
 }
