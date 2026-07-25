@@ -273,7 +273,8 @@ export function createOpenRouterToolCallingClient(
               conversation,
               tools,
               totalToolCalls,
-              toolChoice
+              toolChoice,
+              iteration
             );
 
             const responseResult = await withRetry(
@@ -406,7 +407,10 @@ export function createOpenRouterToolCallingClient(
             }
             if (tools.length > 0 && toolChoice === 'required' && totalToolCalls === 0) {
               conversation.push({ role: 'assistant', content: finalText });
-              conversation.push({ role: 'user', content: REQUIRED_TOOL_RETRY_MESSAGE });
+              conversation.push({
+                role: 'user',
+                content: requiredToolRetryMessage(tools),
+              });
               logger.info({ iteration }, 'OpenRouter tool calling: retrying required tool choice');
               continue;
             }
@@ -518,11 +522,12 @@ function buildRequestBody(
   messages: OpenRouterMessage[],
   tools: ToolDefinition[],
   totalToolCalls: number,
-  toolChoice: 'auto' | 'required'
+  toolChoice: 'auto' | 'required',
+  iteration: number
 ): Record<string, unknown> {
   const onlyTool = tools.length === 1 ? tools[0] : undefined;
   const initialToolChoice =
-    toolChoice === 'required' && onlyTool !== undefined
+    toolChoice === 'required' && onlyTool !== undefined && iteration === 1
       ? { type: 'function', function: { name: onlyTool.name } }
       : toolChoice;
   return {
@@ -541,6 +546,12 @@ function buildRequestBody(
       tool_choice: totalToolCalls === 0 ? initialToolChoice : 'auto',
     }),
   };
+}
+
+function requiredToolRetryMessage(tools: ToolDefinition[]): string {
+  const onlyTool = tools.length === 1 ? tools[0] : undefined;
+  if (onlyTool === undefined) return REQUIRED_TOOL_RETRY_MESSAGE;
+  return `Call the required ${onlyTool.name} tool now with arguments derived from the original request. Do not return final text before calling the tool.`;
 }
 
 async function runToolCall(

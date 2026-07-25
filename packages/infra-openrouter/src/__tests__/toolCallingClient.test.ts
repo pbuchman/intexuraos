@@ -627,10 +627,7 @@ describe('createOpenRouterToolCallingClient', () => {
       type: 'function',
       function: { name: 'add_user_preference' },
     });
-    expect(capturedBodies[1]?.['tool_choice']).toEqual({
-      type: 'function',
-      function: { name: 'add_user_preference' },
-    });
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
     expect(capturedBodies[2]?.['tool_choice']).toBe('auto');
     expect(capturedBodies[1]?.['messages']).toEqual(
       expect.arrayContaining([
@@ -640,7 +637,7 @@ describe('createOpenRouterToolCallingClient', () => {
         },
         {
           role: 'user',
-          content: expect.stringContaining('Call one of the provided tools'),
+          content: expect.stringContaining('Call the required add_user_preference tool now'),
         },
       ])
     );
@@ -798,10 +795,25 @@ describe('createOpenRouterToolCallingClient', () => {
   });
 
   it('keeps generic required tool choice when multiple tools are available', async () => {
-    let capturedBody: Record<string, unknown> | undefined;
+    const capturedBodies: Record<string, unknown>[] = [];
     nock(API_BASE_URL)
       .post('/chat/completions', (body) => {
-        capturedBody = body as Record<string, unknown>;
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"outcome":"no_action","reply":"No tool selected."}',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.0001 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
         return true;
       })
       .reply(200, {
@@ -846,7 +858,16 @@ describe('createOpenRouterToolCallingClient', () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(capturedBody?.['tool_choice']).toBe('required');
+    expect(capturedBodies[0]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[1]?.['messages']).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'user',
+          content: expect.stringContaining('Call one of the provided tools'),
+        },
+      ])
+    );
   });
 
   it('uses auto tool choice when requested', async () => {
