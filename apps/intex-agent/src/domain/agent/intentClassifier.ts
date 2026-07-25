@@ -115,9 +115,12 @@ export interface IntexAgentIntentClassifier {
   classify(input: IntexAgentIntentClassifierInput): Promise<IntexAgentIntentClassification>;
 }
 
+export type IntexAgentIntentClassifierResponseFormatMode = 'json_schema' | 'prompt_json';
+
 export function createLlmIntexAgentIntentClassifier(deps: {
   client: StructuredClient;
   logger: AppLogger;
+  responseFormatMode?: IntexAgentIntentClassifierResponseFormatMode;
 }): IntexAgentIntentClassifier {
   return {
     async classify(input): Promise<IntexAgentIntentClassification> {
@@ -148,9 +151,10 @@ export function createLlmIntexAgentIntentClassifier(deps: {
         prompt,
         schema: classifierSchemaFor(activeClarification),
         promptType: INTEX_AGENT_INTENT_CLASSIFIER_PROMPT_TYPE,
-        options: {
-          responseFormat: INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT,
-        },
+        options:
+          deps.responseFormatMode === 'prompt_json'
+            ? {}
+            : { responseFormat: INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT },
         repairBuilder: (raw, error) =>
           intexAgentIntentClassifierRepairPrompt.build({
             originalPrompt: prompt,
