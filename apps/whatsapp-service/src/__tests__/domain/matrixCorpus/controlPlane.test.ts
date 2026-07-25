@@ -1610,6 +1610,45 @@ describe('Matrix corpus A2 frozen contracts', () => {
       drain: { ...lease.drain, drained: false },
     };
     expect(matrixCorpusLeaseV1Schema.safeParse({ ...provisioningLease, finalCleanupReceipt }).success).toBe(true);
+    const priorFinalCleanupReceipt = {
+      ...finalCleanupReceipt,
+      idempotencyKeyDigest: 'c'.repeat(64),
+      canonicalRequestDigest: 'd'.repeat(64),
+      replayProjection: {
+        ...finalCleanupReceipt.replayProjection,
+        targetRunId: 'old_run_2',
+        targetLeaseFence: '3',
+        targetRunFenceDigest: 'e'.repeat(64),
+      },
+    };
+    expect(
+      matrixCorpusLeaseV1Schema.safeParse({
+        ...provisioningLease,
+        priorFinalCleanupReceipts: [priorFinalCleanupReceipt],
+        finalCleanupReceipt,
+      }).success
+    ).toBe(true);
+    expect(
+      matrixCorpusLeaseV1Schema.safeParse({
+        ...provisioningLease,
+        priorFinalCleanupReceipts: [finalCleanupReceipt],
+        finalCleanupReceipt,
+      }).success
+    ).toBe(false);
+    expect(
+      matrixCorpusLeaseV1Schema.safeParse({
+        ...provisioningLease,
+        priorFinalCleanupReceipts: [priorFinalCleanupReceipt],
+        finalCleanupReceipt: null,
+      }).success
+    ).toBe(false);
+    expect(
+      matrixCorpusLeaseV1Schema.safeParse({
+        ...lease,
+        priorFinalCleanupReceipts: [priorFinalCleanupReceipt],
+        finalCleanupReceipt,
+      }).success
+    ).toBe(false);
     expect(
       matrixCorpusLeaseV1Schema.safeParse({
         ...provisioningLease,
@@ -6943,6 +6982,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
       terminalControlOutboxIds: [...lease.terminalControlOutboxIds],
       terminalWinner: lease.terminalWinner,
       cleanupProgress: lease.cleanupProgress,
+      priorFinalCleanupReceipts: lease.priorFinalCleanupReceipts ?? [],
       finalCleanupReceipt: lease.finalCleanupReceipt,
       drain: lease.drain,
     };
@@ -10708,6 +10748,145 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     });
     expect(digestCalls).toBe(3);
     expect(repository.operationCounts('cleanup')).toEqual({ invocations: 4, commits: 1 });
+  });
+
+  it('A2 cleanup preserves and exposes receipts while reconciling sequential terminal targets', async () => {
+    const repository = new FakeMatrixCorpusRepository({
+      replayProjectionDigest: { digest: () => digest },
+    });
+    const first = cleanupTerminalFixture();
+    const acquireReceipt = first.target.operationReceipts.acquire;
+    const activateReceipt = first.target.operationReceipts.activate;
+    const quiesceReceipt = first.target.operationReceipts.quiesce;
+    const releaseReceipt = first.target.operationReceipts.release;
+    const terminalWinner = first.target.terminalWinner;
+    if (
+      acquireReceipt === null ||
+      acquireReceipt.replayProjection.operation !== 'acquire' ||
+      activateReceipt === null ||
+      activateReceipt.replayProjection.operation !== 'activate' ||
+      quiesceReceipt === null ||
+      quiesceReceipt.replayProjection.operation !== 'quiesce' ||
+      releaseReceipt === null ||
+      releaseReceipt.replayProjection.operation !== 'release' ||
+      terminalWinner?.kind !== 'release'
+    )
+      throw new Error('terminal cleanup fixture requires complete lifecycle receipts');
+    const secondRunId = 'run_10';
+    const secondLeaseFence = '3';
+    const secondRunFenceDigest = 'd'.repeat(64);
+    const secondTerminalControlId = 'event_2';
+    const secondTarget = {
+      ...first.target,
+      runId: secondRunId,
+      leaseFence: secondLeaseFence,
+      fenceEpoch: secondLeaseFence,
+      runFenceDigest: secondRunFenceDigest,
+      operationReceipts: {
+        acquire: {
+          ...acquireReceipt,
+          replayProjection: {
+            ...acquireReceipt.replayProjection,
+            runId: secondRunId,
+            leaseFence: secondLeaseFence,
+          },
+        },
+        activate: {
+          ...activateReceipt,
+          replayProjection: {
+            ...activateReceipt.replayProjection,
+            runId: secondRunId,
+            leaseFence: secondLeaseFence,
+          },
+        },
+        quiesce: {
+          ...quiesceReceipt,
+          replayProjection: {
+            ...quiesceReceipt.replayProjection,
+            runId: secondRunId,
+            leaseFence: secondLeaseFence,
+          },
+        },
+        release: {
+          ...releaseReceipt,
+          replayProjection: {
+            ...releaseReceipt.replayProjection,
+            runId: secondRunId,
+            leaseFence: secondLeaseFence,
+            terminalControlId: secondTerminalControlId,
+            eventId: secondTerminalControlId,
+          },
+        },
+      },
+      terminalControlOutboxIds: [secondTerminalControlId],
+      terminalWinner: {
+        ...terminalWinner,
+        eventId: secondTerminalControlId,
+      },
+    } satisfies MatrixCorpusLeaseHistoryV1;
+    const secondTerminal = {
+      ...first.terminal,
+      terminalControlId: secondTerminalControlId,
+      eventId: secondTerminalControlId,
+      runId: secondRunId,
+      leaseFence: secondLeaseFence,
+      payload: {
+        ...first.terminal.payload,
+        eventId: secondTerminalControlId,
+        runId: secondRunId,
+        leaseFence: secondLeaseFence,
+      },
+    } satisfies MatrixCorpusTerminalControlOutboxRecordV1;
+    repository.seedValidCleanupOutboxState({
+      ...first.seed,
+      retainedHistories: [first.target, secondTarget],
+      terminalControlOutboxes: [first.terminal, secondTerminal],
+    });
+    const secondCommand = {
+      ...first.command,
+      targetRunId: secondTarget.runId,
+      targetLeaseFence: secondTarget.leaseFence,
+      targetRunFenceDigest: secondTarget.runFenceDigest,
+      idempotencyKeyDigest: '6'.repeat(64),
+      canonicalRequestDigest: '7'.repeat(64),
+      now: '2026-07-20T00:00:07.000Z',
+    } satisfies CleanupExactRunCommand;
+
+    await expect(repository.cleanupExactRun(first.command)).resolves.toMatchObject({
+      code: 'RUN_CLEANED',
+      finalRevision: 1,
+    });
+    await expect(repository.cleanupExactRun(secondCommand)).resolves.toMatchObject({
+      code: 'RUN_CLEANED',
+      finalRevision: 1,
+    });
+    await expect(repository.cleanupExactRun(first.command)).resolves.toMatchObject({
+      code: 'ALREADY_APPLIED',
+      operation: 'cleanup',
+      result: 'cleaned',
+      targetRunFenceDigest: first.target.runFenceDigest,
+    });
+    await expect(repository.cleanupExactRun(secondCommand)).resolves.toMatchObject({
+      code: 'ALREADY_APPLIED',
+      operation: 'cleanup',
+      result: 'cleaned',
+      targetRunFenceDigest: secondTarget.runFenceDigest,
+    });
+    expect(repository.safeStateSummary().current[0]?.lease).toMatchObject({
+      priorFinalCleanupReceipts: [
+        {
+          replayProjection: {
+            targetRunFenceDigest: first.target.runFenceDigest,
+          },
+        },
+      ],
+      finalCleanupReceipt: {
+        replayProjection: {
+          targetRunFenceDigest: secondTarget.runFenceDigest,
+        },
+      },
+    });
+    expect(repository.operationCounts('cleanup')).toEqual({ invocations: 4, commits: 2 });
   });
 
   it('A2 cleanup gives the current non-provisioning phase precedence over a missing target', async () => {
