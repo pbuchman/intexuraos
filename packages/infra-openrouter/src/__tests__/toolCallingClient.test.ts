@@ -1136,6 +1136,251 @@ describe('createOpenRouterToolCallingClient', () => {
     );
   });
 
+  it('does not expose the same single tool again after MiniMax runs it successfully', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi.fn().mockResolvedValue('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_query',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list","query":"today meetings"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'You have no meetings today.' } }],
+        usage: { prompt_tokens: 25, completion_tokens: 6, total_tokens: 31, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'What meetings do I have today?' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: {
+            type: 'object',
+            required: ['mode'],
+            properties: {
+              mode: { type: 'string' },
+              query: { type: 'string' },
+            },
+          },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'You have no meetings today.',
+        toolCallsMade: 1,
+        iterationCount: 2,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(capturedBodies[0]).toHaveProperty('tools');
+    expect(capturedBodies[1]).not.toHaveProperty('tools');
+    expect(capturedBodies[1]).not.toHaveProperty('tool_choice');
+  });
+
+  it('runs only the first accepted single MiniMax tool call from one response', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi.fn().mockResolvedValue('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_query_1',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list","query":"today meetings"}',
+                  },
+                },
+                {},
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'You have no meetings today.' } }],
+        usage: { prompt_tokens: 25, completion_tokens: 6, total_tokens: 31, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'What meetings do I have today?' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: { type: 'object', required: ['mode'] },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'You have no meetings today.',
+        toolCallsMade: 1,
+        iterationCount: 2,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(capturedBodies[1]).not.toHaveProperty('tools');
+    expect(capturedBodies[1]?.['messages']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'tool',
+          tool_call_id: 'call_query_1',
+          content: '{"events":[]}',
+        }),
+        expect.objectContaining({
+          role: 'tool',
+          tool_call_id: 'call_1_1',
+          name: '',
+          content: '{"error":"Tool already completed"}',
+        }),
+      ])
+    );
+  });
+
+  it('keeps the single MiniMax tool available until one callback succeeds', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('invalid query'))
+      .mockResolvedValueOnce('{"events":[]}');
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_invalid',
+                  type: 'function',
+                  function: { name: 'query_calendar_events', arguments: '{"mode":"list"}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_repaired',
+                  type: 'function',
+                  function: {
+                    name: 'query_calendar_events',
+                    arguments: '{"mode":"list","query":"today meetings"}',
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 25, completion_tokens: 5, total_tokens: 30, cost: 0.0002 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'You have no meetings today.' } }],
+        usage: { prompt_tokens: 30, completion_tokens: 6, total_tokens: 36, cost: 0.0003 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the calendar query tool, then answer from its result.',
+      messages: [{ role: 'user', content: 'What meetings do I have today?' }],
+      tools: [
+        {
+          name: 'query_calendar_events',
+          description: 'Query calendar events.',
+          parameters: { type: 'object', required: ['mode'] },
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: 'You have no meetings today.',
+        toolCallsMade: 2,
+        iterationCount: 3,
+      }),
+    });
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(capturedBodies[1]).toHaveProperty('tools');
+    expect(capturedBodies[1]?.['tool_choice']).toBe('auto');
+    expect(capturedBodies[2]).not.toHaveProperty('tools');
+    expect(capturedBodies[2]).not.toHaveProperty('tool_choice');
+  });
+
   it('keeps generic required tool choice when multiple tools are available', async () => {
     const capturedBodies: Record<string, unknown>[] = [];
     nock(API_BASE_URL)
@@ -1177,7 +1422,7 @@ describe('createOpenRouterToolCallingClient', () => {
         usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.0001 },
       });
 
-    const result = await createClient().run({
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
       systemPrompt: 'Use one appropriate tool.',
       messages: [{ role: 'user', content: 'Store this.' }],
       tools: [

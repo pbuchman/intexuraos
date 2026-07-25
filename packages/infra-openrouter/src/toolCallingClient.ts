@@ -226,6 +226,7 @@ export function createOpenRouterToolCallingClient(
 
       const runStart = Date.now();
       let totalToolCalls = 0;
+      let acceptedToolCallMade = false;
       let iteration = 0;
       let effectiveMax = maxIterations;
       let onExhaustedFn = onExhausted;
@@ -240,6 +241,7 @@ export function createOpenRouterToolCallingClient(
       let providerReportedUsd = 0;
       let responsesWithUsage = 0;
       let hasUnknownProviderCost = false;
+      const suppressSingleToolAfterAcceptedCall = isMiniMaxM3Model(model) && tools.length === 1;
       const retryOptions = {
         maxAttempts,
         baseDelayMs: 500,
@@ -308,7 +310,7 @@ export function createOpenRouterToolCallingClient(
             const requestBody = buildRequestBody(
               model,
               conversation,
-              tools,
+              acceptedToolCallMade && suppressSingleToolAfterAcceptedCall ? [] : tools,
               totalToolCalls,
               toolChoice,
               iteration
@@ -335,6 +337,19 @@ export function createOpenRouterToolCallingClient(
               });
 
               for (const [index, toolCall] of toolCalls.entries()) {
+                if (acceptedToolCallMade && suppressSingleToolAfterAcceptedCall) {
+                  conversation.push({
+                    role: 'tool',
+                    tool_call_id: toolCall.id ?? `call_${String(iteration)}_${String(index)}`,
+                    name: toolCall.function?.name ?? '',
+                    content: JSON.stringify({ error: 'Tool already completed' }),
+                  });
+                  logger.info(
+                    { iteration },
+                    'OpenRouter tool calling: skipped duplicate MiniMax single-tool call'
+                  );
+                  continue;
+                }
                 const toolResponse = await runToolCall(
                   toolMap,
                   toolCall,
@@ -343,6 +358,7 @@ export function createOpenRouterToolCallingClient(
                   params.matrixCorpusContext !== undefined
                 );
                 totalToolCalls++;
+                if (toolResponse.accepted) acceptedToolCallMade = true;
                 conversation.push({
                   role: 'tool',
                   tool_call_id: toolCall.id ?? `call_${String(iteration)}_${String(index)}`,
@@ -641,7 +657,7 @@ function requiredTerminalToolArgsFallback(
 ): ToolDefinition | undefined {
   if (
     !allowFallback ||
-    !/^(?:or:)?minimax\/minimax-m3$/iu.test(model) ||
+    !isMiniMaxM3Model(model) ||
     toolChoice !== 'required' ||
     totalToolCalls !== 0 ||
     tools.length !== 1 ||
@@ -650,6 +666,10 @@ function requiredTerminalToolArgsFallback(
     return undefined;
   }
   return tools[0];
+}
+
+function isMiniMaxM3Model(model: string): boolean {
+  return /^(?:or:)?minimax\/minimax-m3$/iu.test(model);
 }
 
 function buildToolArgsFallbackRequestBody(
