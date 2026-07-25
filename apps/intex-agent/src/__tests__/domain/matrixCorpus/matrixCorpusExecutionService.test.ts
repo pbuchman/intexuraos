@@ -887,6 +887,160 @@ describe('Matrix corpus execution service', () => {
     expect(replyPublisher.publishReplyWithReceipt).not.toHaveBeenCalled();
   });
 
+  it('retries a normal turn after a zero-evidence provider failure and persists only final usage', async () => {
+    const fallbackRunner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(),
+    };
+    const current = fixture(fallbackRunner as unknown as IntexAgentRunner);
+    let runnerAttempt = 0;
+    current.createRunner.mockImplementation((runnerInput) => ({
+      executeConfirmed: vi.fn(),
+      run: vi.fn(async () => {
+        const context = {
+          version: 1 as const,
+          runId: 'run_1',
+          scenarioId: 'scenario_001',
+          sessionId: stableKeys.sessionId,
+          turnIndex: 0,
+          stage: 'agent_generation' as const,
+          callOrdinal: 1,
+        };
+        runnerInput.execution.registerExpectedProviderCall(context);
+        runnerAttempt += 1;
+        if (runnerAttempt === 1) throw new Error('Matrix corpus agent generation failed');
+        await runnerInput.execution.recordProviderCall({
+          context,
+          modelId: 'or:deepseek/deepseek-v4-flash',
+          inputTokens: 21,
+          outputTokens: 4,
+          totalTokens: 25,
+          providerReportedUsd: 0.0000000025,
+        });
+        return { outcome: 'no_action' as const, reply: 'Recovered synthetic reply.' };
+      }),
+    }));
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(current.createRunner).toHaveBeenCalledTimes(2);
+    const summaries = current.sessionRepository.appendMatrixCorpusEvent.mock.calls
+      .map(([input]) => input.event)
+      .filter(({ type }) => type === 'llm_usage_summary');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.payload).toEqual({
+      turnIndex: 0,
+      status: 'complete',
+      expectedCallCount: 1,
+      reportedCallCount: 1,
+      inputTokens: 21,
+      outputTokens: 4,
+      totalTokens: 25,
+      costNanoUsd: 3,
+    });
+  });
+
+  it('stops after three zero-evidence provider failures and persists one failed summary', async () => {
+    const fallbackRunner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(),
+    };
+    const current = fixture(fallbackRunner as unknown as IntexAgentRunner);
+    current.createRunner.mockImplementation((runnerInput) => ({
+      executeConfirmed: vi.fn(),
+      run: vi.fn(async () => {
+        runnerInput.execution.registerExpectedProviderCall({
+          version: 1,
+          runId: 'run_1',
+          scenarioId: 'scenario_001',
+          sessionId: stableKeys.sessionId,
+          turnIndex: 0,
+          stage: 'agent_generation',
+          callOrdinal: 1,
+        });
+        throw new Error('Matrix corpus intent classification failed');
+      }),
+    }));
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow('Matrix corpus intent classification failed');
+
+    expect(current.createRunner).toHaveBeenCalledTimes(3);
+    const summaries = current.sessionRepository.appendMatrixCorpusEvent.mock.calls
+      .map(([input]) => input.event)
+      .filter(({ type }) => type === 'llm_usage_summary');
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]?.payload).toEqual({
+      turnIndex: 0,
+      status: 'failed',
+      expectedCallCount: 1,
+      reportedCallCount: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costNanoUsd: 0,
+    });
+  });
+
+  it('does not retry a generic provider failure after a provider response was observed', async () => {
+    const fallbackRunner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(),
+    };
+    const current = fixture(fallbackRunner as unknown as IntexAgentRunner);
+    current.sessionRepository.appendMatrixCorpusEvent.mockImplementation(async (input) =>
+      input.event.type === 'llm_call_usage'
+        ? { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' }
+        : { ok: true, disposition: 'applied', sequence: 2 }
+    );
+    current.createRunner.mockImplementation((runnerInput) => ({
+      executeConfirmed: vi.fn(),
+      run: vi.fn(async () => {
+        const context = {
+          version: 1 as const,
+          runId: 'run_1',
+          scenarioId: 'scenario_001',
+          sessionId: stableKeys.sessionId,
+          turnIndex: 0,
+          stage: 'agent_generation' as const,
+          callOrdinal: 1,
+        };
+        runnerInput.execution.registerExpectedProviderCall(context);
+        try {
+          await runnerInput.execution.recordProviderCall({
+            context,
+            modelId: 'or:deepseek/deepseek-v4-flash',
+            inputTokens: 21,
+            outputTokens: 4,
+            totalTokens: 25,
+            providerReportedUsd: 0.0000000025,
+          });
+        } catch {
+          throw new Error('Matrix corpus agent generation failed');
+        }
+        return { outcome: 'no_action' as const, reply: 'unreachable' };
+      }),
+    }));
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow('Matrix corpus agent generation failed');
+
+    expect(current.createRunner).toHaveBeenCalledTimes(1);
+  });
+
   it('creates a one-use confirmation without persisting raw tool arguments in session events', async () => {
     const runner = {
       run: vi.fn(async () => ({

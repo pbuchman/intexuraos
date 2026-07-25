@@ -97,6 +97,12 @@ export interface MatrixCorpusExecutionServiceDeps {
   replyPublisher: Pick<MatrixCorpusWhatsAppReplyPublisher, 'publishReplyWithReceipt'>;
 }
 
+const MATRIX_CORPUS_ZERO_EVIDENCE_RUNNER_ATTEMPTS = 3;
+const MATRIX_CORPUS_RETRIABLE_ZERO_EVIDENCE_ERRORS = new Set([
+  'Error: Matrix corpus agent generation failed',
+  'Error: Matrix corpus intent classification failed',
+]);
+
 export function createMatrixCorpusExecutionService(
   deps: MatrixCorpusExecutionServiceDeps
 ): MatrixCorpusExecutionService {
@@ -123,6 +129,7 @@ export function createMatrixCorpusExecutionService(
       ]);
       if (!sessionResult.ok || !eventsResult.ok) return failure('SESSION_REJECTED');
       if (!promptResult.ok) return failure('CONTEXT_REJECTED');
+      const promptContext = promptResult.promptContext;
       const session = sessionResult.session;
       if (
         stableJson(session.matrixCorpusProfile.expectedToolSchedule) !==
@@ -152,14 +159,6 @@ export function createMatrixCorpusExecutionService(
         });
       }
 
-      const usageRecorder = createMatrixCorpusProviderUsageRecorder({
-        sessionRepository: deps.sessionRepository,
-        identity,
-        ingestReceiptId: context.ingestReceiptId,
-        expectedModelId: session.matrixCorpusProfile.agentModel,
-        turnIndex: context.turnIndex,
-        createdAt: ordinaryIngest.timestamp,
-      });
       const recordExecutionBoundary = createMatrixCorpusExecutionBoundaryRecorder({
         sessionRepository: deps.sessionRepository,
         identity,
@@ -169,6 +168,14 @@ export function createMatrixCorpusExecutionService(
         createdAt: ordinaryIngest.timestamp,
       });
       if (isMatrixCorpusIdleNewSessionStart(input.claims)) {
+        const usageRecorder = createMatrixCorpusProviderUsageRecorder({
+          sessionRepository: deps.sessionRepository,
+          identity,
+          ingestReceiptId: context.ingestReceiptId,
+          expectedModelId: session.matrixCorpusProfile.agentModel,
+          turnIndex: context.turnIndex,
+          createdAt: ordinaryIngest.timestamp,
+        });
         await recordExecutionBoundary('no_executor_required');
         await usageRecorder.finalize('natural', 'complete');
         return await persistAndPublishResult({
@@ -181,49 +188,69 @@ export function createMatrixCorpusExecutionService(
           },
         });
       }
-      const execution = createExecutionContext({
-        flow: 'normal',
-        turnIndex: context.turnIndex,
-        ingestReceiptId: context.ingestReceiptId,
-        expectedSchedule: context.expectedToolSchedule,
-        preferenceOverlay,
-        recordExecutionBoundary,
-        recordToolCallStarted: createMatrixCorpusToolCallStartedRecorder({
+      async function executeNaturalAttempt(
+        runnerAttempt: number
+      ): Promise<MatrixCorpusExecutionResult> {
+        const usageRecorder = createMatrixCorpusProviderUsageRecorder({
           sessionRepository: deps.sessionRepository,
           identity,
           ingestReceiptId: context.ingestReceiptId,
+          expectedModelId: session.matrixCorpusProfile.agentModel,
+          turnIndex: context.turnIndex,
           createdAt: ordinaryIngest.timestamp,
-        }),
-        registerExpectedProviderCall: (providerContext) => {
-          usageRecorder.registerExpectedProviderCall(providerContext);
-        },
-        recordProviderCall: async (providerCall) => {
-          await usageRecorder.recordProviderCall(providerCall);
-        },
-      });
-      const runner = deps.createRunner({
-        execution,
-        agentModel: session.matrixCorpusProfile.agentModel,
-        userId: ordinaryIngest.userId,
-        userPreferences: promptResult.promptContext,
-      });
-      let result: IntexAgentRunnerResult;
-      try {
-        result = await runner.run({
-          session,
-          events: previousEvents,
-          message: ordinaryIngest.text,
-          sourceType: ordinaryIngest.sourceType,
-          currentDateTime: context.currentDateTime,
-          timeZone: context.timeZone,
-          messageId: ordinaryIngest.messageId,
         });
-      } catch (error) {
-        await usageRecorder.finalize('natural', 'failed');
-        throw error;
+        const execution = createExecutionContext({
+          flow: 'normal',
+          turnIndex: context.turnIndex,
+          ingestReceiptId: context.ingestReceiptId,
+          expectedSchedule: context.expectedToolSchedule,
+          preferenceOverlay,
+          recordExecutionBoundary,
+          recordToolCallStarted: createMatrixCorpusToolCallStartedRecorder({
+            sessionRepository: deps.sessionRepository,
+            identity,
+            ingestReceiptId: context.ingestReceiptId,
+            createdAt: ordinaryIngest.timestamp,
+          }),
+          registerExpectedProviderCall: (providerContext) => {
+            usageRecorder.registerExpectedProviderCall(providerContext);
+          },
+          recordProviderCall: async (providerCall) => {
+            await usageRecorder.recordProviderCall(providerCall);
+          },
+        });
+        const runner = deps.createRunner({
+          execution,
+          agentModel: session.matrixCorpusProfile.agentModel,
+          userId: ordinaryIngest.userId,
+          userPreferences: promptContext,
+        });
+        let result: IntexAgentRunnerResult;
+        try {
+          result = await runner.run({
+            session,
+            events: previousEvents,
+            message: ordinaryIngest.text,
+            sourceType: ordinaryIngest.sourceType,
+            currentDateTime: context.currentDateTime,
+            timeZone: context.timeZone,
+            messageId: ordinaryIngest.messageId,
+          });
+        } catch (error) {
+          if (
+            !usageRecorder.hasObservedProviderResponse() &&
+            MATRIX_CORPUS_RETRIABLE_ZERO_EVIDENCE_ERRORS.has(String(error)) &&
+            runnerAttempt < MATRIX_CORPUS_ZERO_EVIDENCE_RUNNER_ATTEMPTS
+          ) {
+            return await executeNaturalAttempt(runnerAttempt + 1);
+          }
+          await usageRecorder.finalize('natural', 'failed');
+          throw error;
+        }
+        await usageRecorder.finalize('natural', 'complete');
+        return await persistAndPublishResult({ deps, input, identity, result });
       }
-      await usageRecorder.finalize('natural', 'complete');
-      return await persistAndPublishResult({ deps, input, identity, result });
+      return await executeNaturalAttempt(1);
     },
     async recoverVerifiedIngest(input): Promise<MatrixCorpusExecutionResult> {
       return await recoverReservedReply({ deps, ...input });
@@ -839,6 +866,7 @@ function sha256(value: string): string {
 interface MatrixCorpusProviderUsageRecorder {
   registerExpectedProviderCall(context: MatrixCorpusLlmCallContextV1): void;
   recordProviderCall(call: MatrixCorpusProviderCallUsageV1): Promise<void>;
+  hasObservedProviderResponse(): boolean;
   finalize(phase: 'natural' | 'confirmation', status: 'complete' | 'failed'): Promise<void>;
 }
 
@@ -854,6 +882,7 @@ function createMatrixCorpusProviderUsageRecorder(
 ): MatrixCorpusProviderUsageRecorder {
   const expectedCalls = new Map<string, MatrixCorpusLlmCallContextV1>();
   const actualCalls = new Map<string, MatrixCorpusProviderCallUsageV1>();
+  let providerResponseObserved = false;
   const registerExpected = (context: MatrixCorpusLlmCallContextV1): void => {
     assertProviderContext(input, context);
     const key = providerCallKey(context);
@@ -871,6 +900,7 @@ function createMatrixCorpusProviderUsageRecorder(
       registerExpected(context);
     },
     async recordProviderCall(call): Promise<void> {
+      providerResponseObserved = true;
       registerExpected(call.context);
       assertProviderContext(input, call.context);
       if (
@@ -922,6 +952,9 @@ function createMatrixCorpusProviderUsageRecorder(
       });
       if (!appended.ok) throw new Error('Matrix corpus provider usage persistence failed');
       actualCalls.set(key, structuredClone(call));
+    },
+    hasObservedProviderResponse(): boolean {
+      return providerResponseObserved;
     },
     async finalize(phase, status): Promise<void> {
       const projectedExpectedCalls =
