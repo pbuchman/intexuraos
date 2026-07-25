@@ -271,6 +271,7 @@ function fixture(
   const replyPublisher = {
     publishReplyWithReceipt: vi.fn(async () => ({ publicationReceiptId: 'pubsub_message_1' })),
   };
+  const waitForZeroEvidenceRetry = vi.fn(async (_delayMs: number) => undefined);
   const deps = {
     contextService,
     sessionRepository,
@@ -278,6 +279,7 @@ function fixture(
     receiptRepository,
     createRunner,
     replyPublisher,
+    waitForZeroEvidenceRetry,
   } as unknown as MatrixCorpusExecutionServiceDeps;
   return {
     session,
@@ -287,6 +289,7 @@ function fixture(
     receiptRepository,
     createRunner,
     replyPublisher,
+    waitForZeroEvidenceRetry,
     service: createMatrixCorpusExecutionService(deps),
   };
 }
@@ -929,6 +932,8 @@ describe('Matrix corpus execution service', () => {
     ).resolves.toEqual({ ok: true });
 
     expect(current.createRunner).toHaveBeenCalledTimes(2);
+    expect(current.waitForZeroEvidenceRetry).toHaveBeenCalledTimes(1);
+    expect(current.waitForZeroEvidenceRetry).toHaveBeenCalledWith(5_000);
     const summaries = current.sessionRepository.appendMatrixCorpusEvent.mock.calls
       .map(([input]) => input.event)
       .filter(({ type }) => type === 'llm_usage_summary');
@@ -975,6 +980,7 @@ describe('Matrix corpus execution service', () => {
     ).rejects.toThrow('Matrix corpus intent classification failed');
 
     expect(current.createRunner).toHaveBeenCalledTimes(3);
+    expect(current.waitForZeroEvidenceRetry.mock.calls).toEqual([[5_000], [20_000]]);
     const summaries = current.sessionRepository.appendMatrixCorpusEvent.mock.calls
       .map(([input]) => input.event)
       .filter(({ type }) => type === 'llm_usage_summary');
