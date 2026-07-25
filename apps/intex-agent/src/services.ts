@@ -704,6 +704,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
           intentClassifier: createLlmIntexAgentIntentClassifier({
             client: clients.structuredClient,
             logger,
+            responseFormatMode: input.intentClassifierResponseMode,
           }),
           userPreferences: input.userPreferences,
           webAppUrl: config.webAppUrl,

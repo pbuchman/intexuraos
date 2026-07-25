@@ -13,6 +13,7 @@ import type {
   IntexAgentRunnerResult,
   MatrixCorpusWhatsAppReplyPublisher,
 } from '../messages/handleIncomingMessage.js';
+import type { IntexAgentIntentClassifierResponseFormatMode } from '../agent/intentClassifier.js';
 import type {
   MatrixCorpusSession,
   MatrixCorpusSessionIdentity,
@@ -93,6 +94,7 @@ export interface MatrixCorpusExecutionServiceDeps {
       userId: string;
       userPreferences: string | null;
       deadlineAtMs: number;
+      intentClassifierResponseMode: IntexAgentIntentClassifierResponseFormatMode;
     }>
   ): IntexAgentRunner;
   replyPublisher: Pick<MatrixCorpusWhatsAppReplyPublisher, 'publishReplyWithReceipt'>;
@@ -234,6 +236,8 @@ export function createMatrixCorpusExecutionService(
           userId: ordinaryIngest.userId,
           userPreferences: promptContext,
           deadlineAtMs,
+          intentClassifierResponseMode:
+            runnerAttempt === 1 ? 'json_schema' : 'prompt_json',
         });
         let result: IntexAgentRunnerResult;
         try {
@@ -490,6 +494,7 @@ async function executeConfirmation(
     userId: ordinaryIngest.userId,
     userPreferences: input.userPreferences,
     deadlineAtMs: input.deadlineAtMs,
+    intentClassifierResponseMode: 'json_schema',
   });
   let result: IntexAgentRunnerResult;
   try {

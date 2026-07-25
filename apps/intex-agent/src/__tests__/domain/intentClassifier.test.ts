@@ -1087,6 +1087,46 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     });
   });
 
+  it('uses prompt JSON without provider response_format for a Matrix corpus fallback attempt', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.9,
+          question: 'Which date should I use?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        })
+      ),
+    ]);
+
+    await expect(
+      createLlmIntexAgentIntentClassifier({
+        client,
+        logger: new FakeLogger(),
+        responseFormatMode: 'prompt_json',
+      }).classify({
+        message: 'Add lunch with Marta at noon.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+        matrixCorpusLlm: {
+          nextContext: (stage) => matrixContext(stage, 1),
+          recordProviderCall: vi.fn(async () => undefined),
+        },
+      })
+    ).resolves.toMatchObject({
+      kind: 'needs_clarification',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.options).not.toHaveProperty('responseFormat');
+  });
+
   it('warns and fails closed to clarification when the classifier response cannot be repaired', async () => {
     const malformedClient = new FakeStructuredClient([
       ok(generateResult('not json')),
