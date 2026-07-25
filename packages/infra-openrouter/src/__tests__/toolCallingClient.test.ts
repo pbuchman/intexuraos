@@ -623,8 +623,14 @@ describe('createOpenRouterToolCallingClient', () => {
       toolCallsMade: 1,
       iterationCount: 3,
     });
-    expect(capturedBodies[0]?.['tool_choice']).toBe('required');
-    expect(capturedBodies[1]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[0]?.['tool_choice']).toEqual({
+      type: 'function',
+      function: { name: 'add_user_preference' },
+    });
+    expect(capturedBodies[1]?.['tool_choice']).toEqual({
+      type: 'function',
+      function: { name: 'add_user_preference' },
+    });
     expect(capturedBodies[2]?.['tool_choice']).toBe('auto');
     expect(capturedBodies[1]?.['messages']).toEqual(
       expect.arrayContaining([
@@ -768,7 +774,10 @@ describe('createOpenRouterToolCallingClient', () => {
         },
       },
     ]);
-    expect(capturedBodies[0]?.['tool_choice']).toBe('required');
+    expect(capturedBodies[0]?.['tool_choice']).toEqual({
+      type: 'function',
+      function: { name: 'request_review' },
+    });
     expect(capturedBodies[1]?.['messages']).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
@@ -786,6 +795,58 @@ describe('createOpenRouterToolCallingClient', () => {
         providerReportedUsd: 0.0005,
       })
     );
+  });
+
+  it('keeps generic required tool choice when multiple tools are available', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBody = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_create_note',
+                  type: 'function',
+                  function: { name: 'create_note', arguments: '{"content":"test"}' },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { prompt_tokens: 10, completion_tokens: 4, total_tokens: 14, cost: 0.0001 },
+      });
+
+    const result = await createClient().run({
+      systemPrompt: 'Use one appropriate tool.',
+      messages: [{ role: 'user', content: 'Store this.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create note.',
+          parameters: { type: 'object', properties: { content: { type: 'string' } } },
+          run: async (): Promise<string> => JSON.stringify({ status: 'completed' }),
+          stopAfterRun: true,
+        },
+        {
+          name: 'create_link',
+          description: 'Create link.',
+          parameters: { type: 'object', properties: { url: { type: 'string' } } },
+          run: async (): Promise<string> => JSON.stringify({ status: 'completed' }),
+          stopAfterRun: true,
+        },
+      ],
+      toolChoice: 'required',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(capturedBody?.['tool_choice']).toBe('required');
   });
 
   it('uses auto tool choice when requested', async () => {
