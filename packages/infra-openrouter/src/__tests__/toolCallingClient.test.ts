@@ -644,6 +644,348 @@ describe('createOpenRouterToolCallingClient', () => {
     expect(runTool).toHaveBeenCalledWith({ text: 'Be concise.', expectedVersion: 0 });
   });
 
+  it('falls back to validated JSON arguments when MiniMax exhausts a single required terminal tool', async () => {
+    const capturedBodies: Record<string, unknown>[] = [];
+    const runTool = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    const scope = nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .times(2)
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions', (body) => {
+        capturedBodies.push(body as Record<string, unknown>);
+        return true;
+      })
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '```json\n{"content":"Garage code is 7241."}\n```',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+    const onProviderCall = vi.fn().mockResolvedValue(undefined);
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool when the user asks to retain a factual note.',
+      messages: [{ role: 'user', content: 'Remember that the garage code is 7241.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['content'],
+            properties: { content: { type: 'string' } },
+          },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 2,
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_006',
+        sessionId: 'session_6',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+      onMatrixCorpusProviderCall: onProviderCall,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 3,
+        usage: expect.objectContaining({
+          inputTokens: 40,
+          outputTokens: 8,
+          totalTokens: 48,
+          providerReportedUsd: 0.0004,
+        }),
+        providerCalls: [
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 1 }) }),
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 2 }) }),
+          expect.objectContaining({ context: expect.objectContaining({ callOrdinal: 3 }) }),
+        ],
+      },
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(runTool).toHaveBeenCalledWith({ content: 'Garage code is 7241.' });
+    expect(capturedBodies[2]).not.toHaveProperty('tools');
+    expect(capturedBodies[2]).not.toHaveProperty('tool_choice');
+    expect(capturedBodies[2]?.['messages']).toEqual(
+      expect.arrayContaining([
+        {
+          role: 'user',
+          content: expect.stringMatching(/create_note[\s\S]*"required":\["content"\]/u),
+        },
+      ])
+    );
+    expect(onProviderCall).toHaveBeenCalledTimes(3);
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('returns a non-Matrix MiniMax fallback result from bare JSON', async () => {
+    const runTool = vi.fn().mockResolvedValue('{"status":"needs_confirmation"}');
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"content":"Garage code is 7241."}',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        content: '',
+        toolCallsMade: 1,
+        iterationCount: 2,
+      }),
+    });
+    expect(result).toEqual({
+      ok: true,
+      value: expect.not.objectContaining({ providerCalls: expect.anything() }),
+    });
+    expect(runTool).toHaveBeenCalledWith({ content: 'Garage code is 7241.' });
+  });
+
+  it('maps a MiniMax fallback provider failure after recording the native iteration', async () => {
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(503, 'fallback provider unavailable');
+
+    const result = await createClientWithConfig({
+      model: 'minimax/minimax-m3',
+      deadlineAtMs: Date.now() + 60_000,
+    }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: vi.fn(),
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'OVERLOADED', message: 'fallback provider unavailable' },
+    });
+  });
+
+  it('does not override a caller that explicitly declines exhausted-loop repair', async () => {
+    const runTool = vi.fn();
+    const scope = nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+      onExhausted: () => undefined,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    });
+    expect(runTool).not.toHaveBeenCalled();
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it.each([
+    ['missing content', [], true],
+    ['invalid JSON', [{ message: { role: 'assistant', content: 'PRIVATE_INVALID_JSON' } }], false],
+    ['a JSON array', [{ message: { role: 'assistant', content: '[]' } }], true],
+  ])('rejects MiniMax fallback arguments with %s', async (_case, fallbackChoices, matrix) => {
+    const runTool = vi.fn();
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: fallbackChoices,
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+      ...(matrix
+        ? {
+            matrixCorpusContext: {
+              version: 1 as const,
+              runId: 'run_1',
+              scenarioId: 'scenario_006',
+              sessionId: 'session_6',
+              turnIndex: 0,
+              stage: 'agent_generation' as const,
+              callOrdinal: 1,
+            },
+          }
+        : {}),
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    });
+    expect(runTool).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: 'MINIMAX_REQUIRED_TOOL_ARGUMENT_FALLBACK_REJECTED',
+        ...(matrix ? { _skipSentry: true } : {}),
+      }),
+      expect.any(String)
+    );
+    expect(JSON.stringify(vi.mocked(mockLogger.warn).mock.calls)).not.toContain(
+      'PRIVATE_INVALID_JSON'
+    );
+  });
+
+  it('rejects MiniMax fallback arguments when the terminal callback validation throws', async () => {
+    const runTool = vi.fn(async () => {
+      throw new Error('PRIVATE_CALLBACK_REJECTION');
+    });
+    nock(API_BASE_URL)
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [{ message: { role: 'assistant', content: 'I will remember that.' } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12, cost: 0.0001 },
+      })
+      .post('/chat/completions')
+      .reply(200, {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: '{"content":"Garage code is 7241."}',
+            },
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 4, total_tokens: 24, cost: 0.0002 },
+      });
+
+    const result = await createClientWithConfig({ model: 'minimax/minimax-m3' }).run({
+      systemPrompt: 'Use the note tool.',
+      messages: [{ role: 'user', content: 'Remember the garage code.' }],
+      tools: [
+        {
+          name: 'create_note',
+          description: 'Create a note preview.',
+          parameters: { type: 'object', required: ['content'] },
+          stopAfterRun: true,
+          run: runTool,
+        },
+      ],
+      toolChoice: 'required',
+      maxIterations: 1,
+      matrixCorpusContext: {
+        version: 1,
+        runId: 'run_1',
+        scenarioId: 'scenario_006',
+        sessionId: 'session_6',
+        turnIndex: 0,
+        stage: 'agent_generation',
+        callOrdinal: 1,
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'API_ERROR', message: 'Tool calling loop exceeded maxIterations' },
+    });
+    expect(runTool).toHaveBeenCalledOnce();
+    expect(
+      JSON.stringify([
+        vi.mocked(mockLogger.warn).mock.calls,
+        vi.mocked(mockLogger.error).mock.calls,
+      ])
+    ).not.toContain('PRIVATE_CALLBACK_REJECTION');
+  });
+
   it('logs ownerType and zero usage when OpenRouter omits usage metadata', async () => {
     nock(API_BASE_URL)
       .post('/chat/completions')
