@@ -426,7 +426,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
         ? parseMatrixCorpusSessionDocument(item.sessionSnapshot.id, item.sessionSnapshot.data())
         : undefined;
       const projection = item.projectionSnapshot.exists
-        ? parseScenarioProjection(item.projectionSnapshot.data())
+        ? parseCleanupScenarioProjection(item.projectionSnapshot.data())
         : null;
       const isAbandonedProjectionGap =
         acceptsAbandonedProjectionGap &&
@@ -606,7 +606,7 @@ export class FirestoreTestRunRepository implements TestRunRepository {
               summary !== undefined &&
               isUnprojectedAbandonedScenario(summary)
             );
-          const projection = parseScenarioProjection(snapshot.data());
+          const projection = parseCleanupScenarioProjection(snapshot.data());
           return (
             projection?.runId !== input.targetIdentity.runId ||
             projection.userId !== input.targetIdentity.userId ||
@@ -1544,6 +1544,43 @@ function isUnprojectedAbandonedScenario(
 function parseScenarioProjection(value: unknown): TestRunScenarioProjectionV1 | null {
   const parsed = testRunScenarioProjectionV1Schema.safeParse(value);
   return parsed.success ? parsed.data : null;
+}
+
+function parseCleanupScenarioProjection(value: unknown): TestRunScenarioProjectionV1 | null {
+  const current = testRunScenarioProjectionV1Schema.safeParse(value);
+  if (current.success) return current.data;
+  if (!isUnknownRecord(value) || !Array.isArray(value['replyEvaluations'])) return null;
+
+  if (!value['replyEvaluations'].some(isLegacySingleCallFailedEvaluation)) return null;
+  const replyEvaluations = value['replyEvaluations'].map((evaluation: unknown) => {
+    if (!isLegacySingleCallFailedEvaluation(evaluation)) return evaluation;
+    return { ...evaluation, usage: { ...evaluation.usage, logicalCalls: 2 } };
+  });
+
+  const compatible = testRunScenarioProjectionV1Schema.safeParse({
+    ...value,
+    replyEvaluations,
+  });
+  return compatible.success ? compatible.data : null;
+}
+
+function isLegacySingleCallFailedEvaluation(
+  value: unknown
+): value is Record<string, unknown> & { usage: Record<string, unknown> } {
+  if (!isUnknownRecord(value) || value['verdict'] !== 'failed') return false;
+  const usage = value['usage'];
+  return (
+    isUnknownRecord(usage) &&
+    usage['logicalCalls'] === 1 &&
+    typeof usage['repairCount'] === 'number' &&
+    Number.isSafeInteger(usage['repairCount']) &&
+    usage['repairCount'] >= 0 &&
+    usage['repairCount'] <= 1
+  );
+}
+
+function isUnknownRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function matchesIdentity(record: TestRunIdentity, identity: TestRunIdentity): boolean {

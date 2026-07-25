@@ -538,6 +538,135 @@ describe('Firestore Test Run foundation repository', () => {
     ).resolves.toMatchObject({ ok: true, disposition: 'already_applied' });
   });
 
+  it('cleans terminal evidence with a legacy single-call failed MiniMax evaluation', async () => {
+    const { firestore, repository } = fixture();
+    await writeCleanupFixture(firestore);
+    const projectionId = createHash('sha256')
+      .update('v1\u0000run_target\u0000scenario_001', 'utf8')
+      .digest('hex');
+    const projectionRef = firestore
+      .collection('intex_agent_test_run_scenarios')
+      .doc(`v1_${projectionId}`);
+    const projection = await projectionRef.get();
+    await projectionRef.set({
+      ...projection.data(),
+      replyEvaluations: [
+        {
+          turnIndex: 0,
+          replyIndex: 1,
+          verdict: 'passed',
+          score: 5,
+          criteria: {
+            understoodIntent: true,
+            helpful: true,
+            conciseAndClear: true,
+            professionalTone: true,
+            noPassiveAggression: true,
+          },
+          failureCodes: [],
+          latencyMs: 1,
+          usage: {
+            logicalCalls: 1,
+            repairCount: 0,
+            inputTokens: 2,
+            outputTokens: 1,
+            totalTokens: 3,
+            costNanoUsd: 7,
+          },
+        },
+        {
+          turnIndex: 0,
+          replyIndex: 2,
+          verdict: 'failed',
+          score: 4,
+          criteria: {
+            understoodIntent: true,
+            helpful: false,
+            conciseAndClear: true,
+            professionalTone: true,
+            noPassiveAggression: true,
+          },
+          failureCodes: ['helpful'],
+          latencyMs: 1,
+          usage: {
+            logicalCalls: 1,
+            repairCount: 0,
+            inputTokens: 2,
+            outputTokens: 1,
+            totalTokens: 3,
+            costNanoUsd: 7,
+          },
+        },
+      ],
+    });
+
+    await expect(repository.cleanupExactRun(cleanupInput())).resolves.toMatchObject({
+      ok: true,
+      disposition: 'applied',
+      removed: { scenarioProjections: 1 },
+    });
+  });
+
+  it('does not let legacy MiniMax cleanup compatibility mask other corrupt evidence', async () => {
+    for (const usage of [
+      {
+        logicalCalls: 1,
+        repairCount: 2,
+        inputTokens: 2,
+        outputTokens: 1,
+        totalTokens: 3,
+        costNanoUsd: 7,
+      },
+      {
+        logicalCalls: 1,
+        repairCount: 0,
+        inputTokens: 2,
+        outputTokens: 1,
+        totalTokens: 4,
+        costNanoUsd: 7,
+      },
+    ]) {
+      const { firestore, repository } = fixture();
+      await writeCleanupFixture(firestore);
+      const projectionId = createHash('sha256')
+        .update('v1\u0000run_target\u0000scenario_001', 'utf8')
+        .digest('hex');
+      const projectionRef = firestore
+        .collection('intex_agent_test_run_scenarios')
+        .doc(`v1_${projectionId}`);
+      const projection = await projectionRef.get();
+      await projectionRef.set({
+        ...projection.data(),
+        replyEvaluations: [
+          {
+            turnIndex: 0,
+            replyIndex: 1,
+            verdict: 'failed',
+            score: 4,
+            criteria: {
+              understoodIntent: true,
+              helpful: false,
+              conciseAndClear: true,
+              professionalTone: true,
+              noPassiveAggression: true,
+            },
+            failureCodes: ['helpful'],
+            latencyMs: 1,
+            usage,
+          },
+        ],
+      });
+
+      await expect(repository.cleanupExactRun(cleanupInput())).resolves.toEqual({
+        ok: false,
+        code: 'EVIDENCE_MISMATCH',
+      });
+      await expect(
+        firestore.collection('intex_agent_session_events').doc('target_event_1').get()
+      ).resolves.toMatchObject({ exists: true });
+    }
+  });
+
   it('refuses to clean the latest retained successful run before deleting child evidence', async () => {
     const { firestore, repository } = fixture();
     await writeCleanupFixture(firestore);
