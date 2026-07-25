@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, randomUUID } from 'node:crypto';
+import { setTimeout as wait } from 'node:timers/promises';
 import { err, type Result } from '@intexuraos/common-core';
 import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
@@ -254,6 +255,9 @@ export function createIntexMatrixCorpusRuntime(
     receiptRepository,
     createRunner: dependencies.createRunner,
     replyPublisher: dependencies.replyPublisher,
+    waitForZeroEvidenceRetry: async (delayMs) => {
+      await wait(delayMs);
+    },
   });
   const terminalRecorder = createMatrixCorpusTurnTerminalRecorder({
     sessionRepository: dependencies.sessionRepository,

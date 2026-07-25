@@ -95,9 +95,11 @@ export interface MatrixCorpusExecutionServiceDeps {
     }>
   ): IntexAgentRunner;
   replyPublisher: Pick<MatrixCorpusWhatsAppReplyPublisher, 'publishReplyWithReceipt'>;
+  waitForZeroEvidenceRetry(delayMs: number): Promise<void>;
 }
 
 const MATRIX_CORPUS_ZERO_EVIDENCE_RUNNER_ATTEMPTS = 3;
+const MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS = [5_000, 20_000] as const;
 const MATRIX_CORPUS_RETRIABLE_ZERO_EVIDENCE_ERRORS = new Set([
   'Error: Matrix corpus agent generation failed',
   'Error: Matrix corpus intent classification failed',
@@ -242,6 +244,10 @@ export function createMatrixCorpusExecutionService(
             MATRIX_CORPUS_RETRIABLE_ZERO_EVIDENCE_ERRORS.has(String(error)) &&
             runnerAttempt < MATRIX_CORPUS_ZERO_EVIDENCE_RUNNER_ATTEMPTS
           ) {
+            const retryDelayMs = MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS[
+              runnerAttempt - 1
+            ] as (typeof MATRIX_CORPUS_ZERO_EVIDENCE_RETRY_DELAYS_MS)[number];
+            await deps.waitForZeroEvidenceRetry(retryDelayMs);
             return await executeNaturalAttempt(runnerAttempt + 1);
           }
           await usageRecorder.finalize('natural', 'failed');
