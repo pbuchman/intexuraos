@@ -546,6 +546,99 @@ describe('matrix corpus artifact lifecycle', () => {
     expect(MatrixCorpusReportV1Schema.safeParse(contradictory).success).toBe(false);
   });
 
+  it('accepts bounded MiniMax quorum votes in complete passing evidence', () => {
+    const valid = report('ready');
+    const withQuorum = {
+      ...valid,
+      usage: {
+        ...valid.usage,
+        evaluator: usage(61),
+        totalCostNanoUsd: 80,
+      },
+      scenarios: valid.scenarios.map((scenario, offset) =>
+        offset === 0
+          ? {
+              ...scenario,
+              judge: {
+                ...scenario.judge,
+                usage: usage(4),
+              },
+            }
+          : scenario
+      ),
+    };
+
+    expect(MatrixCorpusReportV1Schema.safeParse(withQuorum).success).toBe(true);
+    expect(
+      MatrixCorpusReportV1Schema.safeParse({
+        ...withQuorum,
+        usage: {
+          ...withQuorum.usage,
+          evaluator: usage(64),
+          totalCostNanoUsd: 83,
+        },
+        scenarios: withQuorum.scenarios.map((scenario, offset) =>
+          offset === 0
+            ? {
+                ...scenario,
+                judge: {
+                  ...scenario.judge,
+                  usage: usage(7),
+                },
+              }
+            : scenario
+        ),
+      }).success
+    ).toBe(false);
+    expect(
+      MatrixCorpusReportV1Schema.safeParse({
+        ...withQuorum,
+        usage: {
+          ...withQuorum.usage,
+          evaluator: usage(60),
+          totalCostNanoUsd: 79,
+        },
+        scenarios: withQuorum.scenarios.map((scenario, offset) =>
+          offset === 0
+            ? {
+                ...scenario,
+                judge: {
+                  ...scenario.judge,
+                  usage: usage(3),
+                },
+              }
+            : scenario
+        ),
+      }).success
+    ).toBe(false);
+    expect(
+      MatrixCorpusReportV1Schema.safeParse({
+        ...withQuorum,
+        usage: {
+          ...withQuorum.usage,
+          evaluator: {
+            ...withQuorum.usage.evaluator,
+            repairCount: 5,
+          },
+        },
+        scenarios: withQuorum.scenarios.map((scenario, offset) =>
+          offset === 0
+            ? {
+                ...scenario,
+                judge: {
+                  ...scenario.judge,
+                  usage: {
+                    ...scenario.judge.usage,
+                    repairCount: 5,
+                  },
+                },
+              }
+            : scenario
+        ),
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects PASS with reused sessions, empty MiniMax evidence, failed ready cleanup, or a forged tool schedule', () => {
     const valid = report('ready');
     expect(

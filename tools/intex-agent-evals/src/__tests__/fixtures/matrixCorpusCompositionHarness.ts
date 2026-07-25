@@ -16,6 +16,7 @@ import {
   safeToolFactV1Schema,
   type MatrixCorpusSignedControlMutationV1,
   type SafeDeterministicCheckV1,
+  type SafeReplyEvaluationV1,
   type SafeToolFactV1,
 } from '@intexuraos/http-contracts';
 
@@ -128,6 +129,7 @@ export interface MatrixCorpusCompositionMetrics {
   readonly scenarioProjectionSessions: string[];
   readonly scenarioProjectionEventWatermarks: number[];
   readonly scenarioProjectionDeterministicChecks: SafeDeterministicCheckV1[][];
+  readonly scenarioProjectionReplyEvaluations: SafeReplyEvaluationV1[][];
   readonly judgeAssistantTexts: string[];
   transportReadinessChecks: number;
   artifactDeliveryStatus: 'pending' | 'staged' | 'ready' | 'failed';
@@ -180,6 +182,7 @@ export async function createPassingMatrixCorpusCompositionHarness(
     scenarioProjectionSessions: [],
     scenarioProjectionEventWatermarks: [],
     scenarioProjectionDeterministicChecks: [],
+    scenarioProjectionReplyEvaluations: [],
     judgeAssistantTexts: [],
     transportReadinessChecks: 0,
     artifactDeliveryStatus: 'pending',
@@ -570,6 +573,9 @@ function createIntexBoundary(state: SharedState): IntexAgentServiceClient {
           state.metrics.scenarioProjectionDeterministicChecks.push(
             structuredClone(projection['deterministicChecks'] as SafeDeterministicCheckV1[])
           );
+          state.metrics.scenarioProjectionReplyEvaluations.push(
+            structuredClone(projection['replyEvaluations'] as SafeReplyEvaluationV1[])
+          );
           state.lifecycle = 'running';
         }
       }
@@ -821,6 +827,16 @@ function createMiniMaxBoundary(state: SharedState): MiniMaxEvaluator {
           },
         };
       }
+      const decisionCalls = inputs.reduce((total, input) => {
+        const entry = findEntry(state.catalog, input.scenarioId);
+        return total + (entry.scenarioNumber === state.failMiniMaxScenarioNumber ? 2 : 1);
+      }, 0);
+      const repairCount = inputs.filter(
+        (input) =>
+          findEntry(state.catalog, input.scenarioId).scenarioNumber ===
+          state.failMiniMaxScenarioNumber
+      ).length;
+      const providerCalls = decisionCalls + repairCount;
       return {
         ok: true,
         verdicts: inputs.map((input) => {
@@ -846,12 +862,12 @@ function createMiniMaxBoundary(state: SharedState): MiniMaxEvaluator {
           };
         }),
         usage: {
-          logicalCalls: inputs.length,
-          repairCount: 0,
-          inputTokens: inputs.length * 10,
-          outputTokens: inputs.length * 5,
-          totalTokens: inputs.length * 15,
-          providerReportedUsd: inputs.length * 0.000001,
+          logicalCalls: providerCalls,
+          repairCount,
+          inputTokens: providerCalls * 10,
+          outputTokens: providerCalls * 5,
+          totalTokens: providerCalls * 15,
+          providerReportedUsd: providerCalls * 0.000001,
           providerReportedUsdComplete: true,
         },
       };
