@@ -240,6 +240,11 @@ export function createOpenRouterToolCallingClient(
       let providerReportedUsd = 0;
       let responsesWithUsage = 0;
       let hasUnknownProviderCost = false;
+      const retryOptions = {
+        maxAttempts,
+        baseDelayMs: 500,
+        ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
+      };
 
       function completeUsage(): NormalizedUsage {
         if (hasUnknownProviderCost || responsesWithUsage === 0) {
@@ -263,6 +268,38 @@ export function createOpenRouterToolCallingClient(
         return hasUnknownProviderCost || responsesWithUsage === 0 ? null : providerReportedUsd;
       }
 
+      async function recordProviderResponse(
+        data: OpenRouterToolCallingResponse,
+        callOrdinal: number
+      ): Promise<ReturnType<typeof extractUsage>> {
+        const usage = extractUsage(data.usage);
+        if (params.matrixCorpusContext !== undefined) {
+          const providerCall: MatrixCorpusProviderCallUsageV1 = {
+            context: {
+              ...params.matrixCorpusContext,
+              callOrdinal: params.matrixCorpusContext.callOrdinal + callOrdinal - 1,
+            },
+            modelId: evidenceModelId,
+            inputTokens: usage.normalized.inputTokens,
+            outputTokens: usage.normalized.outputTokens,
+            totalTokens: usage.normalized.totalTokens,
+            ...(usage.providerReportedUsd === null
+              ? {}
+              : { providerReportedUsd: usage.providerReportedUsd }),
+          };
+          providerCalls.push(providerCall);
+          await params.onMatrixCorpusProviderCall?.(providerCall);
+        }
+        aggregatedUsage = addUsage(aggregatedUsage, usage.normalized);
+        responsesWithUsage++;
+        if (usage.providerReportedUsd === null) {
+          hasUnknownProviderCost = true;
+        } else {
+          providerReportedUsd += usage.providerReportedUsd;
+        }
+        return usage;
+      }
+
       try {
         for (let attempt = 0; attempt < 2; attempt++) {
           while (iteration < effectiveMax) {
@@ -277,48 +314,17 @@ export function createOpenRouterToolCallingClient(
               iteration
             );
 
-            const responseResult = await withRetry(
-              async () => {
-                try {
-                  return ok(await postChatCompletion(requestBody));
-                } catch (error) {
-                  return err(mapOpenRouterError(error));
-                }
-              },
-              {
-                maxAttempts,
-                baseDelayMs: 500,
-                ...(deadlineAtMs === undefined ? {} : { deadlineAtMs }),
+            const responseResult = await withRetry(async () => {
+              try {
+                return ok(await postChatCompletion(requestBody));
+              } catch (error) {
+                return err(mapOpenRouterError(error));
               }
-            );
+            }, retryOptions);
             if (!responseResult.ok) throw new OpenRouterLlmError(responseResult.error);
             const data = responseResult.value;
             const message = data.choices[0]?.message;
-            const usage = extractUsage(data.usage);
-            if (params.matrixCorpusContext !== undefined) {
-              const providerCall: MatrixCorpusProviderCallUsageV1 = {
-                context: {
-                  ...params.matrixCorpusContext,
-                  callOrdinal: params.matrixCorpusContext.callOrdinal + iteration - 1,
-                },
-                modelId: evidenceModelId,
-                inputTokens: usage.normalized.inputTokens,
-                outputTokens: usage.normalized.outputTokens,
-                totalTokens: usage.normalized.totalTokens,
-                ...(usage.providerReportedUsd === null
-                  ? {}
-                  : { providerReportedUsd: usage.providerReportedUsd }),
-              };
-              providerCalls.push(providerCall);
-              await params.onMatrixCorpusProviderCall?.(providerCall);
-            }
-            aggregatedUsage = addUsage(aggregatedUsage, usage.normalized);
-            responsesWithUsage++;
-            if (usage.providerReportedUsd === null) {
-              hasUnknownProviderCost = true;
-            } else {
-              providerReportedUsd += usage.providerReportedUsd;
-            }
+            const usage = await recordProviderResponse(data, iteration);
 
             const toolCalls = message?.tool_calls ?? [];
             if (toolCalls.length > 0) {
@@ -467,6 +473,78 @@ export function createOpenRouterToolCallingClient(
           break;
         }
 
+        const fallbackTool = requiredTerminalToolArgsFallback(
+          model,
+          tools,
+          toolChoice,
+          totalToolCalls,
+          onExhausted === undefined
+        );
+        if (fallbackTool !== undefined) {
+          iteration++;
+          const responseResult = await withRetry(async () => {
+            try {
+              return ok(
+                await postChatCompletion(
+                  buildToolArgsFallbackRequestBody(model, systemPrompt, messages, fallbackTool)
+                )
+              );
+            } catch (error) {
+              return err(mapOpenRouterError(error));
+            }
+          }, retryOptions);
+          if (!responseResult.ok) throw new OpenRouterLlmError(responseResult.error);
+          const data = responseResult.value;
+          await recordProviderResponse(data, iteration);
+          const fallbackArgs = parsePromptJsonObject(data.choices[0]?.message.content);
+          if (fallbackArgs !== undefined) {
+            const toolResponse = await runToolCall(
+              toolMap,
+              {
+                id: `fallback_${String(iteration)}`,
+                type: 'function',
+                function: {
+                  name: fallbackTool.name,
+                  arguments: JSON.stringify(fallbackArgs),
+                },
+              },
+              logger,
+              iteration,
+              params.matrixCorpusContext !== undefined
+            );
+            totalToolCalls++;
+            if (toolResponse.accepted) {
+              logger.info(
+                { iteration, totalToolCalls },
+                'OpenRouter tool calling: completed MiniMax required-tool argument fallback'
+              );
+              trackUsage(
+                completeUsage(),
+                true,
+                Date.now() - runStart,
+                undefined,
+                completeProviderReportedUsd(),
+                promptType
+              );
+              return ok({
+                content: '',
+                toolCallsMade: totalToolCalls,
+                iterationCount: iteration,
+                usage: completeUsage(),
+                ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
+              });
+            }
+          }
+          logger.warn(
+            {
+              iteration,
+              errorCode: 'MINIMAX_REQUIRED_TOOL_ARGUMENT_FALLBACK_REJECTED',
+              ...(params.matrixCorpusContext === undefined ? {} : { _skipSentry: true }),
+            },
+            'OpenRouter tool calling: MiniMax required-tool argument fallback rejected'
+          );
+        }
+
         trackUsage(
           completeUsage(),
           false,
@@ -554,13 +632,56 @@ function requiredToolRetryMessage(tools: ToolDefinition[]): string {
   return `Call the required ${onlyTool.name} tool now with arguments derived from the original request. Do not return final text before calling the tool.`;
 }
 
+function requiredTerminalToolArgsFallback(
+  model: string,
+  tools: ToolDefinition[],
+  toolChoice: 'auto' | 'required',
+  totalToolCalls: number,
+  allowFallback: boolean
+): ToolDefinition | undefined {
+  if (
+    !allowFallback ||
+    !/^(?:or:)?minimax\/minimax-m3$/iu.test(model) ||
+    toolChoice !== 'required' ||
+    totalToolCalls !== 0 ||
+    tools.length !== 1 ||
+    tools[0]?.stopAfterRun !== true
+  ) {
+    return undefined;
+  }
+  return tools[0];
+}
+
+function buildToolArgsFallbackRequestBody(
+  model: string,
+  systemPrompt: string,
+  messages: ToolCallingMessage[],
+  tool: ToolDefinition
+): Record<string, unknown> {
+  const fallbackInstruction = [
+    `Return only the JSON object of arguments for the required ${tool.name} tool.`,
+    'Derive every argument from the original user request and conversation.',
+    'Do not include markdown, commentary, the tool name, or an outer wrapper.',
+    `Tool purpose: ${tool.description}`,
+    `Arguments JSON Schema: ${JSON.stringify(tool.parameters)}`,
+  ].join('\n');
+  return {
+    model,
+    messages: [
+      ...buildInitialMessages(systemPrompt, messages),
+      { role: 'user', content: fallbackInstruction },
+    ],
+    temperature: 0,
+  };
+}
+
 async function runToolCall(
   toolMap: Map<string, ToolDefinition>,
   toolCall: OpenRouterToolCall,
   logger: Logger,
   iteration: number,
   matrixCorpus: boolean
-): Promise<Readonly<{ content: string; stopAfterRun: boolean }>> {
+): Promise<Readonly<{ accepted: boolean; content: string; stopAfterRun: boolean }>> {
   const toolName = toolCall.function?.name ?? '';
   const toolArgs = parseToolArgs(toolCall.function?.arguments);
   const toolDef = toolMap.get(toolName);
@@ -576,6 +697,7 @@ async function runToolCall(
       'OpenRouter tool calling: hallucinated tool name'
     );
     return {
+      accepted: false,
       content: JSON.stringify({
         error: matrixCorpus ? 'Unknown tool' : `Unknown tool: ${toolName}`,
       }),
@@ -585,6 +707,7 @@ async function runToolCall(
 
   try {
     return {
+      accepted: true,
       content: await toolDef.run(toolArgs),
       stopAfterRun: toolDef.stopAfterRun === true,
     };
@@ -597,6 +720,7 @@ async function runToolCall(
       'OpenRouter tool calling: run callback threw'
     );
     return {
+      accepted: false,
       content: JSON.stringify({ error: matrixCorpus ? 'Tool execution failed' : errorMsg }),
       stopAfterRun: false,
     };
@@ -616,6 +740,21 @@ function parseToolArgs(rawArgs: string | undefined): Record<string, unknown> {
     return {};
   } catch {
     return {};
+  }
+}
+
+function parsePromptJsonObject(
+  rawContent: string | null | undefined
+): Record<string, unknown> | undefined {
+  if (typeof rawContent !== 'string') return undefined;
+  const trimmed = rawContent.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(trimmed);
+  const candidate = fenced?.[1]?.trim() ?? trimmed;
+  try {
+    const parsed = JSON.parse(candidate) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
   }
 }
 
