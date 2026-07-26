@@ -242,6 +242,7 @@ export function createOpenRouterToolCallingClient(
       let responsesWithUsage = 0;
       let hasUnknownProviderCost = false;
       const suppressSingleToolAfterAcceptedCall = isMiniMaxM3Model(model) && tools.length === 1;
+      const requireAcceptedToolCall = isMiniMaxM3Model(model);
       const retryOptions = {
         maxAttempts,
         baseDelayMs: 500,
@@ -311,7 +312,7 @@ export function createOpenRouterToolCallingClient(
               model,
               conversation,
               acceptedToolCallMade && suppressSingleToolAfterAcceptedCall ? [] : tools,
-              totalToolCalls,
+              acceptedToolCallMade || (!requireAcceptedToolCall && totalToolCalls > 0),
               toolChoice,
               iteration
             );
@@ -427,7 +428,12 @@ export function createOpenRouterToolCallingClient(
               );
               return err({ code: 'API_ERROR', message: 'Empty response from model' });
             }
-            if (tools.length > 0 && toolChoice === 'required' && totalToolCalls === 0) {
+            if (
+              tools.length > 0 &&
+              toolChoice === 'required' &&
+              !acceptedToolCallMade &&
+              (requireAcceptedToolCall || totalToolCalls === 0)
+            ) {
               conversation.push({ role: 'assistant', content: finalText });
               conversation.push({
                 role: 'user',
@@ -489,11 +495,11 @@ export function createOpenRouterToolCallingClient(
           break;
         }
 
-        const fallbackTool = requiredTerminalToolArgsFallback(
+        const fallbackTool = requiredToolArgsFallback(
           model,
           tools,
           toolChoice,
-          totalToolCalls,
+          acceptedToolCallMade,
           onExhausted === undefined
         );
         if (fallbackTool !== undefined) {
@@ -530,25 +536,89 @@ export function createOpenRouterToolCallingClient(
             );
             totalToolCalls++;
             if (toolResponse.accepted) {
-              logger.info(
-                { iteration, totalToolCalls },
-                'OpenRouter tool calling: completed MiniMax required-tool argument fallback'
-              );
-              trackUsage(
-                completeUsage(),
-                true,
-                Date.now() - runStart,
-                undefined,
-                completeProviderReportedUsd(),
-                promptType
-              );
-              return ok({
-                content: '',
-                toolCallsMade: totalToolCalls,
-                iterationCount: iteration,
-                usage: completeUsage(),
-                ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
-              });
+              if (fallbackTool.stopAfterRun !== true) {
+                const fallbackToolCallId = `fallback_${String(iteration)}`;
+                const completionConversation = buildInitialMessages(systemPrompt, messages);
+                completionConversation.push({
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: fallbackToolCallId,
+                      type: 'function',
+                      function: {
+                        name: fallbackTool.name,
+                        arguments: JSON.stringify(fallbackArgs),
+                      },
+                    },
+                  ],
+                });
+                completionConversation.push({
+                  role: 'tool',
+                  tool_call_id: fallbackToolCallId,
+                  name: fallbackTool.name,
+                  content: toolResponse.content,
+                });
+                iteration++;
+                const completionResponseResult = await withRetry(async () => {
+                  try {
+                    return ok(
+                      await postChatCompletion(
+                        buildRequestBody(model, completionConversation, [], true, 'auto', iteration)
+                      )
+                    );
+                  } catch (error) {
+                    return err(mapOpenRouterError(error));
+                  }
+                }, retryOptions);
+                if (!completionResponseResult.ok) {
+                  throw new OpenRouterLlmError(completionResponseResult.error);
+                }
+                const completionData = completionResponseResult.value;
+                await recordProviderResponse(completionData, iteration);
+                const completionContent = completionData.choices[0]?.message.content;
+                if (typeof completionContent === 'string' && completionContent !== '') {
+                  logger.info(
+                    { iteration, totalToolCalls },
+                    'OpenRouter tool calling: rendered MiniMax fallback tool result'
+                  );
+                  trackUsage(
+                    completeUsage(),
+                    true,
+                    Date.now() - runStart,
+                    undefined,
+                    completeProviderReportedUsd(),
+                    promptType
+                  );
+                  return ok({
+                    content: completionContent,
+                    toolCallsMade: totalToolCalls,
+                    iterationCount: iteration,
+                    usage: completeUsage(),
+                    ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
+                  });
+                }
+              } else {
+                logger.info(
+                  { iteration, totalToolCalls },
+                  'OpenRouter tool calling: completed MiniMax required-tool argument fallback'
+                );
+                trackUsage(
+                  completeUsage(),
+                  true,
+                  Date.now() - runStart,
+                  undefined,
+                  completeProviderReportedUsd(),
+                  promptType
+                );
+                return ok({
+                  content: '',
+                  toolCallsMade: totalToolCalls,
+                  iterationCount: iteration,
+                  usage: completeUsage(),
+                  ...(params.matrixCorpusContext === undefined ? {} : { providerCalls }),
+                });
+              }
             }
           }
           logger.warn(
@@ -615,7 +685,7 @@ function buildRequestBody(
   model: string,
   messages: OpenRouterMessage[],
   tools: ToolDefinition[],
-  totalToolCalls: number,
+  acceptedToolCallMade: boolean,
   toolChoice: 'auto' | 'required',
   iteration: number
 ): Record<string, unknown> {
@@ -637,7 +707,7 @@ function buildRequestBody(
           parameters: tool.parameters,
         },
       })),
-      tool_choice: totalToolCalls === 0 ? initialToolChoice : 'auto',
+      tool_choice: acceptedToolCallMade ? 'auto' : initialToolChoice,
     }),
   };
 }
@@ -648,20 +718,19 @@ function requiredToolRetryMessage(tools: ToolDefinition[]): string {
   return `Call the required ${onlyTool.name} tool now with arguments derived from the original request. Do not return final text before calling the tool.`;
 }
 
-function requiredTerminalToolArgsFallback(
+function requiredToolArgsFallback(
   model: string,
   tools: ToolDefinition[],
   toolChoice: 'auto' | 'required',
-  totalToolCalls: number,
+  acceptedToolCallMade: boolean,
   allowFallback: boolean
 ): ToolDefinition | undefined {
   if (
     !allowFallback ||
     !isMiniMaxM3Model(model) ||
     toolChoice !== 'required' ||
-    totalToolCalls !== 0 ||
-    tools.length !== 1 ||
-    tools[0]?.stopAfterRun !== true
+    acceptedToolCallMade ||
+    tools.length !== 1
   ) {
     return undefined;
   }
