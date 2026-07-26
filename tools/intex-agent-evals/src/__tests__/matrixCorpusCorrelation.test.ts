@@ -206,6 +206,114 @@ describe('Matrix corpus reply correlation', () => {
     });
   });
 
+  it('recovers a digest-bound reply from recent Matrix history after incremental sync misses it', async () => {
+    const assistantReply = 'Add this preference?';
+    const outbound = reply('$sent-1', 'Scenario turn', '@operator:home-dev');
+    const matrix = matrixWith([
+      { ok: true, nextBatch: 'cursor-2', limited: false, events: [] },
+      { ok: true, nextBatch: 'cursor-3', limited: false, events: [] },
+      {
+        ok: true,
+        nextBatch: 'snapshot-cursor',
+        limited: true,
+        events: [
+          reply('$old-identical', assistantReply),
+          outbound,
+          reply('$reply-current', `${assistantReply}${MATRIX_WHATSAPP_CONFIRMATION_MIRROR_SUFFIX}`),
+        ],
+      },
+    ]);
+
+    const result = await collectCorrelatedReplies({
+      ...baseInput(
+        matrix,
+        evidenceWith([
+          ...Array.from({ length: 2 }, () => ({
+            status: 'completed' as const,
+            replyCount: 1,
+            replyDigests: [digestMatrixReply(assistantReply)],
+          })),
+        ])
+      ),
+      outboundMatrixEventId: outbound.eventId as string,
+      expectedReplyRendering: 'whatsapp_confirmation_buttons',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      cursor: 'snapshot-cursor',
+      replies: [{ eventId: '$reply-current', body: assistantReply }],
+    });
+    expect(matrix.syncTargetRoom).toHaveBeenNthCalledWith(
+      3,
+      expect.not.objectContaining({ since: expect.anything() })
+    );
+  });
+
+  it('does not bind a matching reply that follows a later self-authored outbound', async () => {
+    const expectedReply = 'Matching reply';
+    const matrix = matrixWith([
+      { ok: true, nextBatch: 'cursor-2', limited: false, events: [] },
+      { ok: true, nextBatch: 'cursor-3', limited: false, events: [] },
+      {
+        ok: true,
+        nextBatch: 'snapshot-cursor',
+        limited: true,
+        events: [
+          reply('$sent-1', 'Scenario turn', '@operator:home-dev'),
+          reply('$sent-later', 'Unrelated later message', '@operator:home-dev'),
+          reply('$reply-later', expectedReply),
+        ],
+      },
+    ]);
+
+    await expect(
+      collectCorrelatedReplies(
+        baseInput(
+          matrix,
+          evidenceWith(
+            Array.from({ length: 2 }, () => ({
+              status: 'completed' as const,
+              replyCount: 1,
+              replyDigests: [digestMatrixReply(expectedReply)],
+            }))
+          )
+        )
+      )
+    ).resolves.toEqual({ ok: false, code: 'unbound_reply' });
+  });
+
+  it('fails closed when recent Matrix history contains a changed reply after the outbound anchor', async () => {
+    const matrix = matrixWith([
+      { ok: true, nextBatch: 'cursor-2', limited: false, events: [] },
+      { ok: true, nextBatch: 'cursor-3', limited: false, events: [] },
+      {
+        ok: true,
+        nextBatch: 'snapshot-cursor',
+        limited: true,
+        events: [
+          reply('$sent-1', 'Scenario turn', '@operator:home-dev'),
+          reply('$changed-reply', 'Changed reply'),
+        ],
+      },
+    ]);
+
+    await expect(
+      collectCorrelatedReplies(
+        baseInput(
+          matrix,
+          evidenceWith(
+            Array.from({ length: 2 }, () => ({
+              status: 'completed' as const,
+              replyCount: 1,
+              replyDigests: [digestMatrixReply('Expected reply')],
+            }))
+          )
+        )
+      )
+    ).resolves.toEqual({ ok: false, code: 'unbound_reply' });
+  });
+
   it('correlates the exact WhatsApp confirmation mirror with the durable assistant reply', async () => {
     const assistantReply = 'Save this note?\n\nContent: [redacted]';
     const matrix = matrixWith([
@@ -498,6 +606,8 @@ function baseInput(
     cursor: 'cursor-1',
     matrixUserId: '@operator:home-dev',
     expectedPuppetSender: PUPPET,
+    outboundMatrixEventId: '$sent-1',
+    outboundMessageText: 'Scenario turn',
     runId: 'run_1',
     scenarioId: 'intex-eval-001',
     turnIndex: 0,

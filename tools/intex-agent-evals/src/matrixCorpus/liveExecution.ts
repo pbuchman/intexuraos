@@ -1128,6 +1128,8 @@ async function executeLiveTurn(input: {
         initialEvents: observedProof.eventsAfterOutbound,
         matrixUserId: input.state.prepared.account.matrixUserId,
         expectedPuppetSender: input.state.prepared.expectedPuppetSender,
+        outboundMatrixEventId: sent.matrixEventId,
+        outboundMessageText: messageText,
         runId: input.runId,
         scenarioId: input.scenario.id,
         turnIndex: input.turnIndex,
