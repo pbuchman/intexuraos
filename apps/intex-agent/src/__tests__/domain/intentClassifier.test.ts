@@ -170,6 +170,250 @@ describe('createLlmIntexAgentIntentClassifier', () => {
     expect(client.calls).toHaveLength(1);
   });
 
+  it('ignores a conflicting language override when the current turn did not request it', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.9,
+          question: 'Czy godzina 12:00 oznacza południe?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['start_time_clarification'],
+          candidateIntents: ['create_calendar_event'],
+          languageOverride: 'pl',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Next Tuesday at noon for one hour.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'needs_clarification',
+      question: 'What time should the calendar event start?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['start_time_clarification'],
+      candidateIntents: ['create_calendar_event'],
+    });
+  });
+
+  it('keeps a conflicting language override when the current turn explicitly requests it', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'tool',
+          confidence: 0.9,
+          allowedToolNames: ['create_calendar_event'],
+          languageOverride: 'en',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Po angielsku dodaj spotkanie jutro o 15:00 na godzinę.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_calendar_event'],
+      languageOverride: 'en',
+    });
+  });
+
+  it('uses an explicit language override when localizing a classifier clarification', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          confidence: 0.9,
+          question: 'O której godzinie ma się rozpocząć wydarzenie?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['start'],
+          candidateIntents: ['create_calendar_event'],
+          languageOverride: 'en',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Po angielsku dodaj spotkanie jutro.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'needs_clarification',
+      question: 'What time should the calendar event start?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['start'],
+      candidateIntents: ['create_calendar_event'],
+      languageOverride: 'en',
+    });
+  });
+
+  it.each([
+    {
+      label: 'a missing calendar start in Polish',
+      message: 'Dodaj wydarzenie do kalendarza, ale brakuje godziny.',
+      output: {
+        outcome: 'needs_clarification' as const,
+        confidence: 0.9,
+        question: 'What time should the event start?',
+        blockerReason: 'missing_required_details' as const,
+        missingFields: ['start'],
+        candidateIntents: ['create_calendar_event'] as const,
+      },
+      expectedQuestion: 'O której godzinie ma się rozpocząć wydarzenie w kalendarzu?',
+    },
+    {
+      label: 'a non-calendar clarification in English',
+      message: 'Please help me with that request.',
+      output: {
+        outcome: 'needs_clarification' as const,
+        confidence: 0.9,
+        question: 'Co dokładnie mam zrobić?',
+        blockerReason: 'not_enough_context' as const,
+      },
+      expectedQuestion: 'What would you like me to do with this?',
+    },
+    {
+      label: 'a calendar clarification without a missing start field',
+      message: 'Please help me with that calendar request.',
+      output: {
+        outcome: 'needs_clarification' as const,
+        confidence: 0.9,
+        question: 'Co dokładnie mam zrobić?',
+        blockerReason: 'not_enough_context' as const,
+        candidateIntents: ['create_calendar_event'] as const,
+      },
+      expectedQuestion: 'What would you like me to do with this?',
+    },
+  ])('localizes $label', async ({ message, output, expectedQuestion }) => {
+    const client = new FakeStructuredClient([ok(generateResult(output))]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message,
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      kind: 'needs_clarification',
+      question: expectedQuestion,
+      blockerReason: output.blockerReason,
+    });
+  });
+
+  it('does not treat a durable preference value as a current-turn language override', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'tool',
+          confidence: 0.9,
+          allowedToolNames: ['add_user_preference'],
+          stylePreferenceAction: 'save_new',
+          languageOverride: 'pl',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'Add a preference: reply in Polish unless I ask otherwise.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['add_user_preference'],
+      stylePreferenceAction: 'save_new',
+    });
+  });
+
+  it('keeps an explicit language override for a read-only preference request', async () => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'tool',
+          confidence: 0.9,
+          allowedToolNames: ['get_user_preferences'],
+          languageOverride: 'en',
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message: 'In English, show my Intex Agent preferences.',
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['get_user_preferences'],
+      languageOverride: 'en',
+    });
+  });
+
+  it.each([
+    {
+      label: 'an unknown language override',
+      message: 'Create a calendar event tomorrow at 3 PM for one hour.',
+      languageOverride: 'fr',
+    },
+    {
+      label: 'an incidental language name',
+      message: 'Translate the phrase in Polish and create a calendar event tomorrow at 3 PM.',
+      languageOverride: 'pl',
+    },
+    {
+      label: 'an unrequested same-language override',
+      message: 'Create a calendar event tomorrow at 3 PM for one hour.',
+      languageOverride: 'en',
+    },
+  ])('ignores $label', async ({ message, languageOverride }) => {
+    const client = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'tool',
+          confidence: 0.9,
+          allowedToolNames: ['create_calendar_event'],
+          languageOverride,
+        })
+      ),
+    ]);
+    const classifier = createLlmIntexAgentIntentClassifier({ client, logger: new FakeLogger() });
+
+    await expect(
+      classifier.classify({
+        message,
+        events: [],
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      kind: 'tool',
+      allowedToolNames: ['create_calendar_event'],
+    });
+  });
+
   it('sends greeting-prefixed action requests to the LLM classifier', async () => {
     const client = new FakeStructuredClient([
       ok(
@@ -399,7 +643,6 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         kind: 'tool',
         allowedToolNames: ['add_user_preference'],
         stylePreferenceAction: 'save_new',
-        languageOverride: 'pl',
         decisionEvidence: 'The user asked to save a durable style preference.',
       },
     ],
@@ -428,7 +671,6 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         candidateIntents: ['query_calendar_events', 'create_calendar_event'],
         suggestedNextStep: 'Ask which event and new time the user means.',
         stylePreferenceAction: 'needs_clarification',
-        languageOverride: 'en',
         reason: 'The request lacks the target calendar event.',
         decisionEvidence: 'The current message says "that meeting" without a prior resolvable event.',
       },
@@ -451,7 +693,6 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         blockerReason: 'unsupported_capability',
         suggestedNextStep: 'Offer to save the ticket details as a note.',
         stylePreferenceAction: 'apply_this_turn_only',
-        languageOverride: 'en',
         decisionEvidence: 'Buying tickets requires an unsupported external purchasing action.',
       },
     ],
@@ -469,7 +710,6 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         kind: 'no_action',
         reason: 'greeting',
         stylePreferenceAction: 'apply_this_turn_only',
-        languageOverride: 'pl',
         decisionEvidence: 'The user is opening conversationally.',
       },
     ],
@@ -487,7 +727,6 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         kind: 'no_action',
         reason: 'conversation',
         stylePreferenceAction: 'apply_this_turn_only',
-        languageOverride: 'en',
         decisionEvidence: 'The user asks for discussion rather than a tool action.',
       },
     ],
@@ -505,7 +744,6 @@ describe('createLlmIntexAgentIntentClassifier', () => {
         kind: 'no_action',
         reason: 'retain_context',
         stylePreferenceAction: 'apply_this_turn_only',
-        languageOverride: 'pl',
         decisionEvidence: 'The sole request is temporary current-session retention.',
       },
     ],

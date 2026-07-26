@@ -24,6 +24,7 @@ import {
   withRetry,
 } from '@intexuraos/llm-utils';
 import {
+  detectIntexAgentReplyLanguage,
   selectIntexAgentReplyLanguage,
   type IntexAgentLanguageMessage,
   type IntexAgentReplyLanguage,
@@ -56,6 +57,11 @@ const PREFERENCE_TOOL_NAMES = [
 ] as const satisfies readonly IntexAgentToolName[];
 
 const PREFERENCE_TOOL_NAME_SET = new Set<IntexAgentToolName>(PREFERENCE_TOOL_NAMES);
+const PREFERENCE_MUTATION_TOOL_NAME_SET = new Set<IntexAgentToolName>([
+  'add_user_preference',
+  'update_user_preference',
+  'delete_user_preference',
+]);
 
 export interface IntexAgentIntentClassifierInput {
   message: string;
@@ -195,7 +201,7 @@ export function createLlmIntexAgentIntentClassifier(deps: {
         return genericClarification(replyLanguage);
       }
 
-      return mapValidatedClassifierOutput(result.value.data, replyLanguage);
+      return mapValidatedClassifierOutput(result.value.data, replyLanguage, input.message);
     },
   };
 }
@@ -213,40 +219,61 @@ function createRetryingStructuredClient(client: StructuredClient): StructuredCli
 
 function mapValidatedClassifierOutput(
   output: IntexAgentIntentClassifierOutput,
-  replyLanguage: IntexAgentReplyLanguage
+  replyLanguage: IntexAgentReplyLanguage,
+  currentMessage: string
 ): IntexAgentIntentClassification {
+  const isPreferenceMutation =
+    output.outcome === 'tool' &&
+    output.allowedToolNames.some((toolName) =>
+      PREFERENCE_MUTATION_TOOL_NAME_SET.has(toolName)
+    );
+  const languageOverride = isPreferenceMutation
+    ? undefined
+    : validatedLanguageOverride(output.languageOverride, currentMessage);
+  const languageOverrideFields =
+    languageOverride === undefined ? {} : { languageOverride };
   if (output.outcome === 'tool') {
     const allowedToolNames = normalizeAllowedToolNames(output.allowedToolNames);
     if (
       allowedToolNames.length > 1 &&
       !allowedToolNames.every((toolName) => PREFERENCE_TOOL_NAME_SET.has(toolName))
     ) {
-      return clarificationFromOutput(output, replyLanguage, {
-        blockerReason: 'multiple_possible_intents',
-        candidateIntents: allowedToolNames,
-        suggestedNextStep: MULTIPLE_TOOL_CLARIFICATION_NEXT_STEP,
-      });
+      return clarificationFromOutput(
+        output,
+        languageOverride ?? replyLanguage,
+        {
+          blockerReason: 'multiple_possible_intents',
+          candidateIntents: allowedToolNames,
+          suggestedNextStep: MULTIPLE_TOOL_CLARIFICATION_NEXT_STEP,
+        },
+        languageOverrideFields
+      );
     }
     return {
       kind: 'tool',
       allowedToolNames,
       ...(output.reason !== undefined ? { reason: output.reason } : {}),
       ...stylePreferenceFields(output.stylePreferenceAction),
-      ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+      ...languageOverrideFields,
       ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
     };
   }
 
   if (output.outcome === 'needs_clarification') {
-    return clarificationFromOutput(output, replyLanguage, {
-      blockerReason: output.blockerReason,
-      ...(output.candidateIntents !== undefined
-        ? { candidateIntents: output.candidateIntents }
-        : {}),
-      ...(output.suggestedNextStep !== undefined
-        ? { suggestedNextStep: output.suggestedNextStep }
-        : {}),
-    });
+    return clarificationFromOutput(
+      output,
+      languageOverride ?? replyLanguage,
+      {
+        blockerReason: output.blockerReason,
+        ...(output.candidateIntents !== undefined
+          ? { candidateIntents: output.candidateIntents }
+          : {}),
+        ...(output.suggestedNextStep !== undefined
+          ? { suggestedNextStep: output.suggestedNextStep }
+          : {}),
+      },
+      languageOverrideFields
+    );
   }
 
   if (output.outcome === 'unsupported') {
@@ -256,7 +283,7 @@ function mapValidatedClassifierOutput(
       blockerReason: output.blockerReason,
       suggestedNextStep: output.suggestedNextStep,
       ...stylePreferenceFields(output.stylePreferenceAction),
-      ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+      ...languageOverrideFields,
       ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
     };
   }
@@ -266,7 +293,7 @@ function mapValidatedClassifierOutput(
       kind: 'no_action',
       reason: 'greeting',
       ...stylePreferenceFields(output.stylePreferenceAction),
-      ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+      ...languageOverrideFields,
       ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
     };
   }
@@ -276,7 +303,7 @@ function mapValidatedClassifierOutput(
       kind: 'no_action',
       reason: 'retain_context',
       ...stylePreferenceFields(output.stylePreferenceAction),
-      ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+      ...languageOverrideFields,
       ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
     };
   }
@@ -285,7 +312,7 @@ function mapValidatedClassifierOutput(
     kind: 'no_action',
     reason: 'conversation',
     ...stylePreferenceFields(output.stylePreferenceAction),
-    ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+    ...languageOverrideFields,
     ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
   };
 }
@@ -423,14 +450,19 @@ function clarificationFromOutput(
     blockerReason: IntexAgentBlockerReason;
     candidateIntents?: IntexAgentToolName[];
     suggestedNextStep?: string;
-  }
+  },
+  languageOverrideFields: { languageOverride?: string }
 ): IntexAgentIntentClassification {
+  const classifierQuestion =
+    readQuestion(output.question) ?? readQuestion(output.clarification);
   return {
     kind: 'needs_clarification',
-    question:
-      readQuestion(output.question) ??
-      readQuestion(output.clarification) ??
-      GENERIC_CLARIFICATION_QUESTIONS[replyLanguage],
+    question: localizedClarificationQuestion(
+      classifierQuestion,
+      replyLanguage,
+      metadata.candidateIntents,
+      output.missingFields
+    ),
     blockerReason: metadata.blockerReason,
     ...(output.missingFields !== undefined ? { missingFields: output.missingFields } : {}),
     ...(metadata.candidateIntents !== undefined
@@ -440,10 +472,70 @@ function clarificationFromOutput(
       ? { suggestedNextStep: metadata.suggestedNextStep }
       : {}),
     ...stylePreferenceFields(output.stylePreferenceAction),
-    ...(output.languageOverride !== undefined ? { languageOverride: output.languageOverride } : {}),
+    ...languageOverrideFields,
     ...(output.reason !== undefined ? { reason: output.reason } : {}),
     ...(output.decisionEvidence !== undefined ? { decisionEvidence: output.decisionEvidence } : {}),
   };
+}
+
+function validatedLanguageOverride(
+  languageOverride: string | undefined,
+  currentMessage: string
+): IntexAgentReplyLanguage | undefined {
+  if (languageOverride === undefined) return undefined;
+
+  const normalized = languageOverride.trim().toLocaleLowerCase('en-US');
+  const targetLanguage = ['en', 'english', 'angielski', 'po angielsku'].includes(normalized)
+    ? 'en'
+    : ['pl', 'polish', 'polski', 'po polsku'].includes(normalized)
+      ? 'pl'
+      : undefined;
+  if (targetLanguage === undefined) return undefined;
+
+  const normalizedMessage = currentMessage
+    .normalize('NFKC')
+    .toLocaleLowerCase('pl-PL')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  const explicitlyRequested =
+    targetLanguage === 'en'
+      ? /(?:^(?:(?:please|proszę|prosze)\s+)?(?:in english|po angielsku)\b|\b(?:answer|reply|respond|write|say|odpowiedz|odpisz|napisz|powiedz)(?:\s+\S+){0,5}\s+(?:in english|po angielsku)\b)/u.test(
+          normalizedMessage
+        )
+      : /(?:^(?:(?:please|proszę|prosze)\s+)?(?:in polish|po polsku)\b|\b(?:answer|reply|respond|write|say|odpowiedz|odpisz|napisz|powiedz)(?:\s+\S+){0,5}\s+(?:in polish|po polsku)\b)/u.test(
+          normalizedMessage
+        );
+  return explicitlyRequested ? targetLanguage : undefined;
+}
+
+function localizedClarificationQuestion(
+  classifierQuestion: string | undefined,
+  replyLanguage: IntexAgentReplyLanguage,
+  candidateIntents: readonly IntexAgentToolName[] | undefined,
+  missingFields: readonly string[] | undefined
+): string {
+  if (
+    classifierQuestion !== undefined &&
+    detectIntexAgentReplyLanguage(classifierQuestion) === replyLanguage
+  ) {
+    return classifierQuestion;
+  }
+
+  const isMissingCalendarStart =
+    candidateIntents?.length === 1 &&
+    candidateIntents[0] === 'create_calendar_event' &&
+    missingFields?.some((field) =>
+      ['start', 'starttime', 'startdatetime', 'time', 'starttimeclarification'].includes(
+        field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '')
+      )
+    ) === true;
+  if (isMissingCalendarStart) {
+    return replyLanguage === 'pl'
+      ? 'O której godzinie ma się rozpocząć wydarzenie w kalendarzu?'
+      : 'What time should the calendar event start?';
+  }
+
+  return GENERIC_CLARIFICATION_QUESTIONS[replyLanguage];
 }
 
 function stylePreferenceFields(

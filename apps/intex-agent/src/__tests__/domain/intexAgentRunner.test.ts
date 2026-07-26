@@ -181,7 +181,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('21.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('22.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -943,6 +943,86 @@ describe('createIntexAgentRunner', () => {
             missingFields: ['summary', 'date', 'start', 'end', 'timeZone'],
             candidateIntents: ['create_calendar_event'],
             suggestedNextStep: 'Ask for every calendar field again.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [
+        event('user_message', {
+          text: 'Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 at noon.',
+        }),
+        event('clarification_requested', {
+          message: 'Which day or date should I use for this calendar event?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          candidateIntents: ['create_calendar_event'],
+        }),
+        event('assistant_message', {
+          text: 'Which day or date should I use for this calendar event?',
+        }),
+      ],
+      message: 'Next Tuesday at noon for one hour for INTEX-EVAL-003.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01',
+        start: '2026-07-28T12:00:00+02:00',
+        end: '2026-07-28T13:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+    });
+    expect(client.calls[0]?.toolChoice).toBe('required');
+  });
+
+  it.each([
+    {
+      label: 'start and time zone clarifications',
+      missingFields: ['start_time_clarification', 'timezone_confirmation'],
+    },
+    {
+      label: 'a single start clarification',
+      missingFields: ['start_time_clarification'],
+    },
+  ])('uses the complete calendar chain when MiniMax names $label', async ({ missingFields }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01',
+          start: '2026-07-28T12:00:00+02:00',
+          end: '2026-07-28T13:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'Should I confirm the start time and time zone?',
+            blockerReason: 'missing_required_details',
+            missingFields,
+            candidateIntents: ['create_calendar_event'],
           };
         },
       },
@@ -5210,7 +5290,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('21.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('22.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);

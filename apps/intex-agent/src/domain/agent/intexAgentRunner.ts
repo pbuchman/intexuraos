@@ -84,6 +84,7 @@ const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
 ]);
 const RUNTIME_TIME_ZONE_MISSING_FIELDS = new Set([
   'timezone',
+  'timezoneconfirmation',
   'ianatimezone',
   'usertimezone',
   'eventtimezone',
@@ -744,7 +745,7 @@ function applyCompleteCalendarClarificationContext(
     intent.candidateIntents?.length !== 1 ||
     intent.candidateIntents[0] !== 'create_calendar_event' ||
     intent.missingFields === undefined ||
-    intent.missingFields.length < 2
+    intent.missingFields.length === 0
   ) {
     return intent;
   }
@@ -786,6 +787,7 @@ function isSatisfiedCalendarClarificationField(
   if (
     canonical === 'start' ||
     canonical === 'starttime' ||
+    canonical === 'starttimeclarification' ||
     canonical === 'startdatetime' ||
     canonical === 'time'
   ) {
@@ -804,7 +806,7 @@ function isSatisfiedCalendarClarificationField(
     return hasCalendarSignal(context, activeClarificationIndex, containsCalendarEndTimeSignal);
   }
   if (isRuntimeTimeZoneMissingField(field)) {
-    return context.timeZone.trim() !== '' || hasExplicitTimeZoneContext(context);
+    return context.timeZone.trim() !== '' && !hasExplicitTimeZoneContext(context);
   }
   return false;
 }
