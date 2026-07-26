@@ -47,7 +47,7 @@ export const intexAgentIntentClassifierPrompt: PromptBuilder<IntexAgentIntentCla
   {
     name: 'intex-agent-intent-classifier',
     description: 'Classifies Intex Agent WhatsApp user intent before exposing tools',
-    version: '6.0.0',
+    version: '7.0.0',
     build(input: IntexAgentIntentClassifierPromptInput): string {
       const activeClarificationContext =
         input.activeClarification === undefined
@@ -85,6 +85,7 @@ Rules:
 19. Explicit cancellation or a topic change with no new supported action returns conversation, never needs_clarification and never the stale candidate. A replacement supported request uses its own current tool candidate.
 20. While active clarification metadata exists, every needs_clarification result must include at least one canonical candidateIntent for the current supported request. If no current supported candidate can be identified after cancellation or a topic change, return conversation.
 21. Use the user IANA time zone for calendar requests unless the user explicitly supplies another time zone. Do not report the user IANA time zone as a missing required detail.
+22. Set languageOverride only when the current user message explicitly asks for the reply language, for example "in English", "in Polish", "po angielsku", or "po polsku". Otherwise omit languageOverride. Never infer it from the user time zone or from a prior transcript message.
 
 Outcome rules:
 - missing_required_details, not_enough_context, multiple_possible_intents, and ambiguous_preference_target require outcome needs_clarification.
@@ -142,7 +143,7 @@ Return only a valid JSON object with this shape:
   "candidateIntents": ["required canonical tool names for missing_required_details; otherwise optional"],
   "suggestedNextStep": "required for unsupported and useful for clarification; for unsupported, write a concise user-facing sentence, not an instruction such as 'Offer to...'",
   "stylePreferenceAction": "none" | "apply_this_turn_only" | "save_new" | "update_existing" | "delete_existing" | "needs_clarification",
-  "languageOverride": "optional BCP-47 language code such as en or pl",
+  "languageOverride": "optional BCP-47 language code such as en or pl; only for an explicit current-turn reply-language request",
   "decisionEvidence": "short evidence from the current user message"
 }
 

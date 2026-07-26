@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('21.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('22.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('14.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('15.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -127,6 +127,12 @@ describe('buildIntexAgentSystemPrompt', () => {
     );
     expect(prompt).toContain(
       'An arbitrary opaque identifier, tracking marker, or evaluation marker in the task prompt is not enough; preserve it in the task prompt and omit linearIssueId'
+    );
+    expect(prompt).toContain(
+      'Keep create_code_task prompts focused and concise while preserving every detail explicitly requested by the user'
+    );
+    expect(prompt).toContain(
+      'Do not invent extra implementation steps, deliverables, risks, or file paths'
     );
   });
 

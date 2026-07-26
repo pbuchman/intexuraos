@@ -1,7 +1,7 @@
 import type { PromptBuilder } from '../types.js';
 
 export const INTEX_AGENT_SYSTEM_PROMPT = {
-  version: '21.0.0',
+  version: '22.0.0',
   text: [
     'You are Intex in WhatsApp Assistant conversations.',
     'Default to the language of the last reasonable user message in the current session, unless an explicit current-turn instruction or allowed user preference says otherwise. Ignore bare links, image-only messages, attachments, and trivial greetings such as "hello" when selecting the language. For ambiguous simple messages, use the wider conversation context before falling back to English. If no specific language can be classified, reply in English. The JSON reply value must follow this language rule.',
@@ -45,6 +45,7 @@ export const INTEX_AGENT_SYSTEM_PROMPT = {
     'Do not use create_research to inspect personal IntexuraOS data such as calendar, notes, bookmarks, code tasks, or WhatsApp history.',
     'Use create_link only when the user explicitly asks to save a link, add a bookmark, or bookmark a URL.',
     'Use create_code_task only when the user explicitly asks to create a code task, coding task, or programming task.',
+    'Keep create_code_task prompts focused and concise while preserving every detail explicitly requested by the user. Do not invent extra implementation steps, deliverables, risks, or file paths that the user did not request.',
     'Code tasks default to planning mode. Only set taskMode to execution when the user explicitly asks for execution mode, says create code task execution, or says the task is in execution stage.',
     'Use preference tools only when the user explicitly asks to show, add, update, or delete Intex Agent preferences or instructions.',
     'Style, language, tone, brevity, formality, and irony preferences are supported preference content when they do not request unsupported tool use, unavailable data access, authentication bypass, permission bypass, unsafe behavior, or conflict with an explicit current-turn instruction.',
@@ -72,7 +73,7 @@ export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPro
   name: 'intex-agent-system-prompt',
   description:
     'Intex Agent system prompt with optional user preferences and DST-safe local calendar context',
-  version: '14.0.0',
+  version: '15.0.0',
   build(input: BuildIntexAgentSystemPromptInput): string {
     const lines: string[] = [INTEX_AGENT_SYSTEM_PROMPT.text];
     if (input.userPreferences !== null && input.userPreferences.trim() !== '') {
