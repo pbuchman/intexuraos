@@ -1017,10 +1017,22 @@ function applyMissingCalendarDateClarification(
     replyLanguage: IntexAgentReplyLanguage;
   }>
 ): IntexAgentIntentClassification {
+  const candidateIntents = intent.kind === 'needs_clarification' ? intent.candidateIntents : undefined;
+  const singleCalendarCandidate =
+    candidateIntents?.length === 1 && candidateIntents[0] === 'create_calendar_event';
+  const safelyNarrowedCalendarCandidate =
+    intent.kind === 'needs_clarification' &&
+    intent.blockerReason === 'missing_required_details' &&
+    candidateIntents?.length === 2 &&
+    candidateIntents.includes('create_calendar_event') &&
+    candidateIntents.includes('create_note') &&
+    containsExplicitCalendarSummarySignal(context.message) &&
+    containsCalendarClockTimeSignal(context.message) &&
+    !containsCalendarTimeWithdrawalSignal(context.message) &&
+    !containsExplicitNoteActionSignal(context.message);
   if (
     intent.kind !== 'needs_clarification' ||
-    intent.candidateIntents?.length !== 1 ||
-    intent.candidateIntents[0] !== 'create_calendar_event' ||
+    (!singleCalendarCandidate && !safelyNarrowedCalendarCandidate) ||
     hasCalendarDateSignal(context.message, context.events, context.replyContext)
   ) {
     return intent;
@@ -1041,6 +1053,12 @@ function applyMissingCalendarDateClarification(
     ...(intent.reason !== undefined ? { reason: intent.reason } : {}),
     ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
   };
+}
+
+function containsExplicitNoteActionSignal(message: string): boolean {
+  return /(?<![\p{L}\p{N}])(?:remember|save|store|write\s+down|take\s+(?:a\s+)?note|notes?|memo|zapamiętaj|zapamietaj|zapisz|zanotuj|notatk[\p{L}]*)(?![\p{L}\p{N}])/iu.test(
+    message.normalize('NFKC')
+  );
 }
 
 function isOptionalNoteField(field: string): boolean {

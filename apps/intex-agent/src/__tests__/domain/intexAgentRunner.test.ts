@@ -829,6 +829,120 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toEqual([]);
   });
 
+  it('narrows a spurious note candidate when a timed calendar request only lacks its date', async () => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification',
+            question: 'What would you like me to do with this?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['end', 'summary'],
+            candidateIntents: ['create_calendar_event', 'create_note'],
+            suggestedNextStep:
+              'Ask for the missing end time and confirm whether this is a calendar event or a note.',
+            reason: 'The timed request may be a calendar event or a note.',
+            stylePreferenceAction: 'none',
+            languageOverride: 'en',
+            decisionEvidence: 'The request has a substantive title and clock time but no date.',
+          } as const;
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Add lunch with Marta at noon.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which day or date should I use for this calendar event?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_calendar_event'],
+      suggestedNextStep: 'Provide the day or date for the calendar event.',
+    });
+    expect(client.calls).toEqual([]);
+  });
+
+  it('keeps a genuine note-and-calendar request on the clarification path', async () => {
+    const classified: IntexAgentIntentClassification = {
+      kind: 'needs_clarification',
+      question: 'Should I save the PIN or schedule lunch first?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_note', 'create_calendar_event'],
+      suggestedNextStep: 'Choose which action to handle first.',
+      reason: 'The request contains two actions.',
+      stylePreferenceAction: 'none',
+      languageOverride: 'en',
+      decisionEvidence: 'The user explicitly asked to remember data and add a timed event.',
+    };
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      intentClassifier: { classify: async () => classified },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Remember the PIN and add lunch with Marta at noon.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: classified.question,
+      blockerReason: classified.blockerReason,
+      missingFields: classified.missingFields,
+      candidateIntents: classified.candidateIntents,
+      suggestedNextStep: classified.suggestedNextStep,
+    });
+  });
+
+  it('keeps an explicit Polish note request on the clarification path', async () => {
+    const classified: IntexAgentIntentClassification = {
+      kind: 'needs_clarification',
+      question: 'Czy zapisać notatkę, czy utworzyć wydarzenie?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['date'],
+      candidateIntents: ['create_note', 'create_calendar_event'],
+      suggestedNextStep: 'Wybierz akcję.',
+      reason: 'Wiadomość zawiera rzeczownik notatka i godzinę.',
+      stylePreferenceAction: 'none',
+      languageOverride: 'pl',
+      decisionEvidence: 'Użytkownik jawnie poprosił o notatkę.',
+    };
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      intentClassifier: { classify: async () => classified },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Dodaj notatkę o lunchu z Martą o 12.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: classified.question,
+      blockerReason: classified.blockerReason,
+      missingFields: classified.missingFields,
+      candidateIntents: classified.candidateIntents,
+      suggestedNextStep: classified.suggestedNextStep,
+    });
+  });
+
   it('uses the accepted calendar title from the active clarification chain', async () => {
     const client = new ToolExecutingFakeToolCallingClient(
       {
