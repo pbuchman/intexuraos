@@ -25,6 +25,7 @@ function makeTask(overrides: Partial<SerializedTask> & { id: string }): Serializ
     callbackReceived: false,
     status: 'implemented',
     createdAt: '2026-03-01T10:00:00.000Z',
+    statusChangedAt: '2026-03-01T10:00:00.000Z',
     updatedAt: '2026-03-01T10:00:00.000Z',
     ...overrides,
   };

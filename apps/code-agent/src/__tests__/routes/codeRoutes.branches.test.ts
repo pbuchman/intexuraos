@@ -415,6 +415,8 @@ describe('codeRoutes branch coverage', () => {
       expect(task.prNumber).toBe(42);
       expect(task.agentType).toBe('planning');
       expect(task.createdAt).toBeDefined();
+      expect(task.statusChangedAt).toBeDefined();
+      expect(task.completedAt).toBe(task.statusChangedAt);
       expect(task.updatedAt).toBeDefined();
     });
 
@@ -453,6 +455,61 @@ describe('codeRoutes branch coverage', () => {
       expect(task.followUpReason).toBeUndefined();
       expect(task.result).toBeUndefined();
       expect(task.error).toBeUndefined();
+      expect(task.statusChangedAt).toBe(task.createdAt);
+      expect(task.completedAt).toBeUndefined();
+    });
+
+    it('uses terminal dispatch lastSeenAt for a legacy task instead of its later metadata update', async () => {
+      const failureAt = Timestamp.fromDate(new Date('2026-07-26T15:20:19.625Z'));
+      const metadataUpdatedAt = Timestamp.fromDate(new Date('2026-07-26T15:23:48.130Z'));
+      const createdAt = Timestamp.fromDate(new Date('2026-07-26T15:19:00.000Z'));
+      const mockRepo = {
+        ...getServices().codeTaskRepo,
+        findByIdForUser: vi.fn().mockResolvedValue(ok({
+          id: 'task-legacy-terminal-dispatch',
+          userId: 'test-user-id',
+          prompt: 'Legacy failed task',
+          sanitizedPrompt: 'legacy failed task',
+          systemPromptHash: 'abc123',
+          workerType: 'codex',
+          workerLocation: 'home-dev',
+          repository: 'test/repo',
+          baseBranch: 'development',
+          traceId: 'trace-legacy-terminal',
+          status: 'failed',
+          dedupKey: 'dedup-legacy-terminal',
+          callbackReceived: false,
+          dispatchStatus: {
+            state: 'terminal',
+            reason: 'codex_auth_unavailable',
+            terminal: true,
+            severity: 'critical',
+            message: 'Codex authentication is unavailable.',
+            remediation: 'Configure Codex authentication, then retry.',
+            workerNames: ['home-dev'],
+            firstSeenAt: failureAt,
+            lastSeenAt: failureAt,
+            nextAction: 'retry_after_fix',
+          },
+          createdAt,
+          updatedAt: metadataUpdatedAt,
+        })),
+      } as unknown as CodeTaskRepository;
+      setServices({ ...getServices(), codeTaskRepo: mockRepo } as never);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/tasks/task-legacy-terminal-dispatch',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: { statusChangedAt: string; completedAt: string; updatedAt: string };
+      };
+      expect(body.data.statusChangedAt).toBe('2026-07-26T15:20:19.625Z');
+      expect(body.data.completedAt).toBe('2026-07-26T15:20:19.625Z');
+      expect(body.data.updatedAt).toBe('2026-07-26T15:23:48.130Z');
     });
     it('returns task with dispatchedAt when set', async () => {
       const { Timestamp } = await import('@google-cloud/firestore');

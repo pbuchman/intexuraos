@@ -9,7 +9,10 @@ import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastif
 import { logIncomingRequest } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
-import { timestampToIso } from '../codeRoutes.js';
+import {
+  serializeDispatchStatus,
+  timestampToIso,
+} from './responseFormatters.js';
 import type { JwtValidator } from '../codeRoutes.js';
 import {
   groupByLinearIssue,
@@ -18,6 +21,15 @@ import {
 import type { GroupStatus, SortOption, SerializedTask } from '../../domain/issueGrouping/index.js';
 import type { TaskGroupSummary } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
+import type {
+  CodeTaskDispatchStatus,
+  TaskStatus,
+} from '../../domain/models/codeTask.js';
+import {
+  isTerminalTaskStatus,
+  resolveTaskLifecycleTime,
+  type CodeTaskLifecycleShape,
+} from '../../domain/models/taskLifecycleTime.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
@@ -43,13 +55,16 @@ function taskToSerializedTask(task: {
   repository: string;
   baseBranch: string;
   traceId: string;
-  status: string;
+  status: TaskStatus;
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: unknown;
+  statusChangedAt?: unknown;
   updatedAt: unknown;
+  queuedAt?: unknown;
   completedAt?: unknown;
   dispatchedAt?: unknown;
+  dispatchStatus?: CodeTaskDispatchStatus;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
@@ -92,10 +107,21 @@ function taskToSerializedTask(task: {
   const createdAt = timestampToIso(task.createdAt as { toDate: () => Date } | string | undefined) ?? '';
   const updatedAt = timestampToIso(task.updatedAt as { toDate: () => Date } | string | undefined) ?? '';
   /* v8 ignore stop @preserve */
-  /* v8 ignore start -- test-infra: FakeFirestore cannot preserve Timestamp fields during update() -- isFieldValueDelete falsely matches Timestamp.isEqual causing dispatchedAt/completedAt to be dropped @preserve */
+  /* v8 ignore start -- test-infra: FakeFirestore cannot preserve Timestamp fields during update() -- isFieldValueDelete falsely matches Timestamp.isEqual causing dispatchedAt to be dropped @preserve */
   const dispatchedAt = timestampToIso(task.dispatchedAt as { toDate: () => Date } | string | undefined);
-  const completedAt = timestampToIso(task.completedAt as { toDate: () => Date } | string | undefined);
   /* v8 ignore stop @preserve */
+  const resolvedLifecycleAt = resolveTaskLifecycleTime(
+    task as unknown as CodeTaskLifecycleShape,
+  ).at;
+  const statusChangedAt = timestampToIso(resolvedLifecycleAt) ?? '';
+  const serializedCompletedAt = timestampToIso(
+    task.completedAt as { toDate: () => Date } | string | undefined,
+  );
+  const completedAt = serializedCompletedAt
+    ?? (isTerminalTaskStatus(task.status) ? statusChangedAt : undefined);
+  const dispatchStatus = task.dispatchStatus !== undefined
+    ? serializeDispatchStatus(task.dispatchStatus)
+    : undefined;
 
   const serialized: SerializedTask = {
     id: task.id,
@@ -112,13 +138,15 @@ function taskToSerializedTask(task: {
     dedupKey: task.dedupKey,
     callbackReceived: task.callbackReceived,
     createdAt,
+    statusChangedAt,
     updatedAt,
   };
 
-  /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields (isFieldValueDelete matches Timestamp.isEqual) so dispatchedAt/completedAt cannot be reliably set in tests @preserve */
+  /* v8 ignore start -- test-infra: FakeFirestore update() drops Timestamp fields (isFieldValueDelete matches Timestamp.isEqual) so dispatchedAt cannot be reliably set in tests @preserve */
   if (dispatchedAt !== undefined) { serialized.dispatchedAt = dispatchedAt; }
-  if (completedAt !== undefined) { serialized.completedAt = completedAt; }
   /* v8 ignore stop @preserve */
+  if (completedAt !== undefined) { serialized.completedAt = completedAt; }
+  if (dispatchStatus !== undefined) { serialized.dispatchStatus = dispatchStatus; }
   if (task.linearIssueId !== undefined) { serialized.linearIssueId = task.linearIssueId; }
   if (task.agentType !== undefined) { serialized.agentType = task.agentType; }
   if (task.implementationTaskId !== undefined) { serialized.implementationTaskId = task.implementationTaskId; }

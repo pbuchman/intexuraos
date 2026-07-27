@@ -1293,6 +1293,118 @@ describe('GET /code/issue-groups', () => {
     expect(task?.error?.code).toBe('WORKER_DIED');
   });
 
+  it('serializes canonical lifecycle completion and full terminal dispatch details', async () => {
+    const taskId = 'task_issue_group_legacy_terminal';
+    const createdAt = Timestamp.fromDate(new Date('2026-07-26T15:19:00.000Z'));
+    const failureAt = Timestamp.fromDate(new Date('2026-07-26T15:20:19.625Z'));
+    const metadataUpdatedAt = Timestamp.fromDate(new Date('2026-07-26T15:23:48.130Z'));
+    await fakeFirestore.collection('code_tasks').doc(taskId).set({
+      id: taskId,
+      userId: 'test-user-id',
+      prompt: 'Legacy failed task',
+      sanitizedPrompt: 'legacy failed task',
+      systemPromptHash: 'hash',
+      workerType: 'codex',
+      workerLocation: 'home-dev',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace-issue-group-legacy-terminal',
+      status: 'failed',
+      dedupKey: 'dedup-issue-group-legacy-terminal',
+      callbackReceived: false,
+      linearIssueId: 'INT-1934',
+      createdAt,
+      updatedAt: metadataUpdatedAt,
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        severity: 'critical',
+        message: 'Codex authentication is unavailable.',
+        remediation: 'Configure Codex authentication, then retry.',
+        workerNames: ['home-dev'],
+        firstSeenAt: failureAt,
+        lastSeenAt: failureAt,
+        lastAttemptAt: failureAt,
+        attemptCount: 3,
+        expiresAt: metadataUpdatedAt,
+        nextAction: 'retry_after_fix',
+        terminalCause: {
+          reason: 'codex_auth_unavailable',
+          message: 'Codex authentication remained unavailable.',
+          remediation: 'Configure Codex authentication.',
+          workerNames: ['home-dev'],
+          lastSeenAt: failureAt,
+        },
+        workerHealthDetails: [{
+          workerName: 'home-dev',
+          tag: 'codex',
+          healthy: false,
+          reason: 'auth_unavailable',
+        }],
+      },
+    });
+    mockSummaries = [makeSummary({
+      linearIssueId: 'INT-1934',
+      aggregateStatus: 'failed',
+      latestTaskStatus: 'failed',
+    })];
+    mockCounts = { ...mockCounts, failed: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: {
+            statusChangedAt: string;
+            completedAt?: string;
+            updatedAt: string;
+            dispatchStatus?: Record<string, unknown>;
+          }[];
+        }[];
+      };
+    };
+    const task = body.data.groups.find((group) => group.linearIssueId === 'INT-1934')?.tasks[0];
+    expect(task?.statusChangedAt).toBe('2026-07-26T15:20:19.625Z');
+    expect(task?.completedAt).toBe('2026-07-26T15:20:19.625Z');
+    expect(task?.updatedAt).toBe('2026-07-26T15:23:48.130Z');
+    expect(task?.dispatchStatus).toEqual({
+      state: 'terminal',
+      reason: 'codex_auth_unavailable',
+      terminal: true,
+      severity: 'critical',
+      message: 'Codex authentication is unavailable.',
+      remediation: 'Configure Codex authentication, then retry.',
+      workerNames: ['home-dev'],
+      firstSeenAt: '2026-07-26T15:20:19.625Z',
+      lastSeenAt: '2026-07-26T15:20:19.625Z',
+      lastAttemptAt: '2026-07-26T15:20:19.625Z',
+      attemptCount: 3,
+      expiresAt: '2026-07-26T15:23:48.130Z',
+      nextAction: 'retry_after_fix',
+      terminalCause: {
+        reason: 'codex_auth_unavailable',
+        message: 'Codex authentication remained unavailable.',
+        remediation: 'Configure Codex authentication.',
+        workerNames: ['home-dev'],
+        lastSeenAt: '2026-07-26T15:20:19.625Z',
+      },
+      workerHealthDetails: [{
+        workerName: 'home-dev',
+        tag: 'codex',
+        healthy: false,
+        reason: 'auth_unavailable',
+      }],
+    });
+  });
+
   describe('precomputed summaries path', () => {
     it('returns counts from getUserGroupCounts', async () => {
       const fakeCounts: UserGroupCounts = {

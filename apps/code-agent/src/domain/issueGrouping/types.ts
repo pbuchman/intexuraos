@@ -3,6 +3,7 @@
  * Operates on serialized API-shaped tasks with ISO string dates.
  */
 import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
+import type { CodeTaskDispatchStatus } from '../models/codeTask.js';
 
 export type GroupStatus = 'active' | 'needs-action' | 'done' | 'failed' | 'archived';
 export type StepState = 'completed' | 'running' | 'dispatched' | 'queued' | 'failed' | 'waiting' | 'actionable';
@@ -19,6 +20,26 @@ export interface PipelineState {
   pr: { url: string; number: string; status: 'open' | 'merged' | 'closed' | 'mergeable' } | null;
   failedAttempts: number;
   archivedCount: number;
+}
+
+export interface SerializedDispatchStatus {
+  state: CodeTaskDispatchStatus['state'];
+  reason: CodeTaskDispatchStatus['reason'];
+  terminal: boolean;
+  severity: CodeTaskDispatchStatus['severity'];
+  message: string;
+  remediation: string;
+  workerNames: string[];
+  firstSeenAt: string;
+  lastSeenAt: string;
+  nextAction: CodeTaskDispatchStatus['nextAction'];
+  lastAttemptAt?: string;
+  attemptCount?: number;
+  expiresAt?: string;
+  terminalCause?: Omit<NonNullable<CodeTaskDispatchStatus['terminalCause']>, 'lastSeenAt'> & {
+    lastSeenAt: string;
+  };
+  workerHealthDetails?: CodeTaskDispatchStatus['workerHealthDetails'];
 }
 
 /**
@@ -40,9 +61,11 @@ export interface SerializedTask {
   dedupKey: string;
   callbackReceived: boolean;
   createdAt: string;
+  statusChangedAt: string;
   updatedAt: string;
   dispatchedAt?: string;
   completedAt?: string;
+  dispatchStatus?: SerializedDispatchStatus;
   linearIssueId?: string;
   agentType?: string;
   implementationTaskId?: string;
