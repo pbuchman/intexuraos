@@ -126,6 +126,17 @@ describe('resolveTaskLifecycleTime', () => {
     expect(resolved.source).toBe(expectedSource);
   });
 
+  it('preserves exact Firestore nanoseconds while materializing a fresh Timestamp', () => {
+    const statusChangedAt = new Timestamp(1_750_000_000, 123_456_789);
+
+    const resolved = resolveTaskLifecycleTime(baseTask('running', { statusChangedAt }));
+
+    expect(resolved.at).not.toBe(statusChangedAt);
+    expect(resolved.at.seconds).toBe(1_750_000_000);
+    expect(resolved.at.nanoseconds).toBe(123_456_789);
+    expect(resolved.source).toBe('status_changed');
+  });
+
   it('skips invalid empty and malformed candidates before valid terminal dispatch evidence', () => {
     const dispatchFailureAt = timestamp('2026-07-27T08:03:00.000Z');
     const resolved = resolveTaskLifecycleTime(baseTask('failed', {
@@ -177,6 +188,24 @@ describe('resolveTaskLifecycleTime', () => {
       value: new Proxy(timestamp('2026-07-27T08:01:00.000Z'), {
         get: (target, property, receiver): unknown => property === 'toDate'
           ? (): never => { throw new Error('timestamp call trap'); }
+          : Reflect.get(target, property, receiver),
+      }),
+    },
+    {
+      name: 'Timestamp proxy whose seconds access throws',
+      value: new Proxy(new Timestamp(1_750_000_000, 123_456_789), {
+        get: (target, property, receiver): unknown => {
+          if (property === 'toDate') return target.toDate.bind(target);
+          if (property === 'seconds') throw new Error('timestamp seconds trap');
+          return Reflect.get(target, property, receiver);
+        },
+      }),
+    },
+    {
+      name: 'Timestamp proxy whose toDate disagrees with its components',
+      value: new Proxy(new Timestamp(1_750_000_000, 123_456_789), {
+        get: (target, property, receiver): unknown => property === 'toDate'
+          ? (): Date => new Date(1_750_000_001_000)
           : Reflect.get(target, property, receiver),
       }),
     },
