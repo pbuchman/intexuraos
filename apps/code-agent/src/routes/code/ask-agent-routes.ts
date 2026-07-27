@@ -203,6 +203,7 @@ export const askAgentRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify
                             prompt: { type: 'string' },
                             createdAt: { type: 'string' },
                             statusChangedAt: { type: 'string', format: 'date-time' },
+                            completedAt: { type: 'string', format: 'date-time', nullable: true },
                           },
                           required: ['statusChangedAt'],
                         },

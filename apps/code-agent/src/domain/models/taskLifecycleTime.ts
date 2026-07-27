@@ -33,7 +33,7 @@ export interface CodeTaskLifecycleShape {
   createdAt: unknown;
 }
 
-const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/u;
 
 export class TaskLifecycleTimeInvariantError extends Error {
   constructor(status: TaskStatus) {
@@ -45,37 +45,69 @@ export class TaskLifecycleTimeInvariantError extends Error {
 }
 
 function timestampFromValidDate(value: unknown): Timestamp | undefined {
-  return value instanceof Date && Number.isFinite(value.getTime())
-    ? Timestamp.fromDate(value)
-    : undefined;
-}
-
-function hasToDate(value: unknown): value is { toDate: () => unknown } {
-  if (typeof value !== 'object' || value === null || !('toDate' in value)) {
-    return false;
-  }
-  const candidate = value as { toDate?: unknown };
-  return typeof candidate.toDate === 'function';
-}
-
-export function normalizeTaskLifecycleTimestamp(value: unknown): Timestamp | undefined {
-  if (value instanceof Timestamp) {
-    return value;
-  }
-  if (value instanceof Date) {
-    return timestampFromValidDate(value);
-  }
-  if (typeof value === 'string') {
-    if (!ISO_DATE_TIME.test(value)) {
-      return undefined;
-    }
-    return timestampFromValidDate(new Date(value));
-  }
-  if (!hasToDate(value)) {
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) {
     return undefined;
   }
   try {
-    return timestampFromValidDate(value.toDate());
+    return Timestamp.fromDate(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function isValidIsoDateTime(value: string): boolean {
+  const match = ISO_DATE_TIME.exec(value);
+  if (match === null) {
+    return false;
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = Number(match[7] ?? 0);
+  const offsetMinute = Number(match[8] ?? 0);
+  const leapDay = Number(year % 4 === 0) - Number(year % 100 === 0) + Number(year % 400 === 0);
+  const daysInMonth = month === 2
+    ? 28 + leapDay
+    : [31, 0, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+
+  return year >= 1
+    && month >= 1
+    && month <= 12
+    && daysInMonth !== undefined
+    && day >= 1
+    && day <= daysInMonth
+    && hour <= 23
+    && minute <= 59
+    && second <= 59
+    && offsetHour <= 23
+    && offsetMinute <= 59;
+}
+
+export function normalizeTaskLifecycleTimestamp(value: unknown): Timestamp | undefined {
+  try {
+    if (value instanceof Timestamp) {
+      return value;
+    }
+    if (value instanceof Date) {
+      return timestampFromValidDate(value);
+    }
+    if (typeof value === 'string') {
+      if (!isValidIsoDateTime(value)) {
+        return undefined;
+      }
+      return timestampFromValidDate(new Date(value));
+    }
+    if (typeof value !== 'object' || value === null || !('toDate' in value)) {
+      return undefined;
+    }
+    const toDate = (value as { toDate?: unknown }).toDate;
+    if (typeof toDate !== 'function') {
+      return undefined;
+    }
+    return timestampFromValidDate(Reflect.apply(toDate, value, []));
   } catch {
     return undefined;
   }

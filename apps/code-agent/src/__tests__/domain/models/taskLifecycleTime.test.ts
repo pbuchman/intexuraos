@@ -6,6 +6,7 @@ import {
   isArchivalTaskStatus,
   isCompletionTaskStatus,
   resolveTaskLifecycleTime,
+  TaskLifecycleTimeInvariantError,
   type CodeTaskLifecycleShape,
   type TaskLifecycleTimeSource,
 } from '../../../domain/models/taskLifecycleTime.js';
@@ -144,10 +145,24 @@ describe('resolveTaskLifecycleTime', () => {
   it.each([
     { name: 'null', value: null },
     { name: 'non-ISO string', value: 'not-an-iso-date' },
+    { name: 'impossible ISO calendar date', value: '2026-02-30T08:01:00Z' },
     { name: 'invalid Date', value: new Date(Number.NaN) },
+    { name: 'finite Date outside the Firestore range', value: new Date(Date.UTC(10_000, 0, 1)) },
     { name: 'plain object', value: {} },
     { name: 'object with non-function toDate', value: { toDate: 'not-a-function' } },
     { name: 'object whose toDate returns an invalid Date', value: { toDate: (): Date => new Date(Number.NaN) } },
+    {
+      name: 'object whose toDate getter throws',
+      value: Object.defineProperty({}, 'toDate', {
+        get: (): never => { throw new Error('getter trap'); },
+      }),
+    },
+    {
+      name: 'proxy whose reflection trap throws',
+      value: new Proxy({}, {
+        has: (): never => { throw new Error('reflection trap'); },
+      }),
+    },
   ])('skips an invalid $name candidate and uses the next valid timestamp', ({ value }) => {
     const resolved = resolveTaskLifecycleTime(baseTask('planned', {
       statusChangedAt: value as never,
@@ -177,19 +192,45 @@ describe('resolveTaskLifecycleTime', () => {
     expect(resolved.source).toBe('status_changed');
   });
 
+  it.each([
+    {
+      name: 'positive offset',
+      value: '2026-07-27T10:01:00+02:00',
+      expected: '2026-07-27T08:01:00.000Z',
+    },
+    {
+      name: 'negative offset with minutes',
+      value: '2026-07-27T02:31:00-05:30',
+      expected: '2026-07-27T08:01:00.000Z',
+    },
+  ])('normalizes a valid ISO lifecycle string with a $name', ({ value, expected }) => {
+    const resolved = resolveTaskLifecycleTime(baseTask('running', {
+      statusChangedAt: value,
+    }));
+
+    expect(resolved.at.toDate().toISOString()).toBe(expected);
+    expect(resolved.source).toBe('status_changed');
+  });
+
   it('fails fast when every lifecycle timestamp candidate is invalid', () => {
     expect(() => resolveTaskLifecycleTime({
       status: 'failed',
-      statusChangedAt: '' as never,
-      completedAt: { seconds: 123 } as never,
+      statusChangedAt: new Date(Date.UTC(10_000, 0, 1)),
+      completedAt: Object.defineProperty({}, 'toDate', {
+        get: (): never => { throw new Error('getter trap'); },
+      }),
       dispatchStatus: {
         terminal: true,
-        lastSeenAt: { toDate: 'not-a-function' } as never,
-        terminalCause: { lastSeenAt: 'not-an-iso-date' as never },
+        lastSeenAt: { toDate: 'not-a-function' },
+        terminalCause: {
+          lastSeenAt: new Proxy({}, {
+            has: (): never => { throw new Error('reflection trap'); },
+          }),
+        },
       },
-      updatedAt: { toDate: (): Date => new Date(Number.NaN) } as never,
-      createdAt: {} as never,
-    })).toThrowError('Task lifecycle timestamp invariant violated');
+      updatedAt: { toDate: (): Date => new Date(Number.NaN) },
+      createdAt: {},
+    })).toThrowError(TaskLifecycleTimeInvariantError);
   });
 });
 
