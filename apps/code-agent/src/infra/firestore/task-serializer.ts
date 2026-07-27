@@ -337,7 +337,11 @@ export function buildUpdateData(
   if (input.dispatchedAt !== undefined) {
     updateData['dispatchedAt'] = Timestamp.fromDate(input.dispatchedAt);
   }
-  if (!statusChanged && input.completedAt !== undefined) {
+  if (
+    !statusChanged
+    && !isArchivalTaskStatus(existingTask.status)
+    && input.completedAt !== undefined
+  ) {
     updateData['completedAt'] = Timestamp.fromDate(input.completedAt);
   }
   if (input.logChunksDropped !== undefined) {
@@ -435,6 +439,14 @@ export function buildUpdateData(
           : writeTimestamp;
       updateData['completedAt'] = FieldValue.delete();
     }
+  } else if (
+    isArchivalTaskStatus(existingTask.status)
+    && existingTask.completedAt === undefined
+  ) {
+    updateData['completedAt'] =
+      input.completedAt !== undefined
+        ? Timestamp.fromDate(input.completedAt)
+        : writeTimestamp;
   }
 
   return withSchemaVersion(updateData, 2, writeTimestamp);

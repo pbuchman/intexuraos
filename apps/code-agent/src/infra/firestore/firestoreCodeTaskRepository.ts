@@ -139,23 +139,42 @@ export const createFirestoreCodeTaskRepository = (deps: {
     }, { taskId, userId }, 'Failed to find task by id for user', true),
     update: (taskId, input, options) => guarded<CodeTask>(async () => {
       const docRef = collection.doc(taskId);
-      const doc = options?.transaction !== undefined
-        ? await options.transaction.get(docRef) : await docRef.get();
-      if (!doc.exists) return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
-      const existingTask = fromFirestoreDoc(doc);
-      const updateData = buildUpdateData(existingTask, input, new Date());
-      if (options?.transaction !== undefined) {
-        options.transaction.update(docRef, updateData);
-        // doc.exists checked above, so data() returns the actual document data
+      type UpdateOutcome =
+        | { kind: 'not_found'; result: Result<CodeTask, RepositoryError> }
+        | {
+          kind: 'updated';
+          result: Result<CodeTask, RepositoryError>;
+          existingTask: CodeTask;
+          updatedTask: CodeTask;
+        };
+      const applyUpdate = async (
+        transaction: FirestoreTransaction,
+      ): Promise<UpdateOutcome> => {
+        const doc = await transaction.get(docRef);
+        if (!doc.exists) {
+          return {
+            kind: 'not_found',
+            result: err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` }),
+          };
+        }
+        const existingTask = fromFirestoreDoc(doc);
+        const updateData = buildUpdateData(existingTask, input, new Date());
+        transaction.update(docRef, updateData);
         const merged = mergeUpdateForTransaction(doc.data()!, updateData);
         const updatedTask = fromFirestoreDoc({ id: taskId, data: () => merged });
-        logLifecycleTransition(existingTask, updatedTask, input);
-        return ok(updatedTask);
+        return { kind: 'updated', result: ok(updatedTask), existingTask, updatedTask };
+      };
+
+      if (options?.transaction !== undefined) {
+        const outcome = await applyUpdate(options.transaction);
+        return outcome.result;
       }
-      await docRef.update(updateData);
-      const updatedTask = fromFirestoreDoc(await docRef.get());
-      logLifecycleTransition(existingTask, updatedTask, input);
-      return ok(updatedTask);
+
+      const outcome = await firestore.runTransaction(applyUpdate);
+      if (outcome.kind === 'updated') {
+        logLifecycleTransition(outcome.existingTask, outcome.updatedTask, input);
+      }
+      return outcome.result;
     }, { taskId, input }, 'Failed to update task', true),
     list: (input: ListTasksInput) => guarded<ListTasksOutput>(async () => {
       const { query, limit } = await buildListQuery(collection, input);

@@ -1118,6 +1118,130 @@ describe('firestoreCodeTaskRepository', () => {
       );
     });
 
+    it('logs a repository-owned transition once after the committed transaction retry', async () => {
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let retryUpdate = false;
+      let callbackAttempts = 0;
+      let committed = false;
+      let loggedAfterCommit = false;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        if (!retryUpdate) return originalRunTransaction(updateFn);
+        callbackAttempts += 1;
+        await originalRunTransaction(updateFn);
+        await fakeFirestore.collection('code_tasks').doc('task-retry-log').update({
+          status: 'dispatched',
+        });
+        callbackAttempts += 1;
+        const result = await originalRunTransaction(updateFn);
+        committed = true;
+        return result;
+      });
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({
+        id: 'task-retry-log',
+        initialStatus: 'dispatched',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockImplementation(() => {
+        loggedAfterCommit = committed;
+      });
+      retryUpdate = true;
+
+      const result = await repo.update(created.value.id, { status: 'running' });
+
+      expect(result.ok).toBe(true);
+      expect(callbackAttempts).toBe(2);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(loggedAfterCommit).toBe(true);
+    });
+
+    it('does not emit a transition log from a caller-owned transaction', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(true);
+      expect(logger.info).not.toHaveBeenCalled();
+    });
+
+    it('does not emit a transition log when a caller-owned transaction aborts', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+
+      const snapshot = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      const discardedTransaction = {
+        get: vi.fn().mockResolvedValue(snapshot),
+        update: vi.fn(),
+      } as unknown as FirebaseFirestore.Transaction;
+      const result = await repo.update(
+        created.value.id,
+        { status: 'running' },
+        { transaction: discardedTransaction }
+      );
+
+      expect(result.ok).toBe(true);
+
+      expect(logger.info).not.toHaveBeenCalled();
+      const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      expect(stored.get('status')).toBe('dispatched');
+    });
+
+    it('logs the transition committed by update without a second-read race', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const collection = fakeFirestore.collection('code_tasks');
+      const originalDoc = collection.doc.bind(collection);
+      let taskReads = 0;
+      vi.spyOn(collection, 'doc').mockImplementation((id?: string) => {
+        const ref = originalDoc(id);
+        if (id !== created.value.id) return ref;
+        const originalGet = ref.get.bind(ref);
+        vi.spyOn(ref, 'get').mockImplementation(async () => {
+          taskReads += 1;
+          if (taskReads === 2) {
+            await ref.update({ status: 'archived' });
+          }
+          return originalGet();
+        });
+        return ref;
+      });
+      vi.mocked(logger.info).mockClear();
+
+      const result = await repo.update(created.value.id, { status: 'running' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.status).toBe('running');
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ fromStatus: 'dispatched', toStatus: 'running' }),
+        'Code task lifecycle transitioned'
+      );
+    });
+
     it('returns NOT_FOUND for non-existent task', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,

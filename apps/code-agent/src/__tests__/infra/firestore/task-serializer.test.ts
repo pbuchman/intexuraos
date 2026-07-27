@@ -642,6 +642,41 @@ describe('buildUpdateData', () => {
     expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
+  it('preserves archived completion on a same-status write with a later completedAt', () => {
+    const originalCompletedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
+    const laterCompletedAt = new Date('2026-07-27T11:00:00.000Z');
+    const data = buildUpdateData(
+      lifecycleTask('archived', { completedAt: originalCompletedAt }),
+      { status: 'archived', completedAt: laterCompletedAt, prNumber: 42 },
+      writeTime
+    );
+
+    expect(data['completedAt']).toBeUndefined();
+    expect(data['statusChangedAt']).toBeUndefined();
+  });
+
+  it('fills missing archived completion during a metadata-only write', () => {
+    const data = buildUpdateData(
+      lifecycleTask('archived'),
+      { prNumber: 42 },
+      writeTime
+    );
+
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect(data['statusChangedAt']).toBeUndefined();
+  });
+
+  it('fills missing archived completion from explicit input on a same-status write', () => {
+    const completedAt = new Date('2026-07-27T11:00:00.000Z');
+    const data = buildUpdateData(
+      lifecycleTask('archived'),
+      { status: 'archived', completedAt },
+      writeTime
+    );
+
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
+  });
+
   it.each([
     { status: 'queued', field: 'queuedAt', at: new Date('2026-07-27T11:10:00.000Z') },
     { status: 'dispatched', field: 'dispatchedAt', at: new Date('2026-07-27T11:20:00.000Z') },
