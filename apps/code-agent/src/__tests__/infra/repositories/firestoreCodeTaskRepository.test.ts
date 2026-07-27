@@ -1159,7 +1159,7 @@ describe('firestoreCodeTaskRepository', () => {
       expect(loggedAfterCommit).toBe(true);
     });
 
-    it('does not emit a transition log from a caller-owned transaction', async () => {
+    it('logs a caller-owned transition once after the outer repository transaction commits', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1168,13 +1168,34 @@ describe('firestoreCodeTaskRepository', () => {
       expect(created.ok).toBe(true);
       if (!created.ok) return;
       vi.mocked(logger.info).mockClear();
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let committed = false;
+      let loggedAfterCommit = false;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        const result = await originalRunTransaction(updateFn);
+        committed = true;
+        return result;
+      });
+      vi.mocked(logger.info).mockImplementation(() => {
+        loggedAfterCommit = committed;
+      });
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
 
-      const result = await (fakeFirestore as unknown as Firestore).runTransaction((transaction) =>
+      const result = await repo.runInTransaction((transaction) =>
         repo.update(created.value.id, { status: 'running' }, { transaction })
       );
 
       expect(result.ok).toBe(true);
-      expect(logger.info).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: created.value.id,
+          fromStatus: 'dispatched',
+          toStatus: 'running',
+        }),
+        'Code task lifecycle transitioned'
+      );
+      expect(loggedAfterCommit).toBe(true);
     });
 
     it('does not emit a transition log when a caller-owned transaction aborts', async () => {
@@ -1192,14 +1213,90 @@ describe('firestoreCodeTaskRepository', () => {
         get: vi.fn().mockResolvedValue(snapshot),
         update: vi.fn(),
       } as unknown as FirebaseFirestore.Transaction;
-      const result = await repo.update(
-        created.value.id,
-        { status: 'running' },
-        { transaction: discardedTransaction }
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        await updateFn(discardedTransaction as never);
+        throw new Error('outer transaction aborted');
+      });
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(false);
+
+      expect(logger.info).not.toHaveBeenCalled();
+      const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      expect(stored.get('status')).toBe('dispatched');
+    });
+
+    it('logs only the committed caller-owned transition when the outer transaction retries', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({
+        id: 'task-outer-retry-log',
+        initialStatus: 'dispatched',
+      }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      let callbackAttempts = 0;
+      let committed = false;
+      let loggedAfterCommit = false;
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementation(async (updateFn) => {
+        callbackAttempts += 1;
+        await originalRunTransaction(updateFn);
+        await fakeFirestore.collection('code_tasks').doc(created.value.id).update({
+          status: 'queued',
+        });
+        callbackAttempts += 1;
+        const result = await originalRunTransaction(updateFn);
+        committed = true;
+        return result;
+      });
+      vi.mocked(logger.info).mockImplementation(() => {
+        loggedAfterCommit = committed;
+      });
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
       );
 
       expect(result.ok).toBe(true);
+      expect(callbackAttempts).toBe(2);
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: created.value.id,
+          fromStatus: 'queued',
+          toStatus: 'running',
+        }),
+        'Code task lifecycle transitioned'
+      );
+      expect(loggedAfterCommit).toBe(true);
+    });
 
+    it('rejects a transition in an unregistered raw transaction before writing', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+
+      const result = await (fakeFirestore as unknown as Firestore).runTransaction((transaction) =>
+        repo.update(created.value.id, { status: 'running' }, { transaction })
+      );
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe('FIRESTORE_ERROR');
       expect(logger.info).not.toHaveBeenCalled();
       const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
       expect(stored.get('status')).toBe('dispatched');
@@ -2316,7 +2413,8 @@ describe('firestoreCodeTaskRepository', () => {
       const getCallsAfterUpdate: string[] = [];
       let updateCalled = false;
 
-      await fakeFirestore.runTransaction(async (tx) => {
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+      await repo.runInTransaction(async (tx) => {
         // Wrap transaction to spy on get/update ordering
         const originalGet = tx.get.bind(tx);
         const originalUpdate = tx.update.bind(tx);
@@ -2332,7 +2430,7 @@ describe('firestoreCodeTaskRepository', () => {
           return originalGet(...args);
         };
 
-        txAny.update = (...args: Parameters<UpdateFn>): void => {
+        txAny.update = (...args: Parameters<UpdateFn>): ReturnType<UpdateFn> => {
           updateCalled = true;
           return originalUpdate(...args);
         };
@@ -2340,13 +2438,14 @@ describe('firestoreCodeTaskRepository', () => {
         const updateResult = await repo.update(
           taskId,
           { status: 'running' },
-          { transaction: tx as unknown as FirebaseFirestore.Transaction },
+          { transaction: tx },
         );
         expect(updateResult.ok).toBe(true);
         if (!updateResult.ok) throw new Error('Update failed');
 
         // Verify the returned task has the updated status
         expect(updateResult.value.status).toBe('running');
+        return updateResult;
       });
 
       // The key assertion: no get() calls happened after update()

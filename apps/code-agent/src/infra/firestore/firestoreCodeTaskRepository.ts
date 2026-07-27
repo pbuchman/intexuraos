@@ -43,6 +43,15 @@ export const createFirestoreCodeTaskRepository = (deps: {
 }): CodeTaskRepository => {
   const { firestore, logger } = deps;
   const collection = firestore.collection('code_tasks');
+  type PendingLifecycleTransition = {
+    existingTask: CodeTask;
+    updatedTask: CodeTask;
+    input: UpdateTaskInput;
+  };
+  const transactionLifecycleTransitions = new WeakMap<
+    FirestoreTransaction,
+    PendingLifecycleTransition[]
+  >();
 
   /** Run an async thunk and wrap it in Result + uniform error logging.
    *  When `asResult` is true, the thunk already returns a Result and is passed through. */
@@ -140,7 +149,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
     update: (taskId, input, options) => guarded<CodeTask>(async () => {
       const docRef = collection.doc(taskId);
       type UpdateOutcome =
-        | { kind: 'not_found'; result: Result<CodeTask, RepositoryError> }
+        | { kind: 'not_updated'; result: Result<CodeTask, RepositoryError> }
         | {
           kind: 'updated';
           result: Result<CodeTask, RepositoryError>;
@@ -149,24 +158,40 @@ export const createFirestoreCodeTaskRepository = (deps: {
         };
       const applyUpdate = async (
         transaction: FirestoreTransaction,
+        transitionSink?: PendingLifecycleTransition[] | null,
       ): Promise<UpdateOutcome> => {
         const doc = await transaction.get(docRef);
         if (!doc.exists) {
           return {
-            kind: 'not_found',
+            kind: 'not_updated',
             result: err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` }),
           };
         }
         const existingTask = fromFirestoreDoc(doc);
         const updateData = buildUpdateData(existingTask, input, new Date());
-        transaction.update(docRef, updateData);
         const merged = mergeUpdateForTransaction(doc.data()!, updateData);
         const updatedTask = fromFirestoreDoc({ id: taskId, data: () => merged });
+        const statusChanged = existingTask.status !== updatedTask.status;
+        if (statusChanged && transitionSink === null) {
+          return {
+            kind: 'not_updated',
+            result: err({
+              code: 'FIRESTORE_ERROR',
+              message: 'Status transitions with an external transaction require runInTransaction',
+            }),
+          };
+        }
+        transaction.update(docRef, updateData);
+        if (statusChanged && transitionSink !== undefined && transitionSink !== null) {
+          transitionSink.push({ existingTask, updatedTask, input });
+        }
         return { kind: 'updated', result: ok(updatedTask), existingTask, updatedTask };
       };
 
       if (options?.transaction !== undefined) {
-        const outcome = await applyUpdate(options.transaction);
+        const transitionSink =
+          transactionLifecycleTransitions.get(options.transaction) ?? null;
+        const outcome = await applyUpdate(options.transaction, transitionSink);
         return outcome.result;
       }
 
@@ -256,7 +281,28 @@ export const createFirestoreCodeTaskRepository = (deps: {
       return task;
     }, { linearIssueId }, 'Failed to find planned task by Linear issue'),
     runInTransaction: async (operation) => {
-      try { return await firestore.runTransaction((t) => operation(t)); }
+      try {
+        let committedTransitions: PendingLifecycleTransition[] = [];
+        const result = await firestore.runTransaction(async (transaction) => {
+          const attemptTransitions: PendingLifecycleTransition[] = [];
+          transactionLifecycleTransitions.set(transaction, attemptTransitions);
+          try {
+            const attemptResult = await operation(transaction);
+            committedTransitions = attemptTransitions;
+            return attemptResult;
+          } finally {
+            transactionLifecycleTransitions.delete(transaction);
+          }
+        });
+        for (const transition of committedTransitions) {
+          logLifecycleTransition(
+            transition.existingTask,
+            transition.updatedTask,
+            transition.input,
+          );
+        }
+        return result;
+      }
       catch (error) {
         logger.error({ error }, 'Failed to run repository transaction');
         return err(firestoreError(error));
