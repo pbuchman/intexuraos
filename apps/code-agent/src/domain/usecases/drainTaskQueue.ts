@@ -328,17 +328,36 @@ async function recordDispatchBlockedForTask(
 }
 
 async function resolveDispatchBlockersForTask(
-  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'codeTaskDispatchStatusService'>,
   task: CodeTask
 ): Promise<void> {
   if (deps.codeTaskDispatchStatusService === undefined) {
     return;
   }
 
+  const observedBefore = new Date();
   try {
+    const queuedResult = await deps.codeTaskRepo.listQueued();
+    if (!queuedResult.ok) {
+      deps.logger.error(
+        { taskId: task.id, workerType: task.workerType, error: queuedResult.error },
+        'Failed to reconcile queued tasks before resolving dispatch blockers'
+      );
+      return;
+    }
+    const anotherBlockedTaskRemains = queuedResult.value.some((queuedTask) =>
+      queuedTask.id !== task.id
+      && queuedTask.userId === task.userId
+      && queuedTask.workerType === task.workerType
+      && queuedTask.dispatchStatus?.terminal === false
+    );
+    if (anotherBlockedTaskRemains) {
+      return;
+    }
     await deps.codeTaskDispatchStatusService.resolveDispatchBlockers({
       userId: task.userId,
       workerType: task.workerType,
+      observedBefore,
     });
   } catch (error) {
     deps.logger.warn(
@@ -626,6 +645,8 @@ export async function drainTaskQueue(
           'timeout'
         );
 
+        await resolveDispatchBlockersForTask(deps, candidate);
+
         return ok({ action: 'expired', taskId: candidate.id, locksToCleanup });
       }
 
@@ -692,8 +713,17 @@ export async function drainTaskQueue(
       if (!failResult.ok) {
         return err(failResult.error);
       }
+      await resolveDispatchBlockersForTask(deps, task);
       logger.warn(
-        { userId: task.userId, taskId: task.id, reason: 'no_enabled_workers' },
+        {
+          userId: task.userId,
+          taskId: task.id,
+          workerType: task.workerType,
+          reason: 'no_enabled_workers',
+          terminal: true,
+          affectedTaskCount: affectedTasks.length,
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Drain blocked: user has no enabled workers — task failed immediately',
       );
       return ok({ action: 'failed', taskId: task.id, locksToCleanup: buildLockCleanups(task) });
@@ -936,9 +966,9 @@ export async function drainTaskQueue(
       const dispatchError = dispatchResult.error;
       const dispatchProblem = dispatchProblemFromError(dispatchError);
 
-      if (dispatchError.blocker !== undefined) {
-        await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchError.blocker);
-      }
+      const affectedTasks = dispatchError.blocker !== undefined
+        ? findAffectedDispatchTasks(activeCandidates, task)
+        : [task];
 
       // Recoverable dispatch problems keep the task queued. Do NOT reset
       // queuedAt — TTL is measured from queuedAt and resetting would defeat
@@ -959,17 +989,37 @@ export async function drainTaskQueue(
         if (!rollbackResult.ok) {
           return err(rollbackResult.error);
         }
+        // Persist the aggregate only after every affected task is visibly
+        // queued with its nonterminal status. A concurrent resolver re-reads
+        // the queue and will therefore preserve this occurrence.
+        if (dispatchError.blocker !== undefined) {
+          await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchError.blocker);
+        }
         return ok({ action: 'still_busy', taskId: task.id });
       }
 
-      logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
-      const affectedTasks = dispatchError.blocker !== undefined
-        ? findAffectedDispatchTasks(activeCandidates, task)
-        : [task];
+      if (dispatchError.blocker !== undefined) {
+        await recordDispatchBlockedForTask(deps, activeCandidates, task, dispatchError.blocker);
+        logger.warn(
+          {
+            taskId: task.id,
+            workerType: task.workerType,
+            reason: dispatchError.blocker.reason,
+            terminal: true,
+            affectedTaskCount: affectedTasks.length,
+            error: dispatchError,
+            [SKIP_SENTRY_KEY]: true,
+          },
+          'Drain dispatch blocked by known worker capability state',
+        );
+      } else {
+        logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
+      }
       const failResult = await failAffectedTasksForDispatchProblem(deps, affectedTasks, dispatchProblem);
       if (!failResult.ok) {
         return err(failResult.error);
       }
+      await resolveDispatchBlockersForTask(deps, task);
 
       const locksToCleanup = buildLockCleanups(task);
 

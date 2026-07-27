@@ -268,7 +268,7 @@ describe('ecosystem.config.cjs', () => {
     }
   });
 
-  it('enables owner-only Test Runs reads for User Service and Intex Agent in Home Dev', () => {
+  it('keeps User Service Test Runs disabled with its required production audience while preserving Home Dev Matrix reads for Intex Agent', () => {
     const config = loadDevConfig({
       INTEXURAOS_MATRIX_CORPUS_ENABLED: 'true',
       INTEXURAOS_MATRIX_CORPUS_TRUSTED_RUNTIME: 'home-dev',
@@ -278,15 +278,19 @@ describe('ecosystem.config.cjs', () => {
     });
     const byName = new Map(config.apps.map((app) => [app.name, app.env]));
 
-    for (const service of ['user-service', 'intex-agent']) {
-      expect(byName.get(service)?.[TEST_RUNS_READ_FLAG], service).toBe('true');
-      expect(byName.get(service)?.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE, service).toBe(
-        'home-dev'
-      );
-      expect(byName.get(service)?.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID, service).toBe(
-        'auth0:evaluator'
-      );
-    }
+    expect(byName.get('user-service')?.[TEST_RUNS_READ_FLAG]).toBe('false');
+    expect(byName.get('user-service')?.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE).toBe(
+      'hetzner-prod'
+    );
+    expect(byName.get('user-service')?.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID).toBe(
+      'auth0:evaluator'
+    );
+
+    expect(byName.get('intex-agent')?.[TEST_RUNS_READ_FLAG]).toBe('true');
+    expect(byName.get('intex-agent')?.INTEXURAOS_MATRIX_CORPUS_RUNTIME_AUDIENCE).toBe('home-dev');
+    expect(byName.get('intex-agent')?.INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID).toBe(
+      'auth0:evaluator'
+    );
     for (const app of config.apps) {
       if (app.name === 'user-service' || app.name === 'intex-agent') continue;
       expect(app.env[TEST_RUNS_READ_FLAG], app.name).toBeUndefined();

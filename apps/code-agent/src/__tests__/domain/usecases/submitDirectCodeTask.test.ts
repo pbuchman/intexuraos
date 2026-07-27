@@ -195,6 +195,39 @@ describe('submitDirectCodeTask', () => {
     );
   });
 
+  it('keeps the handled no-worker outcome out of Sentry', async () => {
+    const { deps, workerSettingsRepo, logger } = createDeps();
+    vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
+      ok({
+        userId: 'user-1',
+        workers: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+    const result = await submit(deps, { workerType: 'codex-xhigh' });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'worker_not_configured',
+        message: 'Please configure your workers in Settings before submitting code tasks',
+      },
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      {
+        userId: 'user-1',
+        workerType: 'codex-xhigh',
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 0,
+        _skipSentry: true,
+      },
+      'User has no workers configured'
+    );
+  });
+
   it('creates and enqueues a direct planning task with default source metrics', async () => {
     const { deps, codeTaskRepo, taskEnqueueService, metricsClient } = createDeps();
 

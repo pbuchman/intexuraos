@@ -22,8 +22,10 @@ import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js'
 import type { WorkerConfig as WorkerSettingsConfig } from '../../domain/models/workerSettings.js';
 import {
   classifyCodeTaskDispatchability,
+  healthDiagnostics,
   type CodeTaskDispatchability,
 } from '../../domain/services/codeTaskDispatchBlockers.js';
+import { isTerminalDispatchBlockerReason } from '../../domain/services/codeTaskDispatchProblems.js';
 import { signDispatchRequest, generateNonce } from './hmacSigning.js';
 
 type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
@@ -203,23 +205,25 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       workers: probeConfigs,
       healthByWorkerName: healthResults,
     });
+    const unexpectedWorkerHealth = healthDiagnostics(probeConfigs, healthResults).filter(
+      (details) => details.tag === 'unknown'
+    );
 
     if (!dispatchability.dispatchable) {
-      // 'workers_at_capacity' is an expected, transient operational state (all
-      // capable workers are busy running legitimate tasks). The dispatch
-      // pipeline already handles this gracefully — it returns the 'at_capacity'
-      // error code, queues the task for retry, and notifies the user via
-      // WhatsApp. Surfacing it as a Sentry issue creates noise (e.g.
-      // INTEXURAOS-HETZNER-3E) without any actionable signal, so we suppress
-      // Sentry capture for this reason while keeping the warn log on stdout.
-      const skipSentry = dispatchability.reason === 'workers_at_capacity';
+      // Classified capability blockers are expected domain outcomes. The
+      // dispatch pipeline persists them on the task, exposes current blockers
+      // in the queue, and notifies the user. Malformed or incompatible health
+      // responses remain capturable because they are unexpected contracts.
       this.logger.warn(
         {
           taskId: request.taskId,
           workerType: request.workerType,
           reason: dispatchability.reason,
           workerNames: dispatchability.workerNames,
-          [SKIP_SENTRY_KEY]: skipSentry,
+          terminal: isTerminalDispatchBlockerReason(dispatchability.reason),
+          affectedTaskCount: 1,
+          ...(unexpectedWorkerHealth.length > 0 && { unexpectedWorkerHealth }),
+          [SKIP_SENTRY_KEY]: unexpectedWorkerHealth.length === 0,
         },
         'Dispatch blocked by worker capability or health state'
       );
@@ -228,6 +232,19 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         message: dispatchability.message,
         blocker: dispatchability,
       });
+    }
+
+    if (unexpectedWorkerHealth.length > 0) {
+      this.logger.warn(
+        {
+          taskId: request.taskId,
+          workerType: request.workerType,
+          reason: 'unexpected_worker_health_response',
+          unexpectedWorkerHealth,
+          [SKIP_SENTRY_KEY]: false,
+        },
+        'Worker health probe returned an unexpected response'
+      );
     }
 
     // Filter to healthy workers and extract available capacity in a single pass.

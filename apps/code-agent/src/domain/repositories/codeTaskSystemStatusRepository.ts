@@ -14,6 +14,7 @@ export interface ResolveCodeTaskSystemStatusesInput {
   readonly userId: string;
   readonly workerType: string;
   readonly reasons?: readonly CodeTaskDispatchBlockerReason[];
+  readonly observedBefore?: Date;
 }
 
 export interface CodeTaskSystemStatusRepository {

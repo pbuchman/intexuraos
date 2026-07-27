@@ -1,6 +1,7 @@
 import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskSystemStatusRepository } from '../repositories/codeTaskSystemStatusRepository.js';
 import type { CodeTaskDispatchability } from './codeTaskDispatchBlockers.js';
+import { isTerminalDispatchBlockerReason } from './codeTaskDispatchProblems.js';
 
 type DispatchBlocker = Extract<CodeTaskDispatchability, { dispatchable: false }>;
 
@@ -15,6 +16,7 @@ export interface RecordCodeTaskDispatchBlockedInput {
 export interface ResolveCodeTaskDispatchBlockersInput {
   readonly userId: string;
   readonly workerType: string;
+  readonly observedBefore?: Date;
 }
 
 export interface CodeTaskDispatchStatusService {
@@ -37,6 +39,10 @@ export function createCodeTaskDispatchStatusService(
 
   return {
     async recordDispatchBlocked(input: RecordCodeTaskDispatchBlockedInput): Promise<void> {
+      if (isTerminalDispatchBlockerReason(input.blocker.reason)) {
+        return;
+      }
+
       const upsertResult = await statusRepo.upsertActive({
         userId: input.userId,
         workerType: input.workerType,
@@ -58,10 +64,7 @@ export function createCodeTaskDispatchStatusService(
     },
 
     async resolveDispatchBlockers(input: ResolveCodeTaskDispatchBlockersInput): Promise<void> {
-      const result = await statusRepo.resolveActive({
-        userId: input.userId,
-        workerType: input.workerType,
-      });
+      const result = await statusRepo.resolveActive(input);
       if (!result.ok) {
         logger.warn({ error: result.error, input }, 'Failed to resolve code task dispatch system statuses');
       }
