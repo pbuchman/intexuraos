@@ -1046,6 +1046,50 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
     });
 
+    it('restores and rolls back an archived completion without replacing history or backdating clocks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      const historicalCompletion = new Date('2020-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, {
+        status: 'failed',
+        completedAt: historicalCompletion,
+      });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+      const archived = await repo.update(created.value.id, { status: 'archived' });
+      expect(archived.ok).toBe(true);
+      if (!archived.ok) return;
+
+      const restored = await repo.update(created.value.id, {
+        status: 'reviewed',
+        updatedAt: new Date('2019-01-01T00:00:00.000Z'),
+      });
+      expect(restored.ok).toBe(true);
+      if (!restored.ok) return;
+      const rolledBack = await repo.update(created.value.id, {
+        status: 'archived',
+        updatedAt: new Date('2018-01-01T00:00:00.000Z'),
+      });
+      expect(rolledBack.ok).toBe(true);
+      if (!rolledBack.ok) return;
+
+      expect(restored.value.completedAt?.toMillis()).toBe(historicalCompletion.getTime());
+      expect(restored.value.statusChangedAt?.toMillis()).toBe(restored.value.updatedAt.toMillis());
+      expect(restored.value.updatedAt.toMillis()).toBeGreaterThan(
+        new Date('2019-01-01T00:00:00.000Z').getTime(),
+      );
+      expect(rolledBack.value.completedAt?.toMillis()).toBe(historicalCompletion.getTime());
+      expect(rolledBack.value.statusChangedAt?.toMillis()).toBe(rolledBack.value.updatedAt.toMillis());
+      expect(rolledBack.value.updatedAt.toMillis()).toBeGreaterThan(
+        new Date('2018-01-01T00:00:00.000Z').getTime(),
+      );
+    });
+
     it('advances statusChangedAt and deletes completedAt on failed to running', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,

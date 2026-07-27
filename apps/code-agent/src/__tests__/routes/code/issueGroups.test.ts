@@ -2479,6 +2479,7 @@ describe('GET /code/issue-groups', () => {
         updatedAt: Date,
       ): Promise<void> {
         const createResult = await codeTaskRepo.create(makeTaskInput({
+          id: agentType === 'review' ? 'task-int-1423-review' : 'task-int-1423-planning',
           linearIssueId: 'INT-1423',
           traceId,
           agentType,
@@ -2564,10 +2565,10 @@ describe('GET /code/issue-groups', () => {
       };
       const repairedGroup = body.data.groups.find((group) => group.linearIssueId === 'INT-1423');
       expect(repairedGroup).toBeDefined();
-      expect(repairedGroup?.aggregateStatus).toBe('done');
       expect(repairedGroup?.tasks).toEqual([
         expect.objectContaining({ status: 'reviewed' }),
       ]);
+      expect(repairedGroup?.aggregateStatus).toBe('done');
       expect(body.data.counts['done']).toBe(1);
       expect(body.data.totalGroups).toBe(1);
     });

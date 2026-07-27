@@ -642,6 +642,76 @@ describe('buildUpdateData', () => {
     expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
+  it.each(['planned', 'implemented', 'reviewed'] as const)(
+    'restores archived to %s with a new lifecycle clock and the historical completion intact',
+    (status) => {
+      const historicalCompletion = Timestamp.fromDate(
+        new Date('2026-07-20T09:00:00.000Z'),
+      );
+      const backdatedTechnicalTime = new Date('2026-07-21T09:00:00.000Z');
+      const data = buildUpdateData(
+        lifecycleTask('archived', { completedAt: historicalCompletion }),
+        { status, updatedAt: backdatedTechnicalTime },
+        writeTime,
+      );
+
+      expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+      expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+      expect(data['completedAt']).toBeUndefined();
+    },
+  );
+
+  it('fills missing completion on archived restoration from pre-transition lifecycle time', () => {
+    const archivedAt = Timestamp.fromDate(new Date('2026-07-20T09:00:00.000Z'));
+    const data = buildUpdateData(
+      lifecycleTask('archived', {
+        statusChangedAt: archivedAt,
+        updatedAt: Timestamp.fromDate(new Date('2026-07-25T09:00:00.000Z')),
+      }),
+      { status: 'reviewed' },
+      writeTime,
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(archivedAt.toMillis());
+  });
+
+  it('uses terminal-cause lifecycle fallback when restoring a legacy archive', () => {
+    const failedAt = Timestamp.fromDate(new Date('2026-07-19T09:00:00.000Z'));
+    const legacyArchived = lifecycleTask('archived', {
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        severity: 'warning',
+        message: 'Codex auth unavailable',
+        remediation: 'Use an authorized worker',
+        workerNames: ['home-dev'],
+        firstSeenAt: failedAt,
+        lastSeenAt: failedAt,
+        terminalCause: {
+          reason: 'codex_auth_unavailable',
+          message: 'Codex auth unavailable',
+          remediation: 'Use an authorized worker',
+          workerNames: ['home-dev'],
+          lastSeenAt: failedAt,
+        },
+        nextAction: 'retry_after_fix',
+      },
+      updatedAt: Timestamp.fromDate(new Date('2026-07-25T09:00:00.000Z')),
+    });
+    delete legacyArchived.statusChangedAt;
+    delete legacyArchived.completedAt;
+
+    const data = buildUpdateData(
+      legacyArchived,
+      { status: 'reviewed' },
+      writeTime,
+    );
+
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(failedAt.toMillis());
+  });
+
   it('preserves archived completion on a same-status write with a later completedAt', () => {
     const originalCompletedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
     const laterCompletedAt = new Date('2026-07-27T11:00:00.000Z');

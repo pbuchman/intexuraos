@@ -299,8 +299,9 @@ export function buildUpdateData(
   const writeTimestamp = Timestamp.fromDate(now);
   const statusChanged = input.status !== undefined && input.status !== existingTask.status;
 
-  // Allow explicit updatedAt for heartbeat (INT-372), otherwise use current time
-  if (input.updatedAt !== undefined) {
+  // Allow explicit updatedAt for metadata/heartbeat writes (INT-372). Real
+  // lifecycle transitions always advance the technical clock to this write.
+  if (!statusChanged && input.updatedAt !== undefined) {
     updateData['updatedAt'] = Timestamp.fromDate(input.updatedAt);
   } else {
     updateData['updatedAt'] = writeTimestamp;
@@ -412,12 +413,19 @@ export function buildUpdateData(
 
   if (statusChanged && input.status !== undefined) {
     if (isCompletionTaskStatus(input.status)) {
-      const completedAt =
-        input.completedAt !== undefined
-          ? Timestamp.fromDate(input.completedAt)
-          : writeTimestamp;
-      updateData['statusChangedAt'] = completedAt;
-      updateData['completedAt'] = completedAt;
+      if (isArchivalTaskStatus(existingTask.status)) {
+        updateData['statusChangedAt'] = writeTimestamp;
+        if (existingTask.completedAt === undefined) {
+          updateData['completedAt'] = resolveTaskLifecycleTime(existingTask).at;
+        }
+      } else {
+        const completedAt =
+          input.completedAt !== undefined
+            ? Timestamp.fromDate(input.completedAt)
+            : writeTimestamp;
+        updateData['statusChangedAt'] = completedAt;
+        updateData['completedAt'] = completedAt;
+      }
     } else if (isArchivalTaskStatus(input.status)) {
       updateData['statusChangedAt'] = writeTimestamp;
       if (existingTask.completedAt === undefined) {
