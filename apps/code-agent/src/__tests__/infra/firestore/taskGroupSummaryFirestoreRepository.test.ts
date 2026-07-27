@@ -4517,4 +4517,283 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       }
     });
   });
+
+  describe('removeAskOnlyOrphan', () => {
+    const at = Timestamp.fromDate(new Date('2026-07-27T09:00:00.000Z'));
+
+    async function seedOrphan(
+      userId: string,
+      groupKey: string,
+      aggregateStatus: 'active' | 'done' = 'done',
+    ): Promise<void> {
+      await fakeFirestore.collection('task_group_summaries').doc(`${userId}_${groupKey}`).set({
+        userId,
+        linearIssueId: groupKey,
+        groupKey,
+        taskCount: 1,
+        activeTaskCount: aggregateStatus === 'active' ? 1 : 0,
+        latestTaskStatus: aggregateStatus === 'active' ? 'running' : 'planned',
+        latestTaskUpdatedAt: at,
+        agentTypesPresent: ['ask_agent'],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: at,
+        mostRecentDispatchedAt: null,
+        aggregateStatus,
+        updatedAt: at,
+      });
+      await fakeFirestore.collection('user_group_counts').doc(userId).set({
+        userId,
+        active: aggregateStatus === 'active' ? 1 : 0,
+        needsAction: 0,
+        done: aggregateStatus === 'done' ? 1 : 0,
+        failed: 0,
+        archived: 0,
+        totalGroups: 1,
+        updatedAt: at,
+      });
+    }
+
+    it('deletes a summary and corrects counts exactly once only after proving an exact ask-only source', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const askTask = makeTask({
+        id: 'ask-exact',
+        userId: 'user-ask',
+        linearIssueId: 'INT-ASK-ONLY',
+        agentType: 'ask_agent',
+        status: 'archived',
+      });
+      const wrongUserTask = makeTask({
+        id: 'ask-other-user',
+        userId: 'other-user',
+        linearIssueId: 'INT-ASK-ONLY',
+        agentType: 'execution',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: askTask.id, data: askTask as unknown as Record<string, unknown> },
+        { id: wrongUserTask.id, data: wrongUserTask as unknown as Record<string, unknown> },
+      ]);
+      await seedOrphan('user-ask', 'INT-ASK-ONLY');
+
+      const first = await repo.removeAskOnlyOrphan('user-ask', 'INT-ASK-ONLY');
+      const second = await repo.removeAskOnlyOrphan('user-ask', 'INT-ASK-ONLY');
+
+      expect(first).toEqual({ ok: true, value: 'removed' });
+      expect(second).toEqual({ ok: true, value: 'summary_missing' });
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-ask_INT-ASK-ONLY').get()).exists)
+        .toBe(false);
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-ask').get();
+      expect(counts.get('done')).toBe(0);
+      expect(counts.get('totalGroups')).toBe(0);
+    });
+
+    it('leaves mixed and malformed exact source groups untouched', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const askTask = makeTask({
+        id: 'ask-mixed', userId: 'user-mixed', linearIssueId: 'INT-MIXED', agentType: 'ask_agent',
+      });
+      const executionTask = makeTask({
+        id: 'execution-mixed', userId: 'user-mixed', linearIssueId: 'INT-MIXED', agentType: 'execution',
+      });
+      const malformedStandalone = makeTask({
+        id: 'malformed-standalone', userId: 'wrong-user', agentType: 'ask_agent',
+      });
+      const malformedLinear = makeTask({
+        id: 'malformed-linear', userId: 'user-malformed-linear', linearIssueId: 'INT-MALFORMED-LINEAR',
+        agentType: 'ask_agent', createdAt: null as never,
+      });
+      const malformedCanonical = makeTask({
+        id: 'malformed-canonical', userId: 'user-malformed-canonical',
+        linearIssueId: 'INT-MALFORMED-CANONICAL', agentType: 'ask_agent',
+        statusChangedAt: null as never,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: askTask.id, data: askTask as unknown as Record<string, unknown> },
+        { id: executionTask.id, data: executionTask as unknown as Record<string, unknown> },
+        { id: malformedStandalone.id, data: malformedStandalone as unknown as Record<string, unknown> },
+        { id: malformedLinear.id, data: malformedLinear as unknown as Record<string, unknown> },
+        { id: malformedCanonical.id, data: malformedCanonical as unknown as Record<string, unknown> },
+      ]);
+      await seedOrphan('user-mixed', 'INT-MIXED', 'active');
+      await seedOrphan('user-malformed', 'standalone_malformed-standalone');
+      await seedOrphan('user-malformed-linear', 'INT-MALFORMED-LINEAR');
+      await seedOrphan('user-malformed-canonical', 'INT-MALFORMED-CANONICAL');
+
+      const mixed = await repo.removeAskOnlyOrphan('user-mixed', 'INT-MIXED');
+      const malformed = await repo.removeAskOnlyOrphan('user-malformed', 'standalone_malformed-standalone');
+      const malformedLinearResult = await repo.removeAskOnlyOrphan(
+        'user-malformed-linear',
+        'INT-MALFORMED-LINEAR',
+      );
+      const malformedCanonicalResult = await repo.removeAskOnlyOrphan(
+        'user-malformed-canonical',
+        'INT-MALFORMED-CANONICAL',
+      );
+
+      expect(mixed).toEqual({ ok: true, value: 'source_not_ask_only' });
+      expect(malformed).toEqual({ ok: true, value: 'source_invalid' });
+      expect(malformedLinearResult).toEqual({ ok: true, value: 'source_invalid' });
+      expect(malformedCanonicalResult).toEqual({ ok: true, value: 'source_invalid' });
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-mixed_INT-MIXED').get()).exists)
+        .toBe(true);
+      expect((await fakeFirestore.collection('task_group_summaries')
+        .doc('user-malformed_standalone_malformed-standalone').get()).exists).toBe(true);
+    });
+
+    it('reports an empty exact source as unknown and never deletes it', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      await seedOrphan('user-unknown', 'INT-UNKNOWN');
+
+      const result = await repo.removeAskOnlyOrphan('user-unknown', 'INT-UNKNOWN');
+
+      expect(result).toEqual({ ok: true, value: 'source_unknown' });
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-unknown_INT-UNKNOWN').get()).exists)
+        .toBe(true);
+    });
+
+    it('re-proves ask-only state inside the transaction so a concurrent non-ask task blocks deletion', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const askTask = makeTask({
+        id: 'ask-race', userId: 'user-race', linearIssueId: 'INT-RACE', agentType: 'ask_agent',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: askTask.id, data: askTask as unknown as Record<string, unknown> },
+      ]);
+      await seedOrphan('user-race', 'INT-RACE');
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementationOnce(async (callback) => {
+        const executionTask = makeTask({
+          id: 'execution-race', userId: 'user-race', linearIssueId: 'INT-RACE', agentType: 'execution',
+        });
+        await fakeFirestore.collection('code_tasks').doc(executionTask.id)
+          .set(executionTask as unknown as Record<string, unknown>);
+        return await originalRunTransaction(callback);
+      });
+
+      const result = await repo.removeAskOnlyOrphan('user-race', 'INT-RACE');
+
+      expect(result).toEqual({ ok: true, value: 'source_not_ask_only' });
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-race_INT-RACE').get()).exists)
+        .toBe(true);
+    });
+
+    it('handles an exact standalone ask-only source safely', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const task = makeTask({
+        id: 'ask-standalone', userId: 'user-standalone-ask', agentType: 'ask_agent', status: 'archived',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: task.id, data: task as unknown as Record<string, unknown> },
+      ]);
+      await fakeFirestore.collection('task_group_summaries')
+        .doc('user-standalone-ask_standalone_ask-standalone').set({
+          userId: 'user-standalone-ask',
+          groupKey: 'standalone_ask-standalone',
+          linearIssueId: null,
+          aggregateStatus: 'done',
+          updatedAt: at,
+        });
+      await fakeFirestore.collection('user_group_counts').doc('user-standalone-ask').set({
+        userId: 'user-standalone-ask', active: 0, needsAction: 0, done: 1, failed: 0, archived: 0,
+        totalGroups: 1, updatedAt: at,
+      });
+
+      const removed = await repo.removeAskOnlyOrphan('user-standalone-ask', 'standalone_ask-standalone');
+      const unknown = await repo.removeAskOnlyOrphan('user-standalone-ask', 'standalone_missing');
+
+      expect(removed).toEqual({ ok: true, value: 'removed' });
+      expect(unknown).toEqual({ ok: true, value: 'source_unknown' });
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-standalone-ask').get();
+      expect(counts.get('done')).toBe(0);
+      expect(counts.get('totalGroups')).toBe(0);
+    });
+
+    it('does not guess user counts when the counts document is missing', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const task = makeTask({
+        id: 'ask-missing-counts', userId: 'user-missing-counts', linearIssueId: 'INT-MISSING-COUNTS',
+        agentType: 'ask_agent', status: 'archived',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: task.id, data: task as unknown as Record<string, unknown> },
+      ]);
+      await fakeFirestore.collection('task_group_summaries').doc('user-missing-counts_INT-MISSING-COUNTS').set({
+        userId: 'user-missing-counts', groupKey: 'INT-MISSING-COUNTS',
+        aggregateStatus: 'done', updatedAt: at,
+      });
+
+      const result = await repo.removeAskOnlyOrphan('user-missing-counts', 'INT-MISSING-COUNTS');
+
+      expect(result).toEqual({ ok: true, value: 'counts_invalid' });
+      expect((await fakeFirestore.collection('task_group_summaries')
+        .doc('user-missing-counts_INT-MISSING-COUNTS').get()).exists).toBe(true);
+    });
+
+    it.each([
+      ['summary_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('task_group_summaries').doc('user-invalid_INT-INVALID').update({
+          isImportant: 'yes',
+        });
+      }],
+      ['summary_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('task_group_summaries').doc('user-invalid_INT-INVALID').update({
+          labelsUpdatedAt: null,
+        });
+      }],
+      ['summary_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('task_group_summaries').doc('user-invalid_INT-INVALID').update({
+          userId: 'other-user',
+        });
+      }],
+      ['summary_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('task_group_summaries').doc('user-invalid_INT-INVALID').update({
+          aggregateStatus: 'mystery',
+        });
+      }],
+      ['counts_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('user_group_counts').doc('user-invalid').update({
+          totalGroups: -1,
+        });
+      }],
+      ['counts_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('user_group_counts').doc('user-invalid').update({
+          userId: 'other-user',
+        });
+      }],
+    ])('leaves invalid persisted user state untouched with %s', async (expectedOutcome, mutate) => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const task = makeTask({
+        id: 'ask-invalid', userId: 'user-invalid', linearIssueId: 'INT-INVALID',
+        agentType: 'ask_agent', status: 'archived',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: task.id, data: task as unknown as Record<string, unknown> },
+      ]);
+      await seedOrphan('user-invalid', 'INT-INVALID');
+      await mutate();
+
+      const result = await repo.removeAskOnlyOrphan('user-invalid', 'INT-INVALID');
+
+      expect(result).toEqual({ ok: true, value: expectedOutcome });
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-invalid_INT-INVALID').get()).exists)
+        .toBe(true);
+    });
+
+    it('returns FIRESTORE_ERROR instead of throwing when orphan verification fails', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      fakeFirestore.configure({ errorToThrow: new Error('verification failed') });
+
+      const result = await repo.removeAskOnlyOrphan('user-error', 'INT-ERROR');
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'FIRESTORE_ERROR', message: 'verification failed' },
+      });
+    });
+  });
 });

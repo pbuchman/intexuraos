@@ -17,7 +17,8 @@ export interface ResolvedTaskLifecycleTime {
 }
 
 export interface CodeTaskLifecycleShape {
-  status: TaskStatus;
+  /** Runtime-only compatibility for one retained legacy document. Never writable. */
+  status: TaskStatus | 'completed';
   statusChangedAt?: unknown;
   completedAt?: unknown;
   dispatchStatus?: {
@@ -36,7 +37,7 @@ export interface CodeTaskLifecycleShape {
 const ISO_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/u;
 
 export class TaskLifecycleTimeInvariantError extends Error {
-  constructor(status: TaskStatus) {
+  constructor(status: CodeTaskLifecycleShape['status']) {
     super(
       `Task lifecycle timestamp invariant violated for status ${status}: no valid timestamp candidate`,
     );
@@ -159,7 +160,7 @@ export function isTerminalTaskStatus(status: TaskStatus): boolean {
 export function resolveTaskLifecycleTime(
   task: CodeTaskLifecycleShape
 ): ResolvedTaskLifecycleTime {
-  const terminal = isTerminalTaskStatus(task.status);
+  const terminal = task.status === 'completed' || isTerminalTaskStatus(task.status);
   const candidates: readonly {
     enabled: boolean;
     value: unknown;

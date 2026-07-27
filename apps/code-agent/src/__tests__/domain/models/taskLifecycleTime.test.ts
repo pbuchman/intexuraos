@@ -138,6 +138,21 @@ describe('resolveTaskLifecycleTime', () => {
     expect(resolved.source).toBe('status_changed');
   });
 
+  it('treats runtime-legacy completed as terminal without adding it to writable TaskStatus', () => {
+    const completedAt = new Timestamp(1_773_886_013, 707_000_000);
+    const resolved = resolveTaskLifecycleTime({
+      status: 'completed',
+      completedAt,
+      updatedAt: timestamp('2026-03-19T02:14:34.998Z'),
+      createdAt: timestamp('2026-03-19T01:00:00.000Z'),
+    });
+
+    expect(resolved.source).toBe('completed');
+    expect(resolved.at.seconds).toBe(completedAt.seconds);
+    expect(resolved.at.nanoseconds).toBe(completedAt.nanoseconds);
+    expect(isCompletionTaskStatus('completed' as TaskStatus)).toBe(false);
+  });
+
   it('normalizes the exact maximum Firestore Timestamp', () => {
     const maximum = new Timestamp(253_402_300_799, 999_999_999);
 

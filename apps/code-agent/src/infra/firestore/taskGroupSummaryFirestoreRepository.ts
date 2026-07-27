@@ -7,7 +7,12 @@ import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import type { DocumentData, Firestore, DocumentSnapshot, Transaction } from '@google-cloud/firestore';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
-import type { TaskGroupSummaryRepository, ListGroupSummariesInput, ListGroupSummariesOutput, GroupSummaryError } from '../../domain/ports/taskGroupSummaryRepository.js';
+import type {
+  LifecycleBackfillTaskGroupSummaryRepository,
+  ListGroupSummariesInput,
+  ListGroupSummariesOutput,
+  GroupSummaryError,
+} from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
@@ -20,8 +25,17 @@ import {
 } from './taskGroupSummary/serializer.js';
 import { SUMMARIES_COLLECTION, buildListQuery, countsDocRef, summaryDocRef } from './taskGroupSummary/queries.js';
 import { fromFirestoreDoc } from './task-serializer.js';
+import { normalizeTaskLifecycleTimestamp } from '../../domain/models/taskLifecycleTime.js';
 
-export interface RepairReadableTaskGroupSummaryRepository extends TaskGroupSummaryRepository {
+const RAW_BACKFILL_STATUSES: ReadonlySet<string> = new Set([
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'reviewed',
+  'failed', 'interrupted', 'cancelled', 'archived', 'completed',
+]);
+const RAW_BACKFILL_AGENT_TYPES: ReadonlySet<string> = new Set([
+  'planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry',
+]);
+
+export interface RepairReadableTaskGroupSummaryRepository extends LifecycleBackfillTaskGroupSummaryRepository {
   getSummary(userId: string, groupKey: string): Promise<Result<TaskGroupSummary | null, GroupSummaryError>>;
 }
 
@@ -54,6 +68,84 @@ export function createTaskGroupSummaryFirestoreRepository(
     return snapshot.docs
       .map((doc) => fromFirestoreDoc(doc))
       .filter((task) => task.agentType !== 'ask_agent' && getGroupKey(task) === groupKey);
+  }
+
+  async function loadRawExactGroupTasks(
+    tx: Transaction,
+    userId: string,
+    groupKey: string,
+  ): Promise<{ id: string; data: Record<string, unknown> }[]> {
+    if (groupKey.startsWith('standalone_')) {
+      const taskId = groupKey.slice('standalone_'.length);
+      const snapshot = await tx.get(firestore.collection('code_tasks').doc(taskId));
+      if (!snapshot.exists) return [];
+      return [{ id: snapshot.id, data: snapshot.data() as Record<string, unknown> }];
+    }
+
+    const snapshot = await tx.get(
+      firestore.collection('code_tasks')
+        .where('userId', '==', userId)
+        .where('linearIssueId', '==', groupKey),
+    );
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    }));
+  }
+
+  function rawTaskMatchesExactGroup(
+    task: { id: string; data: Record<string, unknown> },
+    userId: string,
+    groupKey: string,
+  ): boolean {
+    if (task.data['userId'] !== userId) return false;
+    const linearIssueId = task.data['linearIssueId'];
+    if (groupKey.startsWith('standalone_')) {
+      return linearIssueId === undefined;
+    }
+    return linearIssueId === groupKey;
+  }
+
+  function rawSummaryCanBeDeleted(
+    raw: Record<string, unknown>,
+    userId: string,
+    groupKey: string,
+  ): boolean {
+    if (raw['userId'] !== userId || raw['groupKey'] !== groupKey) return false;
+    if (!['active', 'needs-action', 'done', 'failed', 'archived'].includes(String(raw['aggregateStatus']))) {
+      return false;
+    }
+    for (const field of ['hasImplementationReadyLabel', 'hasMergeReadyLabel', 'isImportant']) {
+      if (Object.prototype.hasOwnProperty.call(raw, field) && typeof raw[field] !== 'boolean') return false;
+    }
+    return !Object.prototype.hasOwnProperty.call(raw, 'labelsUpdatedAt') ||
+      normalizeTaskLifecycleTimestamp(raw['labelsUpdatedAt']) !== undefined;
+  }
+
+  function rawSourceTaskIsValid(task: { id: string; data: Record<string, unknown> }): boolean {
+    const agentType = task.data['agentType'];
+    if (
+      typeof task.data['status'] !== 'string' ||
+      !RAW_BACKFILL_STATUSES.has(task.data['status']) ||
+      normalizeTaskLifecycleTimestamp(task.data['createdAt']) === undefined ||
+      normalizeTaskLifecycleTimestamp(task.data['updatedAt']) === undefined ||
+      typeof agentType !== 'string' ||
+      !RAW_BACKFILL_AGENT_TYPES.has(agentType)
+    ) return false;
+    for (const field of ['statusChangedAt', 'completedAt']) {
+      if (
+        Object.prototype.hasOwnProperty.call(task.data, field) &&
+        normalizeTaskLifecycleTimestamp(task.data[field]) === undefined
+      ) return false;
+    }
+    return true;
+  }
+
+  function rawCountsCanBeCorrected(raw: Record<string, unknown>, userId: string): boolean {
+    return raw['userId'] === userId &&
+      ['active', 'needsAction', 'done', 'failed', 'archived', 'totalGroups'].every((field) =>
+        Number.isSafeInteger(raw[field]) && Number(raw[field]) >= 0,
+      );
   }
 
   async function loadCounts(tx: Transaction, userId: string): Promise<UserGroupCounts> {
@@ -498,6 +590,52 @@ export function createTaskGroupSummaryFirestoreRepository(
         return ok(undefined);
       } catch (error) {
         return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error, 'Failed to recompute group summary with labels') });
+      }
+    },
+
+    async removeAskOnlyOrphan(
+      userId: string,
+      groupKey: string,
+    ): ReturnType<LifecycleBackfillTaskGroupSummaryRepository['removeAskOnlyOrphan']> {
+      try {
+        const outcome = await firestore.runTransaction(async (tx) => {
+          const sourceTasks = await loadRawExactGroupTasks(tx, userId, groupKey);
+          if (sourceTasks.length === 0) return 'source_unknown' as const;
+          if (!sourceTasks.every((task) => rawTaskMatchesExactGroup(task, userId, groupKey))) {
+            return 'source_invalid' as const;
+          }
+          if (!sourceTasks.every(rawSourceTaskIsValid)) return 'source_invalid' as const;
+          if (!sourceTasks.every((task) => task.data['agentType'] === 'ask_agent')) {
+            return 'source_not_ask_only' as const;
+          }
+
+          const summaryRef = summaryDocRef(firestore, userId, groupKey);
+          const summaryDoc = await tx.get(summaryRef);
+          if (!summaryDoc.exists) return 'summary_missing' as const;
+          const rawSummary = summaryDoc.data() as Record<string, unknown>;
+          if (!rawSummaryCanBeDeleted(rawSummary, userId, groupKey)) {
+            return 'summary_invalid' as const;
+          }
+
+          const countsDoc = await tx.get(countsDocRef(firestore, userId));
+          if (!countsDoc.exists) return 'counts_invalid' as const;
+          const rawCounts = countsDoc.data() as Record<string, unknown>;
+          if (!rawCountsCanBeCorrected(rawCounts, userId)) {
+            return 'counts_invalid' as const;
+          }
+          const existingCounts = docToCounts(rawCounts);
+          const current = docToSummary(rawSummary);
+          const now = Timestamp.fromDate(new Date());
+          tx.delete(summaryRef);
+          writeCounts(tx, userId, applyDeleteGroupDelta(existingCounts, current.aggregateStatus), now);
+          return 'removed' as const;
+        });
+        return ok(outcome);
+      } catch (error) {
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Failed to remove ask-only group summary'),
+        });
       }
     },
 

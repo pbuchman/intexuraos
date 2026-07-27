@@ -55,6 +55,27 @@ export interface TaskGroupSummaryRepository {
   ): Promise<Result<void, GroupSummaryError>>;
 }
 
+export type AskOnlyOrphanRemovalOutcome =
+  | 'removed'
+  | 'summary_missing'
+  | 'source_unknown'
+  | 'source_not_ask_only'
+  | 'source_invalid'
+  | 'summary_invalid'
+  | 'counts_invalid';
+
+/** Narrow maintenance extension used only by the lifecycle reconciliation command. */
+export interface LifecycleBackfillTaskGroupSummaryRepository extends TaskGroupSummaryRepository {
+  /**
+   * Delete a stale summary only after an exact transactional source read proves
+   * that at least one source task exists and every source task is ask_agent.
+   */
+  removeAskOnlyOrphan(
+    userId: string,
+    groupKey: string,
+  ): Promise<Result<AskOnlyOrphanRemovalOutcome, GroupSummaryError>>;
+}
+
 export interface ListGroupSummariesInput {
   userId: string;
   statusFilter?: GroupStatus[];
