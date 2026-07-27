@@ -124,6 +124,73 @@ describe('resolveTaskLifecycleTime', () => {
     expect(resolved.at.toMillis()).toBe(expectedAt.toMillis());
     expect(resolved.source).toBe(expectedSource);
   });
+
+  it('skips invalid empty and malformed candidates before valid terminal dispatch evidence', () => {
+    const dispatchFailureAt = timestamp('2026-07-27T08:03:00.000Z');
+    const resolved = resolveTaskLifecycleTime(baseTask('failed', {
+      statusChangedAt: '' as never,
+      completedAt: { toDate: (): never => { throw new Error('malformed timestamp'); } } as never,
+      dispatchStatus: {
+        terminal: true,
+        lastSeenAt: timestamp('2026-07-27T08:04:00.000Z'),
+        terminalCause: { lastSeenAt: dispatchFailureAt },
+      },
+    }));
+
+    expect(resolved.at.toMillis()).toBe(dispatchFailureAt.toMillis());
+    expect(resolved.source).toBe('dispatch_terminal_cause');
+  });
+
+  it.each([
+    { name: 'null', value: null },
+    { name: 'non-ISO string', value: 'not-an-iso-date' },
+    { name: 'invalid Date', value: new Date(Number.NaN) },
+    { name: 'plain object', value: {} },
+    { name: 'object with non-function toDate', value: { toDate: 'not-a-function' } },
+    { name: 'object whose toDate returns an invalid Date', value: { toDate: (): Date => new Date(Number.NaN) } },
+  ])('skips an invalid $name candidate and uses the next valid timestamp', ({ value }) => {
+    const resolved = resolveTaskLifecycleTime(baseTask('planned', {
+      statusChangedAt: value as never,
+    }));
+
+    expect(resolved.at.toMillis()).toBe(legacyUpdatedAt.toMillis());
+    expect(resolved.source).toBe('legacy_updated');
+  });
+
+  it('normalizes a valid structural toDate lifecycle timestamp', () => {
+    const resolved = resolveTaskLifecycleTime(baseTask('running', {
+      statusChangedAt: {
+        toDate: (): Date => new Date('2026-07-27T08:01:00.000Z'),
+      } as never,
+    }));
+
+    expect(resolved.at.toDate().toISOString()).toBe('2026-07-27T08:01:00.000Z');
+    expect(resolved.source).toBe('status_changed');
+  });
+
+  it('normalizes a valid ISO lifecycle string when compatibility input intentionally supplies one', () => {
+    const resolved = resolveTaskLifecycleTime(baseTask('running', {
+      statusChangedAt: '2026-07-27T08:01:00.000Z' as never,
+    }));
+
+    expect(resolved.at.toDate().toISOString()).toBe('2026-07-27T08:01:00.000Z');
+    expect(resolved.source).toBe('status_changed');
+  });
+
+  it('fails fast when every lifecycle timestamp candidate is invalid', () => {
+    expect(() => resolveTaskLifecycleTime({
+      status: 'failed',
+      statusChangedAt: '' as never,
+      completedAt: { seconds: 123 } as never,
+      dispatchStatus: {
+        terminal: true,
+        lastSeenAt: { toDate: 'not-a-function' } as never,
+        terminalCause: { lastSeenAt: 'not-an-iso-date' as never },
+      },
+      updatedAt: { toDate: (): Date => new Date(Number.NaN) } as never,
+      createdAt: {} as never,
+    })).toThrowError('Task lifecycle timestamp invariant violated');
+  });
 });
 
 describe('task lifecycle status predicates', () => {

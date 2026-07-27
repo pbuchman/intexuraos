@@ -278,10 +278,14 @@ describe('GET /code/ask-agent/active', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body) as { success: boolean; data: { task: { id: string } } };
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { task: { id: string; createdAt: string; statusChangedAt: string } };
+    };
     expect(body.success).toBe(true);
     expect(body.data.task).not.toBeNull();
     expect(body.data.task.id).toBe('task_active_1');
+    expect(body.data.task.statusChangedAt).toBe(body.data.task.createdAt);
   });
 
   it('returns 500 when repository fails', async () => {

@@ -13,6 +13,7 @@ import type {
 } from '../../domain/models/codeTask.js';
 import {
   isTerminalTaskStatus,
+  normalizeTaskLifecycleTimestamp,
   resolveTaskLifecycleTime,
   type CodeTaskLifecycleShape,
 } from '../../domain/models/taskLifecycleTime.js';
@@ -274,10 +275,10 @@ function taskToApiResponse(task: {
   const resolvedLifecycleAt = resolveTaskLifecycleTime(
     task as unknown as CodeTaskLifecycleShape,
   ).at;
-  const statusChangedAt = timestampToIso(resolvedLifecycleAt) ?? '';
-  const serializedCompletedAt = timestampToIso(
-    task.completedAt as { toDate: () => Date } | string | undefined,
-  );
+  const statusChangedAt = resolvedLifecycleAt.toDate().toISOString();
+  const serializedCompletedAt = normalizeTaskLifecycleTimestamp(task.completedAt)
+    ?.toDate()
+    .toISOString();
   const completedAt = serializedCompletedAt
     ?? (isTerminalTaskStatus(task.status) ? statusChangedAt : undefined);
 

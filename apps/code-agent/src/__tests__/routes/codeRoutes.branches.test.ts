@@ -491,6 +491,7 @@ describe('codeRoutes branch coverage', () => {
             lastSeenAt: failureAt,
             nextAction: 'retry_after_fix',
           },
+          statusChangedAt: '',
           createdAt,
           updatedAt: metadataUpdatedAt,
         })),
@@ -551,9 +552,8 @@ describe('codeRoutes branch coverage', () => {
       expect(body.data.dispatchedAt).toBe(now.toISOString());
     });
 
-    it('falls back to empty string when timestampToIso returns undefined for createdAt and updatedAt', async () => {
-      // Mock findByIdForUser to return a task where createdAt and updatedAt are objects without toDate()
-      // This exercises the ?? '' fallback path for both timestamp fields
+    it('fails with a controlled server error when every lifecycle timestamp is malformed', async () => {
+      // Mock findByIdForUser with no valid canonical lifecycle candidate.
       const mockRepo = {
         ...getServices().codeTaskRepo,
         findByIdForUser: vi.fn().mockResolvedValue(ok({
@@ -596,13 +596,49 @@ describe('codeRoutes branch coverage', () => {
         headers: { authorization: 'Bearer test-token' },
       });
 
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+    });
+
+    it('keeps the canonical lifecycle timestamp valid when legacy technical timestamps are malformed', async () => {
+      const lifecycleAt = Timestamp.fromDate(new Date('2026-07-27T08:01:00.000Z'));
+      const mockRepo = {
+        ...getServices().codeTaskRepo,
+        findByIdForUser: vi.fn().mockResolvedValue(ok({
+          id: 'task-with-valid-lifecycle',
+          userId: 'test-user-id',
+          prompt: 'Valid lifecycle task',
+          sanitizedPrompt: 'valid lifecycle task',
+          systemPromptHash: 'abc123',
+          workerType: 'opus',
+          workerLocation: 'vm',
+          repository: 'test/repo',
+          baseBranch: 'main',
+          traceId: 'trace-valid-lifecycle',
+          status: 'running',
+          dedupKey: 'dedup',
+          callbackReceived: false,
+          statusChangedAt: lifecycleAt,
+          createdAt: { seconds: 123 } as never,
+          updatedAt: { seconds: 456 } as never,
+        })),
+      } as unknown as CodeTaskRepository;
+
+      setServices({ ...getServices(), codeTaskRepo: mockRepo } as never);
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/tasks/task-with-valid-lifecycle',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
-      // Both should fall back to '' since timestampToIso returns undefined
+      expect(body.data.statusChangedAt).toBe(lifecycleAt.toDate().toISOString());
       expect(body.data.createdAt).toBe('');
       expect(body.data.updatedAt).toBe('');
-      expect(body.data.dispatchStatus.firstSeenAt).toBe('');
-      expect(body.data.dispatchStatus.lastSeenAt).toBe('');
     });
   });
 

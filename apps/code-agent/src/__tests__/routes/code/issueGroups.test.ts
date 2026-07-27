@@ -1314,6 +1314,8 @@ describe('GET /code/issue-groups', () => {
       callbackReceived: false,
       linearIssueId: 'INT-1934',
       createdAt,
+      statusChangedAt: { toDate: 'not-a-function' },
+      completedAt: '',
       updatedAt: metadataUpdatedAt,
       dispatchStatus: {
         state: 'terminal',

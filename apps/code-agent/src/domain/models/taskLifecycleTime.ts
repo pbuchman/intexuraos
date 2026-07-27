@@ -1,4 +1,4 @@
-import type { Timestamp } from '@google-cloud/firestore';
+import { Timestamp } from '@google-cloud/firestore';
 import type { TaskStatus } from './codeTask.js';
 
 export type TaskLifecycleTimeSource =
@@ -18,19 +18,67 @@ export interface ResolvedTaskLifecycleTime {
 
 export interface CodeTaskLifecycleShape {
   status: TaskStatus;
-  statusChangedAt?: Timestamp;
-  completedAt?: Timestamp;
+  statusChangedAt?: unknown;
+  completedAt?: unknown;
   dispatchStatus?: {
     terminal: boolean;
-    lastSeenAt: Timestamp;
+    lastSeenAt: unknown;
     terminalCause?: {
-      lastSeenAt: Timestamp;
+      lastSeenAt: unknown;
     };
   };
-  dispatchedAt?: Timestamp;
-  queuedAt?: Timestamp;
-  updatedAt?: Timestamp;
-  createdAt: Timestamp;
+  dispatchedAt?: unknown;
+  queuedAt?: unknown;
+  updatedAt?: unknown;
+  createdAt: unknown;
+}
+
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u;
+
+export class TaskLifecycleTimeInvariantError extends Error {
+  constructor(status: TaskStatus) {
+    super(
+      `Task lifecycle timestamp invariant violated for status ${status}: no valid timestamp candidate`,
+    );
+    this.name = 'TaskLifecycleTimeInvariantError';
+  }
+}
+
+function timestampFromValidDate(value: unknown): Timestamp | undefined {
+  return value instanceof Date && Number.isFinite(value.getTime())
+    ? Timestamp.fromDate(value)
+    : undefined;
+}
+
+function hasToDate(value: unknown): value is { toDate: () => unknown } {
+  if (typeof value !== 'object' || value === null || !('toDate' in value)) {
+    return false;
+  }
+  const candidate = value as { toDate?: unknown };
+  return typeof candidate.toDate === 'function';
+}
+
+export function normalizeTaskLifecycleTimestamp(value: unknown): Timestamp | undefined {
+  if (value instanceof Timestamp) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return timestampFromValidDate(value);
+  }
+  if (typeof value === 'string') {
+    if (!ISO_DATE_TIME.test(value)) {
+      return undefined;
+    }
+    return timestampFromValidDate(new Date(value));
+  }
+  if (!hasToDate(value)) {
+    return undefined;
+  }
+  try {
+    return timestampFromValidDate(value.toDate());
+  } catch {
+    return undefined;
+  }
 }
 
 const ACTIVE_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set([
@@ -67,38 +115,45 @@ export function isTerminalTaskStatus(status: TaskStatus): boolean {
 export function resolveTaskLifecycleTime(
   task: CodeTaskLifecycleShape
 ): ResolvedTaskLifecycleTime {
-  if (task.statusChangedAt !== undefined) {
-    return { at: task.statusChangedAt, source: 'status_changed' };
-  }
-  if (isTerminalTaskStatus(task.status) && task.completedAt !== undefined) {
-    return { at: task.completedAt, source: 'completed' };
-  }
-  if (
-    isTerminalTaskStatus(task.status)
-    && task.dispatchStatus?.terminalCause !== undefined
-  ) {
-    return {
-      at: task.dispatchStatus.terminalCause.lastSeenAt,
+  const terminal = isTerminalTaskStatus(task.status);
+  const candidates: readonly {
+    enabled: boolean;
+    value: unknown;
+    source: TaskLifecycleTimeSource;
+  }[] = [
+    { enabled: true, value: task.statusChangedAt, source: 'status_changed' },
+    { enabled: terminal, value: task.completedAt, source: 'completed' },
+    {
+      enabled: terminal,
+      value: task.dispatchStatus?.terminalCause?.lastSeenAt,
       source: 'dispatch_terminal_cause',
-    };
+    },
+    {
+      enabled: terminal && task.dispatchStatus?.terminal === true,
+      value: task.dispatchStatus?.lastSeenAt,
+      source: 'dispatch_terminal',
+    },
+    {
+      enabled: task.status === 'dispatched' || task.status === 'running',
+      value: task.dispatchedAt,
+      source: 'dispatched',
+    },
+    {
+      enabled: task.status === 'queued',
+      value: task.queuedAt,
+      source: 'queued',
+    },
+    { enabled: true, value: task.updatedAt, source: 'legacy_updated' },
+    { enabled: true, value: task.createdAt, source: 'created' },
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate.enabled) continue;
+    const at = normalizeTaskLifecycleTimestamp(candidate.value);
+    if (at !== undefined) {
+      return { at, source: candidate.source };
+    }
   }
-  if (
-    isTerminalTaskStatus(task.status)
-    && task.dispatchStatus?.terminal === true
-  ) {
-    return { at: task.dispatchStatus.lastSeenAt, source: 'dispatch_terminal' };
-  }
-  if (
-    (task.status === 'dispatched' || task.status === 'running')
-    && task.dispatchedAt !== undefined
-  ) {
-    return { at: task.dispatchedAt, source: 'dispatched' };
-  }
-  if (task.status === 'queued' && task.queuedAt !== undefined) {
-    return { at: task.queuedAt, source: 'queued' };
-  }
-  if (task.updatedAt !== undefined) {
-    return { at: task.updatedAt, source: 'legacy_updated' };
-  }
-  return { at: task.createdAt, source: 'created' };
+
+  throw new TaskLifecycleTimeInvariantError(task.status);
 }
