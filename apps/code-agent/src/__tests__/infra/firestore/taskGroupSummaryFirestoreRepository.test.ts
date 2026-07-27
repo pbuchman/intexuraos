@@ -32,7 +32,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     resetFirestore();
   });
 
-  function createTaskGroupSummaryFirestoreRepository(
+  function createIncrementalRepository(
     deps: { firestore: Firestore; logger: Logger },
   ): ReturnType<typeof createRepository> {
     return createRepository({ ...deps, authoritativeTaskReads: false });
@@ -63,7 +63,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('updateAfterCreate', () => {
     it('creates summary doc for new group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -98,7 +98,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('increments existing group summary', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -134,7 +134,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not let reordered creates regress attempt identity or lifecycle activity', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -162,7 +162,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('is idempotent when the same create maintenance callback is retried', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -183,7 +183,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const staleCreate = makeTask({ id: 'task-deleted', linearIssueId: 'INT-DELAYED-DELETE' });
 
@@ -197,7 +196,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const staleCreate = makeTask({ id: 'task-archived-late', linearIssueId: 'INT-DELAYED-ARCHIVE' });
       const archived = { ...staleCreate, status: 'archived' as const };
@@ -211,8 +209,205 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(summary.exists).toBe(false);
     });
 
+    it('repairs legacy ownership before duplicate create callbacks without inflating tasks or counts', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const createdAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const labelsUpdatedAt = Timestamp.fromDate(new Date('2026-07-27T09:30:00Z'));
+      const task = makeTask({
+        id: 'task-legacy-create',
+        userId: 'user-legacy-create',
+        linearIssueId: 'INT-LEGACY-CREATE',
+        agentType: 'execution',
+        status: 'running',
+        createdAt,
+        statusChangedAt: createdAt,
+        updatedAt: createdAt,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: task.id, data: task as unknown as Record<string, unknown> },
+      ]);
+      await fakeFirestore.collection('task_group_summaries').doc('user-legacy-create_INT-LEGACY-CREATE').set({
+        userId: 'user-legacy-create',
+        linearIssueId: 'INT-LEGACY-CREATE',
+        groupKey: 'INT-LEGACY-CREATE',
+        taskCount: 1,
+        activeTaskCount: 1,
+        latestTaskStatus: 'running',
+        latestTaskUpdatedAt: createdAt,
+        agentTypesPresent: ['execution'],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: createdAt,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'active',
+        hasImplementationReadyLabel: true,
+        hasMergeReadyLabel: false,
+        labelsUpdatedAt,
+        isImportant: true,
+        updatedAt: createdAt,
+      });
+      await fakeFirestore.collection('user_group_counts').doc('user-legacy-create').set({
+        userId: 'user-legacy-create',
+        active: 1,
+        needsAction: 0,
+        done: 0,
+        failed: 0,
+        archived: 0,
+        totalGroups: 1,
+        updatedAt: createdAt,
+      });
+
+      await repo.updateAfterCreate(task);
+      await repo.updateAfterCreate(task);
+
+      const summary = await fakeFirestore.collection('task_group_summaries')
+        .doc('user-legacy-create_INT-LEGACY-CREATE').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-legacy-create').get();
+      expect(summary.get('taskIds')).toEqual(['task-legacy-create']);
+      expect(summary.get('taskStatusById')).toEqual({ 'task-legacy-create': 'running' });
+      expect(summary.get('taskCount')).toBe(1);
+      expect(summary.get('activeTaskCount')).toBe(1);
+      expect(summary.get('latestTaskId')).toBe('task-legacy-create');
+      expect(summary.get('hasImplementationReadyLabel')).toBe(true);
+      expect(summary.get('hasMergeReadyLabel')).toBe(false);
+      expect(summary.get('labelsUpdatedAt')).toEqual(labelsUpdatedAt);
+      expect(summary.get('isImportant')).toBe(true);
+      expect(counts.get('totalGroups')).toBe(1);
+      expect(counts.get('active')).toBe(1);
+    });
+
+    it('rebuilds an archived shell from visible source tasks when a failed retry revives it', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const archivedAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const retryAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const labelsUpdatedAt = Timestamp.fromDate(new Date('2026-07-27T09:30:00Z'));
+      const archivedTask = makeTask({
+        id: 'task-archived-evidence',
+        userId: 'user-revive',
+        linearIssueId: 'INT-REVIVE-EVIDENCE',
+        agentType: 'review',
+        status: 'archived',
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/1801',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+          needs_remediation: '0',
+        },
+        prNumber: 1801,
+        implementationTaskId: 'task-old-implementation',
+        createdAt: archivedAt,
+        statusChangedAt: archivedAt,
+        updatedAt: archivedAt,
+      });
+      const failedRetry = makeTask({
+        id: 'task-failed-retry',
+        userId: 'user-revive',
+        linearIssueId: 'INT-REVIVE-EVIDENCE',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt: retryAt,
+        statusChangedAt: retryAt,
+        updatedAt: retryAt,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: archivedTask.id, data: archivedTask as unknown as Record<string, unknown> },
+        { id: failedRetry.id, data: failedRetry as unknown as Record<string, unknown> },
+      ]);
+      await fakeFirestore.collection('task_group_summaries').doc('user-revive_INT-REVIVE-EVIDENCE').set({
+        userId: 'user-revive',
+        linearIssueId: 'INT-REVIVE-EVIDENCE',
+        groupKey: 'INT-REVIVE-EVIDENCE',
+        taskCount: 0,
+        taskIds: [],
+        taskStatusById: {},
+        taskLifecycleAtById: {},
+        activeTaskCount: 0,
+        latestTaskId: archivedTask.id,
+        latestTaskCreatedAt: archivedAt,
+        latestTaskStatus: 'archived',
+        latestTaskUpdatedAt: archivedAt,
+        latestLifecycleTaskId: archivedTask.id,
+        agentTypesPresent: ['review'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: true,
+        hasCompletedExecutionAgent: true,
+        hasImplementationTaskId: true,
+        hasPrUrl: true,
+        prNumber: 1801,
+        latestMergeReadyEvidence: true,
+        latestMergeReadyReason: 'review_no_remediation',
+        latestMergeReadyUpdatedAt: archivedAt,
+        latestMergeReadyDecisionAt: archivedAt,
+        latestMergeReadyDecisionTaskId: archivedTask.id,
+        latestReviewNeedsRemediation: false,
+        latestReviewUpdatedAt: archivedAt,
+        latestReviewTaskId: archivedTask.id,
+        representativePrUpdatedAt: archivedAt,
+        representativePrTaskId: archivedTask.id,
+        oldestTaskCreatedAt: archivedAt,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'archived',
+        hasImplementationReadyLabel: true,
+        hasMergeReadyLabel: true,
+        labelsUpdatedAt,
+        isImportant: true,
+        updatedAt: archivedAt,
+      });
+      await fakeFirestore.collection('user_group_counts').doc('user-revive').set({
+        userId: 'user-revive',
+        active: 0,
+        needsAction: 0,
+        done: 0,
+        failed: 0,
+        archived: 1,
+        totalGroups: 1,
+        updatedAt: archivedAt,
+      });
+
+      await repo.updateAfterCreate(failedRetry);
+
+      const summary = await fakeFirestore.collection('task_group_summaries')
+        .doc('user-revive_INT-REVIVE-EVIDENCE').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-revive').get();
+      expect(summary.get('taskIds')).toEqual(['task-failed-retry']);
+      expect(summary.get('taskCount')).toBe(1);
+      expect(summary.get('activeTaskCount')).toBe(0);
+      expect(summary.get('latestTaskId')).toBe('task-failed-retry');
+      expect(summary.get('latestTaskStatus')).toBe('failed');
+      expect(summary.get('aggregateStatus')).toBe('failed');
+      expect(summary.get('hasPrUrl')).toBe(false);
+      expect(summary.get('prNumber')).toBeNull();
+      expect(summary.get('representativePrTaskId')).toBeNull();
+      expect(summary.get('latestMergeReadyEvidence')).toBe(false);
+      expect(summary.get('latestMergeReadyReason')).toBeNull();
+      expect(summary.get('latestReviewNeedsRemediation')).toBeNull();
+      expect(summary.get('latestReviewTaskId')).toBeNull();
+      expect(summary.get('hasCompletedPlanning')).toBe(false);
+      expect(summary.get('hasCompletedExecution')).toBe(false);
+      expect(summary.get('hasCompletedExecutionAgent')).toBe(false);
+      expect(summary.get('hasImplementationTaskId')).toBe(false);
+      expect(summary.get('hasImplementationReadyLabel')).toBe(true);
+      expect(summary.get('hasMergeReadyLabel')).toBe(true);
+      expect(summary.get('labelsUpdatedAt')).toEqual(labelsUpdatedAt);
+      expect(summary.get('isImportant')).toBe(true);
+      expect(counts.get('archived')).toBe(0);
+      expect(counts.get('failed')).toBe(1);
+      expect(counts.get('totalGroups')).toBe(1);
+    });
+
     it('sets activeTaskCount when task is active', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -233,7 +428,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates user_group_counts with new group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -255,7 +450,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('uses standalone key when no linearIssueId', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -278,7 +473,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update counts when task is archived (new group)', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -304,7 +499,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets dispatchedAt and implementationTaskId on new group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -329,7 +524,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasPrUrl and prNumber on new group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -353,7 +548,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets latestReviewNeedsRemediation=false on new group for review task with no-remediation result', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -375,7 +570,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets latestReviewNeedsRemediation=true on new group for review task with remediation needed', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -397,7 +592,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('keeps latestReviewNeedsRemediation null for review task with unknown needs_remediation', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -420,7 +615,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecution for review agent with reviewed status', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -441,7 +636,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedExecutionAgent when execution agent created with implemented status', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -460,7 +655,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecutionAgent for pull_request agent with implemented status', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -479,7 +674,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecutionAgent for review agent with reviewed status', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -498,7 +693,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not increment taskCount when archived task added to existing group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -527,7 +722,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedPlanning for planning task in existing group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -557,7 +752,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates existingGroup: sets implementationTaskId flag', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -588,7 +783,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates existingGroup: sets hasPrUrl and prNumber', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -620,7 +815,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates existingGroup: sets hasPrUrl without prNumber when prUrl set but prNumber absent', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -653,7 +848,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates existingGroup: updates latestReviewNeedsRemediation', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -683,7 +878,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates existingGroup: mostRecentDispatchedAt set from second task', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -713,7 +908,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates counts when aggregateStatus changes on existing group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -746,7 +941,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update latestTaskStatus when existing task is older', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -776,7 +971,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates oldestTaskCreatedAt when new task is older', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -806,7 +1001,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('reverts archived group to active when new non-archived task is created in it', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -855,7 +1050,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('repairs missing linear sort fields when a legacy summary receives a new task', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -911,11 +1106,244 @@ describe('taskGroupSummaryFirestoreRepository', () => {
   });
 
   describe('updateAfterStatusChange', () => {
+    it('repairs internally inconsistent ownership counts before applying a status callback', async () => {
+      const incrementalRepo = createIncrementalRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const createdAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const lifecycleAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const failedTask = makeTask({
+        id: 'task-inconsistent-owner',
+        userId: 'user-inconsistent-owner',
+        linearIssueId: 'INT-INCONSISTENT-OWNER',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt,
+        statusChangedAt: createdAt,
+        updatedAt: createdAt,
+      });
+      const runningTask = {
+        ...failedTask,
+        status: 'running' as const,
+        statusChangedAt: lifecycleAt,
+        updatedAt: lifecycleAt,
+      };
+      await incrementalRepo.updateAfterCreate(failedTask);
+      await fakeFirestore.collection('task_group_summaries')
+        .doc('user-inconsistent-owner_INT-INCONSISTENT-OWNER')
+        .update({
+          taskCount: 2,
+          hasPrUrl: true,
+          prNumber: 1951,
+          representativePrUpdatedAt: createdAt,
+          representativePrTaskId: 'task-removed-pr-owner',
+        });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: runningTask.id, data: runningTask as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.updateAfterStatusChange(failedTask, runningTask);
+
+      const summary = await fakeFirestore.collection('task_group_summaries')
+        .doc('user-inconsistent-owner_INT-INCONSISTENT-OWNER').get();
+      expect(summary.get('taskIds')).toEqual(['task-inconsistent-owner']);
+      expect(summary.get('taskCount')).toBe(1);
+      expect(summary.get('activeTaskCount')).toBe(1);
+      expect(summary.get('hasPrUrl')).toBe(false);
+      expect(summary.get('prNumber')).toBeNull();
+      expect(summary.get('representativePrTaskId')).toBeNull();
+    });
+
+    it('repairs ownership timestamps that differ only below millisecond precision', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const createdAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const persistedLifecycleAt = new Timestamp(1_785_146_400, 123_456_701);
+      const staleOwnedLifecycleAt = new Timestamp(1_785_146_400, 123_456_700);
+      expect(persistedLifecycleAt.toMillis()).toBe(staleOwnedLifecycleAt.toMillis());
+      const oldTask = makeTask({
+        id: 'task-nanosecond-owner',
+        userId: 'user-nanosecond-owner',
+        linearIssueId: 'INT-NANOSECOND-OWNER',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt,
+        statusChangedAt: staleOwnedLifecycleAt,
+        updatedAt: staleOwnedLifecycleAt,
+      });
+      const persistedTask = {
+        ...oldTask,
+        status: 'running' as const,
+        statusChangedAt: persistedLifecycleAt,
+        updatedAt: persistedLifecycleAt,
+      };
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: persistedTask.id, data: persistedTask as unknown as Record<string, unknown> },
+      ]);
+      await fakeFirestore.collection('task_group_summaries').doc('user-nanosecond-owner_INT-NANOSECOND-OWNER').set({
+        userId: 'user-nanosecond-owner',
+        linearIssueId: 'INT-NANOSECOND-OWNER',
+        groupKey: 'INT-NANOSECOND-OWNER',
+        taskCount: 1,
+        taskIds: [persistedTask.id],
+        taskStatusById: { [persistedTask.id]: 'failed' },
+        taskLifecycleAtById: { [persistedTask.id]: staleOwnedLifecycleAt },
+        activeTaskCount: 0,
+        latestTaskId: persistedTask.id,
+        latestTaskCreatedAt: createdAt,
+        latestTaskStatus: 'failed',
+        latestTaskUpdatedAt: persistedLifecycleAt,
+        latestLifecycleTaskId: persistedTask.id,
+        agentTypesPresent: ['execution'],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: true,
+        prNumber: 1901,
+        representativePrUpdatedAt: createdAt,
+        representativePrTaskId: 'task-removed-pr-owner',
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: createdAt,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'failed',
+        updatedAt: persistedLifecycleAt,
+      });
+      await fakeFirestore.collection('user_group_counts').doc('user-nanosecond-owner').set({
+        userId: 'user-nanosecond-owner',
+        active: 0,
+        needsAction: 0,
+        done: 0,
+        failed: 1,
+        archived: 0,
+        totalGroups: 1,
+        updatedAt: persistedLifecycleAt,
+      });
+
+      await repo.updateAfterStatusChange(oldTask, persistedTask);
+
+      const summary = await fakeFirestore.collection('task_group_summaries')
+        .doc('user-nanosecond-owner_INT-NANOSECOND-OWNER').get();
+      expect(summary.get('taskLifecycleAtById')).toEqual({
+        [persistedTask.id]: persistedLifecycleAt,
+      });
+      expect(summary.get('hasPrUrl')).toBe(false);
+      expect(summary.get('prNumber')).toBeNull();
+      expect(summary.get('representativePrTaskId')).toBeNull();
+    });
+
+    it('repairs missing legacy ownership before an older status-before-create callback', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const olderCreatedAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const newerCreatedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const olderLifecycleAt = Timestamp.fromDate(new Date('2026-07-27T11:00:00Z'));
+      const labelsUpdatedAt = Timestamp.fromDate(new Date('2026-07-27T10:30:00Z'));
+      const oldCallbackTask = makeTask({
+        id: 'task-older',
+        userId: 'user-legacy-status',
+        linearIssueId: 'INT-LEGACY-STATUS',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt: olderCreatedAt,
+        statusChangedAt: olderCreatedAt,
+        updatedAt: olderCreatedAt,
+      });
+      const persistedOlderTask = {
+        ...oldCallbackTask,
+        status: 'running' as const,
+        statusChangedAt: olderLifecycleAt,
+        updatedAt: olderLifecycleAt,
+      };
+      const newerTask = makeTask({
+        id: 'task-newer',
+        userId: 'user-legacy-status',
+        linearIssueId: 'INT-LEGACY-STATUS',
+        agentType: 'planning',
+        status: 'planned',
+        createdAt: newerCreatedAt,
+        statusChangedAt: newerCreatedAt,
+        updatedAt: newerCreatedAt,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: persistedOlderTask.id, data: persistedOlderTask as unknown as Record<string, unknown> },
+        { id: newerTask.id, data: newerTask as unknown as Record<string, unknown> },
+      ]);
+      await fakeFirestore.collection('task_group_summaries').doc('user-legacy-status_INT-LEGACY-STATUS').set({
+        userId: 'user-legacy-status',
+        linearIssueId: 'INT-LEGACY-STATUS',
+        groupKey: 'INT-LEGACY-STATUS',
+        taskCount: 1,
+        activeTaskCount: 0,
+        latestTaskStatus: 'planned',
+        latestTaskUpdatedAt: newerCreatedAt,
+        agentTypesPresent: ['planning'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: newerCreatedAt,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'needs-action',
+        hasImplementationReadyLabel: true,
+        hasMergeReadyLabel: true,
+        labelsUpdatedAt,
+        isImportant: true,
+        updatedAt: newerCreatedAt,
+      });
+      await fakeFirestore.collection('user_group_counts').doc('user-legacy-status').set({
+        userId: 'user-legacy-status',
+        active: 0,
+        needsAction: 1,
+        done: 0,
+        failed: 0,
+        archived: 0,
+        totalGroups: 1,
+        updatedAt: newerCreatedAt,
+      });
+
+      await repo.updateAfterStatusChange(oldCallbackTask, persistedOlderTask);
+
+      const summary = await fakeFirestore.collection('task_group_summaries')
+        .doc('user-legacy-status_INT-LEGACY-STATUS').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-legacy-status').get();
+      expect(summary.get('taskIds')).toEqual(['task-older', 'task-newer']);
+      expect(summary.get('taskStatusById')).toEqual({
+        'task-older': 'running',
+        'task-newer': 'planned',
+      });
+      expect(summary.get('taskCount')).toBe(2);
+      expect(summary.get('activeTaskCount')).toBe(1);
+      expect(summary.get('latestTaskId')).toBe('task-newer');
+      expect(summary.get('latestTaskCreatedAt')).toEqual(newerCreatedAt);
+      expect(summary.get('latestTaskStatus')).toBe('planned');
+      expect(summary.get('latestTaskUpdatedAt')).toEqual(olderLifecycleAt);
+      expect(summary.get('latestLifecycleTaskId')).toBe('task-older');
+      expect(summary.get('hasImplementationReadyLabel')).toBe(true);
+      expect(summary.get('hasMergeReadyLabel')).toBe(true);
+      expect(summary.get('labelsUpdatedAt')).toEqual(labelsUpdatedAt);
+      expect(summary.get('isImportant')).toBe(true);
+      expect(counts.get('active')).toBe(1);
+      expect(counts.get('needsAction')).toBe(0);
+      expect(counts.get('totalGroups')).toBe(1);
+    });
+
     it('repairs status-before-create ordering from the current persisted task', async () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
       const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
@@ -946,7 +1374,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
       const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
@@ -1004,7 +1431,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const now = Timestamp.now();
       const missing = makeTask({
@@ -1032,14 +1458,13 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('repairs an existing incomplete summary and preserves user-owned flags and counts', async () => {
-      const localRepo = createTaskGroupSummaryFirestoreRepository({
+      const localRepo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
       const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
@@ -1090,14 +1515,13 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('repairs an existing incomplete summary without inventing flags or changing stable counts', async () => {
-      const localRepo = createTaskGroupSummaryFirestoreRepository({
+      const localRepo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const now = Timestamp.now();
       const existing = makeTask({
@@ -1131,7 +1555,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
       const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
@@ -1189,7 +1612,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
 
     it('updates activeTaskCount on status transition (active -> done)', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1222,7 +1645,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates activeTaskCount on status transition (inactive -> active)', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1250,7 +1673,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('is idempotent when the same inactive-to-active transition is retried', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1274,7 +1697,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates aggregateStatus when transitioning from active to done', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1303,7 +1726,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('handles archive: decrements taskCount', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1336,7 +1759,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('preserves summary with archived status when last task archived', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1372,7 +1795,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('logs warning when summary doc not found', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1389,7 +1812,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('uses defaultCounts when counts doc does not exist on status change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1431,7 +1854,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedPlanning when transitioning to planned', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1456,7 +1879,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecution when review task reviewed', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1481,7 +1904,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasImplementationTaskId on status change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1505,7 +1928,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasPrUrl and prNumber on status change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1536,7 +1959,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets latestReviewNeedsRemediation on status change for review task', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1565,7 +1988,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets dispatchedAt on status change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1591,7 +2014,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates counts when aggregateStatus changes on status change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1618,7 +2041,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates representative status even when technical updatedAt is older', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1643,7 +2066,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update counts when aggregateStatus does not change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1681,7 +2104,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedExecution when execution agent transitions to reviewed', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1706,7 +2129,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecution when review agent transitions to reviewed', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1731,7 +2154,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedExecutionAgent when execution agent transitions to implemented on status change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1756,7 +2179,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasPrUrl without prNumber when prUrl present but prNumber absent', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1787,7 +2210,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update mostRecentDispatchedAt when newTask has no dispatchedAt', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1815,7 +2238,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update latestTaskStatus when archiving', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1851,7 +2274,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('decrements failed count when last task in failed group is archived', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1888,7 +2311,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('updateAfterDelete', () => {
     it('decrements task count', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1919,7 +2342,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('deletes summary when last task removed', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1944,7 +2367,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does nothing when summary does not exist', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1956,7 +2379,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('decrements activeTaskCount when deleting an active task', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -1989,7 +2412,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates counts when aggregateStatus changes on delete', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2025,7 +2448,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('uses defaultCounts when counts doc does not exist on delete', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2059,7 +2482,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not decrement taskCount for archived task on delete', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2091,7 +2514,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('deletes summary and clears archived count when archived task in fully-archived group is hard-deleted', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2136,7 +2559,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('getUserGroupCounts', () => {
     it('returns zeros for nonexistent user', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2154,7 +2577,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('returns archived: 0 when no archived groups exist', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2178,7 +2601,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('returns stored counts', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2210,7 +2633,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('listGroupSummaries', () => {
     it('returns filtered results by aggregateStatus', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2283,7 +2706,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('respects limit and returns nextCursor', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2378,7 +2801,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const firestore = {
         collection: vi.fn().mockReturnValue(query),
       };
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: firestore as unknown as Firestore,
         logger,
       });
@@ -2397,7 +2820,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('paginates backfilled summaries by linear-id numerically', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2473,7 +2896,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('accepts existing document cursors for non-linear sorts', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2537,7 +2960,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('ignores missing document cursors for non-linear sorts', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2585,7 +3008,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('returns all results when no statusFilter provided', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2629,7 +3052,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sorts by pr-number', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2673,7 +3096,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sorts by dispatched', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2717,7 +3140,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('handles cursor that does not match a document', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2769,7 +3192,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     it('accepts cursor without error and returns results', async () => {
       // FakeFirestore startAfter is a no-op (doesn't actually paginate),
       // but we can verify the cursor path is executed without errors.
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2831,7 +3254,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('getSummary', () => {
     it('returns null when the summary document does not exist', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2845,7 +3268,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('returns an existing summary document', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2896,7 +3319,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const now = Timestamp.now();
       const valid = makeTask({
@@ -2940,8 +3362,63 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         .toBe(false);
     });
 
+    it('deletes a stale summary and decrements counts exactly once when authoritative source is empty', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      await fakeFirestore.collection('task_group_summaries').doc('user-empty-source_INT-EMPTY-SOURCE').set({
+        userId: 'user-empty-source',
+        linearIssueId: 'INT-EMPTY-SOURCE',
+        groupKey: 'INT-EMPTY-SOURCE',
+        taskCount: 1,
+        taskIds: ['task-gone'],
+        taskStatusById: { 'task-gone': 'running' },
+        taskLifecycleAtById: { 'task-gone': now },
+        activeTaskCount: 1,
+        latestTaskId: 'task-gone',
+        latestTaskCreatedAt: now,
+        latestTaskStatus: 'running',
+        latestTaskUpdatedAt: now,
+        latestLifecycleTaskId: 'task-gone',
+        agentTypesPresent: ['execution'],
+        hasCompletedPlanning: false,
+        hasCompletedExecution: false,
+        hasCompletedExecutionAgent: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: now,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'active',
+        updatedAt: now,
+      });
+      await fakeFirestore.collection('user_group_counts').doc('user-empty-source').set({
+        userId: 'user-empty-source',
+        active: 1,
+        needsAction: 0,
+        done: 0,
+        failed: 0,
+        archived: 0,
+        totalGroups: 1,
+        updatedAt: now,
+      });
+
+      await repo.recomputeGroupFromSource('user-empty-source', 'INT-EMPTY-SOURCE');
+      await repo.recomputeGroupFromSource('user-empty-source', 'INT-EMPTY-SOURCE');
+
+      const summary = await fakeFirestore.collection('task_group_summaries')
+        .doc('user-empty-source_INT-EMPTY-SOURCE').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-empty-source').get();
+      expect(summary.exists).toBe(false);
+      expect(counts.get('active')).toBe(0);
+      expect(counts.get('totalGroups')).toBe(0);
+    });
+
     it('builds summary from task array', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2985,7 +3462,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does nothing when tasks array is empty', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -2997,7 +3474,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does nothing when all tasks are archived', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3018,7 +3495,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('correctly sets aggregateStatus for active tasks', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3040,7 +3517,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets mostRecentDispatchedAt from task with dispatchedAt', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3075,7 +3552,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets implementationTaskId flag when any task has it', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3106,7 +3583,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets implementationTaskId flag when any task has fanOutChildTaskIds', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3129,7 +3606,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedExecution for execution agent with reviewed status', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3152,7 +3629,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecution for review-only reviewed tasks', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3176,7 +3653,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedExecution for pull_request tasks with implemented status', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3201,7 +3678,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets hasCompletedExecutionAgent for execution agent with reviewed status in recomputeGroupFromTasks', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3224,7 +3701,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not set hasCompletedExecutionAgent for pull_request agent in recomputeGroupFromTasks', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3247,7 +3724,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets latestReviewNeedsRemediation from review task result (no-remediation)', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3271,7 +3748,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets latestReviewNeedsRemediation=true from review task result (remediation needed)', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3295,7 +3772,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets latestReviewNeedsRemediation=null for review task with unknown needs_remediation', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3319,7 +3796,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('picks later review result when multiple review tasks exist', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3355,7 +3832,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('preserves importance, label flags, and labelsUpdatedAt when recomputing from tasks', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3398,7 +3875,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('keeps authoritative archive recompute when an older callback arrives afterward', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3438,7 +3915,6 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
-        authoritativeTaskReads: true,
       });
       const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
       const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
@@ -3465,7 +3941,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not invent label fields when recomputing a summary that has never been label-hydrated', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3489,7 +3965,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update counts when recomputeGroupFromTasks keeps the same aggregateStatus', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3513,7 +3989,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates counts when recomputeGroupFromTasks changes aggregateStatus on an existing summary', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3548,7 +4024,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update mostRecentDispatchedAt with earlier timestamp', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3582,7 +4058,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not replace later review result with earlier one', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3621,7 +4097,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('uses null for linearIssueId when no task has it', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3645,7 +4121,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('prNumber is null when prUrl present but prNumber is undefined', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3671,7 +4147,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('sets prNumber from the newest task that has prUrl', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3711,7 +4187,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('recomputeWithLabels', () => {
     it('returns NOT_FOUND when no group summary exists', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3724,7 +4200,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('stores label flags on the summary doc', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3752,7 +4228,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('rejects stale label writes and preserves existing label state', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3790,7 +4266,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('accepts newer label writes and updates labelsUpdatedAt', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3823,7 +4299,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('initializes labelsUpdatedAt for legacy docs that already have label flags', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3867,7 +4343,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates aggregateStatus when label changes status from needs-action to done', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3900,7 +4376,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('updates user_group_counts when aggregateStatus changes', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3932,7 +4408,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('does not update counts when aggregateStatus does not change', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -3959,7 +4435,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('preserves archived status and does not change counts for fully-archived groups', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -4003,7 +4479,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   describe('setImportant', () => {
     it('marks a group as important', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -4016,7 +4492,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('unmarks a group as important', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });
@@ -4030,7 +4506,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     });
 
     it('returns NOT_FOUND for non-existent group', async () => {
-      const repo = createTaskGroupSummaryFirestoreRepository({
+      const repo = createIncrementalRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
       });

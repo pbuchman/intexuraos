@@ -65,6 +65,112 @@ export function createTaskGroupSummaryFirestoreRepository(
     tx.set(countsDocRef(firestore, userId), { ...counts, userId, updatedAt: now } as unknown as DocumentData);
   }
 
+  function timestampsMatchExactly(left: Timestamp, right: Timestamp): boolean {
+    return left.seconds === right.seconds && left.nanoseconds === right.nanoseconds;
+  }
+
+  function hasConsistentOwnershipState(summary: TaskGroupSummary): boolean {
+    const taskIds = summary.taskIds;
+    const statusById = summary.taskStatusById;
+    const lifecycleAtById = summary.taskLifecycleAtById;
+    if (
+      taskIds === undefined ||
+      statusById === undefined ||
+      lifecycleAtById === undefined ||
+      summary.latestTaskId === undefined ||
+      summary.latestTaskCreatedAt === undefined ||
+      summary.latestLifecycleTaskId === undefined
+    ) return false;
+
+    const uniqueTaskIds = new Set(taskIds);
+    const statusIds = Object.keys(statusById);
+    const lifecycleIds = Object.keys(lifecycleAtById);
+    if (
+      uniqueTaskIds.size !== taskIds.length ||
+      summary.taskCount !== taskIds.length ||
+      statusIds.length !== taskIds.length ||
+      lifecycleIds.length !== taskIds.length ||
+      !taskIds.every((id) => statusById[id] !== undefined && lifecycleAtById[id] !== undefined)
+    ) return false;
+
+    if (summary.taskCount === 0) {
+      return summary.aggregateStatus === 'archived' && summary.activeTaskCount === 0;
+    }
+    const latestOwnedLifecycleAt = lifecycleAtById[summary.latestLifecycleTaskId] as Timestamp;
+    if (
+      !uniqueTaskIds.has(summary.latestTaskId) ||
+      !uniqueTaskIds.has(summary.latestLifecycleTaskId) ||
+      statusById[summary.latestTaskId] !== summary.latestTaskStatus ||
+      !timestampsMatchExactly(latestOwnedLifecycleAt, summary.latestTaskUpdatedAt)
+    ) return false;
+
+    const activeTaskCount = statusIds.filter((id) => {
+      const status = statusById[id];
+      return status === 'queued' || status === 'dispatched' || status === 'running';
+    }).length;
+    return activeTaskCount === summary.activeTaskCount;
+  }
+
+  function preserveUserOwnedState(current: TaskGroupSummary, recomputed: TaskGroupSummary): void {
+    if (current.hasImplementationReadyLabel !== undefined) {
+      recomputed.hasImplementationReadyLabel = current.hasImplementationReadyLabel;
+    }
+    if (current.hasMergeReadyLabel !== undefined) {
+      recomputed.hasMergeReadyLabel = current.hasMergeReadyLabel;
+    }
+    if (current.labelsUpdatedAt !== undefined) {
+      recomputed.labelsUpdatedAt = current.labelsUpdatedAt;
+    }
+    if (current.isImportant !== undefined) {
+      recomputed.isImportant = current.isImportant;
+    }
+  }
+
+  function writeRecomputedGroup(
+    tx: Transaction,
+    userId: string,
+    groupKey: string,
+    sourceTasks: CodeTask[],
+    current: TaskGroupSummary | null,
+    existingCounts: UserGroupCounts,
+    now: Timestamp,
+    options: { includeArchivedShell: boolean; deleteWhenEmpty: boolean; replaceExisting: boolean },
+  ): void {
+    const summaryRef = summaryDocRef(firestore, userId, groupKey);
+    const recomputed = computeSummaryFromTasks(userId, groupKey, sourceTasks, now) ??
+      (options.includeArchivedShell
+        ? computeAllArchivedSummaryFromTasks(userId, groupKey, sourceTasks, now)
+        : null);
+
+    if (recomputed === null) {
+      if (!options.deleteWhenEmpty || current === null) return;
+      tx.delete(summaryRef);
+      writeCounts(tx, userId, applyDeleteGroupDelta(existingCounts, current.aggregateStatus), now);
+      return;
+    }
+
+    if (current !== null) preserveUserOwnedState(current, recomputed);
+    recomputed.aggregateStatus = deriveAggregateStatusFromSummary(recomputed);
+    if (options.replaceExisting) {
+      tx.set(summaryRef, recomputed as unknown as DocumentData);
+    } else {
+      tx.set(summaryRef, recomputed as unknown as DocumentData, { merge: true });
+    }
+
+    if (current === null) {
+      writeCounts(tx, userId, applyNewGroupDelta(existingCounts, recomputed.aggregateStatus), now);
+      return;
+    }
+    if (current.aggregateStatus !== recomputed.aggregateStatus) {
+      writeCounts(
+        tx,
+        userId,
+        applyStatusChangeDelta(existingCounts, current.aggregateStatus, recomputed.aggregateStatus),
+        now,
+      );
+    }
+  }
+
   async function recomputeGroup(
     userId: string,
     groupKey: string,
@@ -78,48 +184,16 @@ export function createTaskGroupSummaryFirestoreRepository(
         const sourceTasks = forceAuthoritativeRead
           ? await loadPersistedGroupTasks(tx, userId, groupKey)
           : suppliedTasks;
-        const summary = computeSummaryFromTasks(userId, groupKey, sourceTasks, now) ??
-          (forceAuthoritativeRead
-            ? computeAllArchivedSummaryFromTasks(userId, groupKey, sourceTasks, now)
-            : null);
-        if (summary === null) return;
-
         const existingSummaryDoc = await tx.get(summaryRef);
         const existingCounts = await loadCounts(tx, userId);
         const existingSummary = existingSummaryDoc.exists
           ? docToSummary(existingSummaryDoc.data() as Record<string, unknown>)
           : null;
-
-        if (existingSummary !== null) {
-          if (existingSummary.hasImplementationReadyLabel !== undefined) {
-            summary.hasImplementationReadyLabel = existingSummary.hasImplementationReadyLabel;
-          }
-          if (existingSummary.hasMergeReadyLabel !== undefined) {
-            summary.hasMergeReadyLabel = existingSummary.hasMergeReadyLabel;
-          }
-          if (existingSummary.labelsUpdatedAt !== undefined) {
-            summary.labelsUpdatedAt = existingSummary.labelsUpdatedAt;
-          }
-          if (existingSummary.isImportant !== undefined) {
-            summary.isImportant = existingSummary.isImportant;
-          }
-        }
-
-        summary.aggregateStatus = deriveAggregateStatusFromSummary(summary);
-        tx.set(summaryRef, summary as unknown as DocumentData, { merge: true });
-
-        if (existingSummary === null) {
-          writeCounts(tx, userId, applyNewGroupDelta(existingCounts, summary.aggregateStatus), now);
-          return;
-        }
-        if (existingSummary.aggregateStatus !== summary.aggregateStatus) {
-          writeCounts(
-            tx,
-            userId,
-            applyStatusChangeDelta(existingCounts, existingSummary.aggregateStatus, summary.aggregateStatus),
-            now,
-          );
-        }
+        writeRecomputedGroup(tx, userId, groupKey, sourceTasks, existingSummary, existingCounts, now, {
+          includeArchivedShell: forceAuthoritativeRead,
+          deleteWhenEmpty: forceAuthoritativeRead,
+          replaceExisting: forceAuthoritativeRead,
+        });
       });
       return ok(undefined);
     } catch (error) {
@@ -154,8 +228,33 @@ export function createTaskGroupSummaryFirestoreRepository(
           const now = Timestamp.fromDate(new Date());
           const summaryDoc = await tx.get(summaryRef);
           const existingCounts = await loadCounts(tx, task.userId);
+          const current = summaryDoc.exists
+            ? docToSummary(summaryDoc.data() as Record<string, unknown>)
+            : null;
 
-          if (!summaryDoc.exists) {
+          const needsAuthoritativeRepair = authoritativeTaskReads && (
+            current === null ||
+            !hasConsistentOwnershipState(current) ||
+            current.aggregateStatus === 'archived' ||
+            current.taskCount <= 0
+          );
+          if (needsAuthoritativeRepair) {
+            const groupKey = getGroupKey(sourceTask);
+            const sourceTasks = await loadPersistedGroupTasks(tx, sourceTask.userId, groupKey);
+            writeRecomputedGroup(
+              tx,
+              sourceTask.userId,
+              groupKey,
+              sourceTasks,
+              current,
+              existingCounts,
+              now,
+              { includeArchivedShell: true, deleteWhenEmpty: true, replaceExisting: true },
+            );
+            return;
+          }
+
+          if (current === null) {
             const initial = buildInitialSummary(sourceTask, now);
             const aggregateStatus = deriveAggregateStatusFromSummary(initial);
             const summary: TaskGroupSummary = { ...initial, aggregateStatus };
@@ -166,7 +265,6 @@ export function createTaskGroupSummaryFirestoreRepository(
             return;
           }
 
-          const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
           const oldStatus = current.aggregateStatus;
           const updated = applyIncrementalCreateUpdate(current, sourceTask, now);
           tx.set(summaryRef, updated as unknown as DocumentData);
@@ -205,42 +303,22 @@ export function createTaskGroupSummaryFirestoreRepository(
             : null;
           const needsAuthoritativeRepair = authoritativeTaskReads && (
             current === null ||
-            (current.taskIds !== undefined && !current.taskIds.includes(sourceTask.id))
+            !hasConsistentOwnershipState(current) ||
+            current.taskIds?.includes(sourceTask.id) !== true
           );
           if (needsAuthoritativeRepair) {
             const sourceTasks = await loadPersistedGroupTasks(tx, sourceTask.userId, groupKey);
-            const repaired = computeSummaryFromTasks(sourceTask.userId, groupKey, sourceTasks, now) ??
-              (current === null
-                ? computeAllArchivedSummaryFromTasks(sourceTask.userId, groupKey, sourceTasks, now)
-                : null);
-            if (repaired === null) return;
             const existingCounts = await loadCounts(tx, sourceTask.userId);
-            if (current !== null) {
-              if (current.hasImplementationReadyLabel !== undefined) {
-                repaired.hasImplementationReadyLabel = current.hasImplementationReadyLabel;
-              }
-              if (current.hasMergeReadyLabel !== undefined) {
-                repaired.hasMergeReadyLabel = current.hasMergeReadyLabel;
-              }
-              if (current.labelsUpdatedAt !== undefined) {
-                repaired.labelsUpdatedAt = current.labelsUpdatedAt;
-              }
-              if (current.isImportant !== undefined) {
-                repaired.isImportant = current.isImportant;
-              }
-            }
-            repaired.aggregateStatus = deriveAggregateStatusFromSummary(repaired);
-            tx.set(summaryRef, repaired as unknown as DocumentData);
-            if (current === null) {
-              writeCounts(tx, sourceTask.userId, applyNewGroupDelta(existingCounts, repaired.aggregateStatus), now);
-            } else if (current.aggregateStatus !== repaired.aggregateStatus) {
-              writeCounts(
-                tx,
-                sourceTask.userId,
-                applyStatusChangeDelta(existingCounts, current.aggregateStatus, repaired.aggregateStatus),
-                now,
-              );
-            }
+            writeRecomputedGroup(
+              tx,
+              sourceTask.userId,
+              groupKey,
+              sourceTasks,
+              current,
+              existingCounts,
+              now,
+              { includeArchivedShell: true, deleteWhenEmpty: true, replaceExisting: true },
+            );
             return;
           }
           if (current === null) {
