@@ -89,12 +89,16 @@ function isValidIsoDateTime(value: string): boolean {
 export function normalizeTaskLifecycleTimestamp(value: unknown): Timestamp | undefined {
   try {
     if (value instanceof Timestamp) {
-      const candidateDate = timestampFromValidDate(value.toDate());
-      if (candidateDate === undefined) {
+      const candidateDate = value.toDate();
+      if (!(candidateDate instanceof Date)) {
+        return undefined;
+      }
+      const candidateMillis = candidateDate.getTime();
+      if (!Number.isFinite(candidateMillis)) {
         return undefined;
       }
       const materialized = new Timestamp(value.seconds, value.nanoseconds);
-      if (materialized.toDate().getTime() !== candidateDate.toDate().getTime()) {
+      if (materialized.toDate().getTime() !== candidateMillis) {
         return undefined;
       }
       return materialized;

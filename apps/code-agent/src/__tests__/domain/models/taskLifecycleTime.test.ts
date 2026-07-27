@@ -5,6 +5,7 @@ import {
   isActiveTaskStatus,
   isArchivalTaskStatus,
   isCompletionTaskStatus,
+  normalizeTaskLifecycleTimestamp,
   resolveTaskLifecycleTime,
   TaskLifecycleTimeInvariantError,
   type CodeTaskLifecycleShape,
@@ -134,6 +135,27 @@ describe('resolveTaskLifecycleTime', () => {
     expect(resolved.at).not.toBe(statusChangedAt);
     expect(resolved.at.seconds).toBe(1_750_000_000);
     expect(resolved.at.nanoseconds).toBe(123_456_789);
+    expect(resolved.source).toBe('status_changed');
+  });
+
+  it('normalizes the exact maximum Firestore Timestamp', () => {
+    const maximum = new Timestamp(253_402_300_799, 999_999_999);
+
+    const normalized = normalizeTaskLifecycleTimestamp(maximum);
+
+    expect(normalized).toBeDefined();
+    expect(normalized).not.toBe(maximum);
+    expect(normalized?.seconds).toBe(253_402_300_799);
+    expect(normalized?.nanoseconds).toBe(999_999_999);
+  });
+
+  it('resolves the exact maximum Firestore Timestamp as status_changed', () => {
+    const resolved = resolveTaskLifecycleTime(baseTask('running', {
+      statusChangedAt: new Timestamp(253_402_300_799, 999_999_999),
+    }));
+
+    expect(resolved.at.seconds).toBe(253_402_300_799);
+    expect(resolved.at.nanoseconds).toBe(999_999_999);
     expect(resolved.source).toBe('status_changed');
   });
 
