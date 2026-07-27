@@ -16,6 +16,10 @@ function affectedTasksText(count: number): string {
 
 export function DispatchQueuePage(): React.JSX.Element {
   const { tasks, systemStatuses, totalQueued, maxQueueSize, loading, error } = useDispatchQueue();
+  const queuedTaskIds = new Set(tasks.map((task) => task.id));
+  const currentSystemStatuses = systemStatuses.filter((status) =>
+    status.exampleTaskIds.some((taskId) => queuedTaskIds.has(taskId))
+  );
   // Re-render every 30s so time-ago labels stay fresh
   useTimeTick(30000);
 
@@ -58,13 +62,15 @@ export function DispatchQueuePage(): React.JSX.Element {
         ) : null}
 
         {/* System status */}
-        {!loading && systemStatuses.length > 0 ? (
+        {!loading && currentSystemStatuses.length > 0 ? (
           <div className="space-y-2">
-            {systemStatuses.map((status) => {
+            {currentSystemStatuses.map((status) => {
               const isCritical = status.severity === 'critical';
               return (
                 <div
                   key={status.id}
+                  role="status"
+                  aria-live="polite"
                   className={isCritical
                     ? 'rounded-lg border border-red-200 bg-red-50 p-4 text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100'
                     : 'rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'}
@@ -96,6 +102,30 @@ export function DispatchQueuePage(): React.JSX.Element {
                             ))}
                           </div>
                         ) : null}
+                        <div className="mt-3 space-y-1 text-xs opacity-80">
+                          <p>
+                            Blocked since {formatAbsoluteDateTime(status.firstSeenAt)}
+                          </p>
+                          <time
+                            dateTime={status.lastSeenAt}
+                          >
+                            Last checked {formatRelative(status.lastSeenAt)} ({formatAbsoluteDateTime(status.lastSeenAt)})
+                          </time>
+                        </div>
+                        {status.exampleTaskIds.length > 0 ? (
+                          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+                            <span className="font-medium opacity-80">Affected tasks:</span>
+                            {status.exampleTaskIds.map((taskId) => (
+                              <Link
+                                key={taskId}
+                                to={`/code-tasks/${taskId}`}
+                                className="rounded bg-white/70 px-1.5 py-0.5 font-medium underline-offset-2 hover:underline dark:bg-black/20"
+                              >
+                                {taskId}
+                              </Link>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <span className="rounded bg-white/70 px-2 py-1 text-xs font-semibold dark:bg-black/20">
@@ -109,7 +139,7 @@ export function DispatchQueuePage(): React.JSX.Element {
         ) : null}
 
         {/* Empty state */}
-        {!loading && tasks.length === 0 && error === null ? (
+        {!loading && tasks.length === 0 && currentSystemStatuses.length === 0 && error === null ? (
           <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <Clock className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
             <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">

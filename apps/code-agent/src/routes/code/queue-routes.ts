@@ -20,6 +20,7 @@ import {
 } from './schemas.js';
 import type { CodeRoutesOptions } from './types.js';
 import type { CodeTaskSystemStatus } from '../../domain/models/codeTaskSystemStatus.js';
+import type { CodeTask } from '../../domain/models/codeTask.js';
 
 /** Max characters of sanitized prompt to include in queue listing responses. */
 const QUEUE_PROMPT_PREVIEW_LENGTH = 200;
@@ -41,6 +42,28 @@ function serializeSystemStatus(status: CodeTaskSystemStatus): Record<string, unk
     lastSeenAt: status.lastSeenAt.toISOString(),
     ...(status.lastNotifiedAt !== undefined && { lastNotifiedAt: status.lastNotifiedAt.toISOString() }),
   };
+}
+
+function reconcileSystemStatusesWithQueue(
+  statuses: readonly CodeTaskSystemStatus[],
+  queuedTasks: readonly CodeTask[],
+): CodeTaskSystemStatus[] {
+  return statuses.flatMap((status) => {
+    const affectedTasks = queuedTasks.filter((task) =>
+      task.userId === status.userId
+      && task.workerType === status.workerType
+      && task.dispatchStatus?.terminal === false
+      && task.dispatchStatus.reason === status.reason
+    );
+    if (affectedTasks.length === 0) {
+      return [];
+    }
+    return [{
+      ...status,
+      affectedTaskCount: affectedTasks.length,
+      exampleTaskIds: affectedTasks.slice(0, 5).map((task) => task.id),
+    }];
+  });
 }
 
 export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opts, done) => {
@@ -391,6 +414,10 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
 
         // Scope to requesting user's tasks only — prevents cross-user data leakage
         const userTasks = result.value.filter((task) => task.userId === userId);
+        const currentSystemStatuses = reconcileSystemStatusesWithQueue(
+          statusResult.value,
+          userTasks,
+        );
 
         const tasks = userTasks.map((task, index) => {
           const dispatchScheduleFields = task.dispatchSchedule !== undefined
@@ -417,7 +444,7 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
 
         return await reply.ok({
           tasks,
-          systemStatuses: statusResult.value.map(serializeSystemStatus),
+          systemStatuses: currentSystemStatuses.map(serializeSystemStatus),
           totalQueued: tasks.length,
           maxQueueSize: config.queue.maxSize,
         });
@@ -505,7 +532,7 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
       },
       async (request: FastifyRequest, reply: FastifyReply) => {
         logIncomingRequest(request, { message: 'Received request to GET /code/system-status' });
-        const { codeTaskSystemStatusRepo } = getServices();
+        const { codeTaskRepo, codeTaskSystemStatusRepo } = getServices();
 
         /* v8 ignore start -- ts-type: FakeAuthPlugin always provides userId — ?? fallback unreachable @preserve */
         const userId = request.user?.userId ?? 'unknown-user';
@@ -522,8 +549,17 @@ export const queueRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, o
           return await reply.fail('INTERNAL_ERROR', 'Failed to fetch system status');
         }
 
+        const queuedResult = await codeTaskRepo.listQueued();
+        if (!queuedResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch system status');
+        }
+        const currentSystemStatuses = reconcileSystemStatusesWithQueue(
+          statusResult.value,
+          queuedResult.value.filter((task) => task.userId === userId),
+        );
+
         return await reply.ok({
-          systemStatuses: statusResult.value.map(serializeSystemStatus),
+          systemStatuses: currentSystemStatuses.map(serializeSystemStatus),
         });
       }
     );

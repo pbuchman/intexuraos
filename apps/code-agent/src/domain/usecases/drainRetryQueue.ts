@@ -10,6 +10,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask } from '../models/codeTask.js';
 import type { DispatchRetry } from '../models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../repositories/dispatchRetryRepository.js';
@@ -180,17 +181,36 @@ async function reportOrNotifyRetryDispatchProblem(
 }
 
 async function resolveDispatchBlockersForRetry(
-  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskDispatchStatusService'>,
+  deps: Pick<DrainRetryQueueDeps, 'logger' | 'codeTaskRepo' | 'codeTaskDispatchStatusService'>,
   task: CodeTask
 ): Promise<void> {
   if (deps.codeTaskDispatchStatusService === undefined) {
     return;
   }
 
+  const observedBefore = new Date();
   try {
+    const queuedResult = await deps.codeTaskRepo.listQueued();
+    if (!queuedResult.ok) {
+      deps.logger.error(
+        { taskId: task.id, workerType: task.workerType, error: queuedResult.error },
+        'Failed to reconcile queued tasks before resolving retry dispatch blockers'
+      );
+      return;
+    }
+    const anotherBlockedTaskRemains = queuedResult.value.some((queuedTask) =>
+      queuedTask.id !== task.id
+      && queuedTask.userId === task.userId
+      && queuedTask.workerType === task.workerType
+      && queuedTask.dispatchStatus?.terminal === false
+    );
+    if (anotherBlockedTaskRemains) {
+      return;
+    }
     await deps.codeTaskDispatchStatusService.resolveDispatchBlockers({
       userId: task.userId,
       workerType: task.workerType,
+      observedBefore,
     });
   } catch (error) {
     deps.logger.warn(
@@ -375,6 +395,7 @@ export async function drainRetryQueue(
             problem,
             'retry_expired'
           );
+          await resolveDispatchBlockersForRetry(deps, taskResult.value);
           const deleteResult = await dispatchRetryRepo.delete(entry.id);
           if (!deleteResult.ok) {
             logger.error({ retryId: entry.id, error: deleteResult.error }, 'Failed to delete expired retry entry');
@@ -456,6 +477,7 @@ export async function drainRetryQueue(
             problem,
             'retry_exhausted'
           );
+          await resolveDispatchBlockersForRetry(deps, taskResult.value);
           const deleteResult = await dispatchRetryRepo.delete(entry.id);
           if (!deleteResult.ok) {
             logger.error({ retryId: entry.id, error: deleteResult.error }, 'Failed to delete exhausted retry entry');
@@ -595,11 +617,23 @@ async function handleNewTaskRetry(
       healthByWorkerName: {},
     }) as DispatchBlocker;
     await recordDispatchBlockedForRetry(deps, task, dispatchability);
-    logger.warn({ userId: task.userId }, 'No enabled workers during retry');
+    logger.warn(
+      {
+        userId: task.userId,
+        taskId: task.id,
+        workerType: task.workerType,
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 1,
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'No enabled workers during retry',
+    );
     const failResult = await failRetryTaskForDispatchProblem(deps, task, dispatchProblemFromBlocker(dispatchability));
     if (!failResult.ok) {
       return err(failResult.error);
     }
+    await resolveDispatchBlockersForRetry(deps, task);
     const deleteResult = await deleteRetryEntryOrError(
       deps,
       entry,
@@ -769,6 +803,7 @@ async function handleNewTaskRetry(
     if (!failResult.ok) {
       return err(failResult.error);
     }
+    await resolveDispatchBlockersForRetry(deps, task);
     const deleteResult = await deleteRetryEntryOrError(
       deps,
       entry,

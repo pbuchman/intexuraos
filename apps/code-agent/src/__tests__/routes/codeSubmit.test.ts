@@ -736,6 +736,7 @@ describe('POST /code/submit', () => {
 
     it('returns a failed task id when the user has no enabled workers', async () => {
       const services = getServices();
+      const warnSpy = vi.spyOn(services.logger, 'warn');
       await services.workerSettingsRepo.updateWorker('test-user-id', 'home-mac', { enabled: false });
       vi.spyOn(services.linearIssueService, 'ensureIssueExists').mockResolvedValueOnce({
         linearIssueId: 'INT-123',
@@ -773,6 +774,16 @@ describe('POST /code/submit', () => {
           nextAction: 'retry_after_fix',
         }));
       }
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'test-user-id',
+          taskId: body.data.codeTaskId,
+          workerType: expect.any(String),
+          reason: 'no_enabled_workers',
+          _skipSentry: true,
+        }),
+        'User has no workers configured',
+      );
     });
 
     it('returns a failed task id when worker settings fetch fails after task creation', async () => {

@@ -489,16 +489,49 @@ describe('GET /code/queue', () => {
   });
 
   describe('system statuses', () => {
-    it('returns active dispatch blocker statuses for the authenticated user only', async () => {
+    it('returns only blocker statuses backed by currently queued affected tasks', async () => {
+      const taskResult = await codeTaskRepo.create({
+        userId: 'test-user-id',
+        prompt: 'Queued capacity-blocked task',
+        sanitizedPrompt: 'Queued capacity-blocked task',
+        systemPromptHash: 'default',
+        workerType: 'codex-xhigh',
+        workerLocation: 'pending',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_status',
+        agentType: 'execution',
+      });
+      if (!taskResult.ok) {
+        throw new Error(`Failed to create queued task: ${taskResult.error.message}`);
+      }
+      const taskUpdate = await codeTaskRepo.update(taskResult.value.id, {
+        dispatchStatus: {
+          state: 'waiting',
+          reason: 'workers_at_capacity',
+          terminal: false,
+          severity: 'warning',
+          message: 'All capable workers are currently at capacity.',
+          remediation: 'Wait for a running task to finish.',
+          workerNames: ['home-mac'],
+          firstSeenAt: Timestamp.now(),
+          lastSeenAt: Timestamp.now(),
+          nextAction: 'will_retry_automatically',
+        },
+      });
+      if (!taskUpdate.ok) {
+        throw new Error(`Failed to update queued task: ${taskUpdate.error.message}`);
+      }
+
       const statusResult = await codeTaskSystemStatusRepo.upsertActive({
         userId: 'test-user-id',
         workerType: 'codex-xhigh',
-        reason: 'codex_auth_unavailable',
-        severity: 'critical',
-        message: 'No reachable worker has active Codex auth for codex-xhigh.',
-        remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
-        affectedTaskCount: 2,
-        exampleTaskIds: ['task-123'],
+        reason: 'workers_at_capacity',
+        severity: 'warning',
+        message: 'All capable workers for codex-xhigh are currently at capacity.',
+        remediation: 'Wait for a running task to finish or add worker capacity.',
+        affectedTaskCount: 99,
+        exampleTaskIds: ['stale-example'],
         workerNames: ['home-mac'],
       });
       if (!statusResult.ok) {
@@ -508,6 +541,21 @@ describe('GET /code/queue', () => {
       const notifyResult = await codeTaskSystemStatusRepo.markNotified(statusResult.value.id, notifiedAt);
       if (!notifyResult.ok) {
         throw new Error(`Failed to mark status notified: ${notifyResult.error.message}`);
+      }
+
+      const staleStatusResult = await codeTaskSystemStatusRepo.upsertActive({
+        userId: 'test-user-id',
+        workerType: 'opus',
+        reason: 'workers_unreachable',
+        severity: 'critical',
+        message: 'No configured workers are reachable for opus.',
+        remediation: 'Restore worker connectivity.',
+        affectedTaskCount: 1,
+        exampleTaskIds: ['task-no-longer-queued'],
+        workerNames: ['home-mac'],
+      });
+      if (!staleStatusResult.ok) {
+        throw new Error(`Failed to create stale status: ${staleStatusResult.error.message}`);
       }
 
       const otherUserStatusResult = await codeTaskSystemStatusRepo.upsertActive({
@@ -538,13 +586,13 @@ describe('GET /code/queue', () => {
         id: statusResult.value.id,
         component: 'code-task-dispatch',
         status: 'active',
-        severity: 'critical',
+        severity: 'warning',
         workerType: 'codex-xhigh',
-        reason: 'codex_auth_unavailable',
-        message: 'No reachable worker has active Codex auth for codex-xhigh.',
-        remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
-        affectedTaskCount: 2,
-        exampleTaskIds: ['task-123'],
+        reason: 'workers_at_capacity',
+        message: 'All capable workers for codex-xhigh are currently at capacity.',
+        remediation: 'Wait for a running task to finish or add worker capacity.',
+        affectedTaskCount: 1,
+        exampleTaskIds: [taskResult.value.id],
         workerNames: ['home-mac'],
         firstSeenAt: expect.any(String),
         lastSeenAt: expect.any(String),
@@ -678,15 +726,48 @@ describe('GET /code/system-status', () => {
   });
 
   it('returns only active system statuses for the authenticated user', async () => {
+    const queuedTaskResult = await codeTaskRepo.create({
+      userId: 'test-user-id',
+      prompt: 'Queued capacity-blocked task',
+      sanitizedPrompt: 'Queued capacity-blocked task',
+      systemPromptHash: 'default',
+      workerType: 'codex-xhigh',
+      workerLocation: 'pending',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace_system_status',
+      agentType: 'execution',
+    });
+    if (!queuedTaskResult.ok) {
+      throw new Error(`Failed to create queued task: ${queuedTaskResult.error.message}`);
+    }
+    const queuedTaskUpdate = await codeTaskRepo.update(queuedTaskResult.value.id, {
+      dispatchStatus: {
+        state: 'waiting',
+        reason: 'workers_at_capacity',
+        terminal: false,
+        severity: 'warning',
+        message: 'All capable workers are currently at capacity.',
+        remediation: 'Wait for a running task to finish.',
+        workerNames: ['home-mac'],
+        firstSeenAt: Timestamp.now(),
+        lastSeenAt: Timestamp.now(),
+        nextAction: 'will_retry_automatically',
+      },
+    });
+    if (!queuedTaskUpdate.ok) {
+      throw new Error(`Failed to update queued task: ${queuedTaskUpdate.error.message}`);
+    }
+
     const activeStatusResult = await codeTaskSystemStatusRepo.upsertActive({
       userId: 'test-user-id',
       workerType: 'codex-xhigh',
-      reason: 'codex_auth_unavailable',
-      severity: 'critical',
-      message: 'No reachable worker has active Codex auth for codex-xhigh.',
-      remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
-      affectedTaskCount: 2,
-      exampleTaskIds: ['task-123'],
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'All capable workers for codex-xhigh are currently at capacity.',
+      remediation: 'Wait for a running task to finish or add worker capacity.',
+      affectedTaskCount: 1,
+      exampleTaskIds: [queuedTaskResult.value.id],
       workerNames: ['home-mac'],
     });
     if (!activeStatusResult.ok) {
@@ -744,13 +825,13 @@ describe('GET /code/system-status', () => {
       id: activeStatusResult.value.id,
       component: 'code-task-dispatch',
       status: 'active',
-      severity: 'critical',
+      severity: 'warning',
       workerType: 'codex-xhigh',
-      reason: 'codex_auth_unavailable',
-      message: 'No reachable worker has active Codex auth for codex-xhigh.',
-      remediation: 'Refresh Codex/ChatGPT authentication on a worker that can run this task.',
-      affectedTaskCount: 2,
-      exampleTaskIds: ['task-123'],
+      reason: 'workers_at_capacity',
+      message: 'All capable workers for codex-xhigh are currently at capacity.',
+      remediation: 'Wait for a running task to finish or add worker capacity.',
+      affectedTaskCount: 1,
+      exampleTaskIds: [queuedTaskResult.value.id],
       workerNames: ['home-mac'],
       firstSeenAt: expect.any(String),
       lastSeenAt: expect.any(String),
@@ -761,6 +842,24 @@ describe('GET /code/system-status', () => {
     vi.spyOn(codeTaskSystemStatusRepo, 'listActiveForUser').mockResolvedValueOnce({
       ok: false,
       error: { code: 'FIRESTORE_ERROR', message: 'DB unavailable' },
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/system-status',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    const body = JSON.parse(response.body);
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe('INTERNAL_ERROR');
+  });
+
+  it('returns 500 when the queued-task reconciliation read fails', async () => {
+    vi.spyOn(codeTaskRepo, 'listQueued').mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'FIRESTORE_ERROR', message: 'Queue unavailable' },
     });
 
     const response = await app.inject({

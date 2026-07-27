@@ -121,7 +121,17 @@ export async function submitDirectCodeTask(
   const enabledWorkers = (settings?.workers ?? []).filter((w) => w.enabled);
 
   if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured');
+    logger.warn(
+      {
+        userId,
+        workerType: workerType ?? 'auto',
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 0,
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'User has no workers configured'
+    );
     return err({
       code: 'worker_not_configured',
       message: 'Please configure your workers in Settings before submitting code tasks',

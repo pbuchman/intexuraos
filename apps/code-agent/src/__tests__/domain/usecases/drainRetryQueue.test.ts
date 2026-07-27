@@ -92,6 +92,7 @@ describe('drainRetryQueue', () => {
     findById: ReturnType<typeof vi.fn>;
     claimForDispatch: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
+    listQueued: ReturnType<typeof vi.fn>;
   };
   let mockTaskDispatcher: {
     dispatch: ReturnType<typeof vi.fn>;
@@ -227,6 +228,7 @@ describe('drainRetryQueue', () => {
       findById: vi.fn().mockResolvedValue(ok(sampleTask)),
       claimForDispatch: vi.fn().mockResolvedValue(ok(true)),
       update: vi.fn().mockResolvedValue(ok(sampleTask)),
+      listQueued: vi.fn().mockResolvedValue(ok([])),
     };
 
     mockTaskDispatcher = {
@@ -665,6 +667,11 @@ describe('drainRetryQueue', () => {
       exampleTaskId: 'task_xyz',
     }));
     expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user_123',
+      workerType: 'opus',
+      observedBefore: expect.any(Date),
+    }));
   });
 
   it('keeps retry entry when expired new-task failure status cannot be persisted', async () => {
@@ -746,6 +753,11 @@ describe('drainRetryQueue', () => {
       exampleTaskId: 'task_xyz',
     }));
     expect(mockWhatsappNotifier.notifyDispatchRetryExhausted).not.toHaveBeenCalled();
+    expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user_123',
+      workerType: 'opus',
+      observedBefore: expect.any(Date),
+    }));
   });
 
   it('keeps retry entry when exhausted new-task failure status cannot be persisted', async () => {
@@ -819,10 +831,11 @@ describe('drainRetryQueue', () => {
           webhookUrl: 'https://callback.test/internal/webhooks/task-complete',
         })
       );
-      expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith({
+      expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
         userId: 'user_123',
         workerType: 'opus',
-      });
+        observedBefore: expect.any(Date),
+      }));
     });
 
     it('returns internal_error when retry entry cannot be deleted after successful dispatch', async () => {
@@ -1362,6 +1375,71 @@ describe('drainRetryQueue', () => {
         reason: 'no_enabled_workers',
         exampleTaskId: 'task_xyz',
       }));
+      expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user_123',
+        workerType: 'opus',
+        observedBefore: expect.any(Date),
+      }));
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user_123',
+          taskId: 'task_xyz',
+          workerType: 'opus',
+          reason: 'no_enabled_workers',
+          _skipSentry: true,
+        }),
+        'No enabled workers during retry',
+      );
+    });
+
+    it('does not clear an aggregate while another matching queued task remains blocked', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockCodeTaskRepo.listQueued.mockResolvedValue(ok([{
+        ...sampleTask,
+        id: 'task_other',
+        dispatchStatus: {
+          state: 'waiting',
+          reason: 'workers_at_capacity',
+          terminal: false,
+          severity: 'warning',
+          message: 'Workers are at capacity',
+          remediation: 'Wait for capacity',
+          workerNames: ['home-mac'],
+          firstSeenAt: Timestamp.now(),
+          lastSeenAt: Timestamp.now(),
+          nextAction: 'will_retry_automatically',
+        },
+      }]));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [] }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
+    });
+
+    it('keeps the aggregate and reports an unexpected queue reconciliation failure', async () => {
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockCodeTaskRepo.listQueued.mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'queue read failed',
+      }));
+      mockWorkerSettingsRepo.getSettings.mockResolvedValue(ok({ workers: [] }));
+
+      const result = await drainRetryQueue(buildDeps());
+
+      expect(result.ok).toBe(true);
+      expect(mockDispatchStatusService.resolveDispatchBlockers).not.toHaveBeenCalled();
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task_xyz',
+          workerType: 'opus',
+          error: expect.objectContaining({ message: 'queue read failed' }),
+        }),
+        'Failed to reconcile queued tasks before resolving retry dispatch blockers'
+      );
     });
 
     it('returns internal_error when retry entry cannot be deleted after no enabled workers', async () => {
@@ -1571,6 +1649,11 @@ describe('drainRetryQueue', () => {
         affectedTaskCount: 1,
         exampleTaskIds: ['task_xyz'],
       });
+      expect(mockDispatchStatusService.resolveDispatchBlockers).toHaveBeenCalledWith(expect.objectContaining({
+        userId: 'user_123',
+        workerType: 'opus',
+        observedBefore: expect.any(Date),
+      }));
     });
 
     it('notifies user on successful dispatch when task update succeeds', async () => {

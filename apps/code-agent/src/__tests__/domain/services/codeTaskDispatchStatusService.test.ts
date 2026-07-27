@@ -18,6 +18,15 @@ const BLOCKER = {
   workerNames: ['home-dev'],
 };
 
+const RECOVERABLE_BLOCKER = {
+  dispatchable: false as const,
+  reason: 'workers_at_capacity' as const,
+  severity: 'warning' as const,
+  message: 'All capable workers for codex-xhigh are currently at capacity.',
+  remediation: 'Wait for a running task to finish or add worker capacity.',
+  workerNames: ['home-dev'],
+};
+
 function makeStatus(overrides: Partial<CodeTaskSystemStatus> = {}): CodeTaskSystemStatus {
   return {
     id: 'status-1',
@@ -66,7 +75,35 @@ describe('CodeTaskDispatchStatusService', () => {
     };
   });
 
-  it('upserts an active status without marking aggregate notifications', async () => {
+  it('upserts a recoverable active status without marking aggregate notifications', async () => {
+    const service = createCodeTaskDispatchStatusService({
+      statusRepo,
+      logger,
+    });
+
+    await service.recordDispatchBlocked({
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      blocker: RECOVERABLE_BLOCKER,
+      affectedTaskCount: 2,
+      exampleTaskIds: ['task-1', 'task-2'],
+    });
+
+    expect(statusRepo.upsertActive).toHaveBeenCalledWith({
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: RECOVERABLE_BLOCKER.message,
+      remediation: RECOVERABLE_BLOCKER.remediation,
+      affectedTaskCount: 2,
+      exampleTaskIds: ['task-1', 'task-2'],
+      workerNames: ['home-dev'],
+    });
+    expect(statusRepo.markNotified).not.toHaveBeenCalled();
+  });
+
+  it('does not persist a terminal blocker as an active aggregate', async () => {
     const service = createCodeTaskDispatchStatusService({
       statusRepo,
       logger,
@@ -76,22 +113,11 @@ describe('CodeTaskDispatchStatusService', () => {
       userId: 'user-1',
       workerType: 'codex-xhigh',
       blocker: BLOCKER,
-      affectedTaskCount: 2,
-      exampleTaskIds: ['task-1', 'task-2'],
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-1'],
     });
 
-    expect(statusRepo.upsertActive).toHaveBeenCalledWith({
-      userId: 'user-1',
-      workerType: 'codex-xhigh',
-      reason: 'codex_auth_unavailable',
-      severity: 'critical',
-      message: BLOCKER.message,
-      remediation: BLOCKER.remediation,
-      affectedTaskCount: 2,
-      exampleTaskIds: ['task-1', 'task-2'],
-      workerNames: ['home-dev'],
-    });
-    expect(statusRepo.markNotified).not.toHaveBeenCalled();
+    expect(statusRepo.upsertActive).not.toHaveBeenCalled();
   });
 
   it('logs and exits when status persistence fails', async () => {
@@ -104,7 +130,7 @@ describe('CodeTaskDispatchStatusService', () => {
     await service.recordDispatchBlocked({
       userId: 'user-1',
       workerType: 'codex-xhigh',
-      blocker: BLOCKER,
+      blocker: RECOVERABLE_BLOCKER,
       affectedTaskCount: 1,
       exampleTaskIds: ['task-1'],
     });
@@ -127,7 +153,7 @@ describe('CodeTaskDispatchStatusService', () => {
     await service.recordDispatchBlocked({
       userId: 'user-1',
       workerType: 'codex-xhigh',
-      blocker: BLOCKER,
+      blocker: RECOVERABLE_BLOCKER,
       affectedTaskCount: 2,
       exampleTaskIds: ['task-1'],
     });
@@ -145,7 +171,7 @@ describe('CodeTaskDispatchStatusService', () => {
     await service.recordDispatchBlocked({
       userId: 'user-1',
       workerType: 'codex-xhigh',
-      blocker: BLOCKER,
+      blocker: RECOVERABLE_BLOCKER,
       affectedTaskCount: 2,
       exampleTaskIds: ['task-1'],
     });
@@ -159,12 +185,14 @@ describe('CodeTaskDispatchStatusService', () => {
       logger,
     });
 
+    const observedBefore = new Date('2026-06-05T10:30:00.000Z');
     await service.resolveDispatchBlockers({
       userId: 'user-1',
       workerType: 'sonnet',
+      observedBefore,
     });
 
-    expect(resolveCalls).toEqual([{ userId: 'user-1', workerType: 'sonnet' }]);
+    expect(resolveCalls).toEqual([{ userId: 'user-1', workerType: 'sonnet', observedBefore }]);
   });
 
   it('logs when resolving active statuses fails', async () => {

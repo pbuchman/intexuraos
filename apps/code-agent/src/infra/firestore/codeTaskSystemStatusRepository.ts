@@ -86,34 +86,50 @@ export function createFirestoreCodeTaskSystemStatusRepository(deps: {
       try {
         const id = buildCodeTaskSystemStatusId(input.userId, input.workerType, input.reason);
         const docRef = collection.doc(id);
-        const existing = await docRef.get();
         const now = new Date();
-        const existingData = existing.exists
-          ? (existing.data() as CodeTaskSystemStatusDoc | undefined)
-          : undefined;
-        const firstSeenAt = existingData?.firstSeenAt !== undefined
-          ? toDate(existingData.firstSeenAt)
-          : now;
-        const lastNotifiedAt = existingData?.lastNotifiedAt;
+        const data = await firestore.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(collection.where('userId', '==', input.userId));
+          const existing = snapshot.docs.find((doc) => doc.id === id);
+          const existingData = existing?.data() as CodeTaskSystemStatusDoc | undefined;
+          const firstSeenAt = existingData?.status === 'active'
+            ? toDate(existingData.firstSeenAt)
+            : now;
+          const lastNotifiedAt = existingData?.lastNotifiedAt;
 
-        const data: CodeTaskSystemStatusDoc = {
-          userId: input.userId,
-          component: COMPONENT,
-          status: 'active',
-          severity: input.severity,
-          workerType: input.workerType,
-          reason: input.reason,
-          message: input.message,
-          remediation: input.remediation,
-          affectedTaskCount: input.affectedTaskCount,
-          exampleTaskIds: [...input.exampleTaskIds],
-          workerNames: [...input.workerNames],
-          firstSeenAt: Timestamp.fromDate(firstSeenAt),
-          lastSeenAt: Timestamp.fromDate(now),
-          ...(lastNotifiedAt !== undefined && { lastNotifiedAt }),
-        };
-
-        await docRef.set(data);
+          const nextData: CodeTaskSystemStatusDoc = {
+            userId: input.userId,
+            component: COMPONENT,
+            status: 'active',
+            severity: input.severity,
+            workerType: input.workerType,
+            reason: input.reason,
+            message: input.message,
+            remediation: input.remediation,
+            affectedTaskCount: input.affectedTaskCount,
+            exampleTaskIds: [...input.exampleTaskIds],
+            workerNames: [...input.workerNames],
+            firstSeenAt: Timestamp.fromDate(firstSeenAt),
+            lastSeenAt: Timestamp.fromDate(now),
+            ...(lastNotifiedAt !== undefined && { lastNotifiedAt }),
+          };
+          const resolvedAt = Timestamp.fromDate(now);
+          for (const statusDoc of snapshot.docs) {
+            const statusData = statusDoc.data() as CodeTaskSystemStatusDoc;
+            if (
+              statusDoc.id !== id
+              && statusData.status === 'active'
+              && statusData.workerType === input.workerType
+            ) {
+              transaction.update(statusDoc.ref, {
+                status: 'resolved',
+                resolvedAt,
+                lastSeenAt: resolvedAt,
+              });
+            }
+          }
+          transaction.set(docRef, nextData);
+          return nextData;
+        });
 
         return ok(deserializeStatus(id, data));
       } catch (error) {
@@ -143,29 +159,36 @@ export function createFirestoreCodeTaskSystemStatusRepository(deps: {
       input: ResolveCodeTaskSystemStatusesInput,
     ): Promise<Result<number, CodeTaskSystemStatusRepositoryError>> {
       try {
-        const snapshot = await collection.where('userId', '==', input.userId).get();
         const reasons = new Set(input.reasons ?? []);
         const shouldResolveReason: (reason: CodeTaskDispatchBlockerReason) => boolean = reasons.size === 0
           ? (): boolean => true
           : (reason: CodeTaskDispatchBlockerReason): boolean => reasons.has(reason);
         const now = Timestamp.fromDate(new Date());
-        let resolvedCount = 0;
+        const resolvedCount = await firestore.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(collection.where('userId', '==', input.userId));
+          let count = 0;
 
-        for (const doc of snapshot.docs) {
-          const data = doc.data() as CodeTaskSystemStatusDoc;
-          if (
-            data.status === 'active'
-            && data.workerType === input.workerType
-            && shouldResolveReason(data.reason)
-          ) {
-            await doc.ref.update({
-              status: 'resolved',
-              resolvedAt: now,
-              lastSeenAt: now,
-            });
-            resolvedCount += 1;
+          for (const doc of snapshot.docs) {
+            const data = doc.data() as CodeTaskSystemStatusDoc;
+            if (
+              data.status === 'active'
+              && data.workerType === input.workerType
+              && shouldResolveReason(data.reason)
+              && (
+                input.observedBefore === undefined
+                || toDate(data.lastSeenAt).getTime() <= input.observedBefore.getTime()
+              )
+            ) {
+              transaction.update(doc.ref, {
+                status: 'resolved',
+                resolvedAt: now,
+                lastSeenAt: now,
+              });
+              count += 1;
+            }
           }
-        }
+          return count;
+        });
 
         return ok(resolvedCount);
       } catch (error) {

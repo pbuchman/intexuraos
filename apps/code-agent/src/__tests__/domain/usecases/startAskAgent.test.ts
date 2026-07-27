@@ -88,9 +88,15 @@ describe('startAskAgent', () => {
   });
 
   it('returns a failed task id when no workers are set up', async () => {
+    const blockerLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as Logger;
     // Use a user with no workers
     const result = await startAskAgent(
-      { logger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
+      { logger: blockerLogger, codeTaskRepo, workerSettingsRepo, taskEnqueueService, whatsappNotifier },
       { userId: 'user-with-no-workers', prompt: 'Ask something' },
     );
 
@@ -120,6 +126,16 @@ describe('startAskAgent', () => {
         reason: 'no_enabled_workers',
         exampleTaskId: task.id,
       }),
+    );
+    expect(blockerLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-with-no-workers',
+        taskId: task.id,
+        workerType: task.workerType,
+        reason: 'no_enabled_workers',
+        _skipSentry: true,
+      }),
+      'User has no workers configured for ask-agent',
     );
   });
 

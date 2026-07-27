@@ -17,7 +17,7 @@ import {
   MIN_TIMEOUT_HOURS,
   MAX_TIMEOUT_HOURS,
 } from '@intexuraos/code-task-domain';
-import { createAppLogger } from '@intexuraos/infra-sentry';
+import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import { submitDirectCodeTask } from '../../domain/usecases/submitDirectCodeTask.js';
 import { cancelTask, type CancelTaskErrorCode } from '../../domain/usecases/cancelTask.js';
@@ -1514,7 +1514,18 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
         // Fail if no workers configured
         if (enabledWorkers.length === 0) {
-          request.log.warn({ userId }, 'User has no workers configured');
+          serviceLogger.warn(
+            {
+              userId,
+              taskId: task.id,
+              workerType: task.workerType,
+              reason: 'no_enabled_workers',
+              terminal: true,
+              affectedTaskCount: 1,
+              [SKIP_SENTRY_KEY]: true,
+            },
+            'User has no workers configured',
+          );
           const dispatchability = classifyCodeTaskDispatchability({
             workerType: task.workerType,
             workers: enabledWorkers,

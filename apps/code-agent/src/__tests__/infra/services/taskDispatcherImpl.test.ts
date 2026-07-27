@@ -679,7 +679,7 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
-    it('does not skip Sentry capture when blocker reason is a critical condition', async () => {
+    it('skips Sentry capture when blocker reason is a critical capability condition', async () => {
       const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
       probeAllWorkers.mockResolvedValueOnce({
         'default': {
@@ -708,9 +708,243 @@ describe('taskDispatcherImpl', () => {
         expect.objectContaining({
           taskId: 'task-unreachable',
           reason: 'workers_unreachable',
+          _skipSentry: true,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('skips Sentry capture when intentionally unavailable Codex auth blocks dispatch', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+          workerAuths: {
+            ...HEALTHY_WORKER_DETAILS.workerAuths,
+            codex: { status: 'expired', refreshSupported: false, message: 'Codex token expired' },
+          },
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-codex-auth',
+        workerType: 'codex-xhigh',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-codex-auth',
+          reason: 'codex_auth_unavailable',
+          _skipSentry: true,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('keeps an incompatible worker health contract visible in Sentry', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Health response missing worker capability details',
+          contractMismatch: true,
+          missingFields: ['workerAuths'],
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-contract-mismatch',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-contract-mismatch',
+          reason: 'worker_health_contract_mismatch',
           _skipSentry: false,
         }),
         'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('keeps malformed worker health responses visible in Sentry', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'default': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-invalid-health',
+        workerCredentials: {
+          workers: [{
+            name: 'default',
+            url: WORKER_URL,
+            cfAccessClientId: 'test-client-id',
+            cfAccessClientSecret: 'test-client-secret',
+            dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+          }],
+        },
+      });
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-invalid-health',
+          reason: 'workers_unreachable',
+          _skipSentry: false,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('keeps malformed health visible when another worker produces an auth blocker', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'malformed': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        },
+        'healthy': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+          workerAuths: {
+            ...HEALTHY_WORKER_DETAILS.workerAuths,
+            codex: { status: 'not_configured' },
+          },
+        },
+      });
+      const service = createTaskDispatcherService(deps);
+
+      const result = await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-mixed-auth-health',
+        workerType: 'codex-xhigh',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'malformed',
+              url: 'https://malformed-worker.example.com',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+            {
+              name: 'healthy',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-mixed-auth-health',
+          reason: 'codex_auth_unavailable',
+          unexpectedWorkerHealth: [expect.objectContaining({ workerName: 'malformed', tag: 'unknown' })],
+          _skipSentry: false,
+        }),
+        'Dispatch blocked by worker capability or health state'
+      );
+    });
+
+    it('reports malformed health even when another worker can dispatch the task', async () => {
+      const probeAllWorkers = deps.workerHealthProbe.probeAllWorkers as ReturnType<typeof vi.fn>;
+      probeAllWorkers.mockResolvedValueOnce({
+        'malformed': {
+          _tag: 'unknown',
+          healthy: false,
+          error: 'Invalid health response format',
+        },
+        'healthy': {
+          _tag: 'healthy',
+          healthy: true,
+          capacity: 2,
+          running: 0,
+          available: 2,
+          responseTimeMs: 50,
+          ...HEALTHY_WORKER_DETAILS,
+        },
+      });
+      nock(WORKER_URL)
+        .post('/tasks')
+        .reply(200, { status: 'accepted' });
+      const service = createTaskDispatcherService(deps);
+
+      const result = await service.dispatch({
+        ...baseRequest,
+        taskId: 'task-mixed-dispatchable-health',
+        workerCredentials: {
+          workers: [
+            {
+              name: 'malformed',
+              url: 'https://malformed-worker.example.com',
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+            {
+              name: 'healthy',
+              url: WORKER_URL,
+              cfAccessClientId: 'test-client-id',
+              cfAccessClientSecret: 'test-client-secret',
+              dispatchSigningSecret: 'test-signing-secret-at-least-32-chars-long',
+            },
+          ],
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-mixed-dispatchable-health',
+          reason: 'unexpected_worker_health_response',
+          unexpectedWorkerHealth: [expect.objectContaining({ workerName: 'malformed', tag: 'unknown' })],
+          _skipSentry: false,
+        }),
+        'Worker health probe returned an unexpected response'
       );
     });
   });

@@ -82,6 +82,101 @@ describe('FirestoreCodeTaskSystemStatusRepository', () => {
     expect(second.value.message).toBe('Codex still unavailable');
   });
 
+  it('starts a fresh firstSeenAt when a resolved status becomes active again', async () => {
+    const statusRepo = repo();
+    const input = {
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      reason: 'workers_unreachable' as const,
+      severity: 'critical' as const,
+      message: 'Workers unreachable',
+      remediation: 'Restore worker connectivity',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-1'],
+      workerNames: ['home-dev'],
+    };
+
+    const first = await statusRepo.upsertActive(input);
+    expect(first.ok).toBe(true);
+    const resolved = await statusRepo.resolveActive({
+      userId: input.userId,
+      workerType: input.workerType,
+    });
+    expect(resolved.ok).toBe(true);
+
+    vi.setSystemTime(new Date('2026-06-06T10:00:00.000Z'));
+    const recurring = await statusRepo.upsertActive({
+      ...input,
+      exampleTaskIds: ['task-2'],
+    });
+
+    expect(recurring.ok).toBe(true);
+    if (!recurring.ok) throw new Error('recurring upsert failed');
+    expect(recurring.value.firstSeenAt.toISOString()).toBe('2026-06-06T10:00:00.000Z');
+    expect(recurring.value.resolvedAt).toBeUndefined();
+  });
+
+  it('keeps only the latest active blocker reason for a user and worker type', async () => {
+    const statusRepo = repo();
+    await statusRepo.upsertActive({
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      reason: 'workers_unreachable',
+      severity: 'critical',
+      message: 'Workers unreachable',
+      remediation: 'Restore connectivity',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-1'],
+      workerNames: ['home-dev'],
+    });
+
+    await statusRepo.upsertActive({
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'Workers at capacity',
+      remediation: 'Wait for capacity',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-1'],
+      workerNames: ['home-dev'],
+    });
+
+    const result = await statusRepo.listActiveForUser('user-1');
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('list failed');
+    expect(result.value.map((status) => status.reason)).toEqual(['workers_at_capacity']);
+  });
+
+  it('does not resolve a blocker observed after the resolver began reconciling the queue', async () => {
+    const statusRepo = repo();
+    vi.setSystemTime(new Date('2026-06-05T11:00:00.000Z'));
+    await statusRepo.upsertActive({
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      reason: 'workers_at_capacity',
+      severity: 'warning',
+      message: 'Workers at capacity',
+      remediation: 'Wait for capacity',
+      affectedTaskCount: 1,
+      exampleTaskIds: ['task-2'],
+      workerNames: ['home-dev'],
+    });
+
+    const resolved = await statusRepo.resolveActive({
+      userId: 'user-1',
+      workerType: 'codex-xhigh',
+      observedBefore: new Date('2026-06-05T10:30:00.000Z'),
+    });
+    const active = await statusRepo.listActiveForUser('user-1');
+
+    expect(resolved).toEqual({ ok: true, value: 0 });
+    expect(active.ok).toBe(true);
+    if (!active.ok) throw new Error('list failed');
+    expect(active.value).toHaveLength(1);
+  });
+
   it('lists only active statuses for the requested user', async () => {
     const statusRepo = repo();
     await statusRepo.upsertActive({
@@ -108,7 +203,7 @@ describe('FirestoreCodeTaskSystemStatusRepository', () => {
     });
     await statusRepo.upsertActive({
       userId: 'user-1',
-      workerType: 'sonnet',
+      workerType: 'opus',
       reason: 'workers_unreachable',
       severity: 'critical',
       message: 'Workers unreachable',
@@ -133,7 +228,7 @@ describe('FirestoreCodeTaskSystemStatusRepository', () => {
     expect(result.value).toMatchObject([
       {
         userId: 'user-1',
-        workerType: 'sonnet',
+        workerType: 'opus',
         reason: 'workers_unreachable',
         status: 'active',
       },

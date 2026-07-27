@@ -8,6 +8,7 @@
 import type { Result, Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { randomUUID } from 'node:crypto';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask, CodeTaskDispatchStatus } from '../models/codeTask.js';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { LogLineRepository } from '../repositories/logLineRepository.js';
@@ -137,7 +138,18 @@ export async function startAskAgent(
   const enabledWorkers = settings?.workers.filter((w) => w.enabled) ?? [];
 
   if (enabledWorkers.length === 0) {
-    logger.warn({ userId }, 'User has no workers configured for ask-agent');
+    logger.warn(
+      {
+        userId,
+        taskId: task.id,
+        workerType: task.workerType,
+        reason: 'no_enabled_workers',
+        terminal: true,
+        affectedTaskCount: 1,
+        [SKIP_SENTRY_KEY]: true,
+      },
+      'User has no workers configured for ask-agent',
+    );
     const dispatchability = classifyCodeTaskDispatchability({
       workerType: task.workerType,
       workers: enabledWorkers,
