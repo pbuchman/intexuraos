@@ -23,6 +23,11 @@ import type {
   ExecutionMemoryContext,
   ExecutionMemoryPostRun,
 } from '../../domain/models/codeTask.js';
+import {
+  isArchivalTaskStatus,
+  isCompletionTaskStatus,
+  resolveTaskLifecycleTime,
+} from '../../domain/models/taskLifecycleTime.js';
 import type {
   CreateTaskInput,
   CodeTaskCallbackStateCreateInput,
@@ -69,12 +74,18 @@ export function fromFirestoreDoc(
   const raw = (doc.data() ?? {}) as Record<string, unknown>;
   const data = stripLegacyLinearFields(raw) as Record<string, unknown> & {
     createdAt?: Timestamp;
+    statusChangedAt?: Timestamp;
     updatedAt?: Timestamp;
   };
+  const statusChangedAt =
+    data['status'] !== undefined && data.createdAt !== undefined
+      ? resolveTaskLifecycleTime(data as unknown as CodeTask).at
+      : data.statusChangedAt;
   return {
     ...data,
     id: doc.id,
     createdAt: data['createdAt'] as Timestamp,
+    ...(statusChangedAt !== undefined && { statusChangedAt }),
     updatedAt: data['updatedAt'] as Timestamp,
   } as CodeTask;
 }
@@ -202,6 +213,7 @@ export function toFirestoreDoc(
     dedupKey: opts.dedupKey,
     callbackReceived: false,
     createdAt: taskTimestamp,
+    statusChangedAt: taskTimestamp,
     updatedAt: taskTimestamp,
   };
 
@@ -267,7 +279,7 @@ export function toFirestoreDoc(
     taskData.sentryIssue = input.sentryIssue;
   }
 
-  return withSchemaVersion(taskData, 1, taskTimestamp);
+  return withSchemaVersion(taskData, 2, taskTimestamp);
 }
 
 /**
@@ -278,14 +290,20 @@ export function toFirestoreDoc(
  * docRef.update(). Always sets `updatedAt` (uses the provided input.updatedAt
  * or a freshly-generated "now" Timestamp).
  */
-export function buildUpdateData(input: UpdateTaskInput): Record<string, unknown> {
+export function buildUpdateData(
+  existingTask: CodeTask,
+  input: UpdateTaskInput,
+  now: Date
+): Record<string, unknown> {
   const updateData: Record<string, unknown> = {};
+  const writeTimestamp = Timestamp.fromDate(now);
+  const statusChanged = input.status !== undefined && input.status !== existingTask.status;
 
   // Allow explicit updatedAt for heartbeat (INT-372), otherwise use current time
   if (input.updatedAt !== undefined) {
     updateData['updatedAt'] = Timestamp.fromDate(input.updatedAt);
   } else {
-    updateData['updatedAt'] = Timestamp.fromDate(new Date());
+    updateData['updatedAt'] = writeTimestamp;
   }
 
   if (input.status !== undefined) {
@@ -319,7 +337,7 @@ export function buildUpdateData(input: UpdateTaskInput): Record<string, unknown>
   if (input.dispatchedAt !== undefined) {
     updateData['dispatchedAt'] = Timestamp.fromDate(input.dispatchedAt);
   }
-  if (input.completedAt !== undefined) {
+  if (!statusChanged && input.completedAt !== undefined) {
     updateData['completedAt'] = Timestamp.fromDate(input.completedAt);
   }
   if (input.logChunksDropped !== undefined) {
@@ -388,7 +406,38 @@ export function buildUpdateData(input: UpdateTaskInput): Record<string, unknown>
     updateData['dispatchSchedule'] = serializeDispatchSchedule(input.dispatchSchedule);
   }
 
-  return updateData;
+  if (statusChanged && input.status !== undefined) {
+    if (isCompletionTaskStatus(input.status)) {
+      const completedAt =
+        input.completedAt !== undefined
+          ? Timestamp.fromDate(input.completedAt)
+          : writeTimestamp;
+      updateData['statusChangedAt'] = completedAt;
+      updateData['completedAt'] = completedAt;
+    } else if (isArchivalTaskStatus(input.status)) {
+      updateData['statusChangedAt'] = writeTimestamp;
+      if (existingTask.completedAt === undefined) {
+        updateData['completedAt'] =
+          input.completedAt !== undefined
+            ? Timestamp.fromDate(input.completedAt)
+            : writeTimestamp;
+      }
+    } else {
+      const explicitStatusTime =
+        input.status === 'queued'
+          ? input.queuedAt
+          : input.status === 'dispatched'
+            ? input.dispatchedAt
+            : undefined;
+      updateData['statusChangedAt'] =
+        explicitStatusTime !== undefined
+          ? Timestamp.fromDate(explicitStatusTime)
+          : writeTimestamp;
+      updateData['completedAt'] = FieldValue.delete();
+    }
+  }
+
+  return withSchemaVersion(updateData, 2, writeTimestamp);
 }
 
 /**

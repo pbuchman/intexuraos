@@ -17,6 +17,7 @@ import {
   toFirestoreDoc,
   toTimestamp,
 } from '../../../infra/firestore/task-serializer.js';
+import type { CodeTask, TaskStatus } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput, UpdateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 
 const baseCreate = (): CreateTaskInput => ({
@@ -30,6 +31,33 @@ const baseCreate = (): CreateTaskInput => ({
   baseBranch: 'main',
   traceId: 't1',
 });
+
+const writeTime = new Date('2026-07-27T12:00:00.000Z');
+const lifecycleTask = (
+  status: TaskStatus = 'running',
+  overrides: Partial<CodeTask> = {}
+): CodeTask => {
+  const initial = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
+  return {
+    id: 'task_lifecycle',
+    traceId: 'trace_lifecycle',
+    userId: 'u1',
+    workerType: 'opus',
+    workerLocation: 'vm',
+    status,
+    prompt: 'hello',
+    sanitizedPrompt: 'hello',
+    systemPromptHash: 'h1',
+    repository: 'o/r',
+    baseBranch: 'main',
+    createdAt: initial,
+    statusChangedAt: initial,
+    updatedAt: initial,
+    callbackReceived: false,
+    dedupKey: 'dedup',
+    ...overrides,
+  };
+};
 
 describe('stripLegacyLinearFields', () => {
   it('removes legacy Linear keys and keeps other fields', () => {
@@ -76,6 +104,19 @@ describe('fromFirestoreDoc', () => {
     expect(task.createdAt).toBe(now);
     expect(task.updatedAt).toBe(now);
     expect((task as unknown as Record<string, unknown>)['linearIssueTitle']).toBeUndefined();
+  });
+
+  it('hydrates a missing statusChangedAt from the canonical legacy resolver', () => {
+    const createdAt = Timestamp.fromDate(new Date('2026-07-27T08:00:00.000Z'));
+    const updatedAt = Timestamp.fromDate(new Date('2026-07-27T08:30:00.000Z'));
+    const completedAt = Timestamp.fromDate(new Date('2026-07-27T08:10:00.000Z'));
+
+    const task = fromFirestoreDoc({
+      id: 'task_legacy',
+      data: () => ({ status: 'failed', createdAt, updatedAt, completedAt }),
+    });
+
+    expect(task.statusChangedAt?.toMillis()).toBe(completedAt.toMillis());
   });
 });
 
@@ -216,7 +257,9 @@ describe('toFirestoreDoc', () => {
     expect(doc.createdAt).toBeInstanceOf(Timestamp);
     expect(doc.updatedAt).toBeInstanceOf(Timestamp);
     expect(doc.createdAt.toMillis()).toBe(opts.now.getTime());
-    expect(doc.schemaVersion).toBe(1);
+    expect(doc.updatedAt.toMillis()).toBe(doc.createdAt.toMillis());
+    expect(doc.statusChangedAt?.toMillis()).toBe(doc.createdAt.toMillis());
+    expect(doc.schemaVersion).toBe(2);
     expect(doc.schemaUpdatedAt.toMillis()).toBe(opts.now.getTime());
   });
 
@@ -335,30 +378,26 @@ describe('toFirestoreDoc', () => {
 describe('buildUpdateData', () => {
   it('always sets updatedAt (from input.updatedAt when provided)', () => {
     const d = new Date('2025-05-01T00:00:00Z');
-    const data = buildUpdateData({ updatedAt: d });
+    const data = buildUpdateData(lifecycleTask(), { updatedAt: d }, writeTime);
     expect(data['updatedAt']).toBeInstanceOf(Timestamp);
     expect((data['updatedAt'] as Timestamp).toMillis()).toBe(d.getTime());
   });
 
-  it('always sets updatedAt (from current time when not provided)', () => {
-    const before = Date.now();
-    const data = buildUpdateData({});
-    const after = Date.now();
+  it('always sets updatedAt from the captured write time when not provided', () => {
+    const data = buildUpdateData(lifecycleTask(), {}, writeTime);
     expect(data['updatedAt']).toBeInstanceOf(Timestamp);
-    const ms = (data['updatedAt'] as Timestamp).toMillis();
-    expect(ms).toBeGreaterThanOrEqual(before);
-    expect(ms).toBeLessThanOrEqual(after);
+    expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
   it('converts Date fields to Timestamps', () => {
-    const data = buildUpdateData({
+    const data = buildUpdateData(lifecycleTask(), {
       queuedAt: new Date('2025-01-01'),
       dispatchedAt: new Date('2025-01-02'),
       completedAt: new Date('2025-01-03'),
       lastHeartbeat: new Date('2025-01-04'),
       prMergedAt: new Date('2025-01-05'),
       prClosedAt: new Date('2025-01-06'),
-    });
+    }, writeTime);
     expect(data['queuedAt']).toBeInstanceOf(Timestamp);
     expect(data['dispatchedAt']).toBeInstanceOf(Timestamp);
     expect(data['completedAt']).toBeInstanceOf(Timestamp);
@@ -368,14 +407,14 @@ describe('buildUpdateData', () => {
   });
 
   it('uses FieldValue.delete() for null-clear fields', () => {
-    const data = buildUpdateData({
+    const data = buildUpdateData(lifecycleTask(), {
       error: null,
       cancelNonce: null,
       cancelNonceExpiresAt: null,
       implementationTaskId: null,
       fanOutChildTaskIds: null,
       dispatchStatus: null,
-    } as UpdateTaskInput);
+    } as UpdateTaskInput, writeTime);
     expect(data['error']).toBeInstanceOf(FieldValue);
     expect(data['cancelNonce']).toBeInstanceOf(FieldValue);
     expect(data['cancelNonceExpiresAt']).toBeInstanceOf(FieldValue);
@@ -385,7 +424,7 @@ describe('buildUpdateData', () => {
   });
 
   it('passes non-null values through for nullable fields', () => {
-    const data = buildUpdateData({
+    const data = buildUpdateData(lifecycleTask(), {
       error: { code: 'X', message: 'oops' },
       cancelNonce: 'abcd',
       cancelNonceExpiresAt: '2025-01-01',
@@ -403,7 +442,7 @@ describe('buildUpdateData', () => {
         lastSeenAt: Timestamp.fromDate(new Date('2026-06-05T12:05:00.000Z')),
         nextAction: 'will_retry_automatically',
       },
-    } as UpdateTaskInput);
+    } as UpdateTaskInput, writeTime);
     expect(data['error']).toEqual({ code: 'X', message: 'oops' });
     expect(data['cancelNonce']).toBe('abcd');
     expect(data['cancelNonceExpiresAt']).toBe('2025-01-01');
@@ -446,7 +485,7 @@ describe('buildUpdateData', () => {
         },
       },
     };
-    const data = buildUpdateData(input);
+    const data = buildUpdateData(lifecycleTask(), input, writeTime);
     expect(data['status']).toBe('running');
     expect(data['result']).toEqual({ summary: 'ok' });
     expect(data['statusSummary']).toEqual(input.statusSummary);
@@ -474,14 +513,14 @@ describe('buildUpdateData', () => {
   });
 
   it('falls back to a generated callbackState configuredAt timestamp for malformed update input', () => {
-    const data = buildUpdateData({
+    const data = buildUpdateData(lifecycleTask(), {
       callbackState: {
         webhookUrl: 'https://dev.intexuraos.cloud/api/code/internal/webhooks/task-complete',
         callbackBaseUrl: 'https://dev.intexuraos.cloud/api/code',
         owner: 'dev',
         configuredAt: 'not-a-date',
       },
-    } as unknown as UpdateTaskInput);
+    } as unknown as UpdateTaskInput, writeTime);
 
     const callbackState = data['callbackState'] as { configuredAt: Timestamp };
     expect(callbackState.configuredAt).toBeInstanceOf(Timestamp);
@@ -490,7 +529,7 @@ describe('buildUpdateData', () => {
   it('serializes executionMemoryContext/PostRun when provided', () => {
     const ctxMatched = new Date('2025-01-01');
     const postRunLast = new Date('2025-01-02');
-    const data = buildUpdateData({
+    const data = buildUpdateData(lifecycleTask(), {
       executionMemoryContext: {
         status: 'matched',
         matchedAt: ctxMatched,
@@ -501,7 +540,7 @@ describe('buildUpdateData', () => {
         generatedMemoryIds: [],
         lastAttemptAt: postRunLast,
       },
-    });
+    }, writeTime);
     const ctx = data['executionMemoryContext'] as { matchedAt: Timestamp };
     const post = data['executionMemoryPostRun'] as { lastAttemptAt: Timestamp };
     expect(ctx.matchedAt).toBeInstanceOf(Timestamp);
@@ -509,13 +548,13 @@ describe('buildUpdateData', () => {
   });
 
   it('leaves unspecified fields absent', () => {
-    const data = buildUpdateData({});
-    expect(Object.keys(data).sort()).toEqual(['updatedAt']);
+    const data = buildUpdateData(lifecycleTask(), {}, writeTime);
+    expect(Object.keys(data).sort()).toEqual(['schemaUpdatedAt', 'schemaVersion', 'updatedAt']);
   });
 
   it('serializes dispatchSchedule when provided', () => {
     const notBeforeAt = new Date('2026-04-24T22:00:00Z');
-    const data = buildUpdateData({
+    const data = buildUpdateData(lifecycleTask(), {
       dispatchSchedule: {
         notBeforeAt,
         source: 'retry_cooloff',
@@ -523,7 +562,7 @@ describe('buildUpdateData', () => {
         sourceText: 'resets 10pm (UTC)',
         derivedFromTaskId: 'task_prev',
       },
-    });
+    }, writeTime);
     const schedule = data['dispatchSchedule'] as {
       notBeforeAt: Timestamp;
       source: string;
@@ -534,6 +573,108 @@ describe('buildUpdateData', () => {
     expect(schedule.source).toBe('retry_cooloff');
     expect(schedule.sourceText).toBe('resets 10pm (UTC)');
   });
+
+  it('uses explicit completion time for both lifecycle fields on a completion transition', () => {
+    const completedAt = new Date('2026-07-27T11:00:00.000Z');
+    const data = buildUpdateData(
+      lifecycleTask('running'),
+      { status: 'failed', completedAt },
+      writeTime
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
+    expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+  });
+
+  it('uses one captured write timestamp when a completion transition omits completedAt', () => {
+    const data = buildUpdateData(lifecycleTask('running'), { status: 'reviewed' }, writeTime);
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+  });
+
+  it('does not write lifecycle fields for a same-status metadata update', () => {
+    const completedAt = Timestamp.fromDate(new Date('2026-07-27T11:00:00.000Z'));
+    const data = buildUpdateData(
+      lifecycleTask('failed', { completedAt }),
+      { status: 'failed', prNumber: 42 },
+      writeTime
+    );
+
+    expect(data['statusChangedAt']).toBeUndefined();
+    expect(data['completedAt']).toBeUndefined();
+    expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+  });
+
+  it('advances archive status time while preserving the original completion time', () => {
+    const completedAt = Timestamp.fromDate(new Date('2026-07-27T11:00:00.000Z'));
+    const data = buildUpdateData(
+      lifecycleTask('failed', { completedAt }),
+      { status: 'archived' },
+      writeTime
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect(data['completedAt']).toBeUndefined();
+  });
+
+  it('fills missing archive completion state from an explicit completion time', () => {
+    const completedAt = new Date('2026-07-27T11:00:00.000Z');
+    const data = buildUpdateData(
+      lifecycleTask('failed'),
+      { status: 'archived', completedAt },
+      writeTime
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
+  });
+
+  it('fills missing archive completion state from the captured write time', () => {
+    const data = buildUpdateData(
+      lifecycleTask('failed'),
+      { status: 'archived' },
+      writeTime
+    );
+
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+  });
+
+  it.each([
+    { status: 'queued', field: 'queuedAt', at: new Date('2026-07-27T11:10:00.000Z') },
+    { status: 'dispatched', field: 'dispatchedAt', at: new Date('2026-07-27T11:20:00.000Z') },
+  ] as const)('uses explicit $field for a $status transition', ({ status, field, at }) => {
+    const data = buildUpdateData(
+      lifecycleTask('running'),
+      { status, [field]: at },
+      writeTime
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(at.getTime());
+  });
+
+  it('clears stale completion state when transitioning back to an active status', () => {
+    const completedAt = Timestamp.fromDate(new Date('2026-07-27T11:00:00.000Z'));
+    const data = buildUpdateData(
+      lifecycleTask('failed', { completedAt }),
+      { status: 'running' },
+      writeTime
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect(data['completedAt']).toBeInstanceOf(FieldValue);
+  });
+
+  it.each(['planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled'] as const)(
+    'ensures %s completion transitions store completedAt',
+    (status) => {
+      const data = buildUpdateData(lifecycleTask('running'), { status }, writeTime);
+
+      expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    }
+  );
 });
 
 describe('mergeUpdateForTransaction', () => {

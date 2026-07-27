@@ -61,9 +61,11 @@ describe('firestoreCodeTaskRepository', () => {
       expect(result.value.dedupKey).toMatch(/^[a-f0-9]{16}$/);
       expect(result.value.createdAt).toBeDefined();
       expect(result.value.updatedAt).toBeDefined();
+      expect(result.value.statusChangedAt?.toMillis()).toBe(result.value.createdAt.toMillis());
+      expect(result.value.updatedAt.toMillis()).toBe(result.value.createdAt.toMillis());
 
       const stored = await fakeFirestore.collection('code_tasks').doc(result.value.id).get();
-      expect(stored.get('schemaVersion')).toBe(1);
+      expect(stored.get('schemaVersion')).toBe(2);
       expect(stored.get('schemaUpdatedAt')).toBeInstanceOf(Timestamp);
     });
 
@@ -953,6 +955,167 @@ describe('firestoreCodeTaskRepository', () => {
         expect(result.value.completedAt.toDate()).toEqual(completedAt);
       }
       expect(result.value.result?.summary).toBe('Done');
+    });
+
+    it('stores explicit completion time as the lifecycle time for running to failed', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2026-07-27T09:15:00.000Z');
+
+      const result = await repo.update(created.value.id, { status: 'failed', completedAt });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBe(completedAt.getTime());
+      expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
+      expect(result.value.updatedAt.toMillis()).toBeGreaterThan(completedAt.getTime());
+    });
+
+    it('uses one repository clock value for inferred terminal lifecycle fields', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+
+      const result = await repo.update(created.value.id, { status: 'reviewed' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBe(result.value.completedAt?.toMillis());
+      expect(result.value.completedAt?.toMillis()).toBe(result.value.updatedAt.toMillis());
+    });
+
+    it('advances only updatedAt for a failed to failed metadata write', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2026-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, { status: 'failed', completedAt });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+      const metadataWriteAt = new Date('2026-07-27T10:45:00.000Z');
+
+      const result = await repo.update(created.value.id, {
+        status: 'failed',
+        prNumber: 42,
+        updatedAt: metadataWriteAt,
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBe(failed.value.statusChangedAt?.toMillis());
+      expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
+      expect(result.value.updatedAt.toMillis()).toBe(metadataWriteAt.getTime());
+    });
+
+    it('advances statusChangedAt while preserving completedAt on failed to archived', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2020-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, { status: 'failed', completedAt });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+
+      const result = await repo.update(created.value.id, { status: 'archived' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBeGreaterThan(completedAt.getTime());
+      expect(result.value.completedAt?.toMillis()).toBe(completedAt.getTime());
+    });
+
+    it('advances statusChangedAt and deletes completedAt on failed to running', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      const completedAt = new Date('2020-07-27T09:15:00.000Z');
+      const failed = await repo.update(created.value.id, { status: 'failed', completedAt });
+      expect(failed.ok).toBe(true);
+      if (!failed.ok) return;
+
+      const result = await repo.update(created.value.id, { status: 'running' });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.statusChangedAt?.toMillis()).toBeGreaterThan(completedAt.getTime());
+      expect(result.value.completedAt).toBeUndefined();
+    });
+
+    it('logs one structured lifecycle transition and no metadata-only write', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      await repo.update(created.value.id, { status: 'running' });
+      vi.mocked(logger.info).mockClear();
+      const completedAt = new Date('2026-07-27T09:15:00.000Z');
+      const dispatchAt = Timestamp.fromDate(completedAt);
+
+      const transitioned = await repo.update(created.value.id, {
+        status: 'failed',
+        completedAt,
+        error: { code: 'dispatch_blocked_provider_auth_unavailable', message: 'Auth unavailable' },
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'provider_auth_unavailable',
+          terminal: true,
+          severity: 'critical',
+          message: 'No provider authorization is available.',
+          remediation: 'Configure provider authorization.',
+          workerNames: ['vm'],
+          firstSeenAt: dispatchAt,
+          lastSeenAt: dispatchAt,
+          nextAction: 'retry_after_fix',
+        },
+      });
+      expect(transitioned.ok).toBe(true);
+      await repo.update(created.value.id, { prNumber: 42 });
+
+      expect(logger.info).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: created.value.id,
+          userId: 'user-123',
+          workerType: 'opus',
+          workerLocation: 'vm',
+          fromStatus: 'running',
+          toStatus: 'failed',
+          statusChangedAt: completedAt.toISOString(),
+          lifecycleTimeSource: 'status_changed',
+          dispatchReason: 'provider_auth_unavailable',
+          errorCode: 'dispatch_blocked_provider_auth_unavailable',
+        }),
+        'Code task lifecycle transitioned'
+      );
     });
 
     it('returns NOT_FOUND for non-existent task', async () => {
@@ -4059,6 +4222,10 @@ describe('firestoreCodeTaskRepository', () => {
           nextAction: 'will_retry_automatically',
         },
       });
+      await fakeFirestore.collection('code_tasks').doc('task-claim').update({
+        completedAt: Timestamp.fromDate(new Date('2026-07-27T08:00:00.000Z')),
+      });
+      vi.mocked(logger.info).mockClear();
 
       const result = await repo.claimForDispatch('task-claim');
 
@@ -4071,7 +4238,11 @@ describe('firestoreCodeTaskRepository', () => {
       if (!after.ok) return;
       expect(after.value.status).toBe('dispatched');
       expect(after.value.dispatchedAt).toBeDefined();
+      expect(after.value.statusChangedAt?.toMillis()).toBe(after.value.dispatchedAt?.toMillis());
+      expect(after.value.dispatchedAt?.toMillis()).toBe(after.value.updatedAt.toMillis());
+      expect(after.value.completedAt).toBeUndefined();
       expect(after.value.dispatchStatus).toBeUndefined();
+      expect(logger.info).toHaveBeenCalledTimes(1);
     });
 
     it('returns false when task is already dispatched', async () => {

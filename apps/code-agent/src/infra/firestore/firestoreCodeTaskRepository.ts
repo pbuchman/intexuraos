@@ -10,8 +10,9 @@ import { randomUUID } from 'node:crypto';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import type { CodeTask } from '../../domain/models/codeTask.js';
+import { resolveTaskLifecycleTime } from '../../domain/models/taskLifecycleTime.js';
 import type {
-  CodeTaskRepository, CreateTaskInput, ListTasksInput, ListTasksOutput, RepositoryError,
+  CodeTaskRepository, CreateTaskInput, ListTasksInput, ListTasksOutput, RepositoryError, UpdateTaskInput,
 } from '../../domain/repositories/codeTaskRepository.js';
 import { NON_ARCHIVED_STATUSES } from '../../domain/issueGrouping/constants.js';
 import {
@@ -63,6 +64,37 @@ export const createFirestoreCodeTaskRepository = (deps: {
     const snap = await q.get();
     return snap.empty ? null : fromFirestoreDoc(snap.docs[0]!);
   };
+  const logLifecycleTransition = (
+    existingTask: CodeTask,
+    updatedTask: CodeTask,
+    input?: UpdateTaskInput,
+  ): void => {
+    if (existingTask.status === updatedTask.status) return;
+    const resolved = resolveTaskLifecycleTime(updatedTask);
+    const inputDispatchStatus = input?.dispatchStatus;
+    const dispatchReason =
+      (inputDispatchStatus !== undefined && inputDispatchStatus !== null
+        ? inputDispatchStatus.terminalCause?.reason ?? inputDispatchStatus.reason
+        : undefined)
+      ?? existingTask.dispatchStatus?.terminalCause?.reason
+      ?? existingTask.dispatchStatus?.reason;
+    const inputError = input?.error;
+    const errorCode =
+      (inputError !== undefined && inputError !== null ? inputError.code : undefined)
+      ?? updatedTask.error?.code;
+    logger.info({
+      taskId: updatedTask.id,
+      userId: updatedTask.userId,
+      workerType: updatedTask.workerType,
+      workerLocation: updatedTask.workerLocation,
+      fromStatus: existingTask.status,
+      toStatus: updatedTask.status,
+      statusChangedAt: resolved.at.toDate().toISOString(),
+      lifecycleTimeSource: resolved.source,
+      ...(dispatchReason !== undefined && { dispatchReason }),
+      ...(errorCode !== undefined && { errorCode }),
+    }, 'Code task lifecycle transitioned');
+  };
   const runCreate = async (
     input: CreateTaskInput, transaction: FirestoreTransaction,
     ctx: { taskId: string; dedupKey: string; now: Date },
@@ -110,15 +142,20 @@ export const createFirestoreCodeTaskRepository = (deps: {
       const doc = options?.transaction !== undefined
         ? await options.transaction.get(docRef) : await docRef.get();
       if (!doc.exists) return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
-      const updateData = buildUpdateData(input);
+      const existingTask = fromFirestoreDoc(doc);
+      const updateData = buildUpdateData(existingTask, input, new Date());
       if (options?.transaction !== undefined) {
         options.transaction.update(docRef, updateData);
         // doc.exists checked above, so data() returns the actual document data
         const merged = mergeUpdateForTransaction(doc.data()!, updateData);
-        return ok(fromFirestoreDoc({ id: taskId, data: () => merged }));
+        const updatedTask = fromFirestoreDoc({ id: taskId, data: () => merged });
+        logLifecycleTransition(existingTask, updatedTask, input);
+        return ok(updatedTask);
       }
       await docRef.update(updateData);
-      return ok(fromFirestoreDoc(await docRef.get()));
+      const updatedTask = fromFirestoreDoc(await docRef.get());
+      logLifecycleTransition(existingTask, updatedTask, input);
+      return ok(updatedTask);
     }, { taskId, input }, 'Failed to update task', true),
     list: (input: ListTasksInput) => guarded<ListTasksOutput>(async () => {
       const { query, limit } = await buildListQuery(collection, input);
@@ -268,18 +305,37 @@ export const createFirestoreCodeTaskRepository = (deps: {
         ? { hasActive: false }
         : { hasActive: true, taskId: sibling.id };
     }, { taskId, linearIssueId }, 'Failed to check dispatched/running sibling for Linear issue'),
-    claimForDispatch: (taskId) => guarded(
-      () => firestore.runTransaction(async (txn) => {
+    claimForDispatch: (taskId) => guarded(async () => {
+      const outcome = await firestore.runTransaction(async (txn) => {
         const docRef = collection.doc(taskId);
         const snap = await txn.get(docRef);
-        if (!snap.exists || snap.get('status') !== 'queued') return false;
-        txn.update(docRef, {
+        if (!snap.exists || snap.get('status') !== 'queued') {
+          return { claimed: false } as const;
+        }
+        const existingTask = fromFirestoreDoc(snap);
+        const transitionTimestamp = Timestamp.fromDate(new Date());
+        const updateData = {
           status: 'dispatched',
-          dispatchedAt: new Date(),
+          statusChangedAt: transitionTimestamp,
+          dispatchedAt: transitionTimestamp,
+          updatedAt: transitionTimestamp,
+          completedAt: FieldValue.delete(),
           dispatchStatus: FieldValue.delete(),
-        });
-        return true;
-      }),
+          schemaVersion: 2,
+          schemaUpdatedAt: transitionTimestamp,
+        };
+        txn.update(docRef, updateData);
+        const merged = mergeUpdateForTransaction(snap.data()!, updateData);
+        return {
+          claimed: true,
+          existingTask,
+          updatedTask: fromFirestoreDoc({ id: taskId, data: () => merged }),
+        } as const;
+      });
+      if (!outcome.claimed) return false;
+      logLifecycleTransition(outcome.existingTask, outcome.updatedTask);
+      return true;
+    },
       { taskId },
       'Failed to claim task for dispatch',
     ),
