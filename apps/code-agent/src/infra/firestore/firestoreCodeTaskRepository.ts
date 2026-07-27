@@ -37,6 +37,12 @@ function firestoreError(error: unknown): RepositoryError {
   return { code: 'FIRESTORE_ERROR', message: `Firestore error: ${message}` };
 }
 
+class RepositoryTransactionResultError extends Error {
+  constructor(readonly repositoryError: RepositoryError) {
+    super('Repository transaction operation returned an error result');
+  }
+}
+
 export const createFirestoreCodeTaskRepository = (deps: {
   firestore: Firestore;
   logger: Logger;
@@ -288,6 +294,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
           transactionLifecycleTransitions.set(transaction, attemptTransitions);
           try {
             const attemptResult = await operation(transaction);
+            if (!attemptResult.ok) {
+              throw new RepositoryTransactionResultError(attemptResult.error);
+            }
             committedTransitions = attemptTransitions;
             return attemptResult;
           } finally {
@@ -304,6 +313,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         return result;
       }
       catch (error) {
+        if (error instanceof RepositoryTransactionResultError) {
+          return err(error.repositoryError);
+        }
         logger.error({ error }, 'Failed to run repository transaction');
         return err(firestoreError(error));
       }

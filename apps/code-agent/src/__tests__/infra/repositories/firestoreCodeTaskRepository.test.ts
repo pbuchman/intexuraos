@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp, createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
-import type { Logger } from '@intexuraos/common-core';
+import { err, type Logger } from '@intexuraos/common-core';
 import { createFirestoreCodeTaskRepository } from '../../../infra/firestore/firestoreCodeTaskRepository.js';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../../../domain/models/codeTask.js';
 import type { CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
@@ -26,6 +26,7 @@ describe('firestoreCodeTaskRepository', () => {
   });
 
   afterEach(() => {
+    fakeFirestore.clear();
     resetFirestore();
   });
 
@@ -1228,6 +1229,42 @@ describe('firestoreCodeTaskRepository', () => {
       expect(logger.info).not.toHaveBeenCalled();
       const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
       expect(stored.get('status')).toBe('dispatched');
+    });
+
+    it('rolls back a caller-owned transition when the operation returns a repository error', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create(createTaskInput({ initialStatus: 'dispatched' }));
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+      vi.mocked(logger.info).mockClear();
+      vi.mocked(logger.error).mockClear();
+      const operationError = {
+        code: 'ACTIVE_TASK_EXISTS' as const,
+        message: 'Another task is active',
+        existingTaskId: 'task-other',
+      };
+      if (repo.runInTransaction === undefined) throw new Error('Transaction support is required');
+
+      const result = await repo.runInTransaction(async (transaction) => {
+        const updateResult = await repo.update(
+          created.value.id,
+          { status: 'running' },
+          { transaction },
+        );
+        expect(updateResult.ok).toBe(true);
+        return err(operationError);
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe(operationError);
+      const stored = await fakeFirestore.collection('code_tasks').doc(created.value.id).get();
+      expect(stored.get('status')).toBe('dispatched');
+      expect(logger.info).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
     });
 
     it('logs only the committed caller-owned transition when the outer transaction retries', async () => {
