@@ -58,20 +58,26 @@ function isMergeReadyInvalidator(task: SerializedTask): boolean {
   return false;
 }
 
-function hasDurableMergeReadyEvidence(task: SerializedTask | undefined, invalidatedAtMs: number): boolean {
+function hasDurableMergeReadyEvidence(
+  task: SerializedTask | undefined,
+  latestInvalidator: SerializedTask | undefined,
+): boolean {
   return task !== undefined &&
     task.result?.merge_ready === '1' &&
     task.prMergedAt === undefined &&
     task.prClosedAt === undefined &&
-    Date.parse(task.updatedAt) > invalidatedAtMs;
+    (latestInvalidator === undefined || compareModifiedDesc(task, latestInvalidator) < 0);
 }
 
 export function derivePipeline(tasks: SerializedTask[]): PipelineState {
-  // Tasks are already sorted by updatedAt desc from the caller.
-  // Group by agentType, keeping only the first non-archived task per type (= latest by updatedAt).
+  const tasksByCreation = [...tasks].sort(compareCreatedDesc);
+  const tasksByModification = [...tasks].sort(compareModifiedDesc);
+
+  // Group by agentType, keeping the newest attempt per type. Technical writes
+  // must not replace the attempt that represents a pipeline step.
   const stepMap = new Map<string, { task: SerializedTask; step: PipelineStepData }>();
 
-  for (const task of tasks) {
+  for (const task of tasksByCreation) {
     if (task.agentType === undefined || task.status === 'archived') {
       continue;
     }
@@ -119,19 +125,13 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
   // issue can have sibling PRs (e.g. plan PR merged, execution PR still open);
   // the merge step and PR badge must scope terminal state to one PR, otherwise
   // a merged plan PR poisons the open execution PR's gate.
-  const prOwnerTask = tasks.find(
+  const prOwnerTask = tasksByModification.find(
     (t) => t.status !== 'archived' && t.result?.prUrl !== undefined,
   );
   const isMerged = prOwnerTask?.prMergedAt !== undefined;
   const isClosed = prOwnerTask?.prClosedAt !== undefined;
   const isPrClosedOrMerged = isMerged || isClosed;
-  const mergeReadyInvalidatedAtMs = tasks.reduce((latest, task) => {
-    if (!isMergeReadyInvalidator(task)) {
-      return latest;
-    }
-    const updatedAtMs = Date.parse(task.updatedAt);
-    return Number.isFinite(updatedAtMs) && updatedAtMs > latest ? updatedAtMs : latest;
-  }, 0);
+  const latestMergeReadyInvalidator = tasksByModification.find(isMergeReadyInvalidator);
 
   // Merge-ready logic: if execution step is completed, PR exists, and ready-to-merge label present
   if (
@@ -160,9 +160,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     executionEntry.task.result?.prUrl !== undefined &&
     !steps.some((s) => s.agentType === 'merge')
   ) {
-    const latestRemediation = tasks.find(
-      (t) => t.agentType === 'remediation' && t.status !== 'archived',
-    );
+    const latestRemediation = stepMap.get('remediation')?.task;
     if (latestRemediation?.requiresReReview === false) {
       steps.push({
         agentType: 'merge',
@@ -178,7 +176,7 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     executionEntry?.step.state === 'completed' &&
     executionEntry.task.result?.prUrl !== undefined &&
     !steps.some((s) => s.agentType === 'merge') &&
-    hasDurableMergeReadyEvidence(executionEntry.task, mergeReadyInvalidatedAtMs)
+    hasDurableMergeReadyEvidence(executionEntry.task, latestMergeReadyInvalidator)
   ) {
     steps.push({
       agentType: 'merge',
@@ -216,10 +214,10 @@ export function derivePipeline(tasks: SerializedTask[]): PipelineState {
     !isPrClosedOrMerged &&
     !steps.some((s) => s.agentType === 'merge') &&
     (
-      hasDurableMergeReadyEvidence(reviewEntry?.task, mergeReadyInvalidatedAtMs) ||
-      hasDurableMergeReadyEvidence(stepMap.get('execution')?.task, mergeReadyInvalidatedAtMs) ||
-      hasDurableMergeReadyEvidence(stepMap.get('pull_request')?.task, mergeReadyInvalidatedAtMs) ||
-      hasDurableMergeReadyEvidence(stepMap.get('remediation')?.task, mergeReadyInvalidatedAtMs)
+      hasDurableMergeReadyEvidence(reviewEntry?.task, latestMergeReadyInvalidator) ||
+      hasDurableMergeReadyEvidence(stepMap.get('execution')?.task, latestMergeReadyInvalidator) ||
+      hasDurableMergeReadyEvidence(stepMap.get('pull_request')?.task, latestMergeReadyInvalidator) ||
+      hasDurableMergeReadyEvidence(stepMap.get('remediation')?.task, latestMergeReadyInvalidator)
     )
   ) {
     steps.push({
@@ -275,13 +273,13 @@ export function deriveAggregateStatus(tasks: SerializedTask[], pipeline: Pipelin
   const hasActionableMerge = pipeline.steps.some(
     (step) => step.agentType === 'merge' && step.state === 'actionable',
   );
-  const latestCompletedExecution = tasks.find(
+  const latestCompletedExecution = [...tasks].sort(compareCreatedDesc).find(
     (task) =>
       task.status !== 'archived' &&
       task.agentType === 'execution' &&
       (task.status === 'implemented' || task.status === 'reviewed'),
   );
-  const latestNonArchivedReview = tasks.find(
+  const latestNonArchivedReview = [...tasks].sort(compareCreatedDesc).find(
     (task) => task.status !== 'archived' && task.agentType === 'review',
   );
   if (
@@ -300,7 +298,9 @@ export function deriveAggregateStatus(tasks: SerializedTask[], pipeline: Pipelin
   }
 
   // Failed: latest non-archived task is failed | interrupted
-  const latestNonArchived = tasks.find((t) => t.status !== 'archived');
+  const latestNonArchived = [...tasks]
+    .filter((task) => task.status !== 'archived')
+    .sort(compareCreatedDesc)[0];
   if (
     latestNonArchived !== undefined &&
     (latestNonArchived.status === 'failed' || latestNonArchived.status === 'interrupted')
@@ -317,12 +317,29 @@ export function deriveAggregateStatus(tasks: SerializedTask[], pipeline: Pipelin
   return 'done';
 }
 
-function sortByUpdatedAtDesc(a: SerializedTask, b: SerializedTask): number {
-  return b.updatedAt.localeCompare(a.updatedAt);
+function compareIsoTimestampDesc(a: string, b: string): number {
+  const aTime = Date.parse(a);
+  const bTime = Date.parse(b);
+  if (Number.isFinite(aTime) && Number.isFinite(bTime)) return bTime - aTime;
+  if (Number.isFinite(aTime)) return -1;
+  if (Number.isFinite(bTime)) return 1;
+  return 0;
 }
 
-function sortByCreatedAtAsc(a: SerializedTask, b: SerializedTask): number {
-  return a.createdAt.localeCompare(b.createdAt);
+function compareCreatedDesc(a: SerializedTask, b: SerializedTask): number {
+  return compareIsoTimestampDesc(a.createdAt, b.createdAt) || b.id.localeCompare(a.id);
+}
+
+function compareLifecycleDesc(a: SerializedTask, b: SerializedTask): number {
+  return compareIsoTimestampDesc(a.statusChangedAt, b.statusChangedAt) || b.id.localeCompare(a.id);
+}
+
+function compareModifiedDesc(a: SerializedTask, b: SerializedTask): number {
+  return compareIsoTimestampDesc(a.updatedAt, b.updatedAt) || b.id.localeCompare(a.id);
+}
+
+function compareCreatedAsc(a: SerializedTask, b: SerializedTask): number {
+  return -compareCreatedDesc(a, b);
 }
 
 export function groupByLinearIssue(tasks: SerializedTask[]): IssueGroup[] {
@@ -349,19 +366,21 @@ export function groupByLinearIssue(tasks: SerializedTask[]): IssueGroup[] {
   const groups: IssueGroup[] = [];
 
   for (const group of groupMap.values()) {
-    // Sort by updatedAt desc to derive pipeline, status, and latestTask
-    group.tasks.sort(sortByUpdatedAtDesc);
+    const tasksByCreation = [...group.tasks].sort(compareCreatedDesc);
+    const tasksByLifecycle = [...group.tasks].sort(compareLifecycleDesc);
+    const tasksByModification = [...group.tasks].sort(compareModifiedDesc);
 
     const pipeline = derivePipeline(group.tasks);
     const aggregateStatus = deriveAggregateStatus(group.tasks, pipeline);
 
-    // latestTask is tasks[0] (most recently updated)
-    const latestTask = group.tasks[0];
+    const latestTask = tasksByCreation[0];
+    const lastActivityTask = tasksByLifecycle[0];
+    const lastModifiedTask = tasksByModification[0];
 
     // Re-sort by createdAt ascending for chronological display
-    group.tasks.sort(sortByCreatedAtAsc);
+    group.tasks.sort(compareCreatedAsc);
     /* v8 ignore start -- ts-type: noUncheckedIndexedAccess guard -- groupMap always has non-empty tasks array so index 0 is always defined @preserve */
-    if (latestTask === undefined) {
+    if (latestTask === undefined || lastActivityTask === undefined || lastModifiedTask === undefined) {
       continue;
     }
     /* v8 ignore stop @preserve */
@@ -386,6 +405,10 @@ export function groupByLinearIssue(tasks: SerializedTask[]): IssueGroup[] {
       tasks: group.tasks,
       pipeline,
       latestTask,
+      lastActivityAt: lastActivityTask.statusChangedAt,
+      lastActivityStatus: lastActivityTask.status,
+      lastActivityTaskId: lastActivityTask.id,
+      lastModifiedAt: lastModifiedTask.updatedAt,
       aggregateStatus,
     };
     if (mostRecentDispatchedAt !== undefined) {
@@ -394,14 +417,21 @@ export function groupByLinearIssue(tasks: SerializedTask[]): IssueGroup[] {
     groups.push(issueGroup);
   }
 
-  // Step 3: Default sort by Linear issue number desc, then by latestTask.updatedAt desc
+  // Step 3: Default sort by Linear issue number desc, then lifecycle activity desc
+  const compareGroupActivity = (a: IssueGroup, b: IssueGroup): number => {
+    const activityOrder = b.lastActivityAt.localeCompare(a.lastActivityAt);
+    if (activityOrder !== 0) return activityOrder;
+    const aKey = a.linearIssueId ?? `standalone_${a.latestTask.id}`;
+    const bKey = b.linearIssueId ?? `standalone_${b.latestTask.id}`;
+    return bKey.localeCompare(aKey);
+  };
   groups.sort((a, b) => {
     const aNum = a.linearIssueId !== null ? parseLinearIssueNumber(a.linearIssueId) : null;
     const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
 
     // Both standalone: sort by updatedAt desc
     if (aNum === null && bNum === null) {
-      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      return compareGroupActivity(a, b);
     }
     // Standalone sorts before linked
     if (aNum === null) return -1;
@@ -412,7 +442,7 @@ export function groupByLinearIssue(tasks: SerializedTask[]): IssueGroup[] {
     if (aNum !== bNum) {
       return bNum - aNum;
     }
-    return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+    return compareGroupActivity(a, b);
     /* v8 ignore stop @preserve */
   });
 

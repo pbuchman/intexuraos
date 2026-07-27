@@ -123,6 +123,12 @@ export interface IssueGroup {
   tasks: SerializedTask[];
   pipeline: PipelineState;
   latestTask: SerializedTask;
+  /** Most recent lifecycle transition across the group. */
+  lastActivityAt: string;
+  lastActivityStatus: string;
+  lastActivityTaskId: string;
+  /** Most recent technical write across the group. */
+  lastModifiedAt: string;
   aggregateStatus: GroupStatus;
   mostRecentDispatchedAt?: string;
   isImportant?: boolean;

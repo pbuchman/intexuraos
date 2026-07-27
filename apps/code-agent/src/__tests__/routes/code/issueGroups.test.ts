@@ -100,6 +100,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     getUserGroupCounts: async (): ReturnType<TaskGroupSummaryRepository['getUserGroupCounts']> => ok(defaultCounts),
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
     recomputeGroupFromTasks: async (): ReturnType<TaskGroupSummaryRepository['recomputeGroupFromTasks']> => ok(undefined),
+    recomputeGroupFromSource: async (): ReturnType<TaskGroupSummaryRepository['recomputeGroupFromSource']> => ok(undefined),
     recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
     setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
     ...overrides,

@@ -7,6 +7,18 @@ import type { IssueGroup, SortOption } from './types.js';
 
 const LINEAR_ID_REGEX = /\w+-(\d+)/;
 
+function groupIdentity(group: IssueGroup): string {
+  return group.linearIssueId ?? `standalone_${group.latestTask.id}`;
+}
+
+function compareGroupIdentityDesc(a: IssueGroup, b: IssueGroup): number {
+  return groupIdentity(b).localeCompare(groupIdentity(a));
+}
+
+function compareLastActivityDesc(a: IssueGroup, b: IssueGroup): number {
+  return b.lastActivityAt.localeCompare(a.lastActivityAt) || compareGroupIdentityDesc(a, b);
+}
+
 export function parseLinearIssueNumber(id: string): number | null {
   const match = LINEAR_ID_REGEX.exec(id);
   if (match === null) {
@@ -31,8 +43,8 @@ export function comparePrNumber(a: IssueGroup, b: IssueGroup): number {
   // Only one has PR: the one with PR sorts first
   if (aNum !== null) return -1;
   if (bNum !== null) return 1;
-  // Neither has PR: fall back to updatedAt desc
-  return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+  // Neither has PR: fall back to lifecycle activity desc
+  return compareLastActivityDesc(a, b);
 }
 
 /** Comparator for dispatched sort. Exported for direct testing. */
@@ -42,13 +54,13 @@ export function compareDispatched(a: IssueGroup, b: IssueGroup): number {
 
   // Both have dispatchedAt: sort desc
   if (aDispatched !== undefined && bDispatched !== undefined) {
-    return bDispatched.localeCompare(aDispatched);
+    return bDispatched.localeCompare(aDispatched) || compareGroupIdentityDesc(a, b);
   }
   // Only one has dispatchedAt: the one with dispatchedAt sorts first
   if (aDispatched !== undefined) return -1;
   if (bDispatched !== undefined) return 1;
   // Neither has dispatchedAt: fall back to createdAt desc
-  return b.latestTask.createdAt.localeCompare(a.latestTask.createdAt);
+  return b.latestTask.createdAt.localeCompare(a.latestTask.createdAt) || compareGroupIdentityDesc(a, b);
 }
 
 export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): IssueGroup[] {
@@ -61,12 +73,12 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
       const bNum = b.linearIssueId !== null ? parseLinearIssueNumber(b.linearIssueId) : null;
 
       if (aNum === null && bNum === null) {
-        return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+        return compareLastActivityDesc(a, b);
       }
       if (aNum === null) return -1;
       if (bNum === null) return 1;
       if (aNum !== bNum) return bNum - aNum;
-      return b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt);
+      return compareLastActivityDesc(a, b);
     });
     return sorted;
   }
@@ -76,9 +88,9 @@ export function sortIssueGroups(groups: IssueGroup[], sortBy: SortOption): Issue
     return sorted;
   }
 
-  // last-updated: sort by updatedAt desc
+  // last-updated: sort by lifecycle activity desc (the public compatibility name is retained)
   if (sortBy === 'last-updated') {
-    sorted.sort((a, b) => b.latestTask.updatedAt.localeCompare(a.latestTask.updatedAt));
+    sorted.sort(compareLastActivityDesc);
     return sorted;
   }
 

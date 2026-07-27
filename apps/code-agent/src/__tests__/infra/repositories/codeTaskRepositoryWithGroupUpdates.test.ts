@@ -13,7 +13,7 @@ import { Timestamp } from '@google-cloud/firestore';
 import type FirebaseFirestore from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
-import type { CodeTaskRepository, CreateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
+import type { CodeTaskRepository, CreateTaskInput, UpdateTaskInput } from '../../../domain/repositories/codeTaskRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 import { withGroupUpdates } from '../../../infra/firestore/codeTaskRepositoryWithGroupUpdates.js';
 import {
@@ -294,6 +294,78 @@ describe('withGroupUpdates decorator', () => {
 
     it.each([
       {
+        name: 'result.prUrl',
+        input: { result: { prUrl: 'https://github.com/test/repo/pull/42' } },
+      },
+      { name: 'prNumber', input: { prNumber: 42 } },
+      { name: 'implementationTaskId', input: { implementationTaskId: 'task-implementation' } },
+      { name: 'fanOutChildTaskIds', input: { fanOutChildTaskIds: ['task-child'] } },
+      { name: 'requiresReReview', input: { requiresReReview: false } },
+    ])('refreshes summary-purpose metadata for $name without a lifecycle change', async ({ input }) => {
+      const oldTask = makeTask({
+        id: 'task-metadata',
+        linearIssueId: 'INT-METADATA',
+        status: 'implemented',
+        statusChangedAt: Timestamp.fromDate(new Date('2026-07-27T10:00:00Z')),
+      });
+      const newTask = makeTask({
+        ...oldTask,
+        ...input,
+        updatedAt: Timestamp.fromDate(new Date('2026-07-27T12:00:00Z')),
+      });
+      vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));
+      vi.mocked(inner.update).mockResolvedValue(ok(newTask));
+      const updateAfterStatusChangeSpy = vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange');
+
+      await decorated.update('task-metadata', input as UpdateTaskInput);
+
+      await vi.waitFor(() => {
+        expect(updateAfterStatusChangeSpy).toHaveBeenCalledWith(oldTask, newTask);
+      });
+    });
+
+    it('requests an authoritative group-scoped recompute after archiving', async () => {
+      const oldTask = makeTask({
+        id: 'task-B',
+        linearIssueId: 'INT-ARCHIVE',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: Timestamp.fromDate(new Date('2026-07-27T09:00:00Z')),
+      });
+      const archivedTask = makeTask({
+        ...oldTask,
+        status: 'archived',
+        statusChangedAt: Timestamp.fromDate(new Date('2026-07-27T12:00:00Z')),
+        updatedAt: Timestamp.fromDate(new Date('2026-07-27T12:00:00Z')),
+      });
+      vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));
+      vi.mocked(inner.update).mockResolvedValue(ok(archivedTask));
+      const recomputeSpy = vi.spyOn(groupSummaryRepo, 'recomputeGroupFromSource');
+
+      await decorated.update('task-B', { status: 'archived' });
+
+      await vi.waitFor(() => {
+        expect(recomputeSpy).toHaveBeenCalledWith('user-1', 'INT-ARCHIVE');
+      });
+      expect(inner.listAllNonArchived).not.toHaveBeenCalled();
+    });
+
+    it('keeps all-archived summary semantics when no displayable task remains', async () => {
+      const oldTask = makeTask({ id: 'task-only', linearIssueId: 'INT-ALL-ARCHIVED', status: 'implemented' });
+      const archivedTask = makeTask({ ...oldTask, status: 'archived' });
+      vi.mocked(inner.findById).mockResolvedValue(ok(oldTask));
+      vi.mocked(inner.update).mockResolvedValue(ok(archivedTask));
+      const updateSpy = vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange');
+      const recomputeSpy = vi.spyOn(groupSummaryRepo, 'recomputeGroupFromSource');
+
+      await decorated.update('task-only', { status: 'archived' });
+
+      await vi.waitFor(() => expect(updateSpy).toHaveBeenCalledWith(oldTask, archivedTask));
+      expect(recomputeSpy).toHaveBeenCalledWith('user-1', 'INT-ALL-ARCHIVED');
+    });
+
+    it.each([
+      {
         field: 'prMergedAt' as const,
         terminalAt: new Date('2026-07-05T08:00:00.000Z'),
       },
@@ -410,6 +482,43 @@ describe('withGroupUpdates decorator', () => {
       expect(inner.deleteTask).toHaveBeenCalledWith('task-1', 'user-1');
       await Promise.resolve();
       expect(updateAfterDeleteSpy).toHaveBeenCalledWith(task);
+    });
+
+    it('requests an authoritative group-scoped recompute after delete', async () => {
+      const deletedTask = makeTask({ id: 'task-B', linearIssueId: 'INT-DELETE', agentType: 'execution' });
+      vi.mocked(inner.findByIdForUser).mockResolvedValue(ok(deletedTask));
+      vi.mocked(inner.deleteTask).mockResolvedValue(ok(undefined));
+      const recomputeSpy = vi.spyOn(groupSummaryRepo, 'recomputeGroupFromSource');
+
+      await decorated.deleteTask('task-B', 'user-1');
+
+      await vi.waitFor(() => {
+        expect(recomputeSpy).toHaveBeenCalledWith('user-1', 'INT-DELETE');
+      });
+      expect(inner.listAllNonArchived).not.toHaveBeenCalled();
+    });
+
+    it('serializes same-group fire-and-forget maintenance so an earlier write cannot finish after delete', async () => {
+      const task = makeTask({ id: 'task-B', linearIssueId: 'INT-SERIAL', status: 'running' });
+      const updatedTask = makeTask({ ...task, status: 'implemented' });
+      let releaseFirstUpdate: (() => void) | undefined;
+      const firstUpdate = new Promise<void>((resolve) => {
+        releaseFirstUpdate = resolve;
+      });
+      vi.mocked(inner.findById).mockResolvedValue(ok(task));
+      vi.mocked(inner.update).mockResolvedValue(ok(updatedTask));
+      vi.mocked(inner.findByIdForUser).mockResolvedValue(ok(updatedTask));
+      vi.mocked(inner.deleteTask).mockResolvedValue(ok(undefined));
+      vi.spyOn(groupSummaryRepo, 'updateAfterStatusChange').mockReturnValue(firstUpdate);
+      const deleteSummarySpy = vi.spyOn(groupSummaryRepo, 'updateAfterDelete');
+
+      await decorated.update('task-B', { status: 'implemented' });
+      await decorated.deleteTask('task-B', 'user-1');
+      await Promise.resolve();
+      expect(deleteSummarySpy).not.toHaveBeenCalled();
+
+      releaseFirstUpdate?.();
+      await vi.waitFor(() => expect(deleteSummarySpy).toHaveBeenCalledWith(updatedTask));
     });
 
     it('does NOT call updateAfterDelete when inner.deleteTask fails', async () => {

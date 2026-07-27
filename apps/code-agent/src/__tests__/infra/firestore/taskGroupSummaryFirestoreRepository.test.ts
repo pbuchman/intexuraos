@@ -10,7 +10,7 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
-import { createTaskGroupSummaryFirestoreRepository } from '../../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
+import { createTaskGroupSummaryFirestoreRepository as createRepository } from '../../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
 
 describe('taskGroupSummaryFirestoreRepository', () => {
@@ -32,6 +32,12 @@ describe('taskGroupSummaryFirestoreRepository', () => {
     resetFirestore();
   });
 
+  function createTaskGroupSummaryFirestoreRepository(
+    deps: { firestore: Firestore; logger: Logger },
+  ): ReturnType<typeof createRepository> {
+    return createRepository({ ...deps, authoritativeTaskReads: false });
+  }
+
   function makeTask(overrides: Partial<CodeTask> = {}): CodeTask {
     const now = Timestamp.now();
     return {
@@ -49,6 +55,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       dedupKey: 'abc123',
       callbackReceived: false,
       createdAt: now,
+      statusChangedAt: now,
       updatedAt: now,
       ...overrides,
     };
@@ -68,6 +75,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         agentType: 'planning',
         status: 'planned',
         createdAt: now,
+        statusChangedAt: now,
         updatedAt: now,
       });
 
@@ -82,6 +90,9 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('linearIssueSortKey')).toBe(100);
       expect(doc.get('taskCount')).toBe(1);
       expect(doc.get('activeTaskCount')).toBe(0);
+      expect(doc.get('latestTaskId')).toBe('task-1');
+      expect(doc.get('latestTaskCreatedAt')).toEqual(now);
+      expect(doc.get('latestTaskUpdatedAt')).toEqual(now);
       expect(doc.get('hasCompletedPlanning')).toBe(true);
       expect(doc.get('agentTypesPresent')).toContain('planning');
     });
@@ -120,6 +131,84 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const agentTypes = doc.get('agentTypesPresent') as string[];
       expect(agentTypes).toContain('planning');
       expect(agentTypes).toContain('execution');
+    });
+
+    it('does not let reordered creates regress attempt identity or lifecycle activity', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const createdA = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const createdB = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const lifecycleA = Timestamp.fromDate(new Date('2026-07-27T12:00:00Z'));
+      const lifecycleB = Timestamp.fromDate(new Date('2026-07-27T11:00:00Z'));
+
+      await repo.updateAfterCreate(makeTask({
+        id: 'task-B', linearIssueId: 'INT-ORDER', status: 'implemented',
+        createdAt: createdB, statusChangedAt: lifecycleB, updatedAt: lifecycleB,
+      }));
+      await repo.updateAfterCreate(makeTask({
+        id: 'task-A', linearIssueId: 'INT-ORDER', status: 'failed',
+        createdAt: createdA, statusChangedAt: lifecycleA,
+        updatedAt: Timestamp.fromDate(new Date('2026-07-27T13:00:00Z')),
+      }));
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-ORDER').get();
+      expect(doc.get('taskCount')).toBe(2);
+      expect(doc.get('latestTaskId')).toBe('task-B');
+      expect(doc.get('latestTaskStatus')).toBe('implemented');
+      expect(doc.get('latestTaskCreatedAt')).toEqual(createdB);
+      expect(doc.get('latestTaskUpdatedAt')).toEqual(lifecycleA);
+    });
+
+    it('is idempotent when the same create maintenance callback is retried', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const task = makeTask({ id: 'task-retry', linearIssueId: 'INT-RETRY', status: 'running' });
+
+      await repo.updateAfterCreate(task);
+      await repo.updateAfterCreate(task);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-RETRY').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.get('taskCount')).toBe(1);
+      expect(summary.get('activeTaskCount')).toBe(1);
+      expect(counts.get('totalGroups')).toBe(1);
+      expect(counts.get('active')).toBe(1);
+    });
+
+    it('does not resurrect a deleted task from a delayed create callback', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const staleCreate = makeTask({ id: 'task-deleted', linearIssueId: 'INT-DELAYED-DELETE' });
+
+      await repo.updateAfterCreate(staleCreate);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-DELAYED-DELETE').get();
+      expect(summary.exists).toBe(false);
+    });
+
+    it('does not resurrect an archived task from a delayed create callback', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const staleCreate = makeTask({ id: 'task-archived-late', linearIssueId: 'INT-DELAYED-ARCHIVE' });
+      const archived = { ...staleCreate, status: 'archived' as const };
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: archived.id, data: archived as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.updateAfterCreate(staleCreate);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-DELAYED-ARCHIVE').get();
+      expect(summary.exists).toBe(false);
     });
 
     it('sets activeTaskCount when task is active', async () => {
@@ -822,6 +911,283 @@ describe('taskGroupSummaryFirestoreRepository', () => {
   });
 
   describe('updateAfterStatusChange', () => {
+    it('repairs status-before-create ordering from the current persisted task', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const queued = makeTask({
+        id: 'task-status-first', linearIssueId: 'INT-STATUS-FIRST', status: 'queued',
+        createdAt: t1, statusChangedAt: t1, updatedAt: t1,
+      });
+      const running = { ...queued, status: 'running' as const, statusChangedAt: t2, updatedAt: t2 };
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: running.id, data: running as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.updateAfterStatusChange(queued, running);
+      await repo.updateAfterCreate(queued);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-STATUS-FIRST').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.get('taskIds')).toEqual(['task-status-first']);
+      expect(summary.get('taskCount')).toBe(1);
+      expect(summary.get('activeTaskCount')).toBe(1);
+      expect(summary.get('latestTaskStatus')).toBe('running');
+      expect(summary.get('latestTaskUpdatedAt')).toEqual(t2);
+      expect(counts.get('totalGroups')).toBe(1);
+      expect(counts.get('active')).toBe(1);
+    });
+
+    it('repairs archived-status-before-create without double-counting retries', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const queued = makeTask({
+        id: 'task-archive-first', linearIssueId: 'INT-ARCHIVE-FIRST', status: 'queued',
+        agentType: 'review',
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/1606',
+          merge_ready: '1',
+          merge_ready_reason: 'review_no_remediation',
+          needs_remediation: '0',
+        },
+        prNumber: 1606,
+        implementationTaskId: 'task-implementation',
+        createdAt: t1, statusChangedAt: t1, updatedAt: t1,
+      });
+      const archived = { ...queued, status: 'archived' as const, statusChangedAt: t2, updatedAt: t2 };
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: archived.id, data: archived as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.updateAfterStatusChange(queued, archived);
+      await repo.updateAfterCreate(queued);
+      await repo.updateAfterStatusChange(queued, archived);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-ARCHIVE-FIRST').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.get('taskCount')).toBe(0);
+      expect(summary.get('taskIds')).toEqual([]);
+      expect(summary.get('latestTaskId')).toBe('task-archive-first');
+      expect(summary.get('latestTaskStatus')).toBe('archived');
+      expect(summary.get('latestTaskUpdatedAt')).toEqual(t2);
+      expect(summary.get('aggregateStatus')).toBe('archived');
+      expect(summary.get('hasPrUrl')).toBe(true);
+      expect(summary.get('prNumber')).toBe(1606);
+      expect(summary.get('representativePrUpdatedAt')).toEqual(t2);
+      expect(summary.get('representativePrTaskId')).toBe('task-archive-first');
+      expect(summary.get('latestMergeReadyEvidence')).toBe(true);
+      expect(summary.get('latestMergeReadyReason')).toBe('review_no_remediation');
+      expect(summary.get('latestMergeReadyUpdatedAt')).toEqual(t2);
+      expect(summary.get('latestMergeReadyDecisionAt')).toEqual(t2);
+      expect(summary.get('latestMergeReadyDecisionTaskId')).toBe('task-archive-first');
+      expect(summary.get('latestReviewNeedsRemediation')).toBe(false);
+      expect(summary.get('latestReviewUpdatedAt')).toEqual(t2);
+      expect(summary.get('latestReviewTaskId')).toBe('task-archive-first');
+      expect(summary.get('hasImplementationTaskId')).toBe(true);
+      expect(summary.get('hasCompletedPlanning')).toBe(false);
+      expect(summary.get('hasCompletedExecution')).toBe(false);
+      expect(summary.get('hasCompletedExecutionAgent')).toBe(false);
+      expect(counts.get('totalGroups')).toBe(1);
+      expect(counts.get('archived')).toBe(1);
+    });
+
+    it('ignores status callbacks whose authoritative source task is missing or excluded', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const now = Timestamp.now();
+      const missing = makeTask({
+        id: 'task-missing-source', linearIssueId: 'INT-MISSING-SOURCE', status: 'queued',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      await repo.updateAfterStatusChange(missing, { ...missing, status: 'running' });
+
+      const excluded = makeTask({
+        id: 'task-excluded-source', linearIssueId: 'INT-EXCLUDED-SOURCE', agentType: 'ask_agent', status: 'running',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: excluded.id, data: excluded as unknown as Record<string, unknown> },
+      ]);
+      await repo.updateAfterStatusChange(
+        { ...excluded, agentType: 'planning', status: 'queued' },
+        { ...excluded, agentType: 'planning' },
+      );
+
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-MISSING-SOURCE').get()).exists)
+        .toBe(false);
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-EXCLUDED-SOURCE').get()).exists)
+        .toBe(false);
+    });
+
+    it('repairs an existing incomplete summary and preserves user-owned flags and counts', async () => {
+      const localRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const running = makeTask({
+        id: 'task-existing', linearIssueId: 'INT-REPAIR-EXISTING', agentType: 'execution', status: 'running',
+        createdAt: t1, statusChangedAt: t1, updatedAt: t1,
+      });
+      await localRepo.updateAfterCreate(running);
+      await localRepo.recomputeWithLabels(
+        'user-1',
+        'INT-REPAIR-EXISTING',
+        [
+          { id: 'ready-implementation', name: 'ready-to-implement' },
+          { id: 'ready-merge', name: 'ready-to-merge' },
+        ],
+        '2026-07-27T09:30:00.000Z',
+      );
+      await localRepo.setImportant('user-1', 'INT-REPAIR-EXISTING', true);
+
+      const plannedExisting = {
+        ...running,
+        agentType: 'planning' as const,
+        status: 'planned' as const,
+        statusChangedAt: t2,
+        updatedAt: t2,
+      };
+      const newTask = makeTask({
+        id: 'task-new', linearIssueId: 'INT-REPAIR-EXISTING', agentType: 'planning', status: 'planned',
+        createdAt: t2, statusChangedAt: t2, updatedAt: t2,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: plannedExisting.id, data: plannedExisting as unknown as Record<string, unknown> },
+        { id: newTask.id, data: newTask as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.updateAfterStatusChange({ ...newTask, status: 'queued' }, newTask);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REPAIR-EXISTING').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.get('taskIds')).toEqual(['task-existing', 'task-new']);
+      expect(summary.get('hasImplementationReadyLabel')).toBe(true);
+      expect(summary.get('hasMergeReadyLabel')).toBe(true);
+      expect(summary.get('labelsUpdatedAt')).toEqual(Timestamp.fromDate(new Date('2026-07-27T09:30:00.000Z')));
+      expect(summary.get('isImportant')).toBe(true);
+      expect(summary.get('aggregateStatus')).toBe('needs-action');
+      expect(counts.get('active')).toBe(0);
+      expect(counts.get('needsAction')).toBe(1);
+    });
+
+    it('repairs an existing incomplete summary without inventing flags or changing stable counts', async () => {
+      const localRepo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const now = Timestamp.now();
+      const existing = makeTask({
+        id: 'task-stable-existing', linearIssueId: 'INT-REPAIR-STABLE', agentType: 'planning', status: 'planned',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      const added = makeTask({
+        id: 'task-stable-added', linearIssueId: 'INT-REPAIR-STABLE', agentType: 'planning', status: 'planned',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      await localRepo.updateAfterCreate(existing);
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: existing.id, data: existing as unknown as Record<string, unknown> },
+        { id: added.id, data: added as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.updateAfterStatusChange({ ...added, status: 'queued' }, added);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-REPAIR-STABLE').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.get('taskIds')).toEqual(['task-stable-existing', 'task-stable-added']);
+      expect(summary.get('hasImplementationReadyLabel')).toBeUndefined();
+      expect(summary.get('hasMergeReadyLabel')).toBeUndefined();
+      expect(summary.get('labelsUpdatedAt')).toBeUndefined();
+      expect(summary.get('isImportant')).toBeUndefined();
+      expect(counts.get('totalGroups')).toBe(1);
+      expect(counts.get('needsAction')).toBe(1);
+    });
+
+    it('rebuilds the remaining all-archived group after one archived task is hard-deleted', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const executionTask = makeTask({
+        id: 'task-archived-execution',
+        linearIssueId: 'INT-ARCHIVED-PAIR',
+        agentType: 'execution',
+        status: 'archived',
+        result: {
+          prUrl: 'https://github.com/pbuchman/intexuraos/pull/1701',
+          execution_outcome_label: 'implemented',
+        },
+        prNumber: 1701,
+        implementationTaskId: 'task-child',
+        createdAt: t1,
+        statusChangedAt: t2,
+        updatedAt: t2,
+      });
+      const planningTask = makeTask({
+        id: 'task-archived-planning',
+        linearIssueId: 'INT-ARCHIVED-PAIR',
+        agentType: 'planning',
+        status: 'archived',
+        result: { planning_outcome_label: 'planned' },
+        createdAt: t2,
+        statusChangedAt: t2,
+        updatedAt: t2,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: executionTask.id, data: executionTask as unknown as Record<string, unknown> },
+        { id: planningTask.id, data: planningTask as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.recomputeGroupFromSource('user-1', 'INT-ARCHIVED-PAIR');
+      await fakeFirestore.collection('code_tasks').doc(planningTask.id).delete();
+      await repo.updateAfterDelete(planningTask);
+      await repo.recomputeGroupFromSource('user-1', 'INT-ARCHIVED-PAIR');
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-ARCHIVED-PAIR').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.exists).toBe(true);
+      expect(summary.get('aggregateStatus')).toBe('archived');
+      expect(summary.get('taskCount')).toBe(0);
+      expect(summary.get('latestTaskId')).toBe('task-archived-execution');
+      expect(summary.get('hasCompletedPlanning')).toBe(false);
+      expect(summary.get('hasCompletedExecution')).toBe(true);
+      expect(summary.get('hasCompletedExecutionAgent')).toBe(true);
+      expect(summary.get('hasImplementationTaskId')).toBe(true);
+      expect(summary.get('hasPrUrl')).toBe(true);
+      expect(summary.get('prNumber')).toBe(1701);
+      expect(summary.get('representativePrTaskId')).toBe('task-archived-execution');
+      expect(counts.get('totalGroups')).toBe(1);
+      expect(counts.get('archived')).toBe(1);
+    });
+
+
     it('updates activeTaskCount on status transition (active -> done)', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -881,6 +1247,30 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-TOACTIVE').get();
       expect(doc.get('activeTaskCount')).toBe(1);
+    });
+
+    it('is idempotent when the same inactive-to-active transition is retried', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const oldTask = makeTask({
+        id: 'task-active-retry', linearIssueId: 'INT-ACTIVE-RETRY', status: 'planned',
+        createdAt: t1, statusChangedAt: t1, updatedAt: t1,
+      });
+      const newTask = { ...oldTask, status: 'running' as const, statusChangedAt: t2, updatedAt: t2 };
+
+      await repo.updateAfterCreate(oldTask);
+      await repo.updateAfterStatusChange(oldTask, newTask);
+      await repo.updateAfterStatusChange(oldTask, newTask);
+
+      const summary = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-ACTIVE-RETRY').get();
+      const counts = await fakeFirestore.collection('user_group_counts').doc('user-1').get();
+      expect(summary.get('activeTaskCount')).toBe(1);
+      expect(counts.get('active')).toBe(1);
+      expect(counts.get('totalGroups')).toBe(1);
     });
 
     it('updates aggregateStatus when transitioning from active to done', async () => {
@@ -1227,7 +1617,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(countsAfter.get('failed')).toBe(1);
     });
 
-    it('does not update latestTaskStatus when newTask.updatedAt is older', async () => {
+    it('updates representative status even when technical updatedAt is older', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1249,8 +1639,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await repo.updateAfterStatusChange(oldTask, newTask);
 
       const doc = await fakeFirestore.collection('task_group_summaries').doc('user-1_INT-OLDER2').get();
-      // latestTaskStatus stays 'running' because the new update is older
-      expect(doc.get('latestTaskStatus')).toBe('running');
+      expect(doc.get('latestTaskStatus')).toBe('failed');
     });
 
     it('does not update counts when aggregateStatus does not change', async () => {
@@ -2503,6 +2892,54 @@ describe('taskGroupSummaryFirestoreRepository', () => {
   });
 
   describe('recomputeGroupFromTasks', () => {
+    it('loads standalone source tasks exactly and rejects missing or mismatched source documents', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const now = Timestamp.now();
+      const valid = makeTask({
+        id: 'standalone-valid', userId: 'user-source', status: 'planned',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      const wrongUser = makeTask({
+        id: 'standalone-wrong-user', userId: 'other-user', status: 'planned',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      const askAgent = makeTask({
+        id: 'standalone-ask', userId: 'user-source', agentType: 'ask_agent', status: 'planned',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      const movedToLinear = makeTask({
+        id: 'standalone-moved', userId: 'user-source', linearIssueId: 'INT-MOVED', status: 'planned',
+        createdAt: now, statusChangedAt: now, updatedAt: now,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: valid.id, data: valid as unknown as Record<string, unknown> },
+        { id: wrongUser.id, data: wrongUser as unknown as Record<string, unknown> },
+        { id: askAgent.id, data: askAgent as unknown as Record<string, unknown> },
+        { id: movedToLinear.id, data: movedToLinear as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.recomputeGroupFromSource('user-source', 'standalone_standalone-valid');
+      await repo.recomputeGroupFromSource('user-source', 'standalone_missing');
+      await repo.recomputeGroupFromSource('user-source', 'standalone_standalone-wrong-user');
+      await repo.recomputeGroupFromSource('user-source', 'standalone_standalone-ask');
+      await repo.recomputeGroupFromSource('user-source', 'standalone_standalone-moved');
+
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-source_standalone_standalone-valid').get()).exists)
+        .toBe(true);
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-source_standalone_missing').get()).exists)
+        .toBe(false);
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-source_standalone_standalone-wrong-user').get()).exists)
+        .toBe(false);
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-source_standalone_standalone-ask').get()).exists)
+        .toBe(false);
+      expect((await fakeFirestore.collection('task_group_summaries').doc('user-source_standalone_standalone-moved').get()).exists)
+        .toBe(false);
+    });
+
     it('builds summary from task array', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
@@ -2917,7 +3354,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       expect(doc.get('latestReviewNeedsRemediation')).toBe(false);
     });
 
-    it('preserves label flags and labelsUpdatedAt when recomputing from tasks', async () => {
+    it('preserves importance, label flags, and labelsUpdatedAt when recomputing from tasks', async () => {
       const repo = createTaskGroupSummaryFirestoreRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -2942,6 +3379,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         ],
         labelsUpdatedAtIso,
       );
+      await repo.setImportant('user-4', 'INT-LBLPRESERVE', true);
 
       const summaryRef = fakeFirestore.collection('task_group_summaries').doc('user-4_INT-LBLPRESERVE');
       await repo.recomputeGroupFromTasks('user-4', 'INT-LBLPRESERVE', [task]);
@@ -2955,7 +3393,75 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const doc = await summaryRef.get();
       expect(doc.get('hasImplementationReadyLabel')).toBe(true);
       expect(doc.get('hasMergeReadyLabel')).toBe(true);
+      expect(doc.get('isImportant')).toBe(true);
       expect(doc.get('aggregateStatus')).toBe('needs-action');
+    });
+
+    it('keeps authoritative archive recompute when an older callback arrives afterward', async () => {
+      const repo = createTaskGroupSummaryFirestoreRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const t3 = Timestamp.fromDate(new Date('2026-07-27T11:00:00Z'));
+      const remaining = makeTask({
+        id: 'task-A', userId: 'user-4', linearIssueId: 'INT-OUT-OF-ORDER',
+        agentType: 'planning', status: 'planned', createdAt: t1, statusChangedAt: t1, updatedAt: t1,
+      });
+      const removed = makeTask({
+        id: 'task-B', userId: 'user-4', linearIssueId: 'INT-OUT-OF-ORDER',
+        agentType: 'execution', status: 'implemented', createdAt: t2, statusChangedAt: t2, updatedAt: t2,
+        result: { prUrl: 'https://github.com/org/repo/pull/42' }, prNumber: 42,
+      });
+      const archived = { ...removed, status: 'archived' as const, statusChangedAt: t3, updatedAt: t3 };
+
+      await repo.updateAfterCreate(remaining);
+      await repo.updateAfterCreate(removed);
+      await repo.updateAfterStatusChange(removed, archived);
+      await repo.recomputeGroupFromTasks('user-4', 'INT-OUT-OF-ORDER', [remaining]);
+      await repo.updateAfterStatusChange(
+        removed,
+        { ...removed, result: { ...removed.result, merge_ready: '1', merge_ready_reason: 'review_skipped' } },
+      );
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-OUT-OF-ORDER').get();
+      expect(doc.get('taskIds')).toEqual(['task-A']);
+      expect(doc.get('latestTaskId')).toBe('task-A');
+      expect(doc.get('latestTaskStatus')).toBe('planned');
+      expect(doc.get('hasPrUrl')).toBe(false);
+      expect(doc.get('latestMergeReadyEvidence')).toBe(false);
+      expect(doc.get('taskCount')).toBe(1);
+    });
+
+    it('uses current Firestore tasks instead of a stale recompute callback snapshot', async () => {
+      const repo = createRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+        authoritativeTaskReads: true,
+      });
+      const t1 = Timestamp.fromDate(new Date('2026-07-27T09:00:00Z'));
+      const t2 = Timestamp.fromDate(new Date('2026-07-27T10:00:00Z'));
+      const taskA = makeTask({
+        id: 'task-A', userId: 'user-4', linearIssueId: 'INT-AUTHORITATIVE',
+        status: 'planned', createdAt: t1, statusChangedAt: t1, updatedAt: t1,
+      });
+      const taskB = makeTask({
+        id: 'task-B', userId: 'user-4', linearIssueId: 'INT-AUTHORITATIVE',
+        status: 'implemented', createdAt: t2, statusChangedAt: t2, updatedAt: t2,
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: taskA.id, data: taskA as unknown as Record<string, unknown> },
+        { id: taskB.id, data: taskB as unknown as Record<string, unknown> },
+      ]);
+
+      await repo.recomputeGroupFromTasks('user-4', 'INT-AUTHORITATIVE', [taskA]);
+
+      const doc = await fakeFirestore.collection('task_group_summaries').doc('user-4_INT-AUTHORITATIVE').get();
+      expect(doc.get('taskIds')).toEqual(['task-A', 'task-B']);
+      expect(doc.get('taskCount')).toBe(2);
+      expect(doc.get('latestTaskId')).toBe('task-B');
+      expect(doc.get('latestTaskStatus')).toBe('implemented');
     });
 
     it('does not invent label fields when recomputing a summary that has never been label-hydrated', async () => {

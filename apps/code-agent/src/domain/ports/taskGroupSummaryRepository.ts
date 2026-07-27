@@ -29,6 +29,9 @@ export interface TaskGroupSummaryRepository {
   /** Full recompute of a group from its tasks (for backfill/repair). */
   recomputeGroupFromTasks(userId: string, groupKey: string, tasks: CodeTask[]): Promise<Result<void, GroupSummaryError>>;
 
+  /** Recompute from the authoritative task store for write-path repair. */
+  recomputeGroupFromSource(userId: string, groupKey: string): Promise<Result<void, GroupSummaryError>>;
+
   /**
    * Recompute aggregateStatus and persist label flags for the group identified by
    * (userId, linearIssueId), using the provided Linear labels.
