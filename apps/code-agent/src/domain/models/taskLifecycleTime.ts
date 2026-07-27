@@ -88,9 +88,6 @@ function isValidIsoDateTime(value: string): boolean {
 
 export function normalizeTaskLifecycleTimestamp(value: unknown): Timestamp | undefined {
   try {
-    if (value instanceof Timestamp) {
-      return value;
-    }
     if (value instanceof Date) {
       return timestampFromValidDate(value);
     }

@@ -163,6 +163,27 @@ describe('resolveTaskLifecycleTime', () => {
         has: (): never => { throw new Error('reflection trap'); },
       }),
     },
+    {
+      name: 'Timestamp proxy whose toDate access throws',
+      value: new Proxy(timestamp('2026-07-27T08:01:00.000Z'), {
+        get: (target, property, receiver): unknown => {
+          if (property === 'toDate') throw new Error('timestamp getter trap');
+          return Reflect.get(target, property, receiver);
+        },
+      }),
+    },
+    {
+      name: 'Timestamp proxy whose toDate call throws',
+      value: new Proxy(timestamp('2026-07-27T08:01:00.000Z'), {
+        get: (target, property, receiver): unknown => property === 'toDate'
+          ? (): never => { throw new Error('timestamp call trap'); }
+          : Reflect.get(target, property, receiver),
+      }),
+    },
+    {
+      name: 'Timestamp prototype impostor',
+      value: Object.create(Timestamp.prototype) as Timestamp,
+    },
   ])('skips an invalid $name candidate and uses the next valid timestamp', ({ value }) => {
     const resolved = resolveTaskLifecycleTime(baseTask('planned', {
       statusChangedAt: value as never,
@@ -215,7 +236,7 @@ describe('resolveTaskLifecycleTime', () => {
   it('fails fast when every lifecycle timestamp candidate is invalid', () => {
     expect(() => resolveTaskLifecycleTime({
       status: 'failed',
-      statusChangedAt: new Date(Date.UTC(10_000, 0, 1)),
+      statusChangedAt: Object.create(Timestamp.prototype) as Timestamp,
       completedAt: Object.defineProperty({}, 'toDate', {
         get: (): never => { throw new Error('getter trap'); },
       }),
