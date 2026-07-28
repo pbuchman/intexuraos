@@ -6,7 +6,7 @@ import {
   Loader2,
   XCircle,
 } from 'lucide-react';
-import { formatDateTime, formatRelative } from '@/utils/dateFormat';
+import { formatDateTime } from '@/utils/dateFormat';
 import { getTaskMergeUrl } from '@/utils/issueGroups.js';
 import type { CodeTask, WorkerStatusTag } from '@/types';
 import {
@@ -15,9 +15,9 @@ import {
   LINEAR_STATE_STYLES,
   STATUS_MAP,
   WORKER_STATUS_STYLES,
-  isActiveStatus,
   type StatusConfig,
 } from './shared.js';
+import { TaskLifecycleTime } from './TaskLifecycleTime.js';
 
 const ICON_MAP = { Clock, Loader2, CheckCircle2, XCircle, AlertCircle, Archive } as const;
 
@@ -31,9 +31,10 @@ const FALLBACK_STATUS: StatusConfig = {
 interface TaskHeaderProps {
   task: CodeTask;
   workerStatusTag: WorkerStatusTag | null;
+  timeTick?: number;
 }
 
-export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JSX.Element {
+export function TaskHeader({ task, workerStatusTag, timeTick }: TaskHeaderProps): React.JSX.Element {
   // Runtime guard: Firestore data may contain status values outside the CodeTaskStatus union
   const status = (STATUS_MAP[task.status] as StatusConfig | undefined) ?? { ...FALLBACK_STATUS, label: task.status };
   const StatusIcon = ICON_MAP[status.icon];
@@ -112,9 +113,11 @@ export function TaskHeader({ task, workerStatusTag }: TaskHeaderProps): React.JS
 
       <div className="min-h-[1.75rem] mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
         <span>Created: {formatDateTime(task.createdAt)}</span>
-        {!isActiveStatus(task.status) ? (
-          <span>Updated: {formatRelative(task.updatedAt)}</span>
-        ) : null}
+        <TaskLifecycleTime
+          status={task.status}
+          at={task.statusChangedAt}
+          timeTick={timeTick}
+        />
         {task.agentType === 'planning' ? (
           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
             Planning

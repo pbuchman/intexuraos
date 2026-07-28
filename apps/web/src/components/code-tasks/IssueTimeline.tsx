@@ -1,8 +1,14 @@
 import { ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { CodeTask, CodeTaskStatus } from '@/types';
-import { formatDateTime, formatElapsedTime } from '@/utils/dateFormat';
+import type { CodeTask } from '@/types';
+import {
+  formatDispatchDiagnosticText,
+  formatTaskDuration,
+  getDispatchReasonLabel,
+  getDispatchRemediationText,
+} from '@/utils/taskLifecycle';
+import { TaskLifecycleTime } from './TaskLifecycleTime.js';
 
 interface IssueTimelineProps {
   tasks: CodeTask[];
@@ -84,24 +90,6 @@ function getActionLabel(task: CodeTask): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
-// --- Duration calculation ---
-
-const TERMINAL_STATUSES: ReadonlySet<CodeTaskStatus> = new Set<CodeTaskStatus>([
-  'implemented',
-  'planned',
-  'failed',
-  'interrupted',
-  'cancelled',
-  'archived',
-]);
-
-function computeDuration(task: CodeTask): number {
-  const start = new Date(task.createdAt).getTime();
-  const isTerminal = TERMINAL_STATUSES.has(task.status);
-  const end = isTerminal ? new Date(task.updatedAt).getTime() : Date.now();
-  return Math.floor((end - start) / 1000);
-}
-
 // --- followUpReason chip ---
 
 interface FollowUpChipProps {
@@ -167,16 +155,61 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
   const prUrl = task.result?.prUrl;
   const summary = task.result?.summary;
   const errorMessage = task.error?.message;
+  const dispatchStatus = task.dispatchStatus;
+  const terminalCause = dispatchStatus?.terminalCause;
+  const displayError = errorMessage === undefined
+    ? undefined
+    : formatDispatchDiagnosticText(errorMessage);
+  const displayDispatchMessage = dispatchStatus === undefined
+    || dispatchStatus.message === errorMessage
+    ? undefined
+    : formatDispatchDiagnosticText(dispatchStatus.message);
+  const displayDispatchRemediation = dispatchStatus === undefined
+    ? undefined
+    : getDispatchRemediationText(dispatchStatus.reason, dispatchStatus.remediation);
+  const displayTerminalCauseMessage = terminalCause === undefined
+    ? undefined
+    : formatDispatchDiagnosticText(terminalCause.message);
+  const displayTerminalCauseRemediation = terminalCause === undefined
+    ? undefined
+    : getDispatchRemediationText(terminalCause.reason, terminalCause.remediation);
+  const terminalCauseContext = terminalCause !== undefined
+    && (
+      terminalCause.reason !== dispatchStatus?.reason
+      || displayTerminalCauseMessage !== formatDispatchDiagnosticText(dispatchStatus.message)
+    )
+    ? `Final cause: ${getDispatchReasonLabel(terminalCause.reason)} — ${displayTerminalCauseMessage ?? ''}`
+    : undefined;
+  const additionalTerminalRemediation = displayTerminalCauseRemediation !== undefined
+    && displayTerminalCauseRemediation !== displayDispatchRemediation
+    ? displayTerminalCauseRemediation
+    : undefined;
+  const dispatchReasonClass = dispatchStatus?.terminal === true
+    ? 'text-red-700 dark:text-red-300'
+    : dispatchStatus?.severity === 'warning'
+      ? 'text-amber-700 dark:text-amber-300'
+      : 'text-slate-600 dark:text-slate-400';
+  const dispatchMessageClass = dispatchStatus?.terminal === true
+    ? 'text-red-600 dark:text-red-400'
+    : dispatchStatus?.severity === 'warning'
+      ? 'text-amber-700 dark:text-amber-300'
+      : 'text-slate-600 dark:text-slate-400';
 
   // Summary is always shown when available
   const summaryBlock = summary !== undefined
     ? <InlineMarkdown text={summary} className="text-slate-600 dark:text-slate-400" />
     : null;
 
-  if (prUrl !== undefined) {
+  if (summaryBlock !== null || prUrl !== undefined || displayError !== undefined || dispatchStatus !== undefined) {
+    const truncatedError = displayError !== undefined
+      ? displayError.length > 100
+        ? displayError.slice(0, 100) + '...'
+        : displayError
+      : undefined;
     return (
       <div className="flex flex-col gap-1">
         {summaryBlock}
+        {prUrl !== undefined ? (
         <a
           href={prUrl}
           target="_blank"
@@ -186,24 +219,35 @@ function DetailLine({ task }: { task: CodeTask }): React.JSX.Element | null {
           <ExternalLink className="h-3 w-3" />
           {prUrl}
         </a>
+        ) : null}
+        {truncatedError !== undefined ? (
+          <span className="text-xs text-red-600 dark:text-red-400">{truncatedError}</span>
+        ) : null}
+        {dispatchStatus !== undefined ? (
+          <span className={`text-xs font-medium ${dispatchReasonClass}`}>
+            {getDispatchReasonLabel(dispatchStatus.reason)}
+          </span>
+        ) : null}
+        {displayDispatchMessage !== undefined ? (
+          <span className={`text-xs ${dispatchMessageClass}`}>{displayDispatchMessage}</span>
+        ) : null}
+        {displayDispatchRemediation !== undefined ? (
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {displayDispatchRemediation}
+          </span>
+        ) : null}
+        {terminalCauseContext !== undefined ? (
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {terminalCauseContext}
+          </span>
+        ) : null}
+        {additionalTerminalRemediation !== undefined ? (
+          <span className="text-xs text-slate-600 dark:text-slate-400">
+            {additionalTerminalRemediation}
+          </span>
+        ) : null}
       </div>
     );
-  }
-
-  if (errorMessage !== undefined) {
-    const truncated = errorMessage.length > 100
-      ? errorMessage.slice(0, 100) + '...'
-      : errorMessage;
-    return (
-      <div className="flex flex-col gap-1">
-        {summaryBlock}
-        <span className="text-xs text-red-600 dark:text-red-400">{truncated}</span>
-      </div>
-    );
-  }
-
-  if (summaryBlock !== null) {
-    return summaryBlock;
   }
 
   const prompt = task.sanitizedPrompt;
@@ -218,7 +262,7 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
   const dotColor = getDotColor(task);
   const label = getActionLabel(task);
   const isArchived = task.status === 'archived';
-  const duration = computeDuration(task);
+  const duration = formatTaskDuration(task);
 
   return (
     <div className="relative flex gap-3 pb-4 pl-6 last:pb-0">
@@ -263,20 +307,17 @@ function TimelineItem({ task }: { task: CodeTask }): React.JSX.Element {
           </div>
 
           {/* Second line: timestamp + duration */}
-          <p className="mt-0.5 text-xs text-slate-500">
-            {formatDateTime(task.updatedAt)}
+          <p className="mt-0.5 whitespace-normal text-xs text-slate-500">
+            <TaskLifecycleTime status={task.status} at={task.statusChangedAt} />
             <span className="mx-1 text-slate-400 dark:text-slate-600">&middot;</span>
-            {formatElapsedTime(duration)}
+            {duration}
           </p>
         </a>
 
         {/* Third line: detail */}
-        <a
-          href={`/#/code-tasks/${task.id}`}
-          className="mt-1 block cursor-pointer rounded -mx-1 px-1 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
-        >
+        <div className="mt-1 block -mx-1 px-1">
           <DetailLine task={task} />
-        </a>
+        </div>
       </div>
     </div>
   );

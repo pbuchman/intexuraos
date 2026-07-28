@@ -96,6 +96,8 @@ function createTask(overrides?: Partial<CodeTask>): CodeTask {
     dedupKey: 'dedup-123',
     callbackReceived: false,
     createdAt: '2026-03-06T12:00:00.000Z',
+    statusChangedAt: '2026-03-06T12:05:00.000Z',
+    completedAt: '2026-03-06T12:05:00.000Z',
     updatedAt: '2026-03-06T12:05:00.000Z',
     ...overrides,
   };
@@ -264,6 +266,125 @@ describe('useCodeTaskLogs', () => {
       expect(mockGetCodeTask).toHaveBeenCalledTimes(2);
     });
     expect(result.current.task?.dispatchStatus?.reason).toBe('worker_health_contract_mismatch');
+  });
+
+  it.each([
+    ['statusChangedAt', '2026-03-06T12:06:00.000Z'],
+    ['completedAt', '2026-03-06T12:06:00.000Z'],
+  ] as const)('refreshes when %s changes without an updatedAt change', async (field, changedAt) => {
+    const taskSnapshotHandler: { current?: (value: TaskSnapshotValue) => void } = {};
+    const initial = createTask({
+      status: 'running',
+      completedAt: undefined,
+      statusChangedAt: '2026-03-06T12:05:00.000Z',
+    });
+    const refreshed = createTask({
+      status: 'running',
+      completedAt: field === 'completedAt' ? changedAt : undefined,
+      statusChangedAt: field === 'statusChangedAt' ? changedAt : initial.statusChangedAt,
+    });
+    mockGetCodeTask.mockResolvedValueOnce(initial).mockResolvedValueOnce(refreshed);
+    mockOnSnapshot
+      .mockImplementationOnce((_ref: unknown, onNext: (value: TaskSnapshotValue) => void): ReturnType<typeof vi.fn> => {
+        taskSnapshotHandler.current = onNext;
+        return vi.fn();
+      })
+      .mockImplementationOnce((): ReturnType<typeof vi.fn> => vi.fn());
+
+    renderHook(() => useCodeTaskLogs('task-123'));
+    await waitFor(() => { expect(mockGetCodeTask).toHaveBeenCalledTimes(1); });
+
+    await act(async () => {
+      taskSnapshotHandler.current?.({
+        exists: () => true,
+        data: () => ({
+          status: 'running',
+          updatedAt: initial.updatedAt,
+          statusChangedAt: field === 'statusChangedAt' ? changedAt : initial.statusChangedAt,
+          ...(field === 'completedAt' ? { completedAt: changedAt } : {}),
+        }),
+      });
+    });
+
+    await waitFor(() => { expect(mockGetCodeTask).toHaveBeenCalledTimes(2); });
+  });
+
+  it('does not resubscribe Firestore listeners after a metadata-only task refresh', async () => {
+    const taskSnapshotHandler: { current?: (value: TaskSnapshotValue) => void } = {};
+    const taskUnsubscribe = vi.fn();
+    const logsUnsubscribe = vi.fn();
+    mockGetCodeTask
+      .mockResolvedValueOnce(createTask({ status: 'running', completedAt: undefined }))
+      .mockResolvedValueOnce(createTask({
+        status: 'running',
+        completedAt: undefined,
+        updatedAt: '2026-03-06T12:06:00.000Z',
+      }));
+    mockOnSnapshot
+      .mockImplementationOnce((_ref: unknown, onNext: (value: TaskSnapshotValue) => void): typeof taskUnsubscribe => {
+        taskSnapshotHandler.current = onNext;
+        return taskUnsubscribe;
+      })
+      .mockImplementationOnce((): typeof logsUnsubscribe => logsUnsubscribe);
+
+    renderHook(() => useCodeTaskLogs('task-123'));
+    await waitFor(() => { expect(mockOnSnapshot).toHaveBeenCalledTimes(2); });
+
+    await act(async () => {
+      taskSnapshotHandler.current?.({
+        exists: () => true,
+        data: () => ({
+          status: 'running',
+          updatedAt: '2026-03-06T12:06:00.000Z',
+          statusChangedAt: '2026-03-06T12:05:00.000Z',
+        }),
+      });
+    });
+    await waitFor(() => { expect(mockGetCodeTask).toHaveBeenCalledTimes(2); });
+
+    expect(mockOnSnapshot).toHaveBeenCalledTimes(2);
+    expect(taskUnsubscribe).not.toHaveBeenCalled();
+    expect(logsUnsubscribe).not.toHaveBeenCalled();
+  });
+
+  it('finalizes logs once when an active task transitions to terminal', async () => {
+    const taskSnapshotHandler: { current?: (value: TaskSnapshotValue) => void } = {};
+    mockGetCodeTask
+      .mockResolvedValueOnce(createTask({ status: 'running', completedAt: undefined }))
+      .mockResolvedValueOnce(createTask({
+        status: 'failed',
+        statusChangedAt: '2026-03-06T12:06:00.000Z',
+        completedAt: '2026-03-06T12:06:00.000Z',
+        updatedAt: '2026-03-06T12:06:00.000Z',
+      }));
+    mockOnSnapshot
+      .mockImplementationOnce((_ref: unknown, onNext: (value: TaskSnapshotValue) => void): ReturnType<typeof vi.fn> => {
+        taskSnapshotHandler.current = onNext;
+        return vi.fn();
+      })
+      .mockImplementationOnce((): ReturnType<typeof vi.fn> => vi.fn());
+    mockGetDocs.mockResolvedValue({
+      docs: [{ data: (): LogDocData => ({ sequence: 1, text: '[done] failed' }) }],
+    });
+
+    const { result } = renderHook(() => useCodeTaskLogs('task-123'));
+    await waitFor(() => { expect(mockOnSnapshot).toHaveBeenCalledTimes(2); });
+
+    await act(async () => {
+      taskSnapshotHandler.current?.({
+        exists: () => true,
+        data: () => ({
+          status: 'failed',
+          updatedAt: '2026-03-06T12:06:00.000Z',
+          statusChangedAt: '2026-03-06T12:06:00.000Z',
+          completedAt: '2026-03-06T12:06:00.000Z',
+        }),
+      });
+    });
+
+    await waitFor(() => { expect(result.current.task?.status).toBe('failed'); });
+    await waitFor(() => { expect(mockGetDocs).toHaveBeenCalledTimes(1); });
+    expect(result.current.logs).toEqual([{ sequence: 1, text: '[done] failed' }]);
   });
 
   it('marks listener unhealthy when a live listener errors', async () => {
