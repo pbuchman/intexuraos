@@ -922,6 +922,10 @@ describe('Hetzner web asset deployment', () => {
     expect(runbook).toContain('--limit=200');
     expect(runbook).toContain('--expected-release-sha=');
     expect(runbook).toContain('rollback:lifecycle-time');
+    expect(runbook).toContain('pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time');
+    expect(runbook).toContain('pnpm -s --filter @intexuraos/code-agent resume:lifecycle-time');
+    expect(runbook).toContain('pnpm -s --filter @intexuraos/code-agent rollback:lifecycle-time');
+    expect(runbook).not.toMatch(/(?:backfill|resume|rollback):lifecycle-time -- \\\n/u);
     expect(runbook).toContain('chmod 700');
     expect(runbook).toContain('chmod 600');
     expect(runbook).toMatch(/\bscp\b/u);
