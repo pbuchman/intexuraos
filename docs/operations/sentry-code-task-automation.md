@@ -68,11 +68,62 @@ The orchestrator / worker runtime requires:
 | `INTEXURAOS_SENTRY_AUTH_TOKEN` | Secret read by orchestrator and injected into workers as `SENTRY_AUTH_TOKEN`. |
 | `LINEAR_API_KEY` | Existing Linear MCP credential used by the worker for the linked Linear issue. |
 
-Hetzner production loads `INTEXURAOS_SENTRY_WEBHOOK_SECRET`,
-`INTEXURAOS_SENTRY_AUTOMATION_USER_ID`, and
-`INTEXURAOS_SENTRY_AUTH_TOKEN` from GCP Secret Manager through
-`scripts/hetzner/load-secrets.sh`. Development can mirror the same values from
-`.envrc.local` / `.envrc.local.example`.
+Hetzner production receives and authenticates the webhook, so it loads
+`INTEXURAOS_SENTRY_WEBHOOK_SECRET` and
+`INTEXURAOS_SENTRY_AUTOMATION_USER_ID` through
+`scripts/hetzner/load-secrets.sh`. It deliberately does **not** load
+`INTEXURAOS_SENTRY_AUTH_TOKEN` into the PM2 backend runtime.
+
+The Sentry API token belongs to the `home-dev` orchestrator. The systemd unit
+reads `INTEXURAOS_SENTRY_AUTH_TOKEN` from `~/.code-orchestrator/env` and injects
+it into isolated workers as `SENTRY_AUTH_TOKEN`. Both currently deployed token
+forms are valid when the Sentry API probe returns HTTP 200; this procedure does
+not rotate or rewrite a working token.
+
+### Safe home-dev token sync and verification
+
+Run these steps on `home-dev` as the orchestrator account. Do not paste the
+token into shell history, command arguments, logs, chat, or this runbook.
+
+1. Edit `~/.code-orchestrator/env` with a trusted interactive editor, ensuring
+   it contains exactly one `INTEXURAOS_SENTRY_AUTH_TOKEN=...` assignment.
+2. Restrict the file and print only presence—not the value:
+
+   ```bash
+   chmod 600 ~/.code-orchestrator/env
+   awk -F= '$1 == "INTEXURAOS_SENTRY_AUTH_TOKEN" && length($2) > 0 { found=1 }
+     END { print found ? "SENTRY_AUTH_TOKEN: SET" : "SENTRY_AUTH_TOKEN: MISSING"; exit !found }' \
+     ~/.code-orchestrator/env
+   ```
+
+3. Restart and verify the actual systemd owner (the orchestrator is not a PM2
+   process):
+
+   ```bash
+   sudo systemctl restart intexuraos-orchestrator@pbuchman
+   sudo systemctl status intexuraos-orchestrator@pbuchman --no-pager
+   curl --fail --silent --show-error http://127.0.0.1:8199/health >/dev/null
+   ```
+
+4. In a private shell, load the env file, call the Sentry API, and print only
+   the HTTP status. A valid token returns 200. Immediately unset both names:
+
+   ```bash
+   set -a
+   source ~/.code-orchestrator/env
+   set +a
+   sentry_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+     --header "Authorization: Bearer ${INTEXURAOS_SENTRY_AUTH_TOKEN}" \
+     https://sentry.io/api/0/)"
+   unset INTEXURAOS_SENTRY_AUTH_TOKEN SENTRY_AUTH_TOKEN
+   test "${sentry_status}" = 200
+   printf 'Sentry API status: %s\n' "${sentry_status}"
+   unset sentry_status
+   ```
+
+Do not use `systemctl show ... Environment` for this verification because it
+can expose environment values. Do not copy the auth token into Hetzner's
+`.env.prod` or restart unrelated runtime services.
 
 ## Automation User And Worker Selection
 

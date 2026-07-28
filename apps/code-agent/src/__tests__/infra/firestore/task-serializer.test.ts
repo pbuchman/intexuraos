@@ -118,6 +118,36 @@ describe('fromFirestoreDoc', () => {
 
     expect(task.statusChangedAt?.toMillis()).toBe(completedAt.toMillis());
   });
+
+  it.each([
+    { agentType: 'planning', expectedStatus: 'planned' },
+    { agentType: 'review', expectedStatus: 'reviewed' },
+    { agentType: 'execution', expectedStatus: 'implemented' },
+    { agentType: undefined, expectedStatus: 'implemented' },
+  ] as const)(
+    'normalizes a legacy completed $agentType task only after resolving its raw terminal lifecycle',
+    ({ agentType, expectedStatus }) => {
+      const createdAt = Timestamp.fromDate(new Date('2026-03-19T01:55:00.000Z'));
+      const completedAt = Timestamp.fromDate(new Date('2026-03-19T02:06:53.707Z'));
+      const updatedAt = Timestamp.fromDate(new Date('2026-03-19T02:14:34.998Z'));
+
+      const task = fromFirestoreDoc({
+        id: 'task_76d13dde-c6d9-4c08-86c4-5589f1c8dcf2',
+        data: () => ({
+          status: 'completed',
+          ...(agentType !== undefined && { agentType }),
+          createdAt,
+          completedAt,
+          updatedAt,
+        }),
+      });
+
+      expect(task.status).toBe(expectedStatus);
+      expect(task.statusChangedAt?.toMillis()).toBe(completedAt.toMillis());
+      expect(task.completedAt?.toMillis()).toBe(completedAt.toMillis());
+      expect(task.updatedAt.toMillis()).toBe(updatedAt.toMillis());
+    },
+  );
 });
 
 describe('toTimestamp', () => {
@@ -389,7 +419,7 @@ describe('buildUpdateData', () => {
     expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
-  it('converts Date fields to Timestamps', () => {
+  it('converts non-completion Date fields to Timestamps without completing an active task', () => {
     const data = buildUpdateData(lifecycleTask(), {
       queuedAt: new Date('2025-01-01'),
       dispatchedAt: new Date('2025-01-02'),
@@ -400,7 +430,7 @@ describe('buildUpdateData', () => {
     }, writeTime);
     expect(data['queuedAt']).toBeInstanceOf(Timestamp);
     expect(data['dispatchedAt']).toBeInstanceOf(Timestamp);
-    expect(data['completedAt']).toBeInstanceOf(Timestamp);
+    expect(data['completedAt']).toBeUndefined();
     expect(data['lastHeartbeat']).toBeInstanceOf(Timestamp);
     expect(data['prMergedAt']).toBeInstanceOf(Timestamp);
     expect(data['prClosedAt']).toBeInstanceOf(Timestamp);
@@ -608,6 +638,89 @@ describe('buildUpdateData', () => {
     expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
+  it.each(['planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled'] as const)(
+    'does not overwrite completedAt for a same-status %s write even when input is later',
+    (status) => {
+      const originalCompletedAt = Timestamp.fromDate(new Date('2026-07-27T10:30:00.000Z'));
+      const laterCompletedAt = new Date('2026-07-27T11:30:00.000Z');
+      const data = buildUpdateData(
+        lifecycleTask(status, { completedAt: originalCompletedAt }),
+        { status, completedAt: laterCompletedAt, prNumber: 42 },
+        writeTime,
+      );
+
+      expect(data['completedAt']).toBeUndefined();
+      expect(data['statusChangedAt']).toBeUndefined();
+      expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    },
+  );
+
+  it('treats an invalid existing completion as missing and accepts a valid explicit replacement', () => {
+    const completedAt = new Date('2026-07-27T10:30:00.000Z');
+    const data = buildUpdateData(
+      lifecycleTask('failed', {
+        completedAt: new Date(Number.NaN) as unknown as Timestamp,
+      }),
+      { status: 'failed', completedAt },
+      writeTime,
+    );
+
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
+    expect(data['statusChangedAt']).toBeUndefined();
+  });
+
+  it('rejects an invalid explicit completion when no valid completion exists', () => {
+    expect(() => buildUpdateData(
+      lifecycleTask('failed'),
+      { status: 'failed', completedAt: new Date(Number.NaN) },
+      writeTime,
+    )).toThrowError('Invalid explicit task completion timestamp');
+  });
+
+  it('preserves a valid existing completion when a same-status input is invalid', () => {
+    const completedAt = new Timestamp(1_775_000_000, 123_456_789);
+
+    expect(() => buildUpdateData(
+      lifecycleTask('failed', { completedAt }),
+      { status: 'failed', completedAt: new Date(Number.NaN) },
+      writeTime,
+    )).not.toThrow();
+
+    const data = buildUpdateData(
+      lifecycleTask('failed', { completedAt }),
+      { status: 'failed', completedAt: new Date(Number.NaN) },
+      writeTime,
+    );
+    expect(data['completedAt']).toBeUndefined();
+    expect(data['statusChangedAt']).toBeUndefined();
+  });
+
+  it('does not introduce completion state during active metadata writes', () => {
+    const data = buildUpdateData(
+      lifecycleTask('running'),
+      { status: 'running', completedAt: new Date('2026-07-27T10:30:00.000Z') },
+      writeTime,
+    );
+
+    expect(data['completedAt']).toBeUndefined();
+    expect(data['statusChangedAt']).toBeUndefined();
+  });
+
+  it.each(['planned', 'implemented', 'reviewed', 'failed', 'interrupted', 'cancelled'] as const)(
+    'allows an explicit completedAt to fill missing same-status %s completion state',
+    (status) => {
+      const completedAt = new Date('2026-07-27T10:30:00.000Z');
+      const data = buildUpdateData(
+        lifecycleTask(status),
+        { status, completedAt },
+        writeTime,
+      );
+
+      expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
+      expect(data['statusChangedAt']).toBeUndefined();
+    },
+  );
+
   it('advances archive status time while preserving the original completion time', () => {
     const completedAt = Timestamp.fromDate(new Date('2026-07-27T11:00:00.000Z'));
     const data = buildUpdateData(
@@ -632,13 +745,60 @@ describe('buildUpdateData', () => {
     expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
   });
 
-  it('fills missing archive completion state from the captured write time', () => {
+  it('fills missing archive completion state from the resolved pre-archive lifecycle time', () => {
+    const failedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
     const data = buildUpdateData(
-      lifecycleTask('failed'),
+      lifecycleTask('failed', { statusChangedAt: failedAt }),
       { status: 'archived' },
       writeTime
     );
 
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(failedAt.toMillis());
+  });
+
+  it('uses a legacy terminal cause at T1 when archiving at T2 without completion fields', () => {
+    const failedAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00.000Z'));
+    const technicalUpdateAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
+    const legacyFailed = lifecycleTask('failed', {
+      updatedAt: technicalUpdateAt,
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        severity: 'warning',
+        message: 'Codex auth unavailable',
+        remediation: 'Use an authorized worker',
+        workerNames: ['home-dev'],
+        firstSeenAt: failedAt,
+        lastSeenAt: technicalUpdateAt,
+        terminalCause: {
+          reason: 'codex_auth_unavailable',
+          message: 'Codex auth unavailable',
+          remediation: 'Use an authorized worker',
+          workerNames: ['home-dev'],
+          lastSeenAt: failedAt,
+        },
+        nextAction: 'retry_after_fix',
+      },
+    });
+    delete legacyFailed.statusChangedAt;
+    delete legacyFailed.completedAt;
+
+    const data = buildUpdateData(legacyFailed, { status: 'archived' }, writeTime);
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(failedAt.toMillis());
+  });
+
+  it('uses the archive write time when an active task has no completion evidence', () => {
+    const data = buildUpdateData(
+      lifecycleTask('running'),
+      { status: 'archived' },
+      writeTime,
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
     expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
@@ -674,6 +834,18 @@ describe('buildUpdateData', () => {
 
     expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
     expect((data['completedAt'] as Timestamp).toMillis()).toBe(archivedAt.toMillis());
+  });
+
+  it('uses an explicit completion when restoring an archive with no completion state', () => {
+    const completedAt = new Date('2026-07-19T08:30:00.000Z');
+    const data = buildUpdateData(
+      lifecycleTask('archived'),
+      { status: 'reviewed', completedAt },
+      writeTime,
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect((data['completedAt'] as Timestamp).toMillis()).toBe(completedAt.getTime());
   });
 
   it('uses terminal-cause lifecycle fallback when restoring a legacy archive', () => {
@@ -712,6 +884,39 @@ describe('buildUpdateData', () => {
     expect((data['completedAt'] as Timestamp).toMillis()).toBe(failedAt.toMillis());
   });
 
+  it('does not let archive status time mask the earlier failure when restoring completion', () => {
+    const failedAt = new Timestamp(1_775_000_000, 123_456_789);
+    const archivedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
+    const legacyArchived = lifecycleTask('archived', {
+      statusChangedAt: archivedAt,
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        severity: 'warning',
+        message: 'Codex auth unavailable',
+        remediation: 'Use an authorized worker',
+        workerNames: ['home-dev'],
+        firstSeenAt: failedAt,
+        lastSeenAt: archivedAt,
+        terminalCause: {
+          reason: 'codex_auth_unavailable',
+          message: 'Codex auth unavailable',
+          remediation: 'Use an authorized worker',
+          workerNames: ['home-dev'],
+          lastSeenAt: failedAt,
+        },
+        nextAction: 'retry_after_fix',
+      },
+    });
+
+    const data = buildUpdateData(legacyArchived, { status: 'reviewed' }, writeTime);
+    const completedAt = data['completedAt'] as Timestamp;
+
+    expect(completedAt.seconds).toBe(failedAt.seconds);
+    expect(completedAt.nanoseconds).toBe(failedAt.nanoseconds);
+  });
+
   it('preserves archived completion on a same-status write with a later completedAt', () => {
     const originalCompletedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
     const laterCompletedAt = new Date('2026-07-27T11:00:00.000Z');
@@ -725,15 +930,43 @@ describe('buildUpdateData', () => {
     expect(data['statusChangedAt']).toBeUndefined();
   });
 
-  it('fills missing archived completion during a metadata-only write', () => {
+  it('fills missing archived completion from failure T1 during a metadata-only write at T3', () => {
+    const failedAt = new Timestamp(1_775_000_000, 123_456_789);
+    const archivedAt = Timestamp.fromDate(new Date('2026-07-27T09:00:00.000Z'));
+    const technicalUpdateAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
     const data = buildUpdateData(
-      lifecycleTask('archived'),
+      lifecycleTask('archived', {
+        statusChangedAt: archivedAt,
+        updatedAt: technicalUpdateAt,
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'codex_auth_unavailable',
+          terminal: true,
+          severity: 'warning',
+          message: 'Codex auth unavailable',
+          remediation: 'Use an authorized worker',
+          workerNames: ['home-dev'],
+          firstSeenAt: failedAt,
+          lastSeenAt: archivedAt,
+          terminalCause: {
+            reason: 'codex_auth_unavailable',
+            message: 'Codex auth unavailable',
+            remediation: 'Use an authorized worker',
+            workerNames: ['home-dev'],
+            lastSeenAt: failedAt,
+          },
+          nextAction: 'retry_after_fix',
+        },
+      }),
       { prNumber: 42 },
       writeTime
     );
 
-    expect((data['completedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    const completedAt = data['completedAt'] as Timestamp;
+    expect(completedAt.seconds).toBe(failedAt.seconds);
+    expect(completedAt.nanoseconds).toBe(failedAt.nanoseconds);
     expect(data['statusChangedAt']).toBeUndefined();
+    expect((data['updatedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
   });
 
   it('fills missing archived completion from explicit input on a same-status write', () => {
@@ -766,6 +999,17 @@ describe('buildUpdateData', () => {
       lifecycleTask('failed', { completedAt }),
       { status: 'running' },
       writeTime
+    );
+
+    expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());
+    expect(data['completedAt']).toBeInstanceOf(FieldValue);
+  });
+
+  it('clears stale or missing completion state when restoring an archive to active', () => {
+    const data = buildUpdateData(
+      lifecycleTask('archived'),
+      { status: 'running' },
+      writeTime,
     );
 
     expect((data['statusChangedAt'] as Timestamp).toMillis()).toBe(writeTime.getTime());

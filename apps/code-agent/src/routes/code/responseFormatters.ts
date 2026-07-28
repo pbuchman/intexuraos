@@ -14,6 +14,7 @@ import type {
 import {
   isTerminalTaskStatus,
   normalizeTaskLifecycleTimestamp,
+  resolveMissingTaskCompletionTime,
   resolveTaskLifecycleTime,
   type CodeTaskLifecycleShape,
 } from '../../domain/models/taskLifecycleTime.js';
@@ -60,6 +61,16 @@ export function timestampToIso(
     return timestamp.toDate().toISOString();
   }
   return undefined;
+}
+
+export function taskCompletionToIso(task: CodeTaskLifecycleShape): string | undefined {
+  const stored = normalizeTaskLifecycleTimestamp(task.completedAt);
+  if (stored !== undefined) return stored.toDate().toISOString();
+
+  const terminal = task.status === 'completed' || isTerminalTaskStatus(task.status);
+  if (!terminal) return undefined;
+
+  return resolveMissingTaskCompletionTime(task).at.toDate().toISOString();
 }
 
 /**
@@ -276,11 +287,7 @@ function taskToApiResponse(task: {
     task as unknown as CodeTaskLifecycleShape,
   ).at;
   const statusChangedAt = resolvedLifecycleAt.toDate().toISOString();
-  const serializedCompletedAt = normalizeTaskLifecycleTimestamp(task.completedAt)
-    ?.toDate()
-    .toISOString();
-  const completedAt = serializedCompletedAt
-    ?? (isTerminalTaskStatus(task.status) ? statusChangedAt : undefined);
+  const completedAt = taskCompletionToIso(task as unknown as CodeTaskLifecycleShape);
 
   return {
     id: task.id,

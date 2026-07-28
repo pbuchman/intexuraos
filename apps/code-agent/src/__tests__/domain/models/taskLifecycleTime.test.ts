@@ -6,6 +6,7 @@ import {
   isArchivalTaskStatus,
   isCompletionTaskStatus,
   normalizeTaskLifecycleTimestamp,
+  resolveMissingTaskCompletionTime,
   resolveTaskLifecycleTime,
   TaskLifecycleTimeInvariantError,
   type CodeTaskLifecycleShape,
@@ -318,6 +319,127 @@ describe('resolveTaskLifecycleTime', () => {
       updatedAt: { toDate: (): Date => new Date(Number.NaN) },
       createdAt: {},
     })).toThrowError(TaskLifecycleTimeInvariantError);
+  });
+});
+
+describe('resolveMissingTaskCompletionTime', () => {
+  const failureAt = timestamp('2026-07-27T08:01:00.000Z');
+  const terminalAt = timestamp('2026-07-27T08:02:00.000Z');
+  const archivedAt = timestamp('2026-07-27T08:03:00.000Z');
+  const metadataAt = timestamp('2026-07-27T08:04:00.000Z');
+  const explicitAt = timestamp('2026-07-27T08:00:30.000Z');
+
+  const archivedTask = (overrides: Partial<CodeTaskLifecycleShape> = {}): CodeTaskLifecycleShape =>
+    baseTask('archived', {
+      statusChangedAt: archivedAt,
+      updatedAt: metadataAt,
+      dispatchStatus: {
+        terminal: true,
+        lastSeenAt: terminalAt,
+        terminalCause: { lastSeenAt: failureAt },
+      },
+      ...overrides,
+    });
+
+  it('prefers valid explicit completion over every archived fallback', () => {
+    const resolved = resolveMissingTaskCompletionTime(archivedTask(), {
+      explicitCompletedAt: explicitAt,
+    });
+
+    expect(resolved.at.toMillis()).toBe(explicitAt.toMillis());
+    expect(resolved.source).toBe('explicit_completed');
+  });
+
+  it('prefers terminal cause before terminal dispatch and archived statusChangedAt', () => {
+    const preciseFailureAt = new Timestamp(1_775_000_000, 123_456_789);
+    const resolved = resolveMissingTaskCompletionTime(archivedTask({
+      dispatchStatus: {
+        terminal: true,
+        lastSeenAt: terminalAt,
+        terminalCause: { lastSeenAt: preciseFailureAt },
+      },
+    }));
+
+    expect(resolved.source).toBe('dispatch_terminal_cause');
+    expect(resolved.at.seconds).toBe(preciseFailureAt.seconds);
+    expect(resolved.at.nanoseconds).toBe(preciseFailureAt.nanoseconds);
+  });
+
+  it('falls back through terminal dispatch, archived status, updatedAt, then createdAt', () => {
+    const withoutDispatch = archivedTask();
+    delete withoutDispatch.dispatchStatus;
+    const withoutDispatchOrStatus = archivedTask();
+    delete withoutDispatchOrStatus.dispatchStatus;
+    delete withoutDispatchOrStatus.statusChangedAt;
+    const cases: {
+      task: CodeTaskLifecycleShape;
+      expectedAt: Timestamp;
+      expectedSource: TaskLifecycleTimeSource;
+    }[] = [
+      {
+        task: archivedTask({ dispatchStatus: { terminal: true, lastSeenAt: terminalAt } }),
+        expectedAt: terminalAt,
+        expectedSource: 'dispatch_terminal',
+      },
+      {
+        task: withoutDispatch,
+        expectedAt: archivedAt,
+        expectedSource: 'status_changed',
+      },
+      {
+        task: withoutDispatchOrStatus,
+        expectedAt: metadataAt,
+        expectedSource: 'legacy_updated',
+      },
+      {
+        task: {
+          status: 'archived',
+          createdAt,
+          queuedAt: timestamp('2026-07-27T08:06:00.000Z'),
+          dispatchedAt: timestamp('2026-07-27T08:07:00.000Z'),
+        },
+        expectedAt: createdAt,
+        expectedSource: 'created',
+      },
+    ];
+
+    for (const candidate of cases) {
+      const resolved = resolveMissingTaskCompletionTime(candidate.task);
+      expect(resolved.at.toMillis()).toBe(candidate.expectedAt.toMillis());
+      expect(resolved.source).toBe(candidate.expectedSource);
+    }
+  });
+
+  it('uses a completion-terminal statusChangedAt before dispatch evidence', () => {
+    const resolved = resolveMissingTaskCompletionTime(baseTask('failed', {
+      statusChangedAt: archivedAt,
+      dispatchStatus: {
+        terminal: true,
+        lastSeenAt: terminalAt,
+        terminalCause: { lastSeenAt: failureAt },
+      },
+    }));
+
+    expect(resolved.at.toMillis()).toBe(archivedAt.toMillis());
+    expect(resolved.source).toBe('status_changed');
+  });
+
+  it('uses the write fallback for an active task instead of treating active timestamps as completion', () => {
+    const writeAt = new Timestamp(1_775_100_000, 987_654_321);
+    const resolved = resolveMissingTaskCompletionTime(baseTask('running', {
+      statusChangedAt: archivedAt,
+      dispatchedAt: terminalAt,
+    }), { activeFallbackAt: writeAt });
+
+    expect(resolved.source).toBe('write_time');
+    expect(resolved.at.seconds).toBe(writeAt.seconds);
+    expect(resolved.at.nanoseconds).toBe(writeAt.nanoseconds);
+  });
+
+  it('rejects an invalid explicit completion instead of silently falling back', () => {
+    expect(() => resolveMissingTaskCompletionTime(archivedTask(), {
+      explicitCompletedAt: new Date(Number.NaN),
+    })).toThrowError('Invalid explicit task completion timestamp');
   });
 });
 

@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { Firestore } from '@google-cloud/firestore';
 import type { Firestore as FirestoreType } from '@google-cloud/firestore';
@@ -15,6 +16,12 @@ import {
   type CodeTaskLifecycleBackfillReport,
   type LifecycleBackfillOptions,
 } from './lib/codeTaskLifecycleBackfill.js';
+import {
+  prepareProductionLifecycleJournal,
+  productionLifecycleEndpointsFromEnvironment,
+  runProductionLifecycleApplyBatch,
+  sanitizeLifecycleOperationResult,
+} from './lib/productionLifecycleOperations.js';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -27,6 +34,11 @@ export interface LifecycleBackfillCliDependencies {
   runBackfill?: (
     input: LifecycleBackfillOptions & { firestore: FirestoreType; logger: Logger },
   ) => Promise<unknown>;
+  runProductionApply?: (input: {
+    options: LifecycleBackfillOptions;
+    firestore: FirestoreType;
+    env: Environment;
+  }) => Promise<Record<string, unknown>>;
   logger?: Logger;
 }
 
@@ -202,11 +214,38 @@ export async function executeCodeTaskLifecycleBackfillCli(
   let terminationError: unknown;
   let terminationFailed = false;
   try {
-    report = await (deps.runBackfill ?? runCodeTaskLifecycleBackfill)({
-      ...options,
-      firestore,
-      logger,
-    });
+    if (options.mode === 'apply' && deps.runBackfill === undefined) {
+      report = await (deps.runProductionApply ?? (async (input): Promise<Record<string, unknown>> => {
+        if (
+          input.options.phase === 'all'
+          || input.options.limit !== 200
+          || input.options.expectedReleaseSha === undefined
+        ) throw new LifecycleBackfillSafetyError('APPLY_CONTRACT_INVALID');
+        const journal = await prepareProductionLifecycleJournal({
+          firestore: input.firestore,
+          phase: input.options.phase,
+          pageSize: input.options.pageSize,
+          ...(input.options.cursor !== undefined && { cursor: input.options.cursor }),
+          limit: input.options.limit,
+          operationId: `op_${randomUUID().replaceAll('-', '')}`,
+          expectedReleaseSha: input.options.expectedReleaseSha,
+        });
+        return await runProductionLifecycleApplyBatch({
+          firestore: input.firestore,
+          journal,
+          journalDirectory:
+            input.env['INTEXURAOS_LIFECYCLE_JOURNAL_DIRECTORY']
+            ?? '/var/lib/intexuraos/code-task-lifecycle',
+          endpoints: productionLifecycleEndpointsFromEnvironment(input.env),
+        });
+      }))({ options, firestore, env });
+    } else {
+      report = await (deps.runBackfill ?? runCodeTaskLifecycleBackfill)({
+        ...options,
+        firestore,
+        logger,
+      });
+    }
   } catch (error) {
     primaryFailed = true;
     primaryError = error;
@@ -220,6 +259,16 @@ export async function executeCodeTaskLifecycleBackfillCli(
   }
   if (primaryFailed) throw primaryError;
   if (terminationFailed) throw terminationError;
+  if (options.mode === 'apply' && deps.runBackfill === undefined) {
+    return {
+      projectId: options.projectId,
+      mode: options.mode,
+      phase: options.phase,
+      ...sanitizeLifecycleOperationResult(
+        typeof report === 'object' && report !== null ? report as Record<string, unknown> : {},
+      ),
+    };
+  }
   const sanitized = sanitizeSuccessReport(report, options);
   if (reportHasAuditFindings(sanitized)) {
     throw new LifecycleBackfillAuditError(sanitized);

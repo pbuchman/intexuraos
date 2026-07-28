@@ -144,30 +144,68 @@ function normalizeSummarySortFields(summary: TaskGroupSummary): TaskGroupSummary
 // Timestamp helper (pure)
 // =============================================================================
 
-/**
- * Helper to ensure a value is a Timestamp.
- */
-export function toTimestamp(value: unknown): Timestamp {
-  /* v8 ignore start -- ts-type: FakeFirestore always stores real Timestamp instances; non-Timestamp value is unreachable in tests @preserve */
+function parseTimestamp(value: unknown): Timestamp | undefined {
   if (value instanceof Timestamp) {
     return value;
   }
   if (value instanceof Date) {
-    return Timestamp.fromDate(value);
+    if (!Number.isFinite(value.getTime())) return undefined;
+    try {
+      return Timestamp.fromDate(value);
+    } catch {
+      return undefined;
+    }
   }
   if (typeof value === 'object' && value !== null) {
     const obj = value as Record<string, unknown>;
     if ('toDate' in obj && typeof obj['toDate'] === 'function') {
-      return obj as unknown as Timestamp;
+      try {
+        const date = (obj['toDate'] as () => unknown)();
+        return date instanceof Date && Number.isFinite(date.getTime())
+          ? Timestamp.fromDate(date)
+          : undefined;
+      } catch {
+        return undefined;
+      }
     }
-    if ('_seconds' in obj && typeof obj['_seconds'] === 'number') {
+    if ('_seconds' in obj && typeof obj['_seconds'] === 'number' && Number.isFinite(obj['_seconds'])) {
       const seconds = obj['_seconds'];
-      const nanos = typeof obj['_nanoseconds'] === 'number' ? obj['_nanoseconds'] : 0;
-      return new Timestamp(seconds, nanos);
+      const nanosValue = obj['_nanoseconds'];
+      const nanos = '_nanoseconds' in obj ? nanosValue : 0;
+      if (
+        typeof nanos !== 'number'
+        || !Number.isFinite(nanos)
+        || !Number.isInteger(nanos)
+        || nanos < 0
+        || nanos >= 1_000_000_000
+      ) return undefined;
+      try {
+        return new Timestamp(seconds, nanos);
+      } catch {
+        return undefined;
+      }
     }
   }
-  return Timestamp.now();
-  /* v8 ignore stop @preserve */
+  return undefined;
+}
+
+/**
+ * Helper to ensure a required value is a Timestamp.
+ */
+export function toTimestamp(value: unknown, fieldName = 'timestamp'): Timestamp {
+  const timestamp = parseTimestamp(value);
+  if (timestamp === undefined) {
+    throw new Error(`Invalid task group summary timestamp: ${fieldName}`);
+  }
+  return timestamp;
+}
+
+function optionalTimestamp(value: unknown): Timestamp | undefined {
+  return parseTimestamp(value);
+}
+
+function nullableTimestamp(value: unknown): Timestamp | null {
+  return parseTimestamp(value) ?? null;
 }
 
 function compareTimestamps(a: Timestamp, b: Timestamp): number {
@@ -216,7 +254,6 @@ function lifecycleAt(task: CodeTask): Timestamp {
  * Build a TaskGroupSummary from raw Firestore document data.
  */
 export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
-  /* v8 ignore start -- ts-type: FakeFirestore always returns well-formed documents written by this repo; null/missing field fallbacks are unreachable in tests @preserve */
   const linearIssueId = data['linearIssueId'] !== undefined && data['linearIssueId'] !== null
     ? String(data['linearIssueId'])
     : null;
@@ -244,7 +281,10 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
     ...(typeof data['taskLifecycleAtById'] === 'object' && data['taskLifecycleAtById'] !== null
       ? { taskLifecycleAtById: Object.fromEntries(
         Object.entries(data['taskLifecycleAtById'] as Record<string, unknown>)
-          .map(([id, at]) => [id, toTimestamp(at)]),
+          .flatMap(([id, at]) => {
+            const timestamp = optionalTimestamp(at);
+            return timestamp === undefined ? [] : [[id, timestamp]];
+          }),
       ) }
       : {}),
     activeTaskCount: Number(data['activeTaskCount'] ?? 0),
@@ -252,10 +292,13 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? { latestTaskId: String(data['latestTaskId']) }
       : {}),
     ...(data['latestTaskCreatedAt'] !== undefined && data['latestTaskCreatedAt'] !== null
-      ? { latestTaskCreatedAt: toTimestamp(data['latestTaskCreatedAt']) }
+      ? ((): { latestTaskCreatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['latestTaskCreatedAt']);
+        return timestamp === undefined ? {} : { latestTaskCreatedAt: timestamp };
+      })()
       : {}),
     latestTaskStatus: String(data['latestTaskStatus'] ?? ''),
-    latestTaskUpdatedAt: toTimestamp(data['latestTaskUpdatedAt']),
+    latestTaskUpdatedAt: toTimestamp(data['latestTaskUpdatedAt'], 'latestTaskUpdatedAt'),
     ...(data['latestLifecycleTaskId'] !== undefined
       ? { latestLifecycleTaskId: String(data['latestLifecycleTaskId']) }
       : {}),
@@ -275,19 +318,22 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? String(data['latestMergeReadyReason'])
       : null,
     latestMergeReadyUpdatedAt: data['latestMergeReadyUpdatedAt'] !== undefined && data['latestMergeReadyUpdatedAt'] !== null
-      ? toTimestamp(data['latestMergeReadyUpdatedAt'])
+      ? nullableTimestamp(data['latestMergeReadyUpdatedAt'])
       : null,
     ...(data['latestMergeReadyDecisionAt'] !== undefined && data['latestMergeReadyDecisionAt'] !== null
-      ? { latestMergeReadyDecisionAt: toTimestamp(data['latestMergeReadyDecisionAt']) }
+      ? ((): { latestMergeReadyDecisionAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['latestMergeReadyDecisionAt']);
+        return timestamp === undefined ? {} : { latestMergeReadyDecisionAt: timestamp };
+      })()
       : {}),
     ...(data['latestMergeReadyDecisionTaskId'] !== undefined && data['latestMergeReadyDecisionTaskId'] !== null
       ? { latestMergeReadyDecisionTaskId: String(data['latestMergeReadyDecisionTaskId']) }
       : {}),
     prMergedAt: data['prMergedAt'] !== undefined && data['prMergedAt'] !== null
-      ? toTimestamp(data['prMergedAt'])
+      ? nullableTimestamp(data['prMergedAt'])
       : null,
     prClosedAt: data['prClosedAt'] !== undefined && data['prClosedAt'] !== null
-      ? toTimestamp(data['prClosedAt'])
+      ? nullableTimestamp(data['prClosedAt'])
       : null,
     latestReviewNeedsRemediation: data['latestReviewNeedsRemediation'] === true
       ? true
@@ -295,20 +341,26 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
         ? false
         : null,
     ...(data['latestReviewUpdatedAt'] !== undefined && data['latestReviewUpdatedAt'] !== null
-      ? { latestReviewUpdatedAt: toTimestamp(data['latestReviewUpdatedAt']) }
+      ? ((): { latestReviewUpdatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['latestReviewUpdatedAt']);
+        return timestamp === undefined ? {} : { latestReviewUpdatedAt: timestamp };
+      })()
       : {}),
     ...(data['latestReviewTaskId'] !== undefined && data['latestReviewTaskId'] !== null
       ? { latestReviewTaskId: String(data['latestReviewTaskId']) }
       : {}),
     ...(data['representativePrUpdatedAt'] !== undefined && data['representativePrUpdatedAt'] !== null
-      ? { representativePrUpdatedAt: toTimestamp(data['representativePrUpdatedAt']) }
+      ? ((): { representativePrUpdatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['representativePrUpdatedAt']);
+        return timestamp === undefined ? {} : { representativePrUpdatedAt: timestamp };
+      })()
       : {}),
     ...(data['representativePrTaskId'] !== undefined && data['representativePrTaskId'] !== null
       ? { representativePrTaskId: String(data['representativePrTaskId']) }
       : {}),
-    oldestTaskCreatedAt: toTimestamp(data['oldestTaskCreatedAt']),
+    oldestTaskCreatedAt: toTimestamp(data['oldestTaskCreatedAt'], 'oldestTaskCreatedAt'),
     mostRecentDispatchedAt: data['mostRecentDispatchedAt'] !== undefined && data['mostRecentDispatchedAt'] !== null
-      ? toTimestamp(data['mostRecentDispatchedAt'])
+      ? nullableTimestamp(data['mostRecentDispatchedAt'])
       : null,
     aggregateStatus: String(data['aggregateStatus'] ?? 'done') as GroupStatus,
     // Label flags are only present when recomputeWithLabels has been called; legacy docs omit them
@@ -319,14 +371,16 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? { hasMergeReadyLabel: data['hasMergeReadyLabel'] === true }
       : {}),
     ...(data['labelsUpdatedAt'] !== undefined && data['labelsUpdatedAt'] !== null
-      ? { labelsUpdatedAt: toTimestamp(data['labelsUpdatedAt']) }
+      ? ((): { labelsUpdatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['labelsUpdatedAt']);
+        return timestamp === undefined ? {} : { labelsUpdatedAt: timestamp };
+      })()
       : {}),
     ...(data['isImportant'] === true
       ? { isImportant: true }
       : {}),
-    updatedAt: toTimestamp(data['updatedAt']),
+    updatedAt: toTimestamp(data['updatedAt'], 'updatedAt'),
   };
-  /* v8 ignore stop @preserve */
 }
 
 /**

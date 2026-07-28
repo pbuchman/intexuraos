@@ -4,11 +4,17 @@
 
 /* eslint-disable */
 
-import type { Firestore, Query, Transaction as FirestoreTransaction } from '@google-cloud/firestore';
+import type {
+  Firestore,
+  Query,
+  QueryDocumentSnapshot,
+  Transaction as FirestoreTransaction,
+} from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
 import { randomUUID } from 'node:crypto';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask } from '../../domain/models/codeTask.js';
 import { resolveTaskLifecycleTime } from '../../domain/models/taskLifecycleTime.js';
 import type {
@@ -29,6 +35,19 @@ import {
   selectPreservedPullRequest, tasksCreatedSince, zombieTasks,
 } from './task-query-builder.js';
 import { LIST_QUEUED_DEFAULT_LIMIT } from './task-constants.js';
+
+const EXACT_TASK_READ_CHUNK_SIZE = 100;
+const COMPATIBILITY_LIST_SCAN_PAGE_SIZE = 100;
+const COMPATIBILITY_LIST_SCAN_MAX_PAGES = 10;
+const OWNER_LINEAR_SCAN_PAGE_SIZE = 50;
+const OWNER_LINEAR_SCAN_MAX_PAGES = 10;
+const OWNER_LINEAR_SCAN_MAX_RESULTS = 50;
+
+function needsCompletedStatusCompatibility(input: ListTasksInput): boolean {
+  return input.status?.some(
+    (status) => status === 'planned' || status === 'reviewed' || status === 'implemented',
+  ) === true;
+}
 
 function firestoreError(error: unknown): RepositoryError {
   /* v8 ignore start -- ts-type: catch blocks always throw Error instances so non-Error branch is unreachable in unit tests @preserve */
@@ -152,6 +171,28 @@ export const createFirestoreCodeTaskRepository = (deps: {
       }
       return ok(fromFirestoreDoc(doc));
     }, { taskId, userId }, 'Failed to find task by id for user', true),
+    findByIdsForUser: (taskIds, userId) => guarded<CodeTask[]>(async () => {
+      const uniqueTaskIds = [...new Set(taskIds)];
+      const tasks: CodeTask[] = [];
+      for (let offset = 0; offset < uniqueTaskIds.length; offset += EXACT_TASK_READ_CHUNK_SIZE) {
+        const chunkIds = uniqueTaskIds.slice(offset, offset + EXACT_TASK_READ_CHUNK_SIZE);
+        const refs = chunkIds.map((taskId) => collection.doc(taskId));
+        const snapshots = await firestore.getAll(...refs);
+        const ownedById = new Map<string, CodeTask>();
+        for (const snapshot of snapshots) {
+          if (!snapshot.exists || snapshot.data()?.['userId'] !== userId) continue;
+          ownedById.set(snapshot.id, fromFirestoreDoc(snapshot));
+        }
+        for (const taskId of chunkIds) {
+          const task = ownedById.get(taskId);
+          if (task !== undefined) tasks.push(task);
+        }
+      }
+      return tasks;
+    }, {
+      userId,
+      requestedTaskCount: taskIds.length,
+    }, 'Failed to find tasks by ids for user'),
     update: (taskId, input, options) => guarded<CodeTask>(async () => {
       const docRef = collection.doc(taskId);
       type UpdateOutcome =
@@ -208,6 +249,61 @@ export const createFirestoreCodeTaskRepository = (deps: {
       return outcome.result;
     }, { taskId, input }, 'Failed to update task', true),
     list: (input: ListTasksInput) => guarded<ListTasksOutput>(async () => {
+      if (needsCompletedStatusCompatibility(input)) {
+        const limit = input.limit ?? 20;
+        const publicStatuses = new Set(
+          /* v8 ignore start -- upstream: needsCompletedStatusCompatibility guarantees input.status is defined before this compatibility branch is entered @preserve */
+          input.status ?? []
+          /* v8 ignore stop @preserve */
+        );
+        const matchingTasks: CodeTask[] = [];
+        let scanCursor = input.cursor;
+        let lastScannedTaskId: string | undefined;
+        let exhausted = false;
+
+        for (
+          let page = 0;
+          page < COMPATIBILITY_LIST_SCAN_MAX_PAGES && matchingTasks.length <= limit;
+          page += 1
+        ) {
+          const scanInput: ListTasksInput = {
+            ...input,
+            limit: COMPATIBILITY_LIST_SCAN_PAGE_SIZE - 1,
+            ...(scanCursor !== undefined ? { cursor: scanCursor } : {}),
+          };
+          const { query } = await buildListQuery(collection, scanInput);
+          const docs = (await query.get()).docs;
+          exhausted = docs.length < COMPATIBILITY_LIST_SCAN_PAGE_SIZE;
+
+          for (const doc of docs) {
+            lastScannedTaskId = doc.id;
+            const task = fromFirestoreDoc(doc);
+            if (publicStatuses.has(task.status)) matchingTasks.push(task);
+            if (matchingTasks.length > limit) break;
+          }
+
+          if (matchingTasks.length > limit || exhausted) break;
+          const lastDoc = docs.at(-1);
+          /* v8 ignore start -- upstream: exhausted-page early return guarantees a non-exhausted query page always has a final document @preserve */
+          if (lastDoc === undefined) {
+            exhausted = true;
+            break;
+          }
+          /* v8 ignore stop @preserve */
+          scanCursor = lastDoc.id;
+        }
+
+        const tasks = matchingTasks.slice(0, limit);
+        const out: ListTasksOutput = { tasks };
+        if (matchingTasks.length > limit) {
+          const lastReturnedTask = tasks.at(-1);
+          if (lastReturnedTask !== undefined) out.nextCursor = lastReturnedTask.id;
+        } else if (!exhausted && lastScannedTaskId !== undefined) {
+          out.nextCursor = lastScannedTaskId;
+        }
+        return out;
+      }
+
       const { query, limit } = await buildListQuery(collection, input);
       const docs = (await query.get()).docs;
       const hasMore = docs.length > limit;
@@ -359,10 +455,60 @@ export const createFirestoreCodeTaskRepository = (deps: {
         'findOriginTaskByPR exhausted 50-doc window without finding an origin task'),
       { repository, prNumber }, 'Failed to find origin task by PR',
     ),
-    findRecentTasksByLinearIssue: (linearIssueId, limit) => guarded(
-      () => docsToTasks(recentByLinearIssue(collection, linearIssueId, limit)),
-      { linearIssueId, limit }, 'Failed to find recent tasks by Linear issue',
-    ),
+    findRecentTasksByLinearIssue: (linearIssueId, limit, userId) => guarded(async () => {
+      if (userId === undefined) {
+        return await docsToTasks(recentByLinearIssue(collection, linearIssueId, limit));
+      }
+
+      const startedAt = Date.now();
+      const requestedLimit = Math.min(Math.max(limit, 0), OWNER_LINEAR_SCAN_MAX_RESULTS);
+      const tasks: CodeTask[] = [];
+      let cursorDoc: QueryDocumentSnapshot | undefined;
+      let scannedTaskCount = 0;
+      let exhausted = false;
+
+      for (
+        let page = 0;
+        page < OWNER_LINEAR_SCAN_MAX_PAGES && tasks.length < requestedLimit;
+        page += 1
+      ) {
+        let query = recentByLinearIssue(
+          collection,
+          linearIssueId,
+          OWNER_LINEAR_SCAN_PAGE_SIZE,
+        );
+        if (cursorDoc !== undefined) query = query.startAfter(cursorDoc);
+        const snapshot = await query.get();
+        exhausted = snapshot.docs.length < OWNER_LINEAR_SCAN_PAGE_SIZE;
+
+        for (const doc of snapshot.docs) {
+          scannedTaskCount += 1;
+          if (doc.data()['userId'] === userId) tasks.push(fromFirestoreDoc(doc));
+          if (tasks.length >= requestedLimit) break;
+        }
+
+        if (tasks.length >= requestedLimit || exhausted) break;
+        cursorDoc = snapshot.docs.at(-1);
+        /* v8 ignore start -- upstream: exhausted-page early return guarantees a full owner-scan page always has a final cursor document @preserve */
+        if (cursorDoc === undefined) {
+          exhausted = true;
+          break;
+        }
+        /* v8 ignore stop @preserve */
+      }
+
+      logger.info({
+        linearIssueId,
+        userId,
+        requestedLimit,
+        matchedTaskCount: tasks.length,
+        scannedTaskCount,
+        exhausted,
+        durationMs: Date.now() - startedAt,
+        [SKIP_SENTRY_KEY]: true,
+      }, 'Completed owner-scoped Linear issue task scan');
+      return tasks;
+    }, { linearIssueId, limit, userId }, 'Failed to find recent tasks by Linear issue'),
     listAllNonArchived: (userId) => guarded(
       () => docsToTasks(nonArchivedForUser(collection, userId, NON_ARCHIVED_STATUSES)),
       { userId }, 'Failed to list all non-archived tasks',

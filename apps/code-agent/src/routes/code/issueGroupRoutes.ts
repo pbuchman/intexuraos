@@ -11,26 +11,24 @@ import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { getServices } from '../../services.js';
 import {
   serializeDispatchStatus,
+  taskCompletionToIso,
   timestampToIso,
 } from './responseFormatters.js';
 import type { JwtValidator } from '../codeRoutes.js';
-import {
-  groupByLinearIssue,
-  sortIssueGroups,
-} from '../../domain/issueGrouping/index.js';
-import type { GroupStatus, SortOption, SerializedTask } from '../../domain/issueGrouping/index.js';
+import { groupByLinearIssue } from '../../domain/issueGrouping/index.js';
+import type { GroupStatus, IssueGroup, SortOption, SerializedTask } from '../../domain/issueGrouping/index.js';
 import type { TaskGroupSummary } from '../../domain/models/taskGroupSummary.js';
+import type { CodeTask } from '../../domain/models/codeTask.js';
 import type { CodeTaskRebaseResult } from '@intexuraos/code-task-domain';
 import type {
   CodeTaskDispatchStatus,
   TaskStatus,
 } from '../../domain/models/codeTask.js';
 import {
-  isTerminalTaskStatus,
-  normalizeTaskLifecycleTimestamp,
   resolveTaskLifecycleTime,
   type CodeTaskLifecycleShape,
 } from '../../domain/models/taskLifecycleTime.js';
+import { loadExactTasksForUser } from './issueGroupTaskLoader.js';
 
 export interface CodeRoutesOptions {
   jwtValidator: JwtValidator;
@@ -40,6 +38,80 @@ const VALID_GROUP_STATUSES: ReadonlySet<string> = new Set(['active', 'needs-acti
 const VALID_SORT_OPTIONS: ReadonlySet<string> = new Set(['linear-id', 'pr-number', 'dispatched', 'last-updated']);
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const LEGACY_TASKS_PER_GROUP_LIMIT = 50;
+const PUBLIC_TASK_STATUSES: ReadonlySet<string> = new Set([
+  'dispatched',
+  'running',
+  'queued',
+  'planned',
+  'implemented',
+  'reviewed',
+  'failed',
+  'interrupted',
+  'cancelled',
+  'archived',
+]);
+
+function asPublicTaskStatus(value: string | undefined): TaskStatus | undefined {
+  return value !== undefined && PUBLIC_TASK_STATUSES.has(value)
+    ? value as TaskStatus
+    : undefined;
+}
+
+function usesExactTaskMembership(
+  summary: TaskGroupSummary,
+  includeArchived: boolean,
+): summary is TaskGroupSummary & { taskIds: string[] } {
+  if (summary.taskIds === undefined) return false;
+  return !(
+    includeArchived
+    && summary.aggregateStatus === 'archived'
+    && summary.taskIds.length === 0
+  );
+}
+
+function reconcileGroupWithSummary(
+  group: IssueGroup,
+  summary: TaskGroupSummary | undefined,
+): IssueGroup {
+  /* v8 ignore start -- upstream: a concrete summary is always provided by buildGroupForSummary when calling this reconciliation helper @preserve */
+  if (summary === undefined) return group;
+  /* v8 ignore stop @preserve */
+
+  group.aggregateStatus = summary.aggregateStatus;
+
+  if (summary.latestTaskId !== undefined) {
+    const latestTask = group.tasks.find((task) => task.id === summary.latestTaskId);
+    if (latestTask !== undefined) group.latestTask = latestTask;
+  }
+
+  if (summary.latestLifecycleTaskId !== undefined) {
+    const lastActivityAt = timestampToIso(summary.latestTaskUpdatedAt);
+    if (lastActivityAt !== undefined) group.lastActivityAt = lastActivityAt;
+    group.lastActivityTaskId = summary.latestLifecycleTaskId;
+    const activityTask = group.tasks.find(
+      (task) => task.id === summary.latestLifecycleTaskId,
+    );
+    group.lastActivityStatus =
+      activityTask?.status
+      ?? asPublicTaskStatus(summary.taskStatusById?.[summary.latestLifecycleTaskId])
+      ?? (summary.latestLifecycleTaskId === summary.latestTaskId
+        ? asPublicTaskStatus(summary.latestTaskStatus)
+        : undefined)
+      ?? group.lastActivityStatus;
+  }
+
+  delete group.mostRecentDispatchedAt;
+  if (summary.mostRecentDispatchedAt !== null) {
+    const mostRecentDispatchedAt = timestampToIso(summary.mostRecentDispatchedAt);
+    if (mostRecentDispatchedAt !== undefined) {
+      group.mostRecentDispatchedAt = mostRecentDispatchedAt;
+    }
+  }
+  if (summary.isImportant === true) group.isImportant = true;
+
+  return group;
+}
 
 /**
  * Convert a CodeTask domain model to the full serialized shape matching the frontend CodeTask type.
@@ -115,11 +187,7 @@ function taskToSerializedTask(task: {
     task as unknown as CodeTaskLifecycleShape,
   ).at;
   const statusChangedAt = resolvedLifecycleAt.toDate().toISOString();
-  const serializedCompletedAt = normalizeTaskLifecycleTimestamp(task.completedAt)
-    ?.toDate()
-    .toISOString();
-  const completedAt = serializedCompletedAt
-    ?? (isTerminalTaskStatus(task.status) ? statusChangedAt : undefined);
+  const completedAt = taskCompletionToIso(task as unknown as CodeTaskLifecycleShape);
   const dispatchStatus = task.dispatchStatus !== undefined
     ? serializeDispatchStatus(task.dispatchStatus)
     : undefined;
@@ -277,79 +345,125 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
         }
         /* v8 ignore stop @preserve */
 
-        // 3+4. Fetch tasks and hydrate Linear issues concurrently
-        const includeArchived = statusFilter?.includes('archived') === true;
-        const TASKS_PER_GROUP_LIMIT = 50;
-        const taskFetchesPromise = Promise.all(summaries.map(async (summary): Promise<SerializedTask[]> => {
+        // 3+4. Resolve authoritative task membership once for the whole page.
+        // Current summaries own an exact taskIds set. Legacy summaries and
+        // archived summaries (whose active taskIds are intentionally empty)
+        // retain the bounded compatibility query.
+        const archivedRequested = statusFilter?.includes('archived') === true;
+        const includeArchivedForSummary = (summary: TaskGroupSummary): boolean =>
+          archivedRequested && summary.aggregateStatus === 'archived';
+        const allSummaries = [...summaries, ...phantomCheckSummaries];
+        const exactTaskIds = allSummaries.flatMap((summary) =>
+          usesExactTaskMembership(summary, includeArchivedForSummary(summary))
+            ? summary.taskIds
+            : []
+        );
+        const exactTasksPromise = loadExactTasksForUser({
+          codeTaskRepo,
+          userId,
+          taskIds: exactTaskIds,
+          logger: request.log,
+        });
+
+        const isDisplayableTask = (
+          task: CodeTask,
+          summary: TaskGroupSummary,
+        ): boolean =>
+          task.userId === userId
+          && (includeArchivedForSummary(summary) || task.status !== 'archived')
+          && task.agentType !== 'ask_agent';
+
+        const fetchLegacyTasksForSummary = async (
+          summary: TaskGroupSummary,
+          context: 'display' | 'phantom',
+        ): Promise<SerializedTask[]> => {
           if (summary.linearIssueId !== null) {
             const tasksResult = await codeTaskRepo.findRecentTasksByLinearIssue(
               summary.linearIssueId,
-              TASKS_PER_GROUP_LIMIT,
+              LEGACY_TASKS_PER_GROUP_LIMIT,
+              userId,
             );
             if (!tasksResult.ok) {
               request.log.warn(
-                { linearIssueId: summary.linearIssueId, error: tasksResult.error },
-                'Failed to fetch tasks for linear group'
+                {
+                  linearIssueId: summary.linearIssueId,
+                  error: tasksResult.error,
+                  context,
+                  ...(tasksResult.error.code === 'NOT_FOUND' && {
+                    [SKIP_SENTRY_KEY]: true,
+                  }),
+                },
+                context === 'display'
+                  ? 'Failed to fetch tasks for legacy linear group'
+                  : 'Failed to fetch legacy tasks for phantom check',
               );
               return [];
             }
             return tasksResult.value
-              .filter((t) => t.userId === userId && (includeArchived || t.status !== 'archived') && t.agentType !== 'ask_agent')
-              .map((t) => taskToSerializedTask(t));
+              .filter((task) => isDisplayableTask(task, summary))
+              .map((task) => taskToSerializedTask(task));
           }
           const taskId = summary.groupKey.replace(/^standalone_/, '');
           const taskResult = await codeTaskRepo.findById(taskId);
           if (!taskResult.ok) {
-            request.log.warn({ taskId, error: taskResult.error }, 'Failed to fetch standalone task');
+            request.log.warn(
+              {
+                taskId,
+                error: taskResult.error,
+                context,
+                ...(taskResult.error.code === 'NOT_FOUND' && {
+                  [SKIP_SENTRY_KEY]: true,
+                }),
+              },
+              context === 'display'
+                ? 'Failed to fetch legacy standalone task'
+                : 'Failed to fetch legacy standalone task for phantom check',
+            );
             return [];
           }
-          const task = taskResult.value;
-          /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
-          if (task.userId !== userId || (!includeArchived && task.status === 'archived') || task.agentType === 'ask_agent') {
-            return [];
+          return isDisplayableTask(taskResult.value, summary)
+            ? [taskToSerializedTask(taskResult.value)]
+            : [];
+        };
+
+        type SummaryTaskSource =
+          | {
+            kind: 'exact';
+            summary: TaskGroupSummary & { taskIds: string[] };
           }
-          /* v8 ignore stop @preserve */
-          return [taskToSerializedTask(task)];
-        }));
+          | {
+            kind: 'legacy';
+            summary: TaskGroupSummary;
+            tasks: SerializedTask[];
+          };
+        const resolveSummaryTaskSource = async (
+          summary: TaskGroupSummary,
+          context: 'display' | 'phantom',
+        ): Promise<SummaryTaskSource> => {
+          if (usesExactTaskMembership(summary, includeArchivedForSummary(summary))) {
+            return { kind: 'exact', summary };
+          }
+          return {
+            kind: 'legacy',
+            summary,
+            tasks: await fetchLegacyTasksForSummary(summary, context),
+          };
+        };
+        const taskSourcesPromise = Promise.all(
+          summaries.map((summary) => resolveSummaryTaskSource(summary, 'display')),
+        );
 
         const pageLinearIssueIds = summaries
           .map((s) => s.linearIssueId)
           .filter((id): id is string => id !== null);
 
-        // 2c. Fetch tasks for phantom-check summaries (non-filtered statuses) to
-        // determine which are true phantoms. Only summaries with zero displayable
-        // tasks after filtering are counted as phantoms.
-        const phantomCheckTaskFetchesPromise = Promise.all(phantomCheckSummaries.map(async (summary): Promise<SerializedTask[]> => {
-          if (summary.linearIssueId !== null) {
-            const tasksResult = await codeTaskRepo.findRecentTasksByLinearIssue(
-              summary.linearIssueId,
-              TASKS_PER_GROUP_LIMIT,
-            );
-            if (!tasksResult.ok) {
-              request.log.warn(
-                { linearIssueId: summary.linearIssueId, error: tasksResult.error },
-                'Failed to fetch tasks for phantom check'
-              );
-              return [];
-            }
-            return tasksResult.value
-              .filter((t) => t.userId === userId && (includeArchived || t.status !== 'archived') && t.agentType !== 'ask_agent')
-              .map((t) => taskToSerializedTask(t));
-          }
-          const taskId = summary.groupKey.replace(/^standalone_/, '');
-          const taskResult = await codeTaskRepo.findById(taskId);
-          if (!taskResult.ok) {
-            request.log.warn({ taskId, error: taskResult.error }, 'Failed to fetch standalone task for phantom check');
-            return [];
-          }
-          const task = taskResult.value;
-          /* v8 ignore start -- test-infra: FakeFirestore cannot produce cross-user task leaks or archived standalone tasks in this test flow @preserve */
-          if (task.userId !== userId || (!includeArchived && task.status === 'archived') || task.agentType === 'ask_agent') {
-            return [];
-          }
-          /* v8 ignore stop @preserve */
-          return [taskToSerializedTask(task)];
-        }));
+        // 2c. Phantom checks share the same exact bulk read. Only legacy or
+        // intentionally-empty archived summaries execute a compatibility read.
+        const phantomCheckTaskSourcesPromise = Promise.all(
+          phantomCheckSummaries.map(
+            (summary) => resolveSummaryTaskSource(summary, 'phantom'),
+          ),
+        );
 
         interface HydratedLinearIssue {
           identifier: string;
@@ -380,53 +494,134 @@ const issueGroupRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, opt
           return new Map();
         })();
 
-        const [tasksByGroup, hydratedIssuesByIdentifier, phantomCheckTasksByGroup] = await Promise.all([
-          taskFetchesPromise,
+        const [exactTasksResult, taskSources, hydratedIssuesByIdentifier, phantomCheckTaskSources] = await Promise.all([
+          exactTasksPromise,
+          taskSourcesPromise,
           linearHydrationPromise,
-          phantomCheckTaskFetchesPromise,
+          phantomCheckTaskSourcesPromise,
         ]);
-
-        // 5. Hydrate tasks with linear issue data and group them
-        const allPageTasks: SerializedTask[] = tasksByGroup.flat().map((task) => {
-          if (task.linearIssueId !== undefined) {
-            const linearIssue = hydratedIssuesByIdentifier.get(task.linearIssueId);
-            if (linearIssue !== undefined) {
-              return { ...task, linearIssue };
+        if (!exactTasksResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', exactTasksResult.error.message);
+        }
+        const exactTaskById = new Map(
+          exactTasksResult.value.map((task) => [task.id, task]),
+        );
+        const exactTasksForSummary = (
+          summary: TaskGroupSummary & { taskIds: string[] },
+        ): SerializedTask[] => {
+          const tasks: SerializedTask[] = [];
+          for (const taskId of new Set(summary.taskIds)) {
+            const task = exactTaskById.get(taskId);
+            if (task !== undefined && isDisplayableTask(task, summary)) {
+              tasks.push(taskToSerializedTask(task));
             }
           }
-          return task;
-        });
+          return tasks;
+        };
+        const tasksBySummary = taskSources.map((source) =>
+          source.kind === 'exact'
+            ? exactTasksForSummary(source.summary)
+            : source.tasks
+        );
+        const phantomCheckTasksByGroup = phantomCheckTaskSources.map((source) =>
+          source.kind === 'exact'
+            ? exactTasksForSummary(source.summary)
+            : source.tasks
+        );
 
-        const unsortedGroups = groupByLinearIssue(allPageTasks);
-        const paginatedGroups = sortIssueGroups(unsortedGroups, sortBy);
+        // 5. A summary is the authoritative grouping and pagination unit. Build
+        // at most one group per summary and preserve repository query order.
+        const buildGroupForSummary = (
+          summary: TaskGroupSummary,
+          tasks: SerializedTask[],
+        ): IssueGroup | undefined => {
+          if (tasks.length === 0) return undefined;
 
-        // Build isImportant lookup from summaries
-        const importantByGroupKey = new Map<string, boolean>();
-        for (const summary of summaries) {
-          if (summary.isImportant === true) {
-            importantByGroupKey.set(summary.groupKey, true);
+          const expectedLinearIssueId = summary.linearIssueId ?? undefined;
+          const identityMismatchCount = tasks.filter(
+            (task) => task.linearIssueId !== expectedLinearIssueId,
+          ).length;
+          if (identityMismatchCount > 0) {
+            request.log.warn({
+              groupKey: summary.groupKey,
+              identityMismatchCount,
+              [SKIP_SENTRY_KEY]: true,
+            }, 'Corrected issue-group task identity drift');
           }
-        }
 
-        // Attach isImportant to groups
-        for (const group of paginatedGroups) {
-          const groupKey = group.linearIssueId ?? `standalone_${group.latestTask.id}`;
-          if (importantByGroupKey.get(groupKey) === true) {
-            group.isImportant = true;
-          }
-        }
+          const groupingId = summary.linearIssueId ?? summary.groupKey;
+          const hydratedIssue = summary.linearIssueId === null
+            ? undefined
+            : hydratedIssuesByIdentifier.get(summary.linearIssueId);
+          const normalizedTasks = tasks.map((task): SerializedTask => {
+            const { linearIssue: _staleLinearIssue, ...withoutLinearIssue } = task;
+            return {
+              ...withoutLinearIssue,
+              linearIssueId: groupingId,
+              ...(hydratedIssue !== undefined && { linearIssue: hydratedIssue }),
+            };
+          });
+          const group = groupByLinearIssue(normalizedTasks).at(0);
+          /* v8 ignore start -- upstream: the non-empty tasks guard guarantees groupByLinearIssue always returns one normalized group @preserve */
+          if (group === undefined) return undefined;
+          /* v8 ignore stop @preserve */
+
+          // Synthetic identity exists only long enough to derive one group and
+          // its pipeline. Task-level Linear fields are retained evidence and
+          // must never be rewritten to make stale data look internally clean.
+          const originalTaskById = new Map(tasks.map((task) => [task.id, task]));
+          const restoredTasks = group.tasks.map((task): SerializedTask => {
+            const original = originalTaskById.get(task.id);
+            /* v8 ignore start -- upstream: originalTaskById is guaranteed to contain every task produced from the same normalized task list @preserve */
+            if (original === undefined) return task;
+            /* v8 ignore stop @preserve */
+            const {
+              linearIssueId: _syntheticLinearIssueId,
+              linearIssue: _syntheticLinearIssue,
+              ...withoutSyntheticIdentity
+            } = task;
+            const retainedOrMatchingHydratedIssue = original.linearIssue
+              ?? (original.linearIssueId === summary.linearIssueId ? hydratedIssue : undefined);
+            return {
+              ...withoutSyntheticIdentity,
+              ...(original.linearIssueId !== undefined && { linearIssueId: original.linearIssueId }),
+              ...(retainedOrMatchingHydratedIssue !== undefined && {
+                linearIssue: retainedOrMatchingHydratedIssue,
+              }),
+            };
+          });
+          const restoredLatestTask = restoredTasks.find((task) => task.id === group.latestTask.id);
+          /* v8 ignore start -- upstream: restoredTasks is guaranteed to preserve every task id from the group, including latestTask.id @preserve */
+          if (restoredLatestTask === undefined) return undefined;
+          /* v8 ignore stop @preserve */
+          group.linearIssueId = summary.linearIssueId;
+          group.linearIssue = hydratedIssue;
+          group.tasks = restoredTasks;
+          group.latestTask = restoredLatestTask;
+
+          return reconcileGroupWithSummary(group, summary);
+        };
+
+        const groupsBySummary = summaries.map((summary, index) =>
+          buildGroupForSummary(
+            summary,
+            /* v8 ignore start -- upstream: Promise.all over summaries guarantees tasksBySummary has the same index set as summaries @preserve */
+            tasksBySummary[index] ?? []
+            /* v8 ignore stop @preserve */
+          )
+        );
+        const paginatedGroups = groupsBySummary.flatMap(
+          (group) => group === undefined ? [] : [group],
+        );
 
         // 5b. Detect phantom summaries: summaries returned by the query that
         // produced zero displayable tasks (all tasks archived or ask_agent).
         // Their status must be subtracted from the precomputed counts so the
         // filter badges match what the user actually sees.
-        const displayedGroupKeys = new Set(
-          paginatedGroups.map((g) => g.linearIssueId ?? g.latestTask.id),
-        );
         const phantomStatusDeltas: Record<string, number> = {};
-        for (const summary of summaries) {
-          const summaryKey = summary.linearIssueId ?? summary.groupKey.replace(/^standalone_/, '');
-          if (!displayedGroupKeys.has(summaryKey)) {
+        for (let index = 0; index < summaries.length; index += 1) {
+          const summary = summaries[index];
+          if (summary !== undefined && groupsBySummary[index] === undefined) {
             const status = summary.aggregateStatus;
             phantomStatusDeltas[status] = (phantomStatusDeltas[status] ?? 0) + 1;
           }

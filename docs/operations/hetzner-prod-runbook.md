@@ -2,6 +2,12 @@
 
 Linear: INT-1634
 
+For the reversible repair of code-task lifecycle timestamps and derived issue
+groups, follow
+[`code-task-lifecycle-backfill.md`](./code-task-lifecycle-backfill.md). Its
+release proof, immutable journal, off-host checkpoint, resume, and rollback
+gates are mandatory.
+
 This runbook covers the Hetzner host runtime owned by `scripts/hetzner/**` and
 `ecosystem.config.prod.cjs`. GCP remains the system of record for Firestore,
 Pub/Sub, Secret Manager, retained buckets, Cloud Functions, Artifact Registry,
@@ -180,8 +186,13 @@ cd /opt/intexuraos
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
+RELEASE_SHA='<40-character lowercase Git SHA deployed to /opt/intexuraos>'
+RELEASE_MESSAGE='<matching commit subject>'
+[[ "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+sudo -iu deploy env COMMIT_SHA="${RELEASE_SHA}" COMMIT_MESSAGE="${RELEASE_MESSAGE}" \
+  INTEXURAOS_ENVIRONMENT=prod bash -lc 'cd /opt/intexuraos && bash scripts/hetzner/deploy-web.sh'
+sudo -iu deploy env INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}" \
+  INTEXURAOS_ENVIRONMENT=prod bash -lc 'cd /opt/intexuraos && bash scripts/hetzner/reload-pm2.sh'
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 ```
 
@@ -430,8 +441,10 @@ the current app ports from `ecosystem.config.prod.cjs`, requires every PM2
 process to be online, and requires all health endpoints to pass three times:
 
 ```bash
-INTEXURAOS_ENVIRONMENT=prod PM2_HEALTH_CONSECUTIVE_SUCCESSES=3 \
-  bash scripts/hetzner/reload-pm2.sh
+RELEASE_SHA='<40-character lowercase Git SHA currently deployed to /opt/intexuraos>'
+[[ "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}" INTEXURAOS_ENVIRONMENT=prod \
+  PM2_HEALTH_CONSECUTIVE_SUCCESSES=3 bash scripts/hetzner/reload-pm2.sh
 curl --fail --silent --show-error http://127.0.0.1/healthz
 sudo nginx -t
 pm2 status

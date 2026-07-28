@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { createFakeFirestore } from '@intexuraos/infra-firestore';
+import * as lifecycleBackfillModule from '../../scripts/lib/codeTaskLifecycleBackfill.js';
 import {
   EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
   LifecycleBackfillAuditError,
   LifecycleBackfillRunError,
   aggregateTaskLifecyclePlans,
   buildSummaryReconciliationPlan,
+  encodeTaskLifecycleCursor,
   parseLifecycleBackfillArgs,
   planRawCodeTaskLifecycle,
   runCodeTaskLifecycleBackfill,
@@ -24,6 +26,19 @@ import {
   runCodeTaskLifecycleBackfillMain,
 } from '../../scripts/backfillCodeTaskLifecycleTime.js';
 import { runLegacyGroupSummaryBackfillMain } from '../../scripts/backfillGroupSummaries.js';
+
+const productionOperationMocks = vi.hoisted(() => ({
+  prepare: vi.fn(async () => ({ operationId: 'op_test' })),
+  apply: vi.fn(async (): Promise<Record<string, unknown>> => ({
+    ok: true, operationId: 'op_test', phase: 'tasks', processed: 1, hasMore: false,
+  })),
+}));
+
+vi.mock('../../scripts/lib/productionLifecycleOperations.js', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../scripts/lib/productionLifecycleOperations.js')>(),
+  prepareProductionLifecycleJournal: productionOperationMocks.prepare,
+  runProductionLifecycleApplyBatch: productionOperationMocks.apply,
+}));
 
 const timestamp = (iso: string): Timestamp => Timestamp.fromDate(new Date(iso));
 const t0 = timestamp('2026-07-27T08:00:00.000Z');
@@ -134,6 +149,7 @@ function productionApplyEnv(): Record<string, string> {
     INTEXURAOS_ENVIRONMENT: 'prod',
     INTEXURAOS_RUNTIME: 'prod',
     INTEXURAOS_SENTRY_DSN: 'https://public@example.invalid/1',
+    INTEXURAOS_COMMIT_SHA: '1234567890abcdef1234567890abcdef12345678',
   };
 }
 
@@ -339,6 +355,35 @@ describe('raw lifecycle planning', () => {
 });
 
 describe('argument and environment safety gates', () => {
+  it('requires every production apply batch to name one phase, exactly 200 items, and an exact lowercase release SHA', () => {
+    expect(parseLifecycleBackfillArgs([
+      '--apply',
+      `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+      '--phase=tasks',
+      '--limit=200',
+      '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+    ])).toMatchObject({
+      mode: 'apply',
+      phase: 'tasks',
+      pageSize: 200,
+      limit: 200,
+      expectedReleaseSha: '1234567890abcdef1234567890abcdef12345678',
+    });
+
+    for (const argv of [
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--limit=200', '--expected-release-sha=1234567890abcdef1234567890abcdef12345678'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=all', '--limit=200', '--expected-release-sha=1234567890abcdef1234567890abcdef12345678'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks', '--expected-release-sha=1234567890abcdef1234567890abcdef12345678'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks', '--limit=199', '--expected-release-sha=1234567890abcdef1234567890abcdef12345678'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks', '--limit=201', '--expected-release-sha=1234567890abcdef1234567890abcdef12345678'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks', '--limit=200'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks', '--limit=200', '--expected-release-sha=UNKNOWN'],
+      ['--apply', `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks', '--limit=200', '--expected-release-sha=ABCDEF1234567890ABCDEF1234567890ABCDEF12'],
+    ]) {
+      expect(() => parseLifecycleBackfillArgs(argv)).toThrow();
+    }
+  });
+
   it('defaults to dry-run while requiring the exact explicit retained-production project', () => {
     expect(parseLifecycleBackfillArgs([
       `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
@@ -372,16 +417,16 @@ describe('argument and environment safety gates', () => {
     expect(() => parseLifecycleBackfillArgs(argv)).toThrow();
   });
 
-  it('parses explicit apply, phase, cursor, page size, and limit', () => {
+  it('parses explicit dry-run phase, cursor, page size, and limit', () => {
     expect(parseLifecycleBackfillArgs([
       `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
-      '--apply',
+      '--dry-run',
       '--phase=tasks',
       '--cursor=task_0042',
       '--page-size=37',
       '--limit=101',
     ])).toEqual({
-      mode: 'apply',
+      mode: 'dry-run',
       phase: 'tasks',
       projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
       cursor: 'task_0042',
@@ -504,6 +549,22 @@ describe('argument and environment safety gates', () => {
     await expect(apply).resolves.toMatchObject({ credentials: expect.any(Object) });
   });
 
+  it('requires the running production release to match the apply release gate exactly', async () => {
+    const options = parseLifecycleBackfillArgs([
+      '--apply',
+      `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+      '--phase=tasks',
+      '--limit=200',
+      '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+    ]);
+
+    await expect(validateLifecycleBackfillEnvironment(
+      options,
+      { ...productionApplyEnv(), INTEXURAOS_COMMIT_SHA: 'abcdef1234567890abcdef1234567890abcdef12' },
+      async () => validCredential(),
+    )).rejects.toThrowError('PRODUCTION_RELEASE_MISMATCH');
+  });
+
   it('rejects unreadable and non-object credential payloads without exposing their contents', async () => {
     const env = {
       GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json',
@@ -534,7 +595,7 @@ describe('argument and environment safety gates', () => {
 });
 
 describe('task Firestore phase', () => {
-  it('defaults to zero-write dry-run, pages by document id, and resumes without duplicates', async () => {
+  it('defaults to zero-write dry-run, uses an opaque task cursor, and resumes without duplicates', async () => {
     const fake = createFakeFirestore();
     seedRawTasks(fake, [
       rawTask('task_a', { status: 'running', dispatchedAt: t1 }),
@@ -559,8 +620,12 @@ describe('task Firestore phase', () => {
       cursor: first.cursor,
     });
 
-    expect(first).toMatchObject({ scanned: 2, changed: 2, cursor: 'task_b', limitReached: true });
-    expect(second).toMatchObject({ scanned: 2, changed: 2, cursor: 'task_d', limitReached: false });
+    expect(first).toMatchObject({ scanned: 2, changed: 2, limitReached: true });
+    expect(first.cursor).toMatch(/^task_[A-Za-z0-9_-]{43}$/u);
+    expect(first.cursor).not.toContain('task_b');
+    expect(second).toMatchObject({ scanned: 2, changed: 2, limitReached: false });
+    expect(second.cursor).toMatch(/^task_[A-Za-z0-9_-]{43}$/u);
+    expect(second.cursor).not.toContain('task_d');
     for (const id of ['task_a', 'task_b', 'task_c', 'task_d']) {
       expect((await fake.collection('code_tasks').doc(id).get()).get('statusChangedAt')).toBeUndefined();
     }
@@ -607,7 +672,11 @@ describe('task Firestore phase', () => {
       pageSize: 10,
     });
 
-    expect(report).toMatchObject({ changed: 0, skipped: 1, cursor: 'task_race' });
+    expect(report).toMatchObject({
+      changed: 0,
+      skipped: 1,
+      cursor: encodeTaskLifecycleCursor('task_race'),
+    });
     expect((await fake.collection('code_tasks').doc('task_race').get()).get('statusChangedAt'))
       .toEqual(concurrent);
   });
@@ -640,7 +709,11 @@ describe('task Firestore phase', () => {
 
     expect(runTransaction).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledTimes(2);
-    expect(report).toMatchObject({ scanned: 1, changed: 1, cursor: 'task_retry' });
+    expect(report).toMatchObject({
+      scanned: 1,
+      changed: 1,
+      cursor: encodeTaskLifecycleCursor('task_retry'),
+    });
   });
 
   it('stops with CURSOR_NOT_FOUND without advancing when a scanned document is concurrently deleted', async () => {
@@ -677,7 +750,7 @@ describe('task Firestore phase', () => {
         firestore: fake as unknown as Firestore,
         mode: 'dry-run',
         pageSize: 10,
-        cursor,
+        cursor: encodeTaskLifecycleCursor(cursor),
       })).rejects.toMatchObject({
         name: 'LifecycleBackfillSafetyError',
         code: 'CURSOR_NOT_FOUND',
@@ -700,7 +773,12 @@ describe('task Firestore phase', () => {
       pageSize: 10,
     });
 
-    expect(first).toMatchObject({ scanned: 2, changed: 1, invalid: 1, cursor: 'task_a' });
+    expect(first).toMatchObject({
+      scanned: 2,
+      changed: 1,
+      invalid: 1,
+      cursor: encodeTaskLifecycleCursor('task_a'),
+    });
     expect((await fake.collection('code_tasks').doc('task_b').get()).get('statusChangedAt')).toBeUndefined();
     expect((await fake.collection('code_tasks').doc('task_c').get()).get('statusChangedAt')).toBeUndefined();
 
@@ -713,7 +791,12 @@ describe('task Firestore phase', () => {
       cursor: first.cursor,
     });
 
-    expect(resumed).toMatchObject({ scanned: 2, changed: 2, invalid: 0, cursor: 'task_c' });
+    expect(resumed).toMatchObject({
+      scanned: 2,
+      changed: 2,
+      invalid: 0,
+      cursor: encodeTaskLifecycleCursor('task_c'),
+    });
     expect((await fake.collection('code_tasks').doc('task_b').get()).get('statusChangedAt')).toEqual(t2);
     expect((await fake.collection('code_tasks').doc('task_c').get()).get('statusChangedAt')).toEqual(t1);
   });
@@ -740,7 +823,7 @@ describe('task Firestore phase', () => {
     })).rejects.toMatchObject({
       name: 'LifecycleBackfillRunError',
       code: 'TASK_TRANSACTION_FAILED',
-      cursor: 'task_a',
+      cursor: encodeTaskLifecycleCursor('task_a'),
     });
   });
 
@@ -759,10 +842,10 @@ describe('task Firestore phase', () => {
       firestore,
       mode: 'dry-run',
       pageSize: 10,
-      cursor: 'task_resume',
+      cursor: encodeTaskLifecycleCursor('task_resume'),
     })).rejects.toMatchObject({
       code: 'TASK_SCAN_FAILED',
-      cursor: 'task_resume',
+      cursor: encodeTaskLifecycleCursor('task_resume'),
       message: 'Task scan failed',
     });
   });
@@ -2499,7 +2582,7 @@ describe('CLI lifecycle and legacy delegation', () => {
       phase: 'tasks',
       projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
       pageSize: 2,
-      cursor: 'task_resume',
+      cursor: encodeTaskLifecycleCursor('task_resume'),
       limit: 1,
     });
     const summaries = await runCodeTaskLifecycleBackfill({
@@ -2520,7 +2603,10 @@ describe('CLI lifecycle and legacy delegation', () => {
       tasks: { scanned: 2 },
       summaries: { processed: 2 },
     });
-    expect(tasks).toMatchObject({ phase: 'tasks', tasks: { scanned: 0, cursor: 'task_resume' } });
+    expect(tasks).toMatchObject({
+      phase: 'tasks',
+      tasks: { scanned: 0, cursor: encodeTaskLifecycleCursor('task_resume') },
+    });
     expect(tasks.summaries).toBeUndefined();
     expect(summaries).toMatchObject({ phase: 'summaries', summaries: { processed: 1 } });
     expect(summaries.summaries?.cursor).not.toBe(summaryPreview.cursor);
@@ -2618,6 +2704,153 @@ describe('CLI lifecycle and legacy delegation', () => {
       tasks: { scanned: 0, changed: 0, cursor: null },
     });
     expect(terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the safe production apply operation with cursor and explicit journal directory', async () => {
+    const terminate = vi.fn(async () => undefined);
+    const report = await executeCodeTaskLifecycleBackfillCli(
+      [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--apply', '--phase=tasks', '--limit=200', '--cursor=task_safe',
+        '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+      ],
+      {
+        ...productionApplyEnv(),
+        INTEXURAOS_LIFECYCLE_JOURNAL_DIRECTORY: '/safe/journals',
+        INTEXURAOS_LIFECYCLE_DIRECT_DEPLOYMENT_URL: 'http://127.0.0.1/deployment.json',
+        INTEXURAOS_LIFECYCLE_PUBLIC_DEPLOYMENT_URL: 'https://example.invalid/deployment.json',
+        INTEXURAOS_LIFECYCLE_DIRECT_HEALTH_URL: 'http://127.0.0.1/health',
+        INTEXURAOS_LIFECYCLE_PUBLIC_HEALTH_URL: 'https://example.invalid/health',
+      },
+      {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate } as unknown as Firestore),
+      },
+    );
+
+    expect(productionOperationMocks.prepare).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'tasks', pageSize: 200, cursor: 'task_safe', limit: 200,
+      expectedReleaseSha: '1234567890abcdef1234567890abcdef12345678',
+    }));
+    expect(productionOperationMocks.apply).toHaveBeenCalledWith(expect.objectContaining({
+      journalDirectory: '/safe/journals',
+    }));
+    expect(report).toMatchObject({ mode: 'apply', phase: 'tasks', operationId: 'op_test' });
+    expect(terminate).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an invalid production contract even if an upstream parser violates its schema', async () => {
+    const parse = vi.spyOn(lifecycleBackfillModule, 'parseLifecycleBackfillArgs').mockReturnValueOnce({
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      mode: 'apply', phase: 'all', pageSize: 200, limit: 200,
+      expectedReleaseSha: '1234567890abcdef1234567890abcdef12345678',
+    });
+    try {
+      await expect(executeCodeTaskLifecycleBackfillCli(
+        ['ignored-by-schema-canary'], productionApplyEnv(),
+        {
+          readFile: async () => validCredential(),
+          createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        },
+      )).rejects.toThrowError('APPLY_CONTRACT_INVALID');
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
+  it('uses the default journal directory and sanitizes non-object custom production output', async () => {
+    const baseEnv = {
+      ...productionApplyEnv(),
+      INTEXURAOS_LIFECYCLE_DIRECT_DEPLOYMENT_URL: 'http://127.0.0.1/deployment.json',
+      INTEXURAOS_LIFECYCLE_PUBLIC_DEPLOYMENT_URL: 'https://example.invalid/deployment.json',
+      INTEXURAOS_LIFECYCLE_DIRECT_HEALTH_URL: 'http://127.0.0.1/health',
+      INTEXURAOS_LIFECYCLE_PUBLIC_HEALTH_URL: 'https://example.invalid/health',
+    };
+    productionOperationMocks.apply.mockResolvedValueOnce(null as never);
+    const defaultReport = await executeCodeTaskLifecycleBackfillCli(
+      [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--apply', '--phase=summaries', '--limit=200',
+        '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+      ],
+      baseEnv,
+      {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+      },
+    );
+    expect(productionOperationMocks.apply).toHaveBeenCalledWith(expect.objectContaining({
+      journalDirectory: '/var/lib/intexuraos/code-task-lifecycle',
+    }));
+    expect(defaultReport).toEqual({
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID, mode: 'apply', phase: 'summaries',
+    });
+
+    const customReport = await executeCodeTaskLifecycleBackfillCli(
+      [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--apply', '--phase=tasks', '--limit=200',
+        '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+      ],
+      baseEnv,
+      {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runProductionApply: async () => null as never,
+      },
+    );
+    expect(customReport).toEqual({
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID, mode: 'apply', phase: 'tasks',
+    });
+  });
+
+  it('keeps the source task document ID out of the default dry-run report and stdout', async () => {
+    const fake = createFakeFirestore();
+    const sourceDocumentId = 'task_private_source_document_canary';
+    seedRawTasks(fake, [
+      rawTask(sourceDocumentId, { completedAt: t1 }),
+      rawTask('task_private_source_document_later', { completedAt: t1 }),
+    ]);
+    const terminate = vi.fn(async () => undefined);
+    Object.assign(fake, { terminate });
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+
+    const report = await executeCodeTaskLifecycleBackfillCli(
+      [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--dry-run', '--phase=tasks', '--limit=1',
+      ],
+      { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      {
+        readFile: async () => validCredential(),
+        createFirestore: () => fake as unknown as Firestore,
+      },
+    );
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--dry-run', '--phase=tasks', '--limit=1',
+      ],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => fake as unknown as Firestore,
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: vi.fn(),
+    });
+
+    expect(report).toMatchObject({
+      tasks: { cursor: expect.stringMatching(/^task_[A-Za-z0-9_-]{43}$/u) },
+    });
+    expect(JSON.stringify(report)).not.toContain(sourceDocumentId);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).not.toContain(sourceDocumentId);
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({
+      tasks: { cursor: expect.stringMatching(/^task_[A-Za-z0-9_-]{43}$/u) },
+    });
   });
 
   it('flushes telemetry exactly once after a successful main run', async () => {
@@ -2761,7 +2994,11 @@ describe('CLI lifecycle and legacy delegation', () => {
     const telemetry = createTelemetryHarness();
 
     await runCodeTaskLifecycleBackfillMain({
-      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--apply', '--phase=tasks'],
+      argv: [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--apply', '--phase=tasks', '--limit=200',
+        '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+      ],
       env: productionApplyEnv(),
       deps: {
         readFile: async () => validCredential(),
@@ -2867,6 +3104,8 @@ describe('CLI lifecycle and legacy delegation', () => {
         `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
         '--apply',
         '--phase=summaries',
+        '--limit=200',
+        '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
       ],
       env: productionApplyEnv(),
       deps: {
@@ -3036,7 +3275,11 @@ describe('CLI lifecycle and legacy delegation', () => {
     const terminate = vi.fn(async () => { throw new Error('terminate failure'); });
 
     await expect(executeCodeTaskLifecycleBackfillCli(
-      [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--apply', '--phase=tasks'],
+      [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--apply', '--phase=tasks', '--limit=200',
+        '--expected-release-sha=1234567890abcdef1234567890abcdef12345678',
+      ],
       productionApplyEnv(),
       {
         readFile: async () => validCredential(),

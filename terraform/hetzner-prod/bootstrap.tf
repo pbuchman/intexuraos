@@ -106,13 +106,12 @@ resource "terraform_data" "bootstrap_prod" {
       printf -v commit_sha_quoted '%q' "$commit_sha"
       printf -v commit_message_quoted '%q' "$commit_message"
       ssh ${local.ssh_common_args} deploy@${hcloud_primary_ip.prod_ipv4.ip_address} \
-        "cd /opt/intexuraos && COMMIT_SHA=$commit_sha_quoted COMMIT_MESSAGE=$commit_message_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh"
+        "cd /opt/intexuraos && COMMIT_SHA=$commit_sha_quoted COMMIT_MESSAGE=$commit_message_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh && INTEXURAOS_COMMIT_SHA=$commit_sha_quoted INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh"
     EOT
   }
 
   provisioner "remote-exec" {
     inline = [
-      "sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'",
       "cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh",
     ]
   }

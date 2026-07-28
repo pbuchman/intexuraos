@@ -24,6 +24,7 @@ describe('initWorker', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env = { ...originalEnv };
+    delete process.env['INTEXURAOS_COMMIT_SHA'];
     delete process.env['K_REVISION'];
     delete process.env['INTEXURAOS_SENTRY_DSN'];
     process.env['NODE_ENV'] = 'test';
@@ -64,8 +65,8 @@ describe('initWorker', () => {
     expect(Sentry.init).not.toHaveBeenCalled();
   });
 
-  it('calls Sentry.init with release derived from K_REVISION when DSN provided', () => {
-    process.env['K_REVISION'] = 'svc-00007-rev';
+  it('calls Sentry.init with a safe Cloud Run release from K_REVISION when DSN provided', () => {
+    process.env['K_REVISION'] = 'intexuraos-transcription-dev-00014-foj';
 
     initWorker({
       serviceName: 'svc',
@@ -79,7 +80,25 @@ describe('initWorker', () => {
         dsn: 'https://x@sentry.io/1',
         environment: 'production',
         serverName: 'svc',
-        release: 'svc-00007-rev',
+        release: 'intexuraos-transcription-dev-00014-foj',
+      })
+    );
+  });
+
+  it('uses the Hetzner commit SHA and prod tracing default', () => {
+    process.env['INTEXURAOS_COMMIT_SHA'] = '1234567890abcdef1234567890abcdef12345678';
+    process.env['K_REVISION'] = 'svc-00007-rev';
+
+    initWorker({
+      serviceName: 'svc',
+      environment: 'prod',
+      sentryDsn: 'https://x@sentry.io/1',
+    });
+
+    expect(Sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        release: '1234567890abcdef1234567890abcdef12345678',
+        tracesSampleRate: 0.1,
       })
     );
   });

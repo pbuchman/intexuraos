@@ -38,7 +38,6 @@ import {
   computeAllArchivedSummaryFromTasks,
   computeSummaryFromTasks,
   docToCounts,
-  docToSummary,
 } from '../../infra/firestore/taskGroupSummary/serializer.js';
 import {
   countsDocRef,
@@ -50,6 +49,7 @@ const TASKS_COLLECTION = 'code_tasks';
 const SUMMARIES_COLLECTION = 'task_group_summaries';
 const COUNTS_COLLECTION = 'user_group_counts';
 const DEFAULT_PAGE_SIZE = 200;
+const OPAQUE_TASK_CURSOR = /^task_[A-Za-z0-9_-]{43}$/u;
 const AGENT_TYPES: ReadonlySet<string> = new Set([
   'planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry',
 ]);
@@ -64,11 +64,18 @@ export interface LifecycleBackfillOptions {
   pageSize: number;
   cursor?: string;
   limit?: number;
+  expectedReleaseSha?: string;
 }
 
 export interface RawFirestoreDocument {
   id: string;
   data: Record<string, unknown>;
+}
+
+export function encodeTaskLifecycleCursor(documentId: string): string {
+  return `task_${createHash('sha256')
+    .update(`task\0${documentId}`)
+    .digest('base64url')}`;
 }
 
 export class LifecycleBackfillSafetyError extends Error {
@@ -298,6 +305,9 @@ export function parseLifecycleBackfillArgs(argv: readonly string[]): LifecycleBa
   let cursor: string | undefined;
   let pageSize = DEFAULT_PAGE_SIZE;
   let limit: number | undefined;
+  let expectedReleaseSha: string | undefined;
+  let phaseExplicit = false;
+  let limitExplicit = false;
   const seen = new Set<string>();
 
   for (const arg of argv) {
@@ -330,6 +340,7 @@ export function parseLifecycleBackfillArgs(argv: readonly string[]): LifecycleBa
           throw new LifecycleBackfillSafetyError('PHASE_INVALID');
         }
         phase = value;
+        phaseExplicit = true;
         break;
       case '--cursor':
         if (value === undefined || value.trim().length === 0 || value.includes('/')) {
@@ -342,6 +353,13 @@ export function parseLifecycleBackfillArgs(argv: readonly string[]): LifecycleBa
         break;
       case '--limit':
         limit = parsePositiveInteger(value, 'LIMIT_INVALID');
+        limitExplicit = true;
+        break;
+      case '--expected-release-sha':
+        if (value === undefined || !/^[0-9a-f]{40}$/u.test(value)) {
+          throw new LifecycleBackfillSafetyError('EXPECTED_RELEASE_SHA_INVALID');
+        }
+        expectedReleaseSha = value;
         break;
       default:
         throw new LifecycleBackfillSafetyError('UNKNOWN_FLAG');
@@ -355,6 +373,17 @@ export function parseLifecycleBackfillArgs(argv: readonly string[]): LifecycleBa
   if (phase === 'all' && cursor !== undefined) {
     throw new LifecycleBackfillSafetyError('CURSOR_REQUIRES_SINGLE_PHASE');
   }
+  if (mode === 'apply') {
+    if (!phaseExplicit || phase === 'all') {
+      throw new LifecycleBackfillSafetyError('APPLY_PHASE_REQUIRED');
+    }
+    if (!limitExplicit || limit !== 200) {
+      throw new LifecycleBackfillSafetyError('APPLY_LIMIT_REQUIRED');
+    }
+    if (expectedReleaseSha === undefined) {
+      throw new LifecycleBackfillSafetyError('EXPECTED_RELEASE_SHA_REQUIRED');
+    }
+  }
 
   return {
     mode,
@@ -363,11 +392,12 @@ export function parseLifecycleBackfillArgs(argv: readonly string[]): LifecycleBa
     pageSize,
     ...(cursor !== undefined && { cursor }),
     ...(limit !== undefined && { limit }),
+    ...(expectedReleaseSha !== undefined && { expectedReleaseSha }),
   };
 }
 
 export async function validateLifecycleBackfillEnvironment(
-  input: { projectId: string; mode?: LifecycleBackfillMode },
+  input: { projectId: string; mode?: LifecycleBackfillMode; expectedReleaseSha?: string },
   env: Readonly<Record<string, string | undefined>>,
   readFile: (path: string, encoding: 'utf8') => Promise<string>,
 ): Promise<{ credentials: { client_email: string; private_key: string } }> {
@@ -390,6 +420,12 @@ export async function validateLifecycleBackfillEnvironment(
     }
     if ((env['INTEXURAOS_SENTRY_DSN'] ?? '').trim().length === 0) {
       throw new LifecycleBackfillSafetyError('PRODUCTION_SENTRY_DSN_REQUIRED');
+    }
+    if (
+      input.expectedReleaseSha !== undefined
+      && env['INTEXURAOS_COMMIT_SHA'] !== input.expectedReleaseSha
+    ) {
+      throw new LifecycleBackfillSafetyError('PRODUCTION_RELEASE_MISMATCH');
     }
   }
 
@@ -434,7 +470,7 @@ export async function validateLifecycleBackfillEnvironment(
   };
 }
 
-async function* scanRawCollection(
+export async function* scanRawCollection(
   firestore: Firestore,
   collectionName: string,
   pageSize: number,
@@ -456,6 +492,24 @@ async function* scanRawCollection(
   }
 }
 
+export async function resolveTaskLifecycleCursor(input: {
+  firestore: Firestore;
+  pageSize: number;
+  cursor: string;
+}): Promise<string> {
+  if (!OPAQUE_TASK_CURSOR.test(input.cursor)) {
+    throw new LifecycleBackfillSafetyError('CURSOR_INVALID');
+  }
+  for await (const document of scanRawCollection(
+    input.firestore,
+    TASKS_COLLECTION,
+    input.pageSize,
+  )) {
+    if (encodeTaskLifecycleCursor(document.id) === input.cursor) return document.id;
+  }
+  throw new LifecycleBackfillSafetyError('CURSOR_NOT_FOUND');
+}
+
 function rawDocumentSnapshot(doc: QueryDocumentSnapshot): RawFirestoreDocument {
   return { id: doc.id, data: doc.data() as Record<string, unknown> };
 }
@@ -472,17 +526,18 @@ export async function runTaskLifecycleBackfillPhase(input: {
   let durableCursor = input.cursor;
   let hasMore = false;
   try {
-    if (input.cursor !== undefined) {
-      const checkpoint = await input.firestore.collection(TASKS_COLLECTION).doc(input.cursor).get();
-      if (!checkpoint.exists) {
-        throw new LifecycleBackfillSafetyError('CURSOR_NOT_FOUND');
-      }
-    }
+    const checkpointDocumentId = input.cursor === undefined
+      ? undefined
+      : await resolveTaskLifecycleCursor({
+        firestore: input.firestore,
+        pageSize: input.pageSize,
+        cursor: input.cursor,
+      });
     for await (const scanned of scanRawCollection(
       input.firestore,
       TASKS_COLLECTION,
       input.pageSize,
-      input.cursor,
+      checkpointDocumentId,
     )) {
       if (input.limit !== undefined && report.scanned >= input.limit) {
         hasMore = true;
@@ -519,8 +574,8 @@ export async function runTaskLifecycleBackfillPhase(input: {
         addTaskPlan(report, outcome);
       }
       if (input.mode === 'apply' && outcome.outcome === 'invalid') break;
-      durableCursor = scanned.id;
-      report.cursor = scanned.id;
+      durableCursor = encodeTaskLifecycleCursor(scanned.id);
+      report.cursor = durableCursor;
     }
   } catch (error) {
     if (
@@ -1230,9 +1285,9 @@ async function applyAuthoritativeSummary(
       updatedCounts = applyNewGroupDelta(counts, expected.aggregateStatus);
     } else {
       reason = 'semantic_mismatch';
-      const current = docToSummary(currentRaw);
-      if (current.aggregateStatus !== expected.aggregateStatus) {
-        updatedCounts = applyStatusChangeDelta(counts, current.aggregateStatus, expected.aggregateStatus);
+      const currentStatus = currentRaw['aggregateStatus'] as GroupStatus;
+      if (currentStatus !== expected.aggregateStatus) {
+        updatedCounts = applyStatusChangeDelta(counts, currentStatus, expected.aggregateStatus);
       }
     }
     if (updatedCounts !== undefined) {

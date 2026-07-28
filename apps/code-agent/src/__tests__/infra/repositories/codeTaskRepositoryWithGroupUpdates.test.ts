@@ -62,6 +62,7 @@ function createFakeInnerRepo(): CodeTaskRepository {
     create: vi.fn(),
     findById: vi.fn(),
     findByIdForUser: vi.fn(),
+    findByIdsForUser: vi.fn(),
     update: vi.fn(),
     list: vi.fn(),
     hasActiveTaskForLinearIssue: vi.fn(),

@@ -30,6 +30,9 @@ require_prod() {
   if [[ "${INTEXURAOS_ENVIRONMENT:-}" != "prod" ]]; then
     fail "INTEXURAOS_ENVIRONMENT must be prod"
   fi
+  if [[ ! "${INTEXURAOS_COMMIT_SHA:-}" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
+  fi
 }
 
 parse_args() {

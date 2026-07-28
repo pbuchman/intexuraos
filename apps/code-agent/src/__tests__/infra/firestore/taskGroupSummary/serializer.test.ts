@@ -167,10 +167,88 @@ describe('serializer: toTimestamp', () => {
     const ts = Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'));
     expect(toTimestamp(ts)).toBe(ts);
   });
+
+  it('converts valid Date and timestamp-like values', () => {
+    const date = new Date('2026-01-02T03:04:05.006Z');
+
+    expect(toTimestamp(date).toMillis()).toBe(date.getTime());
+    expect(toTimestamp({ toDate: () => date }).toMillis()).toBe(date.getTime());
+    expect(toTimestamp({ _seconds: 1_767_322_800 }).seconds).toBe(1_767_322_800);
+    expect(toTimestamp({ _seconds: 1_767_322_800, _nanoseconds: 123 }).nanoseconds).toBe(123);
+  });
+
+  it.each([
+    ['invalid Date', new Date(Number.NaN)],
+    ['timestamp-like object returning an invalid Date', { toDate: (): Date => new Date(Number.NaN) }],
+    ['timestamp-like object returning a non-Date', { toDate: (): string => 'invalid' }],
+    ['timestamp-like object throwing', { toDate: (): never => { throw new Error('invalid'); } }],
+    ['private timestamp outside the Firestore range', { _seconds: Number.MAX_SAFE_INTEGER }],
+    ['primitive value', 'invalid'],
+  ])('rejects %s', (_label, value) => {
+    expect(() => toTimestamp(value)).toThrow('Invalid task group summary timestamp: timestamp');
+  });
 });
 
 describe('serializer: docToSummary', () => {
   const now = Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'));
+
+  function requiredSummaryFields(): Record<string, unknown> {
+    return {
+      userId: 'u1',
+      linearIssueId: 'INT-42',
+      groupKey: 'INT-42',
+      taskCount: 1,
+      activeTaskCount: 0,
+      latestTaskStatus: 'planned',
+      latestTaskUpdatedAt: now,
+      agentTypesPresent: ['planning'],
+      hasCompletedPlanning: true,
+      hasCompletedExecution: false,
+      hasImplementationTaskId: false,
+      hasPrUrl: false,
+      prNumber: null,
+      latestReviewNeedsRemediation: null,
+      oldestTaskCreatedAt: now,
+      mostRecentDispatchedAt: null,
+      aggregateStatus: 'done',
+      updatedAt: now,
+    };
+  }
+
+  it('uses documented defaults when optional legacy fields are absent', () => {
+    const back = docToSummary({
+      latestTaskUpdatedAt: now,
+      oldestTaskCreatedAt: now,
+      updatedAt: now,
+    });
+
+    expect(back).toMatchObject({
+      userId: '',
+      linearIssueId: null,
+      groupKey: '',
+      taskCount: 0,
+      activeTaskCount: 0,
+      latestTaskStatus: '',
+      agentTypesPresent: [],
+      prNumber: null,
+      latestMergeReadyReason: null,
+      latestMergeReadyUpdatedAt: null,
+      prMergedAt: null,
+      prClosedAt: null,
+      latestReviewNeedsRemediation: null,
+      mostRecentDispatchedAt: null,
+      aggregateStatus: 'done',
+    });
+  });
+
+  it('preserves true latest review remediation evidence', () => {
+    const back = docToSummary({
+      ...requiredSummaryFields(),
+      latestReviewNeedsRemediation: true,
+    });
+
+    expect(back.latestReviewNeedsRemediation).toBe(true);
+  });
 
   it('reads a full summary', () => {
     const original: TaskGroupSummary = {
@@ -281,6 +359,79 @@ describe('serializer: docToSummary', () => {
       oldestTaskCreatedAt: now, mostRecentDispatchedAt: null, aggregateStatus: 'done', updatedAt: now,
     });
     expect(back.latestReviewNeedsRemediation).toBe(false);
+  });
+
+  it('omits malformed optional timestamps instead of replacing them with the read clock', () => {
+    const back = docToSummary({
+      ...requiredSummaryFields(),
+      latestTaskCreatedAt: {},
+      latestMergeReadyUpdatedAt: {},
+      latestMergeReadyDecisionAt: {},
+      prMergedAt: {},
+      prClosedAt: {},
+      latestReviewUpdatedAt: {},
+      representativePrUpdatedAt: {},
+      mostRecentDispatchedAt: {},
+      labelsUpdatedAt: {},
+      taskLifecycleAtById: {
+        task_valid: now,
+        task_invalid: {},
+      },
+    });
+
+    expect(back.latestTaskCreatedAt).toBeUndefined();
+    expect(back.latestMergeReadyUpdatedAt).toBeNull();
+    expect(back.latestMergeReadyDecisionAt).toBeUndefined();
+    expect(back.prMergedAt).toBeNull();
+    expect(back.prClosedAt).toBeNull();
+    expect(back.latestReviewUpdatedAt).toBeUndefined();
+    expect(back.representativePrUpdatedAt).toBeUndefined();
+    expect(back.mostRecentDispatchedAt).toBeNull();
+    expect(back.labelsUpdatedAt).toBeUndefined();
+    expect(back.taskLifecycleAtById).toEqual({ task_valid: now });
+  });
+
+  it.each([
+    ['finite Date outside Firestore range', new Date(8.64e15)],
+    ['private timestamp with non-finite present nanos', { _seconds: 1_775_000_000, _nanoseconds: Number.NaN }],
+    ['private timestamp with fractional present nanos', { _seconds: 1_775_000_000, _nanoseconds: 1.5 }],
+    ['private timestamp with out-of-range present nanos', { _seconds: 1_775_000_000, _nanoseconds: 1_000_000_000 }],
+  ])('omits optional %s without throwing', (_label, malformedTimestamp) => {
+    expect(() => docToSummary({
+      ...requiredSummaryFields(),
+      latestTaskCreatedAt: malformedTimestamp,
+      mostRecentDispatchedAt: malformedTimestamp,
+      taskLifecycleAtById: { malformed: malformedTimestamp },
+    })).not.toThrow();
+
+    const back = docToSummary({
+      ...requiredSummaryFields(),
+      latestTaskCreatedAt: malformedTimestamp,
+      mostRecentDispatchedAt: malformedTimestamp,
+      taskLifecycleAtById: { malformed: malformedTimestamp },
+    });
+    expect(back.latestTaskCreatedAt).toBeUndefined();
+    expect(back.mostRecentDispatchedAt).toBeNull();
+    expect(back.taskLifecycleAtById).toEqual({});
+  });
+
+  it('rejects malformed required timestamps instead of fabricating now', () => {
+    expect(() => docToSummary({
+      ...requiredSummaryFields(),
+      latestTaskUpdatedAt: {},
+    })).toThrow('Invalid task group summary timestamp: latestTaskUpdatedAt');
+  });
+
+  it.each([
+    ['finite Date outside Firestore range', new Date(8.64e15)],
+    ['private timestamp with non-finite present nanos', { _seconds: 1_775_000_000, _nanoseconds: Number.NaN }],
+    ['private timestamp with fractional present nanos', { _seconds: 1_775_000_000, _nanoseconds: 1.5 }],
+    ['private timestamp with out-of-range present nanos', { _seconds: 1_775_000_000, _nanoseconds: 1_000_000_000 }],
+  ])('rejects required %s', (_label, malformedTimestamp) => {
+    expect(() => docToSummary({
+      ...requiredSummaryFields(),
+      latestTaskUpdatedAt: malformedTimestamp,
+    })).toThrow('Invalid task group summary timestamp: latestTaskUpdatedAt');
   });
 });
 

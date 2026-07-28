@@ -14,6 +14,8 @@ KEY_FILE=""
 KNOWN_HOSTS_FILE=""
 SYNC_SOURCE_DIR=""
 DEPLOYMENT_RESPONSE_HEADERS_FILE=""
+CODE_HEALTH_RESPONSE_HEADERS_FILE=""
+CODE_HEALTH_RESPONSE_BODY_FILE=""
 LOCAL_COMMIT_SHA_VALUE=""
 COMMIT_SHA_VALUE=""
 COMMIT_MESSAGE_VALUE=""
@@ -41,6 +43,8 @@ cleanup() {
   [[ -n "${KEY_FILE}" ]] && rm -f "${KEY_FILE}"
   [[ -n "${KNOWN_HOSTS_FILE}" ]] && rm -f "${KNOWN_HOSTS_FILE}"
   [[ -n "${DEPLOYMENT_RESPONSE_HEADERS_FILE}" ]] && rm -f "${DEPLOYMENT_RESPONSE_HEADERS_FILE}"
+  [[ -n "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}"
+  [[ -n "${CODE_HEALTH_RESPONSE_BODY_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_BODY_FILE}"
   if [[ -n "${SYNC_SOURCE_DIR}" && -d "${SYNC_SOURCE_DIR}" ]]; then
     rm -rf -- "${SYNC_SOURCE_DIR}"
   fi
@@ -178,11 +182,13 @@ run_remote_deploy_web() {
 }
 
 deploy_runtime() {
+  local commit_sha_quoted=""
+  printf -v commit_sha_quoted '%q' "${COMMIT_SHA_VALUE}"
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
   run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh'
   run_remote 'CI=true pnpm install --frozen-lockfile'
-  run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
+  run_remote "INTEXURAOS_COMMIT_SHA=${commit_sha_quoted} INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh"
 }
 
 deploy_web_and_edge() {
@@ -193,6 +199,40 @@ deploy_web_and_edge() {
   fi
 }
 
+verify_code_agent_health() {
+  local label="$1"
+  local url="$2"
+  local status=""
+  shift 2
+
+  CODE_HEALTH_RESPONSE_HEADERS_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-code-health-headers.XXXXXX")"
+  CODE_HEALTH_RESPONSE_BODY_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-code-health-body.XXXXXX")"
+  status="$(curl --silent --show-error --max-time 15 \
+    --dump-header "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" \
+    --output "${CODE_HEALTH_RESPONSE_BODY_FILE}" \
+    --write-out '%{http_code}' \
+    "$@" "${url}")"
+
+  if ! node scripts/hetzner/verify-code-agent-health.mjs \
+    "${status}" "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" < "${CODE_HEALTH_RESPONSE_BODY_FILE}"; then
+    fail "Code-agent semantic health contract failed through ${label}"
+  fi
+
+  rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" "${CODE_HEALTH_RESPONSE_BODY_FILE}"
+  CODE_HEALTH_RESPONSE_HEADERS_FILE=""
+  CODE_HEALTH_RESPONSE_BODY_FILE=""
+}
+
+verify_code_agent_readiness() {
+  verify_code_agent_health \
+    "direct origin" \
+    "https://${PUBLIC_DOMAIN}/api/code/health" \
+    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"
+  verify_code_agent_health \
+    "public DNS" \
+    "https://${PUBLIC_DOMAIN}/api/code/health"
+}
+
 verify_backend_readiness() {
   run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/whatsapp/health >/dev/null'
   run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/intex-agent/health >/dev/null'
@@ -200,6 +240,7 @@ verify_backend_readiness() {
   curl --fail --silent --show-error --max-time 15 \
     --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
     "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
+  verify_code_agent_readiness
 }
 
 publish_deployment_metadata() {
@@ -320,6 +361,7 @@ main() {
   deploy_runtime
   verify_backend_readiness
   deploy_web_and_edge
+  verify_code_agent_readiness
   verify_runtime_readiness
   publish_deployment_metadata
   verify_deployment_attestation

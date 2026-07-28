@@ -126,6 +126,7 @@ describe('POST /webhooks/github', () => {
       create: vi.fn().mockResolvedValue(ok({ id: 'task-123' })),
       findById: vi.fn().mockResolvedValue(ok(null)),
       findByIdForUser: vi.fn().mockResolvedValue(ok(null)),
+      findByIdsForUser: vi.fn().mockResolvedValue(ok([])),
       update: vi.fn().mockResolvedValue(ok(undefined)),
       list: vi.fn().mockResolvedValue(ok([])),
       hasActiveTaskForLinearIssue: vi.fn().mockResolvedValue(ok(false)),

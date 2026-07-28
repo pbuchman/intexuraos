@@ -907,6 +907,93 @@ describe('firestoreCodeTaskRepository', () => {
     });
   });
 
+  describe('findByIdsForUser', () => {
+    it('bulk-loads exact ids in stable order, chunks reads, and omits missing or foreign tasks', async () => {
+      const timestamp = Timestamp.fromDate(new Date('2026-07-28T06:00:00.000Z'));
+      const ownedIds = Array.from({ length: 102 }, (_, index) => `task_${String(index).padStart(3, '0')}`);
+      fakeFirestore.seedCollection('code_tasks', [
+        ...ownedIds.map((id) => ({
+          id,
+          data: {
+            id,
+            userId: 'user-123',
+            status: 'failed',
+            agentType: 'execution',
+            createdAt: timestamp,
+            completedAt: timestamp,
+            updatedAt: timestamp,
+          },
+        })),
+        {
+          id: 'task_foreign',
+          data: {
+            id: 'task_foreign',
+            userId: 'user-456',
+            status: 'failed',
+            createdAt: timestamp,
+            completedAt: timestamp,
+            updatedAt: timestamp,
+          },
+        },
+      ]);
+
+      interface ReadableDocumentRef { get: () => Promise<unknown> }
+      const getAll = vi.fn(async (...refs: ReadableDocumentRef[]): Promise<unknown[]> =>
+        await Promise.all(refs.map(async (ref) => await ref.get()))
+      );
+      Object.assign(fakeFirestore, { getAll });
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const exactIds = [...ownedIds].reverse();
+      const bulkRepo = repo as typeof repo & {
+        findByIdsForUser?: (
+          taskIds: readonly string[],
+          userId: string,
+        ) => Promise<{ ok: true; value: { id: string }[] } | { ok: false; error: unknown }>;
+      };
+
+      expect(bulkRepo.findByIdsForUser).toBeDefined();
+      const result = await bulkRepo.findByIdsForUser?.(
+        [...exactIds, 'task_foreign', 'task_missing'],
+        'user-123',
+      );
+
+      expect(result?.ok).toBe(true);
+      if (result?.ok !== true) return;
+      expect(result.value.map((task) => task.id)).toEqual(exactIds);
+      expect(getAll).toHaveBeenCalledTimes(2);
+      expect(getAll.mock.calls.every((call) => call.length <= 100)).toBe(true);
+    });
+
+    it('fails the whole bulk result when any Firestore batch fails', async () => {
+      const getAll = vi.fn().mockRejectedValue(new Error('batch unavailable'));
+      Object.assign(fakeFirestore, { getAll });
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.findByIdsForUser(['task_a', 'task_b'], 'user-123');
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toEqual({
+        code: 'FIRESTORE_ERROR',
+        message: 'Firestore error: batch unavailable',
+      });
+      expect(getAll).toHaveBeenCalledOnce();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-123',
+          requestedTaskCount: 2,
+        }),
+        'Failed to find tasks by ids for user',
+      );
+    });
+  });
+
   describe('update', () => {
     it('updates task status', async () => {
       const repo = createFirestoreCodeTaskRepository({
@@ -1677,6 +1764,93 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value.tasks.length).toBe(1);
       expect(result.value.tasks[0]?.status).toBe('planned');
+    });
+
+    it('paginates completed-status compatibility results', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const first = await repo.create(createTaskInput({ id: 'planned-one', prompt: 'planned one' }));
+      const second = await repo.create(createTaskInput({ id: 'planned-two', prompt: 'planned two' }));
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (!first.ok || !second.ok) return;
+      await repo.update(first.value.id, { status: 'planned' });
+      await repo.update(second.value.id, { status: 'planned' });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: 1 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toHaveLength(1);
+      expect(result.value.nextCursor).toBeDefined();
+    });
+
+    it('handles an empty compatibility page when a negative repository limit is supplied', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: -1 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toEqual([]);
+      expect(result.value.nextCursor).toBeUndefined();
+    });
+
+    it('continues a full compatibility scan page with a cursor', async () => {
+      const timestamp = Timestamp.fromDate(new Date('2026-07-28T08:00:00.000Z'));
+      fakeFirestore.seedCollection('code_tasks', Array.from({ length: 100 }, (_, index) => ({
+        id: `compat-planning-${String(index).padStart(3, '0')}`,
+        data: {
+          id: `compat-planning-${String(index).padStart(3, '0')}`,
+          userId: 'user-123',
+          status: 'completed',
+          agentType: 'planning',
+          createdAt: Timestamp.fromMillis(timestamp.toMillis() + index),
+          updatedAt: timestamp,
+        },
+      })));
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: 100 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toHaveLength(100);
+      expect(result.value.nextCursor).toBeUndefined();
+    });
+
+    it('returns the final scan cursor after the bounded compatibility window', async () => {
+      const timestamp = Timestamp.fromDate(new Date('2026-07-28T08:00:00.000Z'));
+      fakeFirestore.seedCollection('code_tasks', Array.from({ length: 1_000 }, (_, index) => ({
+        id: `compat-execution-${String(index).padStart(4, '0')}`,
+        data: {
+          id: `compat-execution-${String(index).padStart(4, '0')}`,
+          userId: 'user-123',
+          status: 'completed',
+          agentType: 'execution',
+          createdAt: Timestamp.fromMillis(timestamp.toMillis() + index),
+          updatedAt: timestamp,
+        },
+      })));
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+
+      const result = await repo.list({ userId: 'user-123', status: ['planned'], limit: 100 });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.tasks).toEqual([]);
+      expect(result.value.nextCursor).toBeDefined();
     });
 
     it('returns tasks', async () => {
@@ -3712,6 +3886,124 @@ describe('firestoreCodeTaskRepository', () => {
 
       expect(result.value).toHaveLength(1);
       expect(result.value[0]?.id).toBe('task-b');
+    });
+
+    it('scans past newer foreign tasks when an owner scope is requested', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const issueId = 'INT-702';
+      const ownerResult = await repo.create(createTaskInput({
+        id: 'task-owned-older',
+        userId: 'user-123',
+        linearIssueId: issueId,
+        traceId: 'trace-owned-older',
+      }));
+      expect(ownerResult.ok).toBe(true);
+      if (!ownerResult.ok) return;
+      expect((await repo.update(ownerResult.value.id, { status: 'failed' })).ok).toBe(true);
+      await fakeFirestore.collection('code_tasks').doc(ownerResult.value.id).update({
+        createdAt: Timestamp.fromDate(new Date('2026-07-28T00:00:00.000Z')),
+      });
+
+      for (let index = 0; index < 55; index += 1) {
+        const created = await repo.create(createTaskInput({
+          id: `task-foreign-${String(index).padStart(2, '0')}`,
+          userId: 'foreign-user',
+          linearIssueId: issueId,
+          traceId: `trace-foreign-${String(index)}`,
+          prompt: `foreign ${String(index)}`,
+          sanitizedPrompt: `foreign ${String(index)}`,
+        }));
+        expect(created.ok).toBe(true);
+        if (!created.ok) return;
+        expect((await repo.update(created.value.id, { status: 'failed' })).ok).toBe(true);
+        await fakeFirestore.collection('code_tasks').doc(created.value.id).update({
+          createdAt: Timestamp.fromMillis(
+            new Date('2026-07-28T01:00:00.000Z').getTime() + index,
+          ),
+        });
+      }
+
+      const result = await repo.findRecentTasksByLinearIssue(issueId, 1, 'user-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.map((task) => task.id)).toEqual(['task-owned-older']);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId: issueId,
+          userId: 'user-123',
+          requestedLimit: 1,
+          matchedTaskCount: 1,
+          scannedTaskCount: 56,
+        }),
+        'Completed owner-scoped Linear issue task scan',
+      );
+    });
+  });
+
+  describe('aggregate query helpers', () => {
+    it('counts tasks created today and queued tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'today-queued', prompt: 'today queued' }));
+
+      const today = await repo.countByUserToday('user-123');
+      const queued = await repo.countQueued();
+
+      expect(today).toEqual({ ok: true, value: 1 });
+      expect(queued).toEqual({ ok: true, value: 1 });
+    });
+
+    it('lists queued, errored post-run, and owner-scoped non-archived tasks', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const queued = await repo.create(createTaskInput({ id: 'query-queued', prompt: 'query queued' }));
+      const errored = await repo.create(createTaskInput({ id: 'query-errored', prompt: 'query errored' }));
+      expect(queued.ok).toBe(true);
+      expect(errored.ok).toBe(true);
+      if (!errored.ok) return;
+      await repo.update(errored.value.id, {
+        executionMemoryPostRun: {
+          status: 'error',
+          attempts: 1,
+          lastAttemptAt: Timestamp.now(),
+          generatedMemoryIds: [],
+          errorMessage: 'failed',
+        },
+      });
+
+      const byAge = await repo.listQueuedByAge(10);
+      const allQueued = await repo.listQueued();
+      const postRunErrors = await repo.listErroredExecutionMemoryPostRun();
+      const nonArchived = await repo.listAllNonArchived('user-123');
+      const nonArchivedGlobal = await repo.listAllNonArchivedGlobal();
+
+      expect(byAge.ok && byAge.value.map((task) => task.id)).toContain('query-queued');
+      expect(allQueued.ok && allQueued.value.map((task) => task.id)).toContain('query-queued');
+      expect(postRunErrors.ok && postRunErrors.value.map((task) => task.id)).toContain('query-errored');
+      expect(nonArchived.ok && nonArchived.value).toHaveLength(2);
+      expect(nonArchivedGlobal.ok && nonArchivedGlobal.value).toHaveLength(2);
+    });
+
+    it('returns the latest non-archived ask-agent task', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      await repo.create(createTaskInput({ id: 'ask-agent', agentType: 'ask_agent' }));
+
+      const result = await repo.findLatestAskAgentTask('user-123');
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value?.id).toBe('ask-agent');
     });
   });
 

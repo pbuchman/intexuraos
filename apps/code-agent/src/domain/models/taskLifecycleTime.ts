@@ -16,6 +16,16 @@ export interface ResolvedTaskLifecycleTime {
   source: TaskLifecycleTimeSource;
 }
 
+export type TaskCompletionTimeSource =
+  | TaskLifecycleTimeSource
+  | 'explicit_completed'
+  | 'write_time';
+
+export interface ResolvedTaskCompletionTime {
+  at: Timestamp;
+  source: TaskCompletionTimeSource;
+}
+
 export interface CodeTaskLifecycleShape {
   /** Runtime-only compatibility for one retained legacy document. Never writable. */
   status: TaskStatus | 'completed';
@@ -42,6 +52,13 @@ export class TaskLifecycleTimeInvariantError extends Error {
       `Task lifecycle timestamp invariant violated for status ${status}: no valid timestamp candidate`,
     );
     this.name = 'TaskLifecycleTimeInvariantError';
+  }
+}
+
+export class InvalidTaskCompletionTimestampError extends Error {
+  constructor() {
+    super('Invalid explicit task completion timestamp');
+    this.name = 'InvalidTaskCompletionTimestampError';
   }
 }
 
@@ -197,6 +214,91 @@ export function resolveTaskLifecycleTime(
     const at = normalizeTaskLifecycleTimestamp(candidate.value);
     if (at !== undefined) {
       return { at, source: candidate.source };
+    }
+  }
+
+  throw new TaskLifecycleTimeInvariantError(task.status);
+}
+
+/**
+ * Resolve a completion value only after the caller has established that the
+ * persisted `completedAt` is missing or malformed.
+ *
+ * An archived task's `statusChangedAt` describes the archive transition, so
+ * retained terminal dispatch evidence must win before that archive clock.
+ * Completion-status tasks use their own status transition first. Active tasks
+ * have no completion evidence and therefore require the caller's write-time
+ * fallback when they are archived directly.
+ */
+export function resolveMissingTaskCompletionTime(
+  task: CodeTaskLifecycleShape,
+  options: {
+    explicitCompletedAt?: unknown;
+    activeFallbackAt?: unknown;
+  } = {},
+): ResolvedTaskCompletionTime {
+  if (options.explicitCompletedAt !== undefined) {
+    const explicit = normalizeTaskLifecycleTimestamp(options.explicitCompletedAt);
+    if (explicit === undefined) {
+      throw new InvalidTaskCompletionTimestampError();
+    }
+    return { at: explicit, source: 'explicit_completed' };
+  }
+
+  const completionTerminal =
+    task.status === 'completed'
+    || (task.status !== 'archived' && isCompletionTaskStatus(task.status));
+  const archived = task.status === 'archived';
+  const candidates: readonly {
+    enabled: boolean;
+    value: unknown;
+    source: TaskLifecycleTimeSource;
+  }[] = archived
+    ? [
+      {
+        enabled: true,
+        value: task.dispatchStatus?.terminalCause?.lastSeenAt,
+        source: 'dispatch_terminal_cause',
+      },
+      {
+        enabled: task.dispatchStatus?.terminal === true,
+        value: task.dispatchStatus?.lastSeenAt,
+        source: 'dispatch_terminal',
+      },
+      { enabled: true, value: task.statusChangedAt, source: 'status_changed' },
+      { enabled: true, value: task.updatedAt, source: 'legacy_updated' },
+      { enabled: true, value: task.createdAt, source: 'created' },
+    ]
+    : completionTerminal
+      ? [
+        { enabled: true, value: task.statusChangedAt, source: 'status_changed' },
+        {
+          enabled: true,
+          value: task.dispatchStatus?.terminalCause?.lastSeenAt,
+          source: 'dispatch_terminal_cause',
+        },
+        {
+          enabled: task.dispatchStatus?.terminal === true,
+          value: task.dispatchStatus?.lastSeenAt,
+          source: 'dispatch_terminal',
+        },
+        { enabled: true, value: task.updatedAt, source: 'legacy_updated' },
+        { enabled: true, value: task.createdAt, source: 'created' },
+      ]
+      : [];
+
+  for (const candidate of candidates) {
+    if (!candidate.enabled) continue;
+    const at = normalizeTaskLifecycleTimestamp(candidate.value);
+    if (at !== undefined) {
+      return { at, source: candidate.source };
+    }
+  }
+
+  if (!completionTerminal && !archived) {
+    const fallbackAt = normalizeTaskLifecycleTimestamp(options.activeFallbackAt);
+    if (fallbackAt !== undefined) {
+      return { at: fallbackAt, source: 'write_time' };
     }
   }
 

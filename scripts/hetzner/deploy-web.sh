@@ -20,7 +20,7 @@ WEB_ENV_BACKUP_DIR=""
 WEB_SANITIZED_ENV_FILE=""
 
 usage() {
-  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s [--repo-dir path] [--env-file path] [--web-root path]\n' "$(basename "$0")"
+  printf 'Usage: COMMIT_SHA=<40hex> COMMIT_MESSAGE=<subject> INTEXURAOS_ENVIRONMENT=prod %s [--repo-dir path] [--env-file path] [--web-root path]\n' "$(basename "$0")"
 }
 
 fail() {
@@ -49,18 +49,13 @@ clear_intexuraos_env() {
 }
 
 export_build_metadata() {
-  if [[ -n "${COMMIT_MESSAGE:-}" && -z "${COMMIT_SHA:-}" ]]; then
-    fail "COMMIT_SHA is required when COMMIT_MESSAGE is set"
-  fi
+  [[ -n "${COMMIT_SHA:-}" ]] || fail "COMMIT_SHA is required"
+  [[ "${COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]] \
+    || fail "COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
+  [[ -n "${COMMIT_MESSAGE:-}" ]] || fail "COMMIT_MESSAGE is required"
 
-  if [[ -n "${COMMIT_SHA:-}" && -z "${COMMIT_MESSAGE:-}" ]]; then
-    fail "COMMIT_MESSAGE is required when COMMIT_SHA is set"
-  fi
-
-  if [[ -n "${COMMIT_SHA:-}" ]]; then
-    export COMMIT_SHA
-    export COMMIT_MESSAGE
-  fi
+  export COMMIT_SHA
+  export COMMIT_MESSAGE
 }
 
 parse_args() {

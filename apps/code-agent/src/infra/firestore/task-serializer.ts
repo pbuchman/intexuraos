@@ -26,8 +26,11 @@ import type {
 import {
   isArchivalTaskStatus,
   isCompletionTaskStatus,
+  normalizeTaskLifecycleTimestamp,
+  resolveMissingTaskCompletionTime,
   resolveTaskLifecycleTime,
 } from '../../domain/models/taskLifecycleTime.js';
+import { resolveCompletedTaskStatus } from '../../domain/utils/resolveCompletedTaskStatus.js';
 import type {
   CreateTaskInput,
   CodeTaskCallbackStateCreateInput,
@@ -78,12 +81,16 @@ export function fromFirestoreDoc(
     updatedAt?: Timestamp;
   };
   const statusChangedAt =
-    data['status'] !== undefined && data.createdAt !== undefined
-      ? resolveTaskLifecycleTime(data as unknown as CodeTask).at
+    raw['status'] !== undefined && raw['createdAt'] !== undefined
+      ? resolveTaskLifecycleTime(raw as unknown as CodeTask).at
       : data.statusChangedAt;
+  const status = data['status'] === 'completed'
+    ? resolveCompletedTaskStatus(data['agentType'] as CodeTask['agentType'])
+    : data['status'];
   return {
     ...data,
     id: doc.id,
+    ...(status !== undefined && { status }),
     createdAt: data['createdAt'] as Timestamp,
     ...(statusChangedAt !== undefined && { statusChangedAt }),
     updatedAt: data['updatedAt'] as Timestamp,
@@ -298,6 +305,7 @@ export function buildUpdateData(
   const updateData: Record<string, unknown> = {};
   const writeTimestamp = Timestamp.fromDate(now);
   const statusChanged = input.status !== undefined && input.status !== existingTask.status;
+  const existingCompletedAt = normalizeTaskLifecycleTimestamp(existingTask.completedAt);
 
   // Allow explicit updatedAt for metadata/heartbeat writes (INT-372). Real
   // lifecycle transitions always advance the technical clock to this write.
@@ -337,13 +345,6 @@ export function buildUpdateData(
   }
   if (input.dispatchedAt !== undefined) {
     updateData['dispatchedAt'] = Timestamp.fromDate(input.dispatchedAt);
-  }
-  if (
-    !statusChanged
-    && !isArchivalTaskStatus(existingTask.status)
-    && input.completedAt !== undefined
-  ) {
-    updateData['completedAt'] = Timestamp.fromDate(input.completedAt);
   }
   if (input.logChunksDropped !== undefined) {
     updateData['logChunksDropped'] = input.logChunksDropped;
@@ -415,24 +416,33 @@ export function buildUpdateData(
     if (isCompletionTaskStatus(input.status)) {
       if (isArchivalTaskStatus(existingTask.status)) {
         updateData['statusChangedAt'] = writeTimestamp;
-        if (existingTask.completedAt === undefined) {
-          updateData['completedAt'] = resolveTaskLifecycleTime(existingTask).at;
+        if (existingCompletedAt === undefined) {
+          updateData['completedAt'] = resolveMissingTaskCompletionTime(
+            existingTask,
+            input.completedAt !== undefined
+              ? { explicitCompletedAt: input.completedAt }
+              : {},
+          ).at;
         }
       } else {
         const completedAt =
           input.completedAt !== undefined
-            ? Timestamp.fromDate(input.completedAt)
+            ? resolveMissingTaskCompletionTime(existingTask, {
+              explicitCompletedAt: input.completedAt,
+            }).at
             : writeTimestamp;
         updateData['statusChangedAt'] = completedAt;
         updateData['completedAt'] = completedAt;
       }
     } else if (isArchivalTaskStatus(input.status)) {
       updateData['statusChangedAt'] = writeTimestamp;
-      if (existingTask.completedAt === undefined) {
-        updateData['completedAt'] =
-          input.completedAt !== undefined
-            ? Timestamp.fromDate(input.completedAt)
-            : writeTimestamp;
+      if (existingCompletedAt === undefined) {
+        updateData['completedAt'] = resolveMissingTaskCompletionTime(existingTask, {
+          ...(input.completedAt !== undefined && {
+            explicitCompletedAt: input.completedAt,
+          }),
+          activeFallbackAt: writeTimestamp,
+        }).at;
       }
     } else {
       const explicitStatusTime =
@@ -447,14 +457,21 @@ export function buildUpdateData(
           : writeTimestamp;
       updateData['completedAt'] = FieldValue.delete();
     }
-  } else if (
-    isArchivalTaskStatus(existingTask.status)
-    && existingTask.completedAt === undefined
-  ) {
-    updateData['completedAt'] =
+  } else if (isArchivalTaskStatus(existingTask.status) && existingCompletedAt === undefined) {
+    updateData['completedAt'] = resolveMissingTaskCompletionTime(
+      existingTask,
       input.completedAt !== undefined
-        ? Timestamp.fromDate(input.completedAt)
-        : writeTimestamp;
+        ? { explicitCompletedAt: input.completedAt }
+        : {},
+    ).at;
+  } else if (
+    isCompletionTaskStatus(existingTask.status)
+    && existingCompletedAt === undefined
+    && input.completedAt !== undefined
+  ) {
+    updateData['completedAt'] = resolveMissingTaskCompletionTime(existingTask, {
+      explicitCompletedAt: input.completedAt,
+    }).at;
   }
 
   return withSchemaVersion(updateData, 2, writeTimestamp);

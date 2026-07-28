@@ -9,6 +9,26 @@
  *   pm2 delete all
  */
 const { COMMON_SERVICE_URLS_GENERATED } = require('./ecosystem.generated.cjs');
+const { execFileSync } = require('node:child_process');
+
+const EXACT_COMMIT_SHA = /^[0-9a-f]{40}$/u;
+
+function resolveLocalCommitSha() {
+  const explicit = process.env.INTEXURAOS_COMMIT_SHA?.trim();
+  if (explicit !== undefined && EXACT_COMMIT_SHA.test(explicit)) return explicit;
+  try {
+    const gitHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    return EXACT_COMMIT_SHA.test(gitHead) ? gitHead : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const LOCAL_COMMIT_SHA = resolveLocalCommitSha();
 
 const PM2_BASE_ENV = { ...process.env };
 delete PM2_BASE_ENV.NODE_OPTIONS;
@@ -74,6 +94,7 @@ const COMMON_SERVICE_ENV = {
     'or:google/gemma-4-31b-it,gemini-2.5-flash',
   INTEXURAOS_ENVIRONMENT: 'dev',
   INTEXURAOS_RUNTIME: 'dev',
+  INTEXURAOS_COMMIT_SHA: LOCAL_COMMIT_SHA,
 };
 
 // All service URLs - mirrors Terraform local.common_service_env_vars

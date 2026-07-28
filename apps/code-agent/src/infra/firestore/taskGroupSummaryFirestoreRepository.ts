@@ -18,6 +18,7 @@ import type {
 } from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
+import type { GroupStatus } from '../../domain/issueGrouping/types.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import { hasImplementationReadyLabel, hasMergeReadyLabel } from '../../domain/issueGrouping/labelHelpers.js';
 import {
@@ -742,10 +743,17 @@ export function createTaskGroupSummaryFirestoreRepository(
             return 'counts_invalid' as const;
           }
           const existingCounts = docToCounts(rawCounts);
-          const current = docToSummary(rawSummary);
           const now = Timestamp.fromDate(new Date());
           tx.delete(summaryRef);
-          writeCounts(tx, userId, applyDeleteGroupDelta(existingCounts, current.aggregateStatus), now);
+          writeCounts(
+            tx,
+            userId,
+            applyDeleteGroupDelta(
+              existingCounts,
+              rawSummary['aggregateStatus'] as GroupStatus,
+            ),
+            now,
+          );
           return 'removed' as const;
         });
         return ok(outcome);

@@ -270,6 +270,42 @@ describe('OpenAPI contract', () => {
     expect(patchEndpoint.responses).toHaveProperty('404');
   });
 
+  it('restricts the task-detail response status to public lifecycle values', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openapi.json',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const schema = JSON.parse(response.body) as {
+      paths: Record<string, {
+        get?: {
+          responses?: Record<string, {
+            content?: Record<string, { schema?: unknown }>;
+          }>;
+        };
+      }>;
+    };
+    const responseSchema = schema.paths['/tasks/{taskId}']?.get?.responses?.['200']
+      ?.content?.['application/json']?.schema as {
+        properties?: { data?: { properties?: { status?: { enum?: string[] } } } };
+      } | undefined;
+
+    expect(responseSchema?.properties?.data?.properties?.status?.enum).toEqual([
+      'dispatched',
+      'running',
+      'queued',
+      'planned',
+      'implemented',
+      'reviewed',
+      'failed',
+      'interrupted',
+      'cancelled',
+      'archived',
+    ]);
+    expect(responseSchema?.properties?.data?.properties?.status?.enum).not.toContain('completed');
+  });
+
   it('tags endpoints correctly', async () => {
     const response = await app.inject({
       method: 'GET',

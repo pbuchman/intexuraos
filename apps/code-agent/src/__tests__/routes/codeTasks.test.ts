@@ -509,6 +509,70 @@ describe('GET /code/tasks endpoints', () => {
         // Only valid statuses are used; 'bogus' is dropped
         expect(body.data.tasks.every((task: CodeTask) => task.status === 'implemented')).toBe(true);
       });
+
+      it('paginates retained completed compatibility through a planned-only filter', async () => {
+        const retainedTaskId = 'task_76d13dde-c6d9-4c08-86c4-5589f1c8dcf2';
+        const rawTask = (
+          id: string,
+          status: 'planned' | 'completed',
+          agentType: 'planning' | 'review',
+          createdAt: string,
+        ): { id: string; data: Record<string, unknown> } => {
+          const at = Timestamp.fromDate(new Date(createdAt));
+          return {
+            id,
+            data: {
+              id,
+              userId: 'test-user-id',
+              prompt: id,
+              sanitizedPrompt: id,
+              systemPromptHash: 'legacy',
+              workerType: 'auto',
+              workerLocation: 'home-dev',
+              repository: 'pbuchman/intexuraos',
+              baseBranch: 'development',
+              traceId: `trace_${id}`,
+              status,
+              dedupKey: `dedup_${id}`,
+              callbackReceived: false,
+              agentType,
+              createdAt: at,
+              completedAt: at,
+              updatedAt: at,
+            },
+          };
+        };
+        fakeFirestore.seedCollection('code_tasks', [
+          rawTask('task_completed_review', 'completed', 'review', '2026-03-22T00:00:00.000Z'),
+          rawTask('task_planned_newer', 'planned', 'planning', '2026-03-21T00:00:00.000Z'),
+          rawTask('task_planned_older', 'planned', 'planning', '2026-03-20T00:00:00.000Z'),
+          rawTask(retainedTaskId, 'completed', 'planning', '2026-03-19T00:00:00.000Z'),
+        ]);
+
+        const pages: { id: string; status: string }[][] = [];
+        let cursor: string | undefined;
+        for (let page = 0; page < 3; page += 1) {
+          const response = await app.inject({
+            method: 'GET',
+            url: `/tasks?status=planned&limit=1${cursor === undefined ? '' : `&cursor=${cursor}`}`,
+            headers: { authorization: 'Bearer test-token' },
+          });
+          expect(response.statusCode).toBe(200);
+          const body = JSON.parse(response.body) as {
+            data: { tasks: { id: string; status: string }[]; nextCursor?: string };
+          };
+          pages.push(body.data.tasks.map(({ id, status }) => ({ id, status })));
+          cursor = body.data.nextCursor;
+        }
+
+        expect(pages).toEqual([
+          [{ id: 'task_planned_newer', status: 'planned' }],
+          [{ id: 'task_planned_older', status: 'planned' }],
+          [{ id: retainedTaskId, status: 'planned' }],
+        ]);
+        expect(cursor).toBeUndefined();
+        expect(pages.flat().some((task) => task.id === 'task_completed_review')).toBe(false);
+      });
     });
 
     describe('pagination', () => {
@@ -744,6 +808,137 @@ describe('GET /code/tasks endpoints', () => {
         expect(body.data.id).toBe(testTaskId);
         expect(body.data.userId).toBe('test-user-id');
         expect(body.data.prompt).toBe('Test task');
+      });
+
+      it('normalizes the retained INT-985 completed document consistently in detail and list responses', async () => {
+        const taskId = 'task_76d13dde-c6d9-4c08-86c4-5589f1c8dcf2';
+        const createdAt = Timestamp.fromDate(new Date('2026-03-19T01:55:00.000Z'));
+        const completedAt = new Timestamp(1_773_886_013, 707_000_000);
+        const updatedAt = Timestamp.fromDate(new Date('2026-03-19T02:14:34.998Z'));
+        fakeFirestore.seedCollection('code_tasks', [{
+          id: taskId,
+          data: {
+            id: taskId,
+            userId: 'test-user-id',
+            prompt: 'Plan INT-985',
+            sanitizedPrompt: 'Plan INT-985',
+            systemPromptHash: 'legacy',
+            workerType: 'auto',
+            workerLocation: 'home-dev',
+            repository: 'pbuchman/intexuraos',
+            baseBranch: 'development',
+            traceId: 'trace_int_985',
+            status: 'completed',
+            dedupKey: 'legacy-int-985',
+            callbackReceived: false,
+            agentType: 'planning',
+            linearIssueId: 'INT-985',
+            createdAt,
+            completedAt,
+            updatedAt,
+          },
+        }]);
+
+        const [detailResponse, listResponse] = await Promise.all([
+          app.inject({
+            method: 'GET',
+            url: `/tasks/${taskId}`,
+            headers: { authorization: 'Bearer test-token' },
+          }),
+          app.inject({
+            method: 'GET',
+            url: '/tasks?limit=20',
+            headers: { authorization: 'Bearer test-token' },
+          }),
+        ]);
+
+        expect(detailResponse.statusCode).toBe(200);
+        expect(listResponse.statusCode).toBe(200);
+        const detailBody = JSON.parse(detailResponse.body) as {
+          data: { id: string; status: string; statusChangedAt: string; completedAt?: string; updatedAt: string };
+        };
+        const listBody = JSON.parse(listResponse.body) as {
+          data: { tasks: { id: string; status: string; statusChangedAt: string; completedAt?: string; updatedAt: string }[] };
+        };
+        const listedTask = listBody.data.tasks.find((task) => task.id === taskId);
+
+        expect(detailBody.data).toEqual(expect.objectContaining({
+          id: taskId,
+          status: 'planned',
+          statusChangedAt: '2026-03-19T02:06:53.707Z',
+          completedAt: '2026-03-19T02:06:53.707Z',
+          updatedAt: '2026-03-19T02:14:34.998Z',
+        }));
+        expect(listedTask).toEqual(expect.objectContaining({
+          id: taskId,
+          status: 'planned',
+          statusChangedAt: '2026-03-19T02:06:53.707Z',
+          completedAt: '2026-03-19T02:06:53.707Z',
+          updatedAt: '2026-03-19T02:14:34.998Z',
+        }));
+        expect(detailBody.data.status).not.toBe('completed');
+        expect(listedTask?.status).not.toBe('completed');
+      });
+
+      it('serializes an archived task completion from terminal cause before archive time', async () => {
+        const taskId = 'task_archived_missing_completion';
+        const createdAt = Timestamp.fromDate(new Date('2026-07-27T08:00:00.000Z'));
+        const failureAt = new Timestamp(1_775_000_000, 123_456_789);
+        const archivedAt = Timestamp.fromDate(new Date('2026-07-27T10:00:00.000Z'));
+        fakeFirestore.seedCollection('code_tasks', [{
+          id: taskId,
+          data: {
+            id: taskId,
+            userId: 'test-user-id',
+            prompt: 'Archived failure',
+            sanitizedPrompt: 'Archived failure',
+            systemPromptHash: 'legacy',
+            workerType: 'auto',
+            workerLocation: 'home-dev',
+            repository: 'pbuchman/intexuraos',
+            baseBranch: 'development',
+            traceId: 'trace_archived_missing_completion',
+            status: 'archived',
+            dedupKey: 'legacy-archived',
+            callbackReceived: false,
+            agentType: 'execution',
+            createdAt,
+            statusChangedAt: archivedAt,
+            updatedAt: archivedAt,
+            dispatchStatus: {
+              state: 'terminal',
+              reason: 'codex_auth_unavailable',
+              terminal: true,
+              severity: 'warning',
+              message: 'Codex auth unavailable',
+              remediation: 'Use an authorized worker',
+              workerNames: ['home-dev'],
+              firstSeenAt: failureAt,
+              lastSeenAt: archivedAt,
+              terminalCause: {
+                reason: 'codex_auth_unavailable',
+                message: 'Codex auth unavailable',
+                remediation: 'Use an authorized worker',
+                workerNames: ['home-dev'],
+                lastSeenAt: failureAt,
+              },
+              nextAction: 'retry_after_fix',
+            },
+          },
+        }]);
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/tasks/${taskId}`,
+          headers: { authorization: 'Bearer test-token' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body) as {
+          data: { statusChangedAt: string; completedAt?: string };
+        };
+        expect(body.data.statusChangedAt).toBe(archivedAt.toDate().toISOString());
+        expect(body.data.completedAt).toBe(failureAt.toDate().toISOString());
       });
 
       it('returns execution memory context and post-run state when present', async () => {

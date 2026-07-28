@@ -3377,6 +3377,87 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         });
       }
     });
+
+    it('fails the repository read when a required summary timestamp is malformed', async () => {
+      const repo = createIncrementalRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.fromDate(new Date('2026-07-28T10:00:00Z'));
+
+      await fakeFirestore.collection('task_group_summaries').doc('user-broken_INT-500').set({
+        userId: 'user-broken',
+        linearIssueId: 'INT-500',
+        groupKey: 'INT-500',
+        taskCount: 1,
+        activeTaskCount: 0,
+        latestTaskStatus: 'planned',
+        latestTaskUpdatedAt: {},
+        agentTypesPresent: ['planning'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: now,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'done',
+        updatedAt: now,
+      });
+
+      const result = await repo.getSummary('user-broken', 'INT-500');
+
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({
+          code: 'FIRESTORE_ERROR',
+          message: expect.stringContaining('latestTaskUpdatedAt'),
+        }),
+      });
+    });
+
+    it.each([
+      ['finite Date outside Firestore range', new Date(8.64e15)],
+      ['private timestamp with malformed present nanos', {
+        _seconds: 1_775_000_000,
+        _nanoseconds: Number.NaN,
+      }],
+    ])('fails a real repository read for required %s', async (_label, malformedTimestamp) => {
+      const repo = createIncrementalRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const now = Timestamp.fromDate(new Date('2026-07-28T10:00:00Z'));
+      await fakeFirestore.collection('task_group_summaries').doc('user-broken_INT-501').set({
+        userId: 'user-broken',
+        linearIssueId: 'INT-501',
+        groupKey: 'INT-501',
+        taskCount: 1,
+        activeTaskCount: 0,
+        latestTaskStatus: 'planned',
+        latestTaskUpdatedAt: malformedTimestamp,
+        agentTypesPresent: ['planning'],
+        hasCompletedPlanning: true,
+        hasCompletedExecution: false,
+        hasImplementationTaskId: false,
+        hasPrUrl: false,
+        prNumber: null,
+        latestReviewNeedsRemediation: null,
+        oldestTaskCreatedAt: now,
+        mostRecentDispatchedAt: null,
+        aggregateStatus: 'done',
+        updatedAt: now,
+      });
+
+      await expect(repo.getSummary('user-broken', 'INT-501')).resolves.toEqual({
+        ok: false,
+        error: expect.objectContaining({
+          code: 'FIRESTORE_ERROR',
+          message: expect.stringContaining('latestTaskUpdatedAt'),
+        }),
+      });
+    });
   });
 
   describe('recomputeGroupFromTasks', () => {

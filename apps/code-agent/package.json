@@ -15,6 +15,8 @@
     "start:local": "tsx src/index.ts",
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "backfill:lifecycle-time": "tsx src/scripts/backfillCodeTaskLifecycleTime.ts",
+    "rollback:lifecycle-time": "tsx src/scripts/rollbackCodeTaskLifecycleTime.ts",
+    "resume:lifecycle-time": "tsx src/scripts/resumeCodeTaskLifecycleTime.ts",
     "view-metrics": "tsx src/scripts/view-metrics.ts"
   },
   "dependencies": {

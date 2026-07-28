@@ -202,6 +202,40 @@ function loadInheritedEmulatorEnv(): Record<string, Record<string, string | unde
 }
 
 describe('ecosystem.config.cjs', () => {
+  it('propagates an explicit validated release SHA to every Home Dev backend', () => {
+    const releaseSha = '1234567890abcdef1234567890abcdef12345678';
+    const config = loadDevConfig({ INTEXURAOS_COMMIT_SHA: releaseSha });
+
+    expect(config.apps).not.toHaveLength(0);
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBe(releaseSha);
+    }
+  });
+
+  it('falls back to the exact git HEAD for every Home Dev backend', () => {
+    const expected = execFileSync('git', ['rev-parse', 'HEAD'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    }).trim();
+    const config = loadDevConfig({ INTEXURAOS_COMMIT_SHA: 'UNKNOWN' });
+
+    expect(expected).toMatch(/^[0-9a-f]{40}$/u);
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBe(expected);
+    }
+  });
+
+  it('omits release without crashing when neither env nor git yields an exact SHA', () => {
+    const config = loadDevConfig({
+      INTEXURAOS_COMMIT_SHA: 'invalid',
+      PATH: '',
+    });
+
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBeUndefined();
+    }
+  });
+
   it('declares exactly the production Matrix corpus runtime secrets in Terraform', () => {
     const matrixCorpusSection =
       TERRAFORM_DEV_MAIN.split('# Production Matrix corpus evaluator')[1]?.split(
