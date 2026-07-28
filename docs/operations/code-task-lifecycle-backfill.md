@@ -62,7 +62,7 @@ output in a mode-0600 report.
 
 ```bash
 umask 077
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --dry-run \
   --project=intexuraos-dev-pbuchman \
   --phase=all \
@@ -81,7 +81,7 @@ release SHA are mandatory. Omit `--cursor` for the first batch. Pass the
 returned cursor on the next batch only when `hasMore` is `true`.
 
 ```bash
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --apply \
   --project=intexuraos-dev-pbuchman \
   --phase=tasks \
@@ -135,7 +135,7 @@ hash matches.**
 Only after that checkpoint may the next task batch run:
 
 ```bash
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --apply \
   --project=intexuraos-dev-pbuchman \
   --phase=tasks \
@@ -154,7 +154,7 @@ the exact journal and hash. Resume repeats both production gates and
 idempotently classifies every entry as changed or already applied.
 
 ```bash
-pnpm --filter @intexuraos/code-agent resume:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent resume:lifecycle-time \
   --project=intexuraos-dev-pbuchman \
   --journal=/absolute/private/path/OPERATION_ID-tasks.json \
   --journal-sha=REPLACE_WITH_64_HEX_SHA \
@@ -167,7 +167,7 @@ only by the same operation, phase, release, and journal hash.
 After the terminal task page, prove task convergence before summaries:
 
 ```bash
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --dry-run --project=intexuraos-dev-pbuchman --phase=tasks --page-size=200 \
   > lifecycle-tasks-convergence.json
 chmod 600 lifecycle-tasks-convergence.json
@@ -182,7 +182,7 @@ Complete all task batches, repeat the full dry-run, and only then run summary
 batches. The same cursor, journal-copy, and **STOP** rules apply.
 
 ```bash
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --apply \
   --project=intexuraos-dev-pbuchman \
   --phase=summaries \
@@ -224,7 +224,7 @@ command is forbidden until the off-host copy succeeds and its complete hash
 matches.** Only then may it run:
 
 ```bash
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --apply \
   --project=intexuraos-dev-pbuchman \
   --phase=summaries \
@@ -245,7 +245,7 @@ summary-only dry-run and require `summaries.changed=0`,
 Run one last complete audit:
 
 ```bash
-pnpm --filter @intexuraos/code-agent backfill:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent backfill:lifecycle-time \
   --dry-run --project=intexuraos-dev-pbuchman --phase=all --page-size=200 \
   > lifecycle-final-dry-run.json
 chmod 600 lifecycle-final-dry-run.json
@@ -264,7 +264,7 @@ gates, and the owner-fenced lock. It preflights the entire reverse state
 with CAS while restoring in reverse order.
 
 ```bash
-pnpm --filter @intexuraos/code-agent rollback:lifecycle-time -- \
+pnpm -s --filter @intexuraos/code-agent rollback:lifecycle-time \
   --project=intexuraos-dev-pbuchman \
   --journal=/absolute/private/path/OPERATION_ID-tasks.json \
   --journal-sha=REPLACE_WITH_64_HEX_SHA \
