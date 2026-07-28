@@ -369,10 +369,10 @@ describe('Code Tasks E2E', () => {
 
       const { codeTaskId } = submitResult.data.data;
 
-      // Check initial status (queued, dispatched, or running)
+      // The mock can finish before this first read, so a terminal success is valid here too.
       const initialResponse = await client.get(`/tasks/${codeTaskId}`);
       const initialStatus = initialResponse.data.data.status;
-      expect(['queued', 'dispatched', 'running']).toContain(initialStatus);
+      expect(['queued', 'dispatched', 'running', 'planned', 'implemented']).toContain(initialStatus);
 
       // Wait for completion
       const task = await waitForSuccessStatus(client, codeTaskId, 60000);
