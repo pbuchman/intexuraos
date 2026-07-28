@@ -36,10 +36,7 @@ export interface WorkerBootstrapConfig {
   environment: string;
   /** Sentry DSN. When undefined / empty, Sentry is not initialized. */
   sentryDsn?: string;
-  /**
-   * Release identifier (e.g. Cloud Run revision). Defaults to
-   * `process.env['K_REVISION']`.
-   */
+  /** Release identifier. Defaults to an exact Git SHA, then a safe Cloud Run revision id. */
   release?: string;
   /** Tracing sample rate override. */
   tracesSampleRate?: number;

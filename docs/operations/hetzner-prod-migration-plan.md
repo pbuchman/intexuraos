@@ -164,8 +164,13 @@ separate.
 
 ```bash
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-web.sh'
-sudo -iu deploy bash -lc 'cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh'
+RELEASE_SHA='<40-character lowercase Git SHA deployed to /opt/intexuraos>'
+RELEASE_MESSAGE='<matching commit subject>'
+[[ "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+sudo -iu deploy env COMMIT_SHA="${RELEASE_SHA}" COMMIT_MESSAGE="${RELEASE_MESSAGE}" \
+  INTEXURAOS_ENVIRONMENT=prod bash -lc 'cd /opt/intexuraos && bash scripts/hetzner/deploy-web.sh'
+sudo -iu deploy env INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}" \
+  INTEXURAOS_ENVIRONMENT=prod bash -lc 'cd /opt/intexuraos && bash scripts/hetzner/reload-pm2.sh'
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 ```
 

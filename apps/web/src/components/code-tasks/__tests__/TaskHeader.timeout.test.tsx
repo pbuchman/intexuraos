@@ -23,6 +23,8 @@ function createTask(overrides: Partial<CodeTask> = {}): CodeTask {
     dedupKey: 'dedup-1',
     callbackReceived: true,
     createdAt: '2026-05-01T12:00:00.000Z',
+    statusChangedAt: '2026-05-01T12:05:00.000Z',
+    completedAt: '2026-05-01T12:05:00.000Z',
     updatedAt: '2026-05-01T12:05:00.000Z',
     ...overrides,
   };
@@ -69,5 +71,28 @@ describe('TaskHeader custom timeout badge (INT-1585)', () => {
 
     expect(screen.getByText('Callback: prod')).toBeInTheDocument();
     expect(screen.getByText('Callback failed: logs 401')).toBeInTheDocument();
+  });
+
+  it('shows the terminal lifecycle time instead of technical Updated metadata', () => {
+    render(<TaskHeader task={createTask({
+      status: 'failed',
+      statusChangedAt: '2026-05-01T12:05:00.000Z',
+      completedAt: '2026-05-01T12:05:00.000Z',
+      updatedAt: '2026-05-02T18:00:00.000Z',
+    })} workerStatusTag={null} />);
+
+    expect(screen.getByText(/Failed May 1, 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/Updated:/)).not.toBeInTheDocument();
+  });
+
+  it('shows lifecycle time for a queued task', () => {
+    render(<TaskHeader task={createTask({
+      status: 'queued',
+      statusChangedAt: '2026-05-03T09:00:00.000Z',
+      completedAt: undefined,
+      updatedAt: '2026-05-03T09:02:00.000Z',
+    })} workerStatusTag={null} />);
+
+    expect(screen.getByText(/Queued May 3, 2026/)).toBeInTheDocument();
   });
 });

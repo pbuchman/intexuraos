@@ -1558,6 +1558,8 @@ export interface CodeTask {
   callbackReceived: boolean;
   callbackState?: CodeTaskCallbackState;
   createdAt: string;
+  statusChangedAt: string;
+  completedAt?: string;
   updatedAt: string;
   dispatchedAt?: string;
   linearIssueId?: string;

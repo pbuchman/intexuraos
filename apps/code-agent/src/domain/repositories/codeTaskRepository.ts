@@ -194,6 +194,16 @@ export interface CodeTaskRepository {
     userId: string
   ): Promise<Result<CodeTask, RepositoryError>>;
 
+  /**
+   * Resolve an exact, caller-supplied task membership for one owner.
+   * Implementations preserve first-seen input order, omit missing/foreign
+   * documents, and fail the whole result when an infrastructure batch fails.
+   */
+  findByIdsForUser(
+    taskIds: readonly string[],
+    userId: string
+  ): Promise<Result<CodeTask[], RepositoryError>>;
+
   update(
     taskId: string,
     input: UpdateTaskInput,
@@ -317,7 +327,8 @@ export interface CodeTaskRepository {
    */
   findRecentTasksByLinearIssue(
     linearIssueId: string,
-    limit: number
+    limit: number,
+    userId?: string,
   ): Promise<Result<CodeTask[], RepositoryError>>;
 
   /**

@@ -1140,6 +1140,9 @@ importers:
       '@intexuraos/http-contracts':
         specifier: workspace:*
         version: link:../../packages/http-contracts
+      '@intexuraos/infra-sentry':
+        specifier: workspace:*
+        version: link:../../packages/infra-sentry
       '@intexuraos/llm-contract':
         specifier: workspace:*
         version: link:../../packages/llm-contract

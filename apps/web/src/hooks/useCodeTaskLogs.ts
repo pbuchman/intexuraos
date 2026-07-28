@@ -43,6 +43,8 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [listenerHealthy, setListenerHealthy] = useState(false);
+  const taskStatus = task?.status ?? null;
+  const authenticatedUserId = user?.sub ?? null;
 
   const getAccessTokenRef = useRef(getAccessToken);
   getAccessTokenRef.current = getAccessToken;
@@ -83,14 +85,14 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
   }, [refreshTask]);
 
   useEffect(() => {
-    if (!isAuthenticated || user === undefined || taskId === '' || task === null) {
+    if (!isAuthenticated || authenticatedUserId === null || taskId === '' || taskStatus === null) {
       setListenerHealthy(false);
       return;
     }
 
     const cancelState = { cancelled: false };
     const unsubs: Unsubscribe[] = [];
-    const isActive = ACTIVE_STATUSES.includes(task.status);
+    const isActive = ACTIVE_STATUSES.includes(taskStatus);
 
     const setup = async (): Promise<void> => {
       try {
@@ -229,7 +231,7 @@ export function useCodeTaskLogs(taskId: string): CodeTaskLogsState {
         unsub();
       }
     };
-  }, [isAuthenticated, refreshTask, task, taskId, user]);
+  }, [authenticatedUserId, isAuthenticated, refreshTask, taskId, taskStatus]);
 
   return {
     task,
@@ -246,6 +248,8 @@ function taskRefreshKeyFromTask(task: CodeTask): string {
   return [
     task.status,
     task.updatedAt,
+    task.statusChangedAt,
+    task.completedAt ?? '',
     task.dispatchStatus?.reason ?? '',
     task.dispatchStatus?.lastSeenAt ?? '',
     task.callbackState?.configuredAt ?? '',
@@ -258,6 +262,8 @@ function taskRefreshKeyFromSnapshotData(data: Record<string, unknown>): string |
   const status = data['status'];
   if (typeof status !== 'string') return null;
   const updatedAt = snapshotTimestampToKey(data['updatedAt']);
+  const statusChangedAt = snapshotTimestampToKey(data['statusChangedAt']);
+  const completedAt = snapshotTimestampToKey(data['completedAt']);
   const dispatchStatus = data['dispatchStatus'];
   const dispatchReason = typeof dispatchStatus === 'object' && dispatchStatus !== null
     && 'reason' in dispatchStatus && typeof dispatchStatus.reason === 'string'
@@ -287,6 +293,8 @@ function taskRefreshKeyFromSnapshotData(data: Record<string, unknown>): string |
   return [
     status,
     updatedAt,
+    statusChangedAt,
+    completedAt,
     dispatchReason,
     dispatchLastSeenAt,
     callbackConfiguredAt,

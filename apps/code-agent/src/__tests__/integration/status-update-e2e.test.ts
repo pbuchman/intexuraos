@@ -40,7 +40,8 @@ import { createFakeFirestore, setFirestore, resetFirestore } from '@intexuraos/i
 import type { Firestore } from '@google-cloud/firestore';
 
 import { buildServer } from '../../server.js';
-import { setServices, resetServices, type ServiceContainer } from '../../services.js';
+import { getServices, setServices, resetServices, type ServiceContainer } from '../../services.js';
+import { createFirestoreCodeTaskRepository } from '../../infra/firestore/firestoreCodeTaskRepository.js';
 // Cross-workspace import via relative path. StatusUpdateClient has zero external
 // deps (only `node:crypto` built-in and `pino` type-only), so pulling it into
 // the code-agent test workspace does not break dependency resolution.
@@ -55,6 +56,7 @@ const TASK_ID = 'task_int_e2e';
 describe('StatusUpdateClient <-> updateTaskStatusRoute end-to-end', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let serverUrl: string;
+  let fakeFirestore: Firestore;
   let mockCodeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -78,7 +80,7 @@ describe('StatusUpdateClient <-> updateTaskStatusRoute end-to-end', () => {
     process.env['INTEXURAOS_AUTH_ISSUER'] = 'https://intexuraos.eu.auth0.com/';
     process.env['INTEXURAOS_AUTH_JWKS_URL'] = 'https://intexuraos.eu.auth0.com/.well-known/jwks.json';
 
-    const fakeFirestore = createFakeFirestore() as unknown as Firestore;
+    fakeFirestore = createFakeFirestore() as unknown as Firestore;
     setFirestore(fakeFirestore);
 
     // In-memory fake codeTaskRepo seeded with a task in `running` state, as
@@ -282,5 +284,88 @@ describe('StatusUpdateClient <-> updateTaskStatusRoute end-to-end', () => {
       branch: 'feat/e2e',
       summary: '[INT-E2E] example',
     });
+  });
+
+  it('keeps failure lifecycle at T1 when PR metadata advances updatedAt to T2 across task APIs', async () => {
+    const logger = pino({ level: 'silent' });
+    const codeTaskRepo = createFirestoreCodeTaskRepository({ firestore: fakeFirestore, logger });
+    setServices({ ...getServices(), codeTaskRepo } as ServiceContainer);
+
+    const created = await codeTaskRepo.create({
+      userId: 'test-user-id',
+      prompt: 'Fix lifecycle timestamps',
+      sanitizedPrompt: 'fix lifecycle timestamps',
+      systemPromptHash: 'hash',
+      workerType: 'codex',
+      workerLocation: 'home-dev',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace-lifecycle-t1-t2',
+      agentType: 'execution',
+      initialStatus: 'dispatched',
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const running = await codeTaskRepo.update(created.value.id, { status: 'running' });
+    expect(running.ok).toBe(true);
+
+    const failureAtT1 = new Date('2026-07-26T15:20:19.625Z');
+    const metadataAtT2 = new Date('2026-07-26T15:23:48.130Z');
+    const client = new StatusUpdateClient({
+      codeAgentUrl: serverUrl,
+      orchestratorSecret: ORCHESTRATOR_SECRET,
+      internalAuthToken: INTERNAL_AUTH_TOKEN,
+      logger,
+      retryDelaysMs: [],
+    });
+    const committed = await client.commit({
+      taskId: created.value.id,
+      status: 'failed',
+      completedAt: failureAtT1,
+      error: {
+        code: 'TASK_COMPLETION_VERIFICATION_FAILED',
+        message: 'Failure persisted at T1',
+      },
+    });
+    expect(committed.ok).toBe(true);
+
+    const metadataUpdate = await codeTaskRepo.update(created.value.id, {
+      prNumber: 1934,
+      prMergedAt: metadataAtT2,
+      updatedAt: metadataAtT2,
+      result: {
+        prUrl: 'https://github.com/pbuchman/intexuraos/pull/1934',
+        summary: 'PR metadata arrived at T2',
+      },
+    });
+    expect(metadataUpdate.ok).toBe(true);
+
+    const headers = { authorization: 'Bearer task-api-token' };
+    const [detailResponse, listResponse] = await Promise.all([
+      fetch(`${serverUrl}/tasks/${created.value.id}`, { headers }),
+      fetch(`${serverUrl}/tasks`, { headers }),
+    ]);
+    expect(detailResponse.status).toBe(200);
+    expect(listResponse.status).toBe(200);
+    const detail = await detailResponse.json() as {
+      data: { statusChangedAt: string; completedAt: string; updatedAt: string; prNumber: number };
+    };
+    const list = await listResponse.json() as {
+      data: { tasks: { id: string; statusChangedAt: string; completedAt: string; updatedAt: string; prNumber: number }[] };
+    };
+    const listedTask = list.data.tasks.find((task) => task.id === created.value.id);
+
+    expect(detail.data).toEqual(expect.objectContaining({
+      statusChangedAt: failureAtT1.toISOString(),
+      completedAt: failureAtT1.toISOString(),
+      updatedAt: metadataAtT2.toISOString(),
+      prNumber: 1934,
+    }));
+    expect(listedTask).toEqual(expect.objectContaining({
+      statusChangedAt: failureAtT1.toISOString(),
+      completedAt: failureAtT1.toISOString(),
+      updatedAt: metadataAtT2.toISOString(),
+      prNumber: 1934,
+    }));
   });
 });

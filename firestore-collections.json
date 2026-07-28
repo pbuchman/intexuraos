@@ -261,6 +261,11 @@
       "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"],
       "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
+    "code_task_lifecycle_maintenance_locks": {
+      "owner": "code-agent",
+      "description": "Owner-fenced, release-bound maintenance lease for reversible code task lifecycle backfill batches",
+      "scanPaths": ["apps/code-agent/src/scripts"]
+    },
     "user_spend": {
       "owner": "code-agent",
       "description": "User cost tracking for rate limiting"

@@ -56,7 +56,7 @@ const DEFAULT_FILTERS = NON_ARCHIVED_STATUSES;
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: 'linear-id', label: 'Linear' },
   { key: 'pr-number', label: 'PR#' },
-  { key: 'last-updated', label: 'Updated' },
+  { key: 'last-updated', label: 'Activity' },
   { key: 'dispatched', label: 'Dispatched' },
 ];
 
@@ -232,7 +232,7 @@ function ColumnHeader(): React.JSX.Element {
       <div></div>
       <div>Issue</div>
       <div>Pipeline</div>
-      <div>Time</div>
+      <div>Activity</div>
       <div>Output</div>
       <div>Logs</div>
     </div>
@@ -284,7 +284,7 @@ export function CodeTasksPage(): React.JSX.Element {
     }
   }, [actioningTaskId]);
 
-  const timeTick = useTimeTick(30000, counts.active > 0);
+  const timeTick = useTimeTick(30000, groups.length > 0);
 
   // Eligible groups for batch archive (done + failed only)
   const eligibleGroups = useMemo(

@@ -330,6 +330,7 @@ export interface CodeTask {
 
   // Timestamps
   createdAt: Timestamp;
+  statusChangedAt?: Timestamp;    // Canonical lifecycle transition clock; optional during legacy compatibility
   queuedAt?: Timestamp;           // When task entered queue (INT-619)
   dispatchedAt?: Timestamp;
   completedAt?: Timestamp;

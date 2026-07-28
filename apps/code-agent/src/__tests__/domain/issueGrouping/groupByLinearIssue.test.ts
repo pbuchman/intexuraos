@@ -25,6 +25,7 @@ function makeTask(overrides: Partial<SerializedTask> & { id: string }): Serializ
     callbackReceived: false,
     status: 'implemented',
     createdAt: '2026-03-01T10:00:00.000Z',
+    statusChangedAt: '2026-03-01T10:00:00.000Z',
     updatedAt: '2026-03-01T10:00:00.000Z',
     ...overrides,
   };
@@ -66,15 +67,96 @@ describe('groupByLinearIssue', () => {
     expect(groupByLinearIssue([])).toEqual([]);
   });
 
-  it('sets latestTask to the most recently updated task', () => {
+  it('orders valid creation timestamps ahead of invalid values in either input order', () => {
+    const valid = makeTask({
+      id: 'valid', linearIssueId: 'INT-INVALID-CLOCK', createdAt: '2026-03-01T10:00:00.000Z',
+    });
+    const invalid = makeTask({ id: 'invalid', linearIssueId: 'INT-INVALID-CLOCK', createdAt: 'not-a-date' });
+
+    expect(groupByLinearIssue([invalid, valid])[0]?.latestTask.id).toBe('valid');
+    expect(groupByLinearIssue([valid, invalid])[0]?.latestTask.id).toBe('valid');
+  });
+
+  it('uses task id when both creation timestamps are invalid', () => {
+    const groups = groupByLinearIssue([
+      makeTask({ id: 'task-A', linearIssueId: 'INT-BOTH-INVALID', createdAt: 'invalid-a' }),
+      makeTask({ id: 'task-B', linearIssueId: 'INT-BOTH-INVALID', createdAt: 'invalid-b' }),
+    ]);
+
+    expect(groups[0]?.latestTask.id).toBe('task-B');
+  });
+
+  it('keeps newest-attempt identity, lifecycle activity, and technical modification on separate clocks', () => {
+    const failureAtT1 = '2026-03-03T10:00:00.000Z';
+    const metadataAtT2 = '2026-03-05T10:00:00.000Z';
     const tasks = [
-      makeTask({ id: 'task-1', linearIssueId: 'INT-100', updatedAt: '2026-03-01T10:00:00.000Z' }),
-      makeTask({ id: 'task-2', linearIssueId: 'INT-100', updatedAt: '2026-03-05T10:00:00.000Z' }),
-      makeTask({ id: 'task-3', linearIssueId: 'INT-100', updatedAt: '2026-03-03T10:00:00.000Z' }),
+      makeTask({
+        id: 'task-A',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt: '2026-03-01T10:00:00.000Z',
+        statusChangedAt: failureAtT1,
+        updatedAt: metadataAtT2,
+        prMergedAt: metadataAtT2,
+      }),
+      makeTask({
+        id: 'task-B',
+        linearIssueId: 'INT-100',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: '2026-03-02T10:00:00.000Z',
+        statusChangedAt: '2026-03-02T12:00:00.000Z',
+        updatedAt: '2026-03-02T12:00:00.000Z',
+      }),
     ];
 
     const groups = groupByLinearIssue(tasks);
-    expect(groups[0]?.latestTask.id).toBe('task-2');
+    const group = groups[0];
+
+    expect(group?.latestTask.id).toBe('task-B');
+    expect(group?.pipeline.steps).toEqual([
+      expect.objectContaining({ agentType: 'execution', state: 'completed' }),
+    ]);
+    expect(group?.lastActivityAt).toBe(failureAtT1);
+    expect(group?.lastActivityStatus).toBe('failed');
+    expect(group?.lastActivityTaskId).toBe('task-A');
+    expect(group?.lastModifiedAt).toBe(metadataAtT2);
+    expect(group?.aggregateStatus).not.toBe('failed');
+    expect(group?.tasks.map((task) => task.id)).toEqual(['task-A', 'task-B']);
+  });
+
+  it('uses task id to break creation and lifecycle timestamp ties deterministically', () => {
+    const tiedCreatedAt = '2026-03-01T10:00:00.000Z';
+    const tiedActivityAt = '2026-03-02T10:00:00.000Z';
+    const tasks = [
+      makeTask({
+        id: 'task-A',
+        linearIssueId: 'INT-101',
+        agentType: 'execution',
+        status: 'failed',
+        createdAt: tiedCreatedAt,
+        statusChangedAt: tiedActivityAt,
+        updatedAt: '2026-03-04T10:00:00.000Z',
+      }),
+      makeTask({
+        id: 'task-B',
+        linearIssueId: 'INT-101',
+        agentType: 'execution',
+        status: 'implemented',
+        createdAt: tiedCreatedAt,
+        statusChangedAt: tiedActivityAt,
+        updatedAt: '2026-03-03T10:00:00.000Z',
+      }),
+    ];
+
+    const group = groupByLinearIssue(tasks)[0];
+
+    expect(group?.latestTask.id).toBe('task-B');
+    expect(group?.lastActivityTaskId).toBe('task-B');
+    expect(group?.lastActivityStatus).toBe('implemented');
+    expect(group?.tasks.map((task) => task.id)).toEqual(['task-A', 'task-B']);
+    expect(group?.pipeline.steps[0]?.state).toBe('completed');
   });
 
   it('picks up mostRecentDispatchedAt across group', () => {
@@ -133,16 +215,34 @@ describe('groupByLinearIssue', () => {
     expect(groups[2]?.linearIssueId).toBe('INT-100');
   });
 
-  it('sorts standalone groups by updatedAt desc when both have no linearIssueId', () => {
+  it('sorts standalone groups by lifecycle activity when both have no linearIssueId', () => {
     const tasks = [
-      makeTask({ id: 'task-old', updatedAt: '2026-03-01T10:00:00.000Z' }),
-      makeTask({ id: 'task-new', updatedAt: '2026-03-05T10:00:00.000Z' }),
+      makeTask({
+        id: 'task-old-activity',
+        statusChangedAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-10T10:00:00.000Z',
+      }),
+      makeTask({
+        id: 'task-new-activity',
+        statusChangedAt: '2026-03-05T10:00:00.000Z',
+        updatedAt: '2026-03-05T10:00:00.000Z',
+      }),
     ];
 
     const groups = groupByLinearIssue(tasks);
 
-    expect(groups[0]?.latestTask.id).toBe('task-new');
-    expect(groups[1]?.latestTask.id).toBe('task-old');
+    expect(groups[0]?.latestTask.id).toBe('task-new-activity');
+    expect(groups[1]?.latestTask.id).toBe('task-old-activity');
+  });
+
+  it('breaks equal standalone lifecycle activity ties by standalone group key', () => {
+    const tied = '2026-03-05T10:00:00.000Z';
+    const groups = groupByLinearIssue([
+      makeTask({ id: 'task-A', statusChangedAt: tied }),
+      makeTask({ id: 'task-B', statusChangedAt: tied }),
+    ]);
+
+    expect(groups.map((group) => group.latestTask.id)).toEqual(['task-B', 'task-A']);
   });
 
   it('picks the most recent dispatchedAt when multiple tasks have dispatchedAt', () => {
@@ -596,8 +696,8 @@ describe('deriveAggregateStatus', () => {
 
   it('returns failed when latest non-archived task is failed', () => {
     const tasks = [
-      makeTask({ id: 'task-1', status: 'failed', updatedAt: '2026-03-05T10:00:00.000Z' }),
-      makeTask({ id: 'task-2', status: 'implemented', updatedAt: '2026-03-01T10:00:00.000Z' }),
+      makeTask({ id: 'task-1', status: 'failed', createdAt: '2026-03-05T09:00:00.000Z', statusChangedAt: '2026-03-05T10:00:00.000Z', updatedAt: '2026-03-05T10:00:00.000Z' }),
+      makeTask({ id: 'task-2', status: 'implemented', createdAt: '2026-03-01T09:00:00.000Z', statusChangedAt: '2026-03-01T10:00:00.000Z', updatedAt: '2026-03-01T10:00:00.000Z' }),
     ];
     const pipeline = derivePipeline(tasks);
     expect(deriveAggregateStatus(tasks, pipeline)).toBe('failed');
@@ -1016,11 +1116,11 @@ describe('derivePipeline', () => {
     expect(mergeSteps).toHaveLength(1);
   });
 
-  it('extracts PR URL from first non-archived task with prUrl', () => {
+  it('extracts PR URL from the technically newest non-archived PR task', () => {
     const tasks = [
       makeTask({ id: 'task-1', status: 'archived', result: { prUrl: 'https://github.com/owner/repo/pull/10' } }),
-      makeTask({ id: 'task-2', status: 'implemented', result: { prUrl: 'https://github.com/owner/repo/pull/42' } }),
-      makeTask({ id: 'task-3', status: 'implemented', result: { prUrl: 'https://github.com/owner/repo/pull/99' } }),
+      makeTask({ id: 'task-2', status: 'implemented', updatedAt: '2026-03-05T10:00:00.000Z', result: { prUrl: 'https://github.com/owner/repo/pull/42' } }),
+      makeTask({ id: 'task-3', status: 'implemented', updatedAt: '2026-03-01T10:00:00.000Z', result: { prUrl: 'https://github.com/owner/repo/pull/99' } }),
     ];
 
     const pipeline = derivePipeline(tasks);
@@ -1086,21 +1186,21 @@ describe('derivePipeline', () => {
     expect(pipeline.steps).toHaveLength(0);
   });
 
-  it('keeps only the first (latest by updatedAt) task per agentType', () => {
+  it('keeps the newest created task per agentType even when an older attempt has newer metadata', () => {
     const tasks = [
       makeTask({
-        id: 'task-1',
-        status: 'implemented',
-        agentType: 'execution',
-        updatedAt: '2026-03-05T10:00:00.000Z',
-        createdAt: '2026-03-02T10:00:00.000Z',
-      }),
-      makeTask({
-        id: 'task-2',
+        id: 'task-A',
         status: 'failed',
         agentType: 'execution',
-        updatedAt: '2026-03-01T10:00:00.000Z',
+        updatedAt: '2026-03-05T10:00:00.000Z',
         createdAt: '2026-03-01T10:00:00.000Z',
+      }),
+      makeTask({
+        id: 'task-B',
+        status: 'implemented',
+        agentType: 'execution',
+        updatedAt: '2026-03-01T10:00:00.000Z',
+        createdAt: '2026-03-02T10:00:00.000Z',
       }),
     ];
 

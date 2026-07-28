@@ -952,6 +952,14 @@ class FakeFirestoreImpl {
     return new FakeCollectionReference(name, this.store, this.docCounter);
   }
 
+  /** Match Firestore's exact-reference bulk read semantics in input order. */
+  async getAll(...documentRefs: FakeDocumentReference[]): Promise<FakeDocumentSnapshot[]> {
+    if (this.config.errorToThrow !== undefined) {
+      throw this.config.errorToThrow;
+    }
+    return await Promise.all(documentRefs.map(async (documentRef) => await documentRef.get()));
+  }
+
   /**
    * Configure fake behavior.
    */
@@ -1014,36 +1022,46 @@ class FakeFirestoreImpl {
    */
   async runTransaction<T>(updateFn: (transaction: FakeTransaction) => Promise<T>): Promise<T> {
     // Enqueue this transaction to run after all previous transactions complete
-    transactionQueue = transactionQueue.then(async (): Promise<T> => {
-      const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
-      const transaction = new FakeTransaction(this.store, pendingWrites);
+    const transactionRun = transactionQueue
+      .catch(() => undefined)
+      .then(async (): Promise<T> => {
+        const pendingWrites = new Map<string, { data: DocumentData; deleted: boolean }>();
+        const transaction = new FakeTransaction(this.store, pendingWrites);
 
-      const result = await updateFn(transaction);
-      // Commit: apply all pending writes to the store
-      for (const [key, value] of pendingWrites.entries()) {
-        const separator = key.lastIndexOf('/');
-        if (separator <= 0 || separator === key.length - 1) {
-          continue; // Skip malformed keys
+        const result = await updateFn(transaction);
+        // Commit: apply all pending writes to the store
+        for (const [key, value] of pendingWrites.entries()) {
+          const separator = key.lastIndexOf('/');
+          if (separator <= 0 || separator === key.length - 1) {
+            continue; // Skip malformed keys
+          }
+          const collectionName = key.slice(0, separator);
+          const docId = key.slice(separator + 1);
+          let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
+          if (collection === undefined) {
+            const newCollection = new Map<string, DocumentData>();
+            this.store.set(collectionName, newCollection);
+            collection = newCollection;
+          }
+          if (value.deleted) {
+            collection.delete(docId);
+          } else {
+            collection.set(docId, value.data);
+          }
         }
-        const collectionName = key.slice(0, separator);
-        const docId = key.slice(separator + 1);
-        let collection = this.store.get(collectionName) as Map<string, DocumentData> | undefined;
-        if (collection === undefined) {
-          const newCollection = new Map<string, DocumentData>();
-          this.store.set(collectionName, newCollection);
-          collection = newCollection;
-        }
-        if (value.deleted) {
-          collection.delete(docId);
-        } else {
-          collection.set(docId, value.data);
-        }
-      }
-      return result;
-    });
+        return result;
+      });
+
+    // A deliberately rejected transaction must not poison unrelated future
+    // transactions. Keep only a settled serialization tail while returning the
+    // original result (including its rejection) to the caller.
+    transactionQueue = transactionRun.then(
+      () => undefined,
+      () => undefined
+    );
 
     // eslint-disable-next-line @typescript-eslint/return-await
-    return transactionQueue as Promise<T>;
+    return transactionRun;
   }
 }
 

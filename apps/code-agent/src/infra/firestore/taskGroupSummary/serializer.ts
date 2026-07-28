@@ -12,6 +12,7 @@ import type { CodeTask } from '../../../domain/models/codeTask.js';
 import type { GroupStatus } from '../../../domain/issueGrouping/types.js';
 import { deriveAggregateStatusFromSummary } from '../../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import { REMEDIATION_NOT_NEEDED } from '../../../domain/issueGrouping/constants.js';
+import { resolveTaskLifecycleTime } from '../../../domain/models/taskLifecycleTime.js';
 
 const LINEAR_ISSUE_NUMBER_REGEX = /-(\d+)$/;
 
@@ -108,10 +109,7 @@ function getMergeReadyReason(task: CodeTask): string | null {
     : null;
 }
 
-function isMergeReadyInvalidator(task: CodeTask): boolean {
-  if (task.status === 'archived') {
-    return false;
-  }
+function hasMergeReadyInvalidationResult(task: CodeTask): boolean {
   if (task.agentType === 'review' && task.result?.needs_remediation === '1') {
     return true;
   }
@@ -125,6 +123,10 @@ function isMergeReadyInvalidator(task: CodeTask): boolean {
     return true;
   }
   return false;
+}
+
+function isMergeReadyInvalidator(task: CodeTask): boolean {
+  return task.status !== 'archived' && hasMergeReadyInvalidationResult(task);
 }
 
 function hasRepresentativePr(task: CodeTask): boolean {
@@ -142,30 +144,106 @@ function normalizeSummarySortFields(summary: TaskGroupSummary): TaskGroupSummary
 // Timestamp helper (pure)
 // =============================================================================
 
-/**
- * Helper to ensure a value is a Timestamp.
- */
-export function toTimestamp(value: unknown): Timestamp {
-  /* v8 ignore start -- ts-type: FakeFirestore always stores real Timestamp instances; non-Timestamp value is unreachable in tests @preserve */
+function parseTimestamp(value: unknown): Timestamp | undefined {
   if (value instanceof Timestamp) {
     return value;
   }
   if (value instanceof Date) {
-    return Timestamp.fromDate(value);
+    if (!Number.isFinite(value.getTime())) return undefined;
+    try {
+      return Timestamp.fromDate(value);
+    } catch {
+      return undefined;
+    }
   }
   if (typeof value === 'object' && value !== null) {
     const obj = value as Record<string, unknown>;
     if ('toDate' in obj && typeof obj['toDate'] === 'function') {
-      return obj as unknown as Timestamp;
+      try {
+        const date = (obj['toDate'] as () => unknown)();
+        return date instanceof Date && Number.isFinite(date.getTime())
+          ? Timestamp.fromDate(date)
+          : undefined;
+      } catch {
+        return undefined;
+      }
     }
-    if ('_seconds' in obj && typeof obj['_seconds'] === 'number') {
+    if ('_seconds' in obj && typeof obj['_seconds'] === 'number' && Number.isFinite(obj['_seconds'])) {
       const seconds = obj['_seconds'];
-      const nanos = typeof obj['_nanoseconds'] === 'number' ? obj['_nanoseconds'] : 0;
-      return new Timestamp(seconds, nanos);
+      const nanosValue = obj['_nanoseconds'];
+      const nanos = '_nanoseconds' in obj ? nanosValue : 0;
+      if (
+        typeof nanos !== 'number'
+        || !Number.isFinite(nanos)
+        || !Number.isInteger(nanos)
+        || nanos < 0
+        || nanos >= 1_000_000_000
+      ) return undefined;
+      try {
+        return new Timestamp(seconds, nanos);
+      } catch {
+        return undefined;
+      }
     }
   }
-  return Timestamp.now();
-  /* v8 ignore stop @preserve */
+  return undefined;
+}
+
+/**
+ * Helper to ensure a required value is a Timestamp.
+ */
+export function toTimestamp(value: unknown, fieldName = 'timestamp'): Timestamp {
+  const timestamp = parseTimestamp(value);
+  if (timestamp === undefined) {
+    throw new Error(`Invalid task group summary timestamp: ${fieldName}`);
+  }
+  return timestamp;
+}
+
+function optionalTimestamp(value: unknown): Timestamp | undefined {
+  return parseTimestamp(value);
+}
+
+function nullableTimestamp(value: unknown): Timestamp | null {
+  return parseTimestamp(value) ?? null;
+}
+
+function compareTimestamps(a: Timestamp, b: Timestamp): number {
+  return a.seconds - b.seconds || a.nanoseconds - b.nanoseconds;
+}
+
+function isLaterTimestampOwner(
+  candidateAt: Timestamp,
+  candidateId: string,
+  currentAt: Timestamp,
+  currentId: string | undefined,
+): boolean {
+  return compareTimestampOwners(candidateAt, candidateId, currentAt, currentId) > 0;
+}
+
+function compareTimestampOwners(
+  candidateAt: Timestamp,
+  candidateId: string,
+  currentAt: Timestamp,
+  currentId: string | undefined,
+): number {
+  return compareTimestamps(candidateAt, currentAt) || candidateId.localeCompare(currentId ?? '');
+}
+
+function isNewerAttempt(task: CodeTask, summary: TaskGroupSummary): boolean {
+  if (summary.latestTaskCreatedAt === undefined || summary.latestTaskId === undefined) {
+    return true;
+  }
+  return isLaterTimestampOwner(
+    toTimestamp(task.createdAt),
+    task.id,
+    summary.latestTaskCreatedAt,
+    summary.latestTaskId,
+  );
+}
+
+function lifecycleAt(task: CodeTask): Timestamp {
+  return resolveTaskLifecycleTime(task).at;
 }
 
 // =============================================================================
@@ -176,7 +254,6 @@ export function toTimestamp(value: unknown): Timestamp {
  * Build a TaskGroupSummary from raw Firestore document data.
  */
 export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
-  /* v8 ignore start -- ts-type: FakeFirestore always returns well-formed documents written by this repo; null/missing field fallbacks are unreachable in tests @preserve */
   const linearIssueId = data['linearIssueId'] !== undefined && data['linearIssueId'] !== null
     ? String(data['linearIssueId'])
     : null;
@@ -192,9 +269,39 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? Number(data['linearIssueSortKey'])
       : fallbackSortFields.linearIssueSortKey,
     taskCount: Number(data['taskCount'] ?? 0),
+    ...(Array.isArray(data['taskIds'])
+      ? { taskIds: (data['taskIds'] as unknown[]).map(String) }
+      : {}),
+    ...(typeof data['taskStatusById'] === 'object' && data['taskStatusById'] !== null
+      ? { taskStatusById: Object.fromEntries(
+        Object.entries(data['taskStatusById'] as Record<string, unknown>)
+          .map(([id, status]) => [id, String(status)]),
+      ) }
+      : {}),
+    ...(typeof data['taskLifecycleAtById'] === 'object' && data['taskLifecycleAtById'] !== null
+      ? { taskLifecycleAtById: Object.fromEntries(
+        Object.entries(data['taskLifecycleAtById'] as Record<string, unknown>)
+          .flatMap(([id, at]) => {
+            const timestamp = optionalTimestamp(at);
+            return timestamp === undefined ? [] : [[id, timestamp]];
+          }),
+      ) }
+      : {}),
     activeTaskCount: Number(data['activeTaskCount'] ?? 0),
+    ...(data['latestTaskId'] !== undefined
+      ? { latestTaskId: String(data['latestTaskId']) }
+      : {}),
+    ...(data['latestTaskCreatedAt'] !== undefined && data['latestTaskCreatedAt'] !== null
+      ? ((): { latestTaskCreatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['latestTaskCreatedAt']);
+        return timestamp === undefined ? {} : { latestTaskCreatedAt: timestamp };
+      })()
+      : {}),
     latestTaskStatus: String(data['latestTaskStatus'] ?? ''),
-    latestTaskUpdatedAt: toTimestamp(data['latestTaskUpdatedAt']),
+    latestTaskUpdatedAt: toTimestamp(data['latestTaskUpdatedAt'], 'latestTaskUpdatedAt'),
+    ...(data['latestLifecycleTaskId'] !== undefined
+      ? { latestLifecycleTaskId: String(data['latestLifecycleTaskId']) }
+      : {}),
     agentTypesPresent: Array.isArray(data['agentTypesPresent'])
       ? (data['agentTypesPresent'] as unknown[]).map(String)
       : [],
@@ -211,22 +318,49 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? String(data['latestMergeReadyReason'])
       : null,
     latestMergeReadyUpdatedAt: data['latestMergeReadyUpdatedAt'] !== undefined && data['latestMergeReadyUpdatedAt'] !== null
-      ? toTimestamp(data['latestMergeReadyUpdatedAt'])
+      ? nullableTimestamp(data['latestMergeReadyUpdatedAt'])
       : null,
+    ...(data['latestMergeReadyDecisionAt'] !== undefined && data['latestMergeReadyDecisionAt'] !== null
+      ? ((): { latestMergeReadyDecisionAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['latestMergeReadyDecisionAt']);
+        return timestamp === undefined ? {} : { latestMergeReadyDecisionAt: timestamp };
+      })()
+      : {}),
+    ...(data['latestMergeReadyDecisionTaskId'] !== undefined && data['latestMergeReadyDecisionTaskId'] !== null
+      ? { latestMergeReadyDecisionTaskId: String(data['latestMergeReadyDecisionTaskId']) }
+      : {}),
     prMergedAt: data['prMergedAt'] !== undefined && data['prMergedAt'] !== null
-      ? toTimestamp(data['prMergedAt'])
+      ? nullableTimestamp(data['prMergedAt'])
       : null,
     prClosedAt: data['prClosedAt'] !== undefined && data['prClosedAt'] !== null
-      ? toTimestamp(data['prClosedAt'])
+      ? nullableTimestamp(data['prClosedAt'])
       : null,
     latestReviewNeedsRemediation: data['latestReviewNeedsRemediation'] === true
       ? true
       : data['latestReviewNeedsRemediation'] === false
         ? false
         : null,
-    oldestTaskCreatedAt: toTimestamp(data['oldestTaskCreatedAt']),
+    ...(data['latestReviewUpdatedAt'] !== undefined && data['latestReviewUpdatedAt'] !== null
+      ? ((): { latestReviewUpdatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['latestReviewUpdatedAt']);
+        return timestamp === undefined ? {} : { latestReviewUpdatedAt: timestamp };
+      })()
+      : {}),
+    ...(data['latestReviewTaskId'] !== undefined && data['latestReviewTaskId'] !== null
+      ? { latestReviewTaskId: String(data['latestReviewTaskId']) }
+      : {}),
+    ...(data['representativePrUpdatedAt'] !== undefined && data['representativePrUpdatedAt'] !== null
+      ? ((): { representativePrUpdatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['representativePrUpdatedAt']);
+        return timestamp === undefined ? {} : { representativePrUpdatedAt: timestamp };
+      })()
+      : {}),
+    ...(data['representativePrTaskId'] !== undefined && data['representativePrTaskId'] !== null
+      ? { representativePrTaskId: String(data['representativePrTaskId']) }
+      : {}),
+    oldestTaskCreatedAt: toTimestamp(data['oldestTaskCreatedAt'], 'oldestTaskCreatedAt'),
     mostRecentDispatchedAt: data['mostRecentDispatchedAt'] !== undefined && data['mostRecentDispatchedAt'] !== null
-      ? toTimestamp(data['mostRecentDispatchedAt'])
+      ? nullableTimestamp(data['mostRecentDispatchedAt'])
       : null,
     aggregateStatus: String(data['aggregateStatus'] ?? 'done') as GroupStatus,
     // Label flags are only present when recomputeWithLabels has been called; legacy docs omit them
@@ -237,14 +371,16 @@ export function docToSummary(data: Record<string, unknown>): TaskGroupSummary {
       ? { hasMergeReadyLabel: data['hasMergeReadyLabel'] === true }
       : {}),
     ...(data['labelsUpdatedAt'] !== undefined && data['labelsUpdatedAt'] !== null
-      ? { labelsUpdatedAt: toTimestamp(data['labelsUpdatedAt']) }
+      ? ((): { labelsUpdatedAt?: Timestamp } => {
+        const timestamp = optionalTimestamp(data['labelsUpdatedAt']);
+        return timestamp === undefined ? {} : { labelsUpdatedAt: timestamp };
+      })()
       : {}),
     ...(data['isImportant'] === true
       ? { isImportant: true }
       : {}),
-    updatedAt: toTimestamp(data['updatedAt']),
+    updatedAt: toTimestamp(data['updatedAt'], 'updatedAt'),
   };
-  /* v8 ignore stop @preserve */
 }
 
 /**
@@ -300,7 +436,11 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
   const latestReviewNeedsRemediation = computeReviewNeedsRemediation(task);
   const prNumber = hasPrUrl && task.prNumber !== undefined ? task.prNumber : null;
   const latestMergeReadyReason = getMergeReadyReason(task);
-  const latestMergeReadyUpdatedAt = latestMergeReadyReason !== null ? toTimestamp(task.updatedAt) : null;
+  const taskUpdatedAt = toTimestamp(task.updatedAt);
+  const latestMergeReadyUpdatedAt = latestMergeReadyReason !== null ? taskUpdatedAt : null;
+  const latestMergeReadyDecisionAt = latestMergeReadyReason !== null || isMergeReadyInvalidator(task)
+    ? taskUpdatedAt
+    : null;
   const prMergedAt = hasRepresentativePr(task) && task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
   const prClosedAt = hasRepresentativePr(task) && task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
   const mostRecentDispatchedAt = task.dispatchedAt !== undefined ? toTimestamp(task.dispatchedAt) : null;
@@ -311,9 +451,15 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
     groupKey,
     ...sortFields,
     taskCount: task.status === 'archived' ? 0 : 1,
+    taskIds: task.status === 'archived' ? [] : [task.id],
+    taskStatusById: task.status === 'archived' ? {} : { [task.id]: task.status },
+    taskLifecycleAtById: task.status === 'archived' ? {} : { [task.id]: lifecycleAt(task) },
     activeTaskCount: isActiveStatus(task.status) ? 1 : 0,
+    latestTaskId: task.id,
+    latestTaskCreatedAt: toTimestamp(task.createdAt),
     latestTaskStatus: task.status,
-    latestTaskUpdatedAt: toTimestamp(task.updatedAt),
+    latestTaskUpdatedAt: lifecycleAt(task),
+    latestLifecycleTaskId: task.id,
     agentTypesPresent,
     hasCompletedPlanning,
     hasCompletedExecution,
@@ -324,9 +470,15 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
     latestMergeReadyEvidence: latestMergeReadyReason !== null,
     latestMergeReadyReason,
     latestMergeReadyUpdatedAt,
+    latestMergeReadyDecisionAt,
+    latestMergeReadyDecisionTaskId: latestMergeReadyDecisionAt !== null ? task.id : null,
     prMergedAt,
     prClosedAt,
     latestReviewNeedsRemediation,
+    latestReviewUpdatedAt: task.agentType === 'review' && task.result !== undefined ? taskUpdatedAt : null,
+    latestReviewTaskId: task.agentType === 'review' && task.result !== undefined ? task.id : null,
+    representativePrUpdatedAt: hasRepresentativePr(task) ? taskUpdatedAt : null,
+    representativePrTaskId: hasRepresentativePr(task) ? task.id : null,
     oldestTaskCreatedAt: toTimestamp(task.createdAt),
     mostRecentDispatchedAt,
     updatedAt: now,
@@ -340,12 +492,21 @@ export function buildInitialSummary(task: CodeTask, now: Timestamp): Omit<TaskGr
 export function applyIncrementalCreateUpdate(current: TaskGroupSummary, task: CodeTask, now: Timestamp): TaskGroupSummary {
   const updated: TaskGroupSummary = { ...current };
   updated.updatedAt = now;
+  const alreadyKnown = current.taskIds?.includes(task.id) === true;
 
-  if (task.status !== 'archived') {
+  if (task.status !== 'archived' && !alreadyKnown) {
     updated.taskCount = current.taskCount + 1;
+    if (current.taskIds !== undefined) {
+      updated.taskIds = [...current.taskIds, task.id];
+      updated.taskStatusById = { ...(current.taskStatusById ?? {}), [task.id]: task.status };
+      updated.taskLifecycleAtById = {
+        ...(current.taskLifecycleAtById ?? {}),
+        [task.id]: lifecycleAt(task),
+      };
+    }
   }
 
-  if (isActiveStatus(task.status)) {
+  if (isActiveStatus(task.status) && !alreadyKnown) {
     updated.activeTaskCount = current.activeTaskCount + 1;
   }
 
@@ -370,42 +531,73 @@ export function applyIncrementalCreateUpdate(current: TaskGroupSummary, task: Co
   }
   /* v8 ignore stop @preserve */
   if (task.result?.prUrl !== undefined) {
-    updated.hasPrUrl = true;
-    if (task.prNumber !== undefined) {
-      updated.prNumber = task.prNumber;
+    const taskUpdatedAt = toTimestamp(task.updatedAt);
+    if (
+      current.representativePrUpdatedAt === undefined ||
+      current.representativePrUpdatedAt === null ||
+      isLaterTimestampOwner(
+        taskUpdatedAt, task.id,
+        current.representativePrUpdatedAt, current.representativePrTaskId ?? undefined,
+      )
+    ) {
+      updated.hasPrUrl = true;
+      if (task.prNumber !== undefined) {
+        updated.prNumber = task.prNumber;
+      }
+      updated.prMergedAt = task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
+      updated.prClosedAt = task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
+      updated.representativePrUpdatedAt = taskUpdatedAt;
+      updated.representativePrTaskId = task.id;
     }
-    updated.prMergedAt = task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
-    updated.prClosedAt = task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
   }
 
   const mergeReadyReason = getMergeReadyReason(task);
-  if (mergeReadyReason !== null) {
+  const taskUpdatedAt = toTimestamp(task.updatedAt);
+  const latestMergeDecisionAt = current.latestMergeReadyDecisionAt ?? current.latestMergeReadyUpdatedAt;
+  const isLatestMergeDecision = latestMergeDecisionAt === undefined || latestMergeDecisionAt === null ||
+    isLaterTimestampOwner(
+      taskUpdatedAt, task.id,
+      latestMergeDecisionAt, current.latestMergeReadyDecisionTaskId ?? undefined,
+    );
+  if (mergeReadyReason !== null && isLatestMergeDecision) {
     updated.latestMergeReadyEvidence = true;
     updated.latestMergeReadyReason = mergeReadyReason;
-    updated.latestMergeReadyUpdatedAt = toTimestamp(task.updatedAt);
-  } else if (isMergeReadyInvalidator(task)) {
-    const taskUpdatedAt = toTimestamp(task.updatedAt);
-    if (
-      updated.latestMergeReadyUpdatedAt === undefined ||
-      updated.latestMergeReadyUpdatedAt === null ||
-      taskUpdatedAt.toMillis() >= updated.latestMergeReadyUpdatedAt.toMillis()
-    ) {
-      updated.latestMergeReadyEvidence = false;
-      updated.latestMergeReadyReason = null;
-      updated.latestMergeReadyUpdatedAt = null;
-    }
+    updated.latestMergeReadyUpdatedAt = taskUpdatedAt;
+    updated.latestMergeReadyDecisionAt = taskUpdatedAt;
+    updated.latestMergeReadyDecisionTaskId = task.id;
+  } else if (isMergeReadyInvalidator(task) && isLatestMergeDecision) {
+    updated.latestMergeReadyEvidence = false;
+    updated.latestMergeReadyReason = null;
+    updated.latestMergeReadyUpdatedAt = null;
+    updated.latestMergeReadyDecisionAt = taskUpdatedAt;
+    updated.latestMergeReadyDecisionTaskId = task.id;
   }
 
   // Update latestReviewNeedsRemediation if this is a review task with a result
   const reviewNeedsRemediation = computeReviewNeedsRemediation(task);
-  if (reviewNeedsRemediation !== null) {
+  if (
+    reviewNeedsRemediation !== null &&
+    (current.latestReviewUpdatedAt === undefined || current.latestReviewUpdatedAt === null ||
+      isLaterTimestampOwner(
+        taskUpdatedAt, task.id,
+        current.latestReviewUpdatedAt, current.latestReviewTaskId ?? undefined,
+      ))
+  ) {
     updated.latestReviewNeedsRemediation = reviewNeedsRemediation;
+    updated.latestReviewUpdatedAt = taskUpdatedAt;
+    updated.latestReviewTaskId = task.id;
   }
 
-  // Update latestTaskStatus and latestTaskUpdatedAt if this task is newer
-  if (toTimestamp(task.updatedAt).toMillis() >= current.latestTaskUpdatedAt.toMillis()) {
+  if (isNewerAttempt(task, current)) {
+    updated.latestTaskId = task.id;
+    updated.latestTaskCreatedAt = toTimestamp(task.createdAt);
     updated.latestTaskStatus = task.status;
-    updated.latestTaskUpdatedAt = toTimestamp(task.updatedAt);
+  }
+
+  const taskLifecycleAt = lifecycleAt(task);
+  if (isLaterTimestampOwner(taskLifecycleAt, task.id, current.latestTaskUpdatedAt, current.latestLifecycleTaskId)) {
+    updated.latestTaskUpdatedAt = taskLifecycleAt;
+    updated.latestLifecycleTaskId = task.id;
   }
 
   // Update sort key fields
@@ -437,84 +629,143 @@ export function applyStatusChangeUpdate(
   newTask: CodeTask,
   now: Timestamp,
 ): { updated: TaskGroupSummary; allArchived: boolean } {
+  if (current.taskIds !== undefined && !current.taskIds.includes(newTask.id)) {
+    return {
+      updated: normalizeSummarySortFields(current),
+      allArchived: current.taskCount <= 0 && current.aggregateStatus === 'archived',
+    };
+  }
   const updated: TaskGroupSummary = { ...current };
   updated.updatedAt = now;
+  const taskLifecycleAt = lifecycleAt(newTask);
+  const previousTaskLifecycleAt = current.taskLifecycleAtById?.[newTask.id];
+  const previousStatus = current.taskStatusById?.[newTask.id] ?? oldTask.status;
+  const isNewLifecycleForTask = previousTaskLifecycleAt === undefined ||
+    compareTimestamps(taskLifecycleAt, previousTaskLifecycleAt) > 0 ||
+    (compareTimestamps(taskLifecycleAt, previousTaskLifecycleAt) === 0 &&
+      previousStatus === oldTask.status && oldTask.status !== newTask.status);
 
   // Update activeTaskCount delta
-  const wasActive = isActiveStatus(oldTask.status);
+  const wasActive = isActiveStatus(previousStatus);
   const isActive = isActiveStatus(newTask.status);
-  if (wasActive && !isActive) {
+  if (isNewLifecycleForTask && wasActive && !isActive) {
     updated.activeTaskCount = Math.max(0, current.activeTaskCount - 1);
-  } else if (!wasActive && isActive) {
+  } else if (isNewLifecycleForTask && !wasActive && isActive) {
     updated.activeTaskCount = current.activeTaskCount + 1;
+  }
+
+  if (isNewLifecycleForTask) {
+    updated.taskStatusById = { ...(current.taskStatusById ?? {}), [newTask.id]: newTask.status };
+    updated.taskLifecycleAtById = {
+      ...(current.taskLifecycleAtById ?? {}),
+      [newTask.id]: taskLifecycleAt,
+    };
   }
 
   // Update boolean flags based on new task state
   if (newTask.agentType !== undefined && !current.agentTypesPresent.includes(newTask.agentType)) {
     updated.agentTypesPresent = [...current.agentTypesPresent, newTask.agentType];
   }
-  if (newTask.agentType === 'planning' && newTask.status === 'planned') {
+  if (isNewLifecycleForTask && newTask.agentType === 'planning' && newTask.status === 'planned') {
     updated.hasCompletedPlanning = true;
   }
-  if (hasCompletedExecutionTask(newTask)) {
+  if (isNewLifecycleForTask && hasCompletedExecutionTask(newTask)) {
     updated.hasCompletedExecution = true;
   }
-  if (hasCompletedExecutionAgentOnly(newTask)) {
+  if (isNewLifecycleForTask && hasCompletedExecutionAgentOnly(newTask)) {
     updated.hasCompletedExecutionAgent = true;
   }
   if (hasImplementationLink(newTask)) {
     updated.hasImplementationTaskId = true;
   }
   if (newTask.result?.prUrl !== undefined) {
-    updated.hasPrUrl = true;
-    if (newTask.prNumber !== undefined) {
-      updated.prNumber = newTask.prNumber;
+    const taskUpdatedAt = toTimestamp(newTask.updatedAt);
+    if (
+      current.representativePrUpdatedAt === undefined ||
+      current.representativePrUpdatedAt === null ||
+      isLaterTimestampOwner(
+        taskUpdatedAt, newTask.id,
+        current.representativePrUpdatedAt, current.representativePrTaskId ?? undefined,
+      )
+    ) {
+      updated.hasPrUrl = true;
+      if (newTask.prNumber !== undefined) {
+        updated.prNumber = newTask.prNumber;
+      }
+      updated.prMergedAt = newTask.prMergedAt !== undefined ? toTimestamp(newTask.prMergedAt) : null;
+      updated.prClosedAt = newTask.prClosedAt !== undefined ? toTimestamp(newTask.prClosedAt) : null;
+      updated.representativePrUpdatedAt = taskUpdatedAt;
+      updated.representativePrTaskId = newTask.id;
     }
-    updated.prMergedAt = newTask.prMergedAt !== undefined ? toTimestamp(newTask.prMergedAt) : null;
-    updated.prClosedAt = newTask.prClosedAt !== undefined ? toTimestamp(newTask.prClosedAt) : null;
   }
 
   const mergeReadyReason = getMergeReadyReason(newTask);
-  if (mergeReadyReason !== null) {
+  const taskUpdatedAt = toTimestamp(newTask.updatedAt);
+  const latestMergeDecisionAt = current.latestMergeReadyDecisionAt ?? current.latestMergeReadyUpdatedAt;
+  const isLatestMergeDecision = latestMergeDecisionAt === undefined || latestMergeDecisionAt === null ||
+    isLaterTimestampOwner(
+      taskUpdatedAt, newTask.id,
+      latestMergeDecisionAt, current.latestMergeReadyDecisionTaskId ?? undefined,
+    );
+  if (mergeReadyReason !== null && isLatestMergeDecision) {
     updated.latestMergeReadyEvidence = true;
     updated.latestMergeReadyReason = mergeReadyReason;
-    updated.latestMergeReadyUpdatedAt = toTimestamp(newTask.updatedAt);
-  } else if (isMergeReadyInvalidator(newTask)) {
-    const taskUpdatedAt = toTimestamp(newTask.updatedAt);
-    if (
-      updated.latestMergeReadyUpdatedAt === undefined ||
-      updated.latestMergeReadyUpdatedAt === null ||
-      taskUpdatedAt.toMillis() >= updated.latestMergeReadyUpdatedAt.toMillis()
-    ) {
-      updated.latestMergeReadyEvidence = false;
-      updated.latestMergeReadyReason = null;
-      updated.latestMergeReadyUpdatedAt = null;
-    }
+    updated.latestMergeReadyUpdatedAt = taskUpdatedAt;
+    updated.latestMergeReadyDecisionAt = taskUpdatedAt;
+    updated.latestMergeReadyDecisionTaskId = newTask.id;
+  } else if (isMergeReadyInvalidator(newTask) && isLatestMergeDecision) {
+    updated.latestMergeReadyEvidence = false;
+    updated.latestMergeReadyReason = null;
+    updated.latestMergeReadyUpdatedAt = null;
+    updated.latestMergeReadyDecisionAt = taskUpdatedAt;
+    updated.latestMergeReadyDecisionTaskId = newTask.id;
   }
 
   // Update latestReviewNeedsRemediation
   const reviewNeedsRemediation = computeReviewNeedsRemediation(newTask);
-  if (reviewNeedsRemediation !== null) {
+  if (
+    reviewNeedsRemediation !== null &&
+    (current.latestReviewUpdatedAt === undefined || current.latestReviewUpdatedAt === null ||
+      isLaterTimestampOwner(
+        taskUpdatedAt, newTask.id,
+        current.latestReviewUpdatedAt, current.latestReviewTaskId ?? undefined,
+      ))
+  ) {
     updated.latestReviewNeedsRemediation = reviewNeedsRemediation;
+    updated.latestReviewUpdatedAt = taskUpdatedAt;
+    updated.latestReviewTaskId = newTask.id;
+  }
+
+  if (isNewLifecycleForTask && (current.latestTaskId === undefined || current.latestTaskId === newTask.id)) {
+    updated.latestTaskStatus = newTask.status;
+  }
+
+  if (
+    isNewLifecycleForTask &&
+    isLaterTimestampOwner(taskLifecycleAt, newTask.id, current.latestTaskUpdatedAt, current.latestLifecycleTaskId)
+  ) {
+    updated.latestTaskUpdatedAt = taskLifecycleAt;
+    updated.latestLifecycleTaskId = newTask.id;
   }
 
   // Handle archive: decrement taskCount
-  if (newTask.status === 'archived' && oldTask.status !== 'archived') {
+  if (isNewLifecycleForTask && newTask.status === 'archived' && previousStatus !== 'archived') {
     updated.taskCount = Math.max(0, current.taskCount - 1);
+    if (current.taskIds !== undefined) {
+      updated.taskIds = current.taskIds.filter((id) => id !== newTask.id);
+      /* v8 ignore start -- ts-type: undefined maps are impossible on this path because isNewLifecycleForTask initialized them immediately above; optional fields remain in the legacy-compatible interface @preserve */
+      const { [newTask.id]: _removedStatus, ...remainingStatuses } = updated.taskStatusById ?? {};
+      const { [newTask.id]: _removedLifecycle, ...remainingLifecycle } = updated.taskLifecycleAtById ?? {};
+      /* v8 ignore stop @preserve */
+      updated.taskStatusById = remainingStatuses;
+      updated.taskLifecycleAtById = remainingLifecycle;
+    }
 
     if (updated.taskCount <= 0) {
       // All tasks archived — preserve summary with 'archived' status instead of deleting
       updated.aggregateStatus = 'archived';
       return { updated: normalizeSummarySortFields(updated), allArchived: true };
     }
-  }
-
-  // Update latestTaskStatus to new status if this task is the most recently updated
-  if (toTimestamp(newTask.updatedAt).toMillis() >= current.latestTaskUpdatedAt.toMillis()) {
-    if (newTask.status !== 'archived') {
-      updated.latestTaskStatus = newTask.status;
-    }
-    updated.latestTaskUpdatedAt = toTimestamp(newTask.updatedAt);
   }
 
   // Update sort key for dispatched
@@ -541,6 +792,13 @@ export function applyDeleteUpdate(
   task: CodeTask,
   now: Timestamp,
 ): { updated: TaskGroupSummary; shouldDelete: boolean } {
+  if (
+    current.taskIds !== undefined &&
+    !current.taskIds.includes(task.id) &&
+    !(task.status === 'archived' && current.taskCount <= 0)
+  ) {
+    return { updated: normalizeSummarySortFields(current), shouldDelete: false };
+  }
   let newTaskCount = current.taskCount;
   let newActiveCount = current.activeTaskCount;
 
@@ -561,6 +819,19 @@ export function applyDeleteUpdate(
     ...current,
     taskCount: newTaskCount,
     activeTaskCount: newActiveCount,
+    ...(current.taskIds !== undefined
+      ? { taskIds: current.taskIds.filter((id) => id !== task.id) }
+      : {}),
+    ...(current.taskStatusById !== undefined
+      ? { taskStatusById: Object.fromEntries(
+        Object.entries(current.taskStatusById).filter(([id]) => id !== task.id),
+      ) }
+      : {}),
+    ...(current.taskLifecycleAtById !== undefined
+      ? { taskLifecycleAtById: Object.fromEntries(
+        Object.entries(current.taskLifecycleAtById).filter(([id]) => id !== task.id),
+      ) }
+      : {}),
     updatedAt: now,
   };
 
@@ -574,22 +845,19 @@ export function applyDeleteUpdate(
  * aggregateStatus is set to a placeholder 'done' — the caller should recompute
  * after applying any merged label state (mirrors the legacy recompute flow).
  */
-export function computeSummaryFromTasks(
+function computeSummaryFromIncludedTasks(
   userId: string,
   groupKey: string,
-  tasks: CodeTask[],
+  includedTasks: CodeTask[],
   now: Timestamp,
+  allArchived: boolean,
 ): TaskGroupSummary | null {
-  const nonArchivedTasks = tasks.filter((t) => t.status !== 'archived');
-  if (nonArchivedTasks.length === 0) {
-    return null;
-  }
+  const firstTask = includedTasks[0];
+  if (firstTask === undefined) return null;
 
-  let taskCount = 0;
   let activeTaskCount = 0;
-  let latestTaskStatus = '';
-  let latestTaskUpdatedAtMs = 0;
-  let latestTaskUpdatedAt: Timestamp = now;
+  let latestAttempt = firstTask;
+  let latestLifecycleTask = firstTask;
   let oldestTaskCreatedAt: Timestamp | null = null;
   let mostRecentDispatchedAt: Timestamp | null = null;
   const agentTypesSet = new Set<string>();
@@ -600,34 +868,42 @@ export function computeSummaryFromTasks(
   let hasPrUrl = false;
   let prNumber: number | null = null;
   let latestMergeReadyReason: string | null = null;
-  let latestMergeReadyUpdatedAtMs = 0;
+  let latestMergeReadyUpdatedAt: Timestamp | null = null;
   let prMergedAt: Timestamp | null = null;
   let prClosedAt: Timestamp | null = null;
-  let prOwnerUpdatedAtMs = 0;
+  let prOwnerUpdatedAt: Timestamp | null = null;
+  let prOwnerTaskId = '';
   let latestReviewNeedsRemediation: boolean | null = null;
-  let latestReviewUpdatedAtMs = 0;
-  let latestMergeReadyInvalidatedAtMs = 0;
+  let latestReviewUpdatedAt: Timestamp | null = null;
+  let latestReviewTaskId = '';
+  let latestMergeReadyInvalidatedAt: Timestamp | null = null;
+  let latestMergeReadyInvalidatorTaskId = '';
+  let latestMergeReadyTaskId = '';
 
-  const firstTask = nonArchivedTasks[0];
-  const linearIssueId = firstTask?.linearIssueId ?? null;
-  const sortFields = getLinearIssueSortFields(linearIssueId);
-
-  for (const task of nonArchivedTasks) {
-    const updatedAtMs = toTimestamp(task.updatedAt).toMillis();
-    taskCount++;
-    if (isActiveStatus(task.status)) {
+  for (const task of includedTasks) {
+    const taskUpdatedAt = toTimestamp(task.updatedAt);
+    if (!allArchived && isActiveStatus(task.status)) {
       activeTaskCount++;
     }
     if (task.agentType !== undefined) {
       agentTypesSet.add(task.agentType);
     }
-    if (task.agentType === 'planning' && task.status === 'planned') {
+
+    const archivedPlanningEvidence = allArchived &&
+      task.agentType === 'planning' && task.result?.planning_outcome_label === 'planned';
+    const archivedExecutionEvidence = allArchived && task.agentType === 'execution' && (
+      task.result?.execution_outcome_label === 'implemented' ||
+      task.result?.execution_outcome_label === 'already_completed'
+    );
+    const archivedPullRequestEvidence = allArchived &&
+      task.agentType === 'pull_request' && task.result?.pull_request_outcome_label !== undefined;
+    if ((task.agentType === 'planning' && task.status === 'planned') || archivedPlanningEvidence) {
       hasCompletedPlanning = true;
     }
-    if (hasCompletedExecutionTask(task)) {
+    if (hasCompletedExecutionTask(task) || archivedExecutionEvidence || archivedPullRequestEvidence) {
       hasCompletedExecution = true;
     }
-    if (hasCompletedExecutionAgentOnly(task)) {
+    if (hasCompletedExecutionAgentOnly(task) || archivedExecutionEvidence) {
       hasCompletedExecutionAgent = true;
     }
     if (hasImplementationLink(task)) {
@@ -635,18 +911,29 @@ export function computeSummaryFromTasks(
     }
     if (task.result?.prUrl !== undefined) {
       hasPrUrl = true;
-      if (task.prNumber !== undefined && updatedAtMs >= prOwnerUpdatedAtMs) {
-        prOwnerUpdatedAtMs = updatedAtMs;
-        prNumber = task.prNumber;
+      if (
+        prOwnerUpdatedAt === null ||
+        isLaterTimestampOwner(taskUpdatedAt, task.id, prOwnerUpdatedAt, prOwnerTaskId)
+      ) {
+        prOwnerUpdatedAt = taskUpdatedAt;
+        prOwnerTaskId = task.id;
+        prNumber = task.prNumber ?? null;
         prMergedAt = task.prMergedAt !== undefined ? toTimestamp(task.prMergedAt) : null;
         prClosedAt = task.prClosedAt !== undefined ? toTimestamp(task.prClosedAt) : null;
       }
     }
 
-    if (updatedAtMs > latestTaskUpdatedAtMs) {
-      latestTaskUpdatedAtMs = updatedAtMs;
-      latestTaskStatus = task.status;
-      latestTaskUpdatedAt = toTimestamp(task.updatedAt);
+    if (isLaterTimestampOwner(
+      toTimestamp(task.createdAt), task.id,
+      toTimestamp(latestAttempt.createdAt), latestAttempt.id,
+    )) {
+      latestAttempt = task;
+    }
+    if (isLaterTimestampOwner(
+      lifecycleAt(task), task.id,
+      lifecycleAt(latestLifecycleTask), latestLifecycleTask.id,
+    )) {
+      latestLifecycleTask = task;
     }
 
     const createdAtMs = toTimestamp(task.createdAt).toMillis();
@@ -661,45 +948,80 @@ export function computeSummaryFromTasks(
       }
     }
 
-    // Track latest review result
-    if (task.agentType === 'review' && task.result !== undefined) {
-      if (updatedAtMs > latestReviewUpdatedAtMs) {
-        latestReviewUpdatedAtMs = updatedAtMs;
-        const nr = task.result.needs_remediation;
-        if (nr === REMEDIATION_NOT_NEEDED) {
-          latestReviewNeedsRemediation = false;
-        } else if (nr === '1') {
-          latestReviewNeedsRemediation = true;
-        } else {
-          latestReviewNeedsRemediation = null;
-        }
-      }
+    if (task.agentType === 'review' && task.result !== undefined && (
+      latestReviewUpdatedAt === null ||
+      isLaterTimestampOwner(taskUpdatedAt, task.id, latestReviewUpdatedAt, latestReviewTaskId)
+    )) {
+      latestReviewUpdatedAt = taskUpdatedAt;
+      latestReviewTaskId = task.id;
+      latestReviewNeedsRemediation = computeReviewNeedsRemediation(task);
     }
 
-    const mergeReadyReason = getMergeReadyReason(task);
-    if (mergeReadyReason !== null && updatedAtMs >= latestMergeReadyUpdatedAtMs) {
-      latestMergeReadyUpdatedAtMs = updatedAtMs;
+    const mergeReadyReason = allArchived &&
+      task.result?.merge_ready === '1' && task.result.merge_ready_reason !== undefined
+      ? task.result.merge_ready_reason
+      : getMergeReadyReason(task);
+    if (
+      mergeReadyReason !== null &&
+      (latestMergeReadyUpdatedAt === null ||
+        isLaterTimestampOwner(taskUpdatedAt, task.id, latestMergeReadyUpdatedAt, latestMergeReadyTaskId))
+    ) {
+      latestMergeReadyUpdatedAt = taskUpdatedAt;
+      latestMergeReadyTaskId = task.id;
       latestMergeReadyReason = mergeReadyReason;
     }
-    if (isMergeReadyInvalidator(task) && updatedAtMs > latestMergeReadyInvalidatedAtMs) {
-      latestMergeReadyInvalidatedAtMs = updatedAtMs;
+    const invalidatesMergeReady = allArchived
+      ? hasMergeReadyInvalidationResult(task)
+      : isMergeReadyInvalidator(task);
+    if (
+      invalidatesMergeReady &&
+      (latestMergeReadyInvalidatedAt === null ||
+        isLaterTimestampOwner(
+          taskUpdatedAt, task.id,
+          latestMergeReadyInvalidatedAt, latestMergeReadyInvalidatorTaskId,
+        ))
+    ) {
+      latestMergeReadyInvalidatedAt = taskUpdatedAt;
+      latestMergeReadyInvalidatorTaskId = task.id;
     }
   }
 
-  if (latestMergeReadyReason !== null && latestMergeReadyUpdatedAtMs <= latestMergeReadyInvalidatedAtMs) {
+  const invalidatorWins = latestMergeReadyInvalidatedAt !== null && (
+    latestMergeReadyUpdatedAt === null ||
+    compareTimestampOwners(
+      latestMergeReadyInvalidatedAt,
+      latestMergeReadyInvalidatorTaskId,
+      latestMergeReadyUpdatedAt,
+      latestMergeReadyTaskId,
+    ) >= 0
+  );
+  if (latestMergeReadyReason !== null && invalidatorWins) {
     latestMergeReadyReason = null;
-    latestMergeReadyUpdatedAtMs = 0;
   }
+  const latestMergeDecisionTaskId = invalidatorWins
+    ? latestMergeReadyInvalidatorTaskId
+    : latestMergeReadyTaskId;
+  const linearIssueId = firstTask.linearIssueId ?? null;
 
   return {
     userId,
     linearIssueId,
     groupKey,
-    ...sortFields,
-    taskCount,
+    ...getLinearIssueSortFields(linearIssueId),
+    taskCount: allArchived ? 0 : includedTasks.length,
+    taskIds: allArchived ? [] : includedTasks.map((task) => task.id),
+    taskStatusById: allArchived
+      ? {}
+      : Object.fromEntries(includedTasks.map((task) => [task.id, task.status])),
+    taskLifecycleAtById: allArchived
+      ? {}
+      : Object.fromEntries(includedTasks.map((task) => [task.id, lifecycleAt(task)])),
     activeTaskCount,
-    latestTaskStatus,
-    latestTaskUpdatedAt,
+    latestTaskId: latestAttempt.id,
+    latestTaskCreatedAt: toTimestamp(latestAttempt.createdAt),
+    latestTaskStatus: latestAttempt.status,
+    latestTaskUpdatedAt: lifecycleAt(latestLifecycleTask),
+    latestLifecycleTaskId: latestLifecycleTask.id,
     agentTypesPresent: Array.from(agentTypesSet),
     hasCompletedPlanning,
     hasCompletedExecution,
@@ -709,17 +1031,56 @@ export function computeSummaryFromTasks(
     prNumber,
     latestMergeReadyEvidence: latestMergeReadyReason !== null,
     latestMergeReadyReason,
-    latestMergeReadyUpdatedAt: latestMergeReadyReason !== null ? Timestamp.fromMillis(latestMergeReadyUpdatedAtMs) : null,
+    latestMergeReadyUpdatedAt: latestMergeReadyReason !== null ? latestMergeReadyUpdatedAt : null,
+    latestMergeReadyDecisionAt: invalidatorWins
+      ? latestMergeReadyInvalidatedAt
+      : latestMergeReadyUpdatedAt,
+    latestMergeReadyDecisionTaskId: latestMergeDecisionTaskId || null,
     prMergedAt,
     prClosedAt,
     latestReviewNeedsRemediation,
-    /* v8 ignore start -- ts-type: oldestTaskCreatedAt is always set in the loop when nonArchivedTasks is non-empty; the ?? now fallback is a TypeScript narrowing artifact @preserve */
+    latestReviewUpdatedAt,
+    latestReviewTaskId: latestReviewTaskId || null,
+    representativePrUpdatedAt: prOwnerUpdatedAt,
+    representativePrTaskId: prOwnerTaskId || null,
+    /* v8 ignore start -- ts-type: oldestTaskCreatedAt is always set in the loop when includedTasks is non-empty; the ?? now fallback is a TypeScript narrowing artifact @preserve */
     oldestTaskCreatedAt: oldestTaskCreatedAt ?? now,
     /* v8 ignore stop @preserve */
     mostRecentDispatchedAt,
-    aggregateStatus: 'done',
+    aggregateStatus: allArchived ? 'archived' : 'done',
     updatedAt: now,
   };
+}
+
+export function computeSummaryFromTasks(
+  userId: string,
+  groupKey: string,
+  tasks: CodeTask[],
+  now: Timestamp,
+): TaskGroupSummary | null {
+  return computeSummaryFromIncludedTasks(
+    userId,
+    groupKey,
+    tasks.filter((task) => task.status !== 'archived' && task.agentType !== 'ask_agent'),
+    now,
+    false,
+  );
+}
+
+/** Rebuild the observable shell of a group whose persisted source tasks are all archived. */
+export function computeAllArchivedSummaryFromTasks(
+  userId: string,
+  groupKey: string,
+  tasks: CodeTask[],
+  now: Timestamp,
+): TaskGroupSummary | null {
+  return computeSummaryFromIncludedTasks(
+    userId,
+    groupKey,
+    tasks.filter((task) => task.status === 'archived' && task.agentType !== 'ask_agent'),
+    now,
+    true,
+  );
 }
 
 // =============================================================================

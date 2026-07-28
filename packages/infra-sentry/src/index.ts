@@ -52,6 +52,11 @@
 
 export { initSentry, type SentryConfig } from './init.js';
 export {
+  defaultSentryTracesSampleRate,
+  resolveSentryRelease,
+  type SentryRuntimeEnvironment,
+} from './runtimeDefaults.js';
+export {
   createSentryStream,
   sendToSentry,
   isSentryConfigured,

@@ -88,7 +88,11 @@ export function createRepositoryServices(deps: RepositoryFactoryDeps): Repositor
   const { firestore, logger } = deps;
 
   const rawCodeTaskRepo = createFirestoreCodeTaskRepository({ firestore, logger });
-  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({ firestore, logger });
+  const groupSummaryRepo = createTaskGroupSummaryFirestoreRepository({
+    firestore,
+    logger,
+    authoritativeTaskReads: true,
+  });
   const codeTaskRepo = withGroupUpdates(rawCodeTaskRepo, groupSummaryRepo, logger);
 
   return {

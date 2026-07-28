@@ -68,6 +68,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
     async findByIdForUser(): ReturnType<CodeTaskRepository['findByIdForUser']> {
       return err({ code: 'NOT_FOUND', message: 'not found' });
     },
+    async findByIdsForUser(): ReturnType<CodeTaskRepository['findByIdsForUser']> {
+      return ok([]);
+    },
     async update(): ReturnType<CodeTaskRepository['update']> {
       return ok({} as never);
     },

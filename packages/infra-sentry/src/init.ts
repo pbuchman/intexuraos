@@ -7,6 +7,7 @@
 
 import * as Sentry from '@sentry/node';
 import { redactObject } from './redact.js';
+import { defaultSentryTracesSampleRate, resolveSentryRelease } from './runtimeDefaults.js';
 
 export interface SentryConfig {
   /** Sentry DSN from environment variable or config */
@@ -17,10 +18,7 @@ export interface SentryConfig {
   serviceName: string;
   /** Tracing sample rate (0 = disabled, 1 = 100%). Defaults to 0.1 in production, 0 elsewhere. */
   tracesSampleRate?: number;
-  /**
-   * Release identifier (e.g., Cloud Run revision). Defaults to `process.env['K_REVISION']`
-   * when set and non-empty.
-   */
+  /** Release identifier. Defaults to an exact Git SHA, then a safe Cloud Run revision id. */
   release?: string;
 }
 
@@ -30,24 +28,19 @@ type SentryEvent = Parameters<NonNullable<SentryInitOptions['beforeSend']>>[0];
 /**
  * Resolve the default Sentry `release` from the runtime environment.
  *
- * Cloud Run injects `K_REVISION` on every revision. When unset (e.g. local
- * dev) we leave the field undefined so Sentry can fall back to its own
- * defaults rather than tagging events with a misleading value.
+ * Hetzner receives the exact deployment SHA as `INTEXURAOS_COMMIT_SHA`;
+ * `K_REVISION` remains the bounded, safe-character Cloud Run revision fallback.
+ * Empty, placeholder, malformed, and oversized values are omitted.
  *
  * Exported because `initWorker` also needs the same fallback semantics — keep
- * the rule in one place so future additions (e.g. git-sha fallback) only need
- * to land here.
+ * the rule in one place.
  */
 export function defaultRelease(): string | undefined {
-  const rev = process.env['K_REVISION'];
-  if (rev === undefined || rev === '') {
-    return undefined;
-  }
-  return rev;
+  return resolveSentryRelease(process.env);
 }
 
-function defaultTracesSampleRate(environment: string | undefined): number {
-  return environment === 'production' ? 0.1 : 0;
+export function defaultTracesSampleRate(environment: string | undefined): number {
+  return defaultSentryTracesSampleRate(environment);
 }
 
 /**

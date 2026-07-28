@@ -100,6 +100,7 @@ function makeGroupSummaryRepo(overrides: Partial<TaskGroupSummaryRepository> = {
     getUserGroupCounts: async (): ReturnType<TaskGroupSummaryRepository['getUserGroupCounts']> => ok(defaultCounts),
     listGroupSummaries: async (): ReturnType<TaskGroupSummaryRepository['listGroupSummaries']> => ok({ summaries: [] }),
     recomputeGroupFromTasks: async (): ReturnType<TaskGroupSummaryRepository['recomputeGroupFromTasks']> => ok(undefined),
+    recomputeGroupFromSource: async (): ReturnType<TaskGroupSummaryRepository['recomputeGroupFromSource']> => ok(undefined),
     recomputeWithLabels: async (): ReturnType<TaskGroupSummaryRepository['recomputeWithLabels']> => ok(undefined),
     setImportant: async (): ReturnType<TaskGroupSummaryRepository['setImportant']> => ok(undefined),
     ...overrides,
@@ -537,8 +538,8 @@ describe('GET /code/issue-groups', () => {
     await codeTaskRepo.update(r3.value.id, { status: 'cancelled' });
 
     mockSummaries = [
-      makeSummary({ linearIssueId: 'INT-99', linearIssueNumber: 99, linearIssueSortKey: 99, aggregateStatus: 'done' }),
       makeSummary({ linearIssueId: 'INT-100', linearIssueNumber: 100, linearIssueSortKey: 100, aggregateStatus: 'done' }),
+      makeSummary({ linearIssueId: 'INT-99', linearIssueNumber: 99, linearIssueSortKey: 99, aggregateStatus: 'done' }),
       makeSummary({ linearIssueId: 'INT-2', linearIssueNumber: 2, linearIssueSortKey: 2, aggregateStatus: 'done' }),
     ];
     mockCounts = { ...mockCounts, done: 3, totalGroups: 3 };
@@ -552,7 +553,7 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // linear-id sort is descending by issue number
+    // The summary repository already owns the authoritative sort order.
     expect(issueIds).toEqual(['INT-100', 'INT-99', 'INT-2']);
   });
 
@@ -574,9 +575,9 @@ describe('GET /code/issue-groups', () => {
     await codeTaskRepo.update(r3.value.id, { status: 'implemented', result: { prUrl: 'https://github.com/org/repo/pull/30' } });
 
     mockSummaries = [
-      makeSummary({ linearIssueId: 'INT-700', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: true, prNumber: 10 }),
       makeSummary({ linearIssueId: 'INT-701', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: true, prNumber: 50 }),
       makeSummary({ linearIssueId: 'INT-702', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: true, prNumber: 30 }),
+      makeSummary({ linearIssueId: 'INT-700', aggregateStatus: 'done', latestTaskStatus: 'implemented', hasPrUrl: true, prNumber: 10 }),
     ];
     mockCounts = { ...mockCounts, done: 3, totalGroups: 3 };
 
@@ -589,26 +590,55 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // sortIssueGroups is now called on the grouped result, so pr-number sort desc applies
-    // PR #50 (INT-701), PR #30 (INT-702), PR #10 (INT-700)
+    // The summary repository already owns the authoritative PR-number order.
     expect(issueIds).toEqual(['INT-701', 'INT-702', 'INT-700']);
   });
 
   it('sorts by last-updated when requested', async () => {
-    // Create tasks in order; last-updated sort should be newest first
+    // Create tasks in order, then deliberately make authoritative summary
+    // lifecycle order disagree with the hydrated task subset's technical order.
     const r1 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-800', traceId: 'trace-ct1' }));
     expect(r1.ok).toBe(true);
     if (!r1.ok) return;
-    await codeTaskRepo.update(r1.value.id, { status: 'cancelled' });
+    const u1 = await codeTaskRepo.update(r1.value.id, { status: 'cancelled' });
+    expect(u1.ok).toBe(true);
+    if (!u1.ok) return;
 
     const r2 = await codeTaskRepo.create(makeTaskInput({ linearIssueId: 'INT-801', traceId: 'trace-ct2' }));
     expect(r2.ok).toBe(true);
     if (!r2.ok) return;
-    await codeTaskRepo.update(r2.value.id, { status: 'cancelled' });
+    const u2 = await codeTaskRepo.update(r2.value.id, { status: 'cancelled' });
+    expect(u2.ok).toBe(true);
+    if (!u2.ok) return;
+
+    const summaryActivity800 = Timestamp.fromDate(new Date('2026-07-28T12:00:00.000Z'));
+    const summaryActivity801 = Timestamp.fromDate(new Date('2026-07-28T11:00:00.000Z'));
 
     mockSummaries = [
-      makeSummary({ linearIssueId: 'INT-800', aggregateStatus: 'done' }),
-      makeSummary({ linearIssueId: 'INT-801', aggregateStatus: 'done' }),
+      makeSummary({
+        linearIssueId: 'INT-800',
+        taskIds: [u1.value.id],
+        taskStatusById: { [u1.value.id]: 'cancelled' },
+        taskLifecycleAtById: { [u1.value.id]: summaryActivity800 },
+        latestTaskId: u1.value.id,
+        latestTaskCreatedAt: u1.value.createdAt,
+        latestTaskStatus: 'cancelled',
+        latestTaskUpdatedAt: summaryActivity800,
+        latestLifecycleTaskId: u1.value.id,
+        aggregateStatus: 'done',
+      }),
+      makeSummary({
+        linearIssueId: 'INT-801',
+        taskIds: [u2.value.id],
+        taskStatusById: { [u2.value.id]: 'cancelled' },
+        taskLifecycleAtById: { [u2.value.id]: summaryActivity801 },
+        latestTaskId: u2.value.id,
+        latestTaskCreatedAt: u2.value.createdAt,
+        latestTaskStatus: 'cancelled',
+        latestTaskUpdatedAt: summaryActivity801,
+        latestLifecycleTaskId: u2.value.id,
+        aggregateStatus: 'done',
+      }),
     ];
     mockCounts = { ...mockCounts, done: 2, totalGroups: 2 };
 
@@ -621,9 +651,7 @@ describe('GET /code/issue-groups', () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body) as { data: { groups: { linearIssueId: string | null }[] } };
     const issueIds = body.data.groups.map((g) => g.linearIssueId);
-    // sortIssueGroups applies updatedAt desc; INT-801 updated after INT-800
-    // so INT-801 correctly appears first (coincides with linear-id desc: 801 > 800)
-    expect(issueIds).toEqual(['INT-801', 'INT-800']);
+    expect(issueIds).toEqual(['INT-800', 'INT-801']);
   });
 
   it('paginates with limit and cursor', async () => {
@@ -1293,6 +1321,1009 @@ describe('GET /code/issue-groups', () => {
     expect(task?.error?.code).toBe('WORKER_DIED');
   });
 
+  it('serializes canonical lifecycle completion and full terminal dispatch details', async () => {
+    const taskId = 'task_issue_group_legacy_terminal';
+    const createdAt = Timestamp.fromDate(new Date('2026-07-26T15:19:00.000Z'));
+    const failureAt = Timestamp.fromDate(new Date('2026-07-26T15:20:19.625Z'));
+    const metadataUpdatedAt = Timestamp.fromDate(new Date('2026-07-26T15:23:48.130Z'));
+    await fakeFirestore.collection('code_tasks').doc(taskId).set({
+      id: taskId,
+      userId: 'test-user-id',
+      prompt: 'Legacy failed task',
+      sanitizedPrompt: 'legacy failed task',
+      systemPromptHash: 'hash',
+      workerType: 'codex',
+      workerLocation: 'home-dev',
+      repository: 'pbuchman/intexuraos',
+      baseBranch: 'development',
+      traceId: 'trace-issue-group-legacy-terminal',
+      status: 'failed',
+      dedupKey: 'dedup-issue-group-legacy-terminal',
+      callbackReceived: false,
+      linearIssueId: 'INT-1934',
+      createdAt,
+      statusChangedAt: { toDate: 'not-a-function' },
+      completedAt: '',
+      updatedAt: metadataUpdatedAt,
+      dispatchStatus: {
+        state: 'terminal',
+        reason: 'codex_auth_unavailable',
+        terminal: true,
+        severity: 'critical',
+        message: 'Codex authentication is unavailable.',
+        remediation: 'Configure Codex authentication, then retry.',
+        workerNames: ['home-dev'],
+        firstSeenAt: failureAt,
+        lastSeenAt: failureAt,
+        lastAttemptAt: failureAt,
+        attemptCount: 3,
+        expiresAt: metadataUpdatedAt,
+        nextAction: 'retry_after_fix',
+        terminalCause: {
+          reason: 'codex_auth_unavailable',
+          message: 'Codex authentication remained unavailable.',
+          remediation: 'Configure Codex authentication.',
+          workerNames: ['home-dev'],
+          lastSeenAt: failureAt,
+        },
+        workerHealthDetails: [{
+          workerName: 'home-dev',
+          tag: 'codex',
+          healthy: false,
+          reason: 'auth_unavailable',
+        }],
+      },
+    });
+    mockSummaries = [makeSummary({
+      linearIssueId: 'INT-1934',
+      aggregateStatus: 'failed',
+      latestTaskStatus: 'failed',
+    })];
+    mockCounts = { ...mockCounts, failed: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: {
+            statusChangedAt: string;
+            completedAt?: string;
+            updatedAt: string;
+            dispatchStatus?: Record<string, unknown>;
+          }[];
+        }[];
+      };
+    };
+    const task = body.data.groups.find((group) => group.linearIssueId === 'INT-1934')?.tasks[0];
+    expect(task?.statusChangedAt).toBe('2026-07-26T15:20:19.625Z');
+    expect(task?.completedAt).toBe('2026-07-26T15:20:19.625Z');
+    expect(task?.updatedAt).toBe('2026-07-26T15:23:48.130Z');
+    expect(task?.dispatchStatus).toEqual({
+      state: 'terminal',
+      reason: 'codex_auth_unavailable',
+      terminal: true,
+      severity: 'critical',
+      message: 'Codex authentication is unavailable.',
+      remediation: 'Configure Codex authentication, then retry.',
+      workerNames: ['home-dev'],
+      firstSeenAt: '2026-07-26T15:20:19.625Z',
+      lastSeenAt: '2026-07-26T15:20:19.625Z',
+      lastAttemptAt: '2026-07-26T15:20:19.625Z',
+      attemptCount: 3,
+      expiresAt: '2026-07-26T15:23:48.130Z',
+      nextAction: 'retry_after_fix',
+      terminalCause: {
+        reason: 'codex_auth_unavailable',
+        message: 'Codex authentication remained unavailable.',
+        remediation: 'Configure Codex authentication.',
+        workerNames: ['home-dev'],
+        lastSeenAt: '2026-07-26T15:20:19.625Z',
+      },
+      workerHealthDetails: [{
+        workerName: 'home-dev',
+        tag: 'codex',
+        healthy: false,
+        reason: 'auth_unavailable',
+      }],
+    });
+  });
+
+  it('normalizes INT-985 legacy completed semantics across task, pipeline, status, and activity', async () => {
+    const taskId = 'task_76d13dde-c6d9-4c08-86c4-5589f1c8dcf2';
+    const createdAt = Timestamp.fromDate(new Date('2026-03-19T01:55:00.000Z'));
+    const completedAt = new Timestamp(1_773_886_013, 707_000_000);
+    const updatedAt = Timestamp.fromDate(new Date('2026-03-19T02:14:34.998Z'));
+    fakeFirestore.seedCollection('code_tasks', [{
+      id: taskId,
+      data: {
+        id: taskId,
+        userId: 'test-user-id',
+        prompt: 'Plan INT-985',
+        sanitizedPrompt: 'Plan INT-985',
+        systemPromptHash: 'legacy',
+        workerType: 'auto',
+        workerLocation: 'home-dev',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_int_985',
+        status: 'completed',
+        dedupKey: 'legacy-int-985',
+        callbackReceived: false,
+        agentType: 'planning',
+        linearIssueId: 'INT-985',
+        createdAt,
+        completedAt,
+        updatedAt,
+      },
+    }]);
+    mockSummaries = [makeSummary({
+      linearIssueId: 'INT-985',
+      taskIds: [taskId],
+      taskStatusById: { [taskId]: 'completed' },
+      taskLifecycleAtById: { [taskId]: completedAt },
+      taskCount: 1,
+      activeTaskCount: 0,
+      latestTaskId: taskId,
+      latestTaskCreatedAt: createdAt,
+      latestTaskStatus: 'completed',
+      latestTaskUpdatedAt: completedAt,
+      latestLifecycleTaskId: taskId,
+      agentTypesPresent: ['planning'],
+      hasCompletedPlanning: true,
+      aggregateStatus: 'needs-action',
+    })];
+    mockCounts = { ...mockCounts, needsAction: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: { id: string; status: string; statusChangedAt: string; completedAt?: string }[];
+          pipeline: { steps: { agentType: string; state: string }[] };
+          aggregateStatus: string;
+          latestTask: { id: string; status: string };
+          lastActivityAt: string;
+          lastActivityStatus: string;
+          lastActivityTaskId: string;
+        }[];
+      };
+    };
+    const group = body.data.groups.find((candidate) => candidate.linearIssueId === 'INT-985');
+
+    expect(group?.tasks[0]).toEqual(expect.objectContaining({
+      id: taskId,
+      status: 'planned',
+      statusChangedAt: '2026-03-19T02:06:53.707Z',
+      completedAt: '2026-03-19T02:06:53.707Z',
+    }));
+    expect(group?.latestTask).toEqual(expect.objectContaining({ id: taskId, status: 'planned' }));
+    expect(group?.pipeline.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ agentType: 'planning', state: 'completed' }),
+      expect.objectContaining({ agentType: 'execution', state: 'actionable' }),
+    ]));
+    expect(group?.aggregateStatus).toBe('needs-action');
+    expect(group?.lastActivityAt).toBe('2026-03-19T02:06:53.707Z');
+    expect(group?.lastActivityStatus).toBe('planned');
+    expect(group?.lastActivityTaskId).toBe(taskId);
+  });
+
+  it('hydrates all 52 authoritative task ids when the oldest-created attempt changes lifecycle last', async () => {
+    const linearIssueId = 'INT-9851';
+    const baseMillis = Date.parse('2026-07-27T08:00:00.000Z');
+    const planningTaskId = 'task_old_planning';
+    const latestLifecycleAt = Timestamp.fromMillis(baseMillis + 10_000_000);
+    const newerTaskIds = Array.from({ length: 51 }, (_, index) => `task_new_${String(index).padStart(2, '0')}`);
+    const latestTaskId = newerTaskIds.at(-1);
+    if (latestTaskId === undefined) throw new Error('Expected a newest task fixture');
+    const documents = [
+      {
+        id: planningTaskId,
+        data: {
+          id: planningTaskId,
+          userId: 'test-user-id',
+          prompt: 'Old planning attempt',
+          sanitizedPrompt: 'Old planning attempt',
+          systemPromptHash: 'hash',
+          workerType: 'auto',
+          workerLocation: 'home-dev',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          traceId: 'trace-old-planning',
+          status: 'planned',
+          dedupKey: 'dedup-old-planning',
+          callbackReceived: false,
+          agentType: 'planning',
+          linearIssueId,
+          createdAt: Timestamp.fromMillis(baseMillis),
+          statusChangedAt: latestLifecycleAt,
+          completedAt: latestLifecycleAt,
+          updatedAt: latestLifecycleAt,
+        },
+      },
+      ...newerTaskIds.map((id, index) => {
+        const at = Timestamp.fromMillis(baseMillis + (index + 1) * 1_000);
+        return {
+          id,
+          data: {
+            id,
+            userId: 'test-user-id',
+            prompt: `Newer attempt ${String(index)}`,
+            sanitizedPrompt: `Newer attempt ${String(index)}`,
+            systemPromptHash: 'hash',
+            workerType: 'auto',
+            workerLocation: 'home-dev',
+            repository: 'pbuchman/intexuraos',
+            baseBranch: 'development',
+            traceId: `trace-new-${String(index)}`,
+            status: 'cancelled',
+            dedupKey: `dedup-new-${String(index)}`,
+            callbackReceived: false,
+            agentType: 'sentry',
+            linearIssueId,
+            createdAt: at,
+            statusChangedAt: at,
+            completedAt: at,
+            updatedAt: at,
+          },
+        };
+      }),
+    ];
+    fakeFirestore.seedCollection('code_tasks', documents);
+    const exactTaskIds = [planningTaskId, ...newerTaskIds];
+    const taskStatusById = Object.fromEntries([
+      [planningTaskId, 'planned'],
+      ...newerTaskIds.map((id) => [id, 'cancelled']),
+    ]);
+    const taskLifecycleAtById = Object.fromEntries(documents.map((document) => [
+      document.id,
+      document.data.statusChangedAt,
+    ]));
+    const latestTaskDocument = documents.at(-1);
+    if (latestTaskDocument === undefined) throw new Error('Expected a latest task document fixture');
+    mockSummaries = [makeSummary({
+      linearIssueId,
+      taskIds: [...exactTaskIds, planningTaskId],
+      taskStatusById,
+      taskLifecycleAtById,
+      taskCount: 52,
+      activeTaskCount: 0,
+      latestTaskId,
+      latestTaskCreatedAt: latestTaskDocument.data.createdAt,
+      latestTaskStatus: 'cancelled',
+      latestTaskUpdatedAt: latestLifecycleAt,
+      latestLifecycleTaskId: planningTaskId,
+      agentTypesPresent: ['planning', 'sentry'],
+      hasCompletedPlanning: true,
+      aggregateStatus: 'needs-action',
+    })];
+    mockCounts = { ...mockCounts, needsAction: 1, totalGroups: 1 };
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: { id: string; status: string }[];
+          pipeline: { steps: { agentType: string; state: string }[] };
+          aggregateStatus: string;
+          latestTask: { id: string; status: string };
+          lastActivityAt: string;
+          lastActivityStatus: string;
+          lastActivityTaskId: string;
+        }[];
+      };
+    };
+    const group = body.data.groups.find((candidate) => candidate.linearIssueId === linearIssueId);
+
+    expect(group?.tasks).toHaveLength(52);
+    expect(new Set(group?.tasks.map((task) => task.id)).size).toBe(52);
+    expect(group?.latestTask).toEqual(expect.objectContaining({ id: latestTaskId, status: 'cancelled' }));
+    expect(group?.pipeline.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ agentType: 'planning', state: 'completed' }),
+      expect.objectContaining({ agentType: 'execution', state: 'actionable' }),
+    ]));
+    expect(group?.aggregateStatus).toBe('needs-action');
+    expect(group?.lastActivityAt).toBe(latestLifecycleAt.toDate().toISOString());
+    expect(group?.lastActivityStatus).toBe('planned');
+    expect(group?.lastActivityTaskId).toBe(planningTaskId);
+  });
+
+  it('bulk-hydrates one deduplicated exact-id pool for displayed and phantom-check summaries', async () => {
+    const displayedTaskResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9852',
+      traceId: 'trace-displayed-exact',
+    }));
+    const phantomCheckTaskResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9853',
+      traceId: 'trace-phantom-exact',
+    }));
+    expect(displayedTaskResult.ok).toBe(true);
+    expect(phantomCheckTaskResult.ok).toBe(true);
+    if (!displayedTaskResult.ok || !phantomCheckTaskResult.ok) return;
+
+    const displayedSummary = makeSummary({
+      linearIssueId: 'INT-9852',
+      taskIds: [displayedTaskResult.value.id, displayedTaskResult.value.id],
+      latestTaskId: displayedTaskResult.value.id,
+      latestTaskCreatedAt: displayedTaskResult.value.createdAt,
+      latestLifecycleTaskId: displayedTaskResult.value.id,
+      latestTaskUpdatedAt:
+        displayedTaskResult.value.statusChangedAt ?? displayedTaskResult.value.createdAt,
+      aggregateStatus: 'active',
+    });
+    const phantomCheckSummary = makeSummary({
+      linearIssueId: 'INT-9853',
+      taskIds: [phantomCheckTaskResult.value.id, displayedTaskResult.value.id],
+      latestTaskId: phantomCheckTaskResult.value.id,
+      latestTaskCreatedAt: phantomCheckTaskResult.value.createdAt,
+      latestLifecycleTaskId: phantomCheckTaskResult.value.id,
+      latestTaskUpdatedAt:
+        phantomCheckTaskResult.value.statusChangedAt ?? phantomCheckTaskResult.value.createdAt,
+      aggregateStatus: 'done',
+    });
+    const tasksById = new Map([
+      [displayedTaskResult.value.id, displayedTaskResult.value],
+      [phantomCheckTaskResult.value.id, phantomCheckTaskResult.value],
+    ]);
+    const findByIdsForUser = vi.fn(async (taskIds: readonly string[]) =>
+      ok(taskIds.flatMap((taskId) => {
+        const task = tasksById.get(taskId);
+        return task === undefined ? [] : [task];
+      }))
+    );
+    const bulkRepo = {
+      ...codeTaskRepo,
+      findByIdsForUser,
+    } as CodeTaskRepository & {
+      findByIdsForUser: typeof findByIdsForUser;
+    };
+    const counts = {
+      ...mockCounts,
+      active: 1,
+      done: 1,
+      totalGroups: 2,
+    };
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok(counts),
+      listGroupSummaries: async (input) => {
+        if (input.statusFilter?.includes('active') === true) {
+          return ok({ summaries: [displayedSummary] });
+        }
+        if (input.statusFilter?.includes('done') === true) {
+          return ok({ summaries: [phantomCheckSummary] });
+        }
+        return ok({ summaries: [] });
+      },
+    });
+    setServices(makeBaseServices({ codeTaskRepo: bulkRepo, groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups?groupStatus=active',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(findByIdsForUser).toHaveBeenCalledOnce();
+    expect(findByIdsForUser).toHaveBeenCalledWith(
+      [displayedTaskResult.value.id, phantomCheckTaskResult.value.id],
+      'test-user-id',
+    );
+  });
+
+  it('does not fall back to newest-50 when an exact summary id is stale and keeps summary activity/status', async () => {
+    const presentResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9854',
+      traceId: 'trace-stale-summary-present',
+    }));
+    expect(presentResult.ok).toBe(true);
+    if (!presentResult.ok) return;
+    const cancelledResult = await codeTaskRepo.update(presentResult.value.id, {
+      status: 'cancelled',
+    });
+    expect(cancelledResult.ok).toBe(true);
+    if (!cancelledResult.ok) return;
+
+    const staleTaskId = 'task_stale_summary_reference';
+    const staleFailureAt = new Timestamp(1_775_000_000, 123_456_789);
+    const summary = makeSummary({
+      linearIssueId: 'INT-9854',
+      taskIds: [cancelledResult.value.id, staleTaskId],
+      taskStatusById: {
+        [cancelledResult.value.id]: 'cancelled',
+        [staleTaskId]: 'failed',
+      },
+      taskLifecycleAtById: {
+        [cancelledResult.value.id]:
+          cancelledResult.value.statusChangedAt ?? cancelledResult.value.createdAt,
+        [staleTaskId]: staleFailureAt,
+      },
+      taskCount: 2,
+      activeTaskCount: 0,
+      latestTaskId: cancelledResult.value.id,
+      latestTaskCreatedAt: cancelledResult.value.createdAt,
+      latestTaskStatus: 'cancelled',
+      latestTaskUpdatedAt: staleFailureAt,
+      latestLifecycleTaskId: staleTaskId,
+      aggregateStatus: 'failed',
+    });
+    const findByIdsForUser = vi.fn().mockResolvedValue(ok([cancelledResult.value]));
+    const findRecentTasksByLinearIssue = vi.fn().mockResolvedValue(ok([cancelledResult.value]));
+    const exactRepo = {
+      ...codeTaskRepo,
+      findByIdsForUser,
+      findRecentTasksByLinearIssue,
+    } as CodeTaskRepository;
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        failed: 1,
+        totalGroups: 1,
+      }),
+      listGroupSummaries: async () => ok({ summaries: [summary] }),
+    });
+    setServices(makeBaseServices({ codeTaskRepo: exactRepo, groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          tasks: { id: string }[];
+          aggregateStatus: string;
+          lastActivityAt: string;
+          lastActivityStatus: string;
+          lastActivityTaskId: string;
+        }[];
+      };
+    };
+    const group = body.data.groups.find((candidate) => candidate.linearIssueId === 'INT-9854');
+
+    expect(findByIdsForUser).toHaveBeenCalledWith(
+      [cancelledResult.value.id, staleTaskId],
+      'test-user-id',
+    );
+    expect(findRecentTasksByLinearIssue).not.toHaveBeenCalled();
+    expect(group?.tasks.map((task) => task.id)).toEqual([cancelledResult.value.id]);
+    expect(group?.aggregateStatus).toBe('failed');
+    expect(group?.lastActivityAt).toBe(staleFailureAt.toDate().toISOString());
+    expect(group?.lastActivityStatus).toBe('failed');
+    expect(group?.lastActivityTaskId).toBe(staleTaskId);
+  });
+
+  it('fails the whole response when exact bulk hydration fails', async () => {
+    const taskId = 'task_exact_batch_failure';
+    const summary = makeSummary({
+      linearIssueId: 'INT-9855',
+      taskIds: [taskId],
+      latestTaskId: taskId,
+      latestTaskStatus: 'failed',
+      latestLifecycleTaskId: taskId,
+      aggregateStatus: 'failed',
+    });
+    const findByIdsForUser = vi.fn().mockResolvedValue(err({
+      code: 'FIRESTORE_ERROR' as const,
+      message: 'batch unavailable',
+    }));
+    const findRecentTasksByLinearIssue = vi.fn();
+    const failingRepo = {
+      ...codeTaskRepo,
+      findByIdsForUser,
+      findRecentTasksByLinearIssue,
+    } as CodeTaskRepository;
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        failed: 1,
+        totalGroups: 1,
+      }),
+      listGroupSummaries: async () => ok({ summaries: [summary] }),
+    });
+    setServices(makeBaseServices({ codeTaskRepo: failingRepo, groupSummaryRepo: summaryRepo }));
+    const requestErrorSpy = vi.fn();
+    await server.addHook('onRequest', async (request) => {
+      const log = request.log as unknown as { error: (...args: unknown[]) => void };
+      const originalError = log.error.bind(request.log);
+      log.error = ((...args: unknown[]): void => {
+        requestErrorSpy(...args);
+        originalError(...args);
+      });
+    });
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(findByIdsForUser).toHaveBeenCalledWith([taskId], 'test-user-id');
+    expect(findRecentTasksByLinearIssue).not.toHaveBeenCalled();
+    expect(requestErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps a legacy task group under the authoritative summary identity when repository data drifts', async () => {
+    const taskResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9856',
+      traceId: 'trace-legacy-membership-drift',
+    }));
+    expect(taskResult.ok).toBe(true);
+    if (!taskResult.ok) return;
+
+    const findRecentTasksByLinearIssue = vi.fn().mockResolvedValue(ok([taskResult.value]));
+    const driftRepo = {
+      ...codeTaskRepo,
+      findRecentTasksByLinearIssue,
+    } as CodeTaskRepository;
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        active: 1,
+        totalGroups: 1,
+      }),
+      listGroupSummaries: async () => ok({
+        summaries: [makeSummary({ linearIssueId: 'INT-9857' })],
+      }),
+    });
+    setServices(makeBaseServices({ codeTaskRepo: driftRepo, groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { linearIssueId: string | null; latestTask: { id: string } }[] };
+    };
+    expect(findRecentTasksByLinearIssue).toHaveBeenCalledWith('INT-9857', 50, 'test-user-id');
+    expect(body.data.groups).toEqual([
+      expect.objectContaining({
+        linearIssueId: 'INT-9857',
+        latestTask: expect.objectContaining({ id: taskResult.value.id }),
+      }),
+    ]);
+  });
+
+  it('keeps exact task membership under the authoritative summary identity', async () => {
+    const taskResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9860',
+      traceId: 'trace-exact-membership-drift',
+    }));
+    expect(taskResult.ok).toBe(true);
+    if (!taskResult.ok) return;
+
+    const summary = makeSummary({
+      linearIssueId: 'INT-9861',
+      taskIds: [taskResult.value.id],
+      latestTaskId: taskResult.value.id,
+      latestTaskCreatedAt: taskResult.value.createdAt,
+      latestTaskUpdatedAt: taskResult.value.statusChangedAt ?? taskResult.value.createdAt,
+      latestLifecycleTaskId: taskResult.value.id,
+      aggregateStatus: 'active',
+    });
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        active: 1,
+        totalGroups: 1,
+      }),
+      listGroupSummaries: async () => ok({ summaries: [summary] }),
+    });
+    setServices(makeBaseServices({ groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: {
+        linearIssueId: string | null;
+        tasks: { id: string; linearIssueId?: string; linearIssue?: unknown }[];
+        latestTask: { id: string; linearIssueId?: string; linearIssue?: unknown };
+      }[] };
+    };
+    expect(body.data.groups).toEqual([
+      expect.objectContaining({
+        linearIssueId: 'INT-9861',
+        tasks: [expect.objectContaining({ id: taskResult.value.id, linearIssueId: 'INT-9860' })],
+        latestTask: expect.objectContaining({ id: taskResult.value.id, linearIssueId: 'INT-9860' }),
+      }),
+    ]);
+    expect(body.data.groups[0]?.tasks[0]).not.toHaveProperty('linearIssue');
+    expect(body.data.groups[0]?.latestTask).not.toHaveProperty('linearIssue');
+  });
+
+  it('uses safe summary fallbacks for stale identities and malformed optional timestamps', async () => {
+    const staleLatestResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9858',
+      traceId: 'trace-stale-latest-identity',
+    }));
+    const staleActivityResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9859',
+      traceId: 'trace-stale-activity-identity',
+    }));
+    expect(staleLatestResult.ok).toBe(true);
+    expect(staleActivityResult.ok).toBe(true);
+    if (!staleLatestResult.ok || !staleActivityResult.ok) return;
+
+    const staleLatestTaskId = 'task_stale_latest_identity';
+    const staleActivityTaskId = 'task_stale_activity_identity';
+    const summaryActivityAt = new Timestamp(1_775_010_000, 111_222_333);
+    const dispatchedAt = new Timestamp(1_775_009_000, 444_555_666);
+    const malformedTimestamp = {} as Timestamp;
+    const summaries = [
+      makeSummary({
+        linearIssueId: 'INT-9858',
+        taskIds: [staleLatestResult.value.id],
+        latestTaskId: staleLatestTaskId,
+        latestTaskStatus: 'failed',
+        latestTaskUpdatedAt: summaryActivityAt,
+        latestLifecycleTaskId: staleLatestTaskId,
+        mostRecentDispatchedAt: dispatchedAt,
+        aggregateStatus: 'failed',
+      }),
+      makeSummary({
+        linearIssueId: 'INT-9859',
+        taskIds: [staleActivityResult.value.id],
+        latestTaskId: staleActivityResult.value.id,
+        latestTaskStatus: 'queued',
+        latestTaskUpdatedAt: malformedTimestamp,
+        latestLifecycleTaskId: staleActivityTaskId,
+        mostRecentDispatchedAt: malformedTimestamp,
+        aggregateStatus: 'active',
+      }),
+    ];
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        active: 1,
+        failed: 1,
+        totalGroups: 2,
+      }),
+      listGroupSummaries: async () => ok({ summaries }),
+    });
+    setServices(makeBaseServices({ groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: {
+        groups: {
+          linearIssueId: string | null;
+          latestTask: { id: string };
+          lastActivityAt: string;
+          lastActivityStatus: string;
+          lastActivityTaskId: string;
+          mostRecentDispatchedAt?: string;
+        }[];
+      };
+    };
+    const staleLatestGroup = body.data.groups.find(
+      (group) => group.linearIssueId === 'INT-9858',
+    );
+    const staleActivityGroup = body.data.groups.find(
+      (group) => group.linearIssueId === 'INT-9859',
+    );
+
+    expect(staleLatestGroup).toEqual(expect.objectContaining({
+      latestTask: expect.objectContaining({ id: staleLatestResult.value.id }),
+      lastActivityAt: summaryActivityAt.toDate().toISOString(),
+      lastActivityStatus: 'failed',
+      lastActivityTaskId: staleLatestTaskId,
+      mostRecentDispatchedAt: dispatchedAt.toDate().toISOString(),
+    }));
+    expect(staleActivityGroup).toEqual(expect.objectContaining({
+      lastActivityAt: (
+        staleActivityResult.value.statusChangedAt ?? staleActivityResult.value.createdAt
+      ).toDate().toISOString(),
+      lastActivityStatus: 'queued',
+      lastActivityTaskId: staleActivityTaskId,
+    }));
+    expect(staleActivityGroup?.mostRecentDispatchedAt).toBeUndefined();
+  });
+
+  it('serializes archived exact membership with failure completion before archive time', async () => {
+    const taskId = 'task_archived_issue_group_completion';
+    const failureAt = new Timestamp(1_775_100_000, 123_456_789);
+    const archivedAt = Timestamp.fromDate(new Date('2026-07-27T12:00:00.000Z'));
+    const createdAt = Timestamp.fromDate(new Date('2026-07-27T08:00:00.000Z'));
+    fakeFirestore.seedCollection('code_tasks', [{
+      id: taskId,
+      data: {
+        id: taskId,
+        userId: 'test-user-id',
+        prompt: 'Archived issue group failure',
+        sanitizedPrompt: 'Archived issue group failure',
+        systemPromptHash: 'legacy',
+        workerType: 'auto',
+        workerLocation: 'home-dev',
+        repository: 'pbuchman/intexuraos',
+        baseBranch: 'development',
+        traceId: 'trace_archived_issue_group_completion',
+        status: 'archived',
+        dedupKey: 'legacy-archived-issue-group',
+        callbackReceived: false,
+        agentType: 'execution',
+        linearIssueId: 'INT-9862',
+        createdAt,
+        statusChangedAt: archivedAt,
+        updatedAt: archivedAt,
+        dispatchStatus: {
+          state: 'terminal',
+          reason: 'codex_auth_unavailable',
+          terminal: true,
+          severity: 'warning',
+          message: 'Codex auth unavailable',
+          remediation: 'Use an authorized worker',
+          workerNames: ['home-dev'],
+          firstSeenAt: failureAt,
+          lastSeenAt: archivedAt,
+          terminalCause: {
+            reason: 'codex_auth_unavailable',
+            message: 'Codex auth unavailable',
+            remediation: 'Use an authorized worker',
+            workerNames: ['home-dev'],
+            lastSeenAt: failureAt,
+          },
+          nextAction: 'retry_after_fix',
+        },
+      },
+    }]);
+    const summary = makeSummary({
+      linearIssueId: 'INT-9862',
+      taskIds: [taskId],
+      latestTaskId: taskId,
+      latestTaskCreatedAt: createdAt,
+      latestTaskStatus: 'archived',
+      latestTaskUpdatedAt: archivedAt,
+      latestLifecycleTaskId: taskId,
+      aggregateStatus: 'archived',
+    });
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        archived: 1,
+        totalGroups: 1,
+      }),
+      listGroupSummaries: async () => ok({ summaries: [summary] }),
+    });
+    setServices(makeBaseServices({ groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups?groupStatus=archived',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { tasks: { id: string; statusChangedAt: string; completedAt?: string }[] }[] };
+    };
+    expect(body.data.groups[0]?.tasks[0]).toEqual(expect.objectContaining({
+      id: taskId,
+      statusChangedAt: archivedAt.toDate().toISOString(),
+      completedAt: failureAt.toDate().toISOString(),
+    }));
+  });
+
+  it('uses per-summary archive visibility when correcting non-archived phantom counts', async () => {
+    const archivedVisibleResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9863',
+      traceId: 'trace-archived-visible',
+    }));
+    const archivedDoneDriftResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9864',
+      traceId: 'trace-archived-done-drift',
+    }));
+    expect(archivedVisibleResult.ok).toBe(true);
+    expect(archivedDoneDriftResult.ok).toBe(true);
+    if (!archivedVisibleResult.ok || !archivedDoneDriftResult.ok) return;
+    await codeTaskRepo.update(archivedVisibleResult.value.id, { status: 'archived' });
+    await codeTaskRepo.update(archivedDoneDriftResult.value.id, { status: 'archived' });
+
+    const archivedSummary = makeSummary({
+      linearIssueId: 'INT-9863',
+      aggregateStatus: 'archived',
+      latestTaskStatus: 'archived',
+    });
+    const doneSummary = makeSummary({
+      linearIssueId: 'INT-9864',
+      aggregateStatus: 'done',
+      latestTaskStatus: 'cancelled',
+    });
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({
+        ...mockCounts,
+        done: 1,
+        archived: 1,
+        totalGroups: 2,
+      }),
+      listGroupSummaries: async (input) => {
+        if (input.statusFilter?.includes('archived') === true) {
+          return ok({ summaries: [archivedSummary] });
+        }
+        if (input.statusFilter?.includes('done') === true) {
+          return ok({ summaries: [doneSummary] });
+        }
+        return ok({ summaries: [] });
+      },
+    });
+    setServices(makeBaseServices({ groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups?groupStatus=archived',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { linearIssueId: string | null }[]; counts: Record<string, number> };
+    };
+    expect(body.data.groups.map((group) => group.linearIssueId)).toEqual(['INT-9863']);
+    expect(body.data.counts['archived']).toBe(1);
+    expect(body.data.counts['done']).toBe(0);
+  });
+
+  it('clears derived dispatched activity when the authoritative summary value is null', async () => {
+    const newerDispatchResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9865',
+      traceId: 'trace-derived-dispatch-newer',
+    }));
+    const authoritativeDispatchResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9866',
+      traceId: 'trace-authoritative-dispatch',
+    }));
+    expect(newerDispatchResult.ok).toBe(true);
+    expect(authoritativeDispatchResult.ok).toBe(true);
+    if (!newerDispatchResult.ok || !authoritativeDispatchResult.ok) return;
+    const newerDispatchAt = new Date('2026-07-28T12:00:00.000Z');
+    const authoritativeDispatchAt = new Date('2026-07-28T11:00:00.000Z');
+    await codeTaskRepo.update(newerDispatchResult.value.id, {
+      status: 'dispatched',
+      dispatchedAt: newerDispatchAt,
+    });
+    await codeTaskRepo.update(authoritativeDispatchResult.value.id, {
+      status: 'dispatched',
+      dispatchedAt: authoritativeDispatchAt,
+    });
+
+    const summaries = [
+      makeSummary({
+        linearIssueId: 'INT-9866',
+        taskIds: [authoritativeDispatchResult.value.id],
+        latestTaskId: authoritativeDispatchResult.value.id,
+        latestTaskStatus: 'dispatched',
+        latestLifecycleTaskId: authoritativeDispatchResult.value.id,
+        mostRecentDispatchedAt: Timestamp.fromDate(authoritativeDispatchAt),
+      }),
+      makeSummary({
+        linearIssueId: 'INT-9865',
+        taskIds: [newerDispatchResult.value.id],
+        latestTaskId: newerDispatchResult.value.id,
+        latestTaskStatus: 'dispatched',
+        latestLifecycleTaskId: newerDispatchResult.value.id,
+        mostRecentDispatchedAt: null,
+      }),
+    ];
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({ ...mockCounts, active: 2, totalGroups: 2 }),
+      listGroupSummaries: async () => ok({ summaries }),
+    });
+    setServices(makeBaseServices({ groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups?sortBy=dispatched',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { linearIssueId: string | null; mostRecentDispatchedAt?: string }[] };
+    };
+    expect(body.data.groups.map((group) => group.linearIssueId)).toEqual(['INT-9866', 'INT-9865']);
+    expect(body.data.groups[1]?.mostRecentDispatchedAt).toBeUndefined();
+  });
+
+  it('preserves authoritative summary order for PR-number pagination', async () => {
+    const staleHighPrResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9867',
+      traceId: 'trace-stale-high-pr',
+    }));
+    const authoritativeHighPrResult = await codeTaskRepo.create(makeTaskInput({
+      linearIssueId: 'INT-9868',
+      traceId: 'trace-authoritative-high-pr',
+    }));
+    expect(staleHighPrResult.ok).toBe(true);
+    expect(authoritativeHighPrResult.ok).toBe(true);
+    if (!staleHighPrResult.ok || !authoritativeHighPrResult.ok) return;
+    await codeTaskRepo.update(staleHighPrResult.value.id, {
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/999' },
+    });
+    await codeTaskRepo.update(authoritativeHighPrResult.value.id, {
+      status: 'implemented',
+      result: { prUrl: 'https://github.com/org/repo/pull/2' },
+    });
+
+    const summaries = [
+      makeSummary({
+        linearIssueId: 'INT-9868',
+        taskIds: [authoritativeHighPrResult.value.id],
+        latestTaskId: authoritativeHighPrResult.value.id,
+        latestTaskStatus: 'implemented',
+        latestLifecycleTaskId: authoritativeHighPrResult.value.id,
+        hasPrUrl: true,
+        prNumber: 2,
+        aggregateStatus: 'done',
+      }),
+      makeSummary({
+        linearIssueId: 'INT-9867',
+        taskIds: [staleHighPrResult.value.id],
+        latestTaskId: staleHighPrResult.value.id,
+        latestTaskStatus: 'implemented',
+        latestLifecycleTaskId: staleHighPrResult.value.id,
+        hasPrUrl: true,
+        prNumber: 1,
+        aggregateStatus: 'done',
+      }),
+    ];
+    const summaryRepo = makeGroupSummaryRepo({
+      getUserGroupCounts: async () => ok({ ...mockCounts, done: 2, totalGroups: 2 }),
+      listGroupSummaries: async () => ok({ summaries }),
+    });
+    setServices(makeBaseServices({ groupSummaryRepo: summaryRepo }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/issue-groups?sortBy=pr-number',
+      headers: { authorization: 'Bearer test-token' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { groups: { linearIssueId: string | null }[] };
+    };
+    expect(body.data.groups.map((group) => group.linearIssueId)).toEqual(['INT-9868', 'INT-9867']);
+  });
+
   describe('precomputed summaries path', () => {
     it('returns counts from getUserGroupCounts', async () => {
       const fakeCounts: UserGroupCounts = {
@@ -1682,6 +2713,15 @@ describe('GET /code/issue-groups', () => {
 
     await server.close();
     server = await buildServer();
+    const warnSpy = vi.fn();
+    await server.addHook('onRequest', async (request) => {
+      const log = request.log as unknown as { warn: (...args: unknown[]) => void };
+      const originalWarn = log.warn.bind(request.log);
+      log.warn = ((...args: unknown[]): void => {
+        warnSpy(...args);
+        originalWarn(...args);
+      });
+    });
 
     const response = await server.inject({
       method: 'GET',
@@ -1694,6 +2734,14 @@ describe('GET /code/issue-groups', () => {
     const body = JSON.parse(response.body) as { data: { groups: unknown[] } };
     // No group produced because tasks returned empty array (fetch failed)
     expect(body.data.groups).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: standaloneTaskId,
+        context: 'display',
+        [SKIP_SENTRY_KEY]: true,
+      }),
+      'Failed to fetch legacy standalone task',
+    );
   });
 
   describe('phantom group count correction', () => {
@@ -2015,6 +3063,52 @@ describe('GET /code/issue-groups', () => {
         data: { groups: unknown[]; counts: Record<string, number>; totalGroups: number };
       };
       expect(body.data.counts['done']).toBe(0); // Phantom detected due to error → empty tasks
+    });
+
+    it('marks a missing legacy Linear group task lookup as non-Sentry', async () => {
+      const missingCodeTaskRepo: CodeTaskRepository = {
+        ...codeTaskRepo,
+        findRecentTasksByLinearIssue: async () => err({ code: 'NOT_FOUND' as const, message: 'Tasks not found' }),
+      };
+      const missingSummary = makeSummary({
+        linearIssueId: 'INT-MISSING',
+        aggregateStatus: 'done',
+        taskCount: 1,
+      });
+      const warnSpy = vi.fn();
+
+      setServices(makeBaseServices({
+        codeTaskRepo: missingCodeTaskRepo,
+        groupSummaryRepo: makeGroupSummaryRepo({
+          getUserGroupCounts: async () => ok({ ...mockCounts, done: 1, totalGroups: 1 }),
+          listGroupSummaries: async () => ok({ summaries: [missingSummary] }),
+        }),
+      }));
+      await server.close();
+      server = await buildServer();
+      await server.addHook('onRequest', async (request) => {
+        const log = request.log as unknown as { warn: (...args: unknown[]) => void };
+        const originalWarn = log.warn.bind(request.log);
+        log.warn = ((...args: unknown[]): void => {
+          warnSpy(...args);
+          originalWarn(...args);
+        });
+      });
+
+      const response = await server.inject({
+        method: 'GET',
+        url: '/issue-groups',
+        headers: { authorization: 'Bearer test-jwt' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          linearIssueId: 'INT-MISSING',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        'Failed to fetch tasks for legacy linear group',
+      );
     });
 
     it('handles error gracefully when phantom-check findById fails for standalone', async () => {
@@ -2364,6 +3458,7 @@ describe('GET /code/issue-groups', () => {
         updatedAt: Date,
       ): Promise<void> {
         const createResult = await codeTaskRepo.create(makeTaskInput({
+          id: agentType === 'review' ? 'task-int-1423-review' : 'task-int-1423-planning',
           linearIssueId: 'INT-1423',
           traceId,
           agentType,
@@ -2449,10 +3544,10 @@ describe('GET /code/issue-groups', () => {
       };
       const repairedGroup = body.data.groups.find((group) => group.linearIssueId === 'INT-1423');
       expect(repairedGroup).toBeDefined();
-      expect(repairedGroup?.aggregateStatus).toBe('done');
       expect(repairedGroup?.tasks).toEqual([
         expect.objectContaining({ status: 'reviewed' }),
       ]);
+      expect(repairedGroup?.aggregateStatus).toBe('done');
       expect(body.data.counts['done']).toBe(1);
       expect(body.data.totalGroups).toBe(1);
     });

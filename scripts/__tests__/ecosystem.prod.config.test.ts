@@ -235,6 +235,47 @@ describe('ecosystem.config.prod.cjs', () => {
     }
   });
 
+  it('propagates one validated exact release SHA to every PM2 app', () => {
+    const releaseSha = '1234567890abcdef1234567890abcdef12345678';
+    const config = loadProdConfig({
+      ...PROD_ENV,
+      INTEXURAOS_COMMIT_SHA: releaseSha,
+    });
+
+    expect(config.apps).not.toHaveLength(0);
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBe(releaseSha);
+    }
+  });
+
+  it('keeps the explicitly deployed release SHA when the prod env file contains a stale SHA', () => {
+    const tempDir = mkdtempSync(resolve(tmpdir(), 'intexuraos-prod-release-'));
+    const envFile = resolve(tempDir, '.env.prod');
+    const deployedSha = '1234567890abcdef1234567890abcdef12345678';
+
+    try {
+      writeFileSync(
+        envFile,
+        [
+          'INTEXURAOS_ENVIRONMENT="prod"',
+          'INTEXURAOS_COMMIT_SHA="abcdef1234567890abcdef1234567890abcdef12"',
+        ].join('\n')
+      );
+
+      const config = loadProdConfig({
+        ...PROD_ENV,
+        INTEXURAOS_PROD_ENV_FILE: envFile,
+        INTEXURAOS_COMMIT_SHA: deployedSha,
+      });
+
+      for (const app of config.apps) {
+        expect(app.env.INTEXURAOS_COMMIT_SHA, app.name).toBe(deployedSha);
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('parses the prod env file without mutating the launcher process environment', () => {
     const tempDir = mkdtempSync(resolve(tmpdir(), 'intexuraos-prod-env-'));
     const envFile = resolve(tempDir, '.env.prod');

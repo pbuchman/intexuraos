@@ -271,8 +271,10 @@ const codeTaskSchema = {
     callbackReceived: { type: 'boolean' },
     callbackState: callbackStateSchema,
     createdAt: { type: 'string', format: 'date-time' },
+    statusChangedAt: { type: 'string', format: 'date-time' },
     updatedAt: { type: 'string', format: 'date-time' },
     dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
+    completedAt: { type: 'string', format: 'date-time', nullable: true },
     linearIssueId: { type: 'string', nullable: true },
     linearIssue: {
       ...linearIssueForDisplaySchema,
@@ -349,6 +351,7 @@ const codeTaskSchema = {
     'dedupKey',
     'callbackReceived',
     'createdAt',
+    'statusChangedAt',
     'updatedAt',
   ],
 } as const;

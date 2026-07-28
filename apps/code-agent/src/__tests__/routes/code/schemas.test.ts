@@ -87,9 +87,44 @@ describe('routes/code/schemas', () => {
       dedupKey: 'd',
       callbackReceived: false,
       createdAt: '2024-01-01T00:00:00Z',
+      statusChangedAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
     };
     expect(validate(task)).toBe(true);
+
+    const missingLifecycleTime = { ...task } as Record<string, unknown>;
+    delete missingLifecycleTime['statusChangedAt'];
+    expect(validate(missingLifecycleTime)).toBe(false);
+  });
+
+  it('codeTaskSchema accepts terminal completion and keeps active completion optional or nullable', () => {
+    const validate = ajv.compile(codeTaskSchema);
+    const activeTask = {
+      id: 'task_1',
+      userId: 'u_1',
+      prompt: 'p',
+      sanitizedPrompt: 'p',
+      systemPromptHash: 'h',
+      workerType: 'auto',
+      workerLocation: 'pending',
+      repository: 'org/repo',
+      baseBranch: 'development',
+      traceId: 't',
+      status: 'running',
+      dedupKey: 'd',
+      callbackReceived: false,
+      createdAt: '2024-01-01T00:00:00Z',
+      statusChangedAt: '2024-01-01T00:01:00Z',
+      updatedAt: '2024-01-01T00:02:00Z',
+    };
+
+    expect(validate(activeTask)).toBe(true);
+    expect(validate({ ...activeTask, completedAt: null })).toBe(true);
+    expect(validate({
+      ...activeTask,
+      status: 'failed',
+      completedAt: '2024-01-01T00:01:00Z',
+    })).toBe(true);
   });
 
   it('codeTaskSchema accepts structured rebaseResult and merge-ready result fields', () => {
@@ -109,6 +144,7 @@ describe('routes/code/schemas', () => {
       dedupKey: 'd',
       callbackReceived: true,
       createdAt: '2024-01-01T00:00:00Z',
+      statusChangedAt: '2024-01-01T00:00:00Z',
       updatedAt: '2024-01-01T00:00:00Z',
       result: {
         summary: 'No changes needed',

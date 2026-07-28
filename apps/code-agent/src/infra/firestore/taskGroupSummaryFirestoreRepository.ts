@@ -3,31 +3,256 @@
  * Thin adapter — delegates to `./taskGroupSummary/{serializer,queries}.ts`.
  */
 /* eslint-disable no-restricted-imports */
+import { createHash } from 'node:crypto';
 import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import type { DocumentData, Firestore, DocumentSnapshot, Transaction } from '@google-cloud/firestore';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err, getErrorMessage } from '@intexuraos/common-core';
-import type { TaskGroupSummaryRepository, ListGroupSummariesInput, ListGroupSummariesOutput, GroupSummaryError } from '../../domain/ports/taskGroupSummaryRepository.js';
+import type {
+  LifecycleBackfillTaskGroupSummaryRepository,
+  ListGroupSummariesInput,
+  ListGroupSummariesOutput,
+  GroupSummaryError,
+  LifecycleBackfillGroupCountVector,
+  LifecycleBackfillTargetSummaryProof,
+} from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
+import type { GroupStatus } from '../../domain/issueGrouping/types.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import { hasImplementationReadyLabel, hasMergeReadyLabel } from '../../domain/issueGrouping/labelHelpers.js';
 import {
   applyDeleteGroupDelta, applyDeleteUpdate, applyIncrementalCreateUpdate,
   applyNewGroupDelta, applyStatusChangeDelta, applyStatusChangeUpdate,
-  buildInitialSummary, computeSummaryFromTasks, defaultCounts,
+  buildInitialSummary, computeAllArchivedSummaryFromTasks, computeSummaryFromTasks, defaultCounts,
   docToCounts, docToSummary, getGroupKey,
 } from './taskGroupSummary/serializer.js';
 import { SUMMARIES_COLLECTION, buildListQuery, countsDocRef, summaryDocRef } from './taskGroupSummary/queries.js';
+import { fromFirestoreDoc } from './task-serializer.js';
+import { normalizeTaskLifecycleTimestamp } from '../../domain/models/taskLifecycleTime.js';
 
-export interface RepairReadableTaskGroupSummaryRepository extends TaskGroupSummaryRepository {
+const RAW_BACKFILL_STATUSES: ReadonlySet<string> = new Set([
+  'queued', 'dispatched', 'running', 'planned', 'implemented', 'reviewed',
+  'failed', 'interrupted', 'cancelled', 'archived', 'completed',
+]);
+const RAW_BACKFILL_AGENT_TYPES: ReadonlySet<string> = new Set([
+  'planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry',
+]);
+
+function stableFingerprintValue(value: unknown, ancestors: WeakSet<object>): unknown {
+  if (value instanceof Timestamp) {
+    return ['timestamp', String(value.seconds), String(value.nanoseconds)];
+  }
+  if (Array.isArray(value)) {
+    if (ancestors.has(value)) throw new Error('cyclic summary');
+    ancestors.add(value);
+    const result = value.map((entry) => stableFingerprintValue(entry, ancestors));
+    ancestors.delete(value);
+    return ['array', result];
+  }
+  if (value === null) return ['null'];
+  if (value === undefined) return ['undefined'];
+  if (typeof value === 'string') return ['string', value];
+  if (typeof value === 'boolean') return ['boolean', value];
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return ['number', 'nan'];
+    if (value === Number.POSITIVE_INFINITY) return ['number', 'positive-infinity'];
+    if (value === Number.NEGATIVE_INFINITY) return ['number', 'negative-infinity'];
+    if (Object.is(value, -0)) return ['number', 'negative-zero'];
+    return ['number', String(value)];
+  }
+  if (typeof value !== 'object') {
+    throw new Error('unsupported summary value');
+  }
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('unsupported summary object');
+  }
+  if (ancestors.has(value)) throw new Error('cyclic summary');
+  ancestors.add(value);
+  const result = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => [
+      key,
+      stableFingerprintValue((value as Record<string, unknown>)[key], ancestors),
+    ]);
+  ancestors.delete(value);
+  return ['object', result];
+}
+
+export function createLifecycleBackfillSummaryFingerprint(
+  raw: Record<string, unknown>,
+): string | undefined {
+  try {
+    const canonical = JSON.stringify(stableFingerprintValue(raw, new WeakSet<object>()));
+    return createHash('sha256').update(canonical).digest('base64url');
+  } catch {
+    return undefined;
+  }
+}
+
+export function createLifecycleBackfillTaskSourceFingerprint(
+  tasks: readonly { id: string; data: Record<string, unknown> }[],
+): string | undefined {
+  const ordered = [...tasks].sort((left, right) => {
+    if (left.id < right.id) return -1;
+    if (left.id > right.id) return 1;
+    return 0;
+  });
+  return createLifecycleBackfillSummaryFingerprint({
+    tasks: ordered.map((task) => ({ id: task.id, data: task.data })),
+  });
+}
+
+function rawSummaryMatchesProof(
+  raw: Record<string, unknown>,
+  proof: LifecycleBackfillTargetSummaryProof,
+): boolean {
+  return proof.exists &&
+    raw['aggregateStatus'] === proof.aggregateStatus &&
+    createLifecycleBackfillSummaryFingerprint(raw) === proof.fingerprint;
+}
+
+export interface RepairReadableTaskGroupSummaryRepository extends LifecycleBackfillTaskGroupSummaryRepository {
   getSummary(userId: string, groupKey: string): Promise<Result<TaskGroupSummary | null, GroupSummaryError>>;
 }
 
 export function createTaskGroupSummaryFirestoreRepository(
-  deps: { firestore: Firestore; logger: Logger }
+  deps: { firestore: Firestore; logger: Logger; authoritativeTaskReads?: boolean }
 ): RepairReadableTaskGroupSummaryRepository {
   const { firestore, logger } = deps;
+  const authoritativeTaskReads = deps.authoritativeTaskReads ?? true;
+
+  async function loadPersistedGroupTasks(
+    tx: Transaction,
+    userId: string,
+    groupKey: string,
+  ): Promise<CodeTask[]> {
+    if (groupKey.startsWith('standalone_')) {
+      const taskId = groupKey.slice('standalone_'.length);
+      const snapshot = await tx.get(firestore.collection('code_tasks').doc(taskId));
+      if (!snapshot.exists) return [];
+      const task = fromFirestoreDoc(snapshot);
+      return task.userId === userId && task.agentType !== 'ask_agent' && getGroupKey(task) === groupKey
+        ? [task]
+        : [];
+    }
+
+    const snapshot = await tx.get(
+      firestore.collection('code_tasks')
+        .where('userId', '==', userId)
+        .where('linearIssueId', '==', groupKey),
+    );
+    return snapshot.docs
+      .map((doc) => fromFirestoreDoc(doc))
+      .filter((task) => task.agentType !== 'ask_agent' && getGroupKey(task) === groupKey);
+  }
+
+  async function loadRawExactGroupTasks(
+    tx: Transaction,
+    userId: string,
+    groupKey: string,
+  ): Promise<{ id: string; data: Record<string, unknown> }[]> {
+    if (groupKey.startsWith('standalone_')) {
+      const taskId = groupKey.slice('standalone_'.length);
+      const snapshot = await tx.get(firestore.collection('code_tasks').doc(taskId));
+      if (!snapshot.exists) return [];
+      return [{ id: snapshot.id, data: snapshot.data() as Record<string, unknown> }];
+    }
+
+    const snapshot = await tx.get(
+      firestore.collection('code_tasks')
+        .where('userId', '==', userId)
+        .where('linearIssueId', '==', groupKey),
+    );
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data() as Record<string, unknown>,
+    }));
+  }
+
+  function rawTaskMatchesExactGroup(
+    task: { id: string; data: Record<string, unknown> },
+    userId: string,
+    groupKey: string,
+  ): boolean {
+    if (task.data['userId'] !== userId) return false;
+    const linearIssueId = task.data['linearIssueId'];
+    if (groupKey.startsWith('standalone_')) {
+      return linearIssueId === undefined;
+    }
+    return linearIssueId === groupKey;
+  }
+
+  function rawSummaryCanBeDeleted(
+    raw: Record<string, unknown>,
+    userId: string,
+    groupKey: string,
+  ): boolean {
+    if (raw['userId'] !== userId || raw['groupKey'] !== groupKey) return false;
+    if (!['active', 'needs-action', 'done', 'failed', 'archived'].includes(String(raw['aggregateStatus']))) {
+      return false;
+    }
+    for (const field of ['hasImplementationReadyLabel', 'hasMergeReadyLabel', 'isImportant']) {
+      if (Object.prototype.hasOwnProperty.call(raw, field) && typeof raw[field] !== 'boolean') return false;
+    }
+    return !Object.prototype.hasOwnProperty.call(raw, 'labelsUpdatedAt') ||
+      normalizeTaskLifecycleTimestamp(raw['labelsUpdatedAt']) !== undefined;
+  }
+
+  function rawSourceTaskIsValid(task: { id: string; data: Record<string, unknown> }): boolean {
+    const agentType = task.data['agentType'];
+    if (
+      typeof task.data['status'] !== 'string' ||
+      !RAW_BACKFILL_STATUSES.has(task.data['status']) ||
+      normalizeTaskLifecycleTimestamp(task.data['createdAt']) === undefined ||
+      normalizeTaskLifecycleTimestamp(task.data['updatedAt']) === undefined ||
+      typeof agentType !== 'string' ||
+      !RAW_BACKFILL_AGENT_TYPES.has(agentType)
+    ) return false;
+    for (const field of ['statusChangedAt', 'completedAt']) {
+      if (
+        Object.prototype.hasOwnProperty.call(task.data, field) &&
+        normalizeTaskLifecycleTimestamp(task.data[field]) === undefined
+      ) return false;
+    }
+    return true;
+  }
+
+  function rawCountsMatchProof(
+    raw: Record<string, unknown>,
+    userId: string,
+    aggregateStatus: unknown,
+    expected: LifecycleBackfillGroupCountVector,
+  ): boolean {
+    if (raw['userId'] !== userId) return false;
+    const bucketFields = ['active', 'needsAction', 'done', 'failed', 'archived'] as const;
+    const bucketByStatus: Readonly<Record<string, (typeof bucketFields)[number]>> = {
+      active: 'active',
+      'needs-action': 'needsAction',
+      done: 'done',
+      failed: 'failed',
+      archived: 'archived',
+    };
+    let bucketTotal = 0;
+    for (const field of bucketFields) {
+      const value = raw[field];
+      if (!Number.isSafeInteger(value) || Number(value) < 0) return false;
+      bucketTotal += Number(value);
+      if (!Number.isSafeInteger(bucketTotal)) return false;
+    }
+    if (
+      !Number.isSafeInteger(raw['totalGroups']) ||
+      Number(raw['totalGroups']) <= 0 ||
+      bucketTotal !== Number(raw['totalGroups'])
+    ) return false;
+    if (
+      bucketFields.some((field) => Number(raw[field]) !== expected[field]) ||
+      Number(raw['totalGroups']) !== expected.totalGroups
+    ) return false;
+    const bucket = bucketByStatus[String(aggregateStatus)];
+    return bucket !== undefined && Number(raw[bucket]) > 0;
+  }
 
   async function loadCounts(tx: Transaction, userId: string): Promise<UserGroupCounts> {
     const doc = await tx.get(countsDocRef(firestore, userId));
@@ -38,29 +263,208 @@ export function createTaskGroupSummaryFirestoreRepository(
     tx.set(countsDocRef(firestore, userId), { ...counts, userId, updatedAt: now } as unknown as DocumentData);
   }
 
+  function timestampsMatchExactly(left: Timestamp, right: Timestamp): boolean {
+    return left.seconds === right.seconds && left.nanoseconds === right.nanoseconds;
+  }
+
+  function hasConsistentOwnershipState(summary: TaskGroupSummary): boolean {
+    const taskIds = summary.taskIds;
+    const statusById = summary.taskStatusById;
+    const lifecycleAtById = summary.taskLifecycleAtById;
+    if (
+      taskIds === undefined ||
+      statusById === undefined ||
+      lifecycleAtById === undefined ||
+      summary.latestTaskId === undefined ||
+      summary.latestTaskCreatedAt === undefined ||
+      summary.latestLifecycleTaskId === undefined
+    ) return false;
+
+    const uniqueTaskIds = new Set(taskIds);
+    const statusIds = Object.keys(statusById);
+    const lifecycleIds = Object.keys(lifecycleAtById);
+    if (
+      uniqueTaskIds.size !== taskIds.length ||
+      summary.taskCount !== taskIds.length ||
+      statusIds.length !== taskIds.length ||
+      lifecycleIds.length !== taskIds.length ||
+      !taskIds.every((id) => statusById[id] !== undefined && lifecycleAtById[id] !== undefined)
+    ) return false;
+
+    if (summary.taskCount === 0) {
+      return summary.aggregateStatus === 'archived' && summary.activeTaskCount === 0;
+    }
+    const latestOwnedLifecycleAt = lifecycleAtById[summary.latestLifecycleTaskId] as Timestamp;
+    if (
+      !uniqueTaskIds.has(summary.latestTaskId) ||
+      !uniqueTaskIds.has(summary.latestLifecycleTaskId) ||
+      statusById[summary.latestTaskId] !== summary.latestTaskStatus ||
+      !timestampsMatchExactly(latestOwnedLifecycleAt, summary.latestTaskUpdatedAt)
+    ) return false;
+
+    const activeTaskCount = statusIds.filter((id) => {
+      const status = statusById[id];
+      return status === 'queued' || status === 'dispatched' || status === 'running';
+    }).length;
+    return activeTaskCount === summary.activeTaskCount;
+  }
+
+  function preserveUserOwnedState(current: TaskGroupSummary, recomputed: TaskGroupSummary): void {
+    if (current.hasImplementationReadyLabel !== undefined) {
+      recomputed.hasImplementationReadyLabel = current.hasImplementationReadyLabel;
+    }
+    if (current.hasMergeReadyLabel !== undefined) {
+      recomputed.hasMergeReadyLabel = current.hasMergeReadyLabel;
+    }
+    if (current.labelsUpdatedAt !== undefined) {
+      recomputed.labelsUpdatedAt = current.labelsUpdatedAt;
+    }
+    if (current.isImportant !== undefined) {
+      recomputed.isImportant = current.isImportant;
+    }
+  }
+
+  function writeRecomputedGroup(
+    tx: Transaction,
+    userId: string,
+    groupKey: string,
+    sourceTasks: CodeTask[],
+    current: TaskGroupSummary | null,
+    existingCounts: UserGroupCounts,
+    now: Timestamp,
+    options: { includeArchivedShell: boolean; deleteWhenEmpty: boolean; replaceExisting: boolean },
+  ): void {
+    const summaryRef = summaryDocRef(firestore, userId, groupKey);
+    const recomputed = computeSummaryFromTasks(userId, groupKey, sourceTasks, now) ??
+      (options.includeArchivedShell
+        ? computeAllArchivedSummaryFromTasks(userId, groupKey, sourceTasks, now)
+        : null);
+
+    if (recomputed === null) {
+      if (!options.deleteWhenEmpty || current === null) return;
+      tx.delete(summaryRef);
+      writeCounts(tx, userId, applyDeleteGroupDelta(existingCounts, current.aggregateStatus), now);
+      return;
+    }
+
+    if (current !== null) preserveUserOwnedState(current, recomputed);
+    recomputed.aggregateStatus = deriveAggregateStatusFromSummary(recomputed);
+    if (options.replaceExisting) {
+      tx.set(summaryRef, recomputed as unknown as DocumentData);
+    } else {
+      tx.set(summaryRef, recomputed as unknown as DocumentData, { merge: true });
+    }
+
+    if (current === null) {
+      writeCounts(tx, userId, applyNewGroupDelta(existingCounts, recomputed.aggregateStatus), now);
+      return;
+    }
+    if (current.aggregateStatus !== recomputed.aggregateStatus) {
+      writeCounts(
+        tx,
+        userId,
+        applyStatusChangeDelta(existingCounts, current.aggregateStatus, recomputed.aggregateStatus),
+        now,
+      );
+    }
+  }
+
+  async function recomputeGroup(
+    userId: string,
+    groupKey: string,
+    suppliedTasks: CodeTask[],
+    forceAuthoritativeRead: boolean,
+  ): Promise<Result<void, GroupSummaryError>> {
+    try {
+      const summaryRef = summaryDocRef(firestore, userId, groupKey);
+      await firestore.runTransaction(async (tx) => {
+        const now = Timestamp.fromDate(new Date());
+        const sourceTasks = forceAuthoritativeRead
+          ? await loadPersistedGroupTasks(tx, userId, groupKey)
+          : suppliedTasks;
+        const existingSummaryDoc = await tx.get(summaryRef);
+        const existingCounts = await loadCounts(tx, userId);
+        const existingSummary = existingSummaryDoc.exists
+          ? docToSummary(existingSummaryDoc.data() as Record<string, unknown>)
+          : null;
+        writeRecomputedGroup(tx, userId, groupKey, sourceTasks, existingSummary, existingCounts, now, {
+          includeArchivedShell: forceAuthoritativeRead,
+          deleteWhenEmpty: forceAuthoritativeRead,
+          replaceExisting: forceAuthoritativeRead,
+        });
+      });
+      return ok(undefined);
+    } catch (error) {
+      logger.warn(
+        { userId, groupKey, error: getErrorMessage(error, 'Unknown error') },
+        'recomputeGroup: failed to recompute group summary (non-critical)',
+      );
+      return err({
+        code: 'FIRESTORE_ERROR',
+        message: getErrorMessage(error, 'Failed to recompute group summary'),
+      });
+    }
+  }
+
   return {
     async updateAfterCreate(task: CodeTask): Promise<void> {
       try {
         const summaryRef = summaryDocRef(firestore, task.userId, getGroupKey(task));
         await firestore.runTransaction(async (tx) => {
+          let sourceTask = task;
+          if (authoritativeTaskReads) {
+            const taskDoc = await tx.get(firestore.collection('code_tasks').doc(task.id));
+            if (!taskDoc.exists) return;
+            sourceTask = fromFirestoreDoc(taskDoc);
+            if (
+              sourceTask.userId !== task.userId ||
+              sourceTask.agentType === 'ask_agent' ||
+              sourceTask.status === 'archived' ||
+              getGroupKey(sourceTask) !== getGroupKey(task)
+            ) return;
+          }
           const now = Timestamp.fromDate(new Date());
           const summaryDoc = await tx.get(summaryRef);
           const existingCounts = await loadCounts(tx, task.userId);
+          const current = summaryDoc.exists
+            ? docToSummary(summaryDoc.data() as Record<string, unknown>)
+            : null;
 
-          if (!summaryDoc.exists) {
-            const initial = buildInitialSummary(task, now);
+          const needsAuthoritativeRepair = authoritativeTaskReads && (
+            current === null ||
+            !hasConsistentOwnershipState(current) ||
+            current.aggregateStatus === 'archived' ||
+            current.taskCount <= 0
+          );
+          if (needsAuthoritativeRepair) {
+            const groupKey = getGroupKey(sourceTask);
+            const sourceTasks = await loadPersistedGroupTasks(tx, sourceTask.userId, groupKey);
+            writeRecomputedGroup(
+              tx,
+              sourceTask.userId,
+              groupKey,
+              sourceTasks,
+              current,
+              existingCounts,
+              now,
+              { includeArchivedShell: true, deleteWhenEmpty: true, replaceExisting: true },
+            );
+            return;
+          }
+
+          if (current === null) {
+            const initial = buildInitialSummary(sourceTask, now);
             const aggregateStatus = deriveAggregateStatusFromSummary(initial);
             const summary: TaskGroupSummary = { ...initial, aggregateStatus };
             tx.set(summaryRef, summary as unknown as DocumentData);
-            if (task.status !== 'archived') {
+            if (sourceTask.status !== 'archived') {
               writeCounts(tx, task.userId, applyNewGroupDelta(existingCounts, aggregateStatus), now);
             }
             return;
           }
 
-          const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
           const oldStatus = current.aggregateStatus;
-          const updated = applyIncrementalCreateUpdate(current, task, now);
+          const updated = applyIncrementalCreateUpdate(current, sourceTask, now);
           tx.set(summaryRef, updated as unknown as DocumentData);
           if (updated.aggregateStatus !== oldStatus) {
             writeCounts(tx, task.userId, applyStatusChangeDelta(existingCounts, oldStatus, updated.aggregateStatus), now);
@@ -79,9 +483,43 @@ export function createTaskGroupSummaryFirestoreRepository(
         const groupKey = getGroupKey(newTask);
         const summaryRef = summaryDocRef(firestore, newTask.userId, groupKey);
         await firestore.runTransaction(async (tx) => {
+          let sourceTask = newTask;
+          if (authoritativeTaskReads) {
+            const taskDoc = await tx.get(firestore.collection('code_tasks').doc(newTask.id));
+            if (!taskDoc.exists) return;
+            sourceTask = fromFirestoreDoc(taskDoc);
+            if (
+              sourceTask.userId !== newTask.userId ||
+              sourceTask.agentType === 'ask_agent' ||
+              getGroupKey(sourceTask) !== groupKey
+            ) return;
+          }
           const now = Timestamp.fromDate(new Date());
           const summaryDoc = await tx.get(summaryRef);
-          if (!summaryDoc.exists) {
+          const current = summaryDoc.exists
+            ? docToSummary(summaryDoc.data() as Record<string, unknown>)
+            : null;
+          const needsAuthoritativeRepair = authoritativeTaskReads && (
+            current === null ||
+            !hasConsistentOwnershipState(current) ||
+            current.taskIds?.includes(sourceTask.id) !== true
+          );
+          if (needsAuthoritativeRepair) {
+            const sourceTasks = await loadPersistedGroupTasks(tx, sourceTask.userId, groupKey);
+            const existingCounts = await loadCounts(tx, sourceTask.userId);
+            writeRecomputedGroup(
+              tx,
+              sourceTask.userId,
+              groupKey,
+              sourceTasks,
+              current,
+              existingCounts,
+              now,
+              { includeArchivedShell: true, deleteWhenEmpty: true, replaceExisting: true },
+            );
+            return;
+          }
+          if (current === null) {
             logger.warn(
               { taskId: newTask.id, userId: newTask.userId, groupKey },
               'updateAfterStatusChange: summary doc not found — data inconsistency, will be fixed by backfill',
@@ -90,9 +528,8 @@ export function createTaskGroupSummaryFirestoreRepository(
           }
 
           const existingCounts = await loadCounts(tx, newTask.userId);
-          const current = docToSummary(summaryDoc.data() as Record<string, unknown>);
           const oldStatus = current.aggregateStatus;
-          const { updated, allArchived } = applyStatusChangeUpdate(current, oldTask, newTask, now);
+          const { updated, allArchived } = applyStatusChangeUpdate(current, oldTask, sourceTask, now);
           tx.set(summaryRef, updated as unknown as DocumentData);
 
           if (allArchived) {
@@ -201,54 +638,14 @@ export function createTaskGroupSummaryFirestoreRepository(
       groupKey: string,
       tasks: CodeTask[],
     ): Promise<Result<void, GroupSummaryError>> {
-      try {
-        if (tasks.length === 0) return ok(undefined);
-        const now = Timestamp.fromDate(new Date());
-        const summary = computeSummaryFromTasks(userId, groupKey, tasks, now);
-        if (summary === null) return ok(undefined);
+      return await recomputeGroup(userId, groupKey, tasks, authoritativeTaskReads);
+    },
 
-        const summaryRef = summaryDocRef(firestore, userId, groupKey);
-        await firestore.runTransaction(async (tx) => {
-          const existingSummaryDoc = await tx.get(summaryRef);
-          const existingCounts = await loadCounts(tx, userId);
-          const existingSummary = existingSummaryDoc.exists
-            ? docToSummary(existingSummaryDoc.data() as Record<string, unknown>)
-            : null;
-
-          if (existingSummary !== null) {
-            if (existingSummary.hasImplementationReadyLabel !== undefined) {
-              summary.hasImplementationReadyLabel = existingSummary.hasImplementationReadyLabel;
-            }
-            if (existingSummary.hasMergeReadyLabel !== undefined) {
-              summary.hasMergeReadyLabel = existingSummary.hasMergeReadyLabel;
-            }
-            if (existingSummary.labelsUpdatedAt !== undefined) {
-              summary.labelsUpdatedAt = existingSummary.labelsUpdatedAt;
-            }
-          }
-
-          summary.aggregateStatus = deriveAggregateStatusFromSummary(summary);
-          tx.set(summaryRef, summary as unknown as DocumentData, { merge: true });
-
-          if (existingSummary === null) {
-            writeCounts(tx, userId, applyNewGroupDelta(existingCounts, summary.aggregateStatus), now);
-            return;
-          }
-          if (existingSummary.aggregateStatus !== summary.aggregateStatus) {
-            writeCounts(tx, userId, applyStatusChangeDelta(existingCounts, existingSummary.aggregateStatus, summary.aggregateStatus), now);
-          }
-        });
-        return ok(undefined);
-      } catch (error) {
-        logger.warn(
-          { userId, groupKey, error: getErrorMessage(error, 'Unknown error') },
-          'recomputeGroupFromTasks: failed to recompute group summary (non-critical)',
-        );
-        return err({
-          code: 'FIRESTORE_ERROR',
-          message: getErrorMessage(error, 'Failed to recompute group summary'),
-        });
-      }
+    async recomputeGroupFromSource(
+      userId: string,
+      groupKey: string,
+    ): Promise<Result<void, GroupSummaryError>> {
+      return await recomputeGroup(userId, groupKey, [], true);
     },
 
     async recomputeWithLabels(
@@ -299,6 +696,72 @@ export function createTaskGroupSummaryFirestoreRepository(
         return ok(undefined);
       } catch (error) {
         return err({ code: 'FIRESTORE_ERROR', message: getErrorMessage(error, 'Failed to recompute group summary with labels') });
+      }
+    },
+
+    async removeAskOnlyOrphan(
+      userId: string,
+      groupKey: string,
+      proof,
+    ): ReturnType<LifecycleBackfillTaskGroupSummaryRepository['removeAskOnlyOrphan']> {
+      try {
+        const outcome = await firestore.runTransaction(async (tx) => {
+          const sourceTasks = await loadRawExactGroupTasks(tx, userId, groupKey);
+          if (sourceTasks.length === 0) return 'source_unknown' as const;
+          if (!sourceTasks.every((task) => rawTaskMatchesExactGroup(task, userId, groupKey))) {
+            return 'source_invalid' as const;
+          }
+          if (!sourceTasks.every(rawSourceTaskIsValid)) return 'source_invalid' as const;
+          if (
+            createLifecycleBackfillTaskSourceFingerprint(sourceTasks) !==
+            proof.expectedSourceFingerprint
+          ) return 'source_changed' as const;
+          if (!sourceTasks.every((task) => task.data['agentType'] === 'ask_agent')) {
+            return 'source_not_ask_only' as const;
+          }
+
+          const summaryRef = summaryDocRef(firestore, userId, groupKey);
+          const summaryDoc = await tx.get(summaryRef);
+          if (!summaryDoc.exists) return 'summary_missing' as const;
+          const rawSummary = summaryDoc.data() as Record<string, unknown>;
+          if (
+            !rawSummaryCanBeDeleted(rawSummary, userId, groupKey) ||
+            !rawSummaryMatchesProof(rawSummary, proof.expectedTarget)
+          ) {
+            return 'summary_invalid' as const;
+          }
+
+          const countsDoc = await tx.get(countsDocRef(firestore, userId));
+          if (!countsDoc.exists) return 'counts_invalid' as const;
+          const rawCounts = countsDoc.data() as Record<string, unknown>;
+          if (!rawCountsMatchProof(
+            rawCounts,
+            userId,
+            rawSummary['aggregateStatus'],
+            proof.expectedCounts,
+          )) {
+            return 'counts_invalid' as const;
+          }
+          const existingCounts = docToCounts(rawCounts);
+          const now = Timestamp.fromDate(new Date());
+          tx.delete(summaryRef);
+          writeCounts(
+            tx,
+            userId,
+            applyDeleteGroupDelta(
+              existingCounts,
+              rawSummary['aggregateStatus'] as GroupStatus,
+            ),
+            now,
+          );
+          return 'removed' as const;
+        });
+        return ok(outcome);
+      } catch (error) {
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Failed to remove ask-only group summary'),
+        });
       }
     },
 

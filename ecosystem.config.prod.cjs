@@ -12,7 +12,13 @@ const ENV_FILE = process.env.INTEXURAOS_PROD_ENV_FILE ?? '/etc/intexuraos/.env.p
 const ENV_FILE_VALUES = fs.existsSync(ENV_FILE)
   ? dotenv.parse(fs.readFileSync(ENV_FILE, 'utf8'))
   : {};
-const RUNTIME_ENV = { ...process.env, ...ENV_FILE_VALUES };
+const RUNTIME_ENV = {
+  ...process.env,
+  ...ENV_FILE_VALUES,
+  ...(process.env.INTEXURAOS_COMMIT_SHA === undefined
+    ? {}
+    : { INTEXURAOS_COMMIT_SHA: process.env.INTEXURAOS_COMMIT_SHA }),
+};
 
 function envValue(key) {
   return RUNTIME_ENV[key];
@@ -20,6 +26,12 @@ function envValue(key) {
 
 if (envValue('INTEXURAOS_ENVIRONMENT') !== 'prod') {
   throw new Error('Refusing to start PM2 without INTEXURAOS_ENVIRONMENT=prod');
+}
+if (
+  envValue('INTEXURAOS_COMMIT_SHA') !== undefined &&
+  !/^[0-9a-f]{40}$/.test(envValue('INTEXURAOS_COMMIT_SHA'))
+) {
+  throw new Error('INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA');
 }
 
 const REPO_ROOT = __dirname;
@@ -261,6 +273,9 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_GCP_PROJECT_ID: PROJECT_ID,
   INTEXURAOS_ENVIRONMENT: 'prod',
   INTEXURAOS_RUNTIME: 'prod',
+  ...(envValue('INTEXURAOS_COMMIT_SHA') === undefined
+    ? {}
+    : { INTEXURAOS_COMMIT_SHA: envValue('INTEXURAOS_COMMIT_SHA') }),
   INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   INTEXURAOS_WEB_URL: envValue('INTEXURAOS_WEB_URL') ?? PUBLIC_ORIGIN,
   INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:

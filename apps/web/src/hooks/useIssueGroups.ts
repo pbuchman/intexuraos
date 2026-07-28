@@ -53,7 +53,7 @@ export function mergeGroups(prev: IssueGroup[], incoming: IssueGroup[]): IssueGr
   const merged = incoming.map((g) => {
     const key = g.linearIssueId ?? g.latestTask.id;
     const existing = prevMap.get(key);
-    if (existing?.aggregateStatus === g.aggregateStatus && existing.latestTask.updatedAt === g.latestTask.updatedAt && existing.isImportant === g.isImportant) {
+    if (existing !== undefined && issueGroupIdentityMatches(existing, g)) {
       return existing;
     }
     changed = true;
@@ -69,6 +69,59 @@ export function mergeGroups(prev: IssueGroup[], incoming: IssueGroup[]): IssueGr
     }
   }
   return changed ? merged : prev;
+}
+
+function issueGroupIdentityMatches(left: IssueGroup, right: IssueGroup): boolean {
+  return left.aggregateStatus === right.aggregateStatus
+    && left.lastActivityAt === right.lastActivityAt
+    && left.lastActivityStatus === right.lastActivityStatus
+    && left.lastActivityTaskId === right.lastActivityTaskId
+    && left.lastModifiedAt === right.lastModifiedAt
+    && left.latestTask.id === right.latestTask.id
+    && left.tasks.length === right.tasks.length
+    && left.mostRecentDispatchedAt === right.mostRecentDispatchedAt
+    && left.isImportant === right.isImportant
+    && linearIssueIdentityMatches(left.linearIssue, right.linearIssue)
+    && pipelineIdentityMatches(left.pipeline, right.pipeline);
+}
+
+function linearIssueIdentityMatches(
+  left: IssueGroup['linearIssue'],
+  right: IssueGroup['linearIssue'],
+): boolean {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  return left.identifier === right.identifier
+    && left.parentIdentifier === right.parentIdentifier
+    && left.title === right.title
+    && left.state.name === right.state.name
+    && left.state.type === right.state.type
+    && left.priority === right.priority
+    && left.assignee?.id === right.assignee?.id
+    && left.assignee?.name === right.assignee?.name
+    && left.url === right.url
+    && left.commentCount === right.commentCount
+    && left.lastCommentAt === right.lastCommentAt
+    && left.labels.length === right.labels.length
+    && left.labels.every((label, index) => {
+      const next = right.labels[index];
+      return label.id === next?.id && label.name === next.name;
+    });
+}
+
+function pipelineIdentityMatches(left: IssueGroup['pipeline'], right: IssueGroup['pipeline']): boolean {
+  return left.failedAttempts === right.failedAttempts
+    && left.archivedCount === right.archivedCount
+    && left.pr?.url === right.pr?.url
+    && left.pr?.number === right.pr?.number
+    && left.pr?.status === right.pr?.status
+    && left.steps.length === right.steps.length
+    && left.steps.every((step, index) => {
+      const next = right.steps[index];
+      return step.agentType === next?.agentType
+        && step.state === next.state
+        && step.label === next.label;
+    });
 }
 
 export interface UseIssueGroupsResult {

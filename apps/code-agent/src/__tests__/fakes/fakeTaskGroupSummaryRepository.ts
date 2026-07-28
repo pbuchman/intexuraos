@@ -17,6 +17,7 @@ import type {
 import { hasImplementationReadyLabel, hasMergeReadyLabel } from '../../domain/issueGrouping/labelHelpers.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
+import { resolveTaskLifecycleTime } from '../../domain/models/taskLifecycleTime.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
 import type { SortOption } from '../../domain/issueGrouping/types.js';
 import { getLinearIssueSortFields } from '../../infra/firestore/taskGroupSummary/serializer.js';
@@ -38,6 +39,14 @@ function now(): Timestamp {
   return Timestamp.now();
 }
 
+function isLater(at: Timestamp, id: string, currentAt: Timestamp, currentId: string): boolean {
+  return at.seconds > currentAt.seconds ||
+    (at.seconds === currentAt.seconds && (
+      at.nanoseconds > currentAt.nanoseconds ||
+      (at.nanoseconds === currentAt.nanoseconds && id > currentId)
+    ));
+}
+
 /**
  * Derive a TaskGroupSummary from a list of tasks that all share the same
  * (userId, groupKey). Tasks should be non-empty.
@@ -47,7 +56,7 @@ function computeSummaryFromTasks(
   groupKey: string,
   tasks: CodeTask[],
 ): TaskGroupSummary {
-  const nonArchived = tasks.filter((t) => t.status !== 'archived');
+  const nonArchived = tasks.filter((t) => t.status !== 'archived' && t.agentType !== 'ask_agent');
 
   // Oldest created task (across all tasks including archived)
   const oldestCreatedAt = tasks.reduce<Timestamp>((min, t) =>
@@ -55,9 +64,18 @@ function computeSummaryFromTasks(
     tasks[0]?.createdAt ?? now(),
   );
 
-  // Latest updated non-archived task (fall back to archived if all archived)
+  // Attempt identity and lifecycle activity use independent clocks.
   const latestTask = (nonArchived.length > 0 ? nonArchived : tasks).reduce<CodeTask>(
-    (latest, t) => t.updatedAt.toMillis() > latest.updatedAt.toMillis() ? t : latest,
+    (latest, t) => isLater(t.createdAt, t.id, latest.createdAt, latest.id) ? t : latest,
+    (nonArchived.length > 0 ? nonArchived : tasks)[0] as CodeTask,
+  );
+  const latestLifecycleTask = (nonArchived.length > 0 ? nonArchived : tasks).reduce<CodeTask>(
+    (latest, t) => isLater(
+      resolveTaskLifecycleTime(t).at,
+      t.id,
+      resolveTaskLifecycleTime(latest).at,
+      latest.id,
+    ) ? t : latest,
     (nonArchived.length > 0 ? nonArchived : tasks)[0] as CodeTask,
   );
 
@@ -114,10 +132,18 @@ function computeSummaryFromTasks(
     linearIssueId,
     groupKey,
     ...sortFields,
-    taskCount: tasks.length,
+    taskCount: nonArchived.length,
+    taskIds: nonArchived.map((task) => task.id),
+    taskStatusById: Object.fromEntries(nonArchived.map((task) => [task.id, task.status])),
+    taskLifecycleAtById: Object.fromEntries(
+      nonArchived.map((task) => [task.id, resolveTaskLifecycleTime(task).at]),
+    ),
     activeTaskCount: tasks.filter((t) => ACTIVE_STATUSES.has(t.status)).length,
+    latestTaskId: latestTask.id,
+    latestTaskCreatedAt: latestTask.createdAt,
     latestTaskStatus: latestTask.status,
-    latestTaskUpdatedAt: latestTask.updatedAt,
+    latestTaskUpdatedAt: resolveTaskLifecycleTime(latestLifecycleTask).at,
+    latestLifecycleTaskId: latestLifecycleTask.id,
     agentTypesPresent,
     hasCompletedPlanning,
     hasCompletedExecution,
@@ -322,9 +348,16 @@ export function createFakeTaskGroupSummaryRepository(): FakeTaskGroupSummaryRepo
         if (current.labelsUpdatedAt !== undefined) {
           next.labelsUpdatedAt = current.labelsUpdatedAt;
         }
+        if (current.isImportant !== undefined) {
+          next.isImportant = current.isImportant;
+        }
         next.aggregateStatus = deriveAggregateStatusFromSummary(next);
       }
       upsertSummary(next);
+      return ok(undefined);
+    },
+
+    async recomputeGroupFromSource(): Promise<Result<void, GroupSummaryError>> {
       return ok(undefined);
     },
 

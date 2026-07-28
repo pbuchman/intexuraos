@@ -4,7 +4,7 @@
 
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import * as Sentry from '@sentry/node';
-import { initSentry, type SentryConfig } from '../init.js';
+import { defaultRelease, defaultTracesSampleRate, initSentry, type SentryConfig } from '../init.js';
 
 // Mock Sentry
 vi.mock('@sentry/node', () => ({
@@ -44,6 +44,7 @@ describe('initSentry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env['INTEXURAOS_RUNTIME'];
+    delete process.env['INTEXURAOS_COMMIT_SHA'];
     delete process.env['K_REVISION'];
   });
 
@@ -139,6 +140,13 @@ describe('initSentry', () => {
   });
 
   describe('release', () => {
+    it('prefers the exact Hetzner commit SHA over the Cloud Run revision', () => {
+      process.env['INTEXURAOS_COMMIT_SHA'] = '1234567890abcdef1234567890abcdef12345678';
+      process.env['K_REVISION'] = 'svc-00042-def';
+
+      expect(defaultRelease()).toBe('1234567890abcdef1234567890abcdef12345678');
+    });
+
     it('forwards explicit release to Sentry.init', () => {
       initSentry({
         dsn: 'https://test@sentry.io/123',
@@ -149,15 +157,15 @@ describe('initSentry', () => {
       expect(getInitOptions().release).toBe('svc-00007-abc');
     });
 
-    it('falls back to K_REVISION env var when release omitted', () => {
-      process.env['K_REVISION'] = 'svc-00042-def';
+    it('falls back to a real Cloud Run K_REVISION when release is omitted', () => {
+      process.env['K_REVISION'] = 'intexuraos-transcription-dev-00014-foj';
 
       initSentry({
         dsn: 'https://test@sentry.io/123',
         serviceName: 'test-service',
       });
 
-      expect(getInitOptions().release).toBe('svc-00042-def');
+      expect(getInitOptions().release).toBe('intexuraos-transcription-dev-00014-foj');
     });
 
     it('omits release when neither explicit value nor K_REVISION is set', () => {
@@ -179,6 +187,50 @@ describe('initSentry', () => {
 
       expect(getInitOptions().release).toBeUndefined();
     });
+
+    it.each([
+      { commit: '', revision: 'unknown' },
+      { commit: '   ', revision: ' UNKNOWN ' },
+      { commit: 'unknown', revision: '' },
+    ])(
+      'omits empty and unknown default release placeholders: $commit / $revision',
+      ({ commit, revision }) => {
+        process.env['INTEXURAOS_COMMIT_SHA'] = commit;
+        process.env['K_REVISION'] = revision;
+
+        expect(defaultRelease()).toBeUndefined();
+      }
+    );
+
+    it('falls back to a safe K_REVISION when the Hetzner release value is invalid', () => {
+      process.env['INTEXURAOS_COMMIT_SHA'] = 'ABCDEF1234567890abcdef1234567890abcdef12';
+      process.env['K_REVISION'] = 'intexuraos-transcription-dev-00014-foj';
+
+      expect(defaultRelease()).toBe('intexuraos-transcription-dev-00014-foj');
+    });
+
+    it.each([
+      '1234567',
+      'ABCDEF1234567890abcdef1234567890abcdef12',
+      'g'.repeat(40),
+      ' 1234567890abcdef1234567890abcdef12345678 ',
+    ])('omits non-exact INTEXURAOS_COMMIT_SHA %j without a revision fallback', (invalidRelease) => {
+      process.env['INTEXURAOS_COMMIT_SHA'] = invalidRelease;
+
+      expect(defaultRelease()).toBeUndefined();
+    });
+
+    it.each([
+      'unknown',
+      ' UNKNOWN ',
+      'revision with spaces',
+      'revision/with/slashes',
+      'x'.repeat(129),
+    ])('omits unsafe K_REVISION %j', (invalidRevision) => {
+      process.env['K_REVISION'] = invalidRevision;
+
+      expect(defaultRelease()).toBeUndefined();
+    });
   });
 
   describe('tracesSampleRate env defaults', () => {
@@ -190,6 +242,17 @@ describe('initSentry', () => {
       });
 
       expect(getInitOptions().tracesSampleRate).toBe(0.1);
+    });
+
+    it('defaults to 0.1 when the Hetzner environment is prod', () => {
+      initSentry({
+        dsn: 'https://test@sentry.io/123',
+        serviceName: 'test-service',
+        environment: 'prod',
+      });
+
+      expect(getInitOptions().tracesSampleRate).toBe(0.1);
+      expect(defaultTracesSampleRate('prod')).toBe(0.1);
     });
 
     it('defaults to 0 when environment is development', () => {

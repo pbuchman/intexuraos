@@ -26,8 +26,19 @@ const deploymentDocumentVerifierPath = resolve(
   repoRoot,
   'scripts/hetzner/verify-deployment-document.mjs'
 );
+const codeHealthVerifierPath = resolve(repoRoot, 'scripts/hetzner/verify-code-agent-health.mjs');
 const installPm2LogrotatePath = resolve(repoRoot, 'scripts/hetzner/install-pm2-logrotate.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
+const lifecycleBackfillRunbookPath = resolve(
+  repoRoot,
+  'docs/operations/code-task-lifecycle-backfill.md'
+);
+const sentryAutomationRunbookPath = resolve(
+  repoRoot,
+  'docs/operations/sentry-code-task-automation.md'
+);
+const firestoreCollectionsPath = resolve(repoRoot, 'firestore-collections.json');
+const firestoreIndexesPath = resolve(repoRoot, 'firestore.indexes.json');
 const contextAttachmentsRunbookPath = resolve(
   repoRoot,
   'docs/runbooks/conversation-assistant-context-attachments.md'
@@ -652,6 +663,44 @@ describe('Hetzner web asset deployment', () => {
     }
   });
 
+  it('validates code-agent semantic health with the checked-in dependency-free verifier', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-code-health-'));
+    const headersPath = resolve(directory, 'headers.txt');
+    const validBody = {
+      status: 'ok',
+      serviceName: 'code-agent',
+      version: '3.8.0',
+      timestamp: '2026-07-28T12:00:00.000Z',
+      checks: [{ name: 'firestore', status: 'ok', latencyMs: 4, details: null }],
+    };
+    const validHeaders =
+      'HTTP/2 200\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-cache, no-store\r\n\r\n';
+    const verify = (status: string, body: unknown, headers = validHeaders) => {
+      writeFileSync(headersPath, headers, 'utf8');
+      return spawnSync('node', [codeHealthVerifierPath, status, headersPath], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        input: typeof body === 'string' ? body : JSON.stringify(body),
+      });
+    };
+
+    try {
+      expect(verify('200', validBody).status).toBe(0);
+      expect(verify('503', validBody).status).not.toBe(0);
+      expect(verify('200', { ...validBody, status: 'degraded' }).status).not.toBe(0);
+      expect(verify('200', { ...validBody, checks: [] }).status).not.toBe(0);
+      expect(
+        verify('200', validBody, 'HTTP/2 200\r\nContent-Type: application/json\r\n\r\n').status
+      ).not.toBe(0);
+
+      const verifier = readRequired(codeHealthVerifierPath);
+      expect(verifier).not.toContain('@intexuraos/');
+      expect(verifier).not.toContain('tsx');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('refuses to attest a dirty checkout before the first remote mutation', () => {
     const script = readRequired(githubActionsDeployPath);
     const metadataFlow = script.slice(
@@ -758,6 +807,7 @@ describe('Hetzner web asset deployment', () => {
     );
 
     expect(backendFlow).toContain('scripts/hetzner/reload-pm2.sh');
+    expect(backendFlow).toContain('INTEXURAOS_COMMIT_SHA=${commit_sha_quoted}');
     expect(backendFlow).not.toContain('run_remote_deploy_web');
     expect(webFlow).toContain('run_remote_deploy_web');
     expect(mainFlow.indexOf('deploy_runtime')).toBeLessThan(
@@ -769,6 +819,71 @@ describe('Hetzner web asset deployment', () => {
     expect(mainFlow.indexOf('deploy_web_and_edge')).toBeLessThan(
       mainFlow.indexOf('verify_runtime_readiness')
     );
+  });
+
+  it('requires semantic direct and public code-agent health, not only HTTP 2xx', () => {
+    const script = readRequired(githubActionsDeployPath);
+    const codeReadinessFlow = script.slice(
+      script.indexOf('verify_code_agent_readiness() {'),
+      script.indexOf('\n}\n\nverify_backend_readiness()')
+    );
+    const mainFlow = script.slice(script.indexOf('main() {'));
+
+    expect(codeReadinessFlow.match(/\/api\/code\/health/g)).toHaveLength(2);
+    expect(script).toContain('node scripts/hetzner/verify-code-agent-health.mjs');
+    expect(script).not.toContain('pnpm exec tsx');
+    expect(codeReadinessFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
+    expect(codeReadinessFlow).toContain('"https://${PUBLIC_DOMAIN}/api/code/health"');
+    expect(mainFlow.match(/verify_code_agent_readiness/g)).toHaveLength(1);
+    expect(mainFlow.indexOf('verify_code_agent_readiness')).toBeGreaterThan(
+      mainFlow.indexOf('deploy_web_and_edge')
+    );
+    expect(mainFlow.indexOf('verify_code_agent_readiness')).toBeLessThan(
+      mainFlow.indexOf('publish_deployment_metadata')
+    );
+  });
+
+  it('passes the validated release SHA into PM2 reload and rejects missing release input', () => {
+    const deploy = readRequired(githubActionsDeployPath);
+    const reload = readRequired(reloadPm2Path);
+    const bootstrap = readRequired(terraformHetznerBootstrapPath);
+    const runbook = readRequired(runbookPath);
+    const migrationPlan = readRequired(migrationPlanPath);
+
+    expect(deploy).toContain('INTEXURAOS_COMMIT_SHA=${commit_sha_quoted}');
+    expect(reload).toContain('INTEXURAOS_COMMIT_SHA');
+    expect(reload).toContain('^[0-9a-f]{40}$');
+    expect(bootstrap).toContain('INTEXURAOS_COMMIT_SHA=$commit_sha_quoted');
+    expect(runbook).toContain(
+      "RELEASE_SHA='<40-character lowercase Git SHA deployed to /opt/intexuraos>'"
+    );
+    expect(runbook).toContain('INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}"');
+    expect(migrationPlan).toContain(
+      "RELEASE_SHA='<40-character lowercase Git SHA deployed to /opt/intexuraos>'"
+    );
+    expect(migrationPlan).toContain('INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}"');
+  });
+
+  it('fails closed when a manual web deploy omits or supplies a non-exact release SHA', () => {
+    const run = (commitSha: string | undefined) =>
+      spawnSync('bash', [deployWebPath], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          INTEXURAOS_ENVIRONMENT: 'prod',
+          COMMIT_MESSAGE: commitSha === undefined ? undefined : 'manual release',
+          COMMIT_SHA: commitSha,
+        },
+      });
+
+    const missing = run(undefined);
+    const invalid = run('ABCDEF1234567890abcdef1234567890abcdef12');
+
+    expect(missing.status).not.toBe(0);
+    expect(missing.stderr).toContain('COMMIT_SHA is required');
+    expect(invalid.status).not.toBe(0);
+    expect(invalid.stderr).toContain('COMMIT_SHA must be a 40-character lowercase hexadecimal SHA');
   });
 
   it('documents exact-SHA deployment evidence and the manual checkout fallback', () => {
@@ -785,6 +900,60 @@ describe('Hetzner web asset deployment', () => {
     expect(contextRunbook).toContain('sourceProvenance.resolvedRepoSource.commitSha');
     expect(contextRunbook).toContain('/deployment.json');
     expect(contextRunbook).toContain('/api/whatsapp/health');
+  });
+
+  it('documents the executable reversible lifecycle backfill and off-host journal checkpoint', () => {
+    const runbook = readRequired(lifecycleBackfillRunbookPath);
+    const hetznerRunbook = readRequired(runbookPath);
+    const knownTaskIds = [
+      'task_488aa3c6-1413-47ea-a1c7-9593e5aca5a2',
+      'task_6713e082-4806-41a0-b0f2-763db07404f1',
+      'task_95ecfbc5-233d-4a1f-b7ad-e6a0223f6fd4',
+      'task_e8d7ab84-33fb-4746-8c77-4a1b95823f0c',
+      'task_a5d59442-06c5-47f4-8f2a-d03489e655ce',
+      'task_166001f8-3d65-4397-932d-9c930363e338',
+    ];
+
+    expect(hetznerRunbook).toContain('code-task-lifecycle-backfill.md');
+    expect(runbook).toContain('--dry-run');
+    expect(runbook).toContain('--apply');
+    expect(runbook).toContain('--phase=tasks');
+    expect(runbook).toContain('--phase=summaries');
+    expect(runbook).toContain('--limit=200');
+    expect(runbook).toContain('--expected-release-sha=');
+    expect(runbook).toContain('rollback:lifecycle-time');
+    expect(runbook).toContain('chmod 700');
+    expect(runbook).toContain('chmod 600');
+    expect(runbook).toMatch(/\bscp\b/u);
+    expect(runbook).toMatch(/(?:sha256sum|shasum -a 256)/u);
+    expect(runbook).toContain('STOP');
+    for (const taskId of knownTaskIds) expect(runbook).toContain(taskId);
+  });
+
+  it('registers the no-index maintenance lock collection without Terraform or PITR changes', () => {
+    const registry = JSON.parse(readRequired(firestoreCollectionsPath)) as {
+      collections: Record<string, { owner?: string }>;
+    };
+    const indexes = readRequired(firestoreIndexesPath);
+
+    expect(registry.collections['code_task_lifecycle_maintenance_locks']).toMatchObject({
+      owner: 'code-agent',
+    });
+    expect(indexes).not.toContain('code_task_lifecycle_maintenance_locks');
+  });
+
+  it('documents Sentry API auth on the home-dev systemd orchestrator without exposing it to Hetzner', () => {
+    const runbook = readRequired(sentryAutomationRunbookPath);
+
+    expect(runbook).toContain('home-dev');
+    expect(runbook).toContain('~/.code-orchestrator/env');
+    expect(runbook).toContain('chmod 600');
+    expect(runbook).toContain('intexuraos-orchestrator@pbuchman');
+    expect(runbook).toContain('INTEXURAOS_SENTRY_AUTH_TOKEN');
+    expect(runbook).toContain('SENTRY_AUTH_TOKEN');
+    expect(runbook).toContain('HTTP 200');
+    expect(runbook).toContain('does **not** load');
+    expect(runbook).toContain('Do not use `systemctl show ... Environment`');
   });
 
   it('deploys Hetzner production automatically after development receives a merge', () => {
@@ -1001,7 +1170,9 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('export_build_metadata');
     expect(script).toContain('COMMIT_SHA');
     expect(script).toContain('COMMIT_MESSAGE');
-    expect(script).toContain('COMMIT_SHA is required when COMMIT_MESSAGE is set');
+    expect(script).toContain('COMMIT_SHA is required');
+    expect(script).toContain('COMMIT_SHA must be a 40-character lowercase hexadecimal SHA');
+    expect(script).toContain('COMMIT_MESSAGE is required');
     expect(script).not.toContain('export_web_safe_secrets');
     expect(script).not.toContain('export "${key}=${value}"');
     expect(script).not.toContain('source "${ENV_FILE}"');
@@ -1039,6 +1210,25 @@ describe('Hetzner web asset deployment', () => {
     expect(deployFlow.indexOf('reload_nginx')).toBeGreaterThan(deployFlow.indexOf('nginx -t'));
     expect(siteConfig).not.toContain('variables_hash_max_size');
     expect(siteConfig).not.toContain('variables_hash_bucket_size');
+  });
+
+  it('exposes only the two maintenance proof endpoints on a loopback-only nginx listener', () => {
+    const config = readRequired(nginxConfigPath);
+    const listenerStart = config.indexOf('listen 127.0.0.1:18080;');
+    const listenerEnd = config.indexOf('\nserver {', listenerStart + 1);
+    const block = config.slice(listenerStart, listenerEnd === -1 ? config.length : listenerEnd);
+
+    expect(listenerStart).toBeGreaterThanOrEqual(0);
+    expect(block).not.toContain('0.0.0.0:18080');
+    expect(block).not.toContain('[::]:18080');
+    expect(block).toContain('location = /deployment.json {');
+    expect(block).toContain('default_type application/json;');
+    expect(block).toContain('add_header Cache-Control "no-store" always;');
+    expect(block).toContain('location = /api/code/health {');
+    expect(block).toContain('proxy_pass http://code_agent/health;');
+    expect(block).toContain('location / {');
+    expect(block).toContain('return 404;');
+    expect(block).not.toContain('location ^~');
   });
 
   it('installs and verifies Lua modules required by the nginx JWT verifier before reload', () => {

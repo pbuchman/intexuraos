@@ -265,6 +265,7 @@ export async function registerHealthCheck(
       const response = buildHealthResponse(serviceName, version, results);
 
       void reply.header('x-health-duration-ms', String(Date.now() - started));
+      void reply.header('cache-control', 'no-store');
       return await reply.type('application/json').send(response);
     }
   );
