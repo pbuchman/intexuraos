@@ -1,5 +1,7 @@
 import { FieldPath, Timestamp } from '@google-cloud/firestore';
-import { getErrorMessage } from '@intexuraos/common-core';
+import { createHash } from 'node:crypto';
+import { getErrorMessage, type Logger } from '@intexuraos/common-core';
+import { createAppLogger } from '@intexuraos/infra-sentry';
 import type {
   DocumentData,
   Firestore,
@@ -16,11 +18,13 @@ import {
   resolveTaskLifecycleTime,
 } from '../../domain/models/taskLifecycleTime.js';
 import { deriveAggregateStatusFromSummary } from '../../domain/issueGrouping/deriveAggregateStatusFromSummary.js';
+import type { GroupStatus } from '../../domain/issueGrouping/types.js';
 import type {
   LifecycleBackfillTaskGroupSummaryRepository,
 } from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import { fromFirestoreDoc } from '../../infra/firestore/task-serializer.js';
+import { resolveCompletedTaskStatus } from '../../domain/utils/resolveCompletedTaskStatus.js';
 import { createTaskGroupSummaryFirestoreRepository } from '../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import {
   applyNewGroupDelta,
@@ -38,6 +42,7 @@ import {
 export const EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID = 'intexuraos-dev-pbuchman';
 const TASKS_COLLECTION = 'code_tasks';
 const SUMMARIES_COLLECTION = 'task_group_summaries';
+const COUNTS_COLLECTION = 'user_group_counts';
 const DEFAULT_PAGE_SIZE = 200;
 const AGENT_TYPES: ReadonlySet<string> = new Set([
   'planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry',
@@ -79,6 +84,17 @@ export class LifecycleBackfillRunError extends Error {
     this.name = 'LifecycleBackfillRunError';
     this.code = code;
     if (cursor !== undefined) this.cursor = cursor;
+  }
+}
+
+export class LifecycleBackfillAuditError extends Error {
+  readonly code = 'AUDIT_FINDINGS';
+  readonly report: Record<string, unknown>;
+
+  constructor(report: Record<string, unknown>) {
+    super('AUDIT_FINDINGS');
+    this.name = 'LifecycleBackfillAuditError';
+    this.report = report;
   }
 }
 
@@ -348,7 +364,7 @@ export async function validateLifecycleBackfillEnvironment(
   input: { projectId: string },
   env: Readonly<Record<string, string | undefined>>,
   readFile: (path: string, encoding: 'utf8') => Promise<string>,
-): Promise<{ keyFilename: string }> {
+): Promise<{ credentials: { client_email: string; private_key: string } }> {
   for (const [key, value] of Object.entries(env)) {
     if (
       value !== undefined &&
@@ -386,10 +402,18 @@ export async function validateLifecycleBackfillEnvironment(
   if (record['project_id'] !== input.projectId) {
     throw new LifecycleBackfillSafetyError('CREDENTIALS_PROJECT_MISMATCH');
   }
-  if (typeof record['client_email'] !== 'string' || record['client_email'].length === 0) {
+  if (typeof record['client_email'] !== 'string' || record['client_email'].trim().length === 0) {
     throw new LifecycleBackfillSafetyError('CREDENTIALS_CLIENT_EMAIL_INVALID');
   }
-  return { keyFilename };
+  if (typeof record['private_key'] !== 'string' || record['private_key'].trim().length === 0) {
+    throw new LifecycleBackfillSafetyError('CREDENTIALS_PRIVATE_KEY_INVALID');
+  }
+  return {
+    credentials: {
+      client_email: record['client_email'].trim(),
+      private_key: record['private_key'].trim(),
+    },
+  };
 }
 
 async function* scanRawCollection(
@@ -428,6 +452,7 @@ export async function runTaskLifecycleBackfillPhase(input: {
   const report = emptyTaskReport();
   report.cursor = input.cursor ?? null;
   let durableCursor = input.cursor;
+  let hasMore = false;
   try {
     for await (const scanned of scanRawCollection(
       input.firestore,
@@ -435,7 +460,10 @@ export async function runTaskLifecycleBackfillPhase(input: {
       input.pageSize,
       input.cursor,
     )) {
-      if (input.limit !== undefined && report.scanned >= input.limit) break;
+      if (input.limit !== undefined && report.scanned >= input.limit) {
+        hasMore = true;
+        break;
+      }
 
       let outcome: TaskLifecycleBackfillPlan | { outcome: 'deleted'; docId: string };
       if (input.mode === 'dry-run') {
@@ -467,6 +495,7 @@ export async function runTaskLifecycleBackfillPhase(input: {
       } else {
         addTaskPlan(report, outcome);
       }
+      if (input.mode === 'apply' && outcome.outcome === 'invalid') break;
       durableCursor = scanned.id;
       report.cursor = scanned.id;
     }
@@ -478,7 +507,7 @@ export async function runTaskLifecycleBackfillPhase(input: {
       getErrorMessage(error instanceof Error ? error : undefined, 'Task scan failed'),
     );
   }
-  report.limitReached = input.limit !== undefined && report.scanned >= input.limit;
+  report.limitReached = hasMore;
   return report;
 }
 
@@ -487,22 +516,27 @@ interface RawGroup {
   groupKey: string;
   tasks: RawFirestoreDocument[];
   nonAskTasks: RawFirestoreDocument[];
+  invalidSource: boolean;
+}
+
+interface SummaryItemBase {
+  workKey: string;
+  docId: string;
 }
 
 export type SummaryReconciliationItem =
-  | {
+  | SummaryItemBase & {
     kind: 'upsert';
     reason: 'missing' | 'semantic_mismatch';
-    docId: string;
     userId: string;
     groupKey: string;
     expected: TaskGroupSummary;
   }
-  | { kind: 'unchanged'; docId: string; userId: string; groupKey: string }
-  | { kind: 'delete_ask_only'; docId: string; userId: string; groupKey: string }
-  | { kind: 'ask_only_without_summary'; docId: string; userId: string; groupKey: string }
-  | { kind: 'unknown_orphan'; docId: string; userId: string; groupKey: string }
-  | { kind: 'invalid'; docId: string; reason: string };
+  | SummaryItemBase & { kind: 'unchanged'; userId: string; groupKey: string }
+  | SummaryItemBase & { kind: 'delete_ask_only'; userId: string; groupKey: string }
+  | SummaryItemBase & { kind: 'ask_only_without_summary'; userId: string; groupKey: string }
+  | SummaryItemBase & { kind: 'unknown_orphan'; userId: string; groupKey: string }
+  | SummaryItemBase & { kind: 'invalid'; reason: string };
 
 export interface SummaryReconciliationPlan {
   scannedSourceTasks: number;
@@ -510,6 +544,7 @@ export interface SummaryReconciliationPlan {
   authoritativeGroups: number;
   askOnlyGroups: number;
   scannedSummaries: number;
+  scannedCounts: number;
   missingSummaries: number;
   semanticUpdates: number;
   unchangedSummaries: number;
@@ -524,10 +559,10 @@ export interface SummaryReconciliationPlan {
 
 function groupIdentity(doc: RawFirestoreDocument): { userId: string; groupKey: string } | undefined {
   const userId = doc.data['userId'];
-  if (typeof userId !== 'string' || userId.length === 0) return undefined;
+  if (typeof userId !== 'string' || userId.trim().length === 0) return undefined;
   const linearIssueId = doc.data['linearIssueId'];
   if (linearIssueId === undefined) return { userId, groupKey: `standalone_${doc.id}` };
-  if (typeof linearIssueId !== 'string' || linearIssueId.length === 0) return undefined;
+  if (typeof linearIssueId !== 'string' || linearIssueId.trim().length === 0) return undefined;
   return { userId, groupKey: linearIssueId };
 }
 
@@ -548,22 +583,54 @@ function summaryDocumentId(userId: string, groupKey: string): string {
   return `${userId}_${groupKey}`;
 }
 
-function validateRawSummary(
+function groupWorkKey(userId: string, groupKey: string): string {
+  return opaqueWorkKey('group', identityKey(userId, groupKey));
+}
+
+function standaloneWorkKey(kind: 'task' | 'summary' | 'counts', docId: string): string {
+  return opaqueWorkKey(kind, docId);
+}
+
+function opaqueWorkKey(kind: string, value: string): string {
+  const digest = createHash('sha256').update(`${kind}\0${value}`).digest('base64url');
+  return `${kind}_${digest}`;
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function rawSummaryIdentity(
   doc: RawFirestoreDocument,
 ): { userId: string; groupKey: string } | undefined {
   const userId = doc.data['userId'];
   const groupKey = doc.data['groupKey'];
   if (
     typeof userId !== 'string' ||
-    userId.length === 0 ||
+    userId.trim().length === 0 ||
     typeof groupKey !== 'string' ||
-    groupKey.length === 0 ||
-    doc.id !== summaryDocumentId(userId, groupKey)
+    groupKey.trim().length === 0
   ) return undefined;
-  if (
-    hasOwn(doc.data, 'aggregateStatus') &&
-    !['active', 'needs-action', 'done', 'failed', 'archived'].includes(String(doc.data['aggregateStatus']))
-  ) return undefined;
+  return { userId, groupKey };
+}
+
+function isGroupStatus(value: unknown): value is GroupStatus {
+  return value === 'active' || value === 'needs-action' || value === 'done' ||
+    value === 'failed' || value === 'archived';
+}
+
+function validateRawSummary(
+  doc: RawFirestoreDocument,
+): { userId: string; groupKey: string } | undefined {
+  const identity = rawSummaryIdentity(doc);
+  if (identity === undefined || doc.id !== summaryDocumentId(identity.userId, identity.groupKey)) {
+    return undefined;
+  }
+  if (!hasOwn(doc.data, 'aggregateStatus') || !isGroupStatus(doc.data['aggregateStatus'])) {
+    return undefined;
+  }
   for (const field of ['hasImplementationReadyLabel', 'hasMergeReadyLabel', 'isImportant']) {
     if (hasOwn(doc.data, field) && typeof doc.data[field] !== 'boolean') return undefined;
   }
@@ -571,11 +638,91 @@ function validateRawSummary(
     hasOwn(doc.data, 'labelsUpdatedAt') &&
     normalizeTaskLifecycleTimestamp(doc.data['labelsUpdatedAt']) === undefined
   ) return undefined;
-  return { userId, groupKey };
+  return identity;
+}
+
+type GroupCountField = 'active' | 'needsAction' | 'done' | 'failed' | 'archived';
+
+interface GroupCountVector extends Record<GroupCountField | 'totalGroups', number> {
+  active: number;
+  needsAction: number;
+  done: number;
+  failed: number;
+  archived: number;
+  totalGroups: number;
+}
+
+const COUNT_VECTOR_FIELDS = [
+  'active', 'needsAction', 'done', 'failed', 'archived', 'totalGroups',
+] as const;
+
+function emptyGroupCountVector(): GroupCountVector {
+  return { active: 0, needsAction: 0, done: 0, failed: 0, archived: 0, totalGroups: 0 };
+}
+
+const COUNT_BUCKET_BY_STATUS: Readonly<Record<GroupStatus, GroupCountField>> = {
+  active: 'active',
+  'needs-action': 'needsAction',
+  done: 'done',
+  failed: 'failed',
+  archived: 'archived',
+};
+
+function addPhysicalSummaryToCounts(vector: GroupCountVector, status: GroupStatus): void {
+  vector[COUNT_BUCKET_BY_STATUS[status]]++;
+  vector.totalGroups++;
+}
+
+function buildPhysicalSummaryCountProof(
+  summariesByDocumentId: ReadonlyMap<string, readonly RawFirestoreDocument[]>,
+): {
+  countsByUser: ReadonlyMap<string, GroupCountVector>;
+  invalidUsers: ReadonlySet<string>;
+} {
+  const countsByUser = new Map<string, GroupCountVector>();
+  const invalidUsers = new Set<string>();
+  for (const entries of summariesByDocumentId.values()) {
+    const identities = entries.flatMap((entry) => {
+      const identity = rawSummaryIdentity(entry);
+      return identity === undefined ? [] : [identity];
+    });
+    if (entries.length !== 1) {
+      for (const identity of identities) invalidUsers.add(identity.userId);
+      continue;
+    }
+    const entry = entries[0] as RawFirestoreDocument;
+    const identity = validateRawSummary(entry);
+    if (identity === undefined) {
+      for (const candidate of identities) invalidUsers.add(candidate.userId);
+      continue;
+    }
+    const vector = countsByUser.get(identity.userId) ?? emptyGroupCountVector();
+    addPhysicalSummaryToCounts(vector, entry.data['aggregateStatus'] as GroupStatus);
+    countsByUser.set(identity.userId, vector);
+  }
+  return { countsByUser, invalidUsers };
+}
+
+function reconstructExactPhysicalSummaryCounts(
+  summaryDocs: readonly RawFirestoreDocument[],
+  userId: string,
+): GroupCountVector | undefined {
+  const vector = emptyGroupCountVector();
+  for (const summary of summaryDocs) {
+    const identity = validateRawSummary(summary);
+    if (identity?.userId !== userId) return undefined;
+    addPhysicalSummaryToCounts(vector, summary.data['aggregateStatus'] as GroupStatus);
+  }
+  return vector;
 }
 
 function hydrateRawTask(doc: RawFirestoreDocument): CodeTask {
-  return fromFirestoreDoc({ id: doc.id, data: () => doc.data });
+  const hydrated = fromFirestoreDoc({ id: doc.id, data: () => doc.data });
+  if (doc.data['status'] !== 'completed') return hydrated;
+  return {
+    ...hydrated,
+    status: resolveCompletedTaskStatus(hydrated.agentType),
+  };
 }
 
 function preserveUserOwnedSummaryState(
@@ -636,40 +783,72 @@ function computeExpectedSummary(
 export function buildSummaryReconciliationPlan(
   taskDocs: readonly RawFirestoreDocument[],
   summaryDocs: readonly RawFirestoreDocument[],
+  countDocs: readonly RawFirestoreDocument[],
   now: Timestamp,
 ): SummaryReconciliationPlan {
   const groups = new Map<string, RawGroup>();
-  const invalidItems: SummaryReconciliationItem[] = [];
-  let invalid = 0;
+  const items: SummaryReconciliationItem[] = [];
   for (const task of taskDocs) {
     const identity = groupIdentity(task);
-    if (identity === undefined || !rawTaskCanBeSummarized(task)) {
-      invalidItems.push({ kind: 'invalid', docId: task.id, reason: 'source_task_invalid' });
-      invalid++;
+    if (identity === undefined) {
+      items.push({
+        kind: 'invalid',
+        workKey: standaloneWorkKey('task', task.id),
+        docId: task.id,
+        reason: 'source_task_invalid',
+      });
       continue;
     }
     const key = identityKey(identity.userId, identity.groupKey);
-    const group = groups.get(key) ?? { ...identity, tasks: [], nonAskTasks: [] };
+    const group = groups.get(key) ?? {
+      ...identity,
+      tasks: [],
+      nonAskTasks: [],
+      invalidSource: false,
+    };
     group.tasks.push(task);
-    if (task.data['agentType'] !== 'ask_agent') group.nonAskTasks.push(task);
+    if (!rawTaskCanBeSummarized(task)) group.invalidSource = true;
+    else if (task.data['agentType'] !== 'ask_agent') group.nonAskTasks.push(task);
     groups.set(key, group);
   }
 
-  const validSummaries = new Map<
-    string,
-    { doc: RawFirestoreDocument; identity: { userId: string; groupKey: string } }
-  >();
+  const summariesByGroup = new Map<string, RawFirestoreDocument[]>();
+  const summariesByDocumentId = new Map<string, RawFirestoreDocument[]>();
   for (const summary of summaryDocs) {
-    const identity = validateRawSummary(summary);
-    if (identity === undefined || validSummaries.has(identityKey(identity.userId, identity.groupKey))) {
-      invalidItems.push({ kind: 'invalid', docId: summary.id, reason: 'summary_invalid' });
-      invalid++;
-      continue;
-    }
-    validSummaries.set(identityKey(identity.userId, identity.groupKey), { doc: summary, identity });
+    const physicalEntries = summariesByDocumentId.get(summary.id) ?? [];
+    physicalEntries.push(summary);
+    summariesByDocumentId.set(summary.id, physicalEntries);
+    const identity = rawSummaryIdentity(summary);
+    if (identity === undefined) continue;
+    const key = identityKey(identity.userId, identity.groupKey);
+    const entries = summariesByGroup.get(key) ?? [];
+    entries.push(summary);
+    summariesByGroup.set(key, entries);
   }
 
-  const items: SummaryReconciliationItem[] = [...invalidItems];
+  const countsByUser = new Map<string, RawFirestoreDocument[]>();
+  for (const counts of countDocs) {
+    const entries = countsByUser.get(counts.id) ?? [];
+    entries.push(counts);
+    countsByUser.set(counts.id, entries);
+  }
+  const physicalCountProof = buildPhysicalSummaryCountProof(summariesByDocumentId);
+  const projectedCountsByUser = new Map<string, Record<string, unknown>>();
+  for (const [userId, entries] of countsByUser) {
+    const entry = entries[0] as RawFirestoreDocument;
+    if (
+      entries.length === 1 &&
+      !physicalCountProof.invalidUsers.has(userId) &&
+      countsMatchPhysicalSummaries(
+        entry.data,
+        userId,
+        physicalCountProof.countsByUser.get(userId) ?? emptyGroupCountVector(),
+      )
+    ) {
+      projectedCountsByUser.set(userId, { ...entry.data });
+    }
+  }
+
   let authoritativeGroups = 0;
   let askOnlyGroups = 0;
   let missingSummaries = 0;
@@ -677,53 +856,161 @@ export function buildSummaryReconciliationPlan(
   let unchangedSummaries = 0;
   let askOnlyOrphans = 0;
   let unknownOrphans = 0;
+  const consumedPhysicalSummaryIds = new Set<string>();
 
-  for (const [key, group] of groups) {
-    const currentEntry = validSummaries.get(key);
-    const current = currentEntry?.doc;
-    validSummaries.delete(key);
+  const orderedGroups = [...groups.entries()].sort((left, right) =>
+    compareCodeUnits(
+      groupWorkKey(left[1].userId, left[1].groupKey),
+      groupWorkKey(right[1].userId, right[1].groupKey),
+    ),
+  );
+  for (const [key, group] of orderedGroups) {
+    const workKey = groupWorkKey(group.userId, group.groupKey);
     const docId = summaryDocumentId(group.userId, group.groupKey);
+    const summaryEntries = summariesByGroup.get(key) ?? [];
+    summariesByGroup.delete(key);
+    const summary = summaryEntries[0];
+    const physicalEntries = summariesByDocumentId.get(docId) ?? [];
+    if (physicalEntries.length > 0) consumedPhysicalSummaryIds.add(docId);
+    const summaryInvalid = summaryEntries.length > 1 ||
+      (summary !== undefined && validateRawSummary(summary) === undefined) ||
+      (physicalEntries.length > 0 && (
+        physicalEntries.length !== 1 ||
+        summaryEntries.length !== 1 ||
+        physicalEntries[0] !== summaryEntries[0]
+    ));
+    const countEntries = countsByUser.get(group.userId) ?? [];
+    const projectedCounts = projectedCountsByUser.get(group.userId);
+
+    if (group.invalidSource) {
+      items.push({ kind: 'invalid', workKey, docId, reason: 'source_task_invalid' });
+      continue;
+    }
+    if (summaryInvalid) {
+      items.push({ kind: 'invalid', workKey, docId, reason: 'summary_invalid' });
+      continue;
+    }
+    if (
+      countEntries.length !== 1 ||
+      projectedCounts === undefined ||
+      !countsAreStructurallyValid(projectedCounts, group.userId)
+    ) {
+      items.push({ kind: 'invalid', workKey, docId, reason: 'counts_invalid' });
+      continue;
+    }
+
     if (group.nonAskTasks.length === 0) {
       askOnlyGroups++;
-      if (current === undefined) {
-        items.push({ kind: 'ask_only_without_summary', docId, userId: group.userId, groupKey: group.groupKey });
+      if (summary === undefined) {
+        items.push({
+          kind: 'ask_only_without_summary', workKey, docId,
+          userId: group.userId, groupKey: group.groupKey,
+        });
       } else {
+        const currentStatus = summary.data['aggregateStatus'] as GroupStatus;
         askOnlyOrphans++;
-        items.push({ kind: 'delete_ask_only', docId, userId: group.userId, groupKey: group.groupKey });
+        items.push({
+          kind: 'delete_ask_only', workKey, docId,
+          userId: group.userId, groupKey: group.groupKey,
+        });
+        projectDeleteCounts(projectedCounts, currentStatus);
       }
       continue;
     }
 
-    authoritativeGroups++;
-    const expected = computeExpectedSummary(group, current?.data, now);
-    if (current === undefined) {
+    let expected: TaskGroupSummary;
+    try {
+      expected = computeExpectedSummary(group, summary?.data, now);
+    } catch {
+      items.push({ kind: 'invalid', workKey, docId, reason: 'source_task_invalid' });
+      continue;
+    }
+    if (summary === undefined) {
+      authoritativeGroups++;
       missingSummaries++;
       items.push({
-        kind: 'upsert', reason: 'missing', docId,
+        kind: 'upsert', reason: 'missing', workKey, docId,
         userId: group.userId, groupKey: group.groupKey, expected,
       });
-    } else if (summariesSemanticallyEqual(current.data, expected)) {
+      projectIncrementCounts(projectedCounts, expected.aggregateStatus);
+    } else if (summariesSemanticallyEqual(summary.data, expected)) {
+      authoritativeGroups++;
       unchangedSummaries++;
-      items.push({ kind: 'unchanged', docId, userId: group.userId, groupKey: group.groupKey });
+      items.push({
+        kind: 'unchanged', workKey, docId,
+        userId: group.userId, groupKey: group.groupKey,
+      });
     } else {
+      const currentStatus = summary.data['aggregateStatus'] as GroupStatus;
+      authoritativeGroups++;
       semanticUpdates++;
       items.push({
-        kind: 'upsert', reason: 'semantic_mismatch', docId,
+        kind: 'upsert', reason: 'semantic_mismatch', workKey, docId,
         userId: group.userId, groupKey: group.groupKey, expected,
       });
+      if (currentStatus !== expected.aggregateStatus) {
+        projectChangeCounts(projectedCounts, currentStatus, expected.aggregateStatus);
+      }
     }
   }
 
-  for (const { doc: summary, identity } of validSummaries.values()) {
-    unknownOrphans++;
+  for (const [key, entries] of summariesByGroup) {
+    const first = entries[0] as RawFirestoreDocument;
+    const identity = rawSummaryIdentity(first) as { userId: string; groupKey: string };
+    const workKey = groupWorkKey(identity.userId, identity.groupKey);
+    const docId = first.id;
+    if (entries.length > 1 || entries.some((entry) => validateRawSummary(entry) === undefined)) {
+      items.push({ kind: 'invalid', workKey, docId, reason: 'summary_invalid' });
+    } else {
+      unknownOrphans++;
+      items.push({
+        kind: 'unknown_orphan', workKey, docId,
+        userId: identity.userId, groupKey: identity.groupKey,
+      });
+    }
+    summariesByGroup.delete(key);
+  }
+
+  for (const [docId, entries] of summariesByDocumentId) {
+    if (consumedPhysicalSummaryIds.has(docId)) continue;
+    if (entries.every((entry) => rawSummaryIdentity(entry) !== undefined)) continue;
     items.push({
-      kind: 'unknown_orphan',
-      docId: summary.id,
-      userId: identity.userId,
-      groupKey: identity.groupKey,
+      kind: 'invalid',
+      workKey: standaloneWorkKey('summary', docId),
+      docId,
+      reason: 'summary_invalid',
     });
   }
-  items.sort((left, right) => left.docId.localeCompare(right.docId));
+
+  for (const [userId, entries] of countsByUser) {
+    const countsValid = entries.length === 1 &&
+      !physicalCountProof.invalidUsers.has(userId) &&
+      countsMatchPhysicalSummaries(
+        (entries[0] as RawFirestoreDocument).data,
+        userId,
+        physicalCountProof.countsByUser.get(userId) ?? emptyGroupCountVector(),
+      );
+    if (
+      groupsHasUser(groups, userId) ||
+      countsValid
+    ) continue;
+    items.push({
+      kind: 'invalid',
+      workKey: standaloneWorkKey('counts', userId),
+      docId: userId,
+      reason: 'counts_invalid',
+    });
+  }
+  for (const userId of physicalCountProof.countsByUser.keys()) {
+    if (countsByUser.has(userId) || groupsHasUser(groups, userId)) continue;
+    items.push({
+      kind: 'invalid',
+      workKey: standaloneWorkKey('counts', userId),
+      docId: userId,
+      reason: 'counts_invalid',
+    });
+  }
+  items.sort((left, right) => compareCodeUnits(left.workKey, right.workKey));
 
   return {
     scannedSourceTasks: taskDocs.length,
@@ -731,12 +1018,13 @@ export function buildSummaryReconciliationPlan(
     authoritativeGroups,
     askOnlyGroups,
     scannedSummaries: summaryDocs.length,
+    scannedCounts: countDocs.length,
     missingSummaries,
     semanticUpdates,
     unchangedSummaries,
     askOnlyOrphans,
     unknownOrphans,
-    invalid,
+    invalid: items.filter((item) => item.kind === 'invalid').length,
     summariesWithLabels: summaryDocs.filter((doc) =>
       hasOwn(doc.data, 'hasImplementationReadyLabel') ||
       hasOwn(doc.data, 'hasMergeReadyLabel') ||
@@ -777,11 +1065,58 @@ async function loadExactRawGroupTasks(
   return snapshot.docs.map((doc) => ({ id: doc.id, data: doc.data() as Record<string, unknown> }));
 }
 
-function countsAreValid(raw: Record<string, unknown>, userId: string): boolean {
+function countsAreStructurallyValid(raw: Record<string, unknown>, userId: string): boolean {
   if (raw['userId'] !== userId) return false;
-  return ['active', 'needsAction', 'done', 'failed', 'archived', 'totalGroups'].every((field) =>
-    Number.isSafeInteger(raw[field]) && Number(raw[field]) >= 0,
-  );
+  const bucketFields = ['active', 'needsAction', 'done', 'failed', 'archived'] as const;
+  let bucketTotal = 0;
+  for (const field of bucketFields) {
+    const value = raw[field];
+    if (!Number.isSafeInteger(value) || Number(value) < 0) return false;
+    bucketTotal += Number(value);
+    if (!Number.isSafeInteger(bucketTotal)) return false;
+  }
+  const totalGroups = raw['totalGroups'];
+  return Number.isSafeInteger(totalGroups) && Number(totalGroups) >= 0 &&
+    bucketTotal === Number(totalGroups);
+}
+
+function countsMatchPhysicalSummaries(
+  raw: Record<string, unknown>,
+  userId: string,
+  expected: GroupCountVector,
+): boolean {
+  return countsAreStructurallyValid(raw, userId) &&
+    COUNT_VECTOR_FIELDS.every((field) => Number(raw[field]) === expected[field]);
+}
+
+function projectIncrementCounts(raw: Record<string, unknown>, status: GroupStatus): void {
+  const field = COUNT_BUCKET_BY_STATUS[status];
+  raw[field] = Number(raw[field]) + 1;
+  raw['totalGroups'] = Number(raw['totalGroups']) + 1;
+}
+
+function projectDeleteCounts(raw: Record<string, unknown>, status: GroupStatus): void {
+  const field = COUNT_BUCKET_BY_STATUS[status];
+  raw[field] = Number(raw[field]) - 1;
+  raw['totalGroups'] = Number(raw['totalGroups']) - 1;
+}
+
+function projectChangeCounts(
+  raw: Record<string, unknown>,
+  currentStatus: GroupStatus,
+  expectedStatus: GroupStatus,
+): void {
+  const currentField = COUNT_BUCKET_BY_STATUS[currentStatus];
+  const expectedField = COUNT_BUCKET_BY_STATUS[expectedStatus];
+  raw[currentField] = Number(raw[currentField]) - 1;
+  raw[expectedField] = Number(raw[expectedField]) + 1;
+}
+
+function groupsHasUser(groups: ReadonlyMap<string, RawGroup>, userId: string): boolean {
+  for (const group of groups.values()) {
+    if (group.userId === userId) return true;
+  }
+  return false;
 }
 
 type AppliedSummaryOutcome =
@@ -806,9 +1141,12 @@ async function applyAuthoritativeSummary(
 
     const summaryRef = summaryDocRef(firestore, item.userId, item.groupKey);
     const countsRef = countsDocRef(firestore, item.userId);
-    const [summarySnapshot, countsSnapshot] = await Promise.all([
+    const [summarySnapshot, countsSnapshot, userSummariesSnapshot] = await Promise.all([
       tx.get(summaryRef),
       tx.get(countsRef),
+      tx.get(
+        firestore.collection(SUMMARIES_COLLECTION).where('userId', '==', item.userId),
+      ),
     ]);
     const currentRaw = summarySnapshot.exists
       ? summarySnapshot.data() as Record<string, unknown>
@@ -819,7 +1157,14 @@ async function applyAuthoritativeSummary(
     ) return { kind: 'invalid' as const };
     if (!countsSnapshot.exists) return { kind: 'invalid' as const };
     const countsRaw = countsSnapshot.data() as Record<string, unknown>;
-    if (!countsAreValid(countsRaw, item.userId)) {
+    const physicalCounts = reconstructExactPhysicalSummaryCounts(
+      userSummariesSnapshot.docs.map(rawDocumentSnapshot),
+      item.userId,
+    );
+    if (
+      physicalCounts === undefined ||
+      !countsMatchPhysicalSummaries(countsRaw, item.userId, physicalCounts)
+    ) {
       return { kind: 'invalid' as const };
     }
 
@@ -829,6 +1174,7 @@ async function applyAuthoritativeSummary(
       groupKey: item.groupKey,
       tasks: rawTasks,
       nonAskTasks,
+      invalidSource: false,
     };
     const expected = computeExpectedSummary(group, currentRaw, capturedNow);
     if (currentRaw !== undefined && summariesSemanticallyEqual(currentRaw, expected)) {
@@ -862,6 +1208,7 @@ async function applyAuthoritativeSummary(
 
 export interface SummaryLifecycleBackfillReport {
   scannedSourceTasks: number;
+  scannedCounts: number;
   rawGroups: number;
   authoritativeGroups: number;
   askOnlyGroups: number;
@@ -884,15 +1231,8 @@ export interface SummaryLifecycleBackfillReport {
 
 function createMaintenanceSummaryRepository(
   firestore: Firestore,
+  logger: Logger,
 ): LifecycleBackfillTaskGroupSummaryRepository {
-  /* v8 ignore start -- test-infra: FakeFirestore cannot exercise discarded diagnostics without violating the structured-output-only contract @preserve */
-  const logger = {
-    info: (): void => undefined,
-    warn: (): void => undefined,
-    error: (): void => undefined,
-    debug: (): void => undefined,
-  };
-  /* v8 ignore stop @preserve */
   return createTaskGroupSummaryFirestoreRepository({ firestore, logger });
 }
 
@@ -903,17 +1243,22 @@ export async function runSummaryLifecycleBackfillPhase(input: {
   cursor?: string;
   limit?: number;
   now?: () => Timestamp;
+  logger?: Logger;
   summaryRepository?: LifecycleBackfillTaskGroupSummaryRepository;
 }): Promise<SummaryLifecycleBackfillReport> {
   const now = input.now ?? ((): Timestamp => Timestamp.now());
   const taskDocs: RawFirestoreDocument[] = [];
   const summaryDocs: RawFirestoreDocument[] = [];
+  const countDocs: RawFirestoreDocument[] = [];
   try {
     for await (const doc of scanRawCollection(input.firestore, TASKS_COLLECTION, input.pageSize)) {
       taskDocs.push(doc);
     }
     for await (const doc of scanRawCollection(input.firestore, SUMMARIES_COLLECTION, input.pageSize)) {
       summaryDocs.push(doc);
+    }
+    for await (const doc of scanRawCollection(input.firestore, COUNTS_COLLECTION, input.pageSize)) {
+      countDocs.push(doc);
     }
   } catch (error) {
     throw new LifecycleBackfillRunError(
@@ -922,14 +1267,14 @@ export async function runSummaryLifecycleBackfillPhase(input: {
       getErrorMessage(error instanceof Error ? error : undefined, 'Summary scan failed'),
     );
   }
-  const plan = buildSummaryReconciliationPlan(taskDocs, summaryDocs, now());
+  const plan = buildSummaryReconciliationPlan(taskDocs, summaryDocs, countDocs, now());
   const selected = plan.items.filter((item) =>
-    input.cursor === undefined || item.docId.localeCompare(input.cursor) > 0,
+    input.cursor === undefined || compareCodeUnits(item.workKey, input.cursor) > 0,
   );
   const bounded = input.limit === undefined ? selected : selected.slice(0, input.limit);
-  const repository = input.summaryRepository ?? createMaintenanceSummaryRepository(input.firestore);
   const report: SummaryLifecycleBackfillReport = {
     scannedSourceTasks: plan.scannedSourceTasks,
+    scannedCounts: plan.scannedCounts,
     rawGroups: plan.rawGroups,
     authoritativeGroups: plan.authoritativeGroups,
     askOnlyGroups: plan.askOnlyGroups,
@@ -947,11 +1292,23 @@ export async function runSummaryLifecycleBackfillPhase(input: {
     importantSummaries: plan.importantSummaries,
     maxGroupSize: plan.maxGroupSize,
     cursor: input.cursor ?? null,
-    limitReached: input.limit !== undefined && bounded.length >= input.limit,
+    limitReached: selected.length > bounded.length,
   };
+
+  if (input.mode === 'apply' && (plan.invalid > 0 || plan.unknownOrphans > 0)) {
+    report.invalid = plan.invalid;
+    report.unknownOrphans = plan.unknownOrphans;
+    report.askOnlyOrphans = plan.askOnlyOrphans;
+    report.limitReached = false;
+    return report;
+  }
+
+  const logger = input.logger ?? createAppLogger({ name: 'code-task-lifecycle-backfill' });
+  const repository = input.summaryRepository ?? createMaintenanceSummaryRepository(input.firestore, logger);
   let durableCursor = input.cursor;
 
   for (const item of bounded) {
+    let applyFinding = false;
     try {
       if (item.kind === 'invalid') {
         report.invalid++;
@@ -975,6 +1332,7 @@ export async function runSummaryLifecycleBackfillPhase(input: {
             report.unchanged++;
           } else {
             report.invalid++;
+            applyFinding = true;
           }
         }
       } else if (item.kind === 'upsert' && input.mode === 'dry-run') {
@@ -985,6 +1343,7 @@ export async function runSummaryLifecycleBackfillPhase(input: {
         const outcome = await applyAuthoritativeSummary(input.firestore, item, now);
         if (outcome.kind === 'invalid') {
           report.invalid++;
+          applyFinding = true;
         } else if (outcome.kind === 'unchanged') {
           report.unchanged++;
         } else {
@@ -1000,9 +1359,10 @@ export async function runSummaryLifecycleBackfillPhase(input: {
         getErrorMessage(error instanceof Error ? error : undefined, 'Summary transaction failed'),
       );
     }
+    if (applyFinding) break;
     report.processed++;
-    durableCursor = item.docId;
-    report.cursor = item.docId;
+    durableCursor = item.workKey;
+    report.cursor = item.workKey;
   }
   return report;
 }
@@ -1019,6 +1379,7 @@ export async function runCodeTaskLifecycleBackfill(
   input: LifecycleBackfillOptions & {
     firestore: Firestore;
     now?: () => Timestamp;
+    logger?: Logger;
     summaryRepository?: LifecycleBackfillTaskGroupSummaryRepository;
   },
 ): Promise<CodeTaskLifecycleBackfillReport> {
@@ -1035,6 +1396,7 @@ export async function runCodeTaskLifecycleBackfill(
       ...(input.cursor !== undefined && { cursor: input.cursor }),
       ...(input.limit !== undefined && { limit: input.limit }),
     });
+    if (input.mode === 'apply' && report.tasks.invalid > 0) return report;
   }
   if (input.phase === 'all' || input.phase === 'summaries') {
     report.summaries = await runSummaryLifecycleBackfillPhase({
@@ -1044,6 +1406,7 @@ export async function runCodeTaskLifecycleBackfill(
       ...(input.cursor !== undefined && { cursor: input.cursor }),
       ...(input.limit !== undefined && { limit: input.limit }),
       ...(input.now !== undefined && { now: input.now }),
+      ...(input.logger !== undefined && { logger: input.logger }),
       ...(input.summaryRepository !== undefined && { summaryRepository: input.summaryRepository }),
     });
   }

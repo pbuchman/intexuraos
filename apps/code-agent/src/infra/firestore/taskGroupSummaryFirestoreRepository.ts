@@ -141,11 +141,61 @@ export function createTaskGroupSummaryFirestoreRepository(
     return true;
   }
 
-  function rawCountsCanBeCorrected(raw: Record<string, unknown>, userId: string): boolean {
-    return raw['userId'] === userId &&
-      ['active', 'needsAction', 'done', 'failed', 'archived', 'totalGroups'].every((field) =>
-        Number.isSafeInteger(raw[field]) && Number(raw[field]) >= 0,
-      );
+  function rawCountsCanDelete(
+    raw: Record<string, unknown>,
+    userId: string,
+    aggregateStatus: unknown,
+    summaryDocs: readonly { id: string; data(): DocumentData }[],
+  ): boolean {
+    if (raw['userId'] !== userId) return false;
+    const bucketFields = ['active', 'needsAction', 'done', 'failed', 'archived'] as const;
+    const bucketByStatus: Readonly<Record<string, (typeof bucketFields)[number]>> = {
+      active: 'active',
+      'needs-action': 'needsAction',
+      done: 'done',
+      failed: 'failed',
+      archived: 'archived',
+    };
+    let bucketTotal = 0;
+    for (const field of bucketFields) {
+      const value = raw[field];
+      if (!Number.isSafeInteger(value) || Number(value) < 0) return false;
+      bucketTotal += Number(value);
+      if (!Number.isSafeInteger(bucketTotal)) return false;
+    }
+    if (
+      !Number.isSafeInteger(raw['totalGroups']) ||
+      Number(raw['totalGroups']) <= 0 ||
+      bucketTotal !== Number(raw['totalGroups'])
+    ) return false;
+    const physical = {
+      active: 0,
+      needsAction: 0,
+      done: 0,
+      failed: 0,
+      archived: 0,
+      totalGroups: 0,
+    };
+    for (const summaryDoc of summaryDocs) {
+      const summary = summaryDoc.data() as Record<string, unknown>;
+      const groupKey = summary['groupKey'];
+      if (
+        typeof groupKey !== 'string' ||
+        groupKey.trim().length === 0 ||
+        summaryDoc.id !== `${userId}_${groupKey}` ||
+        !rawSummaryCanBeDeleted(summary, userId, groupKey)
+      ) return false;
+      const physicalBucket = bucketByStatus[String(summary['aggregateStatus'])] as
+        (typeof bucketFields)[number];
+      physical[physicalBucket]++;
+      physical.totalGroups++;
+    }
+    if (
+      bucketFields.some((field) => Number(raw[field]) !== physical[field]) ||
+      Number(raw['totalGroups']) !== physical.totalGroups
+    ) return false;
+    const bucket = bucketByStatus[String(aggregateStatus)];
+    return bucket !== undefined && Number(raw[bucket]) > 0;
   }
 
   async function loadCounts(tx: Transaction, userId: string): Promise<UserGroupCounts> {
@@ -617,10 +667,18 @@ export function createTaskGroupSummaryFirestoreRepository(
             return 'summary_invalid' as const;
           }
 
-          const countsDoc = await tx.get(countsDocRef(firestore, userId));
+          const [countsDoc, userSummariesSnapshot] = await Promise.all([
+            tx.get(countsDocRef(firestore, userId)),
+            tx.get(firestore.collection(SUMMARIES_COLLECTION).where('userId', '==', userId)),
+          ]);
           if (!countsDoc.exists) return 'counts_invalid' as const;
           const rawCounts = countsDoc.data() as Record<string, unknown>;
-          if (!rawCountsCanBeCorrected(rawCounts, userId)) {
+          if (!rawCountsCanDelete(
+            rawCounts,
+            userId,
+            rawSummary['aggregateStatus'],
+            userSummariesSnapshot.docs,
+          )) {
             return 'counts_invalid' as const;
           }
           const existingCounts = docToCounts(rawCounts);

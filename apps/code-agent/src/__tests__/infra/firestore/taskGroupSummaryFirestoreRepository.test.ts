@@ -4682,6 +4682,65 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         .toBe(true);
     });
 
+    it('re-proves the full counts vector against physical summaries before ask-only deletion', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const askTask = makeTask({
+        id: 'ask-ledger-race', userId: 'user-ledger-race', linearIssueId: 'INT-ASK-LEDGER',
+        agentType: 'ask_agent', status: 'archived',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: askTask.id, data: askTask as unknown as Record<string, unknown> },
+      ]);
+      await seedOrphan('user-ledger-race', 'INT-ASK-LEDGER');
+      await fakeFirestore.collection('task_group_summaries').doc('user-ledger-race_INT-OTHER').set({
+        userId: 'user-ledger-race', groupKey: 'INT-OTHER', aggregateStatus: 'active', updatedAt: at,
+      });
+      await fakeFirestore.collection('user_group_counts').doc('user-ledger-race').update({
+        active: 1, done: 1, totalGroups: 2,
+      });
+      const originalRunTransaction = fakeFirestore.runTransaction.bind(fakeFirestore);
+      vi.spyOn(fakeFirestore, 'runTransaction').mockImplementationOnce(async (callback) => {
+        await fakeFirestore.collection('user_group_counts').doc('user-ledger-race').update({
+          active: 0, done: 2, totalGroups: 2,
+        });
+        return await originalRunTransaction(callback);
+      });
+
+      const result = await repo.removeAskOnlyOrphan('user-ledger-race', 'INT-ASK-LEDGER');
+
+      expect(result).toEqual({ ok: true, value: 'counts_invalid' });
+      expect((await fakeFirestore.collection('task_group_summaries')
+        .doc('user-ledger-race_INT-ASK-LEDGER').get()).exists).toBe(true);
+      expect((await fakeFirestore.collection('user_group_counts').doc('user-ledger-race').get()).data())
+        .toMatchObject({ active: 0, done: 2, totalGroups: 2 });
+    });
+
+    it('rejects ask-only deletion when another physical summary for the user is malformed', async () => {
+      const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
+      const askTask = makeTask({
+        id: 'ask-malformed-ledger', userId: 'user-malformed-ledger',
+        linearIssueId: 'INT-ASK-MALFORMED-LEDGER', agentType: 'ask_agent', status: 'archived',
+      });
+      fakeFirestore.seedCollection('code_tasks', [
+        { id: askTask.id, data: askTask as unknown as Record<string, unknown> },
+      ]);
+      await seedOrphan('user-malformed-ledger', 'INT-ASK-MALFORMED-LEDGER');
+      await fakeFirestore.collection('task_group_summaries')
+        .doc('user-malformed-ledger_INT-MALFORMED').set({
+          userId: 'user-malformed-ledger', groupKey: 'INT-MALFORMED', aggregateStatus: 'mystery',
+          updatedAt: at,
+        });
+
+      const result = await repo.removeAskOnlyOrphan(
+        'user-malformed-ledger',
+        'INT-ASK-MALFORMED-LEDGER',
+      );
+
+      expect(result).toEqual({ ok: true, value: 'counts_invalid' });
+      expect((await fakeFirestore.collection('task_group_summaries')
+        .doc('user-malformed-ledger_INT-ASK-MALFORMED-LEDGER').get()).exists).toBe(true);
+    });
+
     it('handles an exact standalone ask-only source safely', async () => {
       const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
       const task = makeTask({
@@ -4758,6 +4817,24 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       ['counts_invalid', async (): Promise<void> => {
         await fakeFirestore.collection('user_group_counts').doc('user-invalid').update({
           totalGroups: -1,
+        });
+      }],
+      ['counts_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('user_group_counts').doc('user-invalid').update({
+          done: -1,
+          totalGroups: 0,
+        });
+      }],
+      ['counts_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('user_group_counts').doc('user-invalid').update({
+          totalGroups: 2,
+        });
+      }],
+      ['counts_invalid', async (): Promise<void> => {
+        await fakeFirestore.collection('user_group_counts').doc('user-invalid').update({
+          active: Number.MAX_SAFE_INTEGER,
+          done: Number.MAX_SAFE_INTEGER,
+          totalGroups: Number.MAX_SAFE_INTEGER,
         });
       }],
       ['counts_invalid', async (): Promise<void> => {

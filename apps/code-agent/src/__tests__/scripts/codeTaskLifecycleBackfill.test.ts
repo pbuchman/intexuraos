@@ -7,6 +7,7 @@ import type { Firestore } from '@google-cloud/firestore';
 import { createFakeFirestore } from '@intexuraos/infra-firestore';
 import {
   EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+  LifecycleBackfillAuditError,
   LifecycleBackfillRunError,
   aggregateTaskLifecyclePlans,
   buildSummaryReconciliationPlan,
@@ -53,6 +54,33 @@ function seedRawTasks(
   fake.seedCollection('code_tasks', tasks.map((task) => ({ id: task.id, data: task.data })));
 }
 
+function rawCounts(
+  userId: string,
+  overrides: Record<string, unknown> = {},
+): RawFirestoreDocument {
+  return {
+    id: userId,
+    data: {
+      userId,
+      active: 0,
+      needsAction: 0,
+      done: 0,
+      failed: 0,
+      archived: 0,
+      totalGroups: 0,
+      updatedAt: t0,
+      ...overrides,
+    },
+  };
+}
+
+function seedRawCounts(
+  fake: ReturnType<typeof createFakeFirestore>,
+  counts: readonly RawFirestoreDocument[],
+): void {
+  fake.seedCollection('user_group_counts', counts.map((doc) => ({ id: doc.id, data: doc.data })));
+}
+
 function validCredential(projectId = EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID): string {
   return JSON.stringify({
     type: 'service_account',
@@ -60,6 +88,21 @@ function validCredential(projectId = EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID): st
     client_email: `migration@${projectId}.iam.gserviceaccount.com`,
     private_key: 'canary-private-key-that-must-never-be-reported',
   });
+}
+
+function createTelemetryHarness(): {
+  logger: {
+    info: ReturnType<typeof vi.fn>;
+    warn: ReturnType<typeof vi.fn>;
+    error: ReturnType<typeof vi.fn>;
+    debug: ReturnType<typeof vi.fn>;
+  };
+  flush: ReturnType<typeof vi.fn>;
+} {
+  return {
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    flush: vi.fn(async () => undefined),
+  };
 }
 
 describe('raw lifecycle planning', () => {
@@ -311,6 +354,14 @@ describe('argument and environment safety gates', () => {
     ['CREDENTIALS_NOT_SERVICE_ACCOUNT', { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' }, JSON.stringify({ type: 'authorized_user' })],
     ['CREDENTIALS_PROJECT_MISMATCH', { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' }, validCredential('other-project')],
     ['CREDENTIALS_CLIENT_EMAIL_INVALID', { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' }, JSON.stringify({ type: 'service_account', project_id: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID })],
+    ['CREDENTIALS_CLIENT_EMAIL_INVALID', { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' }, JSON.stringify({
+      type: 'service_account', project_id: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      client_email: '   ', private_key: 'valid-key',
+    })],
+    ['CREDENTIALS_PRIVATE_KEY_INVALID', { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' }, JSON.stringify({
+      type: 'service_account', project_id: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      client_email: 'migration@example.com', private_key: '   ',
+    })],
   ])('rejects unsafe credentials with stable code %s', async (code, env, file) => {
     await expect(validateLifecycleBackfillEnvironment(
       { projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID },
@@ -329,7 +380,12 @@ describe('argument and environment safety gates', () => {
         CUSTOM_EMULATOR_HOST: '',
       },
       readFile,
-    )).resolves.toEqual({ keyFilename: '/explicit/key.json' });
+    )).resolves.toEqual({
+      credentials: {
+        client_email: `migration@${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}.iam.gserviceaccount.com`,
+        private_key: 'canary-private-key-that-must-never-be-reported',
+      },
+    });
     expect(readFile).toHaveBeenCalledWith('/explicit/key.json', 'utf8');
 
     for (const emulatorKey of ['FIRESTORE_EMULATOR_HOST', 'FIREBASE_EMULATOR_HUB', 'CUSTOM_EMULATOR_HOST']) {
@@ -400,7 +456,7 @@ describe('task Firestore phase', () => {
     });
 
     expect(first).toMatchObject({ scanned: 2, changed: 2, cursor: 'task_b', limitReached: true });
-    expect(second).toMatchObject({ scanned: 2, changed: 2, cursor: 'task_d', limitReached: true });
+    expect(second).toMatchObject({ scanned: 2, changed: 2, cursor: 'task_d', limitReached: false });
     for (const id of ['task_a', 'task_b', 'task_c', 'task_d']) {
       expect((await fake.collection('code_tasks').doc(id).get()).get('statusChangedAt')).toBeUndefined();
     }
@@ -500,6 +556,39 @@ describe('task Firestore phase', () => {
 
     expect(report).toMatchObject({ scanned: 1, changed: 0, deleted: 1, cursor: 'task_deleted' });
     expect((await fake.collection('code_tasks').doc('task_deleted').get()).exists).toBe(false);
+  });
+
+  it('stops apply on an invalid task without advancing past it, then repairs it on resume', async () => {
+    const fake = createFakeFirestore();
+    seedRawTasks(fake, [
+      rawTask('task_a', { completedAt: t1 }),
+      rawTask('task_b', { status: 'mystery' }),
+      rawTask('task_c', { completedAt: t1 }),
+    ]);
+    const firestore = fake as unknown as Firestore;
+
+    const first = await runTaskLifecycleBackfillPhase({
+      firestore,
+      mode: 'apply',
+      pageSize: 10,
+    });
+
+    expect(first).toMatchObject({ scanned: 2, changed: 1, invalid: 1, cursor: 'task_a' });
+    expect((await fake.collection('code_tasks').doc('task_b').get()).get('statusChangedAt')).toBeUndefined();
+    expect((await fake.collection('code_tasks').doc('task_c').get()).get('statusChangedAt')).toBeUndefined();
+
+    await fake.collection('code_tasks').doc('task_b').update({ status: 'archived' });
+    if (first.cursor === null) throw new Error('Expected durable cursor before invalid task');
+    const resumed = await runTaskLifecycleBackfillPhase({
+      firestore,
+      mode: 'apply',
+      pageSize: 10,
+      cursor: first.cursor,
+    });
+
+    expect(resumed).toMatchObject({ scanned: 2, changed: 2, invalid: 0, cursor: 'task_c' });
+    expect((await fake.collection('code_tasks').doc('task_b').get()).get('statusChangedAt')).toEqual(t2);
+    expect((await fake.collection('code_tasks').doc('task_c').get()).get('statusChangedAt')).toEqual(t1);
   });
 
   it('exposes only the last committed cursor when a later document fails', async () => {
@@ -628,7 +717,12 @@ describe('summary planning and Firestore phase', () => {
       },
     }];
 
-    const plan = buildSummaryReconciliationPlan(tasks, summaries, t2);
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [rawCounts('user-1', { failed: 1, totalGroups: 1 })],
+      t2,
+    );
     const item = plan.items.find((candidate) => candidate.docId === 'user-1_INT-42');
 
     expect(item?.kind).toBe('upsert');
@@ -673,7 +767,17 @@ describe('summary planning and Firestore phase', () => {
       },
     ];
 
-    const plan = buildSummaryReconciliationPlan(tasks, summaries, t2);
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [
+        rawCounts('user-1'),
+        rawCounts('user-ask', { done: 1, totalGroups: 1 }),
+        rawCounts('user-x', { done: 1, totalGroups: 1 }),
+        rawCounts('user-y'),
+      ],
+      t2,
+    );
 
     expect(plan).toMatchObject({
       scannedSourceTasks: 3,
@@ -684,7 +788,7 @@ describe('summary planning and Firestore phase', () => {
       missingSummaries: 2,
       askOnlyOrphans: 1,
       unknownOrphans: 1,
-      invalid: 2,
+      invalid: 4,
     });
     expect(plan.items.find((item) => item.docId === 'user-1_INT-ARCHIVED')).toMatchObject({
       kind: 'upsert',
@@ -732,7 +836,12 @@ describe('summary planning and Firestore phase', () => {
       });
     }
 
-    const plan = buildSummaryReconciliationPlan(tasks, summaries, t2);
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [rawCounts('prod-user', { done: 1_112, totalGroups: 1_112 })],
+      t2,
+    );
 
     expect(tasks).toHaveLength(4_447);
     expect(plan).toMatchObject({
@@ -749,7 +858,7 @@ describe('summary planning and Firestore phase', () => {
     });
   });
 
-  it('rejects raw source and summary identity/user-state variants before hydration', () => {
+  it('collapses malformed source and summary state into one invalid item per canonical group', () => {
     const tasks: RawFirestoreDocument[] = [
       { id: 'bad-user', data: { status: 'archived', userId: '', createdAt: t0, updatedAt: t1 } },
       { id: 'bad-linear', data: { status: 'archived', userId: 'u', linearIssueId: null, createdAt: t0, updatedAt: t1 } },
@@ -758,6 +867,9 @@ describe('summary planning and Firestore phase', () => {
       rawTask('bad-created', { userId: 'u', linearIssueId: 'INT-BAD-CREATED', createdAt: null, statusChangedAt: t1, completedAt: t1 }),
       rawTask('bad-updated', { userId: 'u', linearIssueId: 'INT-BAD-UPDATED', updatedAt: null, statusChangedAt: t1, completedAt: t1 }),
       rawTask('standalone-valid', { userId: 'u-standalone', linearIssueId: undefined, statusChangedAt: t1, completedAt: t1 }),
+      rawTask('valid-sibling', {
+        userId: 'u', linearIssueId: 'INT-BAD', statusChangedAt: t1, completedAt: t1,
+      }),
     ];
     const duplicate = {
       id: 'u-standalone_standalone_standalone-valid',
@@ -776,16 +888,324 @@ describe('summary planning and Firestore phase', () => {
       { id: 'u_INT-BAD-STATUS', data: {
         userId: 'u', groupKey: 'INT-BAD-STATUS', aggregateStatus: 'mystery',
       } },
+      { id: 'u_INT-BAD', data: {
+        userId: 'u', groupKey: 'INT-BAD', aggregateStatus: 'done', updatedAt: t0,
+      } },
+      { id: 'u_INT-MISSING-STATUS', data: {
+        userId: 'u', groupKey: 'INT-MISSING-STATUS', updatedAt: t0,
+      } },
     ];
 
-    const plan = buildSummaryReconciliationPlan(tasks, summaries, t2);
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [
+        rawCounts('u', { done: 2, totalGroups: 2 }),
+        rawCounts('u-standalone', { archived: 1, totalGroups: 1 }),
+      ],
+      t2,
+    );
 
-    expect(plan.rawGroups).toBe(1);
-    expect(plan.authoritativeGroups).toBe(1);
-    expect(plan.invalid).toBe(9);
-    expect(plan.items.filter((item) => item.kind === 'invalid')).toHaveLength(9);
-    expect(plan.items.find((item) => item.docId === duplicate.id && item.kind === 'upsert'))
-      .toMatchObject({ kind: 'upsert', reason: 'semantic_mismatch' });
+    expect(plan.rawGroups).toBe(5);
+    expect(plan.authoritativeGroups).toBe(0);
+    expect(plan.items.filter((item) => item.docId === 'u_INT-BAD')).toHaveLength(1);
+    expect(plan.items.find((item) => item.docId === 'u_INT-BAD')).toMatchObject({
+      kind: 'invalid', reason: 'source_task_invalid',
+    });
+    expect(plan.items.filter((item) => item.docId === 'u_INT-MISSING-STATUS')).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'summary_invalid' }),
+    ]);
+    expect(plan.items.filter((item) => item.docId === duplicate.id)).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'summary_invalid' }),
+    ]);
+  });
+
+  it.each([
+    ['missing', []],
+    ['foreign identity', [rawCounts('counts-user', { userId: 'other-user' })]],
+    ['negative bucket', [rawCounts('counts-user', { done: -1, totalGroups: -1 })]],
+    ['unsafe integer', [rawCounts('counts-user', { done: Number.MAX_SAFE_INTEGER + 1, totalGroups: Number.MAX_SAFE_INTEGER + 1 })]],
+    ['unsafe bucket sum', [rawCounts('counts-user', {
+      active: Number.MAX_SAFE_INTEGER, done: Number.MAX_SAFE_INTEGER,
+      totalGroups: Number.MAX_SAFE_INTEGER,
+    })]],
+    ['bucket sum mismatch', [rawCounts('counts-user', { done: 1, totalGroups: 2 })]],
+  ])('marks a group invalid and proposes no change when counts are %s', (_name, counts) => {
+    const tasks = [rawTask('counts-task', {
+      userId: 'counts-user', linearIssueId: 'INT-COUNTS', status: 'failed',
+      statusChangedAt: t1, completedAt: t1,
+    })];
+
+    const plan = buildSummaryReconciliationPlan(tasks, [], counts, t2);
+
+    expect(plan.missingSummaries).toBe(0);
+    expect(plan.semanticUpdates).toBe(0);
+    expect(plan.items).toEqual([
+      expect.objectContaining({
+        kind: 'invalid',
+        docId: 'counts-user_INT-COUNTS',
+        reason: 'counts_invalid',
+      }),
+    ]);
+  });
+
+  it.each([
+    [
+      'already count a missing summary',
+      [],
+      rawCounts('distribution-user', { done: 1, totalGroups: 1 }),
+    ],
+    [
+      'use a different bucket than the physical summary',
+      [{
+        id: 'distribution-user_INT-DISTRIBUTION',
+        data: {
+          userId: 'distribution-user', groupKey: 'INT-DISTRIBUTION',
+          aggregateStatus: 'done', updatedAt: t0,
+        },
+      }],
+      rawCounts('distribution-user', { failed: 1, totalGroups: 1 }),
+    ],
+  ])('rejects counts that %s even though their buckets and total are internally valid', (
+    _name,
+    summaries,
+    counts,
+  ) => {
+    const plan = buildSummaryReconciliationPlan(
+      [rawTask('distribution-task', {
+        userId: 'distribution-user', linearIssueId: 'INT-DISTRIBUTION',
+        statusChangedAt: t1, completedAt: t1,
+      })],
+      summaries,
+      [counts],
+      t2,
+    );
+
+    expect(plan.items).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'counts_invalid' }),
+    ]);
+    expect(plan.missingSummaries).toBe(0);
+    expect(plan.semanticUpdates).toBe(0);
+  });
+
+  it('reports internally valid nonzero counts when no physical summary exists', () => {
+    const plan = buildSummaryReconciliationPlan(
+      [],
+      [],
+      [rawCounts('orphan-counts-user', { done: 1, totalGroups: 1 })],
+      t2,
+    );
+
+    expect(plan.items).toEqual([
+      expect.objectContaining({
+        kind: 'invalid', docId: 'orphan-counts-user', reason: 'counts_invalid',
+      }),
+    ]);
+  });
+
+  it('rejects a count vector whose physical aggregate bucket is absent', () => {
+    const tasks = [rawTask('bucket-task', {
+      userId: 'bucket-user', linearIssueId: 'INT-BUCKET', status: 'failed',
+      statusChangedAt: t1, completedAt: t1,
+    })];
+    const summaries = [{
+      id: 'bucket-user_INT-BUCKET',
+      data: {
+        userId: 'bucket-user', groupKey: 'INT-BUCKET', aggregateStatus: 'done', updatedAt: t0,
+      },
+    }];
+
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [rawCounts('bucket-user', { failed: 1, totalGroups: 1 })],
+      t2,
+    );
+
+    expect(plan.semanticUpdates).toBe(0);
+    expect(plan.items).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'counts_invalid' }),
+    ]);
+  });
+
+  it('rejects an ask-only deletion when counts disagree with its physical summary bucket', () => {
+    const tasks = [rawTask('ask-bucket-task', {
+      userId: 'ask-bucket-user', linearIssueId: 'INT-ASK-BUCKET', agentType: 'ask_agent',
+      statusChangedAt: t1, completedAt: t1,
+    })];
+    const summaries = [{
+      id: 'ask-bucket-user_INT-ASK-BUCKET',
+      data: {
+        userId: 'ask-bucket-user', groupKey: 'INT-ASK-BUCKET',
+        aggregateStatus: 'done', updatedAt: t0,
+      },
+    }];
+
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [rawCounts('ask-bucket-user', { failed: 1, totalGroups: 1 })],
+      t2,
+    );
+
+    expect(plan.items).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'counts_invalid' }),
+    ]);
+  });
+
+  it('rejects impossible nonzero counts before planning a missing-summary increment', () => {
+    const plan = buildSummaryReconciliationPlan(
+      [rawTask('overflow-task', {
+        userId: 'overflow-user', linearIssueId: 'INT-OVERFLOW',
+        statusChangedAt: t1, completedAt: t1,
+      })],
+      [],
+      [rawCounts('overflow-user', {
+        archived: Number.MAX_SAFE_INTEGER,
+        totalGroups: Number.MAX_SAFE_INTEGER,
+      })],
+      t2,
+    );
+
+    expect(plan.items).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'counts_invalid' }),
+    ]);
+  });
+
+  it('never pairs an invalid physical current summary with an upsert for the same document', () => {
+    const tasks = [rawTask('physical-summary-task', {
+      userId: 'physical-user', linearIssueId: 'INT-PHYSICAL', status: 'failed',
+      statusChangedAt: t1, completedAt: t1,
+    })];
+    const malformedAtExpectedId = [{
+      id: 'physical-user_INT-PHYSICAL',
+      data: { aggregateStatus: 'done', updatedAt: t0 },
+    }];
+
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      malformedAtExpectedId,
+      [rawCounts('physical-user', { done: 1, totalGroups: 1 })],
+      t2,
+    );
+
+    expect(plan.items.filter((item) => item.docId === 'physical-user_INT-PHYSICAL')).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'summary_invalid' }),
+    ]);
+    expect(plan.missingSummaries).toBe(0);
+  });
+
+  it('reports an unidentifiable orphan summary and malformed orphan counts exactly once', () => {
+    const plan = buildSummaryReconciliationPlan(
+      [],
+      [{ id: 'unidentified-summary', data: { aggregateStatus: 'done' } }],
+      [
+        rawCounts('valid-unused-counts'),
+        rawCounts('invalid-unused-counts', { userId: 'foreign-user' }),
+      ],
+      t2,
+    );
+
+    expect(plan.scannedCounts).toBe(2);
+    expect(plan.items).toHaveLength(2);
+    expect(plan.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ docId: 'unidentified-summary', reason: 'summary_invalid' }),
+      expect.objectContaining({ docId: 'invalid-unused-counts', reason: 'counts_invalid' }),
+    ]));
+  });
+
+  it('converts a hydration-only source failure into one group audit item', () => {
+    const base = rawTask('hostile-hydration', {
+      userId: 'hostile-user', linearIssueId: 'INT-HOSTILE',
+      statusChangedAt: t1, completedAt: t1,
+    }).data;
+    let ownKeysCalls = 0;
+    const data = new Proxy(base, {
+      ownKeys: (target): ArrayLike<string | symbol> => {
+        ownKeysCalls++;
+        if (ownKeysCalls > 1) throw new Error('private hydration canary');
+        return Reflect.ownKeys(target);
+      },
+    });
+
+    const plan = buildSummaryReconciliationPlan(
+      [{ id: 'hostile-hydration', data }],
+      [],
+      [rawCounts('hostile-user')],
+      t2,
+    );
+
+    expect(plan.items).toEqual([
+      expect.objectContaining({ kind: 'invalid', reason: 'source_task_invalid' }),
+    ]);
+  });
+
+  it('projects count deltas in work-key order so a multi-group dry-run matches apply', () => {
+    const tasks = [
+      rawTask('project-a', {
+        userId: 'projection-user', linearIssueId: 'INT-PROJECT-A', status: 'failed',
+        statusChangedAt: t1, completedAt: t1,
+      }),
+      rawTask('project-b', {
+        userId: 'projection-user', linearIssueId: 'INT-PROJECT-B', status: 'failed',
+        statusChangedAt: t1, completedAt: t1,
+      }),
+    ];
+    const summaries = ['INT-PROJECT-A', 'INT-PROJECT-B'].map((groupKey) => ({
+      id: `projection-user_${groupKey}`,
+      data: { userId: 'projection-user', groupKey, aggregateStatus: 'done', updatedAt: t0 },
+    }));
+
+    const plan = buildSummaryReconciliationPlan(
+      tasks,
+      summaries,
+      [rawCounts('projection-user', { done: 2, totalGroups: 2 })],
+      t2,
+    );
+
+    expect(plan.semanticUpdates).toBe(2);
+    expect(plan.invalid).toBe(0);
+    expect(plan.items.filter((item) => item.kind === 'upsert')).toHaveLength(2);
+  });
+
+  it('normalizes the retained INT-985 completed planning task only in memory and corrects its count delta', async () => {
+    const fake = createFakeFirestore();
+    const completedAt = new Timestamp(1_773_886_013, 707_000_000);
+    seedRawTasks(fake, [rawTask('task_76d13dde-c6d9-4c08-86c4-5589f1c8dcf2', {
+      userId: 'legacy-user',
+      linearIssueId: 'INT-985',
+      agentType: 'planning',
+      status: 'completed',
+      completedAt,
+      updatedAt: timestamp('2026-03-19T02:14:34.998Z'),
+    })]);
+    await fake.collection('task_group_summaries').doc('legacy-user_INT-985').set({
+      userId: 'legacy-user',
+      groupKey: 'INT-985',
+      aggregateStatus: 'done',
+      updatedAt: t0,
+    });
+    seedRawCounts(fake, [rawCounts('legacy-user', { done: 1, totalGroups: 1 })]);
+
+    const report = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply',
+      pageSize: 10,
+      now: () => t2,
+    });
+
+    expect(report).toMatchObject({ changed: 1, semanticUpdates: 1, invalid: 0 });
+    const source = await fake.collection('code_tasks')
+      .doc('task_76d13dde-c6d9-4c08-86c4-5589f1c8dcf2').get();
+    expect(source.get('status')).toBe('completed');
+    const summary = await fake.collection('task_group_summaries').doc('legacy-user_INT-985').get();
+    expect(summary.data()).toMatchObject({
+      latestTaskStatus: 'planned',
+      hasCompletedPlanning: true,
+      aggregateStatus: 'needs-action',
+    });
+    const counts = await fake.collection('user_group_counts').doc('legacy-user').get();
+    expect(counts.data()).toMatchObject({ done: 0, needsAction: 1, totalGroups: 1 });
   });
 
   it('applies per-group summary/count deltas atomically, preserves flags, and converges to a semantic no-op', async () => {
@@ -831,7 +1251,9 @@ describe('summary planning and Firestore phase', () => {
       now: () => new Timestamp(1_753_604_000, 1),
     });
 
-    expect(applied).toMatchObject({ changed: 1, missingSummaries: 1, cursor: 'user-summary_INT-SUMMARY' });
+    expect(applied).toMatchObject({ changed: 1, missingSummaries: 1 });
+    expect(applied.cursor).toMatch(/^group_[A-Za-z0-9_-]{43}$/u);
+    expect(applied.cursor).not.toContain('user-summary');
     expect(repaired).toMatchObject({ changed: 1, semanticUpdates: 1 });
     expect(audit).toMatchObject({ changed: 0, semanticUpdates: 0, unchanged: 1 });
     const summary = await fake.collection('task_group_summaries').doc('user-summary_INT-SUMMARY').get();
@@ -870,7 +1292,7 @@ describe('summary planning and Firestore phase', () => {
     expect(summaryRun.summaries).toMatchObject({ changed: 1, missingSummaries: 1 });
   });
 
-  it('deletes only proven ask-only orphans and reports unknown or malformed orphans without touching them', async () => {
+  it('fails closed before every summary write when preflight finds an unknown or malformed orphan', async () => {
     const fake = createFakeFirestore();
     seedRawTasks(fake, [rawTask('ask-only', {
       userId: 'user-ask', linearIssueId: 'INT-ASK', agentType: 'ask_agent', statusChangedAt: t1, completedAt: t1,
@@ -888,6 +1310,12 @@ describe('summary planning and Firestore phase', () => {
       userId: 'user-ask', active: 0, needsAction: 0, done: 1, failed: 0, archived: 0,
       totalGroups: 1, updatedAt: t0,
     });
+    seedRawCounts(fake, [
+      rawCounts('user-ask', { done: 1, totalGroups: 1 }),
+      rawCounts('user-unknown', { done: 1, totalGroups: 1 }),
+      rawCounts('user-bad', { done: 1, totalGroups: 1 }),
+    ]);
+    const transaction = vi.spyOn(fake, 'runTransaction');
 
     const report = await runSummaryLifecycleBackfillPhase({
       firestore: fake as unknown as Firestore,
@@ -896,13 +1324,84 @@ describe('summary planning and Firestore phase', () => {
       now: () => t2,
     });
 
-    expect(report).toMatchObject({ deleted: 1, askOnlyOrphans: 1, unknownOrphans: 1, invalid: 1 });
-    expect((await fake.collection('task_group_summaries').doc('user-ask_INT-ASK').get()).exists).toBe(false);
+    expect(report).toMatchObject({ changed: 0, deleted: 0, askOnlyOrphans: 1, unknownOrphans: 1, invalid: 2 });
+    expect(transaction).not.toHaveBeenCalled();
+    expect((await fake.collection('task_group_summaries').doc('user-ask_INT-ASK').get()).exists).toBe(true);
     expect((await fake.collection('task_group_summaries').doc('user-unknown_INT-UNKNOWN').get()).exists).toBe(true);
     expect((await fake.collection('task_group_summaries').doc('bad-id').get()).exists).toBe(true);
     const counts = await fake.collection('user_group_counts').doc('user-ask').get();
-    expect(counts.get('done')).toBe(0);
-    expect(counts.get('totalGroups')).toBe(0);
+    expect(counts.get('done')).toBe(1);
+    expect(counts.get('totalGroups')).toBe(1);
+  });
+
+  it('reports an unknown orphan in dry-run without mutating it', async () => {
+    const fake = createFakeFirestore();
+    await fake.collection('task_group_summaries').doc('unknown-user_INT-UNKNOWN').set({
+      userId: 'unknown-user', groupKey: 'INT-UNKNOWN', aggregateStatus: 'done', updatedAt: t0,
+    });
+
+    const report = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run', pageSize: 10, now: () => t2,
+    });
+
+    expect(report).toMatchObject({ processed: 2, unknownOrphans: 1, invalid: 1, changed: 0 });
+    expect((await fake.collection('task_group_summaries').doc('unknown-user_INT-UNKNOWN').get()).exists)
+      .toBe(true);
+  });
+
+  it('deletes a proven ask-only orphan when the complete preflight is clean', async () => {
+    const fake = createFakeFirestore();
+    seedRawTasks(fake, [rawTask('ask-clean', {
+      userId: 'user-ask-clean', linearIssueId: 'INT-ASK-CLEAN', agentType: 'ask_agent',
+      statusChangedAt: t1, completedAt: t1,
+    })]);
+    await fake.collection('task_group_summaries').doc('user-ask-clean_INT-ASK-CLEAN').set({
+      userId: 'user-ask-clean', groupKey: 'INT-ASK-CLEAN', aggregateStatus: 'done', updatedAt: t0,
+    });
+    seedRawCounts(fake, [rawCounts('user-ask-clean', { done: 1, totalGroups: 1 })]);
+
+    const report = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply',
+      pageSize: 10,
+      now: () => t2,
+    });
+
+    expect(report).toMatchObject({ changed: 1, deleted: 1, invalid: 0, unknownOrphans: 0 });
+    expect((await fake.collection('task_group_summaries').doc('user-ask-clean_INT-ASK-CLEAN').get()).exists)
+      .toBe(false);
+  });
+
+  it('reproves count totals and the deleted aggregate bucket for ask-only removal', async () => {
+    const fake = createFakeFirestore();
+    seedRawTasks(fake, [rawTask('ask-count-race', {
+      userId: 'user-ask-count-race', linearIssueId: 'INT-ASK-COUNT-RACE', agentType: 'ask_agent',
+      statusChangedAt: t1, completedAt: t1,
+    })]);
+    await fake.collection('task_group_summaries').doc('user-ask-count-race_INT-ASK-COUNT-RACE').set({
+      userId: 'user-ask-count-race', groupKey: 'INT-ASK-COUNT-RACE',
+      aggregateStatus: 'done', updatedAt: t0,
+    });
+    seedRawCounts(fake, [rawCounts('user-ask-count-race', { done: 1, totalGroups: 1 })]);
+    const originalRunTransaction = fake.runTransaction.bind(fake);
+    vi.spyOn(fake, 'runTransaction').mockImplementationOnce(async (callback) => {
+      await fake.collection('user_group_counts').doc('user-ask-count-race').set(
+        rawCounts('user-ask-count-race', { failed: 1, totalGroups: 1 }).data,
+      );
+      return await originalRunTransaction(callback);
+    });
+
+    const report = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply', pageSize: 10, now: () => t2,
+    });
+
+    expect(report).toMatchObject({ changed: 0, deleted: 0, invalid: 1, cursor: null });
+    expect((await fake.collection('task_group_summaries')
+      .doc('user-ask-count-race_INT-ASK-COUNT-RACE').get()).exists).toBe(true);
+    const counts = await fake.collection('user_group_counts').doc('user-ask-count-race').get();
+    expect(counts.data()).toMatchObject({ done: 0, failed: 1, totalGroups: 1 });
   });
 
   it('applies a standalone all-archived shell and transactionally verifies no-op reruns', async () => {
@@ -932,7 +1431,9 @@ describe('summary planning and Firestore phase', () => {
     expect(counts.get('totalGroups')).toBe(1);
   });
 
-  it('treats a missing counts document as an audit error instead of guessing global user counts', async () => {
+  it.each(['dry-run', 'apply'] as const)(
+    'treats a missing counts document as an audit error in %s instead of proposing a change',
+    async (mode) => {
     const fake = createFakeFirestore();
     seedRawTasks(fake, [rawTask('missing-counts', {
       userId: 'user-missing-counts', linearIssueId: 'INT-MISSING-COUNTS',
@@ -941,7 +1442,7 @@ describe('summary planning and Firestore phase', () => {
 
     const report = await runSummaryLifecycleBackfillPhase({
       firestore: fake as unknown as Firestore,
-      mode: 'apply',
+      mode,
       pageSize: 10,
       now: () => t2,
     });
@@ -950,7 +1451,40 @@ describe('summary planning and Firestore phase', () => {
     expect((await fake.collection('task_group_summaries').doc('user-missing-counts_INT-MISSING-COUNTS').get()).exists)
       .toBe(false);
     expect((await fake.collection('user_group_counts').doc('user-missing-counts').get()).exists).toBe(false);
-  });
+    },
+  );
+
+  it.each(['dry-run', 'apply'] as const)(
+    'rejects malformed scanned counts in %s before any summary/count mutation',
+    async (mode) => {
+      const fake = createFakeFirestore();
+      seedRawTasks(fake, [rawTask('malformed-counts', {
+        userId: 'user-malformed-counts', linearIssueId: 'INT-MALFORMED-COUNTS',
+        status: 'failed', statusChangedAt: t1, completedAt: t1,
+      })]);
+      await fake.collection('task_group_summaries').doc('user-malformed-counts_INT-MALFORMED-COUNTS').set({
+        userId: 'user-malformed-counts', groupKey: 'INT-MALFORMED-COUNTS',
+        aggregateStatus: 'done', updatedAt: t0,
+      });
+      seedRawCounts(fake, [rawCounts('user-malformed-counts', { done: 0, failed: 1, totalGroups: 2 })]);
+      const transaction = vi.spyOn(fake, 'runTransaction');
+
+      const report = await runSummaryLifecycleBackfillPhase({
+        firestore: fake as unknown as Firestore,
+        mode,
+        pageSize: 10,
+        now: () => t2,
+      });
+
+      expect(report).toMatchObject({ scannedCounts: 1, changed: 0, invalid: 1 });
+      expect(transaction).not.toHaveBeenCalled();
+      const summary = await fake.collection('task_group_summaries')
+        .doc('user-malformed-counts_INT-MALFORMED-COUNTS').get();
+      expect(summary.get('aggregateStatus')).toBe('done');
+      const counts = await fake.collection('user_group_counts').doc('user-malformed-counts').get();
+      expect(counts.data()).toMatchObject({ done: 0, failed: 1, totalGroups: 2 });
+    },
+  );
 
   it('corrects only the per-group count delta when authoritative aggregate status changes', async () => {
     const fake = createFakeFirestore();
@@ -1002,6 +1536,13 @@ describe('summary planning and Firestore phase', () => {
         userId: 'user-race', groupKey: 'INT-RACE', aggregateStatus: 'done', isImportant: 'invalid',
       });
     }],
+    ['an unrelated physical summary became invalid', async (
+      fake: ReturnType<typeof createFakeFirestore>,
+    ): Promise<void> => {
+      await fake.collection('task_group_summaries').doc('user-race_INT-OTHER').set({
+        userId: 'user-race', groupKey: 'INT-OTHER', aggregateStatus: 'mystery', updatedAt: t0,
+      });
+    }],
     ['counts became invalid', async (fake: ReturnType<typeof createFakeFirestore>): Promise<void> => {
       await fake.collection('user_group_counts').doc('user-race').set({
         userId: 'user-race', active: 0, needsAction: 0, done: 0, failed: 0, archived: 0,
@@ -1012,6 +1553,29 @@ describe('summary planning and Firestore phase', () => {
       await fake.collection('user_group_counts').doc('user-race').set({
         userId: 'other-user', active: 0, needsAction: 0, done: 0, failed: 0, archived: 0,
         totalGroups: 0, updatedAt: t0,
+      });
+    }],
+    ['counts bucket sum became invalid', async (fake: ReturnType<typeof createFakeFirestore>): Promise<void> => {
+      await fake.collection('user_group_counts').doc('user-race').set({
+        userId: 'user-race', active: 0, needsAction: 0, done: 0, failed: 0, archived: 0,
+        totalGroups: 1, updatedAt: t0,
+      });
+    }],
+    ['counts drifted from the physical summary distribution', async (
+      fake: ReturnType<typeof createFakeFirestore>,
+    ): Promise<void> => {
+      await fake.collection('user_group_counts').doc('user-race').set({
+        userId: 'user-race', active: 0, needsAction: 0, done: 1, failed: 0, archived: 0,
+        totalGroups: 1, updatedAt: t0,
+      });
+    }],
+    ['counts were concurrently deleted', async (fake: ReturnType<typeof createFakeFirestore>): Promise<void> => {
+      await fake.collection('user_group_counts').doc('user-race').delete();
+    }],
+    ['counts became non-incrementable', async (fake: ReturnType<typeof createFakeFirestore>): Promise<void> => {
+      await fake.collection('user_group_counts').doc('user-race').set({
+        userId: 'user-race', active: 0, needsAction: 0, done: 0, failed: 0,
+        archived: Number.MAX_SAFE_INTEGER, totalGroups: Number.MAX_SAFE_INTEGER, updatedAt: t0,
       });
     }],
   ])('replans inside the summary transaction and leaves %s untouched', async (_name, mutate) => {
@@ -1037,6 +1601,49 @@ describe('summary planning and Firestore phase', () => {
     });
 
     expect(report).toMatchObject({ changed: 0, invalid: 1 });
+    expect((await fake.collection('task_group_summaries').doc('user-race_INT-RACE').get()).exists)
+      .toBe(_name === 'current summary became invalid');
+  });
+
+  it('reproves the current aggregate decrement bucket inside the summary transaction', async () => {
+    const fake = createFakeFirestore();
+    seedRawTasks(fake, [rawTask('decrement-race', {
+      userId: 'user-decrement-race', linearIssueId: 'INT-DECREMENT-RACE',
+      status: 'failed', statusChangedAt: t1, completedAt: t1,
+    })]);
+    await fake.collection('task_group_summaries').doc('user-decrement-race_INT-DECREMENT-RACE').set({
+      userId: 'user-decrement-race', groupKey: 'INT-DECREMENT-RACE',
+      aggregateStatus: 'done', updatedAt: t0,
+    });
+    seedRawCounts(fake, [rawCounts('user-decrement-race', { done: 1, totalGroups: 1 })]);
+    const originalRunTransaction = fake.runTransaction.bind(fake);
+    vi.spyOn(fake, 'runTransaction').mockImplementationOnce(async (callback) => {
+      await fake.collection('user_group_counts').doc('user-decrement-race').set(
+        rawCounts('user-decrement-race', { failed: 1, totalGroups: 1 }).data,
+      );
+      return await originalRunTransaction(callback);
+    });
+
+    const report = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply', pageSize: 10, now: () => t2,
+    });
+
+    expect(report).toMatchObject({ changed: 0, invalid: 1, cursor: null });
+    const summary = await fake.collection('task_group_summaries')
+      .doc('user-decrement-race_INT-DECREMENT-RACE').get();
+    expect(summary.get('aggregateStatus')).toBe('done');
+    const counts = await fake.collection('user_group_counts').doc('user-decrement-race').get();
+    expect(counts.data()).toMatchObject({ done: 0, failed: 1, totalGroups: 1 });
+
+    await fake.collection('user_group_counts').doc('user-decrement-race').set(
+      rawCounts('user-decrement-race', { done: 1, totalGroups: 1 }).data,
+    );
+    const resumed = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply', pageSize: 10, now: () => t2,
+    });
+    expect(resumed).toMatchObject({ changed: 1, invalid: 0 });
   });
 
   it('rejects a standalone source whose ownership changes between scan and transaction', async () => {
@@ -1044,6 +1651,7 @@ describe('summary planning and Firestore phase', () => {
     seedRawTasks(fake, [rawTask('standalone-race', {
       userId: 'user-standalone-race', linearIssueId: undefined, statusChangedAt: t1, completedAt: t1,
     })]);
+    seedRawCounts(fake, [rawCounts('user-standalone-race')]);
     const originalRunTransaction = fake.runTransaction.bind(fake);
     vi.spyOn(fake, 'runTransaction').mockImplementationOnce(async (callback) => {
       await fake.collection('code_tasks').doc('standalone-race').update({ userId: 'other-user' });
@@ -1067,6 +1675,7 @@ describe('summary planning and Firestore phase', () => {
     seedRawTasks(fake, [rawTask('standalone-deleted', {
       userId: 'user-standalone-deleted', linearIssueId: undefined, statusChangedAt: t1, completedAt: t1,
     })]);
+    seedRawCounts(fake, [rawCounts('user-standalone-deleted')]);
     const originalRunTransaction = fake.runTransaction.bind(fake);
     vi.spyOn(fake, 'runTransaction').mockImplementationOnce(async (callback) => {
       await fake.collection('code_tasks').doc('standalone-deleted').delete();
@@ -1100,6 +1709,7 @@ describe('summary planning and Firestore phase', () => {
     await fake.collection('task_group_summaries').doc('user-ask-dry_INT-ASK-STALE').set({
       userId: 'user-ask-dry', groupKey: 'INT-ASK-STALE', aggregateStatus: 'done', updatedAt: t0,
     });
+    seedRawCounts(fake, [rawCounts('user-ask-dry', { done: 1, totalGroups: 1 })]);
 
     const report = await runSummaryLifecycleBackfillPhase({
       firestore: fake as unknown as Firestore,
@@ -1123,6 +1733,7 @@ describe('summary planning and Firestore phase', () => {
     await fake.collection('task_group_summaries').doc('user-ask-outcome_INT-ASK-OUTCOME').set({
       userId: 'user-ask-outcome', groupKey: 'INT-ASK-OUTCOME', aggregateStatus: 'done', updatedAt: t0,
     });
+    seedRawCounts(fake, [rawCounts('user-ask-outcome', { done: 1, totalGroups: 1 })]);
     const removeAskOnlyOrphan = vi.fn(async () => ({ ok: true as const, value: outcome }));
 
     const report = await runSummaryLifecycleBackfillPhase({
@@ -1146,6 +1757,7 @@ describe('summary planning and Firestore phase', () => {
     await fake.collection('task_group_summaries').doc('user-ask-error_INT-ASK-ERROR').set({
       userId: 'user-ask-error', groupKey: 'INT-ASK-ERROR', aggregateStatus: 'done', updatedAt: t0,
     });
+    seedRawCounts(fake, [rawCounts('user-ask-error', { done: 1, totalGroups: 1 })]);
 
     await expect(runSummaryLifecycleBackfillPhase({
       firestore: fake as unknown as Firestore,
@@ -1167,6 +1779,15 @@ describe('summary planning and Firestore phase', () => {
       rawTask('cursor-a', { userId: 'u', linearIssueId: 'INT-A', statusChangedAt: t1, completedAt: t1 }),
       rawTask('cursor-b', { userId: 'u', linearIssueId: 'INT-B', statusChangedAt: t1, completedAt: t1 }),
     ]);
+    seedRawCounts(fake, [rawCounts('u')]);
+    const preview = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run',
+      pageSize: 2,
+      limit: 1,
+      now: () => t2,
+    });
+    if (preview.cursor === null) throw new Error('Expected opaque summary cursor');
     const originalRunTransaction = fake.runTransaction.bind(fake);
     let invocation = 0;
     vi.spyOn(fake, 'runTransaction').mockImplementation(async (callback) => {
@@ -1182,9 +1803,21 @@ describe('summary planning and Firestore phase', () => {
       now: () => t2,
     })).rejects.toMatchObject({
       code: 'SUMMARY_TRANSACTION_FAILED',
-      cursor: 'u_INT-A',
+      cursor: preview.cursor,
       message: 'Summary transaction failed',
     });
+
+    const resumed = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply',
+      pageSize: 2,
+      cursor: preview.cursor,
+      now: () => t2,
+    });
+    expect(resumed).toMatchObject({ processed: 1, changed: 1, limitReached: false });
+    expect(resumed.cursor).not.toBe(preview.cursor);
+    expect((await fake.collection('task_group_summaries').doc('u_INT-A').get()).exists).toBe(true);
+    expect((await fake.collection('task_group_summaries').doc('u_INT-B').get()).exists).toBe(true);
   });
 
   it('reports a summary scan failure without constructing partial group state', async () => {
@@ -1223,13 +1856,14 @@ describe('summary planning and Firestore phase', () => {
     })).rejects.toMatchObject({ code: 'SUMMARY_SCAN_FAILED', message: 'Summary scan failed' });
   });
 
-  it('bounds and resumes summary identities by their full document id', async () => {
+  it('uses stable opaque code-unit work keys and exact bounds across summary resumes', async () => {
     const fake = createFakeFirestore();
     seedRawTasks(fake, [
       rawTask('resume-a', { userId: 'u', linearIssueId: 'INT-A', statusChangedAt: t1, completedAt: t1 }),
       rawTask('resume-b', { userId: 'u', linearIssueId: 'INT-B', statusChangedAt: t1, completedAt: t1 }),
       rawTask('resume-c', { userId: 'u', linearIssueId: 'INT-C', statusChangedAt: t1, completedAt: t1 }),
     ]);
+    seedRawCounts(fake, [rawCounts('u')]);
 
     const first = await runSummaryLifecycleBackfillPhase({
       firestore: fake as unknown as Firestore,
@@ -1247,9 +1881,78 @@ describe('summary planning and Firestore phase', () => {
       cursor: first.cursor,
       now: () => t2,
     });
+    if (second.cursor === null) throw new Error('Expected second opaque summary cursor');
+    const third = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run',
+      pageSize: 2,
+      limit: 1,
+      cursor: second.cursor,
+      now: () => t2,
+    });
+    const repeatedFirst = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run',
+      pageSize: 2,
+      limit: 1,
+      now: () => t2,
+    });
 
-    expect(first).toMatchObject({ processed: 1, cursor: 'u_INT-A', limitReached: true });
-    expect(second).toMatchObject({ processed: 1, cursor: 'u_INT-B', limitReached: true });
+    expect(first).toMatchObject({ processed: 1, limitReached: true });
+    expect(second).toMatchObject({ processed: 1, limitReached: true });
+    expect(third).toMatchObject({ processed: 1, limitReached: false });
+    expect(repeatedFirst.cursor).toBe(first.cursor);
+    expect(new Set([first.cursor, second.cursor, third.cursor]).size).toBe(3);
+  });
+
+  it('sorts every canonical work item by deterministic code-unit order', () => {
+    const tasks = [
+      rawTask('order-z', { userId: 'order-user', linearIssueId: 'z', statusChangedAt: t1, completedAt: t1 }),
+      rawTask('order-accent', { userId: 'order-user', linearIssueId: 'ä', statusChangedAt: t1, completedAt: t1 }),
+      rawTask('order-upper', { userId: 'order-user', linearIssueId: 'Z', statusChangedAt: t1, completedAt: t1 }),
+    ];
+    const plan = buildSummaryReconciliationPlan(tasks, [], [rawCounts('order-user')], t2);
+    const workKeys = plan.items.map((item) => item.workKey);
+
+    expect(workKeys).toEqual([...workKeys].sort());
+    expect(new Set(workKeys).size).toBe(plan.items.length);
+  });
+
+  it('emits one canonical item for a group with an invalid sibling and resumes without gaps', async () => {
+    const fake = createFakeFirestore();
+    seedRawTasks(fake, [
+      rawTask('dup-valid', {
+        userId: 'dup-user', linearIssueId: 'INT-A', statusChangedAt: t1, completedAt: t1,
+      }),
+      rawTask('dup-invalid', {
+        userId: 'dup-user', linearIssueId: 'INT-A', statusChangedAt: null, completedAt: t1,
+      }),
+      rawTask('next-valid', {
+        userId: 'dup-user', linearIssueId: 'INT-B', statusChangedAt: t1, completedAt: t1,
+      }),
+    ]);
+    seedRawCounts(fake, [rawCounts('dup-user')]);
+
+    const first = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run', pageSize: 10, limit: 1, now: () => t2,
+    });
+    if (first.cursor === null) throw new Error('Expected first group cursor');
+    const second = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run', pageSize: 10, limit: 1, cursor: first.cursor, now: () => t2,
+    });
+    const full = await runSummaryLifecycleBackfillPhase({
+      firestore: fake as unknown as Firestore,
+      mode: 'dry-run', pageSize: 10, now: () => t2,
+    });
+
+    expect(first).toMatchObject({ processed: 1, limitReached: true });
+    expect(second).toMatchObject({ processed: 1, limitReached: false });
+    expect(first.invalid + second.invalid).toBe(1);
+    expect(first.changed + second.changed).toBe(1);
+    expect(full).toMatchObject({ processed: 2, invalid: 1, changed: 1 });
+    expect(second.cursor).not.toBe(first.cursor);
   });
 });
 
@@ -1257,6 +1960,7 @@ describe('CLI lifecycle and legacy delegation', () => {
   it('runs both independently resumable phases and forwards single-phase bounds only when supplied', async () => {
     const fake = createFakeFirestore();
     const firestore = fake as unknown as Firestore;
+    const logger = createTelemetryHarness().logger;
     const all = await runCodeTaskLifecycleBackfill({
       firestore,
       mode: 'dry-run',
@@ -1282,6 +1986,7 @@ describe('CLI lifecycle and legacy delegation', () => {
       cursor: 'group_resume',
       limit: 1,
       now: () => t2,
+      logger: logger as never,
       summaryRepository: { removeAskOnlyOrphan: vi.fn() } as never,
     });
 
@@ -1296,6 +2001,25 @@ describe('CLI lifecycle and legacy delegation', () => {
     expect(summaries.tasks).toBeUndefined();
   });
 
+  it('stops an all-phase apply after task audit findings before scanning or writing summaries', async () => {
+    const fake = createFakeFirestore();
+    seedRawTasks(fake, [{ id: 'invalid-apply-task', data: { status: 'mystery' } }]);
+    const summaryCollection = fake.collection('task_group_summaries');
+    const summaryGet = vi.spyOn(summaryCollection, 'get');
+
+    const report = await runCodeTaskLifecycleBackfill({
+      firestore: fake as unknown as Firestore,
+      mode: 'apply',
+      phase: 'all',
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      pageSize: 10,
+    });
+
+    expect(report.tasks).toMatchObject({ invalid: 1 });
+    expect(report.summaries).toBeUndefined();
+    expect(summaryGet).not.toHaveBeenCalled();
+  });
+
   it('validates every gate before creating an explicit Firestore client', async () => {
     const createFirestore = vi.fn();
 
@@ -1308,7 +2032,7 @@ describe('CLI lifecycle and legacy delegation', () => {
     expect(createFirestore).not.toHaveBeenCalled();
   });
 
-  it('uses dedicated project/key credentials, defaults to dry-run, and terminates exactly once in finally', async () => {
+  it('parses credentials once, passes only validated in-memory credentials, and terminates exactly once', async () => {
     const terminate = vi.fn(async () => undefined);
     const firestore = { terminate } as unknown as Firestore;
     const runBackfill = vi.fn(async () => ({
@@ -1319,22 +2043,31 @@ describe('CLI lifecycle and legacy delegation', () => {
       summaries: { processed: 0, changed: 0 },
     }));
     const createFirestore = vi.fn(() => firestore);
+    const readFile = vi.fn(async () => validCredential());
+    const logger = createTelemetryHarness().logger;
 
     const report = await executeCodeTaskLifecycleBackfillCli(
       [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`],
       { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
       {
-        readFile: async () => validCredential(),
+        readFile,
         createFirestore,
         runBackfill,
+        logger: logger as never,
       },
     );
 
     expect(createFirestore).toHaveBeenCalledWith({
       projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
-      keyFilename: '/explicit/key.json',
+      credentials: {
+        client_email: `migration@${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}.iam.gserviceaccount.com`,
+        private_key: 'canary-private-key-that-must-never-be-reported',
+      },
     });
-    expect(runBackfill).toHaveBeenCalledWith(expect.objectContaining({ mode: 'dry-run', phase: 'all' }));
+    expect(readFile).toHaveBeenCalledTimes(1);
+    expect(runBackfill).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'dry-run', phase: 'all', logger,
+    }));
     expect(terminate).toHaveBeenCalledTimes(1);
     expect(report).toMatchObject({ ok: true, mode: 'dry-run', phase: 'all' });
   });
@@ -1359,6 +2092,30 @@ describe('CLI lifecycle and legacy delegation', () => {
       tasks: { scanned: 0, changed: 0, cursor: null },
     });
     expect(terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushes telemetry exactly once after a successful main run', async () => {
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill: async () => ({ tasks: { scanned: 0, invalid: 0 } }),
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: vi.fn(),
+    });
+
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({ ok: true, tasks: { scanned: 0, invalid: 0 } });
+    expect(telemetry.logger.error).not.toHaveBeenCalled();
+    expect(telemetry.logger.warn).not.toHaveBeenCalled();
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
   });
 
   it('uses the real credential reader and dedicated Firestore constructor without contacting Firestore', async () => {
@@ -1432,11 +2189,50 @@ describe('CLI lifecycle and legacy delegation', () => {
     expect(JSON.stringify(report)).not.toContain('private canary');
   });
 
+  it('sanitizes every scalar report field by type and safe nonnegative integer bounds', async () => {
+    const secret = 'private scalar canary';
+    const report = await executeCodeTaskLifecycleBackfillCli(
+      [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=all'],
+      { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill: async () => ({
+          tasks: {
+            scanned: { secret }, changed: -1, skipped: 0, deleted: 1.5,
+            cursor: { secret }, limitReached: 'true',
+            sources: { completed: Number.MAX_SAFE_INTEGER + 1, created: 0 },
+            invalidReasons: { status_invalid: -1, lifecycle_unresolvable: 0 },
+          },
+          summaries: {
+            processed: secret, changed: 0, cursor: 42, limitReached: null,
+            scannedSourceTasks: 0, scannedCounts: 1,
+          },
+        }),
+      },
+    );
+
+    expect(report).toMatchObject({
+      tasks: {
+        skipped: 0,
+        sources: { created: 0 },
+        invalidReasons: { lifecycle_unresolvable: 0 },
+      },
+      summaries: { changed: 0, scannedSourceTasks: 0, scannedCounts: 1 },
+    });
+    expect(report).not.toMatchObject({
+      tasks: expect.objectContaining({ scanned: expect.anything() }),
+      summaries: expect.objectContaining({ cursor: expect.anything() }),
+    });
+    expect(JSON.stringify(report)).not.toContain(secret);
+  });
+
   it('terminates after runner failure, emits only allowlisted deterministic failure data, and sets nonzero exit status', async () => {
     const terminate = vi.fn(async () => undefined);
     const lines: string[] = [];
     let exitCode = 0;
     const secret = 'canary-private-secret-and-prompt';
+    const telemetry = createTelemetryHarness();
 
     await runCodeTaskLifecycleBackfillMain({
       argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--apply', '--phase=tasks'],
@@ -1448,6 +2244,7 @@ describe('CLI lifecycle and legacy delegation', () => {
           throw new LifecycleBackfillRunError('TASK_TRANSACTION_FAILED', 'task_safe_cursor', secret);
         },
       },
+      telemetry: telemetry as never,
       writeLine: (line) => { lines.push(line); },
       setExitCode: (code) => { exitCode = code; },
     });
@@ -1459,6 +2256,254 @@ describe('CLI lifecycle and legacy delegation', () => {
     ]);
     expect(lines.join('\n')).not.toContain(secret);
     expect(lines.join('\n')).not.toContain('private_key');
+    expect(telemetry.logger.error).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(telemetry.logger.error.mock.calls)).toContain('TASK_TRANSACTION_FAILED');
+    expect(JSON.stringify(telemetry.logger.error.mock.calls)).not.toContain(secret);
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['task finding', {
+      tasks: {
+        scanned: 1, changed: 0, skipped: 0, invalid: 1, deleted: 0,
+        statusChangedAtAdded: 0, completedAtAdded: 0, activeCompletedAtAnomalies: 0,
+        sources: {}, invalidReasons: { status_invalid: 1 },
+        cursor: 'task_safe_cursor', limitReached: false,
+      },
+    }],
+    ['summary finding', {
+      summaries: {
+        scannedSourceTasks: 0, scannedCounts: 1, rawGroups: 0, authoritativeGroups: 0,
+        askOnlyGroups: 0, scannedSummaries: 1, processed: 1, changed: 0, unchanged: 0,
+        deleted: 0, missingSummaries: 0, semanticUpdates: 0, askOnlyOrphans: 0,
+        unknownOrphans: 1, invalid: 0, summariesWithLabels: 0, importantSummaries: 0,
+        maxGroupSize: 0, cursor: 'summary_safe_cursor', limitReached: false,
+      },
+    }],
+  ])('emits sanitized totals and a nonzero exit for an expected %s without Sentry noise', async (_name, finding) => {
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+    let exitCode = 0;
+    const runBackfill = vi.fn(async () => ({
+      mode: 'dry-run' as const,
+      phase: 'all' as const,
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      ...finding,
+      secret: 'private audit canary',
+    }));
+
+    await expect(executeCodeTaskLifecycleBackfillCli(
+      [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`],
+      { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill,
+        logger: telemetry.logger as never,
+      },
+    )).rejects.toBeInstanceOf(LifecycleBackfillAuditError);
+
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill,
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: (code) => { exitCode = code; },
+    });
+
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({
+      ok: false,
+      error: 'AUDIT_FINDINGS',
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      mode: 'dry-run',
+      phase: 'all',
+      ...finding,
+    });
+    expect(lines.join('\n')).not.toContain('private audit canary');
+    expect(exitCode).toBe(1);
+    expect(telemetry.logger.error).not.toHaveBeenCalled();
+    expect(telemetry.logger.warn).not.toHaveBeenCalled();
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces an apply-time invalid finding with its durable cursor and without technical telemetry', async () => {
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+    let exitCode = 0;
+
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [
+        `--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`,
+        '--apply',
+        '--phase=summaries',
+      ],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill: async () => ({
+          summaries: {
+            scannedSourceTasks: 1,
+            scannedCounts: 1,
+            processed: 0,
+            changed: 0,
+            invalid: 1,
+            unknownOrphans: 0,
+            cursor: 'group_safe_previous_cursor',
+            limitReached: false,
+          },
+        }),
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: (code) => { exitCode = code; },
+    });
+
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({
+      ok: false,
+      error: 'AUDIT_FINDINGS',
+      mode: 'apply',
+      phase: 'summaries',
+      summaries: { invalid: 1, cursor: 'group_safe_previous_cursor' },
+    });
+    expect(exitCode).toBe(1);
+    expect(telemetry.logger.error).not.toHaveBeenCalled();
+    expect(telemetry.logger.warn).not.toHaveBeenCalled();
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-sanitizes a hostile audit error at the main boundary before JSON serialization', async () => {
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+    let exitCode = 0;
+    const secret = 'private hostile audit canary';
+    const cyclic: Record<string, unknown> = { secret };
+    cyclic['self'] = cyclic;
+
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill: async () => {
+          throw new LifecycleBackfillAuditError({
+            projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+            mode: 'dry-run',
+            phase: 'tasks',
+            tasks: {
+              invalid: 1,
+              cursor: 'task_safe_cursor',
+              sources: null,
+              invalidReasons: secret,
+              secret,
+              unsafe: 1n,
+            },
+            secret,
+            cyclic,
+          });
+        },
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: (code) => { exitCode = code; },
+    });
+
+    expect(lines).toEqual([JSON.stringify({
+      projectId: EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID,
+      mode: 'dry-run',
+      phase: 'tasks',
+      tasks: { invalid: 1, cursor: 'task_safe_cursor', sources: {}, invalidReasons: {} },
+      ok: false,
+      error: 'AUDIT_FINDINGS',
+    })]);
+    expect(lines.join('\n')).not.toContain(secret);
+    expect(exitCode).toBe(1);
+    expect(telemetry.logger.error).not.toHaveBeenCalled();
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('reduces non-object and sparse hostile audit reports to allowlisted output', async () => {
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+    const hostileReports: unknown[] = [null, { tasks: { invalid: 1 } }];
+    const runBackfill = async (): Promise<never> => {
+      throw new LifecycleBackfillAuditError(hostileReports.shift() as never);
+    };
+
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill,
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: vi.fn(),
+    });
+    await runCodeTaskLifecycleBackfillMain({
+      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill,
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: vi.fn(),
+    });
+
+    expect(lines).toEqual([
+      JSON.stringify({ ok: false, error: 'AUDIT_FINDINGS' }),
+      JSON.stringify({ tasks: { invalid: 1 }, ok: false, error: 'AUDIT_FINDINGS' }),
+    ]);
+    expect(telemetry.logger.error).not.toHaveBeenCalled();
+    expect(telemetry.flush).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports one aggregated sanitized technical failure and awaits one telemetry flush', async () => {
+    const telemetry = createTelemetryHarness();
+    const lines: string[] = [];
+    let resolveFlush: (() => void) | undefined;
+    const flushGate = new Promise<void>((resolve) => { resolveFlush = resolve; });
+    telemetry.flush.mockImplementation(async () => await flushGate);
+    const secret = 'private unexpected telemetry canary';
+
+    let mainSettled = false;
+    const main = runCodeTaskLifecycleBackfillMain({
+      argv: [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
+      deps: {
+        readFile: async () => validCredential(),
+        createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
+        runBackfill: async () => { throw new Error(secret); },
+      },
+      telemetry: telemetry as never,
+      writeLine: (line) => { lines.push(line); },
+      setExitCode: vi.fn(),
+    }).then(() => { mainSettled = true; });
+
+    await vi.waitFor(() => { expect(telemetry.flush).toHaveBeenCalledTimes(1); });
+    expect(mainSettled).toBe(false);
+    resolveFlush?.();
+    await main;
+
+    expect(lines).toEqual([JSON.stringify({ ok: false, error: 'UNEXPECTED_FAILURE' })]);
+    expect(telemetry.logger.error).toHaveBeenCalledTimes(1);
+    const telemetryPayload = JSON.stringify(telemetry.logger.error.mock.calls);
+    expect(telemetryPayload).toContain('UNEXPECTED_FAILURE');
+    expect(telemetryPayload).not.toContain(secret);
+    expect(telemetryPayload).not.toContain('private_key');
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
+    expect(mainSettled).toBe(true);
   });
 
   it('does not let a terminate failure mask the durable cursor from the primary runner failure', async () => {
@@ -1499,16 +2544,20 @@ describe('CLI lifecycle and legacy delegation', () => {
   it.each([
     ['safety', async (): Promise<never> => {
       throw new Error('unused');
-    }, ['--project=wrong-project'], 'PROJECT_MISMATCH'],
+    }, ['--project=wrong-project'], 'PROJECT_MISMATCH', 0],
     ['unexpected', async (): Promise<never> => {
       throw new Error('private unexpected canary');
-    }, [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'], 'UNEXPECTED_FAILURE'],
+    }, [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'], 'UNEXPECTED_FAILURE', 1],
     ['run-without-cursor', async (): Promise<never> => {
       throw new LifecycleBackfillRunError('TASK_TRANSACTION_FAILED', undefined, 'private');
-    }, [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'], 'TASK_TRANSACTION_FAILED'],
-  ])('emits a stable %s main failure', async (_name, runBackfill, argv, expectedError) => {
+    }, [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'], 'TASK_TRANSACTION_FAILED', 1],
+    ['run-with-unknown-code', async (): Promise<never> => {
+      throw new LifecycleBackfillRunError('private_untrusted_code', 'private_cursor', 'private');
+    }, [`--project=${EXPECTED_LIFECYCLE_BACKFILL_PROJECT_ID}`, '--phase=tasks'], 'UNEXPECTED_FAILURE', 1],
+  ])('emits a stable %s main failure', async (_name, runBackfill, argv, expectedError, telemetryCalls) => {
     const lines: string[] = [];
     let exitCode = 0;
+    const telemetry = createTelemetryHarness();
     await runCodeTaskLifecycleBackfillMain({
       argv,
       env: { GOOGLE_APPLICATION_CREDENTIALS: '/explicit/key.json' },
@@ -1517,11 +2566,15 @@ describe('CLI lifecycle and legacy delegation', () => {
         createFirestore: () => ({ terminate: vi.fn(async () => undefined) } as unknown as Firestore),
         runBackfill,
       },
+      telemetry: telemetry as never,
       writeLine: (line) => { lines.push(line); },
       setExitCode: (code) => { exitCode = code; },
     });
     expect(JSON.parse(lines[0] ?? '{}')).toEqual({ ok: false, error: expectedError });
     expect(exitCode).toBe(1);
+    expect(telemetry.logger.error).toHaveBeenCalledTimes(telemetryCalls);
+    expect(telemetry.logger.warn).not.toHaveBeenCalled();
+    expect(telemetry.flush).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the legacy summary entry point dry-run safe and delegates to the same gates', async () => {
@@ -1571,7 +2624,7 @@ describe('CLI lifecycle and legacy delegation', () => {
     try {
       await runCodeTaskLifecycleBackfillMain({
         argv: ['--project=wrong-project'],
-        env: {},
+        env: { INTEXURAOS_SENTRY_DSN: '' },
       });
       expect(stdout).toHaveBeenCalledWith(`${JSON.stringify({ ok: false, error: 'PROJECT_MISMATCH' })}\n`);
       expect(process.exitCode).toBe(1);
