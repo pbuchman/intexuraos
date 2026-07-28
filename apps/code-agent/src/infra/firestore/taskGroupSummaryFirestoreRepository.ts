@@ -3,6 +3,7 @@
  * Thin adapter — delegates to `./taskGroupSummary/{serializer,queries}.ts`.
  */
 /* eslint-disable no-restricted-imports */
+import { createHash } from 'node:crypto';
 import { Timestamp, FieldValue } from '@google-cloud/firestore';
 import type { DocumentData, Firestore, DocumentSnapshot, Transaction } from '@google-cloud/firestore';
 import type { Logger, Result } from '@intexuraos/common-core';
@@ -12,6 +13,8 @@ import type {
   ListGroupSummariesInput,
   ListGroupSummariesOutput,
   GroupSummaryError,
+  LifecycleBackfillGroupCountVector,
+  LifecycleBackfillTargetSummaryProof,
 } from '../../domain/ports/taskGroupSummaryRepository.js';
 import type { TaskGroupSummary, UserGroupCounts } from '../../domain/models/taskGroupSummary.js';
 import type { CodeTask } from '../../domain/models/codeTask.js';
@@ -34,6 +37,80 @@ const RAW_BACKFILL_STATUSES: ReadonlySet<string> = new Set([
 const RAW_BACKFILL_AGENT_TYPES: ReadonlySet<string> = new Set([
   'planning', 'execution', 'pull_request', 'review', 'remediation', 'ask_agent', 'sentry',
 ]);
+
+function stableFingerprintValue(value: unknown, ancestors: WeakSet<object>): unknown {
+  if (value instanceof Timestamp) {
+    return ['timestamp', String(value.seconds), String(value.nanoseconds)];
+  }
+  if (Array.isArray(value)) {
+    if (ancestors.has(value)) throw new Error('cyclic summary');
+    ancestors.add(value);
+    const result = value.map((entry) => stableFingerprintValue(entry, ancestors));
+    ancestors.delete(value);
+    return ['array', result];
+  }
+  if (value === null) return ['null'];
+  if (value === undefined) return ['undefined'];
+  if (typeof value === 'string') return ['string', value];
+  if (typeof value === 'boolean') return ['boolean', value];
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return ['number', 'nan'];
+    if (value === Number.POSITIVE_INFINITY) return ['number', 'positive-infinity'];
+    if (value === Number.NEGATIVE_INFINITY) return ['number', 'negative-infinity'];
+    if (Object.is(value, -0)) return ['number', 'negative-zero'];
+    return ['number', String(value)];
+  }
+  if (typeof value !== 'object') {
+    throw new Error('unsupported summary value');
+  }
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new Error('unsupported summary object');
+  }
+  if (ancestors.has(value)) throw new Error('cyclic summary');
+  ancestors.add(value);
+  const result = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => [
+      key,
+      stableFingerprintValue((value as Record<string, unknown>)[key], ancestors),
+    ]);
+  ancestors.delete(value);
+  return ['object', result];
+}
+
+export function createLifecycleBackfillSummaryFingerprint(
+  raw: Record<string, unknown>,
+): string | undefined {
+  try {
+    const canonical = JSON.stringify(stableFingerprintValue(raw, new WeakSet<object>()));
+    return createHash('sha256').update(canonical).digest('base64url');
+  } catch {
+    return undefined;
+  }
+}
+
+export function createLifecycleBackfillTaskSourceFingerprint(
+  tasks: readonly { id: string; data: Record<string, unknown> }[],
+): string | undefined {
+  const ordered = [...tasks].sort((left, right) => {
+    if (left.id < right.id) return -1;
+    if (left.id > right.id) return 1;
+    return 0;
+  });
+  return createLifecycleBackfillSummaryFingerprint({
+    tasks: ordered.map((task) => ({ id: task.id, data: task.data })),
+  });
+}
+
+function rawSummaryMatchesProof(
+  raw: Record<string, unknown>,
+  proof: LifecycleBackfillTargetSummaryProof,
+): boolean {
+  return proof.exists &&
+    raw['aggregateStatus'] === proof.aggregateStatus &&
+    createLifecycleBackfillSummaryFingerprint(raw) === proof.fingerprint;
+}
 
 export interface RepairReadableTaskGroupSummaryRepository extends LifecycleBackfillTaskGroupSummaryRepository {
   getSummary(userId: string, groupKey: string): Promise<Result<TaskGroupSummary | null, GroupSummaryError>>;
@@ -141,11 +218,11 @@ export function createTaskGroupSummaryFirestoreRepository(
     return true;
   }
 
-  function rawCountsCanDelete(
+  function rawCountsMatchProof(
     raw: Record<string, unknown>,
     userId: string,
     aggregateStatus: unknown,
-    summaryDocs: readonly { id: string; data(): DocumentData }[],
+    expected: LifecycleBackfillGroupCountVector,
   ): boolean {
     if (raw['userId'] !== userId) return false;
     const bucketFields = ['active', 'needsAction', 'done', 'failed', 'archived'] as const;
@@ -168,31 +245,9 @@ export function createTaskGroupSummaryFirestoreRepository(
       Number(raw['totalGroups']) <= 0 ||
       bucketTotal !== Number(raw['totalGroups'])
     ) return false;
-    const physical = {
-      active: 0,
-      needsAction: 0,
-      done: 0,
-      failed: 0,
-      archived: 0,
-      totalGroups: 0,
-    };
-    for (const summaryDoc of summaryDocs) {
-      const summary = summaryDoc.data() as Record<string, unknown>;
-      const groupKey = summary['groupKey'];
-      if (
-        typeof groupKey !== 'string' ||
-        groupKey.trim().length === 0 ||
-        summaryDoc.id !== `${userId}_${groupKey}` ||
-        !rawSummaryCanBeDeleted(summary, userId, groupKey)
-      ) return false;
-      const physicalBucket = bucketByStatus[String(summary['aggregateStatus'])] as
-        (typeof bucketFields)[number];
-      physical[physicalBucket]++;
-      physical.totalGroups++;
-    }
     if (
-      bucketFields.some((field) => Number(raw[field]) !== physical[field]) ||
-      Number(raw['totalGroups']) !== physical.totalGroups
+      bucketFields.some((field) => Number(raw[field]) !== expected[field]) ||
+      Number(raw['totalGroups']) !== expected.totalGroups
     ) return false;
     const bucket = bucketByStatus[String(aggregateStatus)];
     return bucket !== undefined && Number(raw[bucket]) > 0;
@@ -646,6 +701,7 @@ export function createTaskGroupSummaryFirestoreRepository(
     async removeAskOnlyOrphan(
       userId: string,
       groupKey: string,
+      proof,
     ): ReturnType<LifecycleBackfillTaskGroupSummaryRepository['removeAskOnlyOrphan']> {
       try {
         const outcome = await firestore.runTransaction(async (tx) => {
@@ -655,6 +711,10 @@ export function createTaskGroupSummaryFirestoreRepository(
             return 'source_invalid' as const;
           }
           if (!sourceTasks.every(rawSourceTaskIsValid)) return 'source_invalid' as const;
+          if (
+            createLifecycleBackfillTaskSourceFingerprint(sourceTasks) !==
+            proof.expectedSourceFingerprint
+          ) return 'source_changed' as const;
           if (!sourceTasks.every((task) => task.data['agentType'] === 'ask_agent')) {
             return 'source_not_ask_only' as const;
           }
@@ -663,21 +723,21 @@ export function createTaskGroupSummaryFirestoreRepository(
           const summaryDoc = await tx.get(summaryRef);
           if (!summaryDoc.exists) return 'summary_missing' as const;
           const rawSummary = summaryDoc.data() as Record<string, unknown>;
-          if (!rawSummaryCanBeDeleted(rawSummary, userId, groupKey)) {
+          if (
+            !rawSummaryCanBeDeleted(rawSummary, userId, groupKey) ||
+            !rawSummaryMatchesProof(rawSummary, proof.expectedTarget)
+          ) {
             return 'summary_invalid' as const;
           }
 
-          const [countsDoc, userSummariesSnapshot] = await Promise.all([
-            tx.get(countsDocRef(firestore, userId)),
-            tx.get(firestore.collection(SUMMARIES_COLLECTION).where('userId', '==', userId)),
-          ]);
+          const countsDoc = await tx.get(countsDocRef(firestore, userId));
           if (!countsDoc.exists) return 'counts_invalid' as const;
           const rawCounts = countsDoc.data() as Record<string, unknown>;
-          if (!rawCountsCanDelete(
+          if (!rawCountsMatchProof(
             rawCounts,
             userId,
             rawSummary['aggregateStatus'],
-            userSummariesSnapshot.docs,
+            proof.expectedCounts,
           )) {
             return 'counts_invalid' as const;
           }

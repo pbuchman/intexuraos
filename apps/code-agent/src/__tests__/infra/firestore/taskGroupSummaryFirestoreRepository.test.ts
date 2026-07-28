@@ -10,8 +10,15 @@ import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/i
 import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import type { Logger } from '@intexuraos/common-core';
-import { createTaskGroupSummaryFirestoreRepository as createRepository } from '../../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
+import {
+  createLifecycleBackfillSummaryFingerprint,
+  createLifecycleBackfillTaskSourceFingerprint,
+  createTaskGroupSummaryFirestoreRepository as createRepository,
+} from '../../../infra/firestore/taskGroupSummaryFirestoreRepository.js';
 import type { CodeTask } from '../../../domain/models/codeTask.js';
+import type {
+  LifecycleBackfillSummaryMutationProof,
+} from '../../../domain/ports/taskGroupSummaryRepository.js';
 
 describe('taskGroupSummaryFirestoreRepository', () => {
   let fakeFirestore: ReturnType<typeof createFakeFirestore>;
@@ -30,6 +37,64 @@ describe('taskGroupSummaryFirestoreRepository', () => {
 
   afterEach(() => {
     resetFirestore();
+  });
+
+  describe('lifecycle backfill summary fingerprint', () => {
+    it('distinguishes every supported Firestore scalar and container shape', () => {
+      const timestamp = Timestamp.fromMillis(1_234);
+      const nullPrototypeMap = Object.create(null) as Record<string, unknown>;
+      nullPrototypeMap['value'] = 'plain Firestore map';
+
+      expect(createLifecycleBackfillSummaryFingerprint({ value: timestamp }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({
+          value: ['timestamp', timestamp.seconds, timestamp.nanoseconds],
+        }));
+      expect(createLifecycleBackfillSummaryFingerprint({ value: Number.NaN }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({ value: null }));
+      expect(createLifecycleBackfillSummaryFingerprint({ value: Number.POSITIVE_INFINITY }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({ value: null }));
+      expect(createLifecycleBackfillSummaryFingerprint({ value: Number.NEGATIVE_INFINITY }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({ value: null }));
+      expect(createLifecycleBackfillSummaryFingerprint({ value: -0 }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({ value: 0 }));
+      expect(createLifecycleBackfillSummaryFingerprint({ value: ['a', 'b'] }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({ value: { 0: 'a', 1: 'b' } }));
+      expect(createLifecycleBackfillSummaryFingerprint(nullPrototypeMap)).toEqual(
+        createLifecycleBackfillSummaryFingerprint({ value: 'plain Firestore map' }),
+      );
+    });
+
+    it('preserves explicit undefined and fails closed for cyclic or unsupported values', () => {
+      expect(createLifecycleBackfillSummaryFingerprint({ value: undefined }))
+        .not.toBe(createLifecycleBackfillSummaryFingerprint({}));
+
+      const cyclicArray: unknown[] = [];
+      cyclicArray.push(cyclicArray);
+      const cyclicObject: Record<string, unknown> = {};
+      cyclicObject['self'] = cyclicObject;
+
+      expect(createLifecycleBackfillSummaryFingerprint({ value: cyclicArray })).toBeUndefined();
+      expect(createLifecycleBackfillSummaryFingerprint(cyclicObject)).toBeUndefined();
+      expect(createLifecycleBackfillSummaryFingerprint({ value: 1n })).toBeUndefined();
+      expect(createLifecycleBackfillSummaryFingerprint({ value: (): void => undefined })).toBeUndefined();
+      expect(createLifecycleBackfillSummaryFingerprint({ value: Symbol('unsafe') })).toBeUndefined();
+      expect(createLifecycleBackfillSummaryFingerprint({ value: new Date(0) })).toBeUndefined();
+    });
+
+    it('fingerprints the complete raw source set in deterministic task-id order', () => {
+      const first = { id: 'task-a', data: { status: 'failed', prompt: 'first' } };
+      const second = { id: 'task-b', data: { status: 'queued', prompt: 'second' } };
+
+      expect(createLifecycleBackfillTaskSourceFingerprint([second, first]))
+        .toBe(createLifecycleBackfillTaskSourceFingerprint([first, second]));
+      expect(createLifecycleBackfillTaskSourceFingerprint([first]))
+        .not.toBe(createLifecycleBackfillTaskSourceFingerprint([{
+          ...first,
+          data: { ...first.data, prompt: 'changed' },
+        }]));
+      expect(createLifecycleBackfillTaskSourceFingerprint([first, { ...first }]))
+        .toBeTypeOf('string');
+    });
   });
 
   function createIncrementalRepository(
@@ -4521,6 +4586,71 @@ describe('taskGroupSummaryFirestoreRepository', () => {
   describe('removeAskOnlyOrphan', () => {
     const at = Timestamp.fromDate(new Date('2026-07-27T09:00:00.000Z'));
 
+    async function currentRemovalProof(
+      userId: string,
+      groupKey: string,
+    ): Promise<LifecycleBackfillSummaryMutationProof> {
+      let sourceTasks: { id: string; data: Record<string, unknown> }[];
+      if (groupKey.startsWith('standalone_')) {
+        const source = await fakeFirestore.collection('code_tasks')
+          .doc(groupKey.slice('standalone_'.length)).get();
+        sourceTasks = source.exists
+          ? [{ id: source.id, data: source.data() as Record<string, unknown> }]
+          : [];
+      } else {
+        const source = await fakeFirestore.collection('code_tasks')
+          .where('userId', '==', userId)
+          .where('linearIssueId', '==', groupKey)
+          .get();
+        sourceTasks = source.docs.map((doc) => ({
+          id: doc.id,
+          data: doc.data() as Record<string, unknown>,
+        }));
+      }
+      const sourceFingerprint = createLifecycleBackfillTaskSourceFingerprint(sourceTasks);
+      if (sourceFingerprint === undefined) {
+        throw new Error('Expected fingerprintable source fixture');
+      }
+      const [summary, counts] = await Promise.all([
+        fakeFirestore.collection('task_group_summaries').doc(`${userId}_${groupKey}`).get(),
+        fakeFirestore.collection('user_group_counts').doc(userId).get(),
+      ]);
+      const rawCounts = counts.data() ?? {};
+      const rawSummary = summary.data() as Record<string, unknown> | undefined;
+      const fingerprint = rawSummary === undefined
+        ? undefined
+        : createLifecycleBackfillSummaryFingerprint(rawSummary);
+      if (rawSummary !== undefined && fingerprint === undefined) {
+        throw new Error('Expected fingerprintable summary fixture');
+      }
+      return {
+        expectedSourceFingerprint: sourceFingerprint,
+        expectedCounts: {
+          active: Number(rawCounts['active'] ?? 0),
+          needsAction: Number(rawCounts['needsAction'] ?? 0),
+          done: Number(rawCounts['done'] ?? 0),
+          failed: Number(rawCounts['failed'] ?? 0),
+          archived: Number(rawCounts['archived'] ?? 0),
+          totalGroups: Number(rawCounts['totalGroups'] ?? 0),
+        },
+        expectedTarget: rawSummary === undefined
+          ? { exists: false }
+          : {
+            exists: true,
+            fingerprint: fingerprint as string,
+            aggregateStatus: rawSummary['aggregateStatus'] as 'active' | 'needs-action' | 'done' | 'failed' | 'archived',
+          },
+      };
+    }
+
+    async function removeWithCurrentProof(
+      repo: ReturnType<typeof createRepository>,
+      userId: string,
+      groupKey: string,
+    ): ReturnType<ReturnType<typeof createRepository>['removeAskOnlyOrphan']> {
+      return await repo.removeAskOnlyOrphan(userId, groupKey, await currentRemovalProof(userId, groupKey));
+    }
+
     async function seedOrphan(
       userId: string,
       groupKey: string,
@@ -4580,8 +4710,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       ]);
       await seedOrphan('user-ask', 'INT-ASK-ONLY');
 
-      const first = await repo.removeAskOnlyOrphan('user-ask', 'INT-ASK-ONLY');
-      const second = await repo.removeAskOnlyOrphan('user-ask', 'INT-ASK-ONLY');
+      const first = await removeWithCurrentProof(repo, 'user-ask', 'INT-ASK-ONLY');
+      const second = await removeWithCurrentProof(repo, 'user-ask', 'INT-ASK-ONLY');
 
       expect(first).toEqual({ ok: true, value: 'removed' });
       expect(second).toEqual({ ok: true, value: 'summary_missing' });
@@ -4624,13 +4754,15 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await seedOrphan('user-malformed-linear', 'INT-MALFORMED-LINEAR');
       await seedOrphan('user-malformed-canonical', 'INT-MALFORMED-CANONICAL');
 
-      const mixed = await repo.removeAskOnlyOrphan('user-mixed', 'INT-MIXED');
-      const malformed = await repo.removeAskOnlyOrphan('user-malformed', 'standalone_malformed-standalone');
-      const malformedLinearResult = await repo.removeAskOnlyOrphan(
+      const mixed = await removeWithCurrentProof(repo, 'user-mixed', 'INT-MIXED');
+      const malformed = await removeWithCurrentProof(repo, 'user-malformed', 'standalone_malformed-standalone');
+      const malformedLinearResult = await removeWithCurrentProof(
+        repo,
         'user-malformed-linear',
         'INT-MALFORMED-LINEAR',
       );
-      const malformedCanonicalResult = await repo.removeAskOnlyOrphan(
+      const malformedCanonicalResult = await removeWithCurrentProof(
+        repo,
         'user-malformed-canonical',
         'INT-MALFORMED-CANONICAL',
       );
@@ -4649,14 +4781,14 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
       await seedOrphan('user-unknown', 'INT-UNKNOWN');
 
-      const result = await repo.removeAskOnlyOrphan('user-unknown', 'INT-UNKNOWN');
+      const result = await removeWithCurrentProof(repo, 'user-unknown', 'INT-UNKNOWN');
 
       expect(result).toEqual({ ok: true, value: 'source_unknown' });
       expect((await fakeFirestore.collection('task_group_summaries').doc('user-unknown_INT-UNKNOWN').get()).exists)
         .toBe(true);
     });
 
-    it('re-proves ask-only state inside the transaction so a concurrent non-ask task blocks deletion', async () => {
+    it('re-proves the exact source fingerprint so a concurrent non-ask task blocks deletion', async () => {
       const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
       const askTask = makeTask({
         id: 'ask-race', userId: 'user-race', linearIssueId: 'INT-RACE', agentType: 'ask_agent',
@@ -4675,9 +4807,9 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         return await originalRunTransaction(callback);
       });
 
-      const result = await repo.removeAskOnlyOrphan('user-race', 'INT-RACE');
+      const result = await removeWithCurrentProof(repo, 'user-race', 'INT-RACE');
 
-      expect(result).toEqual({ ok: true, value: 'source_not_ask_only' });
+      expect(result).toEqual({ ok: true, value: 'source_changed' });
       expect((await fakeFirestore.collection('task_group_summaries').doc('user-race_INT-RACE').get()).exists)
         .toBe(true);
     });
@@ -4706,7 +4838,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         return await originalRunTransaction(callback);
       });
 
-      const result = await repo.removeAskOnlyOrphan('user-ledger-race', 'INT-ASK-LEDGER');
+      const result = await removeWithCurrentProof(repo, 'user-ledger-race', 'INT-ASK-LEDGER');
 
       expect(result).toEqual({ ok: true, value: 'counts_invalid' });
       expect((await fakeFirestore.collection('task_group_summaries')
@@ -4715,7 +4847,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         .toMatchObject({ active: 0, done: 2, totalGroups: 2 });
     });
 
-    it('rejects ask-only deletion when another physical summary for the user is malformed', async () => {
+    it('does not repeat the caller-owned global scan for an unrelated summary during point mutation', async () => {
       const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
       const askTask = makeTask({
         id: 'ask-malformed-ledger', userId: 'user-malformed-ledger',
@@ -4731,14 +4863,17 @@ describe('taskGroupSummaryFirestoreRepository', () => {
           updatedAt: at,
         });
 
-      const result = await repo.removeAskOnlyOrphan(
+      const result = await removeWithCurrentProof(
+        repo,
         'user-malformed-ledger',
         'INT-ASK-MALFORMED-LEDGER',
       );
 
-      expect(result).toEqual({ ok: true, value: 'counts_invalid' });
+      expect(result).toEqual({ ok: true, value: 'removed' });
       expect((await fakeFirestore.collection('task_group_summaries')
-        .doc('user-malformed-ledger_INT-ASK-MALFORMED-LEDGER').get()).exists).toBe(true);
+        .doc('user-malformed-ledger_INT-ASK-MALFORMED-LEDGER').get()).exists).toBe(false);
+      expect((await fakeFirestore.collection('task_group_summaries')
+        .doc('user-malformed-ledger_INT-MALFORMED').get()).exists).toBe(true);
     });
 
     it('handles an exact standalone ask-only source safely', async () => {
@@ -4762,8 +4897,8 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         totalGroups: 1, updatedAt: at,
       });
 
-      const removed = await repo.removeAskOnlyOrphan('user-standalone-ask', 'standalone_ask-standalone');
-      const unknown = await repo.removeAskOnlyOrphan('user-standalone-ask', 'standalone_missing');
+      const removed = await removeWithCurrentProof(repo, 'user-standalone-ask', 'standalone_ask-standalone');
+      const unknown = await removeWithCurrentProof(repo, 'user-standalone-ask', 'standalone_missing');
 
       expect(removed).toEqual({ ok: true, value: 'removed' });
       expect(unknown).toEqual({ ok: true, value: 'source_unknown' });
@@ -4786,7 +4921,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
         aggregateStatus: 'done', updatedAt: at,
       });
 
-      const result = await repo.removeAskOnlyOrphan('user-missing-counts', 'INT-MISSING-COUNTS');
+      const result = await removeWithCurrentProof(repo, 'user-missing-counts', 'INT-MISSING-COUNTS');
 
       expect(result).toEqual({ ok: true, value: 'counts_invalid' });
       expect((await fakeFirestore.collection('task_group_summaries')
@@ -4854,7 +4989,7 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       await seedOrphan('user-invalid', 'INT-INVALID');
       await mutate();
 
-      const result = await repo.removeAskOnlyOrphan('user-invalid', 'INT-INVALID');
+      const result = await removeWithCurrentProof(repo, 'user-invalid', 'INT-INVALID');
 
       expect(result).toEqual({ ok: true, value: expectedOutcome });
       expect((await fakeFirestore.collection('task_group_summaries').doc('user-invalid_INT-INVALID').get()).exists)
@@ -4865,7 +5000,13 @@ describe('taskGroupSummaryFirestoreRepository', () => {
       const repo = createRepository({ firestore: fakeFirestore as unknown as Firestore, logger });
       fakeFirestore.configure({ errorToThrow: new Error('verification failed') });
 
-      const result = await repo.removeAskOnlyOrphan('user-error', 'INT-ERROR');
+      const result = await repo.removeAskOnlyOrphan('user-error', 'INT-ERROR', {
+        expectedSourceFingerprint: 'unreached-source-proof',
+        expectedCounts: {
+          active: 0, needsAction: 0, done: 0, failed: 0, archived: 0, totalGroups: 0,
+        },
+        expectedTarget: { exists: false },
+      });
 
       expect(result).toEqual({
         ok: false,

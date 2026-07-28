@@ -61,8 +61,28 @@ export type AskOnlyOrphanRemovalOutcome =
   | 'source_unknown'
   | 'source_not_ask_only'
   | 'source_invalid'
+  | 'source_changed'
   | 'summary_invalid'
   | 'counts_invalid';
+
+export interface LifecycleBackfillGroupCountVector {
+  active: number;
+  needsAction: number;
+  done: number;
+  failed: number;
+  archived: number;
+  totalGroups: number;
+}
+
+export type LifecycleBackfillTargetSummaryProof =
+  | { exists: false }
+  | { exists: true; fingerprint: string; aggregateStatus: GroupStatus };
+
+export interface LifecycleBackfillSummaryMutationProof {
+  expectedSourceFingerprint: string;
+  expectedCounts: LifecycleBackfillGroupCountVector;
+  expectedTarget: LifecycleBackfillTargetSummaryProof;
+}
 
 /** Narrow maintenance extension used only by the lifecycle reconciliation command. */
 export interface LifecycleBackfillTaskGroupSummaryRepository extends TaskGroupSummaryRepository {
@@ -73,6 +93,7 @@ export interface LifecycleBackfillTaskGroupSummaryRepository extends TaskGroupSu
   removeAskOnlyOrphan(
     userId: string,
     groupKey: string,
+    proof: LifecycleBackfillSummaryMutationProof,
   ): Promise<Result<AskOnlyOrphanRemovalOutcome, GroupSummaryError>>;
 }
 
