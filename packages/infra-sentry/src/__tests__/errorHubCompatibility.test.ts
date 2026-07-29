@@ -35,7 +35,7 @@ describe('Error Hub DSN compatibility', () => {
       tracesSampleRate: 0,
     });
     const discardedStdout = new Writable({
-      write(_chunk, _encoding, callback) {
+      write(_chunk, _encoding, callback): void {
         callback();
       },
     });
@@ -61,12 +61,12 @@ describe('Error Hub DSN compatibility', () => {
     }
     const events = capture.requests.flatMap(({ body }) => eventItems(body));
     expect(events).toHaveLength(3);
-    expect(events.map((event) => event.level).sort()).toEqual(['error', 'fatal', 'warning']);
+    expect(events.map((event) => event['level']).sort()).toEqual(['error', 'fatal', 'warning']);
     expect(events.map(eventMessage).sort()).toEqual(['hub error', 'hub fatal', 'hub warning']);
     for (const event of events) {
-      expect(event.environment).toBe('dev');
-      expect(event.release).toBe(RELEASE);
-      expect(event.server_name).toBe('code-agent');
+      expect(event['environment']).toBe('dev');
+      expect(event['release']).toBe(RELEASE);
+      expect(event['server_name']).toBe('code-agent');
     }
     expect(JSON.stringify(events)).not.toContain('hub debug');
     expect(JSON.stringify(events)).not.toContain('hub info');
@@ -104,7 +104,7 @@ async function startEnvelopeCapture(): Promise<{
   return {
     port: address.port,
     requests,
-    stop: async () => {
+    stop: async (): Promise<void> => {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error === undefined ? resolve() : reject(error)));
       });

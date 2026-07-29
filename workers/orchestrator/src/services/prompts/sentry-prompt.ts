@@ -92,7 +92,7 @@ The issue URL host matches neither the configured \`ERROR_HUB_HOST\` nor Sentry 
 export const sentryPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-sentry',
   description: 'Sentry agent system prompt for autonomous issue fixing or code-level suppression',
-  version: '1.0.0',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
