@@ -23,7 +23,8 @@ RUN apk add --no-cache \
     py3-pip \
     && rm -rf /var/cache/apk/*
 
-# Install worker CLI and browser dependencies from the base Alpine repositories.
+# Use one Alpine repository set: edge/community Chromium requires an unavailable
+# edge/main libFLAC.so.14 when mixed with this stable base image.
 # chromium: required for @playwright/mcp (can't download browsers at runtime)
 RUN apk add --no-cache \
     ripgrep \

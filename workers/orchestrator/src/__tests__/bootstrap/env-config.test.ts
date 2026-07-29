@@ -225,6 +225,17 @@ describe('loadEnvConfig', () => {
     );
   });
 
+  it.each([
+    ['host with trailing LF', 'home-dev.example.ts.net\n'],
+    ['host and port with trailing LF', 'home-dev.example.ts.net:8443\n'],
+    ['host and port with trailing CRLF', 'home-dev.example.ts.net:8443\r\n'],
+    ['host and port with trailing tab', 'home-dev.example.ts.net:8443\t'],
+  ])('rejects INTEXURAOS_ERROR_HUB_HOST containing whitespace: %s', (_name, value) => {
+    expect(() => loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: value }))).toThrow(
+      /Invalid INTEXURAOS_ERROR_HUB_HOST/
+    );
+  });
+
   it('does not repeat rejected Error Hub credentials in the startup error', () => {
     const credentialValue = 'user:password@home-dev.example.ts.net';
     let thrown: unknown;

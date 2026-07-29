@@ -26,6 +26,7 @@ import {
   createIsolationProvider,
   TokenRefresher,
   type IsolationProvider,
+  type WorkerSecrets,
 } from '../services/isolation/index.js';
 import { CredentialMonitor } from '../services/isolation/credential-monitor.js';
 import { CredentialRefresher } from '../services/isolation/credential-refresher.js';
@@ -86,6 +87,23 @@ export interface WiredServices {
 
 export function resolveSettingsLocalTemplatePath(repoPath: string): string {
   return join(repoPath, 'docker', 'code-worker', 'config-defaults', 'settings.local.json');
+}
+
+export function buildTaskDispatcherWorkerSecrets(
+  env: BootstrapEnvConfig,
+  anthropicApiKey: string
+): WorkerSecrets {
+  return {
+    ANTHROPIC_API_KEY: anthropicApiKey,
+    LINEAR_API_KEY: env.linearApiKey,
+    SENTRY_AUTH_TOKEN: env.sentryAuthToken,
+    ...(env.errorHubHost !== undefined ? { ERROR_HUB_HOST: env.errorHubHost } : {}),
+    MINIMAX_API_KEY: env.minimaxApiKey,
+    MIMO_API_KEY: env.mimoApiKey,
+    DASHSCOPE_API_KEY: env.dashscopeApiKey,
+    KIMI_API_KEY: env.kimiApiKey,
+    OPENROUTER_API_KEY: env.openRouterApiKey,
+  };
 }
 
 /**
@@ -250,17 +268,10 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   workerAuthRegistry.startMonitoring();
   logWorkerAuthStartupStatus(workerAuthRegistry, logger);
 
-  const apiKeySecrets = {
-    ANTHROPIC_API_KEY: workerAuthRegistry.getCurrentAccessToken('claude') ?? '',
-    LINEAR_API_KEY: env.linearApiKey,
-    SENTRY_AUTH_TOKEN: env.sentryAuthToken,
-    ...(env.errorHubHost !== undefined ? { ERROR_HUB_HOST: env.errorHubHost } : {}),
-    MINIMAX_API_KEY: env.minimaxApiKey,
-    MIMO_API_KEY: env.mimoApiKey,
-    DASHSCOPE_API_KEY: env.dashscopeApiKey,
-    KIMI_API_KEY: env.kimiApiKey,
-    OPENROUTER_API_KEY: env.openRouterApiKey,
-  };
+  const apiKeySecrets = buildTaskDispatcherWorkerSecrets(
+    env,
+    workerAuthRegistry.getCurrentAccessToken('claude') ?? ''
+  );
 
   const providerApiKeys: Record<string, ProviderApiKeyHealth> = {
     MINIMAX_API_KEY: { configured: env.minimaxApiKey.trim() !== '' },

@@ -133,6 +133,7 @@ function readOptionalErrorHubHost(env: EnvReader): string | undefined {
   const host = colonIndex === -1 ? value : value.slice(0, colonIndex);
   const port = colonIndex === -1 ? undefined : value.slice(colonIndex + 1);
   const hasMultipleColons = colonIndex !== -1 && value.includes(':', colonIndex + 1);
+  const hasWhitespace = /\s/u.test(value);
   const dnsLabel = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?';
   const isDnsHost = new RegExp(`^(?=.{1,253}$)(?:${dnsLabel})(?:\\.(?:${dnsLabel}))*$`, 'u').test(
     host
@@ -140,7 +141,7 @@ function readOptionalErrorHubHost(env: EnvReader): string | undefined {
   const isPortValid =
     port === undefined || (/^[0-9]+$/u.test(port) && Number(port) >= 1 && Number(port) <= 65535);
 
-  if (hasMultipleColons || !isDnsHost || !isPortValid) {
+  if (hasWhitespace || hasMultipleColons || !isDnsHost || !isPortValid) {
     throw new IntexuraOSError(
       'MISCONFIGURED',
       'Invalid INTEXURAOS_ERROR_HUB_HOST. Expected a DNS host with an optional port.'
