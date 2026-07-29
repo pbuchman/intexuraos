@@ -84,6 +84,7 @@ const terraformHetznerRetiredAsyncCleanupPath = resolve(
   repoRoot,
   'terraform/hetzner-prod/retired-async-cleanup.tf'
 );
+const terraformHetznerRetainedGcpPath = resolve(repoRoot, 'terraform/hetzner-prod/retained-gcp.tf');
 const terraformHetznerVariablesPath = resolve(repoRoot, 'terraform/hetzner-prod/variables.tf');
 const terraformHetznerOutputsPath = resolve(repoRoot, 'terraform/hetzner-prod/outputs.tf');
 const terraformHetznerTfvarsExamplePath = resolve(
@@ -1680,6 +1681,85 @@ describe('Hetzner async edge cutover', () => {
 });
 
 describe('Hetzner secret loader', () => {
+  it('stages the retained dev transcription Sentry DSN with overlapping IAM bindings', () => {
+    const script = readRequired(loadSecretsPath);
+    const terraform = readRequired(terraformDevMainPath);
+    const retainedGcpTerraform = readRequired(terraformHetznerRetainedGcpPath);
+    const hetznerRuntimeSecretsSection =
+      terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
+    const cloudRunExcludedSecretsSection =
+      terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
+    const legacyTranscriptionIamStart = terraform.indexOf(
+      'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {'
+    );
+    const legacyTranscriptionIamEnd = terraform.indexOf('\n}\n', legacyTranscriptionIamStart);
+    const legacyTranscriptionIamSection = terraform.slice(
+      legacyTranscriptionIamStart,
+      legacyTranscriptionIamEnd
+    );
+    const devTranscriptionIamStart = terraform.indexOf(
+      'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {'
+    );
+    const devTranscriptionIamEnd = terraform.indexOf('\n}\n', devTranscriptionIamStart);
+    const devTranscriptionIamSection = terraform.slice(
+      devTranscriptionIamStart,
+      devTranscriptionIamEnd
+    );
+    const transcriptionModuleStart = terraform.indexOf('module "function_transcription" {');
+    const transcriptionModuleEnd = terraform.indexOf(
+      '\n# Push subscription that delivers audio-stored events',
+      transcriptionModuleStart
+    );
+    const transcriptionModuleSection = terraform.slice(
+      transcriptionModuleStart,
+      transcriptionModuleEnd
+    );
+
+    expect(terraform).toMatch(
+      /"INTEXURAOS_SENTRY_DSN_DEV"\s*=\s*"Sentry Data Source Name for retained dev transcription error tracking"/u
+    );
+    expect(cloudRunExcludedSecretsSection).toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
+    expect(hetznerRuntimeSecretsSection).not.toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
+    expect(script).not.toContain('INTEXURAOS_SENTRY_DSN_DEV');
+    expect(retainedGcpTerraform).toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
+    expect(legacyTranscriptionIamStart).toBeGreaterThanOrEqual(0);
+    expect(legacyTranscriptionIamEnd).toBeGreaterThan(legacyTranscriptionIamStart);
+    expect(legacyTranscriptionIamSection).toContain(
+      'secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]'
+    );
+    expect(legacyTranscriptionIamSection).toContain(
+      'role      = "roles/secretmanager.secretAccessor"'
+    );
+    expect(legacyTranscriptionIamSection).toContain(
+      'member    = "serviceAccount:${google_service_account.transcription_function.email}"'
+    );
+    expect(devTranscriptionIamStart).toBeGreaterThanOrEqual(0);
+    expect(devTranscriptionIamEnd).toBeGreaterThan(devTranscriptionIamStart);
+    expect(devTranscriptionIamSection).toContain(
+      'secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'
+    );
+    expect(devTranscriptionIamSection).toContain(
+      'role      = "roles/secretmanager.secretAccessor"'
+    );
+    expect(devTranscriptionIamSection).toContain(
+      'member    = "serviceAccount:${google_service_account.transcription_function.email}"'
+    );
+    expect(transcriptionModuleStart).toBeGreaterThanOrEqual(0);
+    expect(transcriptionModuleEnd).toBeGreaterThan(transcriptionModuleStart);
+    expect(transcriptionModuleSection).toContain(
+      'INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'
+    );
+    expect(transcriptionModuleSection).toContain(
+      'google_secret_manager_secret_iam_member.transcription_sentry_dsn,'
+    );
+    expect(transcriptionModuleSection).toContain(
+      'google_secret_manager_secret_iam_member.transcription_sentry_dsn_dev,'
+    );
+    expect(
+      terraform.match(/module\.secret_manager\.secret_ids\["INTEXURAOS_SENTRY_DSN_DEV"\]/gu)
+    ).toHaveLength(2);
+  });
+
   it('round-trips JSON secret material through the generated dotenv file', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-secret-loader-'));
     const outputPath = resolve(directory, '.env.prod');
