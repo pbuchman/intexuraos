@@ -98,6 +98,7 @@ export function createLinearApiClient(): LinearApiClient {
         const client = getOrCreateClient(apiKey);
 
         const payload = await client.createIssue({
+          ...(input.id !== undefined && { id: input.id }),
           teamId: input.teamId,
           title: input.title,
           ...(input.description !== null ? { description: input.description } : {}),

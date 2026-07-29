@@ -58,7 +58,19 @@ export type ProcessSentryWebhookResult =
   | { ok: true; outcome: 'processed'; message: string; codeTaskId: string }
   | { ok: true; outcome: 'duplicate'; message: string; codeTaskId?: string | undefined }
   | { ok: true; outcome: 'ignored'; message: string }
-  | { ok: false; reason: 'invalid_signature' | 'internal_error' | 'invalid_payload'; message: string };
+  | {
+    ok: false;
+    reason: 'invalid_signature' | 'internal_error' | 'invalid_payload' | 'retryable';
+    message: string;
+  };
+
+function retryableLeaseResult(): ProcessSentryWebhookResult {
+  return {
+    ok: false,
+    reason: 'retryable',
+    message: 'Sentry issue processing is already in progress',
+  };
+}
 
 function buildSentryTaskPrompt(event: NormalizedSentryIssueEvent): string {
   return [
@@ -252,6 +264,10 @@ export async function processSentryWebhook(
     };
   }
 
+  if (acquireResult.value.kind === 'retryable') {
+    return retryableLeaseResult();
+  }
+
   if (acquireResult.value.kind === 'inspect_linked_task') {
     const linkedTaskId = acquireResult.value.codeTaskId;
     const taskResult = await codeTaskRepo.findById(linkedTaskId);
@@ -274,6 +290,9 @@ export async function processSentryWebhook(
     if (!acquireResult.ok) {
       logger.error({ error: acquireResult.error }, 'Failed to replace stale Sentry task reservation');
       return { ok: false, reason: 'internal_error', message: acquireResult.error.message };
+    }
+    if (acquireResult.value.kind === 'retryable') {
+      return retryableLeaseResult();
     }
     if (acquireResult.value.kind !== 'acquired') {
       return {
@@ -399,12 +418,31 @@ export async function processSentryWebhook(
   const issueResult = await linearIssueService.ensureIssueExists({
     userId: automationUserId,
     taskPrompt: injectionResult.value,
+    idempotencyKey: reservation.transitionKey,
+    ...(reservation.linearIssueId !== undefined && {
+      linearIssueId: reservation.linearIssueId,
+    }),
   });
   if (issueResult.linearFallback || issueResult.linearIssueId === undefined) {
     const message = issueResult.linearFallbackError ?? 'Failed to create or link Linear issue for Sentry issue';
     return await failReservation({
       result: { ok: false, reason: 'internal_error', message },
       reason: message,
+    });
+  }
+
+  const checkpointResult = await sentryIssueEventRepo.checkpointLinearIssue({
+    transitionKey: reservation.transitionKey,
+    issueKey: reservation.issueKey,
+    leaseToken: reservation.leaseToken,
+    linearIssueId: issueResult.linearIssueId,
+  });
+  if (!checkpointResult.ok) {
+    logger.error({ error: checkpointResult.error }, 'Failed to checkpoint Sentry Linear issue');
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message: checkpointResult.error.message },
+      reason: checkpointResult.error.message,
+      linearIssueId: issueResult.linearIssueId,
     });
   }
 

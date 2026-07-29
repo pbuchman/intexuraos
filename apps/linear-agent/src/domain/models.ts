@@ -91,6 +91,7 @@ export interface LinearConnectionPublic {
 
 /** Input for creating a Linear issue */
 export interface CreateIssueInput {
+  id?: string;
   title: string;
   description: string | null;
   priority: LinearPriority;

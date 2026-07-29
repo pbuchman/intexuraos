@@ -98,6 +98,7 @@ function signBody(body: unknown): { rawBody: Buffer; signatureHeader: string } {
 interface MocksShape {
   sentryIssueEventRepo: {
     acquire: ReturnType<typeof vi.fn>;
+    checkpointLinearIssue: ReturnType<typeof vi.fn>;
     completeReservation: ReturnType<typeof vi.fn>;
     failReservation: ReturnType<typeof vi.fn>;
   };
@@ -124,6 +125,7 @@ function acquiredResult(input: AcquireSentryTaskReservationInput): ReturnType<ty
 function installMocks(overrides: MockOverrides = {}): MocksShape {
   const sentryIssueEventRepo = {
     acquire: vi.fn(async (input: AcquireSentryTaskReservationInput) => acquiredResult(input)),
+    checkpointLinearIssue: vi.fn().mockResolvedValue(ok(undefined)),
     completeReservation: vi.fn().mockResolvedValue(ok(undefined)),
     failReservation: vi.fn().mockResolvedValue(ok(undefined)),
     ...overrides.sentryIssueEventRepo,
@@ -326,6 +328,52 @@ describe('processSentryWebhook', () => {
     });
   });
 
+  it('returns a retryable error while another delivery holds the lease without a task', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        acquire: vi.fn().mockResolvedValue(ok({ kind: 'retryable' })),
+      },
+    });
+
+    expect(await processSentryWebhook(buildInput())).toEqual({
+      ok: false,
+      reason: 'retryable',
+      message: 'Sentry issue processing is already in progress',
+    });
+    expect(mocks.codeTaskRepo.findById).not.toHaveBeenCalled();
+    expect(mocks.workerSettingsRepo.getSettings).not.toHaveBeenCalled();
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
+  });
+
+  it('creates exactly one task when a delivery retries after the active lease expires', async () => {
+    resetServices();
+    const acquire = vi.fn()
+      .mockResolvedValueOnce(ok({ kind: 'retryable' }))
+      .mockResolvedValueOnce(ok({
+        kind: 'acquired',
+        transitionKey: TRANSITION_KEY,
+        issueKey: ISSUE_KEY,
+        leaseToken: LEASE_TOKEN,
+        codeTaskId: 'task_after_expiry',
+      }));
+    mocks = installMocks({ sentryIssueEventRepo: { acquire } });
+
+    expect(await processSentryWebhook(buildInput())).toEqual({
+      ok: false,
+      reason: 'retryable',
+      message: 'Sentry issue processing is already in progress',
+    });
+    expect((await processSentryWebhook(buildInput())).ok).toBe(true);
+
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task_after_expiry',
+    }));
+    expect(mocks.taskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
+    expect(mocks.sentryIssueEventRepo.completeReservation).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['active task', createFakeTask({ id: 'task_linked', status: 'running', agentType: 'sentry' })],
     ['open PR URL', createFakeTask({
@@ -455,6 +503,20 @@ describe('processSentryWebhook', () => {
       outcome: 'duplicate',
       message: 'Sentry issue already has a code task',
       codeTaskId: 'task_winner',
+    });
+  });
+
+  it('returns retryable when replacement loses to a lease without a task', async () => {
+    resetServices();
+    const acquire = vi.fn()
+      .mockResolvedValueOnce(inspectResult('task_deleted'))
+      .mockResolvedValueOnce(ok({ kind: 'retryable' }));
+    mocks = installMocks({ sentryIssueEventRepo: { acquire } });
+
+    expect(await processSentryWebhook(buildInput())).toEqual({
+      ok: false,
+      reason: 'retryable',
+      message: 'Sentry issue processing is already in progress',
     });
   });
 
@@ -943,6 +1005,140 @@ describe('processSentryWebhook', () => {
       reason: 'create failed',
       linearIssueId: 'INT-200',
     });
+  });
+
+  it('checkpoints Linear and reuses it with the same proposed task id after task creation fails', async () => {
+    resetServices();
+    const acquire = vi.fn()
+      .mockResolvedValueOnce(ok({
+        kind: 'acquired',
+        transitionKey: TRANSITION_KEY,
+        issueKey: ISSUE_KEY,
+        leaseToken: 'lease-1',
+        codeTaskId: 'task_stable',
+      }))
+      .mockResolvedValueOnce(ok({
+        kind: 'acquired',
+        transitionKey: TRANSITION_KEY,
+        issueKey: ISSUE_KEY,
+        leaseToken: 'lease-2',
+        codeTaskId: 'task_stable',
+        linearIssueId: 'INT-200',
+      }));
+    let linearCreates = 0;
+    const ensureIssueExists = vi.fn().mockImplementation(async (params: {
+      linearIssueId?: string;
+    }) => {
+      if (params.linearIssueId === undefined) linearCreates += 1;
+      return {
+        linearIssueId: 'INT-200',
+        linearIssueTitle: '[sentry] TypeError',
+        linearFallback: false,
+        linearIssueLabels: ['bug', 'sentry'],
+        hasChildren: false,
+      };
+    });
+    const create = vi.fn()
+      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'create failed' }))
+      .mockImplementationOnce(async (input: Record<string, unknown>) => ok({
+        ...input,
+        id: input['id'],
+        status: 'queued',
+      }));
+    mocks = installMocks({
+      sentryIssueEventRepo: { acquire },
+      linearIssueService: { ensureIssueExists },
+      codeTaskRepo: { create },
+    });
+
+    expect(await processSentryWebhook(buildInput())).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'create failed',
+    });
+    expect((await processSentryWebhook(buildInput())).ok).toBe(true);
+
+    expect(linearCreates).toBe(1);
+    expect(ensureIssueExists).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      linearIssueId: 'INT-200',
+    }));
+    expect(mocks.sentryIssueEventRepo.checkpointLinearIssue).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls.map((call) => call[0]?.id)).toEqual(['task_stable', 'task_stable']);
+  });
+
+  it('uses the transition key to recover a Linear issue after a crash before checkpoint', async () => {
+    resetServices();
+    const acquire = vi.fn().mockResolvedValue(ok({
+      kind: 'acquired',
+      transitionKey: TRANSITION_KEY,
+      issueKey: ISSUE_KEY,
+      leaseToken: LEASE_TOKEN,
+      codeTaskId: 'task_stable',
+    }));
+    const remoteIssues = new Map<string, string>();
+    let crashAfterLinearResponse = true;
+    const ensureIssueExists = vi.fn().mockImplementation(async (params: {
+      idempotencyKey?: string;
+    }) => {
+      const key = params.idempotencyKey ?? 'missing-key';
+      if (!remoteIssues.has(key)) remoteIssues.set(key, 'INT-200');
+      const response = {
+        linearIssueId: remoteIssues.get(key),
+        linearIssueTitle: '[sentry] TypeError',
+        linearFallback: false,
+        linearIssueLabels: ['bug', 'sentry'],
+        hasChildren: false,
+      };
+      if (crashAfterLinearResponse) {
+        crashAfterLinearResponse = false;
+        throw new Error('crash after Linear response');
+      }
+      return response;
+    });
+    mocks = installMocks({
+      sentryIssueEventRepo: { acquire },
+      linearIssueService: { ensureIssueExists },
+    });
+
+    await expect(processSentryWebhook(buildInput())).rejects.toThrow('crash after Linear response');
+    expect((await processSentryWebhook(buildInput())).ok).toBe(true);
+
+    expect(ensureIssueExists).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      idempotencyKey: TRANSITION_KEY,
+    }));
+    expect(ensureIssueExists).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      idempotencyKey: TRANSITION_KEY,
+    }));
+    expect(remoteIssues.size).toBe(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'task_stable',
+      linearIssueId: 'INT-200',
+    }));
+  });
+
+  it('fails the lease when the Linear checkpoint cannot be persisted', async () => {
+    resetServices();
+    mocks = installMocks({
+      sentryIssueEventRepo: {
+        checkpointLinearIssue: vi.fn().mockResolvedValue(err({
+          code: 'FIRESTORE_ERROR',
+          message: 'checkpoint failed',
+        })),
+      },
+    });
+
+    expect(await processSentryWebhook(buildInput())).toEqual({
+      ok: false,
+      reason: 'internal_error',
+      message: 'checkpoint failed',
+    });
+    expect(mocks.sentryIssueEventRepo.failReservation).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'checkpoint failed',
+      linearIssueId: 'INT-200',
+    }));
+    expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
   });
 
   it('records the known task id when enqueueing fails', async () => {

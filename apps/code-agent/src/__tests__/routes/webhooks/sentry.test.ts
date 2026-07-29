@@ -63,6 +63,7 @@ describe('POST /webhooks/sentry', () => {
       logger: pino({ level: 'silent' }),
       sentryIssueEventRepo: {
         acquire: sentryReservationAcquire,
+        checkpointLinearIssue: vi.fn().mockResolvedValue(ok(undefined)),
         completeReservation: vi.fn().mockResolvedValue(ok(undefined)),
         failReservation: vi.fn().mockResolvedValue(ok(undefined)),
       },
@@ -250,6 +251,32 @@ describe('POST /webhooks/sentry', () => {
         message: 'reserve failed',
       },
     }));
+  });
+
+  it('returns service unavailable while an active lease has no task', async () => {
+    sentryReservationAcquire.mockResolvedValue(ok({ kind: 'retryable' }));
+    const rawBody = JSON.stringify(buildIssueBody());
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sentry',
+      headers: {
+        'content-type': 'application/json',
+        'sentry-hook-resource': 'issue',
+        'sentry-hook-signature': sign(rawBody),
+      },
+      payload: rawBody,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual(expect.objectContaining({
+      success: false,
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Sentry issue processing is already in progress',
+      },
+    }));
+    expect(codeTaskCreate).not.toHaveBeenCalled();
   });
 
   it('uses attached rawBody strings when Fastify raw body capture is available', async () => {

@@ -12,6 +12,7 @@ export interface CreateIssueRequest {
   title: string;
   description: string;
   labels?: string[];
+  idempotencyKey?: string;
 }
 
 export interface CreateIssueResponse {

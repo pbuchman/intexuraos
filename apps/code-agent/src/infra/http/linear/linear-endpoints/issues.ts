@@ -68,6 +68,9 @@ export function createIssueEndpoints(deps: IssueEndpointsDeps): IssueEndpoints {
           title: request.title,
           description: request.description,
           labels: request.labels ?? [],
+          ...(request.idempotencyKey !== undefined && {
+            idempotencyKey: request.idempotencyKey,
+          }),
         },
       });
 

@@ -90,12 +90,12 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       resource: 'event_alert',
       action: 'triggered',
       eventId: 'ABC-123',
-    }))).toBe('sentry:intexuraos-dev-pbuchman:100:4509001:event:abc-123');
+    }))).toBe('sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:event:abc-123');
   });
 
   it('preserves resource and normalized action when historical payloads omit event id', () => {
     expect(createSentryIssueDedupeKey(buildEvent({ action: '   ' }))).toBe(
-      'sentry:intexuraos-dev-pbuchman:100:4509001:issue:unknown'
+      'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:unknown'
     );
   });
 
@@ -107,14 +107,14 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       issueTitle: 'Original title',
     }));
 
-    expect(original).toBe('sentry-task:intexuraos-dev-pbuchman:100:4509001');
+    expect(original).toBe('sentry-task:intexuraos-dev-pbuchman:intexuraos-development:4509001');
     expect(renamed).toBe(original);
     expect(differentIssue).not.toBe(original);
   });
 
-  it('uses the stable project id across different project slug shapes', () => {
-    expect(createSentryProblemDedupeKey(buildEvent({ projectSlug: 'intexuraos-hetzner' }))).toBe(
-      createSentryProblemDedupeKey(buildEvent({ projectSlug: '100' }))
+  it('uses one canonical project identity with and without a project id', () => {
+    expect(createSentryProblemDedupeKey(buildEvent({ projectId: '100' }))).toBe(
+      createSentryProblemDedupeKey(buildEvent({ projectId: undefined }))
     );
   });
 
@@ -173,7 +173,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     expect(transition.data()?.['payload']).toBe('null');
   });
 
-  it('treats an exact Hub event retry as a duplicate and updates delivery audit fields', async () => {
+  it('returns retryable for an exact event with an active lease but no task', async () => {
     const event = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-1' });
     const acquired = expectAcquired(await repo.acquire(buildAcquireInput(event)));
     const retryAt = new Date('2026-07-29T10:00:10.000Z');
@@ -186,13 +186,39 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     }));
     const transition = await fakeFirestore.collection('sentry-issue-events').doc(acquired.transitionKey).get();
 
-    expect(retry).toEqual({ ok: true, value: { kind: 'duplicate' } });
+    expect(retry).toEqual({ ok: true, value: { kind: 'retryable' } });
     expect(transition.data()).toEqual(expect.objectContaining({
       duplicateCount: 1,
       payload: '{"delivery":2}',
       leaseOwner: 'delivery-1',
     }));
     expect((transition.data()?.['latestReceivedAt'] as { toDate(): Date }).toDate()).toEqual(retryAt);
+  });
+
+  it('returns the known task for an exact event whose lease is still active', async () => {
+    const event = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-known' });
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(event)));
+    await repo.failReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      leaseToken: first.leaseToken,
+      reason: 'enqueue failed',
+      codeTaskId: first.codeTaskId,
+    });
+    const active = expectAcquired(await repo.acquire(buildAcquireInput(event, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      leaseOwner: 'delivery-2',
+    })));
+
+    const retry = await repo.acquire(buildAcquireInput(event, {
+      receivedAt: new Date('2026-07-29T10:00:02.000Z'),
+      leaseOwner: 'delivery-3',
+    }));
+
+    expect(retry).toEqual({
+      ok: true,
+      value: { kind: 'duplicate', codeTaskId: active.codeTaskId },
+    });
   });
 
   it('blocks a later event for the same stable issue while its lease is unexpired despite a title change', async () => {
@@ -210,7 +236,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       leaseOwner: 'delivery-2',
     }));
 
-    expect(renamed).toEqual({ ok: true, value: { kind: 'duplicate' } });
+    expect(renamed).toEqual({ ok: true, value: { kind: 'retryable' } });
   });
 
   it('keeps identical titles on different stable issues independent', async () => {
@@ -240,7 +266,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     ]);
 
     expect(results.filter((result) => result.ok && result.value.kind === 'acquired')).toHaveLength(1);
-    expect(results.filter((result) => result.ok && result.value.kind === 'duplicate')).toHaveLength(1);
+    expect(results.filter((result) => result.ok && result.value.kind === 'retryable')).toHaveLength(1);
   });
 
   it('reacquires an expired crash lease without a task and retains the proposed task id', async () => {
@@ -254,6 +280,36 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     })));
 
     expect(recovered.codeTaskId).toBe('task_retained');
+  });
+
+  it('does not let an older failed transition steal a newer active issue lease', async () => {
+    const firstEvent = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-1' });
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(firstEvent, {
+      proposedCodeTaskId: 'task_first',
+    })));
+    await repo.failReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      leaseToken: first.leaseToken,
+      reason: 'first attempt failed',
+    });
+    const secondEvent = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-2' });
+    const second = expectAcquired(await repo.acquire(buildAcquireInput(secondEvent, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: 'task_second',
+    })));
+
+    const firstRetry = await repo.acquire(buildAcquireInput(firstEvent, {
+      receivedAt: new Date('2026-07-29T10:00:02.000Z'),
+      proposedCodeTaskId: 'task_first_retry',
+    }));
+
+    expect(firstRetry).toEqual({ ok: true, value: { kind: 'retryable' } });
+    const issue = await fakeFirestore.collection('sentry-issue-events').doc(second.issueKey).get();
+    expect(issue.data()).toEqual(expect.objectContaining({
+      proposedCodeTaskId: 'task_second',
+      leaseToken: second.leaseToken,
+    }));
   });
 
   it('releases a failed pre-task reservation for retry while preserving its task identity', async () => {
@@ -339,9 +395,48 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     }
   });
 
+  it('checkpoints a Linear issue under the lease and returns it on retry', async () => {
+    const event = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-linear' });
+    const acquired = expectAcquired(await repo.acquire(buildAcquireInput(event)));
+    await repo.checkpointLinearIssue({
+      transitionKey: acquired.transitionKey,
+      issueKey: acquired.issueKey,
+      leaseToken: acquired.leaseToken,
+      linearIssueId: 'INT-200',
+    });
+    for (const key of [acquired.transitionKey, acquired.issueKey]) {
+      expect((await fakeFirestore.collection('sentry-issue-events').doc(key).get()).data()).toEqual(
+        expect.objectContaining({ linearIssueId: 'INT-200' })
+      );
+    }
+    await repo.failReservation({
+      transitionKey: acquired.transitionKey,
+      issueKey: acquired.issueKey,
+      leaseToken: acquired.leaseToken,
+      reason: 'task create failed',
+      linearIssueId: 'INT-200',
+    });
+
+    const retried = expectAcquired(await repo.acquire(buildAcquireInput(event, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: 'task_discarded',
+    })));
+
+    expect(retried).toEqual(expect.objectContaining({
+      codeTaskId: acquired.codeTaskId,
+      linearIssueId: 'INT-200',
+    }));
+  });
+
   it('guards completion and failure with the current lease token', async () => {
     const acquired = expectAcquired(await repo.acquire(buildAcquireInput(buildEvent())));
 
+    const staleCheckpoint = await repo.checkpointLinearIssue({
+      transitionKey: acquired.transitionKey,
+      issueKey: acquired.issueKey,
+      leaseToken: 'stale-token',
+      linearIssueId: 'INT-stale',
+    });
     const staleCompletion = await repo.completeReservation({
       transitionKey: acquired.transitionKey,
       issueKey: acquired.issueKey,
@@ -356,15 +451,14 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     });
     const transition = await fakeFirestore.collection('sentry-issue-events').doc(acquired.transitionKey).get();
 
-    expect(staleCompletion).toEqual({
-      ok: false,
-      error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
-    });
-    expect(staleFailure).toEqual({
-      ok: false,
-      error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
-    });
+    for (const result of [staleCheckpoint, staleCompletion, staleFailure]) {
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+      });
+    }
     expect(transition.data()?.['state']).toBe('reserved');
+    expect(transition.data()?.['linearIssueId']).toBeNull();
   });
 
   it('returns an inspection result for a later event linked to an existing task', async () => {
@@ -387,8 +481,8 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       value: {
         kind: 'inspect_linked_task',
         codeTaskId: 'task_proposed',
-        transitionKey: 'sentry:intexuraos-dev-pbuchman:100:4509001:event:event-2',
-        issueKey: 'sentry-task:intexuraos-dev-pbuchman:100:4509001',
+        transitionKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:event:event-2',
+        issueKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:4509001',
       },
     });
   });
@@ -454,6 +548,45 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     );
   });
 
+  it('migrates an exact transition stored under the previous project-id key', async () => {
+    const event = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-project-id' });
+    const previousKey = [
+      'sentry',
+      event.organizationSlug,
+      event.projectId,
+      event.issueId,
+      'event',
+      event.eventId,
+    ].join(':');
+    await fakeFirestore.collection('sentry-issue-events').doc(previousKey).set({
+      dedupeKey: previousKey,
+      transitionKey: previousKey,
+      recordType: 'transition',
+      state: 'task_created',
+      organizationSlug: event.organizationSlug,
+      projectSlug: event.projectSlug,
+      projectId: event.projectId,
+      issueId: event.issueId,
+      resource: event.resource,
+      action: event.action,
+      eventId: event.eventId,
+      receivedAt: '2026-07-28T10:00:00.000Z',
+      proposedCodeTaskId: 'task_previous_key',
+      codeTaskId: 'task_previous_key',
+    });
+
+    const result = await repo.acquire(buildAcquireInput(event));
+
+    expect(result).toEqual({
+      ok: true,
+      value: { kind: 'duplicate', codeTaskId: 'task_previous_key' },
+    });
+    expect((await fakeFirestore
+      .collection('sentry-issue-events')
+      .doc(createSentryIssueDedupeKey(event))
+      .get()).exists).toBe(true);
+  });
+
   it('lazily recovers a legacy reservation without a linked task', async () => {
     const event = buildEvent();
     const legacyKey = 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created';
@@ -477,6 +610,34 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       state: 'reserved',
       duplicateCount: 1,
     }));
+  });
+
+  it('migrates an unnormalized legacy transition without an event id', async () => {
+    const event = buildEvent({
+      organizationSlug: 'IntexuraOS-Dev-PBuchman',
+      projectSlug: 'IntexuraOS-Development',
+      eventId: undefined,
+    });
+    const legacyKey = [
+      'sentry',
+      event.organizationSlug,
+      event.projectSlug,
+      event.issueId,
+      event.resource,
+      event.action,
+    ].join(':');
+    await fakeFirestore.collection('sentry-issue-events').doc(legacyKey).set({
+      dedupeKey: legacyKey,
+      receivedAt: '2026-07-28T10:00:00.000Z',
+      codeTaskId: 'task_unnormalized_legacy',
+    });
+
+    const result = await repo.acquire(buildAcquireInput(event));
+
+    expect(result).toEqual({
+      ok: true,
+      value: { kind: 'duplicate', codeTaskId: 'task_unnormalized_legacy' },
+    });
   });
 
   it('uses a matching legacy issue link with a native received-at date', async () => {
@@ -550,7 +711,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     }));
   });
 
-  it('keeps an active exact lease when its issue record is missing', async () => {
+  it('rebuilds a missing issue record from an active exact lease', async () => {
     const event = buildEvent({ resource: 'event_alert', action: 'triggered', eventId: 'event-active' });
     const transitionKey = createSentryIssueDedupeKey(event);
     await fakeFirestore.collection('sentry-issue-events').doc(transitionKey).set({
@@ -559,17 +720,23 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       proposedCodeTaskId: 'task_active',
       leaseToken: 'active-token',
       leaseExpiresAt: new Date('2026-07-29T10:01:00.000Z'),
-      codeTaskId: 'task_active',
+      codeTaskId: null,
       duplicateCount: 0,
     });
 
     const result = await repo.acquire(buildAcquireInput(event));
-
-    expect(result).toEqual({ ok: true, value: { kind: 'duplicate', codeTaskId: 'task_active' } });
-    expect((await fakeFirestore
+    const issue = await fakeFirestore
       .collection('sentry-issue-events')
       .doc(createSentryProblemDedupeKey(event))
-      .get()).exists).toBe(false);
+      .get();
+
+    expect(result).toEqual({ ok: true, value: { kind: 'retryable' } });
+    expect(issue.data()).toEqual(expect.objectContaining({
+      state: 'reserved',
+      proposedCodeTaskId: 'task_active',
+      leaseToken: 'active-token',
+      transitionKey,
+    }));
   });
 
   it('honors active and expired issue-only leases during replacement', async () => {
@@ -628,6 +795,83 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     expect(acquired.codeTaskId).toBe('task_proposed');
   });
 
+  it('finds a linked legacy reservation after title and action changes', async () => {
+    const original = buildEvent({ action: 'created', issueTitle: 'Original failure title' });
+    const legacyKey = createLegacyProblemKey(original);
+    await fakeFirestore.collection('sentry-issue-events').doc(legacyKey).set({
+      dedupeKey: legacyKey,
+      organizationSlug: original.organizationSlug,
+      projectSlug: original.projectSlug,
+      projectId: original.projectId,
+      issueId: original.issueId,
+      issueTitle: original.issueTitle,
+      action: original.action,
+      receivedAt: '2026-07-28T10:00:00.000Z',
+      codeTaskId: 'task_legacy_linked',
+    });
+    const changed = buildEvent({
+      action: 'regressed',
+      issueTitle: 'Renamed failure title',
+      eventId: 'event-renamed',
+    });
+
+    const result = await repo.acquire(buildAcquireInput(changed));
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        kind: 'inspect_linked_task',
+        codeTaskId: 'task_legacy_linked',
+        transitionKey: createSentryIssueDedupeKey(changed),
+        issueKey: createSentryProblemDedupeKey(changed),
+      },
+    });
+  });
+
+  it('treats a legacy record without an action as an issue link, not an exact transition', async () => {
+    const event = buildEvent({ eventId: undefined });
+    const legacyKey = 'legacy-stable-issue-without-action';
+    await fakeFirestore.collection('sentry-issue-events').doc(legacyKey).set({
+      dedupeKey: legacyKey,
+      organizationSlug: event.organizationSlug,
+      projectSlug: event.projectSlug,
+      projectId: event.projectId,
+      issueId: event.issueId,
+      resource: event.resource,
+      receivedAt: '2026-07-28T10:00:00.000Z',
+      codeTaskId: 'task_legacy_without_action',
+    });
+
+    const result = await repo.acquire(buildAcquireInput(event));
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        kind: 'inspect_linked_task',
+        codeTaskId: 'task_legacy_without_action',
+        transitionKey: createSentryIssueDedupeKey(event),
+        issueKey: createSentryProblemDedupeKey(event),
+      },
+    });
+  });
+
+  it('keeps mixed project-id and slug-only deliveries in one lease', async () => {
+    const withProjectId = buildEvent({ eventId: 'event-mixed-project' });
+    const withoutProjectId = buildEvent({ eventId: 'event-mixed-project', projectId: undefined });
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(withProjectId, {
+      proposedCodeTaskId: 'task_mixed',
+    })));
+
+    const retry = await repo.acquire(buildAcquireInput(withoutProjectId, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: 'task_duplicate',
+    }));
+
+    expect(createSentryIssueDedupeKey(withProjectId)).toBe(createSentryIssueDedupeKey(withoutProjectId));
+    expect(first.issueKey).toBe(createSentryProblemDedupeKey(withoutProjectId));
+    expect(retry).toEqual({ ok: true, value: { kind: 'retryable' } });
+  });
+
   it('returns FIRESTORE_ERROR when a completion references missing reservation records', async () => {
     const result = await repo.completeReservation({
       transitionKey: 'missing-transition',
@@ -642,6 +886,39 @@ describe('createFirestoreSentryIssueEventRepository', () => {
         code: 'FIRESTORE_ERROR',
         message: 'Sentry task reservation is missing',
       },
+    });
+  });
+
+  it('returns FIRESTORE_ERROR when a Linear checkpoint references missing reservation records', async () => {
+    const result = await repo.checkpointLinearIssue({
+      transitionKey: 'missing-transition',
+      issueKey: 'missing-issue',
+      leaseToken: 'missing-token',
+      linearIssueId: 'INT-404',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'FIRESTORE_ERROR',
+        message: 'Sentry task reservation is missing',
+      },
+    });
+  });
+
+  it('maps Firestore checkpoint failures to FIRESTORE_ERROR', async () => {
+    vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(new Error('checkpoint unavailable'));
+
+    const result = await repo.checkpointLinearIssue({
+      transitionKey: 'transition',
+      issueKey: 'issue',
+      leaseToken: 'token',
+      linearIssueId: 'INT-500',
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'FIRESTORE_ERROR', message: 'checkpoint unavailable' },
     });
   });
 

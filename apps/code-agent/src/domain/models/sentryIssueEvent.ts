@@ -33,6 +33,7 @@ export interface SentryIssueTaskContext {
 
 export interface SentryIssueEventRecord {
   dedupeKey: string;
+  transitionKey: string;
   recordType: 'transition' | 'issue';
   state: SentryTaskReservationState;
   organizationSlug: string;
@@ -79,8 +80,10 @@ export type AcquireSentryTaskReservationResult =
     issueKey: string;
     leaseToken: string;
     codeTaskId: string;
+    linearIssueId?: string | undefined;
   }
   | { kind: 'duplicate'; codeTaskId?: string | undefined }
+  | { kind: 'retryable' }
   | {
     kind: 'inspect_linked_task';
     codeTaskId: string;
@@ -94,6 +97,13 @@ export interface CompleteSentryTaskReservationInput {
   leaseToken: string;
   codeTaskId: string;
   linearIssueId?: string | undefined;
+}
+
+export interface CheckpointSentryLinearIssueInput {
+  transitionKey: string;
+  issueKey: string;
+  leaseToken: string;
+  linearIssueId: string;
 }
 
 export interface FailSentryTaskReservationInput {

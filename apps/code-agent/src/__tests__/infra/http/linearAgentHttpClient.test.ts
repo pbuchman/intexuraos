@@ -98,6 +98,35 @@ describe('linearAgentHttpClient', () => {
       });
     });
 
+    it('forwards the Linear creation idempotency key', async () => {
+      let capturedBody: unknown;
+      nock(baseUrl)
+        .post('/internal/issues')
+        .reply(200, function (_uri, requestBody) {
+          capturedBody = requestBody;
+          return {
+            success: true,
+            data: {
+              id: 'issue-456',
+              identifier: 'INT-456',
+              title: 'Test Issue',
+              url: 'https://linear.app/pbuchman/issue/INT-456',
+            },
+          };
+        });
+
+      await client.createIssue({
+        userId: 'test-user-123',
+        title: 'Test Issue',
+        description: 'Test description',
+        idempotencyKey: 'sentry:org:project:issue:event:event-1',
+      });
+
+      expect(capturedBody).toEqual(expect.objectContaining({
+        idempotencyKey: 'sentry:org:project:issue:event:event-1',
+      }));
+    });
+
     it('should return UNAVAILABLE on 500 error', async () => {
       nock(baseUrl)
         .post('/internal/issues')
