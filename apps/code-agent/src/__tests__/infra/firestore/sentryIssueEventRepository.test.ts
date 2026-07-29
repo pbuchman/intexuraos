@@ -494,6 +494,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
       issueKey: first.issueKey,
       leaseToken: first.leaseToken,
       codeTaskId: first.codeTaskId,
+      linearIssueId: 'INT-200',
     });
     const laterEvent = buildEvent({ action: 'regressed' });
 
@@ -508,6 +509,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
 
     expect(staleApproval.ok && staleApproval.value.kind).toBe('inspect_linked_task');
     expect(approved.codeTaskId).toBe('task_later');
+    expect(approved.linearIssueId).toBeUndefined();
   });
 
   it('lazily migrates a linked legacy transition and preserves exact-event duplicate behavior', async () => {
