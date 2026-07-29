@@ -233,6 +233,24 @@ export interface SendMessageEvent {
    */
   ctaUrl?: { displayText: string; url: string };
 
+  /** Approved-template presentation for a Message Digest delivery. */
+  presentation?: {
+    kind: 'message_digest_v1';
+    digestName: string;
+    digestExcerpt: string;
+    runUrlSuffix: string;
+  };
+
+  /** Private delivery fence for a Message Digest event. */
+  deliveryAuthorization?: {
+    kind: 'message_digest_delivery_v1';
+    definitionId: string;
+    runId: string;
+  };
+
+  /** Defaults to true. Message Digest deliveries explicitly disable text retention. */
+  retainMessageText?: boolean;
+
   /**
    * Optional: marks the message as important. When true, delivery bypasses
    * the recipient's 'important'-only notification filter.

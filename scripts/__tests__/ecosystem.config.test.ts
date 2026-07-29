@@ -116,7 +116,7 @@ function loadWhatsAppLinkProducerWebAppEnv(): Record<string, string | undefined>
       '-e',
       `
         const config = require('./ecosystem.config.cjs');
-        const names = ${JSON.stringify(['code-agent', 'intex-agent', 'mobile-notifications-service', 'research-agent'])};
+        const names = ${JSON.stringify(['code-agent', 'intex-agent', 'message-digest-service', 'mobile-notifications-service', 'research-agent'])};
         const result = {};
         for (const name of names) {
           const app = config.apps.find((entry) => entry.name === name);
@@ -376,9 +376,39 @@ describe('ecosystem.config.cjs', () => {
     expect(loadWhatsAppLinkProducerWebAppEnv()).toEqual({
       'code-agent': 'https://dev.intexuraos.cloud',
       'intex-agent': 'https://dev.intexuraos.cloud',
+      'message-digest-service': 'https://dev.intexuraos.cloud',
       'mobile-notifications-service': 'https://dev.intexuraos.cloud',
       'research-agent': 'https://dev.intexuraos.cloud',
     });
+  });
+
+  it('starts Message Digest after its local dependencies with isolated emulator and API docs wiring', () => {
+    const config = loadDevConfig({
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'synthetic-openrouter-key',
+    });
+    const names = config.apps.map((app) => app.name);
+    const digest = config.apps.find((app) => app.name === 'message-digest-service');
+    const apiDocs = config.apps.find((app) => app.name === 'api-docs-hub');
+
+    expect(digest?.env).toMatchObject({
+      PORT: '8135',
+      FIRESTORE_EMULATOR_HOST: 'localhost:8101',
+      PUBSUB_EMULATOR_HOST: 'localhost:8102',
+      INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
+      INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
+      INTEXURAOS_OPENROUTER_APP_API_KEY: 'synthetic-openrouter-key',
+      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3-flash-preview',
+      INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC: 'message-digest-runs',
+      INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: 'whatsapp-send-message',
+    });
+    expect(apiDocs?.env.INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL).toBe(
+      'http://localhost:8135/openapi.json'
+    );
+    expect(names.indexOf('message-digest-service')).toBeGreaterThan(
+      names.indexOf('llm-usage-service')
+    );
+    expect(names.indexOf('message-digest-service')).toBeLessThan(names.indexOf('api-docs-hub'));
+    expect(names.indexOf('message-digest-service')).toBeLessThan(names.indexOf('web'));
   });
 
   it('does not inherit NODE_OPTIONS into PM2 service environments', () => {
@@ -389,7 +419,9 @@ describe('ecosystem.config.cjs', () => {
     const envByApp = loadInheritedEmulatorEnv();
 
     for (const [appName, env] of Object.entries(envByApp)) {
-      expect(env.FIRESTORE_EMULATOR_HOST, appName).toBe('');
+      expect(env.FIRESTORE_EMULATOR_HOST, appName).toBe(
+        appName === 'message-digest-service' ? 'localhost:8101' : ''
+      );
       expect(env.STORAGE_EMULATOR_HOST, appName).toBe('');
       expect(env.PUBSUB_EMULATOR_HOST, appName).toBe('localhost:8102');
     }

@@ -1,13 +1,13 @@
 locals {
   hetzner_scheduler_jobs = {
-    mobile_notifications_digest_yesterday = {
-      job_name             = "mobile-notifications-digest-yesterday-prod-hetzner"
-      description          = "Daily WhatsApp digest aggregation via Hetzner edge"
-      schedule             = "0 1 * * *"
+    message_digest_tick = {
+      job_name             = "intexuraos-message-digest-tick-prod-hetzner"
+      description          = "Dispatch due WhatsApp Message Digests every five minutes via Hetzner edge"
+      schedule             = "*/5 * * * *"
       time_zone            = "UTC"
-      path                 = "/internal/notifications/digest/run-yesterday"
-      body                 = null
-      headers              = {}
+      path                 = "/internal/message-digests/scheduler/tick"
+      body                 = base64encode("{}")
+      headers              = { "Content-Type" = "application/json" }
       retry_count          = 3
       max_retry_duration   = null
       min_backoff_duration = "30s"

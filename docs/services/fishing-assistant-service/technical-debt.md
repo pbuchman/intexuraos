@@ -11,11 +11,11 @@
 | Code Duplicates | 0 active issues found in current docs review | - |
 | Deprecations | 0 active issues found in current docs review | - |
 
-Last updated: 2026-06-12
+Last updated: 2026-07-29
 
 ## Current Status
 
-The 3.7.0 service surface includes tests for chat repositories and routes, knowledge indexing and repositories, citation validation, retrieval, prompt/ranking behavior, digest routes, LLM clients, and config. No TODO or FIXME comments were present in `apps/fishing-assistant-service/src` during this docs pass.
+The current service surface includes tests for chat repositories and routes, knowledge indexing and repositories, citation validation, retrieval, prompt/ranking behavior, compatibility digest routes, LLM clients, and config. Digest integration now reads canonical summaries from Message Digest Service and scoped source evidence from WhatsApp Service.
 
 ## Release 3.7.0 Reliability Work
 
@@ -44,6 +44,8 @@ Knowledge and chat list queries require the indexes from migrations 101 and 104,
 ### 3.7.0 Fishing Assistant Foundation
 
 PRs #2038 and #2054 introduced the service, knowledge routes, chat routes, RAG retrieval, persisted chat messages, digest integration, and the web UI integration surface.
+
+The WhatsApp Message Digests release retained `/digest-groups`, `/digests`, and `/digests/:groupKey/:date` as bounded Fishing compatibility views while removing the Mobile Notifications digest dependency.
 
 ### 3.7.0 Date and Source Reliability
 

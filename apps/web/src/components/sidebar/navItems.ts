@@ -14,6 +14,7 @@ import {
   List,
   MessagesSquare,
   MessageCircle,
+  Newspaper,
   PenTool,
   Plus,
   RadioTower,
@@ -43,6 +44,7 @@ export const settingsItems: NavItem[] = [
 export const whatsappItems: NavItem[] = [
   { to: '/whatsapp/assistant', label: 'Assistant', icon: MessageCircle },
   { to: '/whatsapp/private', label: 'Private', icon: MessagesSquare },
+  { to: '/whatsapp/message-digests', label: 'Message Digests', icon: Newspaper },
   { to: '/whatsapp/conversation-assistant', label: 'Conversation Assistant', icon: Bot },
 ];
 
@@ -78,7 +80,6 @@ export const llmUsageItems: NavItem[] = [
 ];
 
 export const fishingAssistantItems: NavItem[] = [
-  { to: '/fishing-assistant/digests', label: 'Current Digests', icon: FileText },
   { to: '/fishing-assistant/knowledge', label: 'Knowledge Base', icon: Library },
   { to: '/fishing-assistant/chat', label: 'Chat', icon: MessageCircle },
 ];

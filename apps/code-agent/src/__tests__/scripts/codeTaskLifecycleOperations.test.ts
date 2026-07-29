@@ -1270,6 +1270,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: built.journal,
       journalSha256: journalHash, lock: bound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toEqual({ reverted: 1, alreadyReverted: 1 });
     expect((await fake.collection('code_tasks').doc(taskEntry.documentId).get()).get('statusChangedAt'))
       .toEqual(presentPreimage);
@@ -1287,6 +1288,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: missing as unknown as Firestore, journal: built.journal,
       journalSha256: journalHash, lock: missingBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_CAS_CONFLICT' });
 
     const drifted = createFakeFirestore();
@@ -1305,6 +1307,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: drifted as unknown as Firestore, journal: built.journal,
       journalSha256: journalHash, lock: driftBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_SOURCE_PROOF_MISMATCH' });
   });
 
@@ -1350,24 +1353,29 @@ describe('journal CAS apply and rollback', () => {
     await expect(applyLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: bound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toEqual({ changed: 1, alreadyApplied: 1 });
     await expect(applyLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: bound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toEqual({ changed: 0, alreadyApplied: 2 });
     await expect(rollbackLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: bound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toEqual({ reverted: 1, alreadyReverted: 1 });
     await expect(rollbackLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: bound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toEqual({ reverted: 0, alreadyReverted: 2 });
 
     await fake.collection('code_tasks').doc(task.id).delete();
     await expect(rollbackLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: bound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_SOURCE_PROOF_MISMATCH' });
   });
 
@@ -1417,10 +1425,12 @@ describe('journal CAS apply and rollback', () => {
     await applyLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: deletion.journal,
       journalSha256: deletionHash, lock: deletionBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     });
     await expect(rollbackLifecycleJournal({
       firestore: fake as unknown as Firestore, journal: deletion.journal,
       journalSha256: deletionHash, lock: deletionBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toMatchObject({ reverted: 1 });
     expect((await fake.collection('task_group_summaries').doc(askSummary.id).get()).exists).toBe(true);
 
@@ -1468,10 +1478,12 @@ describe('journal CAS apply and rollback', () => {
     await applyLifecycleJournal({
       firestore: sameFake as unknown as Firestore, journal: same.journal,
       journalSha256: sameHash, lock: sameBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     });
     await expect(rollbackLifecycleJournal({
       firestore: sameFake as unknown as Firestore, journal: same.journal,
       journalSha256: sameHash, lock: sameBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toMatchObject({ reverted: 1 });
   });
 
@@ -1523,6 +1535,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(applyLifecycleJournal({
       firestore: sourceMissing as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: missingBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_SOURCE_PROOF_MISMATCH' });
 
     const applyConflict = createFakeFirestore();
@@ -1543,6 +1556,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(applyLifecycleJournal({
       firestore: applyConflict as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: conflictBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_CAS_CONFLICT' });
 
     const rollbackSourceDrift = createFakeFirestore();
@@ -1568,6 +1582,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: rollbackSourceDrift as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: sourceDriftBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_SOURCE_PROOF_MISMATCH' });
 
     const rollbackMissing = createFakeFirestore();
@@ -1587,6 +1602,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: rollbackMissing as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: rollbackBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_CAS_CONFLICT' });
 
     rollbackMissing.seedCollection('task_group_summaries', [{
@@ -1596,6 +1612,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: rollbackMissing as unknown as Firestore, journal: batch.journal,
       journalSha256: journalHash, lock: rollbackBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).rejects.toMatchObject({ code: 'JOURNAL_CAS_CONFLICT' });
   });
 
@@ -1656,6 +1673,7 @@ describe('journal CAS apply and rollback', () => {
       await expect(rollbackLifecycleJournal({
         firestore: fake as unknown as Firestore, journal: malformedJournal,
         journalSha256: hash, lock: bound,
+        now: () => new Date('2026-07-28T12:00:01.000Z'),
       })).rejects.toMatchObject({ code: 'JOURNAL_VALUE_INVALID' });
     }
 
@@ -1682,6 +1700,7 @@ describe('journal CAS apply and rollback', () => {
     await expect(rollbackLifecycleJournal({
       firestore: absentFake as unknown as Firestore, journal: absentCountsJournal,
       journalSha256: absentHash, lock: absentBound,
+      now: () => new Date('2026-07-28T12:00:01.000Z'),
     })).resolves.toMatchObject({ reverted: 1 });
   });
 });

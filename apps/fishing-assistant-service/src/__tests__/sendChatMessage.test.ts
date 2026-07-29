@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import { Timestamp } from '@intexuraos/infra-firestore';
+import type {
+  LegacyDigestDefinitionProjection,
+  LegacyDigestRunProjection,
+  PrivateDigestMessage,
+} from '@intexuraos/internal-clients';
 import type { KnowledgeChunkMatch, KnowledgePage } from '../domain/models/knowledge.js';
 import type { FishingChat, FishingChatMessage } from '../domain/models/chat.js';
 import type { KnowledgeEmbeddingClient } from '../domain/ports/embeddingClient.js';
@@ -8,6 +13,7 @@ import type { FishingChatRepository } from '../domain/ports/chatRepository.js';
 import type { FixedModelChatAdapter } from '../domain/ports/chatModel.js';
 import type { KnowledgeChunkRepository, KnowledgePageRepository } from '../domain/ports/knowledgeRepositories.js';
 import { fishingAnswerPrompt } from '../domain/prompts/buildFishingAnswerPrompt.js';
+import { FISHING_LEGACY_GROUP_KEY } from '../domain/retrieval/fishingDigestSource.js';
 import type { SendChatMessageDeps } from '../domain/usecases/sendChatMessage.js';
 import { sendChatMessage } from '../domain/usecases/sendChatMessage.js';
 
@@ -65,6 +71,50 @@ function makeChunk(overrides: Partial<KnowledgeChunkMatch> = {}): KnowledgeChunk
   };
 }
 
+function makeDigestDefinition(): LegacyDigestDefinitionProjection {
+  return {
+    definitionId: 'md_fishing_001',
+    legacyGroupKey: FISHING_LEGACY_GROUP_KEY,
+    source: {
+      sourceAccountId: 'account-fishing-001',
+      generationId: 'generation-fishing-001',
+      chatId: 'chat-fishing-001',
+      chatType: 'group',
+    },
+    activeMigrationId: 'mdm_fishing_001',
+  };
+}
+
+function makeDigestRun(
+  overrides: Partial<LegacyDigestRunProjection> = {}
+): LegacyDigestRunProjection {
+  return {
+    definitionId: 'md_fishing_001',
+    runId: 'mdr_fishing_001',
+    legacyGroupKey: FISHING_LEGACY_GROUP_KEY,
+    date: '2026-05-07',
+    title: 'May 7 digest',
+    summaryMarkdown: 'Members recommended krill extract for the hemp-coconut base.',
+    messageCount: 18,
+    evidenceMessageRefs: [],
+    windowStart: '2026-05-06T00:00:00.000Z',
+    windowEnd: '2026-05-08T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makePrivateMessage(overrides: Partial<PrivateDigestMessage> = {}): PrivateDigestMessage {
+  return {
+    messageRef: 'msg-1',
+    eventTimestamp: '2026-05-01T10:00:00.000Z',
+    direction: 'inbound',
+    authorLabel: 'Piotr',
+    text: 'Use pinka with a light mix.',
+    contentKind: 'text',
+    ...overrides,
+  };
+}
+
 interface SendChatMessageTestContext {
   deps: SendChatMessageDeps;
   chatRepository: {
@@ -94,11 +144,11 @@ interface SendChatMessageTestContext {
   pageRepository: {
     getByIdForUser: ReturnType<typeof vi.fn>;
   };
-  mobileNotificationsClient: {
-    listDigestSubscriptions: ReturnType<typeof vi.fn>;
-    queryDigests: ReturnType<typeof vi.fn>;
-    queryGroupMessages: ReturnType<typeof vi.fn>;
+  messageDigestClient: {
+    queryLegacyDigestDefinitions: ReturnType<typeof vi.fn>;
+    queryLegacyDigestRuns: ReturnType<typeof vi.fn>;
   };
+  whatsappClient: { queryPrivateDigestMessages: ReturnType<typeof vi.fn> };
 }
 
 function createContext(input?: {
@@ -169,10 +219,19 @@ function createContext(input?: {
   const pageRepository = {
     getByIdForUser: vi.fn().mockResolvedValue(okResult(null)),
   };
-  const mobileNotificationsClient = {
-    listDigestSubscriptions: vi.fn().mockResolvedValue(okResult({ items: [] })),
-    queryDigests: vi.fn(),
-    queryGroupMessages: vi.fn(),
+  const messageDigestClient = {
+    queryLegacyDigestDefinitions: vi.fn().mockResolvedValue(okResult({ items: [] })),
+    queryLegacyDigestRuns: vi.fn(),
+  };
+  const whatsappClient = {
+    queryPrivateDigestMessages: vi.fn().mockResolvedValue(
+      okResult({
+        messages: [],
+        sourceRevision: 'source-revision-001',
+        highWatermark: null,
+        nextCursor: null,
+      })
+    ),
   };
 
   return {
@@ -182,7 +241,8 @@ function createContext(input?: {
       embeddingClient: embeddingClient as unknown as KnowledgeEmbeddingClient,
       chunkRepository: chunkRepository as unknown as KnowledgeChunkRepository,
       pageRepository: pageRepository as unknown as KnowledgePageRepository,
-      mobileNotificationsClient,
+      messageDigestClient,
+      whatsappClient,
       generateId: vi
         .fn()
         .mockReturnValueOnce('message-user')
@@ -196,7 +256,8 @@ function createContext(input?: {
     embeddingClient,
     chunkRepository,
     pageRepository,
-    mobileNotificationsClient,
+    messageDigestClient,
+    whatsappClient,
   };
 }
 
@@ -312,39 +373,32 @@ describe('sendChatMessage', () => {
         )
       );
     ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
-    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValue(
-      okResult({ items: [{ groupKey: 'feeder', displayName: 'Feeder Team' }] })
+    ctx.messageDigestClient.queryLegacyDigestDefinitions.mockResolvedValue(
+      okResult({ items: [makeDigestDefinition()] })
     );
-    ctx.mobileNotificationsClient.queryDigests.mockResolvedValue(
+    ctx.messageDigestClient.queryLegacyDigestRuns.mockResolvedValue(
       okResult({
         items: [
-          {
-            groupKey: 'feeder',
+          makeDigestRun({
             date: '2026-05-01',
             title: 'May 1 digest',
             summaryMarkdown: 'Members reported pinka.',
             messageCount: 12,
-          },
+            evidenceMessageRefs: ['msg-1'],
+            windowStart: '2026-04-30T00:00:00.000Z',
+            windowEnd: '2026-05-02T00:00:00.000Z',
+          }),
         ],
         truncated: false,
+        nextCursor: null,
       })
     );
-    ctx.mobileNotificationsClient.queryGroupMessages.mockResolvedValue(
+    ctx.whatsappClient.queryPrivateDigestMessages.mockResolvedValue(
       okResult({
-        messages: [
-          {
-            messageRef: 'msg-1',
-            groupKey: 'feeder',
-            date: '2026-05-01',
-            senderLabel: 'Piotr',
-            text: 'Use pinka with a light mix.',
-            quote: 'Use pinka with a light mix.',
-          },
-        ],
-        totalRaw: 1,
-        totalCleaned: 1,
-        returned: 1,
-        truncated: false,
+        messages: [makePrivateMessage()],
+        sourceRevision: 'source-revision-001',
+        highWatermark: 'watermark-001',
+        nextCursor: null,
       })
     );
     ctx.llmClient.generate.mockResolvedValue(
@@ -445,13 +499,13 @@ describe('sendChatMessage', () => {
             id: 'message-assistant',
             citations: [
               {
-                sourceId: 'digest:feeder:2026-05-07',
+                sourceId: `digest:${FISHING_LEGACY_GROUP_KEY}:2026-05-07`,
                 sourceType: 'digest',
                 title: 'May 7 digest',
                 quote: 'Members recommended krill extract for the hemp-coconut base.',
                 usedFor: 'method-feeder modification',
                 date: '2026-05-07',
-                url: '/fishing-assistant/digests/feeder/2026-05-07',
+                url: `/fishing-assistant/digests/${FISHING_LEGACY_GROUP_KEY}/2026-05-07`,
               },
             ],
             confidence: 'high',
@@ -459,30 +513,14 @@ describe('sendChatMessage', () => {
         )
       );
     ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
-    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValue(
-      okResult({ items: [{ groupKey: 'feeder', displayName: 'Feeder Team' }] })
+    ctx.messageDigestClient.queryLegacyDigestDefinitions.mockResolvedValue(
+      okResult({ items: [makeDigestDefinition()] })
     );
-    ctx.mobileNotificationsClient.queryDigests.mockResolvedValue(
+    ctx.messageDigestClient.queryLegacyDigestRuns.mockResolvedValue(
       okResult({
-        items: [
-          {
-            groupKey: 'feeder',
-            date: '2026-05-07',
-            title: 'May 7 digest',
-            summaryMarkdown: 'Members recommended krill extract for the hemp-coconut base.',
-            messageCount: 18,
-          },
-        ],
+        items: [makeDigestRun()],
         truncated: false,
-      })
-    );
-    ctx.mobileNotificationsClient.queryGroupMessages.mockResolvedValue(
-      okResult({
-        messages: [],
-        totalRaw: 0,
-        totalCleaned: 0,
-        returned: 0,
-        truncated: false,
+        nextCursor: null,
       })
     );
     ctx.llmClient.generate.mockReset()
@@ -513,13 +551,13 @@ describe('sendChatMessage', () => {
       confidence: 'high',
       citations: [
         {
-          sourceId: 'digest:feeder:2026-05-07',
+          sourceId: `digest:${FISHING_LEGACY_GROUP_KEY}:2026-05-07`,
           sourceType: 'digest',
           title: 'May 7 digest',
           quote: 'Members recommended krill extract for the hemp-coconut base.',
           usedFor: 'method-feeder modification',
           date: '2026-05-07',
-          url: '/fishing-assistant/digests/feeder/2026-05-07',
+          url: `/fishing-assistant/digests/${FISHING_LEGACY_GROUP_KEY}/2026-05-07`,
         },
       ],
     });
@@ -564,30 +602,18 @@ describe('sendChatMessage', () => {
         }),
       ])
     );
-    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValue(
-      okResult({ items: [{ groupKey: 'feeder', displayName: 'Feeder Team' }] })
+    ctx.messageDigestClient.queryLegacyDigestDefinitions.mockResolvedValue(
+      okResult({ items: [makeDigestDefinition()] })
     );
-    ctx.mobileNotificationsClient.queryDigests.mockResolvedValue(
+    ctx.messageDigestClient.queryLegacyDigestRuns.mockResolvedValue(
       okResult({
         items: [
-          {
-            groupKey: 'feeder',
-            date: '2026-05-07',
-            title: 'May 7 digest',
+          makeDigestRun({
             summaryMarkdown: 'Members discussed sweet biscuit crumb method feeder bait.',
-            messageCount: 18,
-          },
+          }),
         ],
         truncated: false,
-      })
-    );
-    ctx.mobileNotificationsClient.queryGroupMessages.mockResolvedValue(
-      okResult({
-        messages: [],
-        totalRaw: 0,
-        totalCleaned: 0,
-        returned: 0,
-        truncated: false,
+        nextCursor: null,
       })
     );
     ctx.llmClient.generate.mockReset()
@@ -678,7 +704,9 @@ describe('sendChatMessage', () => {
   it('returns NO_API_KEY before fallback storage when no evidence is available', async () => {
     const ctx = createContext();
     ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
-    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValueOnce(okResult({ items: [] }));
+    ctx.messageDigestClient.queryLegacyDigestDefinitions.mockResolvedValueOnce(
+      okResult({ items: [] })
+    );
     ctx.chatAdapter.createClientForUser.mockResolvedValueOnce(
       errResult({ code: 'NO_API_KEY', message: 'missing key' })
     );
@@ -697,7 +725,9 @@ describe('sendChatMessage', () => {
   it('stores the fallback answer without generating when no evidence is available', async () => {
     const ctx = createContext();
     ctx.chunkRepository.findNearestByUserId.mockResolvedValue(okResult([]));
-    ctx.mobileNotificationsClient.listDigestSubscriptions.mockResolvedValueOnce(okResult({ items: [] }));
+    ctx.messageDigestClient.queryLegacyDigestDefinitions.mockResolvedValueOnce(
+      okResult({ items: [] })
+    );
 
     const result = await sendChatMessage(ctx.deps, {
       userId: 'user-1',

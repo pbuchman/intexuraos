@@ -100,6 +100,18 @@ Physical erasure is an operator-only internal workflow and is intentionally diff
 
 Do not use this workflow as ordinary disconnect. `DELETE /private/account` remains disable-only.
 
+## Verify Message Digest readiness
+
+Message Digest Service calls the internal readiness contract with the owning user ID:
+
+```text
+POST /internal/whatsapp/delivery-readiness/get
+```
+
+A ready response exposes only a masked form of the first mapped phone. Missing mapping, disconnected account, or disabled delivery is returned as an explicit status. The digest UI must direct the user to repair the existing WhatsApp connection; it must not ask for a separate destination number.
+
+To inspect a digest source safely, first validate the owned chat through `/internal/whatsapp/private/digest-source/validate`, then use the returned account generation and source revision with `/internal/whatsapp/private/digest-source/messages/query`. Never copy request or response content into operational logs.
+
 ## Test Unsupported Voice
 
 Send a voice message. The expected reply is:

@@ -5,6 +5,8 @@
 - Keep text ingestion and unsupported voice handling covered by tests.
 - Preserve idempotent webhook replay for text messages.
 - Keep outbound send payloads compatible with existing notification publishers.
+- Keep the approved Message Digest template and run authorization contract frozen until a coordinated template migration is available.
+- Add provider-status reconciliation automation for ambiguous Message Digest sends without ever allowing a blind retry.
 - Do not add approval reply matching without a new Intex tool-call policy design.
 - Keep private Matrix ingest idempotent by Matrix event ID.
 - Preserve private chat group classification when later bridge events report weaker metadata.

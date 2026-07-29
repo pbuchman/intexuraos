@@ -25,6 +25,57 @@ describe('App.tsx lazy-loaded routes', () => {
     expect(source).toMatch(/path="\/whatsapp-notes"\s+element={<Navigate to="\/whatsapp\/assistant" replace \/>}/);
   });
 
+  it('lazy-loads every canonical WhatsApp Message Digest route', () => {
+    for (const page of [
+      'WhatsAppMessageDigestsPage',
+      'WhatsAppMessageDigestNewPage',
+      'WhatsAppMessageDigestDetailPage',
+      'WhatsAppMessageDigestEditPage',
+      'WhatsAppMessageDigestHistoryPage',
+      'WhatsAppMessageDigestRunPage',
+    ]) {
+      expect(source).toContain(`const ${page} = React.lazy(`);
+    }
+
+    for (const path of [
+      '/whatsapp/message-digests',
+      '/whatsapp/message-digests/new',
+      '/whatsapp/message-digests/:definitionId',
+      '/whatsapp/message-digests/:definitionId/edit',
+      '/whatsapp/message-digests/:definitionId/history',
+      '/whatsapp/message-digests/:definitionId/history/:runId',
+    ]) {
+      expect(source).toContain(`path="${path}"`);
+    }
+  });
+
+  it('redirects legacy Mobile digest entry points without rendering the old pages', () => {
+    expect(source).not.toContain('const NotificationDigestsPage = React.lazy(');
+    expect(source).not.toContain('const NotificationDigestBackfillPage = React.lazy(');
+    expect(source).not.toContain('const NotificationDigestViewPage = React.lazy(');
+    expect(source).toMatch(
+      /path="\/notifications\/digests"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
+    );
+    expect(source).toMatch(
+      /path="\/notifications\/digests\/backfill"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
+    );
+    expect(source).toContain('path="/notifications/digests/:groupKey/:date"');
+    expect(source).toContain('element={<MessageDigestLegacyRedirectPage />}');
+  });
+
+  it('redirects legacy Fishing digest entry points without rendering duplicate pages', () => {
+    expect(source).not.toContain('const FishingDigestsPage = React.lazy(');
+    expect(source).not.toContain('const FishingDigestViewPage = React.lazy(');
+    expect(source).toMatch(
+      /path="\/fishing-assistant\/digests"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
+    );
+    expect(source).toMatch(
+      /path="\/fishing\/digests"\s+element={<Navigate to="\/whatsapp\/message-digests" replace \/>}/
+    );
+    expect(source).toContain('path="/fishing-assistant/digests/:groupKey/:date"');
+    expect(source).toContain('path="/fishing/digests/:groupKey/:date"');
+  });
+
   it('uses Intex Agent sessions as the authenticated landing page', () => {
     expect(source).toMatch(/<Navigate to="\/intex-agent\/sessions" replace \/>/);
     expect(source).toMatch(/path="\*"\s+element={<Navigate to="\/intex-agent\/sessions" replace \/>}/);

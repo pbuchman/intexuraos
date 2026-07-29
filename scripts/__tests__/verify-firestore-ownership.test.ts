@@ -15,29 +15,29 @@ import { join } from 'node:path';
 
 import { runOwnershipCheck } from '../verify-firestore-ownership.mjs'; // @allow-missing-js -- .mjs import
 
-function setupTempRepo() {
+function setupTempRepo(): string {
   const root = mkdtempSync(join(tmpdir(), 'verify-firestore-'));
   mkdirSync(join(root, 'apps'), { recursive: true });
   mkdirSync(join(root, 'workers'), { recursive: true });
   return root;
 }
 
-function writeRegistry(root, collections) {
+function writeRegistry(root: string, collections: Record<string, unknown>): void {
   writeFileSync(join(root, 'firestore-collections.json'), JSON.stringify({ collections }, null, 2));
 }
 
-function writeIndexes(root, payload) {
+function writeIndexes(root: string, payload: unknown): void {
   writeFileSync(join(root, 'firestore.indexes.json'), JSON.stringify(payload, null, 2));
 }
 
-function writeFile(root, relPath, contents) {
+function writeFile(root: string, relPath: string, contents: string): void {
   const full = join(root, relPath);
   mkdirSync(join(full, '..'), { recursive: true });
   writeFileSync(full, contents);
 }
 
 describe('runOwnershipCheck', () => {
-  let tempRoots = [];
+  let tempRoots: string[] = [];
 
   beforeEach(() => {
     tempRoots = [];
@@ -53,7 +53,7 @@ describe('runOwnershipCheck', () => {
     vi.restoreAllMocks();
   });
 
-  function setup() {
+  function setup(): string {
     const root = setupTempRepo();
     tempRoots.push(root);
     return root;
@@ -76,6 +76,120 @@ describe('runOwnershipCheck', () => {
 
     expect(result.violations).toEqual([]);
     expect(result.exitCode).toBe(0);
+  });
+
+  it('scans production js, mjs, cjs, and ts files for registry-known object-map literals', () => {
+    const root = setup();
+    writeRegistry(root, {
+      archive_js: { owner: 'svc-a', description: 'js', scanPaths: ['apps/svc-a/ports'] },
+      archive_mjs: { owner: 'svc-a', description: 'mjs', scanPaths: ['apps/svc-a/ports'] },
+      archive_cjs: { owner: 'svc-a', description: 'cjs', scanPaths: ['apps/svc-a/ports'] },
+      archive_ts: { owner: 'svc-a', description: 'ts', scanPaths: ['apps/svc-a/ports'] },
+    });
+    writeIndexes(root, { indexes: [], fieldOverrides: [] });
+    writeFile(
+      root,
+      'apps/svc-a/ports/archive.js',
+      "export const ARCHIVE_COLLECTIONS = { value: 'archive_js' };\n"
+    );
+    writeFile(
+      root,
+      'apps/svc-a/ports/archive.mjs',
+      "export const ARCHIVE_COLLECTIONS = {\n  value:\n    'archive_mjs',\n};\n"
+    );
+    writeFile(
+      root,
+      'apps/svc-a/ports/archive.cjs',
+      "const ARCHIVE_COLLECTIONS = { value: 'archive_cjs' };\n"
+    );
+    writeFile(
+      root,
+      'apps/svc-a/ports/archive.ts',
+      "export const ARCHIVE_COLLECTIONS = { value: 'archive_ts' };\n"
+    );
+
+    const result = runOwnershipCheck({ repoRoot: root });
+
+    expect(result.violations).toEqual([]);
+    expect(result.warnings).toEqual([]);
+    expect(result.stats.files).toBe(4);
+    expect(result.stats.references).toBe(4);
+  });
+
+  it('blocks a cross-owner registry literal in an mjs migration port', () => {
+    const root = setup();
+    writeRegistry(root, {
+      owned_by_a: { owner: 'svc-a', description: 'a' },
+      migration_state: {
+        owner: 'svc-b',
+        description: 'b',
+        scanPaths: ['apps/svc-b/migration'],
+      },
+    });
+    writeIndexes(root, { indexes: [], fieldOverrides: [] });
+    writeFile(
+      root,
+      'apps/svc-b/migration/ports.mjs',
+      "export const collections = { foreign: 'owned_by_a', own: 'migration_state' };\n"
+    );
+
+    const result = runOwnershipCheck({ repoRoot: root });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.violations).toContainEqual(
+      expect.objectContaining({
+        type: 'CROSS_SERVICE',
+        collection: 'owned_by_a',
+        owner: 'svc-a',
+        violator: 'svc-b',
+        file: 'apps/svc-b/migration/ports.mjs',
+      })
+    );
+  });
+
+  it('excludes tests, dist, and node_modules from declared scan paths', () => {
+    const root = setup();
+    writeRegistry(root, {
+      production_collection: {
+        owner: 'svc-a',
+        description: 'production',
+        scanPaths: ['apps/svc-a/ports'],
+      },
+      test_only_collection: { owner: 'svc-a', description: 'test only' },
+      dist_only_collection: { owner: 'svc-a', description: 'dist only' },
+      dependency_only_collection: { owner: 'svc-a', description: 'dependency only' },
+    });
+    writeIndexes(root, { indexes: [], fieldOverrides: [] });
+    writeFile(
+      root,
+      'apps/svc-a/ports/live.mjs',
+      "export const COLLECTIONS = { value: 'production_collection' };\n"
+    );
+    writeFile(root, 'apps/svc-a/ports/live.test.mjs', "const name = 'test_only_collection';\n");
+    writeFile(
+      root,
+      'apps/svc-a/ports/__tests__/fixture.ts',
+      "const name = 'test_only_collection';\n"
+    );
+    writeFile(root, 'apps/svc-a/ports/dist/bundle.js', "const name = 'dist_only_collection';\n");
+    writeFile(
+      root,
+      'apps/svc-a/ports/node_modules/package/index.cjs',
+      "const name = 'dependency_only_collection';\n"
+    );
+
+    const result = runOwnershipCheck({ repoRoot: root });
+
+    expect(result.violations).toEqual([]);
+    expect(result.stats.files).toBe(1);
+    expect(result.stats.references).toBe(1);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('test_only_collection'),
+        expect.stringContaining('dist_only_collection'),
+        expect.stringContaining('dependency_only_collection'),
+      ])
+    );
   });
 
   it('emits ORPHAN_INDEX violation for unknown collectionGroup in indexes', () => {

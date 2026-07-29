@@ -5,9 +5,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import type { FastifyInstance } from 'fastify';
+import { createHash } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { DEFAULT_CONVERSATION_ASSISTANT_MODEL } from '@intexuraos/llm-contract';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
+import {
+  buildSendMessageEvent,
+  MESSAGE_DIGEST_EVENT_MESSAGE,
+} from '@intexuraos/whatsapp-pubsub-client';
 import { buildServer } from '../server.js';
 import { getServices, resetServices, setServices } from '../services.js';
 import {
@@ -33,9 +38,12 @@ import {
 } from './fakes.js';
 import type { Config } from '../config.js';
 import type { PrivateWhatsAppErasureRepository } from '../domain/whatsapp/ports/privateWhatsAppErasure.js';
+import type { MessageDigestDeliveryAuthorizationClient } from '../domain/whatsapp/ports/messageDigestDeliveryAuthorization.js';
 import { emptyPrivateWhatsAppErasureCounts } from '../domain/whatsapp/models/PrivateWhatsAppErasure.js';
 import { notReadyMatrixCorpusIngress } from '../domain/matrixCorpus/ports/matrixCorpusIngress.js';
 import type { ServiceContainer } from '../services.js';
+import { isBoundedMessageDigestTemplateText } from '../routes/pubsubRoutes.js';
+import { FakePdfConversationExporter } from './testUtils.js';
 
 const INTERNAL_AUTH_TOKEN = 'test-internal-auth-token-12345';
 
@@ -55,6 +63,7 @@ const testConfig: Config = {
   internalAuthToken: INTERNAL_AUTH_TOKEN,
   llmUsageServiceUrl: 'http://llm-usage.test',
   userServiceUrl: 'http://user-service.test',
+  messageDigestServiceUrl: 'http://message-digest-service.test',
   conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   port: 8080,
   host: '0.0.0.0',
@@ -85,6 +94,17 @@ function createPubSubBody(eventData: unknown): PubSubBody {
   };
 }
 
+function createPubSubBodyFromRawJson(rawJson: string): PubSubBody {
+  return {
+    message: {
+      data: Buffer.from(rawJson, 'utf8').toString('base64'),
+      messageId: 'msg-' + Date.now().toString(),
+      publishTime: new Date().toISOString(),
+    },
+    subscription: 'projects/test/subscriptions/test-sub',
+  };
+}
+
 function createMatrixSendEvent(
   userId: string,
   suffix: string,
@@ -97,6 +117,35 @@ function createMatrixSendEvent(
     correlationId: `imc_reply_${suffix}`,
     idempotencyKey: `imc_reply_publish_${suffix}`,
     timestamp: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function createMessageDigestSendEvent(
+  userId: string,
+  suffix: string,
+  overrides: Readonly<Record<string, unknown>> = {}
+): Record<string, unknown> {
+  return {
+    type: 'whatsapp.message.send',
+    userId,
+    message: MESSAGE_DIGEST_EVENT_MESSAGE,
+    correlationId: `mdr_run_${suffix}`,
+    idempotencyKey: `message-digest:mdr_run_${suffix}`,
+    timestamp: '2026-07-28T07:00:00.000Z',
+    important: true,
+    presentation: {
+      kind: 'message_digest_v1',
+      digestName: `Daily digest ${suffix}`,
+      digestExcerpt: 'Synthetic stable digest excerpt.',
+      runUrlSuffix: `#/whatsapp/message-digests/md_definition_${suffix}/history/mdr_run_${suffix}`,
+    },
+    deliveryAuthorization: {
+      kind: 'message_digest_delivery_v1',
+      definitionId: `md_definition_${suffix}`,
+      runId: `mdr_run_${suffix}`,
+    },
+    retainMessageText: false,
     ...overrides,
   };
 }
@@ -118,6 +167,7 @@ describe('Pub/Sub Routes', () => {
   let llmClient: FakeLlmGenerateClient;
   let privateWhatsAppErasureRepository: PrivateWhatsAppErasureRepository;
   let conversationAssistantOperationalTelemetry: FakeConversationAssistantOperationalTelemetry;
+  let messageDigestDeliveryAuthorizationClient: MessageDigestDeliveryAuthorizationClient;
 
   beforeEach(async () => {
     messageSender = new FakeMessageSender();
@@ -136,8 +186,16 @@ describe('Pub/Sub Routes', () => {
     conversationAssistantContextAttachmentDeltaBuilder =
       new FakeConversationAssistantContextAttachmentDeltaBuilder();
     llmClient = new FakeLlmGenerateClient();
-    conversationAssistantOperationalTelemetry =
-      new FakeConversationAssistantOperationalTelemetry();
+    conversationAssistantOperationalTelemetry = new FakeConversationAssistantOperationalTelemetry();
+    messageDigestDeliveryAuthorizationClient = {
+      acquire: vi.fn().mockResolvedValue({
+        ok: true,
+        disposition: 'authorized',
+        fence: 3,
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
+      }),
+      release: vi.fn().mockResolvedValue({ ok: true }),
+    };
     privateWhatsAppErasureRepository = {
       start: vi.fn(),
       get: vi.fn(),
@@ -182,6 +240,7 @@ describe('Pub/Sub Routes', () => {
       conversationAssistantOperationalTelemetry,
       privateWhatsAppErasureRepository,
       privateWhatsAppErasurePublisher: eventPublisher,
+      messageDigestDeliveryAuthorizationClient,
       llmClientFactory: {
         createLlmClientForUser: () => Promise.resolve({ ok: true, value: llmClient }),
       },
@@ -1000,6 +1059,1251 @@ describe('Pub/Sub Routes', () => {
       expect(saved[0]?.messageText).toBe('Save success');
     });
 
+    it('uses the approved template, the first mapped number, and a content-minimal idempotent receipt', async () => {
+      await userMappingRepository.saveMapping('user-digest-template', [
+        '+48111222333',
+        '+48999888777',
+      ]);
+      const event = createMessageDigestSendEvent('user-digest-template', 'template_001');
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+      const redelivery = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect([first.statusCode, redelivery.statusCode]).toEqual([200, 200]);
+      expect(messageSender.getSentMessages()).toEqual([
+        {
+          phoneNumber: '48111222333',
+          message: 'Synthetic stable digest excerpt.',
+          digestTemplate: {
+            digestName: 'Daily digest template_001',
+            digestExcerpt: 'Synthetic stable digest excerpt.',
+            runUrlSuffix:
+              '#/whatsapp/message-digests/md_definition_template_001/history/mdr_run_template_001',
+          },
+        },
+      ]);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()[0]).not.toHaveProperty('messageText');
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledTimes(3);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledTimes(2);
+    });
+
+    it('authorizes a Message Digest after preflight and immediately before receipt reservation', async () => {
+      await userMappingRepository.saveMapping('user-digest-authorized', ['+48111222333']);
+      const mapping = vi.spyOn(userMappingRepository, 'getMapping');
+      const preferences = vi.spyOn(prefs, 'getPreferences');
+      const acquire = vi.mocked(messageDigestDeliveryAuthorizationClient.acquire);
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+      const send = vi.spyOn(messageSender, 'sendMessageDigestTemplate');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-authorized', 'authorization_order')
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(acquire).toHaveBeenCalledWith({
+        userId: 'user-digest-authorized',
+        definitionId: 'md_definition_authorization_order',
+        runId: 'mdr_run_authorization_order',
+        idempotencyKey: 'message-digest:mdr_run_authorization_order',
+        ownerDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+        payloadDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      });
+      expect(mapping.mock.invocationCallOrder[0]).toBeLessThan(
+        acquire.mock.invocationCallOrder[0] as number
+      );
+      expect(preferences.mock.invocationCallOrder[0]).toBeLessThan(
+        acquire.mock.invocationCallOrder[0] as number
+      );
+      expect(acquire.mock.invocationCallOrder[0]).toBeLessThan(
+        reserve.mock.invocationCallOrder[0] as number
+      );
+      expect(reserve.mock.invocationCallOrder[0]).toBeLessThan(
+        acquire.mock.invocationCallOrder[1] as number
+      );
+      expect(acquire.mock.invocationCallOrder[1]).toBeLessThan(
+        send.mock.invocationCallOrder[0] as number
+      );
+      expect(acquire.mock.calls[1]?.[0]).toEqual(acquire.mock.calls[0]?.[0]);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledWith(
+        expect.objectContaining({
+          definitionId: 'md_definition_authorization_order',
+          runId: 'mdr_run_authorization_order',
+          fence: 3,
+        })
+      );
+    });
+
+    it('binds Message Digest authorization and receipt reservation to the exact decoded JSON bytes', async () => {
+      await userMappingRepository.saveMapping('user-digest-frozen-bytes', ['+48111222333']);
+      const event = createMessageDigestSendEvent('user-digest-frozen-bytes', 'frozen_bytes');
+      const rawJson = JSON.stringify(event, null, 2);
+      const payloadDigest = createHash('sha256').update(rawJson, 'utf8').digest('hex');
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBodyFromRawJson(rawJson),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledWith(
+        expect.objectContaining({ payloadDigest })
+      );
+      expect(reserve).toHaveBeenCalledWith(expect.objectContaining({ payloadDigest }));
+    });
+
+    it('suppresses changed Message Digest bytes before receipt reservation or provider send', async () => {
+      await userMappingRepository.saveMapping('user-digest-changed-bytes', ['+48111222333']);
+      const frozenEvent = createMessageDigestSendEvent(
+        'user-digest-changed-bytes',
+        'changed_bytes'
+      );
+      const frozenRawJson = JSON.stringify(frozenEvent);
+      const frozenPayloadDigest = createHash('sha256')
+        .update(frozenRawJson, 'utf8')
+        .digest('hex');
+      const changedRawJson = JSON.stringify(
+        {
+          ...frozenEvent,
+          presentation: {
+            ...(frozenEvent['presentation'] as Record<string, unknown>),
+            digestExcerpt: 'Changed but structurally valid excerpt.',
+          },
+        },
+        null,
+        2
+      );
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mockImplementation(
+        async (identity) =>
+          identity.payloadDigest === frozenPayloadDigest
+            ? {
+                ok: true,
+                disposition: 'authorized',
+                fence: 3,
+                expiresAt: new Date(Date.now() + 120_000).toISOString(),
+              }
+            : { ok: true, disposition: 'denied' }
+      );
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+      const send = vi.spyOn(messageSender, 'sendMessageDigestTemplate');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBodyFromRawJson(changedRawJson),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledOnce();
+      expect(reserve).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+    });
+
+    it('keeps ordinary Matrix delivery idempotency canonical across JSON serialization', async () => {
+      await userMappingRepository.saveMapping('user-matrix-canonical-json', ['+48111222333']);
+      const event = createMatrixSendEvent('user-matrix-canonical-json', 'canonical_json');
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+
+      const compact = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBodyFromRawJson(JSON.stringify(event)),
+      });
+      const pretty = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBodyFromRawJson(JSON.stringify(event, null, 2)),
+      });
+
+      expect([compact.statusCode, pretty.statusCode]).toEqual([200, 200]);
+      expect(reserve).toHaveBeenCalledTimes(2);
+      expect(reserve.mock.calls[1]?.[0].payloadDigest).toBe(
+        reserve.mock.calls[0]?.[0].payloadDigest
+      );
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+    });
+
+    it('never sends when authorization expires and erasure starts during receipt reservation', async () => {
+      await userMappingRepository.saveMapping('user-digest-expired-during-reservation', [
+        '+48111222333',
+      ]);
+      const event = createMessageDigestSendEvent(
+        'user-digest-expired-during-reservation',
+        'expired_during_reservation'
+      );
+      const originalReserve = outboundMessageRepository.reserveIdempotentDelivery.bind(
+        outboundMessageRepository
+      );
+      let notifyReservationEntered = (): void => undefined;
+      const reservationEntered = new Promise<void>((resolve) => {
+        notifyReservationEntered = resolve;
+      });
+      let unblockReservation = (): void => undefined;
+      const reservationGate = new Promise<void>((resolve) => {
+        unblockReservation = resolve;
+      });
+      vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery').mockImplementation(
+        async (input) => {
+          notifyReservationEntered();
+          await reservationGate;
+          return await originalReserve(input);
+        }
+      );
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 7,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        })
+        .mockResolvedValueOnce({ ok: true, disposition: 'denied' });
+      const send = vi.spyOn(messageSender, 'sendMessageDigestTemplate');
+
+      const request = app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+      await reservationEntered;
+      unblockReservation();
+      const response = await request;
+
+      expect(response.statusCode).toBe(200);
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledTimes(2);
+      const acquiredIdentities = vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mock
+        .calls;
+      expect(acquiredIdentities[1]?.[0]).toEqual(acquiredIdentities[0]?.[0]);
+      expect(send).not.toHaveBeenCalled();
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-digest-expired-during-reservation',
+          idempotencyKey: 'message-digest:mdr_run_expired_during_reservation',
+        })
+      ).resolves.toEqual(
+        ok({
+          status: 'failed',
+          failedAt: expect.any(String),
+          failureCode: 'DELIVERY_AUTHORIZATION_REVOKED',
+        })
+      );
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('fails closed when renewed authorization cannot cover the provider timeout', async () => {
+      const nowMs = Date.parse('2026-07-28T08:00:00.000Z');
+      vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+      await userMappingRepository.saveMapping('user-digest-short-renewal', ['+48111222333']);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 11,
+          expiresAt: new Date(nowMs + 120_000).toISOString(),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 11,
+          expiresAt: new Date(nowMs + 32_500).toISOString(),
+        });
+      const send = vi.spyOn(messageSender, 'sendMessageDigestTemplate');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-short-renewal', 'short_renewal')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledTimes(2);
+      expect(send).not.toHaveBeenCalled();
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-digest-short-renewal',
+          idempotencyKey: 'message-digest:mdr_run_short_renewal',
+        })
+      ).resolves.toEqual(
+        ok({
+          status: 'failed',
+          failedAt: expect.any(String),
+          failureCode: 'DELIVERY_AUTHORIZATION_UNAVAILABLE',
+        })
+      );
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('sends when renewed authorization covers the exact provider timeout and safety margin', async () => {
+      const nowMs = Date.parse('2026-07-28T08:00:00.000Z');
+      vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+      await userMappingRepository.saveMapping('user-digest-renewal-boundary', ['+48111222333']);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 15,
+          expiresAt: new Date(nowMs + 120_000).toISOString(),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 15,
+          expiresAt: new Date(nowMs + 35_000).toISOString(),
+        });
+      const send = vi.spyOn(messageSender, 'sendMessageDigestTemplate');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-renewal-boundary', 'renewal_boundary')
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(send).toHaveBeenCalledOnce();
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledWith(
+        expect.objectContaining({ fence: 15 })
+      );
+    });
+
+    it('releases the latest fence when the same owner is reclaimed during renewal', async () => {
+      await userMappingRepository.saveMapping('user-digest-renewal-reclaim', ['+48111222333']);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 20,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 21,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-renewal-reclaim', 'renewal_reclaim')
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      const identities = vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mock.calls;
+      expect(identities[1]?.[0]).toEqual(identities[0]?.[0]);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledWith(
+        expect.objectContaining({ fence: 21 })
+      );
+      expect(messageDigestDeliveryAuthorizationClient.release).not.toHaveBeenCalledWith(
+        expect.objectContaining({ fence: 20 })
+      );
+    });
+
+    it.each([
+      ['busy', { ok: true, disposition: 'busy' }],
+      ['unavailable', { ok: false, code: 'unavailable' }],
+      ['invalid', { ok: false, code: 'invalid_response' }],
+    ] as const)(
+      'records retryable failure and never sends when post-reservation renewal is %s',
+      async (suffix, renewal) => {
+        const userId = `user-digest-renewal-${suffix}`;
+        await userMappingRepository.saveMapping(userId, ['+48111222333']);
+        vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+          .mockResolvedValueOnce({
+            ok: true,
+            disposition: 'authorized',
+            fence: 13,
+            expiresAt: new Date(Date.now() + 120_000).toISOString(),
+          })
+          .mockResolvedValueOnce(renewal);
+        const send = vi.spyOn(messageSender, 'sendMessageDigestTemplate');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(
+            createMessageDigestSendEvent(userId, `renewal_${suffix}`)
+          ),
+        });
+
+        expect(response.statusCode).toBe(503);
+        expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledTimes(2);
+        expect(send).not.toHaveBeenCalled();
+        await expect(
+          outboundMessageRepository.getIdempotentDeliveryState({
+            userId,
+            idempotencyKey: `message-digest:mdr_run_renewal_${suffix}`,
+          })
+        ).resolves.toEqual(
+          ok({
+            status: 'failed',
+            failedAt: expect.any(String),
+            failureCode: 'DELIVERY_AUTHORIZATION_UNAVAILABLE',
+          })
+        );
+        expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+      }
+    );
+
+    it('keeps one lease owner per handler for concurrent delivery of the exact same PubSub message', async () => {
+      await userMappingRepository.saveMapping('user-digest-concurrent', ['+48111222333']);
+      const body = createPubSubBody(
+        createMessageDigestSendEvent('user-digest-concurrent', 'concurrent_same_push')
+      );
+      body.message.messageId = 'synthetic-identical-pubsub-message';
+
+      let activeOwner: string | null = null;
+      let activeFence = 0;
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mockImplementation(
+        async (identity) => {
+          if (activeOwner === null) {
+            activeOwner = identity.ownerDigest;
+            activeFence += 1;
+            return {
+              ok: true,
+              disposition: 'authorized',
+              fence: activeFence,
+              expiresAt: new Date(Date.now() + 120_000).toISOString(),
+            };
+          }
+          if (activeOwner === identity.ownerDigest) {
+            return {
+              ok: true,
+              disposition: 'authorized',
+              fence: activeFence,
+              expiresAt: new Date(Date.now() + 120_000).toISOString(),
+            };
+          }
+          return { ok: true, disposition: 'busy' };
+        }
+      );
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockImplementation(
+        async (identity) => {
+          if (activeOwner !== identity.ownerDigest || activeFence !== identity.fence) {
+            return { ok: false, code: 'unavailable' };
+          }
+          activeOwner = null;
+          return { ok: true };
+        }
+      );
+
+      let notifyProviderEntered = (): void => undefined;
+      const providerEntered = new Promise<void>((resolve) => {
+        notifyProviderEntered = resolve;
+      });
+      let settleProvider = (_result: { ok: true; value: { wamid: string } }): void => undefined;
+      const providerResult = new Promise<{ ok: true; value: { wamid: string } }>((resolve) => {
+        settleProvider = resolve;
+      });
+      const send = vi
+        .spyOn(messageSender, 'sendMessageDigestTemplate')
+        .mockImplementation(async () => {
+          notifyProviderEntered();
+          return await providerResult;
+        });
+
+      const firstRequest = app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+      await providerEntered;
+      const secondResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+      const ownerWhileFirstProviderWasActive = activeOwner;
+      settleProvider({ ok: true, value: { wamid: 'synthetic-concurrent-wamid' } });
+      const firstResponse = await firstRequest;
+
+      const acquiredOwners = vi
+        .mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mock.calls.map(([identity]) => identity.ownerDigest);
+      expect(acquiredOwners).toHaveLength(3);
+      expect(new Set(acquiredOwners).size).toBe(2);
+      expect(acquiredOwners[1]).toBe(acquiredOwners[0]);
+      expect(secondResponse.statusCode).toBe(503);
+      expect(firstResponse.statusCode).toBe(200);
+      expect(ownerWhileFirstProviderWasActive).toBe(acquiredOwners[0]);
+      expect(send).toHaveBeenCalledOnce();
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ['erased', { ok: true, disposition: 'denied' }],
+      ['busy', { ok: true, disposition: 'busy' }],
+      ['unavailable', { ok: false, code: 'unavailable' }],
+    ] as const)(
+      'does not reserve or send a delayed Message Digest when authorization is %s',
+      async (_label, authorization) => {
+        await userMappingRepository.saveMapping('user-digest-fenced', ['+48111222333']);
+        vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mockResolvedValueOnce(
+          authorization
+        );
+        const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(
+            createMessageDigestSendEvent('user-digest-fenced', `fenced_${_label}`)
+          ),
+        });
+
+        expect(response.statusCode).toBe(_label === 'erased' ? 200 : 503);
+        expect(reserve).not.toHaveBeenCalled();
+        expect(messageSender.getSentMessages()).toHaveLength(0);
+        expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+        expect(messageDigestDeliveryAuthorizationClient.release).not.toHaveBeenCalled();
+      }
+    );
+
+    it('denies an exact frozen publisher event when erasure starts before delayed delivery', async () => {
+      await userMappingRepository.saveMapping('user-digest-erasure-boundary', ['+48111222333']);
+      let erasureStarted = false;
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mockImplementation(() =>
+        Promise.resolve(
+          erasureStarted
+            ? { ok: true as const, disposition: 'denied' as const }
+            : {
+                ok: true as const,
+                disposition: 'authorized' as const,
+                fence: 1,
+                expiresAt: '2026-07-28T07:02:00.000Z',
+              }
+        )
+      );
+      const frozen = buildSendMessageEvent({
+        userId: 'user-digest-erasure-boundary',
+        message: MESSAGE_DIGEST_EVENT_MESSAGE,
+        correlationId: 'mdr_run_erasure_boundary',
+        timestamp: '2026-07-28T07:00:00.000Z',
+        idempotencyKey: 'message-digest:mdr_run_erasure_boundary',
+        important: true,
+        retainMessageText: false,
+        presentation: {
+          kind: 'message_digest_v1',
+          digestName: 'Erasure boundary',
+          digestExcerpt: 'Synthetic digest.',
+          runUrlSuffix:
+            '#/whatsapp/message-digests/md_definition_erasure_boundary/history/mdr_run_erasure_boundary',
+        },
+        deliveryAuthorization: {
+          kind: 'message_digest_delivery_v1',
+          definitionId: 'md_definition_erasure_boundary',
+          runId: 'mdr_run_erasure_boundary',
+        },
+      });
+      expect(frozen.ok).toBe(true);
+      if (!frozen.ok) return;
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+
+      erasureStarted = true;
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(frozen.value.event),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(reserve).not.toHaveBeenCalled();
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+      expect(messageDigestDeliveryAuthorizationClient.release).not.toHaveBeenCalled();
+    });
+
+    it('makes a failed authorization release retryable after the resolved provider path', async () => {
+      await userMappingRepository.saveMapping('user-digest-release-fail', ['+48111222333']);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-release-fail', 'release_fail')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(1);
+    });
+
+    it('releases its own authorization when an independently authorized receipt is already in flight', async () => {
+      await userMappingRepository.saveMapping('user-digest-receipt-in-flight', [
+        '+48111222333',
+      ]);
+      const body = createPubSubBody(
+        createMessageDigestSendEvent('user-digest-receipt-in-flight', 'receipt_in_flight')
+      );
+      body.message.messageId = 'synthetic-receipt-in-flight-push';
+      let notifyProviderEntered = (): void => undefined;
+      const providerEntered = new Promise<void>((resolve) => {
+        notifyProviderEntered = resolve;
+      });
+      let settleProvider = (_result: { ok: true; value: { wamid: string } }): void => undefined;
+      const providerResult = new Promise<{ ok: true; value: { wamid: string } }>((resolve) => {
+        settleProvider = resolve;
+      });
+      const send = vi
+        .spyOn(messageSender, 'sendMessageDigestTemplate')
+        .mockImplementation(async () => {
+          notifyProviderEntered();
+          return await providerResult;
+        });
+
+      const firstRequest = app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+      await providerEntered;
+      const duplicateResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+      const releasesBeforeProviderSettled = vi.mocked(
+        messageDigestDeliveryAuthorizationClient.release
+      ).mock.calls.length;
+      settleProvider({ ok: true, value: { wamid: 'synthetic-receipt-in-flight-wamid' } });
+      const firstResponse = await firstRequest;
+
+      expect(duplicateResponse.statusCode).toBe(503);
+      expect(firstResponse.statusCode).toBe(200);
+      expect(send).toHaveBeenCalledOnce();
+      expect(releasesBeforeProviderSettled).toBe(1);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases authorization when Message Digest receipt completion fails', async () => {
+      await userMappingRepository.saveMapping('user-digest-completion-fail', ['+48111222333']);
+      outboundMessageRepository.setFailIdempotentCompletion(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-completion-fail', 'completion_fail')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('releases authorization when Message Digest receipt completion throws', async () => {
+      await userMappingRepository.saveMapping('user-digest-completion-throw', ['+48111222333']);
+      vi.spyOn(outboundMessageRepository, 'completeIdempotentDelivery').mockRejectedValueOnce(
+        new Error('synthetic completion exception')
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-completion-throw', 'completion_throw')
+        ),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('makes a thrown authorization release retryable after a settled Message Digest path', async () => {
+      await userMappingRepository.saveMapping('user-digest-release-throw', ['+48111222333']);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockRejectedValueOnce(
+        new Error('synthetic release exception')
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-release-throw', 'release_throw')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(1);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('releases authorization after a terminal Message Digest mapping preflight', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-mapping-missing', 'mapping_missing')
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledOnce();
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('releases authorization when Message Digest receipt reservation fails', async () => {
+      await userMappingRepository.saveMapping('user-digest-reservation-fail', ['+48111222333']);
+      outboundMessageRepository.setFail(true);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-reservation-fail', 'reservation_fail')
+        ),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('fails closed when the Message Digest authorization client is unavailable', async () => {
+      await userMappingRepository.saveMapping('user-digest-no-authorization-client', [
+        '+48111222333',
+      ]);
+      const {
+        messageDigestDeliveryAuthorizationClient: _authorizationClient,
+        ...withoutAuthorizationClient
+      } = getServices();
+      setServices(withoutAuthorizationClient);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-no-authorization-client',
+            'no_authorization_client'
+          )
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs when the initial Message Digest authorization call throws', async () => {
+      await userMappingRepository.saveMapping('user-digest-initial-acquire-throw', [
+        '+48111222333',
+      ]);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire).mockRejectedValueOnce(
+        new Error('synthetic initial acquire exception')
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-initial-acquire-throw',
+            'initial_acquire_throw'
+          )
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(messageDigestDeliveryAuthorizationClient.release).not.toHaveBeenCalled();
+    });
+
+    it('NACKs when the renewed Message Digest authorization call throws', async () => {
+      await userMappingRepository.saveMapping('user-digest-renewal-acquire-throw', [
+        '+48111222333',
+      ]);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 31,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        })
+        .mockRejectedValueOnce(new Error('synthetic renewal acquire exception'));
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-renewal-acquire-throw',
+            'renewal_acquire_throw'
+          )
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('NACKs when terminal preflight recording and authorization release both fail', async () => {
+      await userMappingRepository.saveMapping('user-digest-empty-primary', []);
+      vi.spyOn(outboundMessageRepository, 'markIdempotentDeliveryFailed').mockResolvedValueOnce({
+        ok: false,
+        code: 'PERSISTENCE_ERROR',
+      });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-empty-primary', 'empty_primary')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs a rejected reservation when authorization release also fails', async () => {
+      await userMappingRepository.saveMapping('user-digest-reserve-release-fail', [
+        '+48111222333',
+      ]);
+      vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery').mockResolvedValueOnce({
+        ok: false,
+        code: 'PERSISTENCE_ERROR',
+      });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-reserve-release-fail',
+            'reserve_release_fail'
+          )
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs a duplicate receipt when authorization release fails', async () => {
+      await userMappingRepository.saveMapping('user-digest-duplicate-release-fail', [
+        '+48111222333',
+      ]);
+      vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery').mockResolvedValueOnce({
+        ok: true,
+        disposition: 'duplicate_sent',
+      });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-duplicate-release-fail',
+            'duplicate_release_fail'
+          )
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs a revoked renewal when authorization release fails', async () => {
+      await userMappingRepository.saveMapping('user-digest-renewal-release-fail', [
+        '+48111222333',
+      ]);
+      vi.mocked(messageDigestDeliveryAuthorizationClient.acquire)
+        .mockResolvedValueOnce({
+          ok: true,
+          disposition: 'authorized',
+          fence: 30,
+          expiresAt: new Date(Date.now() + 120_000).toISOString(),
+        })
+        .mockResolvedValueOnce({ ok: true, disposition: 'denied' });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-renewal-release-fail',
+            'renewal_release_fail'
+          )
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('NACKs a thrown provider when ambiguity recording and authorization release fail', async () => {
+      await userMappingRepository.saveMapping('user-digest-throw-failures', ['+48111222333']);
+      messageSender.setThrow(true);
+      vi.spyOn(outboundMessageRepository, 'markIdempotentDeliveryAmbiguous').mockResolvedValueOnce({
+        ok: false,
+        code: 'PERSISTENCE_ERROR',
+      });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-throw-failures', 'throw_failures')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+    });
+
+    it('NACKs a permanent provider rejection when receipt and release recording fail', async () => {
+      await userMappingRepository.saveMapping('user-digest-permanent-failures', [
+        '+48111222333',
+      ]);
+      messageSender.setFail(true, {
+        code: 'VALIDATION_ERROR',
+        message: 'synthetic rejection',
+        httpStatus: 400,
+      });
+      vi.spyOn(outboundMessageRepository, 'markIdempotentDeliveryFailed').mockResolvedValueOnce({
+        ok: false,
+        code: 'PERSISTENCE_ERROR',
+      });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-permanent-failures', 'permanent_failures')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+    });
+
+    it('NACKs a transient provider failure when ambiguity and release recording fail', async () => {
+      await userMappingRepository.saveMapping('user-digest-transient-failures', [
+        '+48111222333',
+      ]);
+      messageSender.setFail(true, {
+        code: 'INTERNAL_ERROR',
+        message: 'synthetic unavailable',
+        httpStatus: 503,
+      });
+      vi.spyOn(outboundMessageRepository, 'markIdempotentDeliveryAmbiguous').mockResolvedValueOnce({
+        ok: false,
+        code: 'PERSISTENCE_ERROR',
+      });
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-digest-transient-failures', 'transient_failures')
+        ),
+      });
+
+      expect(response.statusCode).toBe(503);
+    });
+
+    it('releases authorization in finally when receipt reservation throws', async () => {
+      await userMappingRepository.saveMapping('user-digest-reservation-throw-release-fail', [
+        '+48111222333',
+      ]);
+      vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery').mockRejectedValueOnce(
+        new Error('synthetic reservation exception')
+      );
+      vi.mocked(messageDigestDeliveryAuthorizationClient.release).mockResolvedValueOnce({
+        ok: false,
+        code: 'unavailable',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent(
+            'user-digest-reservation-throw-release-fail',
+            'reservation_throw_release_fail'
+          )
+        ),
+      });
+
+      expect([500, 503]).toContain(response.statusCode);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      [
+        'permanent rejection',
+        (): void =>
+          messageSender.setFail(true, {
+            code: 'VALIDATION_ERROR',
+            message: 'synthetic rejection',
+            httpStatus: 400,
+          }),
+      ],
+      [
+        'transient rejection',
+        (): void =>
+          messageSender.setFail(true, {
+            code: 'INTERNAL_ERROR',
+            message: 'synthetic unavailable',
+            httpStatus: 503,
+          }),
+      ],
+      ['thrown sender', (): void => messageSender.setThrow(true)],
+    ] as const)('releases authorization after Message Digest sender %s', async (_label, arrange) => {
+      const suffix = String(_label).replace(/[^A-Za-z0-9_-]/gu, '_');
+      const userId = `user-digest-sender-${suffix}`;
+      await userMappingRepository.saveMapping(userId, ['+48111222333']);
+      arrange();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(createMessageDigestSendEvent(userId, `sender_${suffix}`)),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageDigestDeliveryAuthorizationClient.acquire).toHaveBeenCalledTimes(2);
+      expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledOnce();
+    });
+
+    it('omits message text from an ordinary outbound receipt when retention is explicitly disabled', async () => {
+      await userMappingRepository.saveMapping('user-no-retention', ['+48111222333']);
+      const event = createMessageDigestSendEvent('user-no-retention', 'no_retention');
+      delete event['idempotencyKey'];
+      delete event['presentation'];
+      delete event['deliveryAuthorization'];
+      delete event['important'];
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(1);
+      expect(outboundMessageRepository.getMessages()[0]).not.toHaveProperty('messageText');
+    });
+
+    it('rejects every unsafe control range in Message Digest template text', () => {
+      for (const unsafeCharacter of [
+        '\n',
+        '\r',
+        '\u001f',
+        '\u007f',
+        '\u009f',
+        '\u202a',
+        '\u202e',
+        '\u2066',
+        '\u2069',
+      ]) {
+        expect(isBoundedMessageDigestTemplateText(`unsafe${unsafeCharacter}`, 80)).toBe(false);
+      }
+      expect(isBoundedMessageDigestTemplateText('Safe digest', 80)).toBe(true);
+    });
+
+    it.each([
+      [
+        'unknown kind',
+        {
+          presentation: {
+            kind: 'unknown',
+            digestName: 'Daily digest',
+            digestExcerpt: 'Digest excerpt',
+            runUrlSuffix:
+              '#/whatsapp/message-digests/md_definition_invalid/history/mdr_run_invalid',
+          },
+        },
+      ],
+      [
+        'oversized name',
+        {
+          presentation: {
+            kind: 'message_digest_v1',
+            digestName: 'n'.repeat(81),
+            digestExcerpt: 'Digest excerpt',
+            runUrlSuffix:
+              '#/whatsapp/message-digests/md_definition_invalid_oversized_name/history/mdr_run_invalid_oversized_name',
+          },
+        },
+      ],
+      [
+        'oversized excerpt',
+        {
+          presentation: {
+            kind: 'message_digest_v1',
+            digestName: 'Daily digest',
+            digestExcerpt: 'e'.repeat(877),
+            runUrlSuffix:
+              '#/whatsapp/message-digests/md_definition_invalid_oversized_excerpt/history/mdr_run_invalid_oversized_excerpt',
+          },
+        },
+      ],
+      [
+        'unsafe URL suffix',
+        {
+          presentation: {
+            kind: 'message_digest_v1',
+            digestName: 'Daily digest',
+            digestExcerpt: 'Digest excerpt',
+            runUrlSuffix: 'https://attacker.example/private',
+          },
+        },
+      ],
+      ['retained content', { retainMessageText: true }],
+      ['missing idempotency key', { idempotencyKey: undefined }],
+      ['blank idempotency key', { idempotencyKey: '   ' }],
+      ['missing important marker', { important: undefined }],
+      ['false important marker', { important: false }],
+      ['non-neutral event message', { message: 'Private digest summary' }],
+      ['presentation without authorization', { deliveryAuthorization: undefined }],
+      ['authorization without presentation', { presentation: undefined }],
+      [
+        'mismatched authorization definition',
+        {
+          deliveryAuthorization: {
+            kind: 'message_digest_delivery_v1',
+            definitionId: 'md_definition_other',
+            runId: 'mdr_run_invalid_mismatched_authorization_definition',
+          },
+        },
+      ],
+      [
+        'authorization with an extra field',
+        {
+          deliveryAuthorization: {
+            kind: 'message_digest_delivery_v1',
+            definitionId: 'md_definition_invalid_authorization_with_an_extra_field',
+            runId: 'mdr_run_invalid_authorization_with_an_extra_field',
+            phoneNumber: '+48111222333',
+          },
+        },
+      ],
+      [
+        'free-form CTA',
+        { ctaUrl: { displayText: 'Unsafe fallback', url: 'https://example.com' } },
+      ],
+      [
+        'reply buttons',
+        { buttons: [{ type: 'reply', reply: { id: 'unsafe', title: 'Unsafe' } }] },
+      ],
+    ])('rejects a malformed digest presentation before reservation: %s', async (_label, patch) => {
+      await userMappingRepository.saveMapping('user-invalid-digest', ['+48111222333']);
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+      const getMapping = vi.spyOn(userMappingRepository, 'getMapping');
+      const getPreferences = vi.spyOn(prefs, 'getPreferences');
+      const invalidSuffix = String(_label).replace(/[^A-Za-z0-9_-]/gu, '_');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMessageDigestSendEvent('user-invalid-digest', `invalid_${invalidSuffix}`, patch)
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(getMapping).not.toHaveBeenCalled();
+      expect(getPreferences).not.toHaveBeenCalled();
+      expect(reserve).not.toHaveBeenCalled();
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+      expect(outboundMessageRepository.getMessages()).toHaveLength(0);
+    });
+
     it('sends an exact idempotent Matrix delivery only once across Pub/Sub redelivery', async () => {
       await userMappingRepository.saveMapping('user-matrix-once', ['+48111222333']);
       const event = {
@@ -1032,6 +2336,213 @@ describe('Pub/Sub Routes', () => {
       expect(outboundMessageRepository.getMessages()).toHaveLength(1);
     });
 
+    it('reserves an idempotent delivery after mapping and preference decisions', async () => {
+      await userMappingRepository.saveMapping('user-reservation-order', ['+48111222333']);
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+      const mapping = vi.spyOn(userMappingRepository, 'getMapping');
+      const preferences = vi.spyOn(prefs, 'getPreferences');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-reservation-order', 'reservation_order', {
+            important: true,
+          })
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(reserve).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-reservation-order',
+          idempotencyKey: 'imc_reply_publish_reservation_order',
+        })
+      );
+      expect(mapping).toHaveBeenCalledWith('user-reservation-order');
+      expect(preferences).toHaveBeenCalledWith('user-reservation-order');
+      expect(mapping.mock.invocationCallOrder[0]).toBeLessThan(
+        reserve.mock.invocationCallOrder[0] as number
+      );
+      expect(preferences.mock.invocationCallOrder[0]).toBeLessThan(
+        reserve.mock.invocationCallOrder[0] as number
+      );
+    });
+
+    it('does not reserve on transient mapping failure and lets redelivery acquire immediately', async () => {
+      const userId = 'user-digest-transient-preflight';
+      await userMappingRepository.saveMapping(userId, ['+48111222333']);
+      const event = createMessageDigestSendEvent(userId, 'transient_preflight');
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+      userMappingRepository.setFailGetMapping(true);
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(first.statusCode).toBe(500);
+      expect(reserve).not.toHaveBeenCalled();
+      userMappingRepository.setFailGetMapping(false);
+
+      const redelivery = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(redelivery.statusCode).toBe(200);
+      expect(reserve).toHaveBeenCalledOnce();
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+    });
+
+    it('persists terminal failed when the user has no WhatsApp mapping', async () => {
+      const event = createMatrixSendEvent('user-digest-unmapped', 'digest_unmapped');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(response.statusCode).toBe(200);
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-digest-unmapped',
+          idempotencyKey: 'imc_reply_publish_digest_unmapped',
+        })
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { status: 'failed', failureCode: 'MAPPING_MISSING' },
+      });
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('sends an exact retry after a definitive pre-provider failure is authorized', async () => {
+      const userId = 'user-digest-retry';
+      const idempotencyKey = 'imc_reply_publish_digest_retry';
+      const event = createMatrixSendEvent(userId, 'digest_retry');
+      const reserve = vi.spyOn(outboundMessageRepository, 'reserveIdempotentDelivery');
+
+      const first = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+      const firstReservation = reserve.mock.calls[0]?.[0];
+      expect(first.statusCode).toBe(200);
+      expect(firstReservation).toEqual(
+        expect.objectContaining({ userId, idempotencyKey, payloadDigest: expect.any(String) })
+      );
+      if (firstReservation === undefined) return;
+
+      await userMappingRepository.saveMapping(userId, ['+48111222333']);
+      await expect(
+        outboundMessageRepository.authorizeIdempotentDeliveryRetry({
+          userId,
+          idempotencyKey,
+          payloadDigest: firstReservation.payloadDigest,
+          now: new Date().toISOString(),
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+
+      const retried = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(retried.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toHaveLength(1);
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({ userId, idempotencyKey })
+      ).resolves.toMatchObject({ ok: true, value: { status: 'sent' } });
+    });
+
+    it('persists terminal failed for a disconnected first-number mapping', async () => {
+      await userMappingRepository.saveMapping('user-digest-disconnected', ['+48111222333']);
+      await userMappingRepository.disconnectMapping('user-digest-disconnected');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-digest-disconnected', 'digest_disconnected')
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-digest-disconnected',
+          idempotencyKey: 'imc_reply_publish_digest_disconnected',
+        })
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { status: 'failed', failureCode: 'DISCONNECTED' },
+      });
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('persists terminal failed when preferences definitively disable this delivery', async () => {
+      await userMappingRepository.saveMapping('user-digest-disabled', ['+48111222333']);
+      prefs.setLevel('user-digest-disabled', 'important');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(
+          createMatrixSendEvent('user-digest-disabled', 'digest_disabled', {
+            important: false,
+          })
+        ),
+      });
+
+      expect(response.statusCode).toBe(200);
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-digest-disabled',
+          idempotencyKey: 'imc_reply_publish_digest_disabled',
+        })
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { status: 'failed', failureCode: 'DELIVERY_DISABLED' },
+      });
+      expect(messageSender.getSentMessages()).toHaveLength(0);
+    });
+
+    it('persists terminal failed for a definitive sender rejection before any external effect', async () => {
+      await userMappingRepository.saveMapping('user-digest-rejected', ['+48111222333']);
+      messageSender.setFail(true, {
+        code: 'VALIDATION_ERROR',
+        message: 'synthetic definitive rejection',
+        httpStatus: 400,
+      });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(createMatrixSendEvent('user-digest-rejected', 'digest_rejected')),
+      });
+
+      expect(response.statusCode).toBe(200);
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-digest-rejected',
+          idempotencyKey: 'imc_reply_publish_digest_rejected',
+        })
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { status: 'failed', failureCode: 'PROVIDER_REJECTED' },
+      });
+    });
+
     it('fails a Matrix delivery with an empty user id without exposing ordinary metadata', async () => {
       const response = await app.inject({
         method: 'POST',
@@ -1045,7 +2556,7 @@ describe('Pub/Sub Routes', () => {
     });
 
     it('fails a Matrix delivery when phone lookup persistence fails', async () => {
-      userMappingRepository.setFailFindPhoneByUserId(true);
+      userMappingRepository.setFailGetMapping(true);
 
       const response = await app.inject({
         method: 'POST',
@@ -1077,9 +2588,7 @@ describe('Pub/Sub Routes', () => {
         method: 'POST',
         url: '/internal/whatsapp/pubsub/send-message',
         headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: createPubSubBody(
-          createMatrixSendEvent('user-matrix-prefs-fail', 'prefs_fail')
-        ),
+        payload: createPubSubBody(createMatrixSendEvent('user-matrix-prefs-fail', 'prefs_fail')),
       });
 
       expect(response.statusCode).toBe(200);
@@ -1279,6 +2788,12 @@ describe('Pub/Sub Routes', () => {
       expect(first.statusCode).toBe(200);
       expect(replay.statusCode).toBe(200);
       expect(messageSender.getSentMessages()).toHaveLength(0);
+      await expect(
+        outboundMessageRepository.getIdempotentDeliveryState({
+          userId: 'user-matrix-ambiguous',
+          idempotencyKey: 'imc_reply_publish_3',
+        })
+      ).resolves.toMatchObject({ ok: true, value: { status: 'ambiguous' } });
     });
 
     it('NACKs until a successful Matrix send with an incomplete receipt can be reconciled', async () => {
@@ -1928,14 +3443,15 @@ describe('Pub/Sub Routes', () => {
         sessionId: 'session-worker-1',
         generationId,
       });
-      const captured = await conversationAssistantContextAttachmentRepository.captureContextAttachment({
-        attachmentId,
-        userId: 'user-123',
-        sessionId: 'session-worker-1',
-        expectedSessionGenerationId: generationId,
-        preparationRequestId: 'request-worker-1',
-        preparationRequestFingerprint: 'fingerprint-worker-1',
-      });
+      const captured =
+        await conversationAssistantContextAttachmentRepository.captureContextAttachment({
+          attachmentId,
+          userId: 'user-123',
+          sessionId: 'session-worker-1',
+          expectedSessionGenerationId: generationId,
+          preparationRequestId: 'request-worker-1',
+          preparationRequestFingerprint: 'fingerprint-worker-1',
+        });
       if (captured.status !== 'created') throw new Error('Expected queued attachment');
       return { attachmentId, generationId };
     }
@@ -2037,26 +3553,29 @@ describe('Pub/Sub Routes', () => {
       { name: 'missing generation', event: { sessionGenerationId: undefined } },
       { name: 'missing attachment', event: { attachmentId: undefined } },
       { name: 'invalid attempt', event: { attempt: 0 } },
-    ])('acknowledges invalid attachment preparation with $name without claiming', async ({ event }) => {
-      const queued = await seedQueuedContextAttachment();
-      const completeEvent = contextAttachmentPreparationEvent({
-        attachmentId: queued.attachmentId,
-        generationId: queued.generationId,
-      });
+    ])(
+      'acknowledges invalid attachment preparation with $name without claiming',
+      async ({ event }) => {
+        const queued = await seedQueuedContextAttachment();
+        const completeEvent = contextAttachmentPreparationEvent({
+          attachmentId: queued.attachmentId,
+          generationId: queued.generationId,
+        });
 
-      const response = await app.inject({
-        method: 'POST',
-        url: '/internal/whatsapp/pubsub/process-webhook',
-        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
-        payload: createPubSubBody({ ...completeEvent, ...event }),
-      });
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/process-webhook',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody({ ...completeEvent, ...event }),
+        });
 
-      expect(response.statusCode).toBe(200);
-      expect(
-        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
-          ?.status
-      ).toBe('queued');
-    });
+        expect(response.statusCode).toBe(200);
+        expect(
+          conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
+            ?.status
+        ).toBe('queued');
+      }
+    );
 
     it.each([
       ['busy', 500],
@@ -2103,8 +3622,7 @@ describe('Pub/Sub Routes', () => {
 
       expect(response.statusCode).toBe(200);
       expect(
-        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)
-          ?.status
+        conversationAssistantContextAttachmentRepository.getAttachment(queued.attachmentId)?.status
       ).toBe('preparing');
     });
 
@@ -2347,6 +3865,27 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(200);
     });
 
+    it('passes an optional generation fence and configured PDF exporter to preparation', async () => {
+      const pdfConversationExporter = new FakePdfConversationExporter();
+      setServices({ ...getServices(), pdfConversationExporter });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.conversation-assistant.prepare',
+          sessionId: 'whatsapp_conv_session_generation_fence_missing',
+          userId: 'user-123',
+          attempt: 1,
+          generationId: 'generation-fence-1',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(pdfConversationExporter.calls).toEqual([]);
+    });
+
     it('returns 500 while another worker owns the active preparation claim', async () => {
       await conversationAssistantRepository.saveSession({
         id: 'whatsapp_conv_session_busy',
@@ -2508,6 +4047,57 @@ describe('Pub/Sub Routes', () => {
       expect(responseBody.success).toBe(true);
     });
 
+    it('NACKs a retryable webhook-processing persistence failure', async () => {
+      await userMappingRepository.saveMapping('user-webhook-retryable', ['+15551234567']);
+      messageRepository.setFailFindByWaMessageId(true);
+      const payload = {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '102290129340398',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '15550000000',
+                    phone_number_id: '123456789012345',
+                  },
+                  contacts: [{ wa_id: '15551234567', profile: { name: 'Synthetic User' } }],
+                  messages: [
+                    {
+                      from: '15551234567',
+                      id: 'wamid.retryable.persistence',
+                      timestamp: '1234567890',
+                      type: 'text',
+                      text: { body: 'Synthetic retryable message' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.webhook.process',
+          eventId: 'event-retryable-persistence',
+          payload: JSON.stringify(payload),
+          phoneNumberId: '123456789012345',
+          receivedAt: new Date().toISOString(),
+        }),
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(JSON.parse(response.body).error.code).toBe('INTERNAL_ERROR');
+    });
+
     it('returns success and logs error when payload is not valid JSON', async () => {
       const body = createPubSubBody({
         type: 'whatsapp.webhook.process',
@@ -2615,6 +4205,26 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(200);
       const responseBody = JSON.parse(response.body) as { success: boolean };
       expect(responseBody.success).toBe(true);
+    });
+
+    it('acknowledges an exception before link preview extraction can start', async () => {
+      vi.spyOn(messageRepository, 'updateLinkPreview').mockRejectedValueOnce(
+        new Error('synthetic link preview initialization exception')
+      );
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/process-webhook',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody({
+          type: 'whatsapp.linkpreview.extract',
+          messageId: 'msg-link-preview-initialization-throw',
+          userId: 'user-link-preview-initialization-throw',
+          text: 'Check https://example.com',
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
     });
   });
 
@@ -2739,6 +4349,18 @@ describe('Pub/Sub Routes', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('returns 400 when transcription event JSON cannot be decoded', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBodyFromRawJson('{'),
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(JSON.parse(response.body).error.code).toBe('INVALID_REQUEST');
     });
 
     it('accepts Pub/Sub push auth and skips the reply when phone metadata is missing', async () => {

@@ -1,5 +1,12 @@
 import React, { Suspense } from 'react';
-import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
+import {
+  createHashRouter,
+  Navigate,
+  Route,
+  RouterProvider,
+  Routes,
+  useParams,
+} from 'react-router-dom';
 import { Auth0Provider } from '@auth0/auth0-react';
 import { AuthProvider, SyncQueueProvider, ThemeProvider, useAuth } from '@/context';
 import { usePageLifecycle, useTimezoneAutoDetect } from '@/hooks';
@@ -9,6 +16,10 @@ import { XiaomiBatteryGuide } from '@/components/XiaomiBatteryGuide';
 import { DevBar } from '@/components/DevBar';
 import { ProtectedLayout } from '@/components/routing/ProtectedLayout';
 import { FullPageSpinner } from '@/components/routing/FullPageSpinner';
+import {
+  clearAuthReturnPath,
+  readAuthReturnPath,
+} from '@/components/routing/authReturnPath';
 import { config } from '@/config';
 
 
@@ -46,14 +57,6 @@ const DispatchQueuePage = React.lazy(() =>
 );
 const FishingChatPage = React.lazy(() =>
   import('@/pages/fishing/FishingChatPage').then((m) => ({ default: m.FishingChatPage })),
-);
-const FishingDigestsPage = React.lazy(() =>
-  import('@/pages/fishing/FishingDigestsPage').then((m) => ({ default: m.FishingDigestsPage })),
-);
-const FishingDigestViewPage = React.lazy(() =>
-  import('@/pages/fishing/FishingDigestViewPage').then((m) => ({
-    default: m.FishingDigestViewPage,
-  })),
 );
 const FishingKnowledgeBasePage = React.lazy(() =>
   import('@/pages/fishing/FishingKnowledgeBasePage').then((m) => ({
@@ -138,17 +141,9 @@ const MobileNotificationsListPage = React.lazy(() =>
     default: m.MobileNotificationsListPage,
   })),
 );
-const NotificationDigestBackfillPage = React.lazy(() =>
-  import('@/pages/NotificationDigestBackfillPage').then((m) => ({
-    default: m.NotificationDigestBackfillPage,
-  })),
-);
-const NotificationDigestsPage = React.lazy(() =>
-  import('@/pages/NotificationDigestsPage').then((m) => ({ default: m.NotificationDigestsPage })),
-);
-const NotificationDigestViewPage = React.lazy(() =>
-  import('@/pages/NotificationDigestViewPage').then((m) => ({
-    default: m.NotificationDigestViewPage,
+const MessageDigestLegacyRedirectPage = React.lazy(() =>
+  import('@/pages/MessageDigestLegacyRedirectPage').then((m) => ({
+    default: m.MessageDigestLegacyRedirectPage,
   })),
 );
 const NotesListPage = React.lazy(() =>
@@ -193,6 +188,36 @@ const ShareTargetPage = React.lazy(() =>
 const WhatsAppConnectionPage = React.lazy(() =>
   import('@/pages/WhatsAppConnectionPage').then((m) => ({ default: m.WhatsAppConnectionPage })),
 );
+const WhatsAppMessageDigestDetailPage = React.lazy(() =>
+  import('@/pages/WhatsAppMessageDigestDetailPage').then((m) => ({
+    default: m.WhatsAppMessageDigestDetailPage,
+  })),
+);
+const WhatsAppMessageDigestEditPage = React.lazy(() =>
+  import('@/pages/WhatsAppMessageDigestEditPage').then((m) => ({
+    default: m.WhatsAppMessageDigestEditPage,
+  })),
+);
+const WhatsAppMessageDigestHistoryPage = React.lazy(() =>
+  import('@/pages/WhatsAppMessageDigestHistoryPage').then((m) => ({
+    default: m.WhatsAppMessageDigestHistoryPage,
+  })),
+);
+const WhatsAppMessageDigestNewPage = React.lazy(() =>
+  import('@/pages/WhatsAppMessageDigestNewPage').then((m) => ({
+    default: m.WhatsAppMessageDigestNewPage,
+  })),
+);
+const WhatsAppMessageDigestRunPage = React.lazy(() =>
+  import('@/pages/WhatsAppMessageDigestRunPage').then((m) => ({
+    default: m.WhatsAppMessageDigestRunPage,
+  })),
+);
+const WhatsAppMessageDigestsPage = React.lazy(() =>
+  import('@/pages/WhatsAppMessageDigestsPage').then((m) => ({
+    default: m.WhatsAppMessageDigestsPage,
+  })),
+);
 const WhatsAppNotesPage = React.lazy(() =>
   import('@/pages/WhatsAppNotesPage').then((m) => ({ default: m.WhatsAppNotesPage })),
 );
@@ -212,13 +237,14 @@ function PageLifecycleManager(): null {
 
 function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
+  const returnTo = useStoredAuthReturnPath(isAuthenticated);
 
   if (isLoading) {
     return <FullPageSpinner />;
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/intex-agent/sessions" replace />;
+    return <Navigate to={returnTo ?? '/intex-agent/sessions'} replace />;
   }
 
   return <>{children}</>;
@@ -226,6 +252,7 @@ function PublicRoute({ children }: { children: React.ReactNode }): React.JSX.Ele
 
 function HomeRoute(): React.JSX.Element {
   const { isAuthenticated, isLoading } = useAuth();
+  const returnTo = useStoredAuthReturnPath(isAuthenticated);
 
   if (isLoading) {
     return (
@@ -236,10 +263,18 @@ function HomeRoute(): React.JSX.Element {
   }
 
   if (isAuthenticated) {
-    return <Navigate to="/intex-agent/sessions" replace />;
+    return <Navigate to={returnTo ?? '/intex-agent/sessions'} replace />;
   }
 
   return <HomePage />;
+}
+
+function useStoredAuthReturnPath(isAuthenticated: boolean): string | null {
+  const [returnTo] = React.useState(readAuthReturnPath);
+  React.useEffect(() => {
+    if (isAuthenticated && returnTo !== null) clearAuthReturnPath();
+  }, [isAuthenticated, returnTo]);
+  return returnTo;
 }
 
 function NoteDetailRedirect(): React.JSX.Element {
@@ -321,6 +356,24 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/whatsapp/conversation-assistant" element={<WhatsAppConversationAssistantListPage />} />
           <Route path="/whatsapp/conversation-assistant/new" element={<WhatsAppConversationAssistantNewPage />} />
           <Route path="/whatsapp/conversation-assistant/:sessionId" element={<WhatsAppConversationAssistantSessionPage />} />
+          <Route path="/whatsapp/message-digests/new" element={<WhatsAppMessageDigestNewPage />} />
+          <Route
+            path="/whatsapp/message-digests/:definitionId/edit"
+            element={<WhatsAppMessageDigestEditPage />}
+          />
+          <Route
+            path="/whatsapp/message-digests/:definitionId/history/:runId"
+            element={<WhatsAppMessageDigestRunPage />}
+          />
+          <Route
+            path="/whatsapp/message-digests/:definitionId/history"
+            element={<WhatsAppMessageDigestHistoryPage />}
+          />
+          <Route
+            path="/whatsapp/message-digests/:definitionId"
+            element={<WhatsAppMessageDigestDetailPage />}
+          />
+          <Route path="/whatsapp/message-digests" element={<WhatsAppMessageDigestsPage />} />
           <Route path="/my-notes" element={<NotesListPage />} />
           <Route path="/notes/:id" element={<NoteDetailRedirect />} />
           <Route path="/my-bookmarks" element={<BookmarksListPage />} />
@@ -329,26 +382,45 @@ export function AppRoutes(): React.JSX.Element {
           <Route path="/linear" element={<LinearIssuesPage />} />
           <Route path="/bookmarks/:id" element={<BookmarkDetailRedirect />} />
           <Route path="/notifications" element={<MobileNotificationsListPage />} />
-          {/* Notification digest routes (most specific first) */}
+          {/* Legacy notification digest redirects (most specific first) */}
           <Route
             path="/notifications/digests/backfill/:runId"
-            element={<NotificationDigestBackfillPage />}
+            element={<Navigate to="/whatsapp/message-digests" replace />}
           />
           <Route
             path="/notifications/digests/:groupKey/:date"
-            element={<NotificationDigestViewPage />}
+            element={<MessageDigestLegacyRedirectPage />}
           />
-          <Route path="/notifications/digests" element={<NotificationDigestsPage />} />
+          <Route
+            path="/notifications/digests/backfill"
+            element={<Navigate to="/whatsapp/message-digests" replace />}
+          />
+          <Route
+            path="/notifications/digests"
+            element={<Navigate to="/whatsapp/message-digests" replace />}
+          />
           {/* Intex Agent routes */}
           <Route path="/intex-agent/sessions" element={<IntexAgentSessionsPage />} />
           <Route path="/intex-agent/config" element={<IntexAgentConfigPage />} />
           <Route path="/intex-agent/preferences" element={<IntexAgentPreferencesPage />} />
-          {/* Fishing Assistant routes */}
+          {/* Legacy Fishing digest redirects */}
           <Route
             path="/fishing-assistant/digests/:groupKey/:date"
-            element={<FishingDigestViewPage />}
+            element={<MessageDigestLegacyRedirectPage />}
           />
-          <Route path="/fishing-assistant/digests" element={<FishingDigestsPage />} />
+          <Route
+            path="/fishing/digests/:groupKey/:date"
+            element={<MessageDigestLegacyRedirectPage />}
+          />
+          <Route
+            path="/fishing-assistant/digests"
+            element={<Navigate to="/whatsapp/message-digests" replace />}
+          />
+          <Route
+            path="/fishing/digests"
+            element={<Navigate to="/whatsapp/message-digests" replace />}
+          />
+          {/* Fishing Assistant routes */}
           <Route
             path="/fishing-assistant/knowledge/pages/:pageId"
             element={<FishingKnowledgePageEditor />}
@@ -379,6 +451,25 @@ export function AppRoutes(): React.JSX.Element {
   );
 }
 
+function RoutedApplication(): React.JSX.Element {
+  return (
+    <AuthProvider>
+      <TimezoneAutoDetect />
+      <PageLifecycleManager />
+      <SyncQueueProvider>
+        <AppRoutes />
+        <UpdateBanner />
+        <IOSInstallBanner />
+        <AndroidInstallBanner />
+        <XiaomiBatteryGuide />
+        <DevBar />
+      </SyncQueueProvider>
+    </AuthProvider>
+  );
+}
+
+const applicationRouter = createHashRouter([{ path: '*', element: <RoutedApplication /> }]);
+
 export function App(): React.JSX.Element {
   return (
     <ThemeProvider>
@@ -393,20 +484,7 @@ export function App(): React.JSX.Element {
             }}
             cacheLocation="localstorage"
           >
-            <HashRouter>
-              <AuthProvider>
-                <TimezoneAutoDetect />
-                <PageLifecycleManager />
-                <SyncQueueProvider>
-                  <AppRoutes />
-                  <UpdateBanner />
-                  <IOSInstallBanner />
-                  <AndroidInstallBanner />
-                  <XiaomiBatteryGuide />
-                  <DevBar />
-                </SyncQueueProvider>
-              </AuthProvider>
-            </HashRouter>
+            <RouterProvider router={applicationRouter} />
           </Auth0Provider>
         </PWAProvider>
     </ThemeProvider>

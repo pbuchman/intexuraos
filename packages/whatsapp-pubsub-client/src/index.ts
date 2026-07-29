@@ -10,9 +10,17 @@
 export type {
   SendMessageEvent,
   WhatsAppInteractiveButton,
+  WhatsAppMessageDigestDeliveryAuthorization,
+  WhatsAppMessageDigestPresentation,
   WhatsAppSendPublisherConfig,
 } from './types.js';
 export {
+  MESSAGE_DIGEST_EVENT_MESSAGE,
+  MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS,
+  MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS,
+} from './types.js';
+export {
+  buildSendMessageEvent,
   type WhatsAppSendPublisher,
   type WhatsAppSendPublisherWithReceipt,
   createWhatsAppSendPublisher,

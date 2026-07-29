@@ -313,6 +313,36 @@
       "description": "Technical-Debt documentation for linear-agent"
     },
     {
+      "path": "services/message-digest-service/features.md",
+      "title": "Message Digest Service",
+      "category": "services",
+      "description": "Features documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/technical.md",
+      "title": "Message Digest Service — Technical Reference",
+      "category": "services",
+      "description": "Technical documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/tutorial.md",
+      "title": "Message Digest Service — Tutorial",
+      "category": "services",
+      "description": "Tutorial documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/agent.md",
+      "title": "message-digest-service — Agent Interface",
+      "category": "services",
+      "description": "Agent documentation for message-digest-service"
+    },
+    {
+      "path": "services/message-digest-service/technical-debt.md",
+      "title": "Message Digest Service — Technical Debt",
+      "category": "services",
+      "description": "Technical-Debt documentation for message-digest-service"
+    },
+    {
       "path": "services/mobile-notifications-service/features.md",
       "title": "Mobile Notifications Service",
       "category": "services",

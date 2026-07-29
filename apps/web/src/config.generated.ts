@@ -5,6 +5,7 @@ export const WEB_SERVICE_URLS = [
   { envVar: 'INTEXURAOS_WHATSAPP_SERVICE_URL', apiPath: '/api/whatsapp', proxyTarget: 'http://localhost:8113' },
   { envVar: 'INTEXURAOS_NOTION_SERVICE_URL', apiPath: '/api/notion', proxyTarget: 'http://localhost:8112' },
   { envVar: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL', apiPath: '/api/notifications', proxyTarget: 'http://localhost:8114' },
+  { envVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL', apiPath: '/api/message-digests', proxyTarget: 'http://localhost:8135' },
   { envVar: 'INTEXURAOS_FISHING_ASSISTANT_SERVICE_URL', apiPath: '/api/fishing-assistant', proxyTarget: 'http://localhost:8119' },
   { envVar: 'INTEXURAOS_RESEARCH_AGENT_URL', apiPath: '/api/research', proxyTarget: 'http://localhost:8116' },
   { envVar: 'INTEXURAOS_NOTES_AGENT_URL', apiPath: '/api/notes', proxyTarget: 'http://localhost:8121' },

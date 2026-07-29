@@ -8,7 +8,7 @@ Fishing knowledge in IntexuraOS is split across manually saved notes, WhatsApp d
 
 ## How It Helps
 
-The service stores per-user knowledge folders and pages, indexes page chunks with embeddings, persists chat sessions and messages, and retrieves supporting evidence before generating a cited answer. It also exposes digest browsing endpoints backed by mobile-notifications-service data.
+The service stores per-user knowledge folders and pages, indexes page chunks with embeddings, persists chat sessions and messages, and retrieves supporting evidence before generating a cited answer. Its compatibility digest views read canonical history from `message-digest-service`, while supporting source-message evidence comes from the scoped private WhatsApp API.
 
 ## Release 3.7.0 Highlights
 
@@ -42,7 +42,7 @@ The service stores per-user knowledge folders and pages, indexes page chunks wit
 
 ### Browse Digest Context
 
-**User Goal:** Inspect recent fishing digest material from subscribed groups.
+**User Goal:** Inspect the migrated Fishing group history from the canonical Message Digest store.
 
 **Steps:**
 1. List digest groups with `/digest-groups`.

@@ -1,6 +1,6 @@
 # WhatsApp Service Technical Reference
 
-WhatsApp Service owns the WhatsApp Business API boundary: webhook verification, webhook persistence, inbound text routing, outbound sends, media cleanup, phone verification, and private WhatsApp mirror persistence.
+WhatsApp Service owns the WhatsApp Business API boundary: webhook verification, webhook persistence, inbound text routing, outbound sends, media cleanup, phone verification, private WhatsApp mirror persistence, Message Digest source fencing, and Message Digest delivery execution.
 
 ## Architecture
 
@@ -19,6 +19,8 @@ flowchart LR
     WS --> ContextWork[context preparation topic]
     ContextWork --> WS
     WS --> AssistantStore[(Conversation Assistant snapshots and turns)]
+    Digest[message-digest-service] -->|source validation and bounded reads| WS
+    Digest -->|WhatsApp send event| SendTopic
 ```
 
 ## Service Container
@@ -68,12 +70,27 @@ Account responses expose `sourceAccountId` so the authenticated user can identif
 | `GET` | `/internal/whatsapp/private/messages` | Query private messages by source account, sender, day, and time range |
 | `GET` | `/internal/whatsapp/private/sender-days` | Query private sender-day aggregates |
 | `POST` | `/internal/whatsapp/private/aggregates/rebuild` | Rebuild private sender and sender-day aggregates |
+| `POST` | `/internal/whatsapp/private/digest-source/validate` | Validate an owned private group/direct chat and issue a source revision |
+| `POST` | `/internal/whatsapp/private/digest-source/messages/query` | Read one bounded page under the exact account generation and source revision |
+| `POST` | `/internal/whatsapp/delivery-readiness/get` | Resolve delivery readiness for the user's first mapped phone number |
+| `POST` | `/internal/whatsapp/outbound-deliveries/get` | Read a user-bound idempotent delivery receipt |
+| `POST` | `/internal/whatsapp/outbound-deliveries/retry` | Authorize one byte-identical retry after a definitive failure |
 | `POST` | `/internal/whatsapp/private/accounts/:sourceAccountId/erasure` | Start an idempotent, generation-fenced physical privacy cascade |
 | `GET` | `/internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId` | Read content-free physical erasure progress |
 | `POST` | `/internal/whatsapp/pubsub/conversation-assistant-prepare` | Prepare an initial Conversation Assistant snapshot |
 | `POST` | `/internal/whatsapp/pubsub/conversation-assistant-context-attachment-prepare` | Prepare one frozen continuation update |
 
 Every internal route must call `logIncomingRequest()` before auth validation.
+
+## Message Digest Source and Delivery
+
+`/internal/whatsapp/private/digest-source/validate` derives the user's active private account, verifies ownership of the requested chat, accepts only `group` or `direct`, and returns a safe label plus a signed source revision. The revision covers user, source account, account generation, chat identity, chat type, and context-change journal head.
+
+`/internal/whatsapp/private/digest-source/messages/query` requires the same fenced source fields, an ISO time window, a maximum page size of 200, and an optional opaque cursor. It returns safe message references, timestamps, direction, bounded author labels, projected text, content kind, source revision, high watermark, and next cursor. Redacted, deleted, and relation-only rows are excluded. Logs never include request bodies or projected text.
+
+`/internal/whatsapp/delivery-readiness/get` inspects the user's mapping in stored order. It reports `ready` with only a masked primary number, or `mapping_missing`, `disconnected`, or `delivery_disabled`. The actual destination is always the first mapped phone number; callers cannot override it.
+
+Message Digest Pub/Sub events use `kind: message_digest_v1`, the approved `intexuraos_message_digest_v1` Meta template, two bounded body parameters, a validated run deep-link suffix, and `message-digest:<runId>` idempotency. Before provider execution, WhatsApp Service acquires a run-bound authorization from Message Digest Service. Delivery receipts distinguish `pending`, `sent`, `ambiguous`, and definitive `failed`; retry authorization requires the identical payload digest and rejects ambiguous state.
 
 ## Event Contract
 

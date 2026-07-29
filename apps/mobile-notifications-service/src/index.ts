@@ -1,6 +1,5 @@
 import { initSentry } from '@intexuraos/infra-sentry';
 import { validateRequiredEnv } from '@intexuraos/http-server';
-import { installUsageSinkShutdownHandler } from '@intexuraos/llm-pricing';
 import { buildServer } from './server.js';
 
 const REQUIRED_ENV = [
@@ -8,13 +7,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_AUDIENCE',
-  'INTEXURAOS_DIGEST_LLM_MODEL',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_OPENROUTER_APP_API_KEY',
-  'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL',
-  'INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC',
-  'INTEXURAOS_WEB_APP_URL',
-  'INTEXURAOS_LLM_USAGE_SERVICE_URL',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -38,11 +31,6 @@ const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 async function main(): Promise<void> {
   const app = await buildServer();
-
-  // Drain registered usage sinks on SIGTERM/SIGINT before exit so the 500ms
-  // batching window doesn't lose events when Cloud Run scales down.
-  installUsageSinkShutdownHandler({ app, logger: app.log });
-
   await app.listen({ port: PORT, host: HOST });
 }
 

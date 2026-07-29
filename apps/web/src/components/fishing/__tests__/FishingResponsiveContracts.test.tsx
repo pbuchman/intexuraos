@@ -5,7 +5,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
-import { FishingDigestList } from '../FishingDigestList.js';
 import { FishingChatPanel } from '../FishingChatPanel.js';
 import { FishingReferencesPanel } from '../FishingReferencesPanel.js';
 import { FishingKnowledgeTree } from '../FishingKnowledgeTree.js';
@@ -103,31 +102,6 @@ describe('Fishing responsive layout contracts', () => {
     });
     expect(button.parentElement).toHaveClass('min-w-0', 'overflow-hidden');
     expect(button.firstElementChild).toHaveClass('min-w-0', 'flex-1');
-  });
-
-  it('keeps digest rows stackable on narrow screens', () => {
-    render(
-      <MemoryRouter>
-        <FishingDigestList
-          digests={[
-            {
-              groupKey: 'very-long-fishing-group-key-that-should-not-overflow',
-              date: '2026-05-01',
-              title: 'Very long digest title that should wrap instead of pushing the badge off screen',
-              summaryMarkdown: 'A long digest summary with enough content to verify wrapping behavior.',
-              messageCount: 123,
-            },
-          ]}
-        />
-      </MemoryRouter>
-    );
-
-    expect(screen.getByTestId('fishing-digest-row')).toHaveClass('min-w-0');
-    expect(screen.getByTestId('fishing-digest-row-header')).toHaveClass('flex-col', 'sm:flex-row');
-    expect(screen.getByTestId('fishing-digest-message-count')).toHaveClass(
-      'shrink-0',
-      'self-start'
-    );
   });
 
   it('keeps knowledge folder controls usable on narrow screens', () => {

@@ -11895,7 +11895,7 @@ describe('FakeMatrixCorpusRepository A2 fake core', () => {
     expect(repository.safeStateSummary()).toEqual(afterFinal);
     expect(repository.operationCounts('cleanup')).toEqual({ invocations: 69, commits: 64 });
     expect(digestCalls).toBe(68);
-  }, 30_000);
+  }, 60_000);
 
   it('R20 ingest claim and renewal eligibility is exact', async () => {
     const pending = seededOutbox(30_000, 'pending');

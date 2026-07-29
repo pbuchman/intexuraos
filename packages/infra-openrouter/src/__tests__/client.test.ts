@@ -1108,6 +1108,67 @@ describe('createOpenRouterClient', () => {
       }
     });
 
+    it('maps a top-level provider error envelope returned with HTTP 200', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          error: {
+            code: 400,
+            message: 'Request contains an invalid argument.',
+          },
+        });
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+        maxAttempts: 1,
+      });
+
+      const result = await client.generate('Synthetic prompt', {
+        promptType: 'test-provider-envelope',
+      });
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'API_ERROR', message: 'Request contains an invalid argument.' },
+      });
+      expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          errorMessage: 'OPENROUTER_HTTP_400',
+          promptType: 'test-provider-envelope',
+        })
+      );
+
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, { error: { code: 'not-an-http-status', message: '   ' } });
+      await expect(
+        client.generate('Synthetic fallback envelope', {
+          promptType: 'test-provider-envelope-fallback',
+        })
+      ).resolves.toEqual({
+        ok: false,
+        error: { code: 'OVERLOADED', message: 'OpenRouter returned an error response' },
+      });
+      expect(mockUsageLoggerLog).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          success: false,
+          errorMessage: 'OPENROUTER_HTTP_500',
+          promptType: 'test-provider-envelope-fallback',
+        })
+      );
+
+      nock(API_BASE_URL).post('/chat/completions').reply(200, []);
+      await expect(
+        client.generate('Synthetic non-object response', {
+          promptType: 'test-non-object-response',
+        })
+      ).resolves.toMatchObject({ ok: false, error: { code: 'API_ERROR' } });
+    });
+
     it('rejects an in-band provider error instead of returning partial content', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')

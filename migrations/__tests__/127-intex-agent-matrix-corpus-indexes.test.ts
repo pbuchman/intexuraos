@@ -69,7 +69,9 @@ describe('migration 127 - Intex Agent Matrix corpus projection indexes', () => {
     const source = readFileSync(
       new URL('../127_intex-agent-matrix-corpus-indexes.mjs', import.meta.url)
     );
-    expect(manifest.entries.at(-1)).toEqual({
+    const matchingEntries = manifest.entries.filter(({ id }) => id === '127');
+    expect(matchingEntries).toHaveLength(1);
+    expect(matchingEntries[0]).toEqual({
       id: '127',
       name: 'intex-agent-matrix-corpus-indexes',
       checksum: `sha256:${createHash('sha256').update(source).digest('hex')}`,

@@ -6,7 +6,8 @@ export interface Config {
   authAudience: string;
   internalAuthToken: string;
   userServiceUrl: string;
-  mobileNotificationsServiceUrl: string;
+  messageDigestServiceUrl: string;
+  whatsappServiceUrl: string;
   llmUsageServiceUrl: string;
   openAiAppApiKey: string;
   sentryDsn?: string;
@@ -26,7 +27,8 @@ export function loadConfig(): Config {
     authAudience: readEnv('INTEXURAOS_AUTH_AUDIENCE'),
     internalAuthToken: readEnv('INTEXURAOS_INTERNAL_AUTH_TOKEN'),
     userServiceUrl: readEnv('INTEXURAOS_USER_SERVICE_URL'),
-    mobileNotificationsServiceUrl: readEnv('INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_URL'),
+    messageDigestServiceUrl: readEnv('INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL'),
+    whatsappServiceUrl: readEnv('INTEXURAOS_WHATSAPP_SERVICE_URL'),
     llmUsageServiceUrl: readEnv('INTEXURAOS_LLM_USAGE_SERVICE_URL'),
     openAiAppApiKey: readEnv('INTEXURAOS_OPENAI_APP_API_KEY'),
     environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',

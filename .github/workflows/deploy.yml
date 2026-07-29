@@ -25,6 +25,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  pull-requests: read
 
 concurrency:
   group: deploy-${{ github.event_name == 'push' && 'hetzner-prod' || inputs.target }}
@@ -35,8 +36,9 @@ jobs:
     name: Deploy Hetzner Production
     if: ${{ github.event_name == 'push' || inputs.target == 'hetzner-prod' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 210
     env:
+      GH_TOKEN: ${{ github.token }}
       HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
       HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
       DEPLOY_NGINX: ${{ github.event_name == 'push' && 'true' || inputs.deploy_nginx }}

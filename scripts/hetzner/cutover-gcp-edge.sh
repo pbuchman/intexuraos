@@ -24,7 +24,6 @@ PUBSUB_ROUTES=(
 )
 
 SCHEDULER_ROUTES=(
-  "mobile-notifications-digest-yesterday|/internal/notifications/digest/run-yesterday|"
   "intexuraos-linear-sync-hourly|/internal/linear/sync-all|"
   "intexuraos-linear-issues-prune-hourly|/internal/linear/prune-issues|"
   "intexuraos-drain-task-queue|/internal/drain-queue|"

@@ -66,13 +66,11 @@ function makeChunk(overrides: Partial<KnowledgeChunkMatch> = {}): KnowledgeChunk
 
 interface RouteTestContext {
   app: FastifyInstance;
-  mobileNotificationsClient: {
-    listDigestSubscriptions: ReturnType<typeof vi.fn>;
-    queryDigests: ReturnType<typeof vi.fn>;
-    getDigest: ReturnType<typeof vi.fn>;
-    getDigestState: ReturnType<typeof vi.fn>;
-    queryGroupMessages: ReturnType<typeof vi.fn>;
+  messageDigestClient: {
+    queryLegacyDigestDefinitions: ReturnType<typeof vi.fn>;
+    queryLegacyDigestRuns: ReturnType<typeof vi.fn>;
   };
+  whatsappClient: { queryPrivateDigestMessages: ReturnType<typeof vi.fn> };
   chatAdapter: {
     createClientForUser: ReturnType<typeof vi.fn>;
     modelId: string;
@@ -81,12 +79,12 @@ interface RouteTestContext {
 
 function createServices(): Omit<RouteTestContext, 'app'> {
   const firestore = createFakeFirestore() as unknown as Firestore;
-  const mobileNotificationsClient = {
-    listDigestSubscriptions: vi.fn().mockResolvedValue({ ok: true, value: { items: [] } }),
-    queryDigests: vi.fn(),
-    getDigest: vi.fn(),
-    getDigestState: vi.fn(),
-    queryGroupMessages: vi.fn(),
+  const messageDigestClient = {
+    queryLegacyDigestDefinitions: vi.fn().mockResolvedValue({ ok: true, value: { items: [] } }),
+    queryLegacyDigestRuns: vi.fn(),
+  };
+  const whatsappClient = {
+    queryPrivateDigestMessages: vi.fn(),
   };
   const llmClient = {
     generate: vi.fn().mockResolvedValue({
@@ -133,13 +131,15 @@ function createServices(): Omit<RouteTestContext, 'app'> {
     },
     openAiClient: {} as OpenAI,
     userServiceClient: {} as ServiceContainer['userServiceClient'],
-    mobileNotificationsClient: mobileNotificationsClient as ServiceContainer['mobileNotificationsClient'],
+    messageDigestClient: messageDigestClient as unknown as ServiceContainer['messageDigestClient'],
+    whatsappClient: whatsappClient as unknown as ServiceContainer['whatsappClient'],
     usageSink: {} as ServiceContainer['usageSink'],
     chatAdapter: chatAdapter as ServiceContainer['chatAdapter'],
   });
 
   return {
-    mobileNotificationsClient,
+    messageDigestClient,
+    whatsappClient,
     chatAdapter,
   };
 }
@@ -354,13 +354,8 @@ describe('Fishing Assistant chat routes', () => {
       } as ServiceContainer['embeddingClient'],
       openAiClient: {} as OpenAI,
       userServiceClient: {} as ServiceContainer['userServiceClient'],
-      mobileNotificationsClient: {
-        listDigestSubscriptions: vi.fn(),
-        queryDigests: vi.fn(),
-        getDigest: vi.fn(),
-        getDigestState: vi.fn(),
-        queryGroupMessages: vi.fn(),
-      } as ServiceContainer['mobileNotificationsClient'],
+      messageDigestClient: {} as ServiceContainer['messageDigestClient'],
+      whatsappClient: {} as ServiceContainer['whatsappClient'],
       usageSink: {} as ServiceContainer['usageSink'],
       chatAdapter: {
         modelId: 'or:google/gemini-3-flash-preview',
@@ -421,13 +416,12 @@ describe('Fishing Assistant chat routes', () => {
         },
         openAiClient: {} as OpenAI,
         userServiceClient: {} as ServiceContainer['userServiceClient'],
-        mobileNotificationsClient: {
-          listDigestSubscriptions: vi.fn().mockResolvedValue({ ok: true, value: { items: [] } }),
-          queryDigests: vi.fn(),
-          getDigest: vi.fn(),
-          getDigestState: vi.fn(),
-          queryGroupMessages: vi.fn(),
-        } as ServiceContainer['mobileNotificationsClient'],
+        messageDigestClient: {
+          queryLegacyDigestDefinitions: vi
+            .fn()
+            .mockResolvedValue({ ok: true, value: { items: [] } }),
+        } as unknown as ServiceContainer['messageDigestClient'],
+        whatsappClient: {} as ServiceContainer['whatsappClient'],
         usageSink: {} as ServiceContainer['usageSink'],
         chatAdapter: {
           modelId: 'or:google/gemini-3-flash-preview',

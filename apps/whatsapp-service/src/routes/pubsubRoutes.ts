@@ -2,7 +2,7 @@
  * Pub/Sub Push Subscription Routes.
  * Receives Pub/Sub push messages for outbound WhatsApp messaging.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
@@ -13,6 +13,7 @@ import type {
   ConversationAssistantContextAttachmentPreparationRequestedEvent,
   ExtractLinkPreviewsEvent,
   IntexMessageSourceType,
+  MessageDigestDeliveryAuthorizationClient,
   MediaCleanupEvent,
   PrivateWhatsAppTranscriptionState,
   PrivateWhatsAppErasureWorkItem,
@@ -25,6 +26,7 @@ import type {
 import {
   ExtractLinkPreviewsUseCase,
   ProcessWebhookEventUseCase,
+  WHATSAPP_MESSAGE_SEND_TIMEOUT_MS,
   shouldDeliverMessage,
 } from '../domain/whatsapp/index.js';
 import { getErrorMessage } from '@intexuraos/common-core';
@@ -35,8 +37,8 @@ import {
   prepareConversationAssistantSession,
 } from '../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
+import { adaptConversationAssistantPreparationPublication } from '../domain/conversation-assistant/preparationPublisherAdapter.js';
 import { prepareConversationAssistantContextAttachment } from '../domain/conversation-assistant/contextAttachmentUseCases.js';
-import { randomUUID } from 'node:crypto';
 import { processPrivateWhatsAppErasureBatch } from '../domain/whatsapp/usecases/privateWhatsAppErasure.js';
 
 interface PubSubPushMessage {
@@ -64,9 +66,154 @@ function matrixDeliveryPayloadDigest(event: SendMessageEvent): string {
     replyToMessageId: event.replyToMessageId ?? null,
     buttons: event.buttons ?? null,
     ctaUrl: event.ctaUrl ?? null,
+    presentation: event.presentation ?? null,
+    deliveryAuthorization: event.deliveryAuthorization ?? null,
+    retainMessageText: event.retainMessageText ?? null,
     important: event.important ?? null,
   });
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+function messageDigestDeliveryOwnerDigest(
+  messageId: string,
+  idempotencyKey: string,
+  deliveryAttemptId: string
+): string {
+  return createHash('sha256')
+    .update(
+      stableJson({
+        version: 1,
+        consumer: 'whatsapp-service',
+        messageId,
+        idempotencyKey,
+        deliveryAttemptId,
+      }),
+      'utf8'
+    )
+    .digest('hex');
+}
+
+const MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS = 1_024;
+// Exact non-variable copy in the frozen template verified by the cutover preflight.
+const MESSAGE_DIGEST_TEMPLATE_FIXED_BODY_CODE_POINTS = 68;
+const MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS = 80;
+const MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS =
+  MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_FIXED_BODY_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS;
+const MESSAGE_DIGEST_EVENT_MESSAGE = 'Message Digest delivery';
+const MESSAGE_DIGEST_RUN_URL_SUFFIX_PATTERN =
+  /^#\/whatsapp\/message-digests\/md_[A-Za-z0-9_-]{3,120}\/history\/mdr_[A-Za-z0-9_-]{3,160}$/u;
+const MESSAGE_DIGEST_DEFINITION_ID_PATTERN = /^md_[A-Za-z0-9_-]{3,120}$/u;
+const MESSAGE_DIGEST_RUN_ID_PATTERN = /^mdr_[A-Za-z0-9_-]{3,160}$/u;
+const MESSAGE_DIGEST_DELIVERY_AUTHORIZATION_SAFETY_MS = 5_000;
+
+type ParsedMessageDigestPresentation =
+  | { disposition: 'absent' }
+  | {
+      disposition: 'valid';
+      value: {
+        template: {
+          digestName: string;
+          digestExcerpt: string;
+          runUrlSuffix: string;
+        };
+        authorization: {
+          definitionId: string;
+          runId: string;
+        };
+      };
+    }
+  | { disposition: 'invalid' };
+
+function parseMessageDigestPresentation(event: SendMessageEvent): ParsedMessageDigestPresentation {
+  const value = event.presentation as unknown;
+  const authorizationValue = event.deliveryAuthorization as unknown;
+  if (value === undefined && authorizationValue === undefined) return { disposition: 'absent' };
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    authorizationValue === null ||
+    typeof authorizationValue !== 'object' ||
+    Array.isArray(authorizationValue) ||
+    event.message !== MESSAGE_DIGEST_EVENT_MESSAGE ||
+    event.retainMessageText !== false ||
+    event.important !== true ||
+    typeof event.idempotencyKey !== 'string' ||
+    event.idempotencyKey.trim() === '' ||
+    event.replyToMessageId !== undefined ||
+    event.buttons !== undefined ||
+    event.ctaUrl !== undefined
+  ) {
+    return { disposition: 'invalid' };
+  }
+  const record = value as Record<string, unknown>;
+  const authorization = authorizationValue as Record<string, unknown>;
+  if (
+    Object.keys(record).length !== 4 ||
+    record['kind'] !== 'message_digest_v1' ||
+    !isBoundedMessageDigestTemplateText(
+      record['digestName'],
+      MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS
+    ) ||
+    !isBoundedMessageDigestTemplateText(
+      record['digestExcerpt'],
+      MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS
+    ) ||
+    typeof record['runUrlSuffix'] !== 'string' ||
+    !MESSAGE_DIGEST_RUN_URL_SUFFIX_PATTERN.test(record['runUrlSuffix']) ||
+    Object.keys(authorization).length !== 3 ||
+    authorization['kind'] !== 'message_digest_delivery_v1' ||
+    typeof authorization['definitionId'] !== 'string' ||
+    !MESSAGE_DIGEST_DEFINITION_ID_PATTERN.test(authorization['definitionId']) ||
+    typeof authorization['runId'] !== 'string' ||
+    !MESSAGE_DIGEST_RUN_ID_PATTERN.test(authorization['runId']) ||
+    record['runUrlSuffix'] !==
+      `#/whatsapp/message-digests/${authorization['definitionId']}/history/${authorization['runId']}` ||
+    event.idempotencyKey !== `message-digest:${authorization['runId']}`
+  ) {
+    return { disposition: 'invalid' };
+  }
+  return {
+    disposition: 'valid',
+    value: {
+      template: {
+        digestName: record['digestName'],
+        digestExcerpt: record['digestExcerpt'],
+        runUrlSuffix: record['runUrlSuffix'],
+      },
+      authorization: {
+        definitionId: authorization['definitionId'],
+        runId: authorization['runId'],
+      },
+    },
+  };
+}
+
+export function isBoundedMessageDigestTemplateText(
+  value: unknown,
+  maxCodePoints: number
+): value is string {
+  if (
+    typeof value !== 'string' ||
+    value === '' ||
+    value.trim() !== value ||
+    Array.from(value).length > maxCodePoints
+  ) {
+    return false;
+  }
+  return !Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) as number;
+    return (
+      codePoint === 10 ||
+      codePoint === 13 ||
+      (codePoint >= 0 && codePoint <= 31) ||
+      (codePoint >= 127 && codePoint <= 159) ||
+      (codePoint >= 0x202a && codePoint <= 0x202e) ||
+      (codePoint >= 0x2066 && codePoint <= 0x2069)
+    );
+  });
 }
 
 function stableJson(value: unknown): string {
@@ -270,8 +417,10 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         const body = request.body as PubSubPushMessage;
 
         let eventData: SendMessageEvent;
+        let rawEventJson = '';
         try {
           const decoded = Buffer.from(body.message.data, 'base64').toString('utf-8');
+          rawEventJson = decoded;
           eventData = JSON.parse(decoded) as SendMessageEvent;
         } catch {
           request.log.error(
@@ -285,6 +434,19 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         if (parsedType !== 'whatsapp.message.send') {
           request.log.warn({ type: parsedType }, 'Unexpected event type');
           return await reply.fail('INVALID_REQUEST', 'Unexpected event type');
+        }
+
+        const parsedMessageDigestPresentation = parseMessageDigestPresentation(eventData);
+        if (parsedMessageDigestPresentation.disposition === 'invalid') {
+          request.log.warn(
+            {
+              lane: 'message_digest',
+              errorCode: 'INVALID_PRESENTATION',
+              [SKIP_SENTRY_KEY]: true,
+            },
+            'Rejected invalid Message Digest WhatsApp presentation'
+          );
+          return await reply.ok({});
         }
 
         const idempotencyKey =
@@ -332,54 +494,126 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           'Processing send message event'
         );
 
-        const { userMappingRepository } = getServices();
-        const phoneResult = await userMappingRepository.findPhoneByUserId(eventData.userId);
-        if (!phoneResult.ok) {
-          request.log.error(
-            isMatrixDelivery
-              ? {
-                  lane: 'matrix_corpus',
-                  errorCode: 'PHONE_LOOKUP_FAILED',
-                  [SKIP_SENTRY_KEY]: true,
-                }
-              : {
-                  messageId: body.message.messageId,
-                  userId: eventData.userId,
-                  correlationId: eventData.correlationId,
-                  error: phoneResult.error.message,
-                },
-            'Failed to look up phone number for user'
-          );
-          return await reply.fail('INTERNAL_ERROR', 'Failed to look up phone number');
+        const {
+          messageSender,
+          messageDigestDeliveryAuthorizationClient,
+          notificationPreferencesRepository,
+          outboundMessageRepository,
+          userMappingRepository,
+        } = getServices();
+        const deliveryPayloadDigest =
+          idempotencyKey === null
+            ? null
+            : parsedMessageDigestPresentation.disposition === 'valid'
+              ? createHash('sha256').update(rawEventJson, 'utf8').digest('hex')
+              : matrixDeliveryPayloadDigest(eventData);
+        const deliveryStartedAt = new Date();
+        const deliveryExpiresAt = Math.floor(
+          (deliveryStartedAt.getTime() + 7 * 24 * 60 * 60 * 1000) / 1000
+        );
+
+        const recordTerminalFailure = async (
+          key: string,
+          payloadDigest: string,
+          failureCode:
+            | 'MAPPING_MISSING'
+            | 'DISCONNECTED'
+            | 'DELIVERY_DISABLED'
+            | 'PROVIDER_REJECTED'
+            | 'DELIVERY_AUTHORIZATION_REVOKED'
+            | 'DELIVERY_AUTHORIZATION_UNAVAILABLE'
+        ): Promise<boolean> => {
+          const failed = await outboundMessageRepository.markIdempotentDeliveryFailed({
+            idempotencyKey: key,
+            payloadDigest,
+            now: new Date().toISOString(),
+            failureCode,
+          });
+          if (!failed.ok) {
+            request.log.error(
+              {
+                lane: 'matrix_corpus',
+                errorCode: failed.code,
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Matrix WhatsApp terminal delivery receipt update failed'
+            );
+            return false;
+          }
+          return true;
+        };
+
+        let phoneNumber: string | null = null;
+        let preflightFailure: 'MAPPING_MISSING' | 'DISCONNECTED' | 'DELIVERY_DISABLED' | null =
+          null;
+        if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+          const mappingResult = await userMappingRepository.getMapping(eventData.userId);
+          if (!mappingResult.ok) {
+            request.log.error(
+              {
+                lane: 'matrix_corpus',
+                errorCode: 'PHONE_LOOKUP_FAILED',
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Failed to look up phone number for Matrix delivery'
+            );
+            return await reply.fail('INTERNAL_ERROR', 'Failed to look up phone number');
+          }
+
+          if (mappingResult.value === null) {
+            preflightFailure = 'MAPPING_MISSING';
+          } else if (!mappingResult.value.connected) {
+            preflightFailure = 'DISCONNECTED';
+          } else {
+            const firstPhoneNumber = mappingResult.value.phoneNumbers[0];
+            if (firstPhoneNumber === undefined || firstPhoneNumber.trim() === '') {
+              preflightFailure = 'MAPPING_MISSING';
+            } else {
+              phoneNumber = firstPhoneNumber;
+            }
+          }
+        } else {
+          const phoneResult = await userMappingRepository.findPhoneByUserId(eventData.userId);
+          if (!phoneResult.ok) {
+            request.log.error(
+              {
+                messageId: body.message.messageId,
+                userId: eventData.userId,
+                correlationId: eventData.correlationId,
+                error: phoneResult.error.message,
+              },
+              'Failed to look up phone number for user'
+            );
+            return await reply.fail('INTERNAL_ERROR', 'Failed to look up phone number');
+          }
+
+          if (phoneResult.value === null) {
+            request.log.warn(
+              {
+                messageId: body.message.messageId,
+                userId: eventData.userId,
+                correlationId: eventData.correlationId,
+              },
+              'User not connected to WhatsApp, skipping message'
+            );
+            return await reply.ok({});
+          }
+          phoneNumber = phoneResult.value;
         }
 
-        if (phoneResult.value === null) {
-          request.log.warn(
+        if (phoneNumber !== null) {
+          request.log.info(
             isMatrixDelivery
               ? { lane: 'matrix_corpus' }
               : {
                   messageId: body.message.messageId,
                   userId: eventData.userId,
-                  correlationId: eventData.correlationId,
+                  phoneNumber: maskPhoneNumber(phoneNumber),
                 },
-            'User not connected to WhatsApp, skipping message'
+            'Found phone number for user'
           );
-          return await reply.ok({});
         }
 
-        const phoneNumber = phoneResult.value;
-        request.log.info(
-          isMatrixDelivery
-            ? { lane: 'matrix_corpus' }
-            : {
-                messageId: body.message.messageId,
-                userId: eventData.userId,
-                phoneNumber: maskPhoneNumber(phoneNumber),
-              },
-          'Found phone number for user'
-        );
-
-        const { notificationPreferencesRepository } = getServices();
         const prefsResult = await notificationPreferencesRepository.getPreferences(
           eventData.userId
         );
@@ -412,18 +646,127 @@ export function createPubsubRoutes(): FastifyPluginCallback {
                 },
             'Dropping non-important WhatsApp message per user preference'
           );
-          return await reply.ok({});
+          if (idempotencyKey === null || deliveryPayloadDigest === null) {
+            return await reply.ok({});
+          }
+          preflightFailure ??= 'DELIVERY_DISABLED';
         }
 
-        const { messageSender, outboundMessageRepository } = getServices();
-        const deliveryPayloadDigest =
-          idempotencyKey === null ? null : matrixDeliveryPayloadDigest(eventData);
-        const deliveryStartedAt = new Date();
-        const deliveryExpiresAt = Math.floor(
-          (deliveryStartedAt.getTime() + 7 * 24 * 60 * 60 * 1000) / 1000
-        );
+        let digestDeliveryAuthorization:
+          | {
+              identity: {
+                userId: string;
+                definitionId: string;
+                runId: string;
+                idempotencyKey: string;
+                payloadDigest: string;
+                ownerDigest: string;
+              };
+              fence: number;
+              expiresAt: string;
+              client: MessageDigestDeliveryAuthorizationClient;
+            }
+          | null = null;
+
+        const releaseDigestDeliveryAuthorization = async (): Promise<boolean> => {
+          if (digestDeliveryAuthorization === null) return true;
+          const authorization = digestDeliveryAuthorization;
+          digestDeliveryAuthorization = null;
+          try {
+            const released = await authorization.client.release({
+              ...authorization.identity,
+              fence: authorization.fence,
+            });
+            if (!released.ok) {
+              request.log.error(
+                {
+                  lane: 'message_digest',
+                  errorCode: 'DELIVERY_AUTHORIZATION_RELEASE_FAILED',
+                  [SKIP_SENTRY_KEY]: true,
+                },
+                'Message Digest delivery authorization release failed'
+              );
+            }
+            return released.ok;
+          } catch {
+            request.log.error(
+              {
+                lane: 'message_digest',
+                errorCode: 'DELIVERY_AUTHORIZATION_RELEASE_FAILED',
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Message Digest delivery authorization release failed'
+            );
+            return false;
+          }
+        };
+
+        if (
+          parsedMessageDigestPresentation.disposition === 'valid' &&
+          idempotencyKey !== null &&
+          deliveryPayloadDigest !== null
+        ) {
+          if (messageDigestDeliveryAuthorizationClient === undefined) {
+            request.log.error(
+              {
+                lane: 'message_digest',
+                errorCode: 'DELIVERY_AUTHORIZATION_UNAVAILABLE',
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Message Digest delivery authorization is unavailable'
+            );
+            void reply.status(503);
+            return await reply.ok({});
+          }
+          const identity = {
+            userId: eventData.userId,
+            definitionId: parsedMessageDigestPresentation.value.authorization.definitionId,
+            runId: parsedMessageDigestPresentation.value.authorization.runId,
+            idempotencyKey,
+            payloadDigest: deliveryPayloadDigest,
+            ownerDigest: messageDigestDeliveryOwnerDigest(
+              body.message.messageId,
+              idempotencyKey,
+              randomUUID()
+            ),
+          };
+          let acquired;
+          try {
+            acquired = await messageDigestDeliveryAuthorizationClient.acquire(identity);
+          } catch {
+            acquired = { ok: false as const, code: 'unavailable' as const };
+          }
+          if (!acquired.ok || acquired.disposition === 'busy') {
+            request.log.warn(
+              {
+                lane: 'message_digest',
+                errorCode: 'DELIVERY_AUTHORIZATION_RETRYABLE',
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Message Digest delivery authorization is retryable'
+            );
+            void reply.status(503);
+            return await reply.ok({});
+          }
+          if (acquired.disposition !== 'authorized') {
+            request.log.info(
+              { lane: 'message_digest', disposition: 'denied' },
+              'Suppressed unauthorized Message Digest delivery'
+            );
+            return await reply.ok({});
+          }
+          digestDeliveryAuthorization = {
+            identity,
+            fence: acquired.fence,
+            expiresAt: acquired.expiresAt,
+            client: messageDigestDeliveryAuthorizationClient,
+          };
+        }
+
+        try {
         if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
           const reservation = await outboundMessageRepository.reserveIdempotentDelivery({
+            userId: eventData.userId,
             idempotencyKey,
             payloadDigest: deliveryPayloadDigest,
             now: deliveryStartedAt.toISOString(),
@@ -438,6 +781,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
               },
               'Matrix WhatsApp delivery reservation rejected'
             );
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) {
+              void reply.status(503);
+              return await reply.ok({});
+            }
             return reservation.code === 'PERSISTENCE_ERROR'
               ? await reply.fail('INTERNAL_ERROR', 'Delivery reservation failed')
               : await reply.ok({});
@@ -450,72 +798,166 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             if (reservation.disposition === 'duplicate_in_flight') {
               void reply.status(503);
             }
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) void reply.status(503);
+            return await reply.ok({});
+          }
+          if (preflightFailure !== null) {
+            const recorded = await recordTerminalFailure(
+              idempotencyKey,
+              deliveryPayloadDigest,
+              preflightFailure
+            );
+            if (!recorded) void reply.status(503);
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) void reply.status(503);
+            return await reply.ok({});
+          }
+        }
+
+        const resolvedPhoneNumber = phoneNumber as string;
+
+        if (digestDeliveryAuthorization !== null) {
+          const authorization = digestDeliveryAuthorization;
+          let renewalDisposition: 'authorized' | 'revoked' | 'unavailable' = 'unavailable';
+          try {
+            const renewed = await authorization.client.acquire(authorization.identity);
+            if (renewed.ok && renewed.disposition === 'authorized') {
+              digestDeliveryAuthorization = {
+                identity: authorization.identity,
+                fence: renewed.fence,
+                expiresAt: renewed.expiresAt,
+                client: authorization.client,
+              };
+              const minimumExpiry =
+                Date.now() +
+                WHATSAPP_MESSAGE_SEND_TIMEOUT_MS +
+                MESSAGE_DIGEST_DELIVERY_AUTHORIZATION_SAFETY_MS;
+              renewalDisposition =
+                Date.parse(renewed.expiresAt) >= minimumExpiry ? 'authorized' : 'unavailable';
+            } else if (renewed.ok && renewed.disposition === 'denied') {
+              renewalDisposition = 'revoked';
+            }
+          } catch {
+            renewalDisposition = 'unavailable';
+          }
+
+          if (renewalDisposition !== 'authorized') {
+            const failureCode =
+              renewalDisposition === 'revoked'
+                ? 'DELIVERY_AUTHORIZATION_REVOKED'
+                : 'DELIVERY_AUTHORIZATION_UNAVAILABLE';
+            request.log.warn(
+              {
+                lane: 'message_digest',
+                errorCode: failureCode,
+                [SKIP_SENTRY_KEY]: true,
+              },
+              'Message Digest delivery authorization renewal failed closed'
+            );
+            const recorded = await recordTerminalFailure(
+              authorization.identity.idempotencyKey,
+              authorization.identity.payloadDigest,
+              failureCode
+            );
+            if (!recorded || renewalDisposition === 'unavailable') void reply.status(503);
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) void reply.status(503);
             return await reply.ok({});
           }
         }
 
         let result;
         try {
-          if (eventData.ctaUrl !== undefined) {
+          if (parsedMessageDigestPresentation.disposition === 'valid') {
+            result = await messageSender.sendMessageDigestTemplate(
+              resolvedPhoneNumber,
+              parsedMessageDigestPresentation.value.template
+            );
+          } else if (eventData.ctaUrl !== undefined) {
             // Send CTA URL message (opens link in browser)
             result = await messageSender.sendCtaUrlMessage(
-              phoneNumber,
+              resolvedPhoneNumber,
               eventData.message,
               eventData.ctaUrl
             );
           } else if (eventData.buttons !== undefined && eventData.buttons.length > 0) {
             // Send interactive message with reply buttons
             result = await messageSender.sendInteractiveMessage(
-              phoneNumber,
+              resolvedPhoneNumber,
               eventData.message,
               eventData.buttons
             );
           } else {
             // Send plain text message
-            result = await messageSender.sendTextMessage(phoneNumber, eventData.message);
+            result = await messageSender.sendTextMessage(resolvedPhoneNumber, eventData.message);
           }
         } catch {
           if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
-            await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
+            const ambiguous = await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
               idempotencyKey,
               payloadDigest: deliveryPayloadDigest,
               now: new Date().toISOString(),
             });
+            if (!ambiguous.ok) void reply.status(503);
             request.log.error(
               {
                 lane: 'matrix_corpus',
-                errorCode: 'AMBIGUOUS_EXTERNAL_EFFECT',
+                errorCode: ambiguous.ok ? 'AMBIGUOUS_EXTERNAL_EFFECT' : ambiguous.code,
                 [SKIP_SENTRY_KEY]: true,
               },
               'Matrix WhatsApp delivery ended ambiguously'
             );
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) void reply.status(503);
             return await reply.ok({});
           }
           throw new Error('WhatsApp message sender threw');
         }
 
         if (!result.ok) {
-          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
-            await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
-              idempotencyKey,
-              payloadDigest: deliveryPayloadDigest,
-              now: new Date().toISOString(),
-            });
-            request.log.error(
-              {
-                lane: 'matrix_corpus',
-                errorCode: 'AMBIGUOUS_EXTERNAL_EFFECT',
-                [SKIP_SENTRY_KEY]: true,
-              },
-              'Matrix WhatsApp delivery ended ambiguously'
-            );
-            return await reply.ok({});
-          }
           const isPermanentError =
             result.error.httpStatus !== undefined &&
             result.error.httpStatus >= 400 &&
             result.error.httpStatus < 500 &&
             result.error.httpStatus !== 429;
+
+          if (idempotencyKey !== null && deliveryPayloadDigest !== null) {
+            if (isPermanentError) {
+              const recorded = await recordTerminalFailure(
+                idempotencyKey,
+                deliveryPayloadDigest,
+                'PROVIDER_REJECTED'
+              );
+              if (!recorded) void reply.status(503);
+              request.log.error(
+                {
+                  lane: 'matrix_corpus',
+                  errorCode: 'PROVIDER_REJECTED',
+                  [SKIP_SENTRY_KEY]: true,
+                },
+                'Matrix WhatsApp delivery was rejected before an external effect'
+              );
+            } else {
+              const ambiguous = await outboundMessageRepository.markIdempotentDeliveryAmbiguous({
+                idempotencyKey,
+                payloadDigest: deliveryPayloadDigest,
+                now: new Date().toISOString(),
+              });
+              if (!ambiguous.ok) void reply.status(503);
+              request.log.error(
+                {
+                  lane: 'matrix_corpus',
+                  errorCode: ambiguous.ok ? 'AMBIGUOUS_EXTERNAL_EFFECT' : ambiguous.code,
+                  [SKIP_SENTRY_KEY]: true,
+                },
+                'Matrix WhatsApp delivery ended ambiguously'
+              );
+            }
+            const released = await releaseDigestDeliveryAuthorization();
+            if (!released) void reply.status(503);
+            return await reply.ok({});
+          }
 
           if (isPermanentError) {
             request.log.error(
@@ -566,7 +1008,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           wamid,
           correlationId: eventData.correlationId,
           userId: eventData.userId,
-          messageText: eventData.message,
+          ...(eventData.retainMessageText === false ? {} : { messageText: eventData.message }),
           sentAt: now.toISOString(),
           expiresAt,
         };
@@ -587,6 +1029,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             );
             void reply.status(503);
           }
+          const released = await releaseDigestDeliveryAuthorization();
+          if (!released) void reply.status(503);
           return await reply.ok({});
         }
 
@@ -610,6 +1054,10 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         return await reply.ok({});
+        } finally {
+          const released = await releaseDigestDeliveryAuthorization();
+          if (!released && !reply.sent) void reply.status(503);
+        }
       }
     );
 
@@ -1240,10 +1688,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             !Number.isInteger(erasureEvent.attempt) ||
             erasureEvent.attempt < 0
           ) {
-            request.log.warn(
-              { outcome: 'invalid' },
-              'Invalid private WhatsApp erasure event'
-            );
+            request.log.warn({ outcome: 'invalid' }, 'Invalid private WhatsApp erasure event');
             return await reply.ok({});
           }
           const services = getServices();
@@ -1251,10 +1696,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             services.privateWhatsAppErasureRepository === undefined ||
             services.privateWhatsAppErasurePublisher === undefined
           ) {
-            return await reply.fail(
-              'INTERNAL_ERROR',
-              'Private WhatsApp erasure is not configured'
-            );
+            return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp erasure is not configured');
           }
           const result = await processPrivateWhatsAppErasureBatch(erasureEvent, {
             repository: services.privateWhatsAppErasureRepository,
@@ -1279,10 +1721,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
           return await reply.ok({});
         }
 
-        if (
-          parsedType ===
-          'whatsapp.conversation-assistant.context-attachment.prepare'
-        ) {
+        if (parsedType === 'whatsapp.conversation-assistant.context-attachment.prepare') {
           const attachmentEvent =
             eventData as unknown as ConversationAssistantContextAttachmentPreparationRequestedEvent;
           if (
@@ -1357,7 +1796,8 @@ export function createPubsubRoutes(): FastifyPluginCallback {
         }
 
         if (parsedType === 'whatsapp.conversation-assistant.prepare') {
-          const preparationEvent = eventData as unknown as ConversationAssistantPreparationRequestedEvent;
+          const preparationEvent =
+            eventData as unknown as ConversationAssistantPreparationRequestedEvent;
           if (
             typeof preparationEvent.sessionId !== 'string' ||
             typeof preparationEvent.userId !== 'string' ||
@@ -1386,7 +1826,11 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             privateWhatsAppRepository: services.privateWhatsAppRepository,
             llmClientFactory: services.llmClientFactory,
             preparationPublisher: {
-              publish: () => Promise.resolve({ ok: true as const, value: undefined }),
+              async publish(event) {
+                return adaptConversationAssistantPreparationPublication(
+                  await services.eventPublisher.publishConversationAssistantPreparation(event)
+                );
+              },
             },
             defaultModel: services.conversationAssistantModel,
             clock: conversationAssistantSystemClock,

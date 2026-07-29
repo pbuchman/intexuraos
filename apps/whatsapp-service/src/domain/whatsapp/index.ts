@@ -101,6 +101,20 @@ export type {
   PrivateWhatsAppOwnedChatInput,
 } from './models/PrivateWhatsAppContextJournal.js';
 
+export type {
+  PrivateDigestChatType,
+  PrivateDigestSourceError,
+  PrivateDigestMessage,
+  PrivateDigestMessageReferenceFactory,
+  PrivateDigestMessageReferenceInput,
+  PrivateDigestSourcePosition,
+  PrivateDigestSourceRevisionClaims,
+  QueryPrivateDigestMessagesInput,
+  QueryPrivateDigestMessagesResult,
+  ValidatePrivateDigestSourceInput,
+  ValidatedPrivateDigestSource,
+} from './models/PrivateWhatsAppDigestSource.js';
+
 export {
   emptyPrivateWhatsAppErasureCounts,
   type PrivateWhatsAppErasureCounts,
@@ -143,20 +157,45 @@ export type {
   MatrixCorpusPublishReceipt,
 } from './ports/eventPublisher.js';
 
-export type { WhatsAppMessageSender } from './ports/messageSender.js';
+export type {
+  WhatsAppMessageDigestTemplate,
+  WhatsAppMessageSender,
+} from './ports/messageSender.js';
 
 export type { TextMessageSendResult } from './ports/messageSender.js';
+export { WHATSAPP_MESSAGE_SEND_TIMEOUT_MS } from './ports/messageSender.js';
 
 export type { LinkPreviewFetcherPort } from './ports/linkPreviewFetcher.js';
 
 export type {
   OutboundMessage,
+  OutboundDeliveryState,
   OutboundMessageRepository,
 } from './ports/outboundMessageRepository.js';
+
+export type {
+  WhatsAppDeliveryReadiness,
+  WhatsAppDeliveryReadinessPort,
+} from './ports/whatsappDeliveryReadiness.js';
+
+export type {
+  MessageDigestDeliveryAuthorizationClient,
+  MessageDigestDeliveryAuthorizationIdentity,
+} from './ports/messageDigestDeliveryAuthorization.js';
 
 export type { NotificationPreferencesRepository } from './ports/notificationPreferencesRepository.js';
 
 export type { PrivateWhatsAppRepository } from './ports/privateWhatsAppRepository.js';
+
+export type {
+  PrivateDigestSourceCursorClaims,
+  PrivateDigestSourceHighWatermarkClaims,
+  PrivateDigestSourceMessageReferenceClaims,
+  PrivateDigestSourceRawPage,
+  PrivateDigestSourceRouteBinding,
+  PrivateDigestSourceTokenCodec,
+  PrivateWhatsAppDigestSourceRepository,
+} from './ports/privateWhatsAppDigestSourceRepository.js';
 
 export type {
   AdvancePrivateWhatsAppErasureResult,
@@ -171,6 +210,22 @@ export {
   createPrivateWhatsAppSenderDayId,
   createPrivateWhatsAppSenderId,
 } from './utils/privateWhatsAppIds.js';
+
+export {
+  projectPrivateDigestMessages,
+  validatePrivateDigestSource,
+  type PrivateWhatsAppDigestSourceDeps,
+} from './usecases/privateWhatsAppDigestSource.js';
+
+export {
+  readPrivateWhatsAppDigestSource,
+  type ReadPrivateWhatsAppDigestSourceDeps,
+} from './usecases/readPrivateWhatsAppDigestSource.js';
+
+export {
+  createWhatsAppDeliveryReadiness,
+  type WhatsAppDeliveryReadinessDeps,
+} from './usecases/whatsappDeliveryReadiness.js';
 
 // Events
 export type {

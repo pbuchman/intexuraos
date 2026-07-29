@@ -654,7 +654,7 @@ describe('FirestoreNotificationRepository', () => {
     });
 
     // Migration 096 deploys the composite Firestore index (app + userId +
-    // receivedAt + timestamp) required by digest backfill. FakeFirestore does
+    // receivedAt + timestamp) required by historical range queries. FakeFirestore does
     // not surface missing-index errors, so this test cannot validate index
     // presence directly. Instead it pins the combined-filter query shape that
     // exercises the index in production, ensuring the call site keeps using

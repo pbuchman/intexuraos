@@ -10,8 +10,13 @@ import {
   strictToolMockProfileV1Schema,
 } from '@intexuraos/http-contracts';
 import { z } from 'zod';
-import { createInternalHttpClient } from '../shared/createInternalHttpClient.js';
+import {
+  createInternalHttpClient,
+  type InternalHttpClientError,
+} from '../shared/createInternalHttpClient.js';
 import type {
+  AuthorizeOutboundDeliveryRetryInput,
+  AuthorizeOutboundDeliveryRetryResult,
   MatrixCorpusActivateResult,
   MatrixCorpusAbortResult,
   MatrixCorpusCapabilityInput,
@@ -31,9 +36,17 @@ import type {
   MatrixCorpusSendProofResult,
   MatrixCorpusTransportStatusInput,
   MatrixCorpusTransportStatusResult,
+  GetOutboundDeliveryStateInput,
+  OutboundDeliveryState,
   PrivateMatrixDeliveryStatus,
+  QueryPrivateDigestMessagesInput,
+  QueryPrivateDigestMessagesResult,
   SendPrivateOutboundMatrixMessageRequest,
   SendPrivateOutboundMatrixMessageResult,
+  ValidatePrivateDigestSourceInput,
+  ValidatedPrivateDigestSource,
+  WhatsAppDigestClientResult,
+  WhatsAppDeliveryReadiness,
   WhatsAppServiceClient,
   WhatsAppServiceClientConfig,
 } from './types.js';
@@ -277,6 +290,77 @@ const successEnvelopeSchema = z
   })
   .strict();
 
+const validatedPrivateDigestSourceSchema = z
+  .object({
+    sourceAccountId: z.string().min(1).max(512),
+    generationId: z.string().min(1).max(512),
+    chatId: z.string().min(1).max(4_096),
+    chatType: z.enum(['group', 'direct']),
+    displayName: z.string().min(1).max(512),
+    messageCount: boundedIntegerSchema,
+    participantCount: boundedIntegerSchema.optional(),
+    lastActivityAt: timestampSchema.optional(),
+    sourceRevision: z.string().min(1).max(8_192),
+  })
+  .strict();
+
+const privateDigestMessageSchema = z
+  .object({
+    messageRef: z.string().min(1).max(8_192),
+    eventTimestamp: timestampSchema,
+    direction: z.enum(['inbound', 'outbound', 'system']),
+    authorLabel: z.string().min(1).max(512),
+    text: z.string().max(262_144),
+    contentKind: z.enum(['text', 'media_caption', 'transcription', 'reaction', 'system']),
+  })
+  .strict();
+
+const queryPrivateDigestMessagesResultSchema = z
+  .object({
+    messages: z.array(privateDigestMessageSchema).max(500),
+    sourceRevision: z.string().min(1).max(8_192),
+    highWatermark: z.string().min(1).max(8_192).nullable(),
+    nextCursor: z.string().min(1).max(8_192).nullable(),
+  })
+  .strict();
+
+const deliveryReadinessCommonSchema = {
+  observationVersion: z.string().min(1).max(8_192),
+  observedAt: timestampSchema,
+};
+const whatsAppDeliveryReadinessSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('ready'),
+      maskedPrimaryNumber: z.string().min(1).max(64),
+      ...deliveryReadinessCommonSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.enum(['mapping_missing', 'disconnected', 'delivery_disabled']),
+      ...deliveryReadinessCommonSchema,
+    })
+    .strict(),
+]);
+
+const outboundDeliveryStateSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.enum(['pending', 'missing']) }).strict(),
+  z.object({ status: z.literal('sent'), acceptedAt: timestampSchema }).strict(),
+  z.object({ status: z.literal('ambiguous'), acceptedAt: timestampSchema.optional() }).strict(),
+  z
+    .object({
+      status: z.literal('failed'),
+      failedAt: timestampSchema,
+      failureCode: z.string().min(1).max(128),
+    })
+    .strict(),
+]);
+
+const authorizeOutboundDeliveryRetryResultSchema = z
+  .object({ authorized: z.literal(true) })
+  .strict();
+
 type WhatsAppClientResult<T> = Result<T>;
 
 function invalidResponseError(): Error {
@@ -332,18 +416,17 @@ async function requestMatrix<T>(
     privateRequest: true,
   });
   if (!response.ok) {
-    switch (response.error.code) {
-      case 'TIMEOUT':
-        return { ok: false, error: { code: 'timeout' } };
-      case 'NETWORK_ERROR':
-        return { ok: false, error: { code: 'unavailable' } };
-      case 'API_ERROR':
-        return {
-          ok: false,
-          error: { code: 'rejected', httpStatus: response.error.status },
-        };
+    const error = response.error as Extract<
+      InternalHttpClientError,
+      { code: 'TIMEOUT' | 'NETWORK_ERROR' | 'API_ERROR' }
+    >;
+    if (error.code === 'TIMEOUT') {
+      return { ok: false, error: { code: 'timeout' } };
     }
-    throw new Error('Unexpected internal HTTP client error');
+    if (error.code === 'NETWORK_ERROR') {
+      return { ok: false, error: { code: 'unavailable' } };
+    }
+    return { ok: false, error: { code: 'rejected', httpStatus: error.status } };
   }
   const envelope = successEnvelopeSchema.safeParse(response.value);
   if (!envelope.success) return { ok: false, error: { code: 'invalid_response' } };
@@ -358,6 +441,55 @@ function invalidMatrixInput<T>(): MatrixCorpusClientResult<T> {
 
 function invalidMatrixResponse<T>(): MatrixCorpusClientResult<T> {
   return { ok: false, error: { code: 'invalid_response' } };
+}
+
+async function requestPrivateDigest<T>(
+  client: ReturnType<typeof createInternalHttpClient>,
+  path: string,
+  body: unknown,
+  schema: z.ZodType<T>
+): Promise<WhatsAppDigestClientResult<T>> {
+  const response = await client.request<unknown>({
+    path,
+    method: 'POST',
+    body,
+    responseMode: 'raw',
+    skipSentry: true,
+    privateRequest: true,
+  });
+  if (!response.ok) {
+    const error = response.error as Extract<
+      InternalHttpClientError,
+      { code: 'TIMEOUT' | 'NETWORK_ERROR' | 'API_ERROR' }
+    >;
+    if (error.code === 'TIMEOUT') {
+      return { ok: false, error: { code: 'timeout' } };
+    }
+    if (error.code === 'NETWORK_ERROR') {
+      return { ok: false, error: { code: 'unavailable' } };
+    }
+    if (error.status === 404) {
+      return { ok: false, error: { code: 'not_found', httpStatus: 404 } };
+    }
+    if (error.status === 409) {
+      const body = error.body;
+      const envelope =
+        typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : null;
+      const envelopeError =
+        envelope !== null && typeof envelope['error'] === 'object' && envelope['error'] !== null
+          ? (envelope['error'] as Record<string, unknown>)
+          : null;
+      if (envelopeError?.['code'] === 'SOURCE_CHANGED') {
+        return { ok: false, error: { code: 'source_changed', httpStatus: 409 } };
+      }
+    }
+    return { ok: false, error: { code: 'rejected', httpStatus: error.status } };
+  }
+  const envelope = successEnvelopeSchema.safeParse(response.value);
+  if (!envelope.success) return { ok: false, error: { code: 'invalid_response' } };
+  const parsed = schema.safeParse(envelope.data.data);
+  if (!parsed.success) return { ok: false, error: { code: 'invalid_response' } };
+  return { ok: true, value: parsed.data };
 }
 
 export function createWhatsAppServiceClient(
@@ -375,6 +507,61 @@ export function createWhatsAppServiceClient(
   });
 
   return {
+    async validatePrivateDigestSource(
+      input: ValidatePrivateDigestSourceInput
+    ): Promise<WhatsAppDigestClientResult<ValidatedPrivateDigestSource>> {
+      return await requestPrivateDigest(
+        client,
+        '/internal/whatsapp/private/digest-source/validate',
+        input,
+        validatedPrivateDigestSourceSchema
+      );
+    },
+
+    async queryPrivateDigestMessages(
+      input: QueryPrivateDigestMessagesInput
+    ): Promise<WhatsAppDigestClientResult<QueryPrivateDigestMessagesResult>> {
+      return await requestPrivateDigest(
+        client,
+        '/internal/whatsapp/private/digest-source/messages/query',
+        input,
+        queryPrivateDigestMessagesResultSchema
+      );
+    },
+
+    async getWhatsAppDeliveryReadiness(
+      userId: string
+    ): Promise<WhatsAppDigestClientResult<WhatsAppDeliveryReadiness>> {
+      return await requestPrivateDigest(
+        client,
+        '/internal/whatsapp/delivery-readiness/get',
+        { userId },
+        whatsAppDeliveryReadinessSchema
+      );
+    },
+
+    async getOutboundDeliveryState(
+      input: GetOutboundDeliveryStateInput
+    ): Promise<WhatsAppDigestClientResult<OutboundDeliveryState>> {
+      return await requestPrivateDigest(
+        client,
+        '/internal/whatsapp/outbound-deliveries/get',
+        input,
+        outboundDeliveryStateSchema
+      );
+    },
+
+    async authorizeOutboundDeliveryRetry(
+      input: AuthorizeOutboundDeliveryRetryInput
+    ): Promise<WhatsAppDigestClientResult<AuthorizeOutboundDeliveryRetryResult>> {
+      return await requestPrivateDigest(
+        client,
+        '/internal/whatsapp/outbound-deliveries/retry',
+        input,
+        authorizeOutboundDeliveryRetryResultSchema
+      );
+    },
+
     async getMatrixCorpusReadiness(): ReturnType<
       WhatsAppServiceClient['getMatrixCorpusReadiness']
     > {

@@ -90,6 +90,7 @@ import type {
   WebhookProcessingStatus,
   WhatsAppCloudApiPort,
   WhatsAppInteractiveButton,
+  WhatsAppMessageDigestTemplate,
   WhatsAppMessage,
   WhatsAppMessageRepository,
   WhatsAppMessageSender,
@@ -174,10 +175,10 @@ export class FakeConversationAssistantContextAttachmentRepository {
     return snapshot === undefined ? undefined : structuredClone(snapshot);
   }
 
-  resolveContextAttachmentSession(input: { userId: string; sessionId: string }): Promise<
-    | { status: 'found'; sessionGenerationId: string }
-    | { status: 'not_found' }
-  > {
+  resolveContextAttachmentSession(input: {
+    userId: string;
+    sessionId: string;
+  }): Promise<{ status: 'found'; sessionGenerationId: string } | { status: 'not_found' }> {
     const session = this.sessions.get(input.sessionId);
     if (session?.userId !== input.userId) return Promise.resolve({ status: 'not_found' });
     return Promise.resolve({ status: 'found', sessionGenerationId: session.generationId });
@@ -261,10 +262,7 @@ export class FakeConversationAssistantContextAttachmentRepository {
   > {
     const attachment = this.ownedAttachment(input);
     if (attachment === undefined) return Promise.resolve({ status: 'not_found' });
-    if (
-      attachment.status !== 'queued' ||
-      attachment.preparationAttempt !== input.attempt
-    ) {
+    if (attachment.status !== 'queued' || attachment.preparationAttempt !== input.attempt) {
       return Promise.resolve({ status: 'stale', attachment: structuredClone(attachment) });
     }
     const failed = { ...attachment, status: 'failed' as const, preparationError: input.error };
@@ -687,7 +685,9 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     return Promise.resolve();
   }
 
-  createSessionIfAbsent(session: ConversationAssistantSession): Promise<
+  createSessionIfAbsent(
+    session: ConversationAssistantSession
+  ): Promise<
     | { status: 'created'; session: ConversationAssistantSession }
     | { status: 'existing'; session: ConversationAssistantSession }
     | { status: 'source_unavailable' }
@@ -840,8 +840,7 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     updatedAt: string;
     expectedGenerationId?: string;
   }): Promise<
-    | { status: 'queued' | 'stale'; session: ConversationAssistantSession }
-    | { status: 'not_found' }
+    { status: 'queued' | 'stale'; session: ConversationAssistantSession } | { status: 'not_found' }
   > {
     const session = this.sessions.get(input.sessionId);
     if (
@@ -880,8 +879,7 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     updatedAt: string;
     expectedGenerationId?: string;
   }): Promise<
-    | { status: 'saved' | 'stale'; session: ConversationAssistantSession }
-    | { status: 'not_found' }
+    { status: 'saved' | 'stale'; session: ConversationAssistantSession } | { status: 'not_found' }
   > {
     const session = this.sessions.get(input.sessionId);
     if (
@@ -926,17 +924,12 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     ) {
       return Promise.resolve(false);
     }
-    this.contextSnapshots.set(
-      `${sessionId}:${snapshotId}`,
-      {
-        userId,
-        ...(expectedGenerationId !== undefined
-          ? { generationId: expectedGenerationId }
-          : {}),
-        messages: snapshot.messages.map((message) => ({ ...message })),
-        omittedMessages: snapshot.omittedMessages.map((message) => ({ ...message })),
-      }
-    );
+    this.contextSnapshots.set(`${sessionId}:${snapshotId}`, {
+      userId,
+      ...(expectedGenerationId !== undefined ? { generationId: expectedGenerationId } : {}),
+      messages: snapshot.messages.map((message) => ({ ...message })),
+      omittedMessages: snapshot.omittedMessages.map((message) => ({ ...message })),
+    });
     return Promise.resolve(true);
   }
 
@@ -948,10 +941,7 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
   ): Promise<void> {
     const key = `${sessionId}:${snapshotId}`;
     const snapshot = this.contextSnapshots.get(key);
-    if (
-      snapshot?.userId === userId &&
-      snapshot.generationId === expectedGenerationId
-    ) {
+    if (snapshot?.userId === userId && snapshot.generationId === expectedGenerationId) {
       this.contextSnapshots.delete(key);
     }
     return Promise.resolve();
@@ -1058,15 +1048,15 @@ export class FakeConversationAssistantRepository implements ConversationAssistan
     sessionId: string,
     snapshotId: string
   ): ConversationAssistantContextResult['messages'] {
-    return (this.contextSnapshots.get(`${sessionId}:${snapshotId}`)?.messages ?? []).map((message) => ({
-      ...message,
-    }));
+    return (this.contextSnapshots.get(`${sessionId}:${snapshotId}`)?.messages ?? []).map(
+      (message) => ({
+        ...message,
+      })
+    );
   }
 }
 
-export class FakeConversationAssistantTurnRequestRepository
-  implements ConversationAssistantTurnRequestRepository
-{
+export class FakeConversationAssistantTurnRequestRepository implements ConversationAssistantTurnRequestRepository {
   private readonly requests = new Map<
     string,
     {
@@ -1381,8 +1371,7 @@ export class FakeConversationAssistantTurnRequestRepository
       ...(session.continuation === undefined
         ? {}
         : {
-            completedConversationRevision:
-              session.continuation.completedConversationRevision,
+            completedConversationRevision: session.continuation.completedConversationRevision,
           }),
       ...(session.continuation?.activeTurnRequestId === undefined
         ? {}
@@ -1611,9 +1600,7 @@ export class FakeConversationAssistantTurnRequestRepository
   }
 }
 
-export class FakeConversationAssistantOperationalTelemetry
-  implements ConversationAssistantOperationalTelemetry
-{
+export class FakeConversationAssistantOperationalTelemetry implements ConversationAssistantOperationalTelemetry {
   readonly records: ConversationAssistantTelemetryInput[] = [];
 
   record(input: ConversationAssistantTelemetryInput): Promise<void> {
@@ -1751,10 +1738,7 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
     this.nextStreamResult = err({ code: 'API_ERROR', message });
   }
 
-  succeedNextStream(
-    content = 'assistant answer',
-    events: GenerateChatStreamEvent[] = []
-  ): void {
+  succeedNextStream(content = 'assistant answer', events: GenerateChatStreamEvent[] = []): void {
     this.nextStreamEvents = events;
     this.nextStreamResult = ok({
       content,
@@ -2486,7 +2470,11 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
 
     this.stored.set(input.message.matrixEventId, input);
-    if (input.message.relation === undefined && input.message.type !== 'reaction' && input.message.type !== 'redaction') {
+    if (
+      input.message.relation === undefined &&
+      input.message.type !== 'reaction' &&
+      input.message.type !== 'redaction'
+    ) {
       const message = this.toMessage(input);
       const entries = this.contextChangesByChat.get(chatId) ?? [];
       const sequence = entries.length + 1;
@@ -2697,7 +2685,9 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
     }
 
     const before = this.toContextProjection(this.toMessage(stored));
-    const unchanged = JSON.stringify(this.messageTranscriptions.get(input.messageId)) === JSON.stringify(input.transcription);
+    const unchanged =
+      JSON.stringify(this.messageTranscriptions.get(input.messageId)) ===
+      JSON.stringify(input.transcription);
     this.messageTranscriptions.set(input.messageId, input.transcription);
     const after = this.toContextProjection(this.toMessage(stored));
     if (JSON.stringify(before) !== JSON.stringify(after)) {
@@ -2754,11 +2744,12 @@ export class FakePrivateWhatsAppRepository implements PrivateWhatsAppRepository 
       chat.userId !== input.userId ||
       chat.sourceAccountId !== input.sourceAccountId
     ) {
-      return Promise.resolve(err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' }));
+      return Promise.resolve(
+        err({ code: 'NOT_FOUND', message: 'Private WhatsApp chat not found' })
+      );
     }
     const matching = (this.contextChangesByChat.get(input.chatId) ?? []).filter(
-      (entry) =>
-        entry.sequence > input.afterSequence && entry.sequence <= input.throughSequence
+      (entry) => entry.sequence > input.afterSequence && entry.sequence <= input.throughSequence
     );
     const entries = matching.slice(0, input.limit);
     const result: PrivateWhatsAppContextJournalQueryResult = { entries };
@@ -3728,8 +3719,7 @@ export class FakeMediaStorage implements MediaStoragePort {
     const prefix = `whatsapp/private/${input.userId}/`;
     const paths = Array.from(this.files.keys())
       .filter(
-        (path) =>
-          path.startsWith(prefix) && (input.cursor === undefined || path >= input.cursor)
+        (path) => path.startsWith(prefix) && (input.cursor === undefined || path >= input.cursor)
       )
       .sort()
       .slice(0, input.limit);
@@ -3791,8 +3781,10 @@ export class FakeEventPublisher implements EventPublisherPort {
   private intexMessageIngestEvents: IntexMessageIngestEvent[] = [];
   private webhookProcessEvents: WebhookProcessEvent[] = [];
   private extractLinkPreviewsEvents: ExtractLinkPreviewsEvent[] = [];
-  private conversationAssistantPreparationEvents: ConversationAssistantPreparationRequestedEvent[] = [];
-  private conversationAssistantContextAttachmentPreparationEvents: ConversationAssistantContextAttachmentPreparationRequestedEvent[] = [];
+  private conversationAssistantPreparationEvents: ConversationAssistantPreparationRequestedEvent[] =
+    [];
+  private conversationAssistantContextAttachmentPreparationEvents: ConversationAssistantContextAttachmentPreparationRequestedEvent[] =
+    [];
   private privateWhatsAppErasureEvents: PrivateWhatsAppErasureWorkItem[] = [];
   private extractLinkPreviewsFailureMessage: string | null = null;
   private audioStoredFailureMessage: string | null = null;
@@ -3997,6 +3989,7 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     message: string;
     buttons?: WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
+    digestTemplate?: WhatsAppMessageDigestTemplate;
   }[] = [];
   private shouldFail = false;
   private shouldThrow = false;
@@ -4060,11 +4053,31 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     return Promise.resolve(ok({ wamid }));
   }
 
+  async sendMessageDigestTemplate(
+    phoneNumber: string,
+    template: WhatsAppMessageDigestTemplate
+  ): Promise<Result<TextMessageSendResult, WhatsAppError>> {
+    if (this.shouldThrow) {
+      throw new Error('Unexpected send error');
+    }
+    if (this.shouldFail) {
+      return Promise.resolve(err(this.failError));
+    }
+    this.sentMessages.push({
+      phoneNumber,
+      message: template.digestExcerpt,
+      digestTemplate: template,
+    });
+    const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;
+    return Promise.resolve(ok({ wamid }));
+  }
+
   getSentMessages(): {
     phoneNumber: string;
     message: string;
     buttons?: WhatsAppInteractiveButton[];
     ctaUrl?: { displayText: string; url: string };
+    digestTemplate?: WhatsAppMessageDigestTemplate;
   }[] {
     return [...this.sentMessages];
   }
@@ -4335,7 +4348,14 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
   private messages = new Map<string, OutboundMessage>();
   private idempotentDeliveries = new Map<
     string,
-    { payloadDigest: string; state: 'sending' | 'sent' | 'ambiguous'; updatedAt: string }
+    {
+      payloadDigest: string;
+      userId?: string | undefined;
+      state: 'sending' | 'retry_ready' | 'sent' | 'ambiguous' | 'failed';
+      createdAt: string;
+      updatedAt: string;
+      failureCode?: string | undefined;
+    }
   >();
   private shouldFail = false;
   private shouldFailIdempotentCompletion = false;
@@ -4389,6 +4409,18 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
     if (existing !== undefined) {
       if (existing.payloadDigest !== input.payloadDigest)
         return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+      if (existing.userId !== undefined && existing.userId !== input.userId)
+        return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+      if (existing.state === 'retry_ready') {
+        this.idempotentDeliveries.set(input.idempotencyKey, {
+          payloadDigest: existing.payloadDigest,
+          ...(existing.userId === undefined ? {} : { userId: existing.userId }),
+          state: 'sending',
+          createdAt: existing.createdAt,
+          updatedAt: input.now,
+        });
+        return { ok: true, disposition: 'acquired' };
+      }
       if (
         existing.state === 'sending' &&
         Date.parse(input.now) - Date.parse(existing.updatedAt) >= 15 * 60 * 1000
@@ -4407,12 +4439,16 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
             ? 'duplicate_sent'
             : existing.state === 'ambiguous'
               ? 'duplicate_ambiguous'
-              : 'duplicate_in_flight',
+              : existing.state === 'failed'
+                ? 'duplicate_failed'
+                : 'duplicate_in_flight',
       };
     }
     this.idempotentDeliveries.set(input.idempotencyKey, {
       payloadDigest: input.payloadDigest,
+      ...(input.userId === undefined ? {} : { userId: input.userId }),
       state: 'sending',
+      createdAt: input.now,
       updatedAt: input.now,
     });
     return { ok: true, disposition: 'acquired' };
@@ -4427,7 +4463,14 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
     if (existing === undefined) return { ok: false, code: 'NOT_FOUND' };
     if (existing.payloadDigest !== input.payloadDigest)
       return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
-    if (existing.state === 'ambiguous') return { ok: false, code: 'INVALID_STATE' };
+    if (
+      existing.state === 'retry_ready' ||
+      existing.state === 'ambiguous' ||
+      existing.state === 'failed'
+    )
+      return { ok: false, code: 'INVALID_STATE' };
+    if (existing.userId !== undefined && existing.userId !== input.outboundMessage.userId)
+      return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
     if (existing.state === 'sent') return { ok: true, disposition: 'already_applied' };
     this.messages.set(input.outboundMessage.wamid, input.outboundMessage);
     this.idempotentDeliveries.set(input.idempotencyKey, {
@@ -4446,7 +4489,12 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
     if (existing === undefined) return { ok: false, code: 'NOT_FOUND' };
     if (existing.payloadDigest !== input.payloadDigest)
       return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
-    if (existing.state === 'sent') return { ok: false, code: 'INVALID_STATE' };
+    if (
+      existing.state === 'retry_ready' ||
+      existing.state === 'sent' ||
+      existing.state === 'failed'
+    )
+      return { ok: false, code: 'INVALID_STATE' };
     if (existing.state === 'ambiguous') return { ok: true, disposition: 'already_applied' };
     this.idempotentDeliveries.set(input.idempotencyKey, {
       ...existing,
@@ -4454,6 +4502,96 @@ export class FakeOutboundMessageRepository implements OutboundMessageRepository 
       updatedAt: input.now,
     });
     return { ok: true, disposition: 'applied' };
+  }
+
+  async markIdempotentDeliveryFailed(
+    input: Parameters<OutboundMessageRepository['markIdempotentDeliveryFailed']>[0]
+  ): ReturnType<OutboundMessageRepository['markIdempotentDeliveryFailed']> {
+    if (this.shouldFail) return { ok: false, code: 'PERSISTENCE_ERROR' };
+    const existing = this.idempotentDeliveries.get(input.idempotencyKey);
+    if (existing === undefined) return { ok: false, code: 'NOT_FOUND' };
+    if (existing.payloadDigest !== input.payloadDigest)
+      return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+    if (
+      existing.state === 'retry_ready' ||
+      existing.state === 'sent' ||
+      existing.state === 'ambiguous'
+    )
+      return { ok: false, code: 'INVALID_STATE' };
+    if (existing.state === 'failed') {
+      return existing.failureCode === input.failureCode
+        ? { ok: true, disposition: 'already_applied' }
+        : { ok: false, code: 'INVALID_STATE' };
+    }
+    this.idempotentDeliveries.set(input.idempotencyKey, {
+      ...existing,
+      state: 'failed',
+      failureCode: input.failureCode,
+      updatedAt: input.now,
+    });
+    return { ok: true, disposition: 'applied' };
+  }
+
+  async authorizeIdempotentDeliveryRetry(
+    input: Parameters<OutboundMessageRepository['authorizeIdempotentDeliveryRetry']>[0]
+  ): ReturnType<OutboundMessageRepository['authorizeIdempotentDeliveryRetry']> {
+    if (this.shouldFail) return { ok: false, code: 'PERSISTENCE_ERROR' };
+    const existing = this.idempotentDeliveries.get(input.idempotencyKey);
+    if (existing === undefined) return { ok: false, code: 'NOT_FOUND' };
+    if (existing.payloadDigest !== input.payloadDigest || existing.userId !== input.userId) {
+      return { ok: false, code: 'CORRELATED_REPLAY_CONFLICT' };
+    }
+    if (existing.state === 'retry_ready') {
+      return { ok: true, disposition: 'already_applied' };
+    }
+    if (
+      existing.state !== 'failed' ||
+      existing.failureCode === undefined ||
+      ![
+        'MAPPING_MISSING',
+        'DISCONNECTED',
+        'DELIVERY_DISABLED',
+        'PROVIDER_REJECTED',
+        'DELIVERY_AUTHORIZATION_UNAVAILABLE',
+      ].includes(existing.failureCode)
+    ) {
+      return { ok: false, code: 'INVALID_STATE' };
+    }
+    this.idempotentDeliveries.set(input.idempotencyKey, {
+      payloadDigest: existing.payloadDigest,
+      userId: existing.userId,
+      state: 'retry_ready',
+      createdAt: existing.createdAt,
+      updatedAt: input.now,
+    });
+    return { ok: true, disposition: 'applied' };
+  }
+
+  getIdempotentDeliveryState(
+    input: Parameters<OutboundMessageRepository['getIdempotentDeliveryState']>[0]
+  ): ReturnType<OutboundMessageRepository['getIdempotentDeliveryState']> {
+    if (this.shouldFail) return Promise.resolve(err(this.failureError));
+    const existing = this.idempotentDeliveries.get(input.idempotencyKey);
+    if (existing === undefined || existing.userId !== input.userId) {
+      return Promise.resolve(ok({ status: 'missing' }));
+    }
+    switch (existing.state) {
+      case 'sending':
+      case 'retry_ready':
+        return Promise.resolve(ok({ status: 'pending' }));
+      case 'sent':
+        return Promise.resolve(ok({ status: 'sent', acceptedAt: existing.updatedAt }));
+      case 'ambiguous':
+        return Promise.resolve(ok({ status: 'ambiguous', acceptedAt: existing.createdAt }));
+      case 'failed':
+        return Promise.resolve(
+          ok({
+            status: 'failed',
+            failedAt: existing.updatedAt,
+            failureCode: existing.failureCode ?? 'DELIVERY_FAILED',
+          })
+        );
+    }
   }
 
   /**

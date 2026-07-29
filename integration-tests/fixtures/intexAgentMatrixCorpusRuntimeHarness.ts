@@ -295,6 +295,7 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
       internalAuthToken: INTERNAL_AUTH_TOKEN,
       llmUsageServiceUrl: 'https://usage.example.test',
       userServiceUrl: 'https://users.example.test',
+      messageDigestServiceUrl: 'https://message-digest-service.example.test',
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.example.test',
       matrixOutboundAdapterAuthToken: 'private-matrix-adapter-token-sentinel',

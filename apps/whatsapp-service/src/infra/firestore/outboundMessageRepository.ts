@@ -8,6 +8,7 @@ import { getFirestore } from '@intexuraos/infra-firestore';
 import type {
   OutboundMessage,
   OutboundMessageRepository,
+  OutboundDeliveryState,
   IdempotentDeliveryMutationResult,
   IdempotentDeliveryReserveResult,
 } from '../../domain/whatsapp/ports/outboundMessageRepository.js';
@@ -20,8 +21,16 @@ const TTL_DAYS = 7;
 const SENDING_RECOVERY_DEADLINE_MS = 15 * 60 * 1000;
 const SAFE_IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const SHA_256_PATTERN = /^[0-9a-f]{64}$/u;
+const FAILURE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/u;
+const RETRYABLE_PRE_PROVIDER_FAILURES = new Set([
+  'MAPPING_MISSING',
+  'DISCONNECTED',
+  'DELIVERY_DISABLED',
+  'PROVIDER_REJECTED',
+  'DELIVERY_AUTHORIZATION_UNAVAILABLE',
+]);
 
-type OutboundDeliveryReceipt =
+type LegacyOutboundDeliveryReceipt =
   | Readonly<{
       version: 1;
       idempotencyKeyDigest: string;
@@ -41,6 +50,42 @@ type OutboundDeliveryReceipt =
       updatedAt: string;
       expiresAt: number;
     }>;
+
+type UserBoundOutboundDeliveryReceipt =
+  | Readonly<{
+      version: 2;
+      idempotencyKeyDigest: string;
+      userIdDigest: string;
+      payloadDigest: string;
+      state: 'sending' | 'retry_ready' | 'ambiguous';
+      createdAt: string;
+      updatedAt: string;
+      expiresAt: number;
+    }>
+  | Readonly<{
+      version: 2;
+      idempotencyKeyDigest: string;
+      userIdDigest: string;
+      payloadDigest: string;
+      state: 'sent';
+      outboundMessageDigest: string;
+      createdAt: string;
+      updatedAt: string;
+      expiresAt: number;
+    }>
+  | Readonly<{
+      version: 2;
+      idempotencyKeyDigest: string;
+      userIdDigest: string;
+      payloadDigest: string;
+      state: 'failed';
+      failureCode: string;
+      createdAt: string;
+      updatedAt: string;
+      expiresAt: number;
+    }>;
+
+type OutboundDeliveryReceipt = LegacyOutboundDeliveryReceipt | UserBoundOutboundDeliveryReceipt;
 
 interface OutboundMessageDoc {
   wamid: string;
@@ -137,12 +182,22 @@ export function createOutboundMessageRepository(): OutboundMessageRepository {
             if (existing === null) return { ok: false as const, code: 'CORRUPT_RECEIPT' as const };
             if (
               existing.idempotencyKeyDigest !== idempotencyKeyDigest ||
-              existing.payloadDigest !== input.payloadDigest
+              existing.payloadDigest !== input.payloadDigest ||
+              (existing.version === 2 &&
+                (input.userId === undefined || existing.userIdDigest !== sha256(input.userId)))
             )
               return {
                 ok: false as const,
                 code: 'CORRELATED_REPLAY_CONFLICT' as const,
               };
+            if (existing.state === 'retry_ready') {
+              transaction.set(ref, {
+                ...existing,
+                state: 'sending',
+                updatedAt: input.now,
+              });
+              return { ok: true as const, disposition: 'acquired' as const };
+            }
             if (
               existing.state === 'sending' &&
               isPastSendingRecoveryDeadline(existing.updatedAt, input.now)
@@ -165,18 +220,32 @@ export function createOutboundMessageRepository(): OutboundMessageRepository {
                   ? ('duplicate_sent' as const)
                   : existing.state === 'ambiguous'
                     ? ('duplicate_ambiguous' as const)
-                    : ('duplicate_in_flight' as const),
+                    : existing.state === 'failed'
+                      ? ('duplicate_failed' as const)
+                      : ('duplicate_in_flight' as const),
             };
           }
-          const receipt: OutboundDeliveryReceipt = {
-            version: 1,
-            idempotencyKeyDigest,
-            payloadDigest: input.payloadDigest,
-            state: 'sending',
-            createdAt: input.now,
-            updatedAt: input.now,
-            expiresAt: input.expiresAt,
-          };
+          const receipt: OutboundDeliveryReceipt =
+            input.userId === undefined
+              ? {
+                  version: 1,
+                  idempotencyKeyDigest,
+                  payloadDigest: input.payloadDigest,
+                  state: 'sending',
+                  createdAt: input.now,
+                  updatedAt: input.now,
+                  expiresAt: input.expiresAt,
+                }
+              : {
+                  version: 2,
+                  idempotencyKeyDigest,
+                  userIdDigest: sha256(input.userId),
+                  payloadDigest: input.payloadDigest,
+                  state: 'sending',
+                  createdAt: input.now,
+                  updatedAt: input.now,
+                  expiresAt: input.expiresAt,
+                };
           transaction.set(ref, receipt);
           return { ok: true as const, disposition: 'acquired' as const };
         });
@@ -205,18 +274,20 @@ export function createOutboundMessageRepository(): OutboundMessageRepository {
           if (existing === null) return { ok: false as const, code: 'CORRUPT_RECEIPT' as const };
           if (
             existing.idempotencyKeyDigest !== idempotencyKeyDigest ||
-            existing.payloadDigest !== input.payloadDigest
+            existing.payloadDigest !== input.payloadDigest ||
+            (existing.version === 2 &&
+              existing.userIdDigest !== sha256(input.outboundMessage.userId))
           )
             return {
               ok: false as const,
               code: 'CORRELATED_REPLAY_CONFLICT' as const,
             };
-          if (existing.state === 'ambiguous')
-            return { ok: false as const, code: 'INVALID_STATE' as const };
           if (existing.state === 'sent')
             return existing.outboundMessageDigest === outboundMessageDigest
               ? { ok: true as const, disposition: 'already_applied' as const }
               : { ok: false as const, code: 'CORRELATED_REPLAY_CONFLICT' as const };
+          if (existing.state !== 'sending')
+            return { ok: false as const, code: 'INVALID_STATE' as const };
           const completed: OutboundDeliveryReceipt = {
             ...existing,
             state: 'sent',
@@ -254,7 +325,11 @@ export function createOutboundMessageRepository(): OutboundMessageRepository {
               ok: false as const,
               code: 'CORRELATED_REPLAY_CONFLICT' as const,
             };
-          if (existing.state === 'sent')
+          if (
+            existing.state === 'retry_ready' ||
+            existing.state === 'sent' ||
+            existing.state === 'failed'
+          )
             return { ok: false as const, code: 'INVALID_STATE' as const };
           if (existing.state === 'ambiguous')
             return { ok: true as const, disposition: 'already_applied' as const };
@@ -270,11 +345,156 @@ export function createOutboundMessageRepository(): OutboundMessageRepository {
         return { ok: false, code: 'PERSISTENCE_ERROR' };
       }
     },
+
+    async markIdempotentDeliveryFailed(input): Promise<IdempotentDeliveryMutationResult> {
+      if (
+        !isValidKeyAndDigest(input.idempotencyKey, input.payloadDigest) ||
+        !isIsoTimestamp(input.now) ||
+        !FAILURE_CODE_PATTERN.test(input.failureCode)
+      ) {
+        return { ok: false, code: 'INVALID_INPUT' };
+      }
+      const idempotencyKeyDigest = sha256(input.idempotencyKey);
+      const ref = db.collection(OUTBOUND_DELIVERY_RECEIPTS_COLLECTION).doc(idempotencyKeyDigest);
+      try {
+        return await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists) return { ok: false as const, code: 'NOT_FOUND' as const };
+          const existing = parseDeliveryReceipt(snapshot.data());
+          if (existing === null) return { ok: false as const, code: 'CORRUPT_RECEIPT' as const };
+          if (
+            existing.idempotencyKeyDigest !== idempotencyKeyDigest ||
+            existing.payloadDigest !== input.payloadDigest
+          ) {
+            return { ok: false as const, code: 'CORRELATED_REPLAY_CONFLICT' as const };
+          }
+          if (
+            existing.version !== 2 ||
+            existing.state === 'retry_ready' ||
+            existing.state === 'sent' ||
+            existing.state === 'ambiguous'
+          ) {
+            return { ok: false as const, code: 'INVALID_STATE' as const };
+          }
+          if (existing.state === 'failed') {
+            return existing.failureCode === input.failureCode
+              ? { ok: true as const, disposition: 'already_applied' as const }
+              : { ok: false as const, code: 'INVALID_STATE' as const };
+          }
+          const failed: UserBoundOutboundDeliveryReceipt = {
+            ...existing,
+            state: 'failed',
+            failureCode: input.failureCode,
+            updatedAt: input.now,
+          };
+          transaction.set(ref, failed);
+          return { ok: true as const, disposition: 'applied' as const };
+        });
+      } catch {
+        return { ok: false, code: 'PERSISTENCE_ERROR' };
+      }
+    },
+
+    async authorizeIdempotentDeliveryRetry(input): Promise<IdempotentDeliveryMutationResult> {
+      if (
+        input.userId.trim().length === 0 ||
+        !isValidKeyAndDigest(input.idempotencyKey, input.payloadDigest) ||
+        !isIsoTimestamp(input.now)
+      ) {
+        return { ok: false, code: 'INVALID_INPUT' };
+      }
+      const idempotencyKeyDigest = sha256(input.idempotencyKey);
+      const ref = db.collection(OUTBOUND_DELIVERY_RECEIPTS_COLLECTION).doc(idempotencyKeyDigest);
+      try {
+        return await db.runTransaction(async (transaction) => {
+          const snapshot = await transaction.get(ref);
+          if (!snapshot.exists) return { ok: false as const, code: 'NOT_FOUND' as const };
+          const existing = parseDeliveryReceipt(snapshot.data());
+          if (existing === null) return { ok: false as const, code: 'CORRUPT_RECEIPT' as const };
+          if (
+            existing.version !== 2 ||
+            existing.idempotencyKeyDigest !== idempotencyKeyDigest ||
+            existing.userIdDigest !== sha256(input.userId) ||
+            existing.payloadDigest !== input.payloadDigest
+          ) {
+            return { ok: false as const, code: 'CORRELATED_REPLAY_CONFLICT' as const };
+          }
+          if (existing.state === 'retry_ready') {
+            return { ok: true as const, disposition: 'already_applied' as const };
+          }
+          if (
+            existing.state !== 'failed' ||
+            !RETRYABLE_PRE_PROVIDER_FAILURES.has(existing.failureCode)
+          ) {
+            return { ok: false as const, code: 'INVALID_STATE' as const };
+          }
+          const retryReady: UserBoundOutboundDeliveryReceipt = {
+            version: 2,
+            idempotencyKeyDigest: existing.idempotencyKeyDigest,
+            userIdDigest: existing.userIdDigest,
+            payloadDigest: existing.payloadDigest,
+            state: 'retry_ready',
+            createdAt: existing.createdAt,
+            updatedAt: input.now,
+            expiresAt: existing.expiresAt,
+          };
+          transaction.set(ref, retryReady);
+          return { ok: true as const, disposition: 'applied' as const };
+        });
+      } catch {
+        return { ok: false, code: 'PERSISTENCE_ERROR' };
+      }
+    },
+
+    async getIdempotentDeliveryState(input): Promise<Result<OutboundDeliveryState, WhatsAppError>> {
+      if (
+        input.userId.trim().length === 0 ||
+        !SAFE_IDEMPOTENCY_KEY_PATTERN.test(input.idempotencyKey)
+      ) {
+        return err({ code: 'VALIDATION_ERROR', message: 'Invalid outbound delivery lookup' });
+      }
+      try {
+        const idempotencyKeyDigest = sha256(input.idempotencyKey);
+        const snapshot = await db
+          .collection(OUTBOUND_DELIVERY_RECEIPTS_COLLECTION)
+          .doc(idempotencyKeyDigest)
+          .get();
+        if (!snapshot.exists) return ok({ status: 'missing' as const });
+        const receipt = parseDeliveryReceipt(snapshot.data());
+        if (receipt === null) {
+          return err({ code: 'PERSISTENCE_ERROR', message: 'Invalid outbound delivery receipt' });
+        }
+        if (receipt.version !== 2 || receipt.userIdDigest !== sha256(input.userId)) {
+          return ok({ status: 'missing' as const });
+        }
+        switch (receipt.state) {
+          case 'sending':
+          case 'retry_ready':
+            return ok({ status: 'pending' as const });
+          case 'sent':
+            return ok({ status: 'sent' as const, acceptedAt: receipt.updatedAt });
+          case 'ambiguous':
+            return ok({ status: 'ambiguous' as const, acceptedAt: receipt.createdAt });
+          case 'failed':
+            return ok({
+              status: 'failed' as const,
+              failedAt: receipt.updatedAt,
+              failureCode: receipt.failureCode,
+            });
+        }
+      } catch {
+        return err({
+          code: 'PERSISTENCE_ERROR',
+          message: 'Failed to read outbound delivery receipt',
+        });
+      }
+    },
   };
 }
 
 function isValidReservationInput(
   input: Readonly<{
+    userId?: string | undefined;
     idempotencyKey: string;
     payloadDigest: string;
     now: string;
@@ -283,6 +503,7 @@ function isValidReservationInput(
 ): boolean {
   return (
     isValidKeyAndDigest(input.idempotencyKey, input.payloadDigest) &&
+    (input.userId === undefined || input.userId.trim().length > 0) &&
     isIsoTimestamp(input.now) &&
     Number.isSafeInteger(input.expiresAt) &&
     input.expiresAt > 0
@@ -307,6 +528,19 @@ function isValidOutboundMessage(message: OutboundMessage): boolean {
 function parseDeliveryReceipt(value: unknown): OutboundDeliveryReceipt | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
+  const version = record['version'];
+  const state = record['state'];
+  if (
+    (version !== 1 && version !== 2) ||
+    (state !== 'sending' &&
+      state !== 'retry_ready' &&
+      state !== 'sent' &&
+      state !== 'ambiguous' &&
+      state !== 'failed') ||
+    (version === 1 && (state === 'retry_ready' || state === 'failed'))
+  ) {
+    return null;
+  }
   const commonKeys = [
     'createdAt',
     'expiresAt',
@@ -316,31 +550,35 @@ function parseDeliveryReceipt(value: unknown): OutboundDeliveryReceipt | null {
     'updatedAt',
     'version',
   ];
-  const expectedKeys =
-    record['state'] === 'sent'
-      ? [...commonKeys, 'outboundMessageDigest'].sort()
-      : commonKeys.sort();
+  const versionKeys = version === 2 ? [...commonKeys, 'userIdDigest'] : commonKeys;
+  const expectedKeys = [
+    ...versionKeys,
+    ...(state === 'sent' ? ['outboundMessageDigest'] : []),
+    ...(state === 'failed' ? ['failureCode'] : []),
+  ].sort();
   const actualKeys = Object.keys(record).sort();
   if (
     actualKeys.length !== expectedKeys.length ||
     expectedKeys.some((key, index) => actualKeys[index] !== key) ||
-    record['version'] !== 1 ||
     typeof record['idempotencyKeyDigest'] !== 'string' ||
     !SHA_256_PATTERN.test(record['idempotencyKeyDigest']) ||
     typeof record['payloadDigest'] !== 'string' ||
     !SHA_256_PATTERN.test(record['payloadDigest']) ||
-    (record['state'] !== 'sending' &&
-      record['state'] !== 'sent' &&
-      record['state'] !== 'ambiguous') ||
     typeof record['createdAt'] !== 'string' ||
     !isIsoTimestamp(record['createdAt']) ||
     typeof record['updatedAt'] !== 'string' ||
     !isIsoTimestamp(record['updatedAt']) ||
     !Number.isSafeInteger(record['expiresAt']) ||
     Number(record['expiresAt']) <= 0 ||
-    (record['state'] === 'sent' &&
+    (version === 2 &&
+      (typeof record['userIdDigest'] !== 'string' ||
+        !SHA_256_PATTERN.test(record['userIdDigest']))) ||
+    (state === 'sent' &&
       (typeof record['outboundMessageDigest'] !== 'string' ||
-        !SHA_256_PATTERN.test(record['outboundMessageDigest'])))
+        !SHA_256_PATTERN.test(record['outboundMessageDigest']))) ||
+    (state === 'failed' &&
+      (typeof record['failureCode'] !== 'string' ||
+        !FAILURE_CODE_PATTERN.test(record['failureCode'])))
   )
     return null;
   return record as unknown as OutboundDeliveryReceipt;
@@ -366,9 +604,7 @@ function sha256(value: string): string {
 
 function stableJson(value: OutboundMessageDoc): string {
   return JSON.stringify(
-    Object.fromEntries(
-      Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
-    )
+    Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)))
   );
 }
 

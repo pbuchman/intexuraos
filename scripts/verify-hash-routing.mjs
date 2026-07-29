@@ -2,17 +2,18 @@
 /**
  * Hash Routing Verification
  *
- * Ensures apps/web uses HashRouter (required for GCS backend bucket hosting).
+ * Ensures apps/web uses hash routing (required for GCS backend bucket hosting).
  *
  * Algorithm:
  * 1. Read apps/web/src/App.tsx
- * 2. Check for HashRouter import and usage
- * 3. Ensure no BrowserRouter usage
- * 4. Report if HashRouter not found or BrowserRouter detected
+ * 2. Accept declarative HashRouter or createHashRouter + RouterProvider
+ * 3. Ensure no browser-history router usage
+ * 4. Report if complete hash-router wiring is not found
  */
 
 import { readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { analyzeHashRouting } from './lib/hash-routing.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const appTsxPath = join(repoRoot, 'apps', 'web', 'src', 'App.tsx');
@@ -26,29 +27,27 @@ if (!existsSync(appTsxPath)) {
 
 const content = readFileSync(appTsxPath, 'utf8');
 
-const hasHashRouterImport =
-  /import\s*\{[^}]*HashRouter[^}]*}\s*from\s*['"]react-router-dom['"]/.test(content);
-const hasHashRouterUsage = /<HashRouter[\s>]/.test(content);
-const hasBrowserRouter = /BrowserRouter/.test(content);
+const analysis = analyzeHashRouting(content);
 
-if (hasBrowserRouter) {
+if (analysis.browserHistoryRouter) {
   console.error('❌ FORBIDDEN ROUTER DETECTED\n');
-  console.error('apps/web/src/App.tsx uses BrowserRouter.');
-  console.error('\nREQUIREMENT: Web app MUST use HashRouter for GCS backend bucket hosting.');
+  console.error('apps/web/src/App.tsx uses a browser-history router.');
+  console.error('\nREQUIREMENT: Web app MUST use hash routing for GCS backend bucket hosting.');
   console.error('Backend buckets do NOT support SPA fallback.\n');
   process.exit(1);
 }
 
-if (!hasHashRouterImport || !hasHashRouterUsage) {
+if (!analysis.valid) {
   console.error('❌ HASH ROUTER NOT FOUND\n');
-  console.error('apps/web/src/App.tsx does not use HashRouter.\n');
-  console.error('Expected:');
-  console.error('  import { HashRouter } from "react-router-dom";');
-  console.error('  <HashRouter>...</HashRouter>\n');
+  console.error('apps/web/src/App.tsx does not contain complete hash-router wiring.\n');
+  console.error('Expected either:');
+  console.error('  <HashRouter>...</HashRouter>');
+  console.error('or:');
+  console.error('  const router = createHashRouter(...);');
+  console.error('  <RouterProvider router={router} />\n');
   process.exit(1);
 }
 
-console.log('✓ HashRouter import found');
-console.log('✓ HashRouter usage found');
-console.log('✓ No BrowserRouter detected\n');
+console.log(`✓ Complete ${analysis.mode} wiring found`);
+console.log('✓ No browser-history router detected\n');
 process.exit(0);

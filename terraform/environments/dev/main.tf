@@ -335,6 +335,16 @@ locals {
     "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
     "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
     "INTEXURAOS_KIMI_APP_API_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION",
+    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
+    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION",
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY",
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
     "INTEXURAOS_SENTRY_DSN_DEV",
@@ -707,6 +717,30 @@ module "claude_code_dev" {
 # Pub/Sub Topics
 # -----------------------------------------------------------------------------
 
+# Dedicated OIDC and publishing identity for message-digest-service. It is kept
+# at the root so the one-shot cutover and its inverse plan have a closed graph.
+resource "google_service_account" "message_digest_service" {
+  account_id   = "intexuraos-message-digest-${var.environment}"
+  display_name = "IntexuraOS Message Digest Service (${var.environment})"
+  description  = "Service account for Message Digest Pub/Sub delivery and publishing"
+}
+
+# Message Digest run requests are retained in the dev-owned GCP control plane.
+# The Hetzner root owns the push consumer and its dead-letter resources.
+resource "google_pubsub_topic" "message_digest_runs" {
+  name    = "intexuraos-message-digest-runs-${var.environment}"
+  project = var.project_id
+  labels  = local.common_labels
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_pubsub_topic_iam_member" "message_digest_publishes_runs" {
+  project = var.project_id
+  topic   = google_pubsub_topic.message_digest_runs.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.message_digest_service.email}"
+}
 
 # Topic for media cleanup events (whatsapp message deletion)
 module "pubsub_media_cleanup" {
@@ -956,6 +990,16 @@ module "pubsub_whatsapp_send" {
     google_project_service.apis,
     module.iam,
   ]
+}
+
+# The WhatsApp topic is retained and already exists before this one-shot cutover.
+# Keep this binding free of module references so the previous immutable root can
+# produce an exact inverse plan without traversing unrelated module-wide IAM.
+resource "google_pubsub_topic_iam_member" "message_digest_publishes_whatsapp" {
+  project = var.project_id
+  topic   = "intexuraos-whatsapp-send-${var.environment}"
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.message_digest_service.email}"
 }
 
 # -----------------------------------------------------------------------------
@@ -1679,4 +1723,9 @@ output "pubsub_audio_stored_topic" {
 output "pubsub_transcription_completed_topic" {
   description = "Pub/Sub topic for transcription completed events"
   value       = google_pubsub_topic.transcription_completed.name
+}
+
+output "pubsub_message_digest_runs_topic" {
+  description = "Pub/Sub topic for Message Digest run requests"
+  value       = google_pubsub_topic.message_digest_runs.name
 }

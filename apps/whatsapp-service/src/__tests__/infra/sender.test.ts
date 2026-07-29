@@ -4,6 +4,7 @@
 import { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from '@intexuraos/http-contracts';
 import type { Logger } from 'pino';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WHATSAPP_MESSAGE_SEND_TIMEOUT_MS } from '../../domain/whatsapp/ports/messageSender.js';
 import { WhatsAppCloudApiSender } from '../../infra/whatsapp/sender.js';
 
 const { warnSpy, errorSpy, infoSpy, mockLogger } = vi.hoisted(() => {
@@ -150,7 +151,7 @@ describe('WhatsAppCloudApiSender', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
         expect(result.error.message).toContain('400');
-        expect(result.error.message).toContain('Bad Request');
+        expect(result.error.message).not.toContain('Bad Request');
         expect(result.error.httpStatus).toBe(400);
       }
     });
@@ -164,7 +165,7 @@ describe('WhatsAppCloudApiSender', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
-        expect(result.error.message).toContain('Network error');
+        expect(result.error.message).toBe('Failed to send WhatsApp text message');
       }
     });
 
@@ -384,7 +385,7 @@ describe('WhatsAppCloudApiSender', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
-        expect(result.error.message).toContain('Network error');
+        expect(result.error.message).toBe('Failed to send WhatsApp interactive message');
       }
     });
 
@@ -560,7 +561,7 @@ describe('WhatsAppCloudApiSender', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('PERSISTENCE_ERROR');
-        expect(result.error.message).toContain('Network error');
+        expect(result.error.message).toBe('Failed to send WhatsApp CTA URL message');
       }
     });
 
@@ -596,6 +597,337 @@ describe('WhatsAppCloudApiSender', () => {
     });
   });
 
+  describe('sendMessageDigestTemplate', () => {
+    const presentation = {
+      digestName: 'Daily fishing digest',
+      digestExcerpt: 'Meet at the lake at 07:00. Bring two nets.',
+      runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+    };
+
+    it('sends the exact approved Utility template and returns its WAMID', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-123' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendMessageDigestTemplate('+48123456789', presentation);
+
+      expect(result).toEqual({ ok: true, value: { wamid: 'wamid.digest-123' } });
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(callArgs[0]).toBe(
+        `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`
+      );
+      expect(JSON.parse(callArgs[1].body as string)).toEqual({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: '48123456789',
+        type: 'template',
+        template: {
+          name: 'intexuraos_message_digest_v1',
+          language: { code: 'en_US' },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: 'Daily fishing digest' },
+                { type: 'text', text: 'Meet at the lake at 07:00. Bring two nets.' },
+              ],
+            },
+            {
+              type: 'button',
+              sub_type: 'url',
+              index: '0',
+              parameters: [
+                {
+                  type: 'text',
+                  text: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+                },
+              ],
+            },
+          ],
+        },
+      });
+    });
+
+    it('keeps an already-normalized phone number unchanged', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-124' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('48123456789', presentation);
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(callArgs[1].body as string)).toMatchObject({ to: '48123456789' });
+    });
+
+    it.each([
+      [400, 'Bad Request: invalid template', 400],
+      [500, 'Provider unavailable', 500],
+    ])('preserves a provider %i failure', async (status, responseText, expectedStatus) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status,
+          text: (): Promise<string> => Promise.resolve(responseText),
+        })
+      );
+
+      const result = await sender.sendMessageDigestTemplate('+48123456789', presentation);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'PERSISTENCE_ERROR', httpStatus: expectedStatus },
+      });
+    });
+
+    it('preserves timeout ambiguity without retrying as free-form text', async () => {
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      const mockFetch = vi.fn().mockRejectedValue(abortError);
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendMessageDigestTemplate('+48123456789', presentation);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: 'PERSISTENCE_ERROR', message: expect.stringContaining('timed out') },
+      });
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('keeps the provider deadline armed until a resolved response body finishes', async () => {
+      const mockFetch = vi.fn((_url: string, init: RequestInit) => {
+        if (!(init.signal instanceof AbortSignal)) {
+          throw new Error('Expected WhatsApp request AbortSignal');
+        }
+        const responseSignal = init.signal;
+        return Promise.resolve({
+          ok: true,
+          json: (): Promise<never> =>
+            new Promise((_resolve, reject) => {
+              responseSignal.addEventListener(
+                'abort',
+                () => {
+                  const abortError = new Error('Aborted while reading response body');
+                  abortError.name = 'AbortError';
+                  reject(abortError);
+                },
+                { once: true }
+              );
+            }),
+        });
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      const resultPromise = sender.sendMessageDigestTemplate('+48123456789', presentation);
+      await vi.advanceTimersByTimeAsync(0);
+      const responseSignal = mockFetch.mock.calls[0]?.[1].signal;
+      if (!(responseSignal instanceof AbortSignal)) {
+        throw new Error('Expected captured WhatsApp request AbortSignal');
+      }
+      expect(responseSignal.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(WHATSAPP_MESSAGE_SEND_TIMEOUT_MS - 1);
+      expect(responseSignal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(responseSignal.aborted).toBe(true);
+      await expect(resultPromise).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'PERSISTENCE_ERROR', message: expect.stringContaining('timed out') },
+      });
+    });
+
+    it('preserves thrown network ambiguity without retrying as free-form text', async () => {
+      const mockFetch = vi.fn().mockRejectedValue(new Error('Network unavailable'));
+      vi.stubGlobal('fetch', mockFetch);
+
+      const result = await sender.sendMessageDigestTemplate('+48123456789', presentation);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'PERSISTENCE_ERROR',
+          message: 'Failed to send WhatsApp Message Digest template message',
+        },
+      });
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
+    it('does not expose provider-controlled response text in logs or returned errors', async () => {
+      const recipient = '+48123456789';
+      const normalizedRecipient = recipient.slice(1);
+      const templateSentinel = 'PRIVATE_DIGEST_TEMPLATE_SENTINEL';
+      const providerText = JSON.stringify({
+        error: {
+          message: `Rejected ${recipient} ${normalizedRecipient}`,
+          code: 132000,
+          error_subcode: 2494010,
+          error_data: { details: templateSentinel },
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          text: (): Promise<string> => Promise.resolve(providerText),
+        })
+      );
+
+      const result = await sender.sendMessageDigestTemplate(recipient, {
+        ...presentation,
+        digestExcerpt: templateSentinel,
+      });
+      const serialized = JSON.stringify([errorSpy.mock.calls, warnSpy.mock.calls, result]);
+
+      expect(serialized).not.toContain(recipient);
+      expect(serialized).not.toContain(normalizedRecipient);
+      expect(serialized).not.toContain('***89');
+      expect(serialized).not.toContain(templateSentinel);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 400,
+          responseBytes: Buffer.byteLength(providerText, 'utf8'),
+          providerCode: 132000,
+          providerSubcode: 2494010,
+          errorClass: 'provider_response',
+        }),
+        expect.any(String)
+      );
+      expect(errorSpy.mock.calls[0]?.[0]).not.toHaveProperty('recipientHint');
+    });
+
+    it('does not log non-numeric or unsafe provider error codes', async () => {
+      const unsafeProviderText = JSON.stringify({
+        error: {
+          code: '132000',
+          error_subcode: Number.MAX_SAFE_INTEGER + 1,
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          text: (): Promise<string> => Promise.resolve(unsafeProviderText),
+        })
+      );
+
+      await sender.sendMessageDigestTemplate('+48123456789', presentation);
+
+      const metadata = errorSpy.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(metadata).not.toHaveProperty('providerCode');
+      expect(metadata).not.toHaveProperty('providerSubcode');
+    });
+
+    it('classifies defensive provider and transport error shapes without exposing payloads', async () => {
+      const recipient = '+';
+      const scenarios = [
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          text: (): Promise<string> => Promise.resolve('null'),
+        }),
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          text: (): Promise<string> => Promise.resolve('{"error":null}'),
+        }),
+        vi.fn().mockRejectedValue(new TypeError('synthetic type failure')),
+        vi.fn().mockRejectedValue('synthetic non-error failure'),
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: (): Promise<{ messages: { id: string }[] }> =>
+            Promise.resolve({ messages: [{ id: 'wamid.redacted-recipient' }] }),
+        }),
+      ];
+
+      for (const mockFetch of scenarios) {
+        vi.stubGlobal('fetch', mockFetch);
+        await sender.sendMessageDigestTemplate(recipient, presentation);
+      }
+
+      const failureMetadata = errorSpy.mock.calls.map((call) => call[0] as Record<string, unknown>);
+      expect(failureMetadata.slice(0, 2)).toEqual([
+        expect.objectContaining({ errorClass: 'provider_response' }),
+        expect.objectContaining({ errorClass: 'provider_response' }),
+      ]);
+      expect(failureMetadata).toContainEqual(expect.objectContaining({ errorClass: 'type_error' }));
+      expect(failureMetadata).toContainEqual(expect.objectContaining({ errorClass: 'non_error' }));
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientHint: '[redacted]' }),
+        expect.any(String)
+      );
+    });
+
+    it('does not expose thrown provider text in logs or returned errors', async () => {
+      const recipient = '+48123456789';
+      const normalizedRecipient = recipient.slice(1);
+      const templateSentinel = 'PRIVATE_DIGEST_THROW_SENTINEL';
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockRejectedValue(
+            new Error(`Network failed ${recipient} ${normalizedRecipient} ${templateSentinel}`)
+          )
+      );
+
+      const result = await sender.sendMessageDigestTemplate(recipient, {
+        ...presentation,
+        digestExcerpt: templateSentinel,
+      });
+      const serialized = JSON.stringify([errorSpy.mock.calls, warnSpy.mock.calls, result]);
+
+      expect(serialized).not.toContain(recipient);
+      expect(serialized).not.toContain(normalizedRecipient);
+      expect(serialized).not.toContain(templateSentinel);
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ recipientHint: '***89', errorClass: 'error' }),
+        expect.any(String)
+      );
+    });
+
+    it('never writes the full or normalized recipient to success and failure logs', async () => {
+      const recipient = '+48123456789';
+      const scenarios = [
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: (): Promise<{ messages: { id: string }[] }> =>
+            Promise.resolve({ messages: [{ id: 'wamid.digest-private' }] }),
+        }),
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 400,
+          text: (): Promise<string> => Promise.resolve('Synthetic provider rejection'),
+        }),
+        vi.fn().mockRejectedValue(Object.assign(new Error('Aborted'), { name: 'AbortError' })),
+        vi.fn().mockRejectedValue(new Error('Synthetic network failure')),
+      ];
+
+      for (const mockFetch of scenarios) {
+        vi.stubGlobal('fetch', mockFetch);
+        await sender.sendMessageDigestTemplate(recipient, presentation);
+        expect(JSON.stringify([infoSpy.mock.calls, warnSpy.mock.calls, errorSpy.mock.calls])).not.toContain(
+          recipient
+        );
+        expect(JSON.stringify([infoSpy.mock.calls, warnSpy.mock.calls, errorSpy.mock.calls])).not.toContain(
+          recipient.slice(1)
+        );
+        infoSpy.mockClear();
+        warnSpy.mockClear();
+        errorSpy.mockClear();
+      }
+    });
+  });
+
   describe('truncation logging', () => {
     const mockFetch = (): ReturnType<typeof vi.fn> =>
       vi.fn().mockResolvedValue({
@@ -618,6 +950,8 @@ describe('WhatsAppCloudApiSender', () => {
         }),
         expect.stringContaining('Truncated text message body')
       );
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('+1234567890');
+      expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('1234567890');
     });
 
     it('marks interactive message truncation warn as Sentry-skipped', async () => {

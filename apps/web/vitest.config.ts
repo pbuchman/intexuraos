@@ -25,6 +25,7 @@ process.env.INTEXURAOS_APP_SETTINGS_SERVICE_URL = 'http://localhost:8122';
 process.env.INTEXURAOS_HELLSCRIPT_AGENT_URL = 'http://localhost:8131';
 process.env.INTEXURAOS_LLM_USAGE_SERVICE_URL = 'http://localhost:8132';
 process.env.INTEXURAOS_INTEX_AGENT_URL = 'http://localhost:8134';
+process.env.INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL = 'http://localhost:8135';
 process.env.INTEXURAOS_IMAGE_SERVICE_URL = 'http://localhost:8120';
 process.env.INTEXURAOS_WEB_AGENT_URL = 'http://localhost:8127';
 process.env.INTEXURAOS_FIREBASE_PROJECT_ID = 'test-project';

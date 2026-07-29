@@ -31,6 +31,13 @@ describe('loadConfig', () => {
     expect(openApiEnvVars).not.toEqual(expect.arrayContaining(retiredOpenApiEnvVars));
   });
 
+  it('registers Message Digest as a required OpenAPI source', () => {
+    expect(OPEN_API_SOURCE_CATALOG).toContainEqual({
+      name: 'Message Digest Service API',
+      openApiUrlEnvVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL',
+    });
+  });
+
   it('throws when required OpenAPI source URLs are missing', () => {
     expect(() => {
       loadConfig();

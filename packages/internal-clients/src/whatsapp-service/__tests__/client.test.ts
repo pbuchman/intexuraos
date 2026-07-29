@@ -852,4 +852,351 @@ describe('createWhatsAppServiceClient', () => {
       /user-123|private-status-network-sentinel|private-send-network-sentinel/iu
     );
   });
+
+  it('validates a private group digest source through the protected owner endpoint', async () => {
+    const response = {
+      sourceAccountId: 'source-synthetic',
+      generationId: 'generation-synthetic',
+      chatId: 'chat-synthetic',
+      chatType: 'group' as const,
+      displayName: 'Synthetic group',
+      messageCount: 12,
+      participantCount: 3,
+      lastActivityAt: '2026-07-27T12:34:56.000Z',
+      sourceRevision: 'opaque-source-revision',
+    };
+    const scope = nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/validate', {
+        userId: 'user-synthetic',
+        chatId: 'chat-synthetic',
+        expectedGenerationId: 'generation-synthetic',
+      })
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: response });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.validatePrivateDigestSource({
+      userId: 'user-synthetic',
+      chatId: 'chat-synthetic',
+      expectedGenerationId: 'generation-synthetic',
+    });
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: response });
+  });
+
+  it('rejects unknown private fields in a digest-source response', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/validate')
+      .reply(200, {
+        success: true,
+        data: {
+          sourceAccountId: 'source-synthetic',
+          generationId: 'generation-synthetic',
+          chatId: 'chat-synthetic',
+          chatType: 'direct',
+          displayName: 'Synthetic contact',
+          messageCount: 2,
+          sourceRevision: 'opaque-source-revision',
+          rawPhoneNumber: 'private-field-sentinel',
+        },
+      });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.validatePrivateDigestSource({
+      userId: 'user-synthetic',
+      chatId: 'chat-synthetic',
+    });
+
+    expect(result).toEqual({ ok: false, error: { code: 'invalid_response' } });
+    expect(JSON.stringify(result)).not.toContain('private-field-sentinel');
+  });
+
+  it('queries one strict page of private digest messages', async () => {
+    const request = {
+      userId: 'user-synthetic',
+      sourceAccountId: 'source-synthetic',
+      generationId: 'generation-synthetic',
+      chatId: 'chat-synthetic',
+      chatType: 'direct' as const,
+      windowStart: '2026-07-27T00:00:00.000Z',
+      windowEnd: '2026-07-28T00:00:00.000Z',
+      limit: 100,
+      cursor: 'opaque-cursor-in',
+    };
+    const response = {
+      messages: [
+        {
+          messageRef: 'opaque-message-ref',
+          eventTimestamp: '2026-07-27T12:34:56.000Z',
+          direction: 'inbound' as const,
+          authorLabel: 'Synthetic participant',
+          text: 'Synthetic message',
+          contentKind: 'text' as const,
+        },
+      ],
+      sourceRevision: 'opaque-source-revision',
+      highWatermark: 'opaque-high-watermark',
+      nextCursor: 'opaque-cursor-out',
+    };
+    const scope = nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/messages/query', request)
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: response });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.queryPrivateDigestMessages(request);
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: response });
+  });
+
+  it('gets versioned digest delivery readiness without a recipient input', async () => {
+    const response = {
+      status: 'ready' as const,
+      maskedPrimaryNumber: '•••• 1234',
+      observationVersion: 'opaque-readiness-version',
+      observedAt: '2026-07-27T12:34:56.000Z',
+    };
+    const scope = nock(BASE_URL)
+      .post('/internal/whatsapp/delivery-readiness/get', { userId: 'user-synthetic' })
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: response });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.getWhatsAppDeliveryReadiness('user-synthetic');
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: response });
+  });
+
+  it('gets a truthful outbound delivery state by owner and idempotency key', async () => {
+    const request = {
+      userId: 'user-synthetic',
+      idempotencyKey: 'digest-run-synthetic',
+    };
+    const response = {
+      status: 'sent' as const,
+      acceptedAt: '2026-07-27T12:34:56.000Z',
+    };
+    const scope = nock(BASE_URL)
+      .post('/internal/whatsapp/outbound-deliveries/get', request)
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: response });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.getOutboundDeliveryState(request);
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: response });
+  });
+
+  it('authorizes a byte-identical outbound delivery retry', async () => {
+    const request = {
+      userId: 'user-synthetic',
+      idempotencyKey: 'digest-run-synthetic',
+      payloadDigest: 'a'.repeat(64),
+    };
+    const scope = nock(BASE_URL)
+      .post('/internal/whatsapp/outbound-deliveries/retry', request)
+      .matchHeader('x-internal-auth', 'secret')
+      .reply(200, { success: true, data: { authorized: true } });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.authorizeOutboundDeliveryRetry(request);
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({ ok: true, value: { authorized: true } });
+  });
+
+  it('rejects unknown fields in outbound delivery retry authorization', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/outbound-deliveries/retry')
+      .reply(200, {
+        success: true,
+        data: { authorized: true, privateReceipt: 'private-retry-sentinel' },
+      });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.authorizeOutboundDeliveryRetry({
+      userId: 'user-synthetic',
+      idempotencyKey: 'digest-run-synthetic',
+      payloadDigest: 'a'.repeat(64),
+    });
+
+    expect(result).toEqual({ ok: false, error: { code: 'invalid_response' } });
+    expect(JSON.stringify(result)).not.toContain('private-retry-sentinel');
+  });
+
+  it('maps a private digest request timeout without downstream details', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/validate')
+      .delayConnection(50)
+      .reply(200, { success: true, data: {} });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+      defaultTimeoutMs: 5,
+    });
+
+    const result = await client.validatePrivateDigestSource({
+      userId: 'user-synthetic',
+      chatId: 'chat-synthetic',
+    });
+
+    expect(result).toEqual({ ok: false, error: { code: 'timeout' } });
+  });
+
+  it('maps a source snapshot conflict without exposing the downstream body', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/messages/query')
+      .reply(409, {
+        success: false,
+        error: {
+          code: 'SOURCE_CHANGED',
+          message: 'private-source-change-sentinel',
+        },
+      });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.queryPrivateDigestMessages({
+      userId: 'user-synthetic',
+      sourceAccountId: 'source-synthetic',
+      generationId: 'generation-synthetic',
+      chatId: 'chat-synthetic',
+      chatType: 'group',
+      windowStart: '2026-07-27T00:00:00.000Z',
+      windowEnd: '2026-07-28T00:00:00.000Z',
+      limit: 100,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'source_changed', httpStatus: 409 },
+    });
+    expect(JSON.stringify(result)).not.toContain('private-source-change-sentinel');
+  });
+
+  it('fails closed for a primitive conflict body and a malformed success envelope', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/messages/query')
+      .reply(409, 'private-conflict-body-sentinel')
+      .post('/internal/whatsapp/private/digest-source/messages/query')
+      .reply(200, { success: false, data: {} });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+    const input = {
+      userId: 'user-synthetic',
+      sourceAccountId: 'source-synthetic',
+      generationId: 'generation-synthetic',
+      chatId: 'chat-synthetic',
+      chatType: 'group' as const,
+      windowStart: '2026-07-27T00:00:00.000Z',
+      windowEnd: '2026-07-28T00:00:00.000Z',
+      limit: 100,
+    };
+
+    const conflict = await client.queryPrivateDigestMessages(input);
+    const malformed = await client.queryPrivateDigestMessages(input);
+
+    expect(conflict).toEqual({ ok: false, error: { code: 'rejected', httpStatus: 409 } });
+    expect(malformed).toEqual({ ok: false, error: { code: 'invalid_response' } });
+    expect(JSON.stringify([conflict, malformed])).not.toContain('private-conflict-body-sentinel');
+  });
+
+  it('maps a private digest network failure to unavailable', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/delivery-readiness/get')
+      .replyWithError('private-digest-network-sentinel');
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.getWhatsAppDeliveryReadiness('user-synthetic');
+
+    expect(result).toEqual({ ok: false, error: { code: 'unavailable' } });
+    expect(JSON.stringify(result)).not.toContain('private-digest-network-sentinel');
+  });
+
+  it('maps a missing private digest source without response details', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/private/digest-source/validate')
+      .reply(404, {
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'private-not-found-sentinel' },
+      });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.validatePrivateDigestSource({
+      userId: 'user-synthetic',
+      chatId: 'chat-synthetic',
+    });
+
+    expect(result).toEqual({ ok: false, error: { code: 'not_found', httpStatus: 404 } });
+    expect(JSON.stringify(result)).not.toContain('private-not-found-sentinel');
+  });
+
+  it('maps another digest API rejection to its safe HTTP status only', async () => {
+    nock(BASE_URL)
+      .post('/internal/whatsapp/outbound-deliveries/get')
+      .reply(503, {
+        success: false,
+        error: { code: 'UNAVAILABLE', message: 'private-api-sentinel' },
+      });
+    const client = createWhatsAppServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.getOutboundDeliveryState({
+      userId: 'user-synthetic',
+      idempotencyKey: 'digest-run-synthetic',
+    });
+
+    expect(result).toEqual({ ok: false, error: { code: 'rejected', httpStatus: 503 } });
+    expect(JSON.stringify(result)).not.toContain('private-api-sentinel');
+  });
 });

@@ -73,9 +73,17 @@ Implementation: `apps/web/src/App.tsx` uses `HashRouter`.
 
 Script: `scripts/hetzner/deploy-web.sh`
 
-It renders production `/api/*` service URLs from `apps/web/service-manifest.json`, builds the Vite bundle, and publishes the output to the Hetzner nginx web root:
+It renders production `/api/*` service URLs from `apps/web/service-manifest.json`, builds the Vite
+bundle, and stages the complete output as an immutable release:
 
-- `/var/www/intexuraos/web/dist`
+- `/var/www/intexuraos/web/releases/<commit-sha>`
+
+After the release is complete, the script atomically switches the nginx-served pointer:
+
+- `/var/www/intexuraos/web/current`
+
+`/var/www/intexuraos/web/dist` remains only as the legacy bootstrap source for the first atomic
+cutover; nginx does not serve it after activation.
 
 ### Content-type fixes
 

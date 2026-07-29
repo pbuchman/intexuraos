@@ -56,6 +56,7 @@ const SERVICES = [
   { name: 'hellscript-agent', port: 8131 },
   { name: 'llm-usage-service', port: 8132 },
   { name: 'intex-agent', port: 8134 },
+  { name: 'message-digest-service', port: 8135 },
   { name: 'web-agent', port: 8127 },
   { name: 'user-service', port: 8110 },
   { name: 'research-agent', port: 8116 },

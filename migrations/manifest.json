@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "127",
+  "lastReservedId": "128",
   "entries": [
     {
       "id": "001",
@@ -635,6 +635,11 @@
       "id": "127",
       "name": "intex-agent-matrix-corpus-indexes",
       "checksum": "sha256:f07ce06870a0e8c435c696ae05710e2fe2ca4f31723004abab5b7d95967fab0c"
+    },
+    {
+      "id": "128",
+      "name": "message-digest-service-indexes",
+      "checksum": "sha256:db990c64119e9bfa14fe34ca5ebd1fe828a5db3c1e123c40625b2c81d71b7a9c"
     }
   ]
 }

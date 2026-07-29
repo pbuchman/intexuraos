@@ -30,7 +30,9 @@ export function CollapsibleNavSection({
   return (
     <div className="pt-2">
       <button
+        type="button"
         aria-label={label}
+        aria-expanded={isOpen && !isCollapsed}
         onClick={(): void => {
           if (isCollapsed) {
             onToggle(true);

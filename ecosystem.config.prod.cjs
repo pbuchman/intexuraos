@@ -62,6 +62,7 @@ const SERVICE_PORTS = {
   'llm-usage-service': 8132,
   'api-docs-hub': 8133,
   'intex-agent': 8134,
+  'message-digest-service': 8135,
 };
 
 const SERVICE_URL_ENV = {
@@ -83,6 +84,7 @@ const SERVICE_URL_ENV = {
   'llm-usage-service': 'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'api-docs-hub': 'INTEXURAOS_API_DOCS_HUB_URL',
   'intex-agent': 'INTEXURAOS_INTEX_AGENT_URL',
+  'message-digest-service': 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
 };
 
 const PUBLIC_API_PATHS = {
@@ -103,6 +105,7 @@ const PUBLIC_API_PATHS = {
   'hellscript-agent': '/api/hellscript-agent',
   'llm-usage-service': '/api/llm-usage',
   'intex-agent': '/api/intex-agent',
+  'message-digest-service': '/api/message-digests',
 };
 
 const API_DOCS_HUB_OPENAPI_URLS = {
@@ -122,6 +125,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_WEB_AGENT_OPENAPI_URL: 'http://127.0.0.1:8127/openapi.json',
   INTEXURAOS_HELLSCRIPT_AGENT_OPENAPI_URL: 'http://127.0.0.1:8131/openapi.json',
   INTEXURAOS_INTEX_AGENT_OPENAPI_URL: 'http://127.0.0.1:8134/openapi.json',
+  INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL: 'http://127.0.0.1:8135/openapi.json',
 };
 
 const PROD_SERVICE_ORDER = [
@@ -136,6 +140,7 @@ const PROD_SERVICE_ORDER = [
   'hellscript-agent',
   'llm-usage-service',
   'intex-agent',
+  'message-digest-service',
   'user-service',
   'research-agent',
   'image-service',
@@ -211,10 +216,7 @@ const SERVICE_SECRET_KEYS = {
     'INTEXURAOS_WHATSAPP_VERIFY_TOKEN',
     'INTEXURAOS_WHATSAPP_WABA_ID',
   ],
-  'mobile-notifications-service': [
-    'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-    'INTEXURAOS_OPENROUTER_APP_API_KEY',
-  ],
+  'mobile-notifications-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'fishing-assistant-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENAI_APP_API_KEY'],
   'notes-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'bookmarks-agent': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
@@ -240,6 +242,7 @@ const SERVICE_SECRET_KEYS = {
     'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
     'INTEXURAOS_OPENROUTER_APP_API_KEY',
   ],
+  'message-digest-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN', 'INTEXURAOS_OPENROUTER_APP_API_KEY'],
   'user-service': [
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_AUTH0_DOMAIN',
@@ -316,13 +319,6 @@ const SERVICE_ENV_MAPPINGS = {
     INTEXURAOS_CONVERSATION_ASSISTANT_MODEL:
       envValue('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL') ?? 'or:minimax/minimax-m3',
   },
-  'mobile-notifications-service': {
-    INTEXURAOS_DIGEST_LLM_MODEL:
-      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3-flash-preview',
-    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
-      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
-    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
-  },
   'research-agent': {
     INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC:
       envValue('INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC') ?? topic('research-process'),
@@ -389,6 +385,15 @@ const SERVICE_ENV_MAPPINGS = {
       envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
     INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS:
       envValue('INTEXURAOS_INTEX_AGENT_SESSION_TIMEOUT_MS') ?? '1800000',
+  },
+  'message-digest-service': {
+    INTEXURAOS_DIGEST_LLM_MODEL:
+      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3-flash-preview',
+    INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC') ?? topic('message-digest-runs'),
+    INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
+      envValue('INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC') ?? topic('whatsapp-send'),
+    INTEXURAOS_WEB_APP_URL: envValue('INTEXURAOS_WEB_APP_URL') ?? PUBLIC_ORIGIN,
   },
   'api-docs-hub': {
     ...API_DOCS_HUB_OPENAPI_URLS,

@@ -19,6 +19,8 @@ import { privateMediaRoutes } from './privateMediaRoutes.js';
 import { conversationAssistantRoutes } from './conversationAssistantRoutes.js';
 import { privateMatrixOutboundRoutes } from './privateMatrixOutboundRoutes.js';
 import { privateErasureRoutes } from './privateErasureRoutes.js';
+import { privateDigestSourceRoutes } from './privateDigestSourceRoutes.js';
+import { outboundDeliveryRoutes } from './outboundDeliveryRoutes.js';
 import { createMatrixCorpusRoutes } from './matrixCorpusRoutes.js';
 import { getServices } from '../services.js';
 
@@ -43,6 +45,8 @@ export function createWhatsappRoutes(config: Config): FastifyPluginCallback {
     fastify.register(privateMediaRoutes);
     fastify.register(privateMatrixOutboundRoutes);
     fastify.register(privateErasureRoutes);
+    fastify.register(privateDigestSourceRoutes);
+    fastify.register(outboundDeliveryRoutes);
     if (config.matrixCorpus.enabled) {
       const matrixCorpus = getServices().matrixCorpus;
       if (matrixCorpus === undefined) {
