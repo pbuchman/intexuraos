@@ -44,6 +44,7 @@ export interface LinearIssueService {
   ensureIssueExists(params: {
     userId: string;
     linearIssueId?: string;
+    idempotencyKey?: string;
     taskPrompt: string;
   }): Promise<EnsureIssueResult>;
 
@@ -105,7 +106,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
 
   return {
     async ensureIssueExists(params): Promise<EnsureIssueResult> {
-      const { userId, linearIssueId, taskPrompt } = params;
+      const { userId, linearIssueId, idempotencyKey, taskPrompt } = params;
 
       // Link existing issue mode: validate issue exists and belongs to user's team
       if (linearIssueId !== undefined) {
@@ -174,6 +175,7 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
         userId,
         title,
         description: `## Code Task\n\n${taskPrompt}\n\n---\n*Created automatically by code-agent*`,
+        ...(idempotencyKey !== undefined && { idempotencyKey }),
       });
 
       if (!createResult.ok) {
@@ -253,4 +255,3 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
     },
   };
 }
-

@@ -337,6 +337,7 @@ locals {
     "INTEXURAOS_KIMI_APP_API_KEY",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
+    "INTEXURAOS_SENTRY_DSN_DEV",
   ])
 }
 
@@ -536,6 +537,7 @@ module "secret_manager" {
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"
     # Sentry error monitoring
     "INTEXURAOS_SENTRY_DSN"                = "Sentry Data Source Name for error tracking (backend services)"
+    "INTEXURAOS_SENTRY_DSN_DEV"            = "Sentry Data Source Name for retained dev transcription error tracking"
     "INTEXURAOS_SENTRY_DSN_WEB"            = "Sentry Data Source Name for error tracking (web app)"
     "INTEXURAOS_SENTRY_WEBHOOK_SECRET"     = "Sentry webhook secret for code-agent issue automation"
     "INTEXURAOS_SENTRY_AUTOMATION_USER_ID" = "Code-agent user ID that owns automatic Sentry code tasks"
@@ -1396,9 +1398,9 @@ resource "google_project_iam_member" "transcription_eventarc" {
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# Grant transcription SA permission to access Sentry DSN secret
-resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+# Grant transcription SA permission to access the dedicated dev Sentry DSN secret.
+resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.transcription_function.email}"
 }
@@ -1489,7 +1491,7 @@ module "function_transcription" {
   secrets = {
     INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
+    INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]
   }
 
   labels = local.common_labels
@@ -1503,7 +1505,7 @@ module "function_transcription" {
     google_pubsub_topic.transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
-    google_secret_manager_secret_iam_member.transcription_sentry_dsn,
+    google_secret_manager_secret_iam_member.transcription_sentry_dsn_dev,
     google_storage_bucket_iam_member.transcription_media_reader,
     google_project_iam_member.transcription_eventarc,
   ]

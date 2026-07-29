@@ -2,10 +2,37 @@
  * Tests for normalizing Sentry webhook payloads into issue automation events.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseSentryIssueEvent } from '../../infra/sentry-event-parser.js';
 
+const ERROR_HUB_EVENT_ALERT = JSON.parse(
+  readFileSync(new URL('../fixtures/error-hub-event-alert.json', import.meta.url), 'utf8'),
+) as unknown;
+
 describe('parseSentryIssueEvent', () => {
+  it('normalizes the exact Error Hub event_alert contract without provider-specific fields', () => {
+    const result = parseSentryIssueEvent('event_alert', ERROR_HUB_EVENT_ALERT);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        resource: 'event_alert',
+        action: 'triggered',
+        organizationSlug: 'intexuraos',
+        projectSlug: 'intexuraos-backend',
+        projectId: '1',
+        issueId: '1042',
+        issueShortId: 'INTEXURA-HUB-1042',
+        issueTitle: 'TypeError: Cannot read properties of undefined',
+        issueUrl:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1042/',
+        status: 'unresolved',
+        eventId: '4f7a4f2c0e8e4c2a9c3d5e7f90123456',
+      },
+    });
+  });
+
   it('normalizes issue webhooks into a Sentry issue event', () => {
     const result = parseSentryIssueEvent('issue', {
       action: 'created',

@@ -32,13 +32,16 @@ Do not classify an issue from `localhost` alone. First identify the machine and 
 
 Sentry routing is DSN-based. Runtime labels remain `dev` and `prod`; local currently runs with the dev service label for compatibility.
 
-| Runtime | Backend project       | Web project               | `INTEXURAOS_ENVIRONMENT` |
-| ------- | --------------------- | ------------------------- | ------------------------ |
-| local   | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
-| dev     | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
-| prod    | `intexuraos-hetzner`  | `intexuraos-web-hetzner`  | `prod`                   |
+| Runtime                | Backend project       | Web project               | `INTEXURAOS_ENVIRONMENT` |
+| ---------------------- | --------------------- | ------------------------- | ------------------------ |
+| local                  | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
+| dev                    | `intexuraos-home-dev` | `intexuraos-web-home-dev` | `dev`                    |
+| retained transcription | `intexuraos-home-dev` | n/a                       | `dev`                    |
+| prod                   | `intexuraos-hetzner`  | `intexuraos-web-hetzner`  | `prod`                   |
 
 Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports older values such as `development`. The home-dev orchestrator systemd env file at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev` and `INTEXURAOS_RUNTIME=dev`. Production receives the Hetzner DSNs from Secret Manager via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the static bundle by `scripts/hetzner/deploy-web.sh`.
+
+The retained transcription Cloud Function receives its runtime `INTEXURAOS_SENTRY_DSN` value from the dedicated Secret Manager secret `INTEXURAOS_SENTRY_DSN_DEV`. That secret is excluded from shared Cloud Run IAM and from the Hetzner provisioner/runtime secret inventories. After the staged `_DEV` revision has been verified, only the transcription service account keeps the secret-specific `roles/secretmanager.secretAccessor` binding for `_DEV`; the legacy `INTEXURAOS_SENTRY_DSN` binding is removed. No other workload runtime identity receives a secret-specific binding for `_DEV`; the administrative Cloud Build service account retains its project-wide access for function deployment.
 
 ## Credentials And Secrets
 

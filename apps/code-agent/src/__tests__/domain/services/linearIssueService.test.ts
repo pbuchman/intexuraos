@@ -214,6 +214,27 @@ describe('linearIssueService', () => {
       );
     });
 
+    it('forwards a stable idempotency key when creating an issue', async () => {
+      mockGenerateTitle.mockResolvedValue(ok({ title: 'Fix Sentry failure', issueType: 'bug' }));
+      mockCreateIssue.mockResolvedValue(ok({
+        issueId: 'new-456',
+        issueIdentifier: 'INT-456',
+        issueTitle: 'Fix Sentry failure',
+        issueUrl: 'https://linear.app/intexuraos/INT-456',
+      }));
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await service.ensureIssueExists({
+        userId: testUserId,
+        taskPrompt: 'Fix the Sentry failure',
+        idempotencyKey: 'sentry:org:project:issue:event:event-1',
+      });
+
+      expect(mockCreateIssue).toHaveBeenCalledWith(expect.objectContaining({
+        idempotencyKey: 'sentry:org:project:issue:event:event-1',
+      }));
+    });
+
     it('should create feature type issue when LLM classifies as feature', async () => {
       mockGenerateTitle = vi.fn().mockResolvedValue(
         ok({

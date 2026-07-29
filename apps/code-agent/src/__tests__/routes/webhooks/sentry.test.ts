@@ -3,6 +3,7 @@
  */
 
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fastify, { type FastifyInstance } from 'fastify';
 import { intexuraFastifyPlugin } from '@intexuraos/common-http';
@@ -16,6 +17,10 @@ import {
 } from '../../../routes/webhooks/sentry.js';
 
 const WEBHOOK_SECRET = 'sentry-webhook-secret';
+const ERROR_HUB_EVENT_ALERT_RAW = readFileSync(
+  new URL('../../fixtures/error-hub-event-alert.json', import.meta.url),
+  'utf8',
+);
 
 function buildIssueBody(): Record<string, unknown> {
   return {
@@ -40,8 +45,7 @@ function sign(rawBody: string): string {
 describe('POST /webhooks/sentry', () => {
   let app: FastifyInstance;
   let codeTaskCreate: ReturnType<typeof vi.fn>;
-  let sentryIssueEventReserve: ReturnType<typeof vi.fn>;
-  let sentryProblemReserve: ReturnType<typeof vi.fn>;
+  let sentryReservationAcquire: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_SENTRY_WEBHOOK_SECRET'] = WEBHOOK_SECRET;
@@ -51,27 +55,22 @@ describe('POST /webhooks/sentry', () => {
     codeTaskCreate = vi.fn().mockImplementation(async (input: Record<string, unknown>) => ok({
       id: input['id'],
       ...input,
+      status: 'queued',
     }));
-    sentryIssueEventReserve = vi.fn().mockResolvedValue(ok({
-      created: true,
-      record: {
-        dedupeKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
-        duplicateCount: 0,
-      },
-    }));
-    sentryProblemReserve = vi.fn().mockResolvedValue(ok({
-      created: true,
-      record: {
-        dedupeKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:task-problem',
-        duplicateCount: 0,
-      },
+    sentryReservationAcquire = vi.fn().mockImplementation(async (input: { proposedCodeTaskId: string }) => ok({
+      kind: 'acquired',
+      transitionKey: 'sentry:intexuraos-dev-pbuchman:intexuraos-development:4509001:issue:created',
+      issueKey: 'sentry-task:intexuraos-dev-pbuchman:intexuraos-development:4509001',
+      leaseToken: 'lease-token',
+      codeTaskId: input.proposedCodeTaskId,
     }));
     setServices({
       logger: pino({ level: 'silent' }),
       sentryIssueEventRepo: {
-        reserve: sentryIssueEventReserve,
-        reserveTaskForProblem: sentryProblemReserve,
-        markCodeTaskCreated: vi.fn().mockResolvedValue(ok(undefined)),
+        acquire: sentryReservationAcquire,
+        checkpointLinearIssue: vi.fn().mockResolvedValue(ok(undefined)),
+        completeReservation: vi.fn().mockResolvedValue(ok(undefined)),
+        failReservation: vi.fn().mockResolvedValue(ok(undefined)),
       },
       workerSettingsRepo: {
         getSettings: vi.fn().mockResolvedValue(ok({
@@ -96,6 +95,7 @@ describe('POST /webhooks/sentry', () => {
         }),
       },
       codeTaskRepo: {
+        findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'task not found' })),
         create: codeTaskCreate,
       },
       taskEnqueueService: {
@@ -143,13 +143,62 @@ describe('POST /webhooks/sentry', () => {
       agentType: 'sentry',
       workerType: 'codex-xhigh',
     }));
-    expect(sentryProblemReserve).toHaveBeenCalledWith(expect.objectContaining({
+    expect(sentryReservationAcquire).toHaveBeenCalledWith(expect.objectContaining({
       event: expect.objectContaining({
         issueId: '4509001',
         issueTitle: 'TypeError: Cannot read properties of undefined',
       }),
     }));
   });
+
+  it('accepts the exact signed Error Hub event_alert contract without route changes', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sentry',
+      headers: {
+        'content-type': 'application/json',
+        'sentry-hook-resource': 'event_alert',
+        'sentry-hook-signature': sign(ERROR_HUB_EVENT_ALERT_RAW),
+      },
+      payload: ERROR_HUB_EVENT_ALERT_RAW,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      success: true,
+      data: {
+        message: 'Sentry issue code task created',
+      },
+    });
+    expect(sentryReservationAcquire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: {
+          resource: 'event_alert',
+          action: 'triggered',
+          organizationSlug: 'intexuraos',
+          projectSlug: 'intexuraos-backend',
+          projectId: '1',
+          issueId: '1042',
+          issueShortId: 'INTEXURA-HUB-1042',
+          issueTitle: 'TypeError: Cannot read properties of undefined',
+          issueUrl:
+            'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1042/',
+          status: 'unresolved',
+          eventId: '4f7a4f2c0e8e4c2a9c3d5e7f90123456',
+        },
+      }),
+    );
+    expect(codeTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'sentry',
+        sentryIssue: expect.objectContaining({
+          issueId: '1042',
+          eventId: '4f7a4f2c0e8e4c2a9c3d5e7f90123456',
+        }),
+      }),
+    );
+  });
+
 
   it('rejects an invalid Sentry signature', async () => {
     const response = await app.inject({
@@ -222,7 +271,7 @@ describe('POST /webhooks/sentry', () => {
         message: 'Ignored non-actionable Sentry issue event: issue.resolved',
       },
     });
-    expect(sentryIssueEventReserve).not.toHaveBeenCalled();
+    expect(sentryReservationAcquire).not.toHaveBeenCalled();
     expect(codeTaskCreate).not.toHaveBeenCalled();
   });
 
@@ -230,9 +279,9 @@ describe('POST /webhooks/sentry', () => {
     setServices({
       logger: pino({ level: 'silent' }),
       sentryIssueEventRepo: {
-        reserve: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'reserve failed' })),
-        reserveTaskForProblem: vi.fn(),
-        markCodeTaskCreated: vi.fn(),
+        acquire: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'reserve failed' })),
+        completeReservation: vi.fn(),
+        failReservation: vi.fn(),
       },
     } as unknown as ServiceContainer);
     const rawBody = JSON.stringify(buildIssueBody());
@@ -256,6 +305,32 @@ describe('POST /webhooks/sentry', () => {
         message: 'reserve failed',
       },
     }));
+  });
+
+  it('returns service unavailable while an active lease has no task', async () => {
+    sentryReservationAcquire.mockResolvedValue(ok({ kind: 'retryable' }));
+    const rawBody = JSON.stringify(buildIssueBody());
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sentry',
+      headers: {
+        'content-type': 'application/json',
+        'sentry-hook-resource': 'issue',
+        'sentry-hook-signature': sign(rawBody),
+      },
+      payload: rawBody,
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(JSON.parse(response.body)).toEqual(expect.objectContaining({
+      success: false,
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Sentry issue processing is already in progress',
+      },
+    }));
+    expect(codeTaskCreate).not.toHaveBeenCalled();
   });
 
   it('uses attached rawBody strings when Fastify raw body capture is available', async () => {

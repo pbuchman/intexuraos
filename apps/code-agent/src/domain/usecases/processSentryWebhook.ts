@@ -3,9 +3,10 @@ import { getErrorMessage, type Result } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import { getServices } from '../../services.js';
 import type {
+  AcquireSentryTaskReservationInput,
+  AcquireSentryTaskReservationResult,
   NormalizedSentryIssueEvent,
   SentryIssueEventParseError,
-  SentryIssueEventRecord,
   SentryIssueTaskContext,
 } from '../models/sentryIssueEvent.js';
 import { sanitizePrompt } from '../utils/promptSanitization.js';
@@ -13,9 +14,9 @@ import { sanitizePromptForInjection } from '../utils/promptInjectionSanitizer.js
 import { generateWebhookSecret } from '../utils/secrets.js';
 import { resolveDefaultWorkerType } from '../utils/defaultWorkerTypeResolution.js';
 import type { CodeTask, TaskStatus } from '../models/codeTask.js';
-import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 
 const SYSTEM_PROMPT_HASH_PLACEHOLDER = 'sentry-agent-system-prompt-v1';
+const SENTRY_RESERVATION_LEASE_DURATION_MS = 5 * 60 * 1000;
 const ACTIONABLE_ISSUE_ACTIONS = new Set(['created', 'regressed', 'unresolved', 'reopened']);
 const TERMINAL_ISSUE_STATUSES = new Set(['resolved', 'ignored', 'muted', 'archived', 'deleted']);
 const ACTIVE_DUPLICATE_TASK_STATUSES = new Set<TaskStatus>(['queued', 'dispatched', 'running']);
@@ -57,7 +58,19 @@ export type ProcessSentryWebhookResult =
   | { ok: true; outcome: 'processed'; message: string; codeTaskId: string }
   | { ok: true; outcome: 'duplicate'; message: string; codeTaskId?: string | undefined }
   | { ok: true; outcome: 'ignored'; message: string }
-  | { ok: false; reason: 'invalid_signature' | 'internal_error' | 'invalid_payload'; message: string };
+  | {
+    ok: false;
+    reason: 'invalid_signature' | 'internal_error' | 'invalid_payload' | 'retryable';
+    message: string;
+  };
+
+function retryableLeaseResult(): ProcessSentryWebhookResult {
+  return {
+    ok: false,
+    reason: 'retryable',
+    message: 'Sentry issue processing is already in progress',
+  };
+}
 
 function buildSentryTaskPrompt(event: NormalizedSentryIssueEvent): string {
   return [
@@ -162,48 +175,7 @@ function isLinkedSentryTaskBlocking(task: CodeTask): boolean {
   if (ACTIVE_DUPLICATE_TASK_STATUSES.has(task.status)) {
     return true;
   }
-
-  if (
-    task.agentType === 'sentry'
-    && task.status === 'implemented'
-    && (task.prNumber !== undefined || task.result?.prUrl !== undefined)
-  ) {
-    return true;
-  }
-
-  if (task.result?.sentry_outcome !== undefined && hasOpenPullRequest(task)) {
-    return true;
-  }
-
-  return task.status === 'implemented' && hasOpenPullRequest(task);
-}
-
-async function inspectDuplicateReservation(input: {
-  record: SentryIssueEventRecord;
-  codeTaskRepo: CodeTaskRepository;
-}): Promise<
-  | { ok: true; duplicate: true; codeTaskId?: string | undefined }
-  | { ok: true; duplicate: false }
-  | { ok: false; message: string }
-> {
-  const { record, codeTaskRepo } = input;
-  if (record.codeTaskId === undefined) {
-    return { ok: true, duplicate: true };
-  }
-
-  const taskResult = await codeTaskRepo.findById(record.codeTaskId);
-  if (!taskResult.ok) {
-    if (taskResult.error.code === 'NOT_FOUND') {
-      return { ok: true, duplicate: false };
-    }
-    return { ok: false, message: taskResult.error.message };
-  }
-
-  if (!isLinkedSentryTaskBlocking(taskResult.value)) {
-    return { ok: true, duplicate: false };
-  }
-
-  return { ok: true, duplicate: true, codeTaskId: record.codeTaskId };
+  return hasOpenPullRequest(task);
 }
 
 export async function processSentryWebhook(
@@ -266,90 +238,167 @@ export async function processSentryWebhook(
   }
 
   const receivedAt = new Date();
-  const reserveResult = await sentryIssueEventRepo.reserve({
+  const proposedCodeTaskId = `task_${randomUUID()}`;
+  const acquireInput: AcquireSentryTaskReservationInput = {
     event: parsed.value,
     receivedAt,
+    proposedCodeTaskId,
+    leaseOwner: proposedCodeTaskId,
+    leaseDurationMs: SENTRY_RESERVATION_LEASE_DURATION_MS,
     payload: body,
-  });
-  if (!reserveResult.ok) {
-    logger.error({ error: reserveResult.error }, 'Failed to reserve Sentry issue event');
-    return { ok: false, reason: 'internal_error', message: reserveResult.error.message };
+  };
+  let acquireResult = await sentryIssueEventRepo.acquire(acquireInput);
+  if (!acquireResult.ok) {
+    logger.error({ error: acquireResult.error }, 'Failed to reserve Sentry issue event');
+    return { ok: false, reason: 'internal_error', message: acquireResult.error.message };
   }
 
-  if (!reserveResult.value.created) {
-    const duplicate = await inspectDuplicateReservation({
-      record: reserveResult.value.record,
-      codeTaskRepo,
-    });
-    if (!duplicate.ok) {
-      return { ok: false, reason: 'internal_error', message: duplicate.message };
+  if (acquireResult.value.kind === 'duplicate') {
+    return {
+      ok: true,
+      outcome: 'duplicate',
+      message: 'Sentry issue already has a code task',
+      ...(acquireResult.value.codeTaskId !== undefined && {
+        codeTaskId: acquireResult.value.codeTaskId,
+      }),
+    };
+  }
+
+  if (acquireResult.value.kind === 'retryable') {
+    return retryableLeaseResult();
+  }
+
+  if (acquireResult.value.kind === 'inspect_linked_task') {
+    const linkedTaskId = acquireResult.value.codeTaskId;
+    const taskResult = await codeTaskRepo.findById(linkedTaskId);
+    if (!taskResult.ok && taskResult.error.code !== 'NOT_FOUND') {
+      return { ok: false, reason: 'internal_error', message: taskResult.error.message };
     }
-    if (!duplicate.duplicate) {
-      logger.info({
-        dedupeKey: reserveResult.value.record.dedupeKey,
-        codeTaskId: reserveResult.value.record.codeTaskId,
-      }, 'Sentry issue reservation points to stale task; creating a replacement code task');
-    } else {
+    if (taskResult.ok && isLinkedSentryTaskBlocking(taskResult.value)) {
       return {
         ok: true,
         outcome: 'duplicate',
         message: 'Sentry issue already has a code task',
-        ...(duplicate.codeTaskId !== undefined && {
-          codeTaskId: duplicate.codeTaskId,
-        }),
+        codeTaskId: linkedTaskId,
       };
     }
-  }
 
-  const problemReserveResult = await sentryIssueEventRepo.reserveTaskForProblem({
-    event: parsed.value,
-    receivedAt,
-    payload: body,
-  });
-  if (!problemReserveResult.ok) {
-    logger.error({ error: problemReserveResult.error }, 'Failed to reserve Sentry problem task');
-    return { ok: false, reason: 'internal_error', message: problemReserveResult.error.message };
-  }
-
-  if (!problemReserveResult.value.created) {
-    const duplicate = await inspectDuplicateReservation({
-      record: problemReserveResult.value.record,
-      codeTaskRepo,
+    acquireResult = await sentryIssueEventRepo.acquire({
+      ...acquireInput,
+      replaceLinkedCodeTaskId: linkedTaskId,
     });
-    if (!duplicate.ok) {
-      return { ok: false, reason: 'internal_error', message: duplicate.message };
+    if (!acquireResult.ok) {
+      logger.error({ error: acquireResult.error }, 'Failed to replace stale Sentry task reservation');
+      return { ok: false, reason: 'internal_error', message: acquireResult.error.message };
     }
-    if (!duplicate.duplicate) {
-      logger.info({
-        dedupeKey: problemReserveResult.value.record.dedupeKey,
-        codeTaskId: problemReserveResult.value.record.codeTaskId,
-      }, 'Sentry problem reservation points to stale task; creating a replacement code task');
-    } else {
+    if (acquireResult.value.kind === 'retryable') {
+      return retryableLeaseResult();
+    }
+    if (acquireResult.value.kind !== 'acquired') {
       return {
         ok: true,
         outcome: 'duplicate',
-        message: 'Sentry problem already has a code task',
-        ...(duplicate.codeTaskId !== undefined && {
-          codeTaskId: duplicate.codeTaskId,
+        message: 'Sentry issue already has a code task',
+        ...(acquireResult.value.codeTaskId !== undefined && {
+          codeTaskId: acquireResult.value.codeTaskId,
         }),
       };
     }
+  }
+
+  const reservation: Extract<AcquireSentryTaskReservationResult, { kind: 'acquired' }> =
+    acquireResult.value;
+
+  const failReservation = async (input: {
+    result: ProcessSentryWebhookResult;
+    reason: string;
+    codeTaskId?: string | undefined;
+    linearIssueId?: string | undefined;
+  }): Promise<ProcessSentryWebhookResult> => {
+    const failed = await sentryIssueEventRepo.failReservation({
+      transitionKey: reservation.transitionKey,
+      issueKey: reservation.issueKey,
+      leaseToken: reservation.leaseToken,
+      reason: input.reason,
+      ...(input.codeTaskId !== undefined && { codeTaskId: input.codeTaskId }),
+      ...(input.linearIssueId !== undefined && { linearIssueId: input.linearIssueId }),
+    });
+    if (!failed.ok) {
+      logger.error({ error: failed.error }, 'Failed to release Sentry task reservation');
+      return { ok: false, reason: 'internal_error', message: failed.error.message };
+    }
+    return input.result;
+  };
+
+  const completeReservation = async (task: CodeTask): Promise<ProcessSentryWebhookResult> => {
+    const completed = await sentryIssueEventRepo.completeReservation({
+      transitionKey: reservation.transitionKey,
+      issueKey: reservation.issueKey,
+      leaseToken: reservation.leaseToken,
+      codeTaskId: task.id,
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
+    });
+    if (!completed.ok) {
+      logger.error({ error: completed.error, taskId: task.id }, 'Failed to complete Sentry task reservation');
+      return await failReservation({
+        result: { ok: false, reason: 'internal_error', message: completed.error.message },
+        reason: completed.error.message,
+        codeTaskId: task.id,
+        linearIssueId: task.linearIssueId,
+      });
+    }
+    return {
+      ok: true,
+      outcome: 'processed',
+      message: 'Sentry issue code task created',
+      codeTaskId: task.id,
+    };
+  };
+
+  const existingTaskResult = await codeTaskRepo.findById(reservation.codeTaskId);
+  if (existingTaskResult.ok) {
+    const existingTask = existingTaskResult.value;
+    if (existingTask.status === 'queued') {
+      const enqueueResult = await taskEnqueueService.enqueue({
+        taskId: existingTask.id,
+        userId: automationUserId,
+      });
+      if (!enqueueResult.ok) {
+        const message = getErrorMessage(enqueueResult.error, 'Failed to enqueue Sentry code task');
+        return await failReservation({
+          result: { ok: false, reason: 'internal_error', message },
+          reason: message,
+          codeTaskId: existingTask.id,
+          linearIssueId: existingTask.linearIssueId,
+        });
+      }
+    }
+    return await completeReservation(existingTask);
+  }
+  if (existingTaskResult.error.code !== 'NOT_FOUND') {
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message: existingTaskResult.error.message },
+      reason: existingTaskResult.error.message,
+    });
   }
 
   const settingsResult = await workerSettingsRepo.getSettings(automationUserId);
   if (!settingsResult.ok) {
     logger.error({ userId: automationUserId, error: settingsResult.error }, 'Failed to load Sentry automation worker settings');
-    return { ok: false, reason: 'internal_error', message: settingsResult.error.message };
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message: settingsResult.error.message },
+      reason: settingsResult.error.message,
+    });
   }
 
   const enabledWorkers = settingsResult.value?.workers.filter((worker) => worker.enabled) ?? [];
   const firstWorker = enabledWorkers[0];
   if (firstWorker === undefined) {
-    return {
-      ok: false,
-      reason: 'internal_error',
-      message: 'Sentry automation user has no enabled workers',
-    };
+    const message = 'Sentry automation user has no enabled workers';
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message },
+      reason: message,
+    });
   }
 
   const workerResolution = resolveDefaultWorkerType({
@@ -360,22 +409,44 @@ export async function processSentryWebhook(
   const secretRedacted = sanitizePrompt(prompt);
   const injectionResult = sanitizePromptForInjection(secretRedacted);
   if (!injectionResult.ok) {
-    return { ok: false, reason: 'invalid_payload', message: injectionResult.error.message };
+    return await failReservation({
+      result: { ok: false, reason: 'invalid_payload', message: injectionResult.error.message },
+      reason: injectionResult.error.message,
+    });
   }
 
   const issueResult = await linearIssueService.ensureIssueExists({
     userId: automationUserId,
     taskPrompt: injectionResult.value,
+    idempotencyKey: reservation.transitionKey,
+    ...(reservation.linearIssueId !== undefined && {
+      linearIssueId: reservation.linearIssueId,
+    }),
   });
   if (issueResult.linearFallback || issueResult.linearIssueId === undefined) {
-    return {
-      ok: false,
-      reason: 'internal_error',
-      message: issueResult.linearFallbackError ?? 'Failed to create or link Linear issue for Sentry issue',
-    };
+    const message = issueResult.linearFallbackError ?? 'Failed to create or link Linear issue for Sentry issue';
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message },
+      reason: message,
+    });
   }
 
-  const taskId = `task_${randomUUID()}`;
+  const checkpointResult = await sentryIssueEventRepo.checkpointLinearIssue({
+    transitionKey: reservation.transitionKey,
+    issueKey: reservation.issueKey,
+    leaseToken: reservation.leaseToken,
+    linearIssueId: issueResult.linearIssueId,
+  });
+  if (!checkpointResult.ok) {
+    logger.error({ error: checkpointResult.error }, 'Failed to checkpoint Sentry Linear issue');
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message: checkpointResult.error.message },
+      reason: checkpointResult.error.message,
+      linearIssueId: issueResult.linearIssueId,
+    });
+  }
+
+  const taskId = reservation.codeTaskId;
   const createResult = await codeTaskRepo.create({
     id: taskId,
     userId: automationUserId,
@@ -393,8 +464,36 @@ export async function processSentryWebhook(
     sentryIssue: toTaskContext(parsed.value, receivedAt),
   });
   if (!createResult.ok) {
+    if (
+      (createResult.error.code === 'DUPLICATE_PROMPT' || createResult.error.code === 'ACTIVE_TASK_EXISTS')
+      && createResult.error.existingTaskId === taskId
+    ) {
+      const recovered = await codeTaskRepo.findById(taskId);
+      if (recovered.ok) {
+        if (recovered.value.status === 'queued') {
+          const enqueueRecovered = await taskEnqueueService.enqueue({
+            taskId: recovered.value.id,
+            userId: automationUserId,
+          });
+          if (!enqueueRecovered.ok) {
+            const message = getErrorMessage(enqueueRecovered.error, 'Failed to enqueue Sentry code task');
+            return await failReservation({
+              result: { ok: false, reason: 'internal_error', message },
+              reason: message,
+              codeTaskId: recovered.value.id,
+              linearIssueId: recovered.value.linearIssueId,
+            });
+          }
+        }
+        return await completeReservation(recovered.value);
+      }
+    }
     logger.error({ error: createResult.error }, 'Failed to create Sentry code task');
-    return { ok: false, reason: 'internal_error', message: createResult.error.message };
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message: createResult.error.message },
+      reason: createResult.error.message,
+      linearIssueId: issueResult.linearIssueId,
+    });
   }
 
   const task = createResult.value;
@@ -404,37 +503,14 @@ export async function processSentryWebhook(
   });
   if (!enqueueResult.ok) {
     logger.error({ error: enqueueResult.error, taskId: task.id }, 'Failed to enqueue Sentry code task');
-    return {
-      ok: false,
-      reason: 'internal_error',
-      message: getErrorMessage(enqueueResult.error, 'Failed to enqueue Sentry code task'),
-    };
+    const message = getErrorMessage(enqueueResult.error, 'Failed to enqueue Sentry code task');
+    return await failReservation({
+      result: { ok: false, reason: 'internal_error', message },
+      reason: message,
+      codeTaskId: task.id,
+      linearIssueId: issueResult.linearIssueId,
+    });
   }
 
-  const markResult = await sentryIssueEventRepo.markCodeTaskCreated({
-    dedupeKey: reserveResult.value.record.dedupeKey,
-    codeTaskId: task.id,
-    linearIssueId: issueResult.linearIssueId,
-  });
-  if (!markResult.ok) {
-    logger.error({ error: markResult.error, taskId: task.id }, 'Failed to link Sentry issue event to code task');
-    return { ok: false, reason: 'internal_error', message: markResult.error.message };
-  }
-
-  const markProblemResult = await sentryIssueEventRepo.markCodeTaskCreated({
-    dedupeKey: problemReserveResult.value.record.dedupeKey,
-    codeTaskId: task.id,
-    linearIssueId: issueResult.linearIssueId,
-  });
-  if (!markProblemResult.ok) {
-    logger.error({ error: markProblemResult.error, taskId: task.id }, 'Failed to link Sentry problem task to code task');
-    return { ok: false, reason: 'internal_error', message: markProblemResult.error.message };
-  }
-
-  return {
-    ok: true,
-    outcome: 'processed',
-    message: 'Sentry issue code task created',
-    codeTaskId: task.id,
-  };
+  return await completeReservation(task);
 }

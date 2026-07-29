@@ -38,7 +38,24 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('Codex skill discovery restored');
   });
 
-  it('bakes and restores Codex MCP config with Linear and Sentry access', () => {
+  it('pins the Sentry MCP server in the image instead of installing latest at runtime', () => {
+    const dockerfile = readFileSync(dockerfilePath, 'utf8');
+
+    expect(dockerfile).toContain('@sentry/mcp-server@0.37.0');
+    expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
+  });
+
+  it('keeps the CI worker image capable of exercising the real Error Hub MCP entry', () => {
+    const dockerfile = readFileSync(dockerfileTestPath, 'utf8');
+
+    expect(dockerfile).toContain('@sentry/mcp-server@0.37.0');
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml'
+    );
+    expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
+  });
+
+  it('bakes and restores Codex MCP config with Linear, Sentry, and Error Hub access', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf8');
     const entrypoint = readFileSync(entrypointPath, 'utf8');
     const codexConfig = readFileSync(codexConfigPath, 'utf8');
@@ -52,9 +69,13 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(codexConfig).toContain('bearer_token_env_var = "LINEAR_API_KEY"');
     expect(codexConfig).toContain('[mcp_servers.sentry]');
     expect(codexConfig).toContain('command = "sh"');
+    expect(codexConfig).toContain('exec sentry-mcp --access-token "$SENTRY_AUTH_TOKEN"');
+    expect(codexConfig).toContain('[mcp_servers.error_hub]');
     expect(codexConfig).toContain(
-      'exec npx @sentry/mcp-server@latest --access-token "$SENTRY_AUTH_TOKEN"'
+      'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer'
     );
+    expect(codexConfig).not.toContain('npx @sentry/mcp-server');
+    expect(codexConfig).not.toContain('@latest');
   });
 
   it('emits explicit bootstrap and runtime evidence lines for Codex runs', () => {

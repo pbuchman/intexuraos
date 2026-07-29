@@ -306,8 +306,9 @@ export class FakeLinearApiClient implements LinearApiClient {
   ): Promise<Result<LinearIssue, LinearError>> {
     if (this.shouldFail) return err(this.failError);
 
+    const issueSequence = this.issueCounter++;
     const issue: LinearIssue = {
-      id: `issue-${Date.now()}-${this.issueCounter++}`,
+      id: input.id ?? `issue-${Date.now()}-${issueSequence}`,
       identifier: `ENG-${this.issueCounter}`,
       title: input.title,
       description: input.description,

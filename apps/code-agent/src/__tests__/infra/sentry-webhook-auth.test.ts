@@ -3,6 +3,7 @@
  */
 
 import { createHmac, randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseSentrySignature, verifySentrySignature } from '../../infra/sentry-webhook-auth.js';
 
@@ -41,6 +42,20 @@ describe('sentry-webhook-auth', () => {
   });
 
   describe('verifySentrySignature', () => {
+    it('authenticates exact Error Hub bytes on retries and rejects a one-byte change', () => {
+      const exactPayload = readFileSync(
+        new URL('../fixtures/error-hub-event-alert.json', import.meta.url),
+      );
+      const signature = createHmac('sha256', secret).update(exactPayload).digest('hex');
+
+      expect(verifySentrySignature(exactPayload, signature, secret)).toBe(true);
+      expect(verifySentrySignature(Buffer.from(exactPayload), signature, secret)).toBe(true);
+
+      const changedPayload = Buffer.from(exactPayload);
+      changedPayload[changedPayload.length - 2] = 0x20;
+      expect(verifySentrySignature(changedPayload, signature, secret)).toBe(false);
+    });
+
     it('returns true for a matching HMAC-SHA256 signature', () => {
       const signature = createHmac('sha256', secret).update(payload).digest('hex');
 

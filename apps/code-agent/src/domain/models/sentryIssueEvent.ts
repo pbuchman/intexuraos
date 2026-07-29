@@ -33,6 +33,9 @@ export interface SentryIssueTaskContext {
 
 export interface SentryIssueEventRecord {
   dedupeKey: string;
+  transitionKey: string;
+  recordType: 'transition' | 'issue';
+  state: SentryTaskReservationState;
   organizationSlug: string;
   projectSlug: string;
   projectId?: string | undefined;
@@ -48,17 +51,66 @@ export interface SentryIssueEventRecord {
   latestReceivedAt: Date;
   duplicateCount: number;
   payload: unknown;
+  proposedCodeTaskId: string;
+  leaseToken?: string | undefined;
+  leaseExpiresAt?: Date | undefined;
+  leaseOwner?: string | undefined;
+  failureReason?: string | undefined;
   codeTaskId?: string | undefined;
   linearIssueId?: string | undefined;
 }
 
-export interface ReserveSentryIssueEventInput {
+export type SentryTaskReservationState = 'reserved' | 'task_created' | 'failed';
+
+export interface AcquireSentryTaskReservationInput {
   event: NormalizedSentryIssueEvent;
   receivedAt: Date;
+  proposedCodeTaskId: string;
+  leaseOwner: string;
+  leaseDurationMs: number;
   payload: unknown;
+  /** Optimistic compare-and-swap after the caller verifies a linked task is non-blocking. */
+  replaceLinkedCodeTaskId?: string | undefined;
 }
 
-export interface ReserveSentryIssueEventResult {
-  created: boolean;
-  record: SentryIssueEventRecord;
+export type AcquireSentryTaskReservationResult =
+  | {
+    kind: 'acquired';
+    transitionKey: string;
+    issueKey: string;
+    leaseToken: string;
+    codeTaskId: string;
+    linearIssueId?: string | undefined;
+  }
+  | { kind: 'duplicate'; codeTaskId?: string | undefined }
+  | { kind: 'retryable' }
+  | {
+    kind: 'inspect_linked_task';
+    codeTaskId: string;
+    transitionKey: string;
+    issueKey: string;
+  };
+
+export interface CompleteSentryTaskReservationInput {
+  transitionKey: string;
+  issueKey: string;
+  leaseToken: string;
+  codeTaskId: string;
+  linearIssueId?: string | undefined;
+}
+
+export interface CheckpointSentryLinearIssueInput {
+  transitionKey: string;
+  issueKey: string;
+  leaseToken: string;
+  linearIssueId: string;
+}
+
+export interface FailSentryTaskReservationInput {
+  transitionKey: string;
+  issueKey: string;
+  leaseToken: string;
+  reason: string;
+  codeTaskId?: string | undefined;
+  linearIssueId?: string | undefined;
 }

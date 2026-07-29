@@ -23,9 +23,10 @@ RUN apk add --no-cache \
     py3-pip \
     && rm -rf /var/cache/apk/*
 
-# Install ripgrep, fd, bat from edge/community (not in main repos)
+# Use one Alpine repository set: edge/community Chromium requires an unavailable
+# edge/main libFLAC.so.14 when mixed with this stable base image.
 # chromium: required for @playwright/mcp (can't download browsers at runtime)
-RUN apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community \
+RUN apk add --no-cache \
     ripgrep \
     fd \
     bat \
@@ -93,7 +94,7 @@ RUN git clone --depth 1 https://github.com/obra/superpowers.git /opt/codex-super
 # npx finds the global install and skips the download entirely.
 RUN npm install -g \
     @upstash/context7-mcp \
-    @sentry/mcp-server \
+    @sentry/mcp-server@0.37.0 \
     @playwright/mcp
 
 # Pre-install Claude Code plugins into staging directory.

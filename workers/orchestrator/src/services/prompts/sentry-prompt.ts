@@ -33,10 +33,66 @@ function renderSentryIssueContext(params: SystemPromptParams): string {
   ].join('\n');
 }
 
+type EvidenceProvider = 'sentry' | 'error_hub' | 'none';
+
+function selectEvidenceProvider(issueUrl: string | undefined): EvidenceProvider {
+  if (issueUrl === undefined) return 'none';
+
+  let url: URL;
+  try {
+    url = new URL(issueUrl);
+  } catch {
+    return 'none';
+  }
+
+  const errorHubHost = process.env['INTEXURAOS_ERROR_HUB_HOST']?.trim().toLowerCase();
+  if (
+    errorHubHost !== undefined &&
+    errorHubHost !== '' &&
+    url.host.toLowerCase() === errorHubHost
+  ) {
+    return 'error_hub';
+  }
+
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === 'sentry.io' || hostname.endsWith('.sentry.io')) {
+    return 'sentry';
+  }
+
+  return 'none';
+}
+
+function renderEvidenceProvider(params: SystemPromptParams): string {
+  const provider = selectEvidenceProvider(params.sentryIssue?.issueUrl);
+  if (provider === 'sentry') {
+    return `### Evidence Provider (MANDATORY)
+Selected evidence MCP: \`sentry\`
+Use only the \`sentry\` MCP for this task. Do not query \`error_hub\`.
+If that MCP is unavailable, use the Sentry REST API with \`SENTRY_AUTH_TOKEN\` from the worker environment.`;
+  }
+
+  if (provider === 'error_hub') {
+    return `### Evidence Provider (MANDATORY)
+Selected evidence MCP: \`error_hub\`
+Use only the \`error_hub\` MCP for this task. Do not query \`sentry\`.
+If that MCP is unavailable, use only these private Sentry-compatible reads at \`https://$ERROR_HUB_HOST\`:
+- GET /api/0/organizations/{org}/issues/{issueId}/
+- GET /api/0/organizations/{org}/issues/{issueId}/events/latest/
+- GET /api/0/organizations/{org}/issues/{issueId}/events/{eventId}/
+- GET /api/0/organizations/{org}/issues/{issueId}/events/
+- GET /api/0/projects/{org}/{projectSlugOrId}/
+The fixed bearer value is syntactic only; network reachability is the access boundary.`;
+  }
+
+  return `### Evidence Provider (MANDATORY)
+Selected evidence MCP: none
+The issue URL host matches neither the configured \`ERROR_HUB_HOST\` nor Sentry SaaS. Do not query either evidence MCP. Finish with outcome \`failed\` and report the provider mismatch.`;
+}
+
 export const sentryPrompt: PromptBuilder<SystemPromptParams> = {
   name: 'orchestrator-sentry',
   description: 'Sentry agent system prompt for autonomous issue fixing or code-level suppression',
-  version: '1.0.0',
+  version: '2.0.0',
   build(params: SystemPromptParams): string {
     const { taskId, linearIssueId, linearIssueTitle, taskUrl, workerType, modelName } = params;
 
@@ -60,10 +116,12 @@ Use the Linear MCP tools for all Linear operations. Do NOT use the /linear skill
 ### Sentry Issue Context
 ${renderSentryIssueContext(params)}
 
+${renderEvidenceProvider(params)}
+
 ### Required Sentry Investigation
 1. Fetch current Sentry issue details before editing code.
 2. Fetch recent events for the same Sentry issue and inspect stack traces, tags, culprit, release, environment, and frequency.
-3. Use the Sentry MCP server when available. If MCP is unavailable, use the Sentry REST API with SENTRY_AUTH_TOKEN from the worker environment.
+3. Use only the selected evidence provider and its documented fallback.
 4. Record the exact Sentry URL and event evidence you used.
 
 ### Reproduction

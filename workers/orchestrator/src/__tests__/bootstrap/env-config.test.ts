@@ -101,6 +101,7 @@ describe('loadEnvConfig', () => {
     expect(config.workerImage).toBe(DEFAULT_WORKER_IMAGE);
     expect(config.logLevel).toBe('info');
     expect(config.openRouterApiKey).toBe('');
+    expect(config.errorHubHost).toBeUndefined();
     expect(config.keepContainersAlive).toBe(false);
     expect(config.workerForensicsMode).toBe(false);
     expect(config.preserveWorkerContainers).toBe(true);
@@ -200,6 +201,53 @@ describe('loadEnvConfig', () => {
     );
     expect(config.repoPath).toBeUndefined();
     expect(config.gitUserNameOverride).toBeUndefined();
+  });
+
+  it.each(['home-dev.example.ts.net', 'home-dev.example.ts.net:8443'])(
+    'accepts Error Hub DNS host %s without changing it',
+    (host) => {
+      const config = loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: host }));
+
+      expect(config.errorHubHost).toBe(host);
+    }
+  );
+
+  it.each([
+    'https://home-dev.example.ts.net:8443',
+    'home-dev.example.ts.net/issues/1',
+    'user@home-dev.example.ts.net',
+    'home dev.example.ts.net',
+    'home-dev.example.ts.net:0',
+    'home-dev.example.ts.net:65536',
+  ])('rejects invalid INTEXURAOS_ERROR_HUB_HOST value %s', (value) => {
+    expect(() => loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: value }))).toThrow(
+      /Invalid INTEXURAOS_ERROR_HUB_HOST/
+    );
+  });
+
+  it.each([
+    ['host with trailing LF', 'home-dev.example.ts.net\n'],
+    ['host and port with trailing LF', 'home-dev.example.ts.net:8443\n'],
+    ['host and port with trailing CRLF', 'home-dev.example.ts.net:8443\r\n'],
+    ['host and port with trailing tab', 'home-dev.example.ts.net:8443\t'],
+  ])('rejects INTEXURAOS_ERROR_HUB_HOST containing whitespace: %s', (_name, value) => {
+    expect(() => loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: value }))).toThrow(
+      /Invalid INTEXURAOS_ERROR_HUB_HOST/
+    );
+  });
+
+  it('does not repeat rejected Error Hub credentials in the startup error', () => {
+    const credentialValue = 'user:password@home-dev.example.ts.net';
+    let thrown: unknown;
+
+    try {
+      loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: credentialValue }));
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(IntexuraOSError);
+    expect((thrown as IntexuraOSError).message).not.toContain(credentialValue);
   });
 
   it('forwards INTEXURAOS_ENVIRONMENT and falls back to NODE_ENV when unset', () => {

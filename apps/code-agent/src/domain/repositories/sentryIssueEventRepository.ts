@@ -1,8 +1,10 @@
 import type { Result } from '@intexuraos/common-core';
 import type {
-  ReserveSentryIssueEventInput,
-  ReserveSentryIssueEventResult,
-  SentryIssueEventRecord,
+  AcquireSentryTaskReservationInput,
+  AcquireSentryTaskReservationResult,
+  CheckpointSentryLinearIssueInput,
+  CompleteSentryTaskReservationInput,
+  FailSentryTaskReservationInput,
 } from '../models/sentryIssueEvent.js';
 
 export interface SentryIssueEventRepositoryError {
@@ -11,17 +13,19 @@ export interface SentryIssueEventRepositoryError {
 }
 
 export interface SentryIssueEventRepository {
-  reserve(
-    input: ReserveSentryIssueEventInput
-  ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>>;
+  acquire(
+    input: AcquireSentryTaskReservationInput
+  ): Promise<Result<AcquireSentryTaskReservationResult, SentryIssueEventRepositoryError>>;
 
-  reserveTaskForProblem(
-    input: ReserveSentryIssueEventInput
-  ): Promise<Result<ReserveSentryIssueEventResult, SentryIssueEventRepositoryError>>;
+  checkpointLinearIssue(
+    input: CheckpointSentryLinearIssueInput
+  ): Promise<Result<void, SentryIssueEventRepositoryError>>;
 
-  markCodeTaskCreated(input: {
-    dedupeKey: string;
-    codeTaskId: string;
-    linearIssueId?: string | undefined;
-  }): Promise<Result<SentryIssueEventRecord, SentryIssueEventRepositoryError>>;
+  completeReservation(
+    input: CompleteSentryTaskReservationInput
+  ): Promise<Result<void, SentryIssueEventRepositoryError>>;
+
+  failReservation(
+    input: FailSentryTaskReservationInput
+  ): Promise<Result<void, SentryIssueEventRepositoryError>>;
 }

@@ -3037,13 +3037,30 @@ describe('DockerProvider', () => {
       expect(envArr).toContainEqual('WORKER_MANAGED_MODE=0');
     });
 
-    it('sets LINEAR_API_KEY and SENTRY_AUTH_TOKEN in env', async () => {
-      await provider.createWorker(createTestConfig());
+    it('sets LINEAR_API_KEY, SENTRY_AUTH_TOKEN, and the configured Error Hub host in env', async () => {
+      const config = createTestConfig();
+      await provider.createWorker(
+        createTestConfig({
+          secrets: {
+            ...config.secrets,
+            ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
+          },
+        })
+      );
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       expect(envArr).toContainEqual('LINEAR_API_KEY=test-linear-key');
       expect(envArr).toContainEqual('SENTRY_AUTH_TOKEN=test-sentry-token');
+      expect(envArr).toContainEqual('ERROR_HUB_HOST=home-dev.example.ts.net:8443');
+    });
+
+    it('does not inject ERROR_HUB_HOST when historical-only operation is configured', async () => {
+      await provider.createWorker(createTestConfig());
+
+      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
+      const envArr = createCall?.Env as string[];
+      expect(envArr.some((entry) => entry.startsWith('ERROR_HUB_HOST='))).toBe(false);
     });
   });
 

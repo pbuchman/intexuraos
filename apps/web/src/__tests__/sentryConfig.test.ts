@@ -35,6 +35,25 @@ describe('buildWebSentryConfig', () => {
     expect(JSON.stringify(result)).not.toContain('must-not-escape');
   });
 
+  it('passes an Error Hub DSN through unchanged with its environment and release', () => {
+    const dsn =
+      'https://0123456789abcdef0123456789abcdef@errors.intexuraos.cloud/2';
+
+    expect(
+      buildWebSentryConfig({
+        dsn,
+        environment: 'prod',
+        commitSha: '1234567890abcdef1234567890abcdef12345678',
+      }),
+    ).toEqual({
+      dsn,
+      environment: 'prod',
+      release: '1234567890abcdef1234567890abcdef12345678',
+      tracesSampleRate: 0.1,
+      sendDefaultPii: false,
+    });
+  });
+
   it('omits absent optional BrowserOptions instead of emitting undefined properties', () => {
     const result = buildWebSentryConfig({
       dsn: undefined,

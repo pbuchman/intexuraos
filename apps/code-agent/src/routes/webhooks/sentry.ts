@@ -44,6 +44,17 @@ const sentryWebhookResponseSchema = {
         },
       },
     },
+    503: {
+      description: 'A previous delivery still holds the processing lease',
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        error: {
+          type: 'object',
+          properties: { code: { type: 'string' }, message: { type: 'string' } },
+        },
+      },
+    },
   },
 } as const;
 
@@ -109,6 +120,9 @@ export const sentryWebhookRoute: FastifyPluginCallback = (fastify, _opts, done) 
       });
 
       if (!result.ok) {
+        if (result.reason === 'retryable') {
+          return await reply.fail('SERVICE_UNAVAILABLE', result.message);
+        }
         if (result.reason === 'invalid_signature') {
           return await reply.fail('UNAUTHORIZED', result.message);
         }

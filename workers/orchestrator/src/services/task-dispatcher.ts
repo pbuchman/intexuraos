@@ -98,6 +98,7 @@ export interface IsolationConfig {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
     SENTRY_AUTH_TOKEN: string;
+    ERROR_HUB_HOST?: string;
     MINIMAX_API_KEY: string;
     MIMO_API_KEY: string;
     DASHSCOPE_API_KEY: string;

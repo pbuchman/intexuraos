@@ -79,6 +79,10 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
     'npm_config_ignore_scripts=true',
   ];
 
+  if (config.secrets.ERROR_HUB_HOST !== undefined) {
+    env.push(`ERROR_HUB_HOST=${config.secrets.ERROR_HUB_HOST}`);
+  }
+
   if (runtime === 'claude') {
     env.push('CLAUDE_PROJECT_DIR=/repo');
     if (!useSharedCreds) {

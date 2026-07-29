@@ -3,10 +3,27 @@
 # Codex CLI Stub for E2E Testing
 # ==============================================================================
 # Simulates Codex CLI for E2E tests without making real API calls.
-# Supports `codex exec` and `codex exec resume` subcommands.
+# Supports `codex exec`, `codex exec resume`, and the read-only MCP config lookup
+# used by the real Error Hub E2E verifier.
 # Streams output line-by-line to stdout (matching real Codex behavior).
 
 set -euo pipefail
+
+if [ "${1:-}" = "mcp" ]; then
+  if [ "$#" -ne 4 ] || [ "${2:-}" != "get" ] || [ "${3:-}" != "error_hub" ] || [ "${4:-}" != "--json" ]; then
+    echo "[codex-stub] ERROR: Unsupported MCP command" >&2
+    exit 1
+  fi
+
+  CONFIG_PATH="/home/claude/.codex/config.toml"
+  grep -Fq '[mcp_servers.error_hub]' "$CONFIG_PATH"
+  grep -Fq 'command = "sh"' "$CONFIG_PATH"
+  grep -Fq "exec sentry-mcp --access-token tailnet-only --host \"\$ERROR_HUB_HOST\" --disable-skills=seer" "$CONFIG_PATH"
+  cat <<'JSON'
+{"name":"error_hub","enabled":true,"disabled_reason":null,"transport":{"type":"stdio","command":"sh","args":["-lc","exec sentry-mcp --access-token tailnet-only --host \"$ERROR_HUB_HOST\" --disable-skills=seer"],"env":null,"env_vars":[],"cwd":null}}
+JSON
+  exit 0
+fi
 
 # Parse subcommand
 SUBCOMMAND="${1:-}"
