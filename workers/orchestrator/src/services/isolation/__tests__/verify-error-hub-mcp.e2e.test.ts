@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
@@ -69,6 +69,9 @@ describe.skipIf(!prerequisitesAvailable)('Error Hub MCP worker image verificatio
       ],
       { stdio: 'ignore' }
     );
+    // Rootless/user-namespaced Docker cannot read OpenSSL's default 0600 host file
+    // through a bind mount. This key is short-lived and only secures the local test fixture.
+    chmodSync(keyPath, 0o644);
     const baseImageId = execFileSync(
       'docker',
       ['image', 'inspect', '--format', '{{.Id}}', workerImage ?? ''],
