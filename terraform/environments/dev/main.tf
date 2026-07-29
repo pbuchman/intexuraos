@@ -1398,13 +1398,6 @@ resource "google_project_iam_member" "transcription_eventarc" {
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
-# Keep legacy Sentry DSN access during the staged switch to the dedicated dev secret.
-resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
 # Grant transcription SA permission to access the dedicated dev Sentry DSN secret.
 resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {
   secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]
@@ -1512,7 +1505,6 @@ module "function_transcription" {
     google_pubsub_topic.transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
-    google_secret_manager_secret_iam_member.transcription_sentry_dsn,
     google_secret_manager_secret_iam_member.transcription_sentry_dsn_dev,
     google_storage_bucket_iam_member.transcription_media_reader,
     google_project_iam_member.transcription_eventarc,
