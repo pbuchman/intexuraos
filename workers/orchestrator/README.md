@@ -661,11 +661,11 @@ pnpm typecheck    # Type checking
 
 ### E2E Prerequisites
 
-| Requirement    | Check Command                            | Install                             |
-| -------------- | ---------------------------------------- | ----------------------------------- |
-| Docker daemon  | `docker info`                            | Docker Desktop                      |
-| Docker network | `docker network inspect code-worker-net` | `./scripts/setup-worker-network.sh` |
-| Test image     | `docker image inspect code-worker:test`  | See below                           |
+| Requirement    | Check Command                           | Install                           |
+| -------------- | --------------------------------------- | --------------------------------- |
+| Docker daemon  | `docker info`                           | Docker Desktop                    |
+| Docker network | `./scripts/setup-worker-network.sh`     | Same command creates or validates |
+| Test image     | `docker image inspect code-worker:test` | See below                         |
 
 ```bash
 # Setup

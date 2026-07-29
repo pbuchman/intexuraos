@@ -12,7 +12,7 @@ graph TB
         Orchestrator[Orchestrator Process]
 
         subgraph "Docker Engine"
-            Network[code-worker-net<br/>172.28.0.0/16]
+            Network[code-worker-net<br/>172.28.0.0/16<br/>fd00:172:28::/64]
 
             subgraph "Container: code-worker-{taskId}"
                 Entrypoint[entrypoint.sh]
@@ -139,12 +139,12 @@ Added timeout enforcement for the Linear MCP server integration to prevent hung 
 
 | Target                                    | Access  | Enforcement                 |
 | ----------------------------------------- | ------- | --------------------------- |
-| Public internet                           | Allowed | Default Docker bridge       |
+| Public internet                           | Allowed | User-defined worker bridge  |
 | Cloud metadata                            | Blocked | iptables on production host |
 | Localhost (127.0.0.0/8)                   | Blocked | iptables on production host |
 | Private IPs (10/8, 172.16/12, 192.168/16) | Blocked | iptables on production host |
 
-Network: `code-worker-net` (bridge driver, subnet `172.28.0.0/16`, IP masquerade enabled).
+Network: `code-worker-net` (dual-stack bridge driver, fixed Linux bridge `code-worker-br`, IPv4 subnet `172.28.0.0/16`, IPv6 subnet `fd00:172:28::/64`, IP masquerade enabled).
 
 ## Mount Points
 

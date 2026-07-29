@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:https';
 
 const eventId = process.env['FIXTURE_EVENT_ID'];
@@ -75,6 +75,13 @@ const server = createServer(
     key: readFileSync('/fixture/tls/key.pem'),
   },
   (request, response) => {
+    writeFileSync(
+      '/tmp/last-peer.json',
+      JSON.stringify({
+        address: request.socket.remoteAddress,
+        family: request.socket.remoteFamily,
+      })
+    );
     if (request.method === 'GET' && request.url === '/health') {
       sendJson(response, 200, { ok: true });
       return;
@@ -137,7 +144,7 @@ const server = createServer(
   }
 );
 
-server.listen(8443, '0.0.0.0');
+server.listen({ host: '::', ipv6Only: true, port: 8443 });
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => server.close(() => process.exit(0)));
