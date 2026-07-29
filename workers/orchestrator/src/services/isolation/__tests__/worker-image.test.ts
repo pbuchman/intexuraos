@@ -45,6 +45,16 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
   });
 
+  it('keeps the CI worker image capable of exercising the real Error Hub MCP entry', () => {
+    const dockerfile = readFileSync(dockerfileTestPath, 'utf8');
+
+    expect(dockerfile).toContain('@sentry/mcp-server@0.37.0');
+    expect(dockerfile).toContain(
+      'COPY --chown=claude:claude config-defaults/codex-config.toml /opt/codex-home/.codex/config.toml'
+    );
+    expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
+  });
+
   it('bakes and restores Codex MCP config with Linear, Sentry, and Error Hub access', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf8');
     const entrypoint = readFileSync(entrypointPath, 'utf8');
