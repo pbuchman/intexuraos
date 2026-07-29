@@ -235,7 +235,16 @@ export function createLinearApiClient(): LinearApiClient {
 
           const client = getOrCreateClient(apiKey);
 
-          const issue = await client.issue(issueId);
+          let issue: Issue;
+          try {
+            issue = await client.issue(issueId);
+          } catch (error) {
+            if (/entity not found:\s*issue\b/iu.test(getErrorMessage(error, ''))) {
+              logger.info({ issueId }, 'Issue not found by ID');
+              return null;
+            }
+            throw error;
+          }
           return await mapSingleIssue(issue);
         });
 
