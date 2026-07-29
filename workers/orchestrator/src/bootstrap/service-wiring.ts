@@ -254,6 +254,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     ANTHROPIC_API_KEY: workerAuthRegistry.getCurrentAccessToken('claude') ?? '',
     LINEAR_API_KEY: env.linearApiKey,
     SENTRY_AUTH_TOKEN: env.sentryAuthToken,
+    ...(env.errorHubHost !== undefined ? { ERROR_HUB_HOST: env.errorHubHost } : {}),
     MINIMAX_API_KEY: env.minimaxApiKey,
     MIMO_API_KEY: env.mimoApiKey,
     DASHSCOPE_API_KEY: env.dashscopeApiKey,
