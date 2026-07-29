@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Timestamp } from '@google-cloud/firestore';
 import type { Firestore } from '@google-cloud/firestore';
 import { createFakeFirestore } from '@intexuraos/infra-firestore';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LifecycleOperationError,
   acquireLifecycleMaintenanceLock,
@@ -863,6 +863,15 @@ describe('owner-fenced lifecycle maintenance lock', () => {
 });
 
 describe('journal CAS apply and rollback', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-28T12:00:01.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('applies pre→post, rolls back in reverse post→pre, and never overwrites unrelated fields', async () => {
     const fake = createFakeFirestore();
     const precise = new Timestamp(1_785_240_000, 987_654_321);
