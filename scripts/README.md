@@ -142,7 +142,9 @@ Deploys Cloud Function workers to GCS. Builds the worker, generates a production
 
 ### setup-worker-network.sh
 
-Creates an isolated Docker network for code-worker containers with IP-level restrictions blocking metadata server, localhost, and private IP ranges.
+Creates and validates the dual-stack Docker network for code-worker containers. Existing
+networks that do not match the required IPv4, IPv6, fixed Linux bridge name, and masquerade
+contract are rejected without modification.
 
 ```bash
 ./scripts/setup-worker-network.sh

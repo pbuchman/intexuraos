@@ -7,7 +7,7 @@
  * Prerequisites:
  * - Docker daemon running
  * - Test worker image built: docker build -t code-worker:test -f Dockerfile.test .
- * - Worker network created: docker network create code-worker-net
+ * - Dual-stack worker network created: ./scripts/setup-worker-network.sh
  *
  * To run locally:
  *   pnpm --filter orchestrator test:e2e
@@ -21,9 +21,10 @@ import * as os from 'node:os';
 import { execSync } from 'node:child_process';
 import { DockerProvider } from '../docker-provider.js';
 import type { WorkerConfig } from '../types.js';
+import { assertWorkerNetworkContract, WORKER_NETWORK_NAME } from './worker-network-contract.js';
 
 const TEST_IMAGE = process.env['WORKER_IMAGE'] ?? 'code-worker:test';
-const TEST_NETWORK = process.env['WORKER_NETWORK'] ?? 'code-worker-net';
+const TEST_NETWORK = WORKER_NETWORK_NAME;
 const TEST_TIMEOUT = 60_000;
 
 function isDockerAvailable(): boolean {
@@ -84,6 +85,10 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
   let testWorktreePath: string;
   let testSecretsPath: string;
   const createdTaskIds: string[] = [];
+
+  it('requires the exact dual-stack worker network contract', () => {
+    expect(() => assertWorkerNetworkContract()).not.toThrow();
+  });
 
   beforeAll(async () => {
     if (skipIfNoImage) {

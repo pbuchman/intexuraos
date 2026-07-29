@@ -21,7 +21,7 @@ const EVENT_ID_PATTERN = /^[a-f0-9]{32}$/u;
 
 export function parseVerificationConfiguration(argv, environment) {
   if (!Array.isArray(argv) || argv.length !== 2) {
-    throw new TypeError('usage: verify:error-hub-mcp -- <private issue URL> <event ID>');
+    throw new TypeError('usage: verify:error-hub-mcp <private issue URL> <event ID>');
   }
 
   const issueUrlText = requiredString(argv[0], 'private issue URL');

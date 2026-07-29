@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { assertWorkerNetworkContract, WORKER_NETWORK_NAME } from './worker-network-contract.js';
+import { createAaaaOnlyDockerProxy } from './aaaa-only-docker-proxy.js';
 
 const execFileAsync = promisify(execFile);
 const workerImage = process.env['ERROR_HUB_MCP_E2E_IMAGE'] ?? process.env['WORKER_IMAGE'];
-const network = 'code-worker-net';
+const network = WORKER_NETWORK_NAME;
 const eventId = 'cccccccccccccccccccccccccccccccc';
 const fixtureHost = `error-hub-mcp-${String(process.pid)}.test.ts.net`;
 const fixtureContainer = `error-hub-mcp-fixture-${String(process.pid)}`;
@@ -36,10 +38,12 @@ const prerequisitesAvailable =
 
 describe.skipIf(!prerequisitesAvailable)('Error Hub MCP worker image verification', () => {
   let directory = '';
+  let dockerProxyEnvironment: Readonly<Record<string, string>> = {};
   let trustedImageId = '';
   let workerPlatform = '';
 
   beforeAll(async () => {
+    assertWorkerNetworkContract();
     directory = mkdtempSync(join(tmpdir(), 'error-hub-mcp-e2e-'));
     const tlsDirectory = join(directory, 'tls');
     const trustDirectory = join(directory, 'trust');
@@ -149,6 +153,30 @@ USER claude
       { stdio: 'ignore' }
     );
 
+    const fixtureIpv6Address = execFileSync(
+      'docker',
+      [
+        'container',
+        'inspect',
+        '--format',
+        '{{range .NetworkSettings.Networks}}{{.GlobalIPv6Address}}{{end}}',
+        fixtureContainer,
+      ],
+      { encoding: 'utf8' }
+    ).trim();
+    if (!fixtureIpv6Address.startsWith('fd00:172:28:')) {
+      throw new Error(`HTTPS SentryBox fixture has invalid IPv6 address: ${fixtureIpv6Address}`);
+    }
+    const realDockerPath = execFileSync('sh', ['-c', 'command -v docker'], {
+      encoding: 'utf8',
+    }).trim();
+    dockerProxyEnvironment = createAaaaOnlyDockerProxy({
+      directory,
+      host: fixtureHost,
+      ipv6Address: fixtureIpv6Address,
+      realDockerPath,
+    }).environment;
+
     let ready = false;
     for (let attempt = 0; attempt < 40; attempt += 1) {
       ready = commandSucceeds('docker', [
@@ -157,7 +185,7 @@ USER claude
         'node',
         '--input-type=module',
         '--eval',
-        "process.env.NODE_TLS_REJECT_UNAUTHORIZED='0';const r=await fetch('https://127.0.0.1:8443/health');if(!r.ok)process.exit(1)",
+        "process.env.NODE_TLS_REJECT_UNAUTHORIZED='0';const r=await fetch('https://[::1]:8443/health');if(!r.ok)process.exit(1)",
       ]);
       if (ready) break;
       await new Promise((resolveWait) => setTimeout(resolveWait, 250));
@@ -182,8 +210,10 @@ USER claude
     const { stdout } = await execFileAsync(process.execPath, [scriptPath, issueUrl, eventId], {
       env: {
         ...process.env,
+        ...dockerProxyEnvironment,
         INTEXURAOS_CODE_WORKER_IMAGE: trustedImageId,
         INTEXURAOS_ERROR_HUB_HOST: `${fixtureHost}:8443`,
+        PATH: `${directory}:${process.env['PATH'] ?? ''}`,
       },
       maxBuffer: 1024 * 1024,
       timeout: 90_000,
@@ -202,5 +232,13 @@ USER claude
       title: 'Controlled SentryBox validation fault',
       tools: ['get_issue_details', 'search_issue_events'],
     });
+
+    const peerEvidence = JSON.parse(
+      execFileSync('docker', ['exec', fixtureContainer, 'cat', '/tmp/last-peer.json'], {
+        encoding: 'utf8',
+      })
+    ) as unknown;
+    expect(peerEvidence).toMatchObject({ family: 'IPv6' });
+    expect(peerEvidence).toHaveProperty('address', expect.stringMatching(/^fd00:172:28:/u));
   }, 120_000);
 });
