@@ -189,6 +189,7 @@ describe('internalIssuesRoutes', () => {
     });
 
     it('returns the same Linear issue for the same creation idempotency key', async () => {
+      const createIssue = vi.spyOn(fakeLinearClient, 'createIssue');
       const request = {
         method: 'POST' as const,
         url: '/internal/issues',
@@ -213,6 +214,9 @@ describe('internalIssuesRoutes', () => {
       expect(second.statusCode).toBe(200);
       expect(secondBody.data).toEqual(firstBody.data);
       expect(issues.ok && issues.value).toHaveLength(1);
+      expect(createIssue.mock.calls[0]?.[1].id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+      );
     });
 
     it('returns the Linear lookup error before idempotent creation', async () => {
