@@ -9,6 +9,7 @@ import { clearClientCache, createLinearApiClient } from '../../infra/linear/line
 
 const mocks = vi.hoisted(() => ({
   issues: vi.fn(),
+  issue: vi.fn(),
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@linear/sdk', () => ({
   LinearClient: vi.fn(function LinearClient() {
     return {
       issues: mocks.issues,
+      issue: mocks.issue,
     };
   }),
 }));
@@ -288,6 +290,34 @@ describe('LinearApiClient', () => {
       const result = await fakeClient.getIssue('api-key', 'issue-123');
 
       expect(result.ok).toBe(false);
+    });
+
+    it('returns null when the Linear SDK reports that the issue does not exist', async () => {
+      mocks.issue.mockRejectedValueOnce(new Error('Entity not found: Issue'));
+      const client = createLinearApiClient();
+
+      const result = await client.getIssue('api-key', 'stable-idempotent-issue-id');
+
+      expect(result).toEqual({ ok: true, value: null });
+      expect(mocks.error).not.toHaveBeenCalled();
+      expect(mocks.info).toHaveBeenCalledWith(
+        { issueId: 'stable-idempotent-issue-id' },
+        'Issue not found by ID'
+      );
+    });
+
+    it('does not hide a mapping failure for an issue that was found', async () => {
+      mocks.issue.mockResolvedValueOnce({
+        state: Promise.resolve(null),
+        children: vi.fn().mockResolvedValue({ nodes: [] }),
+        parent: Promise.reject(new Error('Entity not found: Issue')),
+      });
+      const client = createLinearApiClient();
+
+      const result = await client.getIssue('api-key', 'existing-issue-id');
+
+      expect(result.ok).toBe(false);
+      expect(mocks.error).toHaveBeenCalled();
     });
   });
 
