@@ -1,0 +1,25 @@
+{
+  "action": "triggered",
+  "data": {
+    "event": {
+      "event_id": "4f7a4f2c0e8e4c2a9c3d5e7f90123456",
+      "title": "TypeError: Cannot read properties of undefined",
+      "web_url": "https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1042/events/4f7a4f2c0e8e4c2a9c3d5e7f90123456/",
+      "issue": {
+        "id": "1042",
+        "shortId": "INTEXURA-HUB-1042",
+        "title": "TypeError: Cannot read properties of undefined",
+        "permalink": "https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1042/",
+        "status": "unresolved",
+        "project": {
+          "id": "1",
+          "slug": "intexuraos-backend"
+        }
+      },
+      "project": {
+        "id": "1",
+        "slug": "intexuraos-backend"
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@
  */
 
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fastify, { type FastifyInstance } from 'fastify';
 import { intexuraFastifyPlugin } from '@intexuraos/common-http';
@@ -16,6 +17,10 @@ import {
 } from '../../../routes/webhooks/sentry.js';
 
 const WEBHOOK_SECRET = 'sentry-webhook-secret';
+const ERROR_HUB_EVENT_ALERT_RAW = readFileSync(
+  new URL('../../fixtures/error-hub-event-alert.json', import.meta.url),
+  'utf8',
+);
 
 function buildIssueBody(): Record<string, unknown> {
   return {
@@ -145,6 +150,55 @@ describe('POST /webhooks/sentry', () => {
       }),
     }));
   });
+
+  it('accepts the exact signed Error Hub event_alert contract without route changes', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sentry',
+      headers: {
+        'content-type': 'application/json',
+        'sentry-hook-resource': 'event_alert',
+        'sentry-hook-signature': sign(ERROR_HUB_EVENT_ALERT_RAW),
+      },
+      payload: ERROR_HUB_EVENT_ALERT_RAW,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body)).toEqual({
+      success: true,
+      data: {
+        message: 'Sentry issue code task created',
+      },
+    });
+    expect(sentryReservationAcquire).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: {
+          resource: 'event_alert',
+          action: 'triggered',
+          organizationSlug: 'intexuraos',
+          projectSlug: 'intexuraos-backend',
+          projectId: '1',
+          issueId: '1042',
+          issueShortId: 'INTEXURA-HUB-1042',
+          issueTitle: 'TypeError: Cannot read properties of undefined',
+          issueUrl:
+            'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1042/',
+          status: 'unresolved',
+          eventId: '4f7a4f2c0e8e4c2a9c3d5e7f90123456',
+        },
+      }),
+    );
+    expect(codeTaskCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentType: 'sentry',
+        sentryIssue: expect.objectContaining({
+          issueId: '1042',
+          eventId: '4f7a4f2c0e8e4c2a9c3d5e7f90123456',
+        }),
+      }),
+    );
+  });
+
 
   it('rejects an invalid Sentry signature', async () => {
     const response = await app.inject({
