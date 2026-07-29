@@ -475,7 +475,7 @@ export function createFirestoreSentryIssueEventRepository(deps: {
           failureReason: undefined,
           eventId: input.event.eventId,
         };
-        const linearIssueId = exactTransition?.linearIssueId ?? issueReservation?.linearIssueId;
+        const linearIssueId = exactTransition?.linearIssueId;
         const reservedFields = {
           transitionKey,
           event: input.event,
