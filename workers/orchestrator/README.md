@@ -256,17 +256,22 @@ The orchestrator's env file is NOT auto-synced. To update after secrets change i
 cd ~/deploy/intexuraos
 ./scripts/sync-secrets.sh
 
-# 2. Read the non-secret private SentryBox host from local machine config
+# 2. Read non-secret local-only values from local machine config
 error_hub_host="$(
   source .envrc.local
   printf '%s' "${INTEXURAOS_ERROR_HUB_HOST:?Set INTEXURAOS_ERROR_HUB_HOST in .envrc.local}"
 )"
+usage_webhook_url="$(
+  source .envrc.local
+  printf '%s' "${INTEXURAOS_USAGE_WEBHOOK_URL:?Set INTEXURAOS_USAGE_WEBHOOK_URL in .envrc.local}"
+)"
 
-# 3. Re-extract orchestrator vars and append the local-only host exactly once
+# 3. Re-extract orchestrator vars and append local-only values exactly once
 grep -E '^export INTEXURAOS_' .envrc \
-  | grep -v '^export INTEXURAOS_ERROR_HUB_HOST=' \
+  | grep -Ev '^export INTEXURAOS_(ERROR_HUB_HOST|USAGE_WEBHOOK_URL)=' \
   | sed 's/^export //' > ~/.code-orchestrator/env
 printf 'INTEXURAOS_ERROR_HUB_HOST=%s\n' "${error_hub_host}" >> ~/.code-orchestrator/env
+printf 'INTEXURAOS_USAGE_WEBHOOK_URL=%s\n' "${usage_webhook_url}" >> ~/.code-orchestrator/env
 echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json" >> ~/.code-orchestrator/env
 echo "PORT=8199" >> ~/.code-orchestrator/env
 echo "INTEXURAOS_WORKER_CAPACITY=3" >> ~/.code-orchestrator/env
@@ -275,7 +280,7 @@ echo "LOG_LEVEL=info" >> ~/.code-orchestrator/env
 echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8128" >> ~/.code-orchestrator/env
 echo "INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman" >> ~/.code-orchestrator/env
 chmod 600 ~/.code-orchestrator/env
-unset error_hub_host
+unset error_hub_host usage_webhook_url
 
 # 4. Restart
 sudo systemctl restart intexuraos-orchestrator@pbuchman
