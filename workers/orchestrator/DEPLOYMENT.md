@@ -142,18 +142,18 @@ Orchestrator reuses the same container for follow-up attempts and invokes `--con
 
 Set by `docker-provider.ts` when creating containers:
 
-| Variable                         | Source                | Purpose                           |
-| -------------------------------- | --------------------- | --------------------------------- |
-| `TASK_ID`                        | Task config           | Task identifier                   |
-| `ANTHROPIC_API_KEY`              | OAuth access token    | Claude API authentication         |
-| `ANTHROPIC_BASE_URL`             | Worker type config    | API endpoint (varies by provider) |
-| `ANTHROPIC_MODEL`                | Worker type config    | Model override (optional)         |
-| `LINEAR_API_KEY`                 | Secrets               | Linear MCP integration            |
-| `ERROR_HUB_HOST`                 | Orchestrator config   | Private SentryBox MCP host        |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Hardcoded `/secrets/` | GCP auth inside container         |
-| `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`     | Hook path resolution              |
-| `WORKER_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode   |
-| `WORKER_CONTINUE`                | Per-attempt config    | Resume previous runtime session   |
+| Variable                         | Source                | Purpose                               |
+| -------------------------------- | --------------------- | ------------------------------------- |
+| `TASK_ID`                        | Task config           | Task identifier                       |
+| `ANTHROPIC_API_KEY`              | OAuth access token    | Claude API authentication             |
+| `ANTHROPIC_BASE_URL`             | Worker type config    | API endpoint (varies by provider)     |
+| `ANTHROPIC_MODEL`                | Worker type config    | Model override (optional)             |
+| `LINEAR_API_KEY`                 | Secrets               | Linear MCP integration                |
+| `ERROR_HUB_HOST`                 | Orchestrator config   | Private SentryBox `.ts.net:8443` host |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Hardcoded `/secrets/` | GCP auth inside container             |
+| `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`     | Hook path resolution                  |
+| `WORKER_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode       |
+| `WORKER_CONTINUE`                | Per-attempt config    | Resume previous runtime session       |
 
 ---
 

@@ -120,8 +120,8 @@ describe('pickAgentLabel', () => {
   it('returns "Ask Agent" for ask_agent tasks', () => {
     expect(pickAgentLabel(makeTask({ agentType: 'ask_agent' }))).toBe('Ask Agent');
   });
-  it('returns "Sentry Agent" for sentry tasks', () => {
-    expect(pickAgentLabel(makeTask({ agentType: 'sentry' }))).toBe('Sentry Agent');
+  it('returns "SentryBox Agent" for sentry tasks', () => {
+    expect(pickAgentLabel(makeTask({ agentType: 'sentry' }))).toBe('SentryBox Agent');
   });
   it('returns "Execution Agent" for code-task-labeled tasks without agentType', () => {
     const task = makeTask({ linearIssueLabels: ['code-task'] });
@@ -141,7 +141,7 @@ describe('describeAgent', () => {
     ['Review Agent', 'read-only'],
     ['Remediation Agent', 'review findings'],
     ['Ask Agent', 'interactive'],
-    ['Sentry Agent', 'Sentry issue'],
+    ['SentryBox Agent', 'SentryBox issue'],
     ['Execution Agent', 'implement autonomously'],
     ['Planning Agent', 'planning artifacts'],
   ])('returns the %s tagline containing %j', (label, expectedSubstring) => {

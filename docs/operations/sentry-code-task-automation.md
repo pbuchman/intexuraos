@@ -65,7 +65,7 @@ The orchestrator / worker runtime requires:
 
 | Variable | Purpose |
 | --- | --- |
-| `INTEXURAOS_ERROR_HUB_HOST` | Private SentryBox `host[:port]`, injected into workers as `ERROR_HUB_HOST`. |
+| `INTEXURAOS_ERROR_HUB_HOST` | Private SentryBox `.ts.net:8443` host, injected into workers as `ERROR_HUB_HOST`. |
 | `LINEAR_API_KEY` | Existing Linear MCP credential used by the worker for the linked Linear issue. |
 
 Hetzner production receives and authenticates the webhook, so it loads

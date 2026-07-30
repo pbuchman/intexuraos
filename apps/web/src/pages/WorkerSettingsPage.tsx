@@ -126,9 +126,9 @@ export function WorkerSettingsPage(): React.JSX.Element {
       </div>
       <div className="mb-6">
         <DefaultWorkerTypeCard
-          title="Default Sentry Model"
-          description="Model used for automatic Sentry issue fixes."
-          successMessage="Default Sentry model saved"
+          title="Default SentryBox Model"
+          description="Model used for automatic SentryBox issue fixes."
+          successMessage="Default SentryBox model saved"
           currentType={settings?.defaultSentryWorkerType ?? 'auto'}
           onUpdate={(wt): Promise<void> => updateDefaultWorkerType('sentry', wt)}
         />

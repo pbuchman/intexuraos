@@ -124,7 +124,7 @@
 ## Related
 
 - **Parent Issue:** [INT-XXX](url)
-- **Sentry:** [Issue Title](url) (if applicable)
+- **SentryBox:** [Issue Title](url) (if applicable)
 - **Documentation:** [Doc Link](url)
 
 ---

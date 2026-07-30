@@ -827,9 +827,14 @@ describe('processSentryWebhook', () => {
 
     expect(result.ok && result.outcome).toBe('processed');
     expect(mocks.codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.stringContaining('Event ID: event-4509002'),
+      prompt: expect.stringContaining('SentryBox reported an actionable IntexuraOS issue.'),
       sentryIssue: expect.objectContaining({ eventId: 'event-4509002', issueId: '4509002' }),
     }));
+    const prompt = mocks.codeTaskRepo.create.mock.calls[0]?.[0]?.prompt;
+    expect(prompt).toContain('SentryBox issue: Error: fetch failed');
+    expect(prompt).toContain('SentryBox URL:');
+    expect(prompt).toContain('Event ID: event-4509002');
+    expect(prompt).toContain('Fetch current SentryBox issue details and recent events');
   });
 
   it('ignores terminal event_alert.triggered deliveries before acquisition', async () => {

@@ -21,8 +21,9 @@ interface SentryWebhookHeaders {
 
 const sentryWebhookResponseSchema = {
   operationId: 'sentryWebhook',
-  summary: 'Receive Sentry issue webhook events',
-  description: 'Receives Sentry issue and event_alert webhook events and creates a Sentry code task.',
+  summary: 'Receive SentryBox issue webhook events',
+  description:
+    'Receives SentryBox issue and event_alert webhook events and creates a SentryBox code task.',
   tags: ['webhooks', 'sentry'],
   response: {
     200: {

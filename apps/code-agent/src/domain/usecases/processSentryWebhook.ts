@@ -74,10 +74,10 @@ function retryableLeaseResult(): ProcessSentryWebhookResult {
 
 function buildSentryTaskPrompt(event: NormalizedSentryIssueEvent): string {
   return [
-    'Sentry reported an actionable IntexuraOS issue.',
+    'SentryBox reported an actionable IntexuraOS issue.',
     '',
-    `Sentry issue: ${event.issueTitle}`,
-    `Sentry URL: ${event.issueUrl}`,
+    `SentryBox issue: ${event.issueTitle}`,
+    `SentryBox URL: ${event.issueUrl}`,
     `Organization: ${event.organizationSlug}`,
     `Project: ${event.projectSlug}`,
     `Issue ID: ${event.issueId}`,
@@ -85,7 +85,7 @@ function buildSentryTaskPrompt(event: NormalizedSentryIssueEvent): string {
     `Webhook action: ${event.action}`,
     event.eventId !== undefined ? `Event ID: ${event.eventId}` : undefined,
     '',
-    'Handle this without user interaction. Fetch current Sentry issue details and recent events, attempt reproduction when feasible, then open a pull request that either fixes the bug or suppresses the report in code with evidence.',
+    'Handle this without user interaction. Fetch current SentryBox issue details and recent events, attempt reproduction when feasible, then open a pull request that either fixes the bug or suppresses the report in code with evidence.',
   ].filter((line): line is string => line !== undefined).join('\n');
 }
 

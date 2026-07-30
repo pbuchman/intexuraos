@@ -74,8 +74,9 @@ const DEFAULT_WORKER_TYPE_ROUTES: readonly DefaultWorkerTypeRoute[] = [
   {
     path: '/worker-settings/default-sentry-worker-type',
     operationId: 'updateDefaultSentryWorkerType',
-    summary: 'Update default Sentry worker type',
-    description: 'Set the default worker type for automated Sentry issue fixes. Requires Auth0 JWT.',
+    summary: 'Update default SentryBox worker type',
+    description:
+      'Set the default worker type for automated SentryBox issue fixes. Requires Auth0 JWT.',
     field: 'defaultSentryWorkerType',
     label: 'sentry',
   },

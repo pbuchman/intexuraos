@@ -227,7 +227,7 @@ const handle = await provider.createWorker({
   secrets: {
     ANTHROPIC_API_KEY: 'sk-ant-...',
     LINEAR_API_KEY: 'lin_api_...',
-    ERROR_HUB_HOST: 'home-dev.tailnet.example:8443',
+    ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     MINIMAX_API_KEY: '',
     DASHSCOPE_API_KEY: '',
     OPENROUTER_API_KEY: '',

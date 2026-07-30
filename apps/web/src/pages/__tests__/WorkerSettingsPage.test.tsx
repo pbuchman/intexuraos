@@ -97,7 +97,9 @@ describe('WorkerSettingsPage', () => {
 
     expect(mockDefaultWorkerTypeCard).toHaveBeenCalledWith(
       expect.objectContaining({
-        title: 'Default Sentry Model',
+        title: 'Default SentryBox Model',
+        description: 'Model used for automatic SentryBox issue fixes.',
+        successMessage: 'Default SentryBox model saved',
         currentType: 'codex-xhigh',
       })
     );

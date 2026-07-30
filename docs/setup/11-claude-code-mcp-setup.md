@@ -24,7 +24,7 @@ second version at task startup.
 | Variable         | Purpose                                      |
 | ---------------- | -------------------------------------------- |
 | `LINEAR_API_KEY` | Linear issue-management access               |
-| `ERROR_HUB_HOST` | Private SentryBox host, without URL scheme   |
+| `ERROR_HUB_HOST` | Private SentryBox `.ts.net:8443` host, without URL scheme |
 
 For a direct local Claude session:
 

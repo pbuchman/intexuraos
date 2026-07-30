@@ -92,7 +92,7 @@ All vars come from `.envrc` (synced from GCP via `sync-secrets.sh`) and `.envrc.
 | `INTEXURAOS_GITHUB_INSTALLATION_ID` | `.envrc`       | GitHub App installation ID                        |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | `.envrc`       | Service-to-service auth                           |
 | `INTEXURAOS_LINEAR_API_KEY`         | `.envrc`       | Linear API key (passed to workers)                |
-| `INTEXURAOS_ERROR_HUB_HOST`         | `.envrc`       | Private SentryBox host passed to workers          |
+| `INTEXURAOS_ERROR_HUB_HOST`         | `.envrc.local` | Private SentryBox `.ts.net:8443` host for workers |
 | `INTEXURAOS_ZAI_APP_API_KEY`        | `.envrc`       | ZAI API key (passed to workers)                   |
 | `INTEXURAOS_KIMI_APP_API_KEY`       | `.envrc`       | Kimi Code API key for the `kimi` worker type      |
 | `INTEXURAOS_GEMINI_APP_API_KEY`     | `.envrc`       | Gemini API key (required for completion verifier) |
@@ -256,8 +256,17 @@ The orchestrator's env file is NOT auto-synced. To update after secrets change i
 cd ~/deploy/intexuraos
 ./scripts/sync-secrets.sh
 
-# 2. Re-extract orchestrator vars
-grep -E '^export INTEXURAOS_' .envrc | sed 's/^export //' > ~/.code-orchestrator/env
+# 2. Read the non-secret private SentryBox host from local machine config
+error_hub_host="$(
+  source .envrc.local
+  printf '%s' "${INTEXURAOS_ERROR_HUB_HOST:?Set INTEXURAOS_ERROR_HUB_HOST in .envrc.local}"
+)"
+
+# 3. Re-extract orchestrator vars and append the local-only host exactly once
+grep -E '^export INTEXURAOS_' .envrc \
+  | grep -v '^export INTEXURAOS_ERROR_HUB_HOST=' \
+  | sed 's/^export //' > ~/.code-orchestrator/env
+printf 'INTEXURAOS_ERROR_HUB_HOST=%s\n' "${error_hub_host}" >> ~/.code-orchestrator/env
 echo "GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json" >> ~/.code-orchestrator/env
 echo "PORT=8199" >> ~/.code-orchestrator/env
 echo "INTEXURAOS_WORKER_CAPACITY=3" >> ~/.code-orchestrator/env
@@ -266,8 +275,9 @@ echo "LOG_LEVEL=info" >> ~/.code-orchestrator/env
 echo "INTEXURAOS_CODE_AGENT_URL=http://localhost:8128" >> ~/.code-orchestrator/env
 echo "INTEXURAOS_PROJECT_ID=intexuraos-dev-pbuchman" >> ~/.code-orchestrator/env
 chmod 600 ~/.code-orchestrator/env
+unset error_hub_host
 
-# 3. Restart
+# 4. Restart
 sudo systemctl restart intexuraos-orchestrator@pbuchman
 ```
 
