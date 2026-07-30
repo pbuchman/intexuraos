@@ -135,7 +135,7 @@ const isolationConfig: IsolationConfig = {
   getSecrets: () => ({
     ANTHROPIC_API_KEY: '',
     LINEAR_API_KEY: '',
-    SENTRY_AUTH_TOKEN: '',
+    ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     MINIMAX_API_KEY: '',
     MIMO_API_KEY: '',
     DASHSCOPE_API_KEY: '',

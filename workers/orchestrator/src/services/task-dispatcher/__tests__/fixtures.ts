@@ -118,7 +118,7 @@ export function makeContextHarness(initialTasks: Task[] = []): ContextHarness {
       getSecrets: vi.fn().mockReturnValue({
         ANTHROPIC_API_KEY: 'a',
         LINEAR_API_KEY: 'l',
-        SENTRY_AUTH_TOKEN: 's',
+        ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
         MINIMAX_API_KEY: 'm',
         MIMO_API_KEY: 'mi',
         DASHSCOPE_API_KEY: 'd',

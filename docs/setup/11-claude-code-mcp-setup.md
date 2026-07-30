@@ -1,309 +1,161 @@
 # 11 - Claude Code MCP Setup
 
-This document describes how to configure MCP (Model Context Protocol) servers for Claude Code integration with Linear and Sentry.
+This guide configures Claude Code for Linear and the private SentryBox
+compatibility API. Legacy Sentry SaaS credentials are not used.
 
-## Overview
+## Prerequisites
 
-**Use this guide when:**
+- Node.js and npm are installed.
+- The machine can reach Home Dev through Tailscale.
+- `LINEAR_API_KEY` is available for Linear operations.
 
-- Setting up a new development environment (local or cloud)
-- Configuring Claude Code for the first time
-- Troubleshooting MCP connectivity issues
+Install the same pinned MCP client used by the Code Worker image:
 
-## Required Environment Variables
+```bash
+npm install --global @sentry/mcp-server@0.37.0
+sentry-mcp --version
+```
 
-| Variable            | Service | Purpose                     |
-| ------------------- | ------- | --------------------------- |
-| `LINEAR_API_KEY`    | Linear  | Issue tracking API access   |
-| `SENTRY_AUTH_TOKEN` | Sentry  | Error monitoring API access |
+The reported version must be `0.37.0`. Do not use `npx`, `latest`, or install a
+second version at task startup.
 
-Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+## Environment
+
+| Variable         | Purpose                                      |
+| ---------------- | -------------------------------------------- |
+| `LINEAR_API_KEY` | Linear issue-management access               |
+| `ERROR_HUB_HOST` | Private SentryBox host, without URL scheme   |
+
+For a direct local Claude session:
 
 ```bash
 export LINEAR_API_KEY="lin_api_xxxxxxxxxxxxx"
-export SENTRY_AUTH_TOKEN="sntrys_xxxxxxxxxxxxx"
+export ERROR_HUB_HOST="home-dev.taild6ad57.ts.net:8443"
 ```
 
-## 1. Linear API Key
+`ERROR_HUB_HOST` is not a credential. Tailnet access is the SentryBox access
+boundary. The fixed `tailnet-only` value in `.mcp.json` is syntax required by
+the official MCP client, not an authentication secret.
 
-### 1.1 Create Personal API Key
+The Home Dev orchestrator uses the corresponding non-secret variable
+`INTEXURAOS_ERROR_HUB_HOST` and injects `ERROR_HUB_HOST` into each Code Worker.
 
-1. Go to [Linear Settings → API](https://linear.app/settings/api)
-2. Click **Create new API key**
-3. Name: `Claude Code` (or descriptive name)
-4. Click **Create**
-5. Copy the key immediately (shown only once)
+## Linear API key
 
-### 1.2 Key Format
+1. Open [Linear Settings → API](https://linear.app/settings/api).
+2. Create a personal API key named `Claude Code`.
+3. Store it outside the repository and export it as `LINEAR_API_KEY`.
 
-Linear API keys follow this format:
+Personal Linear API keys inherit the account permissions. Never commit or log
+the key.
 
-```
-lin_api_<alphanumeric-characters>
-```
+## Project MCP configuration
 
-### 1.3 Permissions
-
-Personal API keys inherit your Linear account permissions. No additional scopes needed.
-
-## 2. Sentry Auth Token
-
-### 2.1 Create Auth Token
-
-1. Go to [Sentry Settings → Auth Tokens](https://sentry.io/settings/account/api/auth-tokens/)
-2. Click **Create New Token**
-3. Name: `Claude Code MCP`
-
-### 2.2 Required Scopes
-
-Select the following scopes:
-
-| Scope           | Purpose                 |
-| --------------- | ----------------------- |
-| `org:read`      | List organizations      |
-| `project:read`  | List and view projects  |
-| `project:write` | Update project settings |
-| `team:read`     | List teams              |
-| `team:write`    | Manage team membership  |
-| `event:write`   | Create test events      |
-
-### 2.3 Key Format
-
-Sentry tokens follow this format:
-
-```
-sntrys_<alphanumeric-characters>
-# or
-sntryu_<alphanumeric-characters>
-```
-
-## 3. Configuration Files
-
-### 3.1 MCP Servers (`.mcp.json`)
-
-Located at project root, defines MCP server connections:
+The checked-in `.mcp.json` is the source of truth for Claude:
 
 ```json
 {
   "mcpServers": {
     "linear": {
-      "type": "http",
-      "url": "https://mcp.linear.app/mcp",
+      "type": "sse",
+      "url": "https://mcp.linear.app/sse",
       "headers": {
         "Authorization": "Bearer ${LINEAR_API_KEY}"
       },
       "timeoutMs": 60000
     },
-    "sentry": {
-      "command": "npx",
-      "args": ["@sentry/mcp-server@latest", "--access-token", "${SENTRY_AUTH_TOKEN}"]
+    "error_hub": {
+      "command": "sh",
+      "args": [
+        "-lc",
+        "exec sentry-mcp --access-token tailnet-only --host \"$ERROR_HUB_HOST\" --disable-skills=seer"
+      ]
     }
   }
 }
 ```
 
-#### Linear MCP Timeout
+There must be no `sentry` server, `SENTRY_AUTH_TOKEN`, SaaS hostname, or runtime
+package download in this file. The `error_hub` entry reads issue and event
+evidence from SentryBox only.
 
-The Linear MCP server includes an enforced `timeoutMs` of `60000` (60 seconds). The code-worker entrypoint reads this value from the worktree `.mcp.json` and wraps Codex execution with a `timeout` command, ensuring a stalled Linear MCP call fails the attempt cleanly instead of hanging indefinitely.
+## Verification
 
-**Timeout marker:** When the timeout fires, the entrypoint emits a stable log line:
-
-```
-[entrypoint] MCP timeout server=linear timeout_ms=60000
-```
-
-Operators can scan task logs for the substring `MCP timeout` and `server=linear` to identify timeout events.
-
-**Transport types:**
-
-| Type  | Linear | Sentry | Description                         |
-| ----- | ------ | ------ | ----------------------------------- |
-| HTTP  | Yes    | No     | Stateless, headers per request      |
-| STDIO | No     | Yes    | Subprocess, token passed at startup |
-
-### 3.2 Plugins (`.claude/settings.json`)
-
-Defines enabled plugins for the project:
-
-```json
-{
-  "enabledPlugins": {
-    "superpowers@superpowers-marketplace": true,
-    "context7@claude-plugins-official": true,
-    "commit-commands@claude-plugins-official": true,
-    "pr-review-toolkit@claude-code-plugins": true,
-    "playwright@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true
-  }
-}
-```
-
-**Plugin descriptions:**
-
-| Plugin              | Purpose                                           |
-| ------------------- | ------------------------------------------------- |
-| `superpowers`       | TDD workflow, brainstorming, subagent development |
-| `context7`          | Library documentation lookup                      |
-| `commit-commands`   | Git commit workflow helpers                       |
-| `pr-review-toolkit` | Code review agents (6 specialized reviewers)      |
-| `playwright`        | Browser automation and testing                    |
-| `frontend-design`   | UI/frontend design assistance                     |
-
-### 3.3 First-Time Plugin Setup
-
-New developers need to add the superpowers marketplace once:
+Check that variables are set without printing their values:
 
 ```bash
-claude plugins marketplace add obra/superpowers-marketplace
+printf 'LINEAR_API_KEY=%s\n' "${LINEAR_API_KEY:+SET}"
+printf 'ERROR_HUB_HOST=%s\n' "${ERROR_HUB_HOST:+SET}"
 ```
 
-Then install the plugin:
-
-```bash
-claude plugins install superpowers@superpowers-marketplace
-```
-
-Other plugins from official marketplaces install automatically when enabled in project settings.
-
-## 4. Verification
-
-### 4.1 Check Environment Variables
-
-```bash
-echo "LINEAR_API_KEY: ${LINEAR_API_KEY:+SET}"
-echo "SENTRY_AUTH_TOKEN: ${SENTRY_AUTH_TOKEN:+SET}"
-```
-
-Expected output:
-
-```
-LINEAR_API_KEY: SET
-SENTRY_AUTH_TOKEN: SET
-```
-
-### 4.2 Check MCP Connectivity
+Then verify the registered servers:
 
 ```bash
 claude mcp list
 ```
 
-Expected output:
+Expected servers are `linear` and `error_hub`. There must be no Legacy `sentry`
+entry.
 
-```
-Checking MCP server health...
+From a Claude session, test one known private SentryBox issue URL with
+`error_hub` and list the Linear teams. The SentryBox request must stay on the
+tailnet hostname.
 
-linear: https://mcp.linear.app/mcp (HTTP) - ✓ Connected
-sentry: npx @sentry/mcp-server@latest --access-token ... - ✓ Connected
-```
-
-### 4.3 Test API Access
-
-From within Claude Code session:
-
-```
-# Test Linear
-"List my Linear teams"
-
-# Test Sentry
-"List my Sentry organizations"
-```
-
-## 5. Troubleshooting
-
-### "Needs authentication" Error
-
-**Cause:** Environment variable not set or incorrect
-
-**Solution:**
-
-1. Verify variable is exported: `echo $LINEAR_API_KEY`
-2. Check for typos in token value
-3. Restart shell after adding to profile
-4. Restart Claude Code session
-
-### "Connection refused" Error
-
-**Cause:** Network or firewall blocking MCP server
-
-**Solution:**
-
-1. Check internet connectivity
-2. Verify no proxy/firewall blocking `mcp.linear.app` or `npx`
-3. Try accessing Linear/Sentry web UI to confirm access
-
-### Token Expired or Revoked
-
-**Cause:** Token was deleted or expired
-
-**Solution:**
-
-1. Go to Linear/Sentry settings
-2. Create new token
-3. Update environment variable
-4. Restart Claude Code session
-
-### Sentry STDIO Not Starting
-
-**Cause:** `npx` or Node.js issues
-
-**Solution:**
+The checked-in real-image verifier is the production-equivalent evidence test:
 
 ```bash
-# Verify npx works
-npx --version
-
-# Try running Sentry MCP directly
-npx @sentry/mcp-server@latest --help
+pnpm --filter @intexuraos/orchestrator verify:error-hub-mcp \
+  "https://home-dev.taild6ad57.ts.net:8443/organizations/intexuraos/issues/<id>/" \
+  "<event-id>"
 ```
 
-## 6. Security Best Practices
+## Troubleshooting
 
-### DO
+### `error_hub` does not start
 
-- Store tokens in shell profile (not in committed files)
-- Use separate tokens for different environments
-- Rotate tokens periodically
-- Use minimal required scopes for Sentry
-
-### DON'T
-
-- Never commit tokens to git
-- Never share tokens in screenshots or logs
-- Don't use production tokens for development
-- Don't grant excessive Sentry scopes
-
-## 7. Environment-Specific Notes
-
-### Local Development
-
-- Tokens in `~/.zshrc` or `~/.bashrc`
-- Restart terminal after changes
-
-### CI/CD Environments
-
-- Store tokens in CI secrets (GitHub Actions, etc.)
-- Reference as environment variables in workflow
-
-### Cloud Development (Claude Code Web)
-
-- Provide tokens when prompted
-- Tokens stored in session only
-
-## 8. Related Documentation
-
-- [05 - Local Development](./05-local-dev-with-gcp-deps.md) - GCP local setup
-- [10 - Claude Code Cloud Dev](./10-claude-code-cloud-dev.md) - Cloud environment setup
-- [Linear MCP Docs](https://linear.app/docs/mcp) - Official Linear MCP documentation
-- [Sentry MCP Docs](https://docs.sentry.io/product/sentry-mcp/) - Official Sentry MCP documentation
-
-## 9. Quick Start Checklist
-
+```bash
+command -v sentry-mcp
+sentry-mcp --version
+printf 'ERROR_HUB_HOST=%s\n' "${ERROR_HUB_HOST:+SET}"
 ```
-[ ] LINEAR_API_KEY exported in shell profile
-[ ] SENTRY_AUTH_TOKEN exported in shell profile
-[ ] Shell restarted (or `source ~/.zshrc`)
-[ ] Superpowers marketplace added: `claude plugins marketplace add obra/superpowers-marketplace`
-[ ] Superpowers installed: `claude plugins install superpowers@superpowers-marketplace`
-[ ] `claude mcp list` shows Linear and Sentry connected
-[ ] Test query works for both services
+
+Reinstall exactly `@sentry/mcp-server@0.37.0` if the binary is absent or the
+version differs.
+
+### Connection refused or timeout
+
+1. Confirm Tailscale is connected.
+2. Open `https://home-dev.taild6ad57.ts.net:8443/health/ready` from the same
+   machine.
+3. Confirm `ERROR_HUB_HOST` contains only the DNS hostname and port, with no
+   scheme, path, credentials, or whitespace.
+
+### Linear needs authentication
+
+Verify `LINEAR_API_KEY` is exported and restart the Claude session after
+changing it. SentryBox itself does not require an auth token.
+
+## Security rules
+
+- Keep the Linear key outside tracked files and logs.
+- Do not add a Sentry SaaS token or DSN to MCP configuration.
+- Do not expose the private SentryBox UI or API outside Tailscale.
+- Keep the MCP package pinned to the version exercised by CI and the Code
+  Worker image.
+
+## Quick checklist
+
+```text
+[ ] LINEAR_API_KEY is set
+[ ] ERROR_HUB_HOST is home-dev.taild6ad57.ts.net:8443
+[ ] sentry-mcp reports 0.37.0
+[ ] claude mcp list shows linear and error_hub only
+[ ] a known SentryBox issue can be read through error_hub
+[ ] no SENTRY_AUTH_TOKEN or Legacy sentry MCP entry remains
 ```
+
+Related documentation:
+
+- [Local development](./05-local-dev-with-gcp-deps.md)
+- [Claude Code cloud development](./10-claude-code-cloud-dev.md)
+- [SentryBox automation](../operations/sentry-code-task-automation.md)

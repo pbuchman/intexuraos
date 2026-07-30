@@ -28,6 +28,7 @@ function makeValidEnv(overrides: Partial<Record<string, string>> = {}): EnvReade
     GOOGLE_APPLICATION_CREDENTIALS: '/path/to/sa.json',
     INTEXURAOS_LINEAR_API_KEY: 'lin-key',
     INTEXURAOS_SENTRY_AUTH_TOKEN: 'sentry-token',
+    INTEXURAOS_ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     INTEXURAOS_MINIMAX_APP_API_KEY: 'minimax-key',
     INTEXURAOS_MIMO_APP_API_KEY: 'mimo-key',
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
@@ -80,10 +81,24 @@ describe('getOptionalEnv', () => {
 });
 
 describe('loadEnvConfig', () => {
+  it('starts without the removed Legacy Sentry worker auth token', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
+
+    expect(loadEnvConfig(env)).toEqual(expect.objectContaining({ linearApiKey: 'lin-key' }));
+  });
+
   it('throws naming the missing variable when a required var is absent', () => {
     const env = makeValidEnv();
     delete env['INTEXURAOS_REPOSITORY_URL'];
     expect(() => loadEnvConfig(env)).toThrow(/INTEXURAOS_REPOSITORY_URL/);
+  });
+
+  it('throws naming INTEXURAOS_ERROR_HUB_HOST when the sole evidence provider is missing', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_ERROR_HUB_HOST'];
+
+    expect(() => loadEnvConfig(env)).toThrow(/INTEXURAOS_ERROR_HUB_HOST/);
   });
 
   it('returns a typed config object when all required vars are set', () => {
@@ -101,7 +116,7 @@ describe('loadEnvConfig', () => {
     expect(config.workerImage).toBe(DEFAULT_WORKER_IMAGE);
     expect(config.logLevel).toBe('info');
     expect(config.openRouterApiKey).toBe('');
-    expect(config.errorHubHost).toBeUndefined();
+    expect(config.errorHubHost).toBe('home-dev.example.ts.net:8443');
     expect(config.keepContainersAlive).toBe(false);
     expect(config.workerForensicsMode).toBe(false);
     expect(config.preserveWorkerContainers).toBe(true);
@@ -203,16 +218,17 @@ describe('loadEnvConfig', () => {
     expect(config.gitUserNameOverride).toBeUndefined();
   });
 
-  it.each(['home-dev.example.ts.net', 'home-dev.example.ts.net:8443'])(
-    'accepts Error Hub DNS host %s without changing it',
-    (host) => {
-      const config = loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: host }));
+  it('accepts the private SentryBox tailnet host on port 8443 without changing it', () => {
+    const host = 'home-dev.example.ts.net:8443';
+    const config = loadEnvConfig(makeValidEnv({ INTEXURAOS_ERROR_HUB_HOST: host }));
 
-      expect(config.errorHubHost).toBe(host);
-    }
-  );
+    expect(config.errorHubHost).toBe(host);
+  });
 
   it.each([
+    'home-dev.example.ts.net',
+    'home-dev.example.ts.net:443',
+    'errors.intexuraos.cloud:8443',
     'https://home-dev.example.ts.net:8443',
     'home-dev.example.ts.net/issues/1',
     'user@home-dev.example.ts.net',

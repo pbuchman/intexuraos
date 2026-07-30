@@ -459,18 +459,37 @@ describe('ecosystem.config.cjs', () => {
     expect(terraform).toContain('INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED = "false"');
   });
 
-  it('documents home-dev Sentry DSNs with the canonical dev environment label', () => {
-    const envExample = readFileSync('.envrc.local.example', 'utf8');
-
-    expect(envExample).toContain('export INTEXURAOS_ENVIRONMENT=dev');
-    expect(envExample).not.toContain('export INTEXURAOS_ENVIRONMENT=development');
-    expect(envExample).toMatch(/INTEXURAOS_SENTRY_DSN=.*\/4510703655321680"/);
-    expect(envExample).toMatch(/INTEXURAOS_SENTRY_DSN_WEB=.*\/4510703657812048"/);
-    expect(envExample).toContain('export INTEXURAOS_SENTRY_WEBHOOK_SECRET=');
-    expect(envExample).toContain('export INTEXURAOS_SENTRY_AUTOMATION_USER_ID=');
-    expect(envExample).toContain(
-      'export INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY=pbuchman/intexuraos'
+  it('preserves synced SentryBox DSNs while applying the canonical dev automation config', () => {
+    const backendDsn = 'https://backend.sentrybox.test/api/1';
+    const webDsn = 'https://web.sentrybox.test/api/2';
+    const stdout = execFileSync(
+      'bash',
+      [
+        '-c',
+        `source .envrc.local.example
+printf '%s\n' "$INTEXURAOS_SENTRY_DSN" "$INTEXURAOS_SENTRY_DSN_WEB" "$INTEXURAOS_ENVIRONMENT" "$INTEXURAOS_SENTRY_WEBHOOK_SECRET" "$INTEXURAOS_SENTRY_AUTOMATION_USER_ID" "$INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY" "$INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH"`,
+      ],
+      {
+        cwd: process.cwd(),
+        env: {
+          HOME: process.env.HOME ?? '/tmp',
+          PATH: process.env.PATH ?? '',
+          INTEXURAOS_SENTRY_DSN: backendDsn,
+          INTEXURAOS_SENTRY_DSN_WEB: webDsn,
+          INTEXURAOS_SENTRY_WEBHOOK_SECRET: 'webhook-secret',
+          INTEXURAOS_SENTRY_AUTOMATION_USER_ID: 'automation-user',
+        },
+      }
     );
-    expect(envExample).toContain('export INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH=development');
+
+    expect(stdout.toString().trim().split('\n')).toEqual([
+      backendDsn,
+      webDsn,
+      'dev',
+      'webhook-secret',
+      'automation-user',
+      'pbuchman/intexuraos',
+      'development',
+    ]);
   });
 });

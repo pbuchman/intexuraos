@@ -1,7 +1,8 @@
-# Sentry Code Task Automation
+# SentryBox Code Task Automation
 
-This runbook covers the Sentry integration that turns actionable Sentry issues
-into autonomous IntexuraOS code tasks.
+This runbook covers the Sentry-compatible SentryBox integration that turns
+actionable issues into autonomous IntexuraOS code tasks. Legacy Sentry SaaS is
+not an active event source or worker evidence provider.
 
 The invariant is intentionally strict: a Sentry task cannot complete
 successfully without a GitHub pull request. The PR must either fix the bug or
@@ -11,44 +12,43 @@ issue only in Sentry.
 
 ## Public Endpoint
 
-Register the code-agent webhook URL with Sentry:
+Register the code-agent webhook URL with SentryBox:
 
 | Environment | Webhook URL |
 | --- | --- |
 | Production | `https://intexuraos.cloud/api/code/webhooks/sentry` |
 | Development | `https://dev.intexuraos.cloud/api/code/webhooks/sentry` |
 
-The route accepts Sentry Integration Platform webhook deliveries with:
+The compatibility route remains `/webhooks/sentry` and accepts SentryBox
+deliveries with:
 
-- `Sentry-Hook-Signature`: HMAC-SHA256 signature generated from the Sentry
-  integration client secret and the raw request body.
+- `Sentry-Hook-Signature`: HMAC-SHA256 signature generated from the configured
+  SentryBox webhook secret and the raw request body.
 - `Sentry-Hook-Resource`: supported values are `issue` and `event_alert`.
 
-Reference: Sentry documents webhook signatures on the Integration Platform
-webhooks page and issue-alert deliveries on the Issue Alerts webhook page:
+SentryBox preserves this wire contract so the existing endpoint, payload parser,
+and signature verification remain unchanged. The upstream protocol references
+are:
 
 - <https://docs.sentry.io/integrations/integration-platform/webhooks/>
 - <https://docs.sentry.io/integrations/integration-platform/webhooks/issue-alerts/>
 
-## Sentry Setup
+## SentryBox Setup
 
-1. In Sentry, create an Internal Integration for IntexuraOS code automation.
-2. Set the Webhook URL to the environment-specific endpoint above.
-3. Enable the integration as an alert rule action so issue alert rules can send
-   `event_alert` deliveries.
-4. Enable webhook subscriptions for `issue` and issue alert / `event_alert`
-   deliveries.
-5. Grant read access for the Sentry data the worker needs to inspect:
-   organization, project, issue/event details, and alert metadata.
-6. Copy the Internal Integration Client Secret into
-   `INTEXURAOS_SENTRY_WEBHOOK_SECRET`.
-7. Create or provision a Sentry auth token for worker-side issue lookup and
-   store it as `INTEXURAOS_SENTRY_AUTH_TOKEN`.
+1. Configure the backend and web projects for both `dev` and `prod` in
+   SentryBox.
+2. Set each environment's Code Agent webhook to the corresponding endpoint
+   above.
+3. Configure the webhook HMAC value to match
+   `INTEXURAOS_SENTRY_WEBHOOK_SECRET` in that Code Agent environment.
+4. Enable compatible `issue` and `event_alert` deliveries for new and regressed
+   errors.
+5. Keep SentryBox reachable from Code Workers only through the approved private
+   network hostname.
 
-`INTEXURAOS_SENTRY_WEBHOOK_SECRET` verifies inbound webhook authenticity.
-`INTEXURAOS_SENTRY_AUTH_TOKEN` is passed to worker containers as
-`SENTRY_AUTH_TOKEN` so the Sentry MCP server, or REST API fallback, can fetch
-current issue details and recent events.
+`INTEXURAOS_SENTRY_WEBHOOK_SECRET` remains required because it verifies inbound
+webhook authenticity. It is unrelated to worker-side evidence access and must
+not be removed during the cutover.
 
 ## IntexuraOS Configuration
 
@@ -65,65 +65,20 @@ The orchestrator / worker runtime requires:
 
 | Variable | Purpose |
 | --- | --- |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN` | Secret read by orchestrator and injected into workers as `SENTRY_AUTH_TOKEN`. |
+| `INTEXURAOS_ERROR_HUB_HOST` | Private SentryBox `host[:port]`, injected into workers as `ERROR_HUB_HOST`. |
 | `LINEAR_API_KEY` | Existing Linear MCP credential used by the worker for the linked Linear issue. |
 
 Hetzner production receives and authenticates the webhook, so it loads
 `INTEXURAOS_SENTRY_WEBHOOK_SECRET` and
 `INTEXURAOS_SENTRY_AUTOMATION_USER_ID` through
-`scripts/hetzner/load-secrets.sh`. It deliberately does **not** load
-`INTEXURAOS_SENTRY_AUTH_TOKEN` into the PM2 backend runtime.
+`scripts/hetzner/load-secrets.sh`.
 
-The Sentry API token belongs to the `home-dev` orchestrator. The systemd unit
-reads `INTEXURAOS_SENTRY_AUTH_TOKEN` from `~/.code-orchestrator/env` and injects
-it into isolated workers as `SENTRY_AUTH_TOKEN`. Both currently deployed token
-forms are valid when the Sentry API probe returns HTTP 200; this procedure does
-not rotate or rewrite a working token.
-
-### Safe home-dev token sync and verification
-
-Run these steps on `home-dev` as the orchestrator account. Do not paste the
-token into shell history, command arguments, logs, chat, or this runbook.
-
-1. Edit `~/.code-orchestrator/env` with a trusted interactive editor, ensuring
-   it contains exactly one `INTEXURAOS_SENTRY_AUTH_TOKEN=...` assignment.
-2. Restrict the file and print only presence—not the value:
-
-   ```bash
-   chmod 600 ~/.code-orchestrator/env
-   awk -F= '$1 == "INTEXURAOS_SENTRY_AUTH_TOKEN" && length($2) > 0 { found=1 }
-     END { print found ? "SENTRY_AUTH_TOKEN: SET" : "SENTRY_AUTH_TOKEN: MISSING"; exit !found }' \
-     ~/.code-orchestrator/env
-   ```
-
-3. Restart and verify the actual systemd owner (the orchestrator is not a PM2
-   process):
-
-   ```bash
-   sudo systemctl restart intexuraos-orchestrator@pbuchman
-   sudo systemctl status intexuraos-orchestrator@pbuchman --no-pager
-   curl --fail --silent --show-error http://127.0.0.1:8199/health >/dev/null
-   ```
-
-4. In a private shell, load the env file, call the Sentry API, and print only
-   the HTTP status. A valid token returns 200. Immediately unset both names:
-
-   ```bash
-   set -a
-   source ~/.code-orchestrator/env
-   set +a
-   sentry_status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-     --header "Authorization: Bearer ${INTEXURAOS_SENTRY_AUTH_TOKEN}" \
-     https://sentry.io/api/0/)"
-   unset INTEXURAOS_SENTRY_AUTH_TOKEN SENTRY_AUTH_TOKEN
-   test "${sentry_status}" = 200
-   printf 'Sentry API status: %s\n' "${sentry_status}"
-   unset sentry_status
-   ```
-
-Do not use `systemctl show ... Environment` for this verification because it
-can expose environment values. Do not copy the auth token into Hetzner's
-`.env.prod` or restart unrelated runtime services.
+The home-dev orchestrator systemd environment sets
+`INTEXURAOS_ERROR_HUB_HOST`. The worker image exposes only the `error_hub` MCP
+for issue evidence. Its fixed bearer value is syntactic only; private network
+reachability is the access boundary. Neither the orchestrator nor an isolated
+worker requires or receives `INTEXURAOS_SENTRY_AUTH_TOKEN` or
+`SENTRY_AUTH_TOKEN`.
 
 ## Automation User And Worker Selection
 
@@ -139,7 +94,7 @@ unset and the normal worker resolution fallback is desired for development.
 
 ## Expected Flow
 
-1. Sentry sends a signed `issue` or `event_alert` webhook to code-agent.
+1. SentryBox sends a signed `issue` or `event_alert` webhook to code-agent.
 2. Code-agent verifies `Sentry-Hook-Signature`.
 3. Code-agent parses the Sentry org, project, issue ID, issue URL, title,
    action, event ID when present, and received time.
@@ -157,9 +112,10 @@ unset and the normal worker resolution fallback is desired for development.
 7. Code-agent creates or links the Linear issue for the Sentry issue.
 8. Code-agent queues a CodeTask with `agentType: "sentry"` and the configured
    Sentry worker type.
-9. The orchestrator dispatches the worker with Linear and Sentry access.
-10. The worker fetches current Sentry issue details and recent events, attempts
-   reproduction when feasible, and opens a PR.
+9. The orchestrator dispatches the worker with Linear access and the private
+   SentryBox hostname.
+10. The worker uses only the `error_hub` MCP to fetch current issue details and
+   recent events, attempts reproduction when feasible, and opens a PR.
 11. Completion is rejected unless the worker reports a PR URL and the outcome is
     `fixed` or `suppressed`.
 
@@ -176,9 +132,9 @@ pnpm run ci:tracked
 
 For a live smoke test:
 
-1. Use Sentry's test delivery or trigger an issue alert for a low-risk project.
-2. Confirm the Sentry integration delivery log shows a 2xx response.
-3. Confirm Sentry test/sample deliveries return ignored and do not create a
+1. Send a controlled SentryBox event to a low-risk project and environment.
+2. Confirm the SentryBox delivery log shows a 2xx response.
+3. Confirm test/sample deliveries return ignored and do not create a
    `sentry-issue-events` record.
 4. Trigger an actionable delivery and confirm code-agent stores one
    `sentry-issue-events` record for the Sentry issue transition.
@@ -186,7 +142,8 @@ For a live smoke test:
 6. Confirm one queued CodeTask exists with `agentType: "sentry"`.
 7. Confirm the task worker type matches the automation user's
    `defaultSentryWorkerType`.
-8. Confirm the worker can fetch Sentry details using `SENTRY_AUTH_TOKEN`.
+8. Run the pinned Error Hub MCP verifier against the created issue and event,
+   and confirm the worker fetches both through `error_hub`.
 9. Confirm successful completion includes a PR URL and a final outcome of
    `fixed` or `suppressed`.
 

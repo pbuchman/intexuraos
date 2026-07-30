@@ -13,13 +13,15 @@ afterEach(() => {
 });
 
 describe('sentryPrompt evidence provider routing', () => {
-  it('selects only the historical Sentry MCP for a sentry.io issue URL', () => {
+  it('rejects a Legacy Sentry issue URL instead of using SaaS MCP or REST fallbacks', () => {
     process.env['INTEXURAOS_ERROR_HUB_HOST'] = 'home-dev.example.ts.net:8443';
 
     const prompt = sentryPrompt.build(buildParams('https://intexura.sentry.io/issues/123456/'));
 
-    expect(prompt).toContain('Selected evidence MCP: `sentry`');
-    expect(prompt).toContain('Use only the `sentry` MCP for this task.');
+    expect(prompt).toContain('Selected evidence MCP: none');
+    expect(prompt).toContain('Do not query any evidence MCP');
+    expect(prompt).not.toContain('SENTRY_AUTH_TOKEN');
+    expect(prompt).not.toContain('Use only the `sentry` MCP for this task.');
     expect(prompt).not.toContain('Use only the `error_hub` MCP for this task.');
   });
 
@@ -33,12 +35,12 @@ describe('sentryPrompt evidence provider routing', () => {
     expect(prompt).toContain('Selected evidence MCP: `error_hub`');
     expect(prompt).toContain('Use only the `error_hub` MCP for this task.');
     expect(prompt).not.toContain('Use only the `sentry` MCP for this task.');
-    expect(prompt).toContain('GET /api/0/organizations/{org}/issues/{issueId}/');
-    expect(prompt).toContain('GET /api/0/organizations/{org}/issues/{issueId}/events/latest/');
-    expect(prompt).toContain('GET /api/0/organizations/{org}/issues/{issueId}/events/{eventId}/');
-    expect(prompt).toContain('GET /api/0/organizations/{org}/issues/{issueId}/events/');
-    expect(prompt).toContain('GET /api/0/projects/{org}/{projectSlugOrId}/');
-    expect(prompt).toContain('network reachability is the access boundary');
+    expect(prompt).toContain('If `error_hub` is unavailable, finish with outcome `failed`.');
+    expect(prompt).not.toContain('GET /api/0/');
+    expect(prompt).not.toContain('https://$ERROR_HUB_HOST');
+    expect(prompt).toContain('### SentryBox Issue Context');
+    expect(prompt).toContain('Fetch current SentryBox issue details');
+    expect(prompt).toContain('- SentryBox:');
   });
 
   it('does not route an unknown non-Sentry host to either MCP', () => {
@@ -49,7 +51,7 @@ describe('sentryPrompt evidence provider routing', () => {
     );
 
     expect(prompt).toContain('Selected evidence MCP: none');
-    expect(prompt).toContain('Do not query either evidence MCP');
+    expect(prompt).toContain('Do not query any evidence MCP');
   });
 
   it('keeps the completion contract unchanged', () => {
@@ -62,13 +64,30 @@ describe('sentryPrompt evidence provider routing', () => {
     expect(prompt).toContain(`SENTRY_AGENT_FINAL:
 - outcome: <fixed|suppressed|failed>
 - pr: <GitHub PR URL>
-- sentry_issue: <Sentry issue URL>
+- sentry_issue: <SentryBox issue URL>
 - linear_issue: <Linear issue URL>
 - verification: <commands run and result>
 - reproduction: <attempted reproduction evidence, or why reproduction was not feasible>
 - suppression_rationale: <required when outcome=suppressed, otherwise n/a>
 - failure_reason: <short structured reason when outcome=failed, otherwise n/a>
 - summary: <concise bullet-point list, max 5-6 points>`);
+  });
+
+  it('renders safe placeholders when optional task and issue context are absent', () => {
+    delete process.env['INTEXURAOS_ERROR_HUB_HOST'];
+
+    const prompt = sentryPrompt.build({
+      taskId: 'task_without_optional_context',
+      linearIssueLabels: [],
+      agentType: 'sentry',
+    });
+
+    expect(prompt).toContain('Selected evidence MCP: none');
+    expect(prompt).toContain('- Organization: unknown');
+    expect(prompt).toContain('- Linear: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)');
+    expect(prompt).not.toContain('Linear Issue:');
+    expect(prompt).not.toContain('- IntexuraOS Code Task:');
+    expect(prompt).toContain('- SentryBox: <SentryBox issue URL>');
   });
 });
 

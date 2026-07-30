@@ -120,7 +120,7 @@ docker run -it --rm \
   -e ANTHROPIC_API_KEY=your-api-key \
   -e ANTHROPIC_BASE_URL=https://api.anthropic.com \
   -e LINEAR_API_KEY=your-linear-key \
-  -e SENTRY_AUTH_TOKEN=your-sentry-token \
+  -e ERROR_HUB_HOST=home-dev.tailnet.example:8443 \
   -e GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json \
   -e GIT_USER_NAME="Test User" \
   -e GIT_USER_EMAIL="test@example.com" \

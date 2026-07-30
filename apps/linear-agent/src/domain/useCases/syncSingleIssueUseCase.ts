@@ -74,7 +74,7 @@ export async function syncSingleIssue(
 
     if (liveIssueResult.value === null) {
       logger.warn(
-        { userId, issueId: data.id, identifier: data.identifier },
+        { userId, issueId: data.id, identifier: data.identifier, _skipSentry: true },
         'Webhook sync hydration returned no issue, falling back to webhook payload',
       );
       const fallback = mapWebhookToSyncedIssue(data, userId);

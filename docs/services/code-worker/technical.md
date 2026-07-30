@@ -184,7 +184,7 @@ Network: `code-worker-net` (dual-stack bridge driver, fixed Linux bridge `code-w
 | `CODEX_THREAD_ID`                     | Orchestrator     | Thread ID for resumed Codex attempts (required when `WORKER_CONTINUE=1`)                 |
 | `CODEX_REASONING_EFFORT`              | Orchestrator     | Reasoning effort level for Codex runtime (e.g., `xhigh`)                                 |
 | `LINEAR_API_KEY`                      | Orchestrator env | Linear integration key                                                                   |
-| `SENTRY_AUTH_TOKEN`                   | Orchestrator env | Sentry error tracking token                                                              |
+| `ERROR_HUB_HOST`                      | Orchestrator env | Private SentryBox host for the `error_hub` MCP entry                                      |
 | `GOOGLE_APPLICATION_CREDENTIALS`      | Fixed            | `/secrets/gcp-sa.json`                                                                   |
 | `CLAUDE_PROJECT_DIR`                  | Fixed            | `/repo`                                                                                  |
 | `CODE_WORKER_MODE`                    | Fixed            | `1` — identifies this as an automated worker process                                     |
@@ -394,7 +394,7 @@ If `/repo/.claude/settings.local.json` already exists, the entrypoint merges the
 | strace / gdb          | Alpine package         | Crash forensics debugging                                  |
 | file                  | Alpine package         | File type identification                                   |
 | @upstash/context7-mcp | npm global             | Context7 MCP server                                        |
-| @sentry/mcp-server    | npm global             | Sentry MCP server                                          |
+| @sentry/mcp-server    | npm global             | Pinned MCP client for the private SentryBox compatibility API |
 | @playwright/mcp       | npm global             | Playwright MCP server (uses system Chromium)               |
 | @openai/codex         | npm global             | Codex CLI (AI coding agent runtime)                        |
 | claude                | Anthropic installer    | Claude Code CLI (AI coding agent runtime)                  |

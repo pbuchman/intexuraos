@@ -164,11 +164,12 @@ The VM needs readable keys at `/home/deploy/provisioner-sa-key.json` and
 to read Secret Manager and writes `GOOGLE_APPLICATION_CREDENTIALS` in
 `.env.prod` to the runtime key.
 
-Sentry code-task automation also depends on Hetzner runtime secrets for inbound
-webhook verification and worker-side Sentry reads. See
+SentryBox code-task automation depends on Hetzner runtime secrets for inbound
+webhook verification. Workers read issue evidence through the private
+`error_hub` MCP and do not use a Sentry SaaS auth token. See
 [`docs/operations/sentry-code-task-automation.md`](./sentry-code-task-automation.md)
 before rotating `INTEXURAOS_SENTRY_WEBHOOK_SECRET`,
-`INTEXURAOS_SENTRY_AUTOMATION_USER_ID`, or `INTEXURAOS_SENTRY_AUTH_TOKEN`.
+or `INTEXURAOS_SENTRY_AUTOMATION_USER_ID`.
 
 ```bash
 cd /opt/intexuraos

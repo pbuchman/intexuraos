@@ -47,8 +47,7 @@ export interface BootstrapEnvConfig {
   preserveWorkerContainers: boolean;
   githubPrivateKeyOverride?: string;
   linearApiKey: string;
-  sentryAuthToken: string;
-  errorHubHost?: string;
+  errorHubHost: string;
   minimaxApiKey: string;
   mimoApiKey: string;
   dashscopeApiKey: string;
@@ -123,11 +122,8 @@ function readOptionalString(env: EnvReader, name: string): string | undefined {
   return raw !== undefined && raw !== '' ? raw : undefined;
 }
 
-function readOptionalErrorHubHost(env: EnvReader): string | undefined {
-  const value = readOptionalString(env, 'INTEXURAOS_ERROR_HUB_HOST');
-  if (value === undefined) {
-    return undefined;
-  }
+function readErrorHubHost(env: EnvReader): string {
+  const value = getRequiredEnv('INTEXURAOS_ERROR_HUB_HOST', env);
 
   const colonIndex = value.indexOf(':');
   const host = colonIndex === -1 ? value : value.slice(0, colonIndex);
@@ -208,7 +204,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     getOptionalEnv('INTEXURAOS_PRESERVE_WORKER_CONTAINERS', '1', env) !== '0';
 
   const linearApiKey = getRequiredEnv('INTEXURAOS_LINEAR_API_KEY', env);
-  const sentryAuthToken = getRequiredEnv('INTEXURAOS_SENTRY_AUTH_TOKEN', env);
   const minimaxApiKey = getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY', env);
   const mimoApiKey = getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY', env);
   const dashscopeApiKey = getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY', env);
@@ -233,7 +228,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const gitUserNameOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_NAME');
   const gitUserEmailOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_EMAIL');
   const sentryDsn = readOptionalString(env, 'INTEXURAOS_SENTRY_DSN');
-  const errorHubHost = readOptionalErrorHubHost(env);
+  const errorHubHost = readErrorHubHost(env);
   // Release identifier: prefer Cloud Run's K_REVISION (auto-injected on every
   // deploy) and fall back to an explicit override for non-Cloud-Run hosts.
   const release =
@@ -261,8 +256,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     preserveWorkerContainers,
     ...(githubPrivateKeyOverride !== undefined ? { githubPrivateKeyOverride } : {}),
     linearApiKey,
-    sentryAuthToken,
-    ...(errorHubHost !== undefined ? { errorHubHost } : {}),
+    errorHubHost,
     minimaxApiKey,
     mimoApiKey,
     dashscopeApiKey,

@@ -140,12 +140,11 @@ export INTEXURAOS_WEB_APP_URL="http://localhost:3000"
 export INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI=http://localhost:8110/oauth/connections/google/callback
 
 # =============================================================================
-# SENTRY ERROR MONITORING
+# SENTRYBOX ERROR MONITORING
 # =============================================================================
-# Sentry DSN for home-dev error tracking (Sentry project: intexuraos-home-dev)
-export INTEXURAOS_SENTRY_DSN="https://5e5f5df6749b5153e6692c7995ec3ff9@o4510702688337920.ingest.de.sentry.io/4510703655321680"
-# Web app DSN for home-dev error tracking (Sentry project: intexuraos-web-home-dev)
-export INTEXURAOS_SENTRY_DSN_WEB="https://e80fca02a2e9ae3a49aeafcac1cf59fa@o4510702688337920.ingest.de.sentry.io/4510703657812048"
+# INTEXURAOS_SENTRY_DSN and INTEXURAOS_SENTRY_DSN_WEB are environment-bound
+# SentryBox DSNs. Load them from Secret Manager / the approved SentryBox setup;
+# never hardcode DSN keys in this file.
 # Environment tag for Sentry and runtime logs. The project environment model is dev/prod only.
 export INTEXURAOS_ENVIRONMENT=dev
 # Code-agent Sentry automation settings for home-dev issue webhooks.
@@ -198,6 +197,8 @@ export INTEXURAOS_REPOSITORY_URL=https://github.com/pbuchman/intexuraos.git
 export INTEXURAOS_REPOSITORY_PATH=$HOME/claude-orchestrator/intexuraos
 export INTEXURAOS_CODE_AGENT_URL=http://localhost:8128
 export INTEXURAOS_USAGE_WEBHOOK_URL=http://localhost:8128/internal/webhooks/usage-events
+# Private Tailscale SentryBox host used by the pinned error_hub MCP client.
+export INTEXURAOS_ERROR_HUB_HOST=home-dev.taild6ad57.ts.net:8443
 # Worker image reference for Claude containers (tag or digest)
 # Recommended in production: immutable digest (@sha256:...)
 # export INTEXURAOS_CLAUDE_WORKER_IMAGE=europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev/claude-worker@sha256:<digest>
@@ -209,7 +210,6 @@ export INTEXURAOS_PRESERVE_WORKER_CONTAINERS=1
 # OpenAI key for embeddings
 [ -n "$OPENAI_API_KEY" ] && export INTEXURAOS_OPENAI_APP_API_KEY=$OPENAI_API_KEY
 [ -n "$LINEAR_API_KEY" ] && export INTEXURAOS_LINEAR_API_KEY=$LINEAR_API_KEY
-[ -n "$SENTRY_AUTH_TOKEN" ] && export INTEXURAOS_SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
 [ -n "$SENTRY_WEBHOOK_SECRET" ] && export INTEXURAOS_SENTRY_WEBHOOK_SECRET=$SENTRY_WEBHOOK_SECRET
 [ -n "$SENTRY_AUTOMATION_USER_ID" ] && export INTEXURAOS_SENTRY_AUTOMATION_USER_ID=$SENTRY_AUTOMATION_USER_ID
 export INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY=${INTEXURAOS_SENTRY_CODE_TASK_REPOSITORY:-pbuchman/intexuraos}

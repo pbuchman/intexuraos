@@ -131,7 +131,7 @@ The container receives these environment variables:
 | `ANTHROPIC_BASE_URL`             | API endpoint URL (`opus`/`auto`)           |
 | `ANTHROPIC_MODEL`                | Model to use (if specified by worker type) |
 | `LINEAR_API_KEY`                 | Linear API key                             |
-| `SENTRY_AUTH_TOKEN`              | Sentry auth token                          |
+| `ERROR_HUB_HOST`                 | Private SentryBox MCP host                 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to GCP SA key                         |
 | `CLAUDE_PROJECT_DIR`             | Always `/repo`                             |
 | `CODE_WORKER_MODE`               | Always `1`                                 |

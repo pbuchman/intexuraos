@@ -184,7 +184,7 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
   secrets: {
     ANTHROPIC_API_KEY: 'test-anthropic-key',
     LINEAR_API_KEY: 'test-linear-key',
-    SENTRY_AUTH_TOKEN: 'test-sentry-token',
+    ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     MINIMAX_API_KEY: 'test-minimax-key',
     MIMO_API_KEY: 'test-mimo-key',
     DASHSCOPE_API_KEY: 'test-dashscope-key',
@@ -3002,7 +3002,7 @@ describe('DockerProvider', () => {
             secrets: {
               ANTHROPIC_API_KEY: '',
               LINEAR_API_KEY: 'test',
-              SENTRY_AUTH_TOKEN: 'test',
+              ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
               MINIMAX_API_KEY: 'test',
               MIMO_API_KEY: 'test',
               DASHSCOPE_API_KEY: 'test',
@@ -3037,7 +3037,7 @@ describe('DockerProvider', () => {
       expect(envArr).toContainEqual('WORKER_MANAGED_MODE=0');
     });
 
-    it('sets LINEAR_API_KEY, SENTRY_AUTH_TOKEN, and the configured Error Hub host in env', async () => {
+    it('sets Linear and Error Hub access without injecting the removed Legacy Sentry token', async () => {
       const config = createTestConfig();
       await provider.createWorker(
         createTestConfig({
@@ -3051,16 +3051,16 @@ describe('DockerProvider', () => {
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
       expect(envArr).toContainEqual('LINEAR_API_KEY=test-linear-key');
-      expect(envArr).toContainEqual('SENTRY_AUTH_TOKEN=test-sentry-token');
+      expect(envArr.some((entry) => entry.startsWith('SENTRY_AUTH_TOKEN='))).toBe(false);
       expect(envArr).toContainEqual('ERROR_HUB_HOST=home-dev.example.ts.net:8443');
     });
 
-    it('does not inject ERROR_HUB_HOST when historical-only operation is configured', async () => {
+    it('always injects the configured Error Hub host', async () => {
       await provider.createWorker(createTestConfig());
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr.some((entry) => entry.startsWith('ERROR_HUB_HOST='))).toBe(false);
+      expect(envArr).toContainEqual('ERROR_HUB_HOST=home-dev.example.ts.net:8443');
     });
   });
 
@@ -3099,7 +3099,7 @@ describe('DockerProvider', () => {
           secrets: {
             ANTHROPIC_API_KEY: 'key',
             LINEAR_API_KEY: 'test',
-            SENTRY_AUTH_TOKEN: 'test',
+            ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
             MINIMAX_API_KEY: 'test',
             MIMO_API_KEY: 'test',
             DASHSCOPE_API_KEY: 'test',

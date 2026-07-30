@@ -2,10 +2,6 @@
 url = "https://mcp.linear.app/mcp"
 bearer_token_env_var = "LINEAR_API_KEY"
 
-[mcp_servers.sentry]
-command = "sh"
-args = ["-lc", 'exec sentry-mcp --access-token "$SENTRY_AUTH_TOKEN"']
-
 [mcp_servers.error_hub]
 command = "sh"
 args = ["-lc", 'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer']

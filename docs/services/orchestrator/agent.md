@@ -566,7 +566,7 @@ On startup, the orchestrator:
 | `INTEXURAOS_GITHUB_INSTALLATION_ID`         | Yes      | -                                  |
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
 | `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
-| `INTEXURAOS_SENTRY_AUTH_TOKEN`              | Yes      | -                                  |
+| `INTEXURAOS_ERROR_HUB_HOST`                 | Yes      | -                                  |
 | `INTEXURAOS_GEMINI_APP_API_KEY`             | Yes      | -                                  |
 | `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
 | `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
