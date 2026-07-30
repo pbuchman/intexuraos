@@ -233,6 +233,11 @@ describe('loadEnvConfig', () => {
     'home-dev.example.ts.net/issues/1',
     'user@home-dev.example.ts.net',
     'home dev.example.ts.net',
+    '.ts.net:8443',
+    'foo..ts.net:8443',
+    '_x.example.ts.net:8443',
+    '-host.example.ts.net:8443',
+    'host-.example.ts.net:8443',
     'home-dev.example.ts.net:0',
     'home-dev.example.ts.net:65536',
   ])('rejects invalid INTEXURAOS_ERROR_HUB_HOST value %s', (value) => {

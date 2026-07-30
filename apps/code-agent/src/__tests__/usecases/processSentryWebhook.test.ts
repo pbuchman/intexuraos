@@ -17,8 +17,8 @@ import { createFakeTask } from '../helpers/mockFirestore.js';
 const WEBHOOK_SECRET = 'sentry-webhook-secret';
 const ORCHESTRATOR_SECRET = 'orchestrator-secret';
 const AUTOMATION_USER_ID = 'sentry-automation-user';
-const TRANSITION_KEY = 'sentry:intexuraos-dev-pbuchman:100:4509001:issue:created';
-const ISSUE_KEY = 'sentry-task:intexuraos-dev-pbuchman:100:4509001';
+const TRANSITION_KEY = 'sentry:intexuraos:100:4509001:issue:created';
+const ISSUE_KEY = 'sentry-task:intexuraos:100:4509001';
 const LEASE_TOKEN = 'lease-token';
 
 function buildIssueBody(): Record<string, unknown> {
@@ -29,7 +29,8 @@ function buildIssueBody(): Record<string, unknown> {
         id: '4509001',
         shortId: 'INTEXURAOS-DEVELOPMENT-7',
         title: 'TypeError: Cannot read properties of undefined',
-        permalink: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/',
+        permalink:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509001/',
         status: 'unresolved',
         project: { id: '100', slug: 'intexuraos-development' },
       },
@@ -44,8 +45,10 @@ function buildEventAlertBody(): Record<string, unknown> {
       event: {
         event_id: 'event-4509002',
         title: 'Error: fetch failed',
-        web_url: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509002/events/event-4509002/',
-        issue: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509002/',
+        web_url:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509002/events/event-4509002/',
+        issue:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509002/',
         project: 'intexuraos-web-development',
       },
     },
@@ -63,7 +66,8 @@ function buildResolvedEventAlertBody(): Record<string, unknown> {
           id: '4509003',
           title: 'Resolved issue',
           status: 'resolved',
-          url: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509003/',
+          url:
+            'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509003/',
           project: { slug: 'intexuraos-web-development' },
         },
       },
@@ -79,8 +83,10 @@ function buildSampleEventAlertBody(): Record<string, unknown> {
         event_id: 'sample-event',
         project: 4510702691024976,
         title: 'This is an example node-fastify exception',
-        web_url: 'https://sentry.io/organizations/intexuraos/issues/1117540176/events/sample-event/',
-        issue_url: 'https://sentry.io/api/0/issues/1117540176/',
+        web_url:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1117540176/events/sample-event/',
+        issue_url:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/1117540176/',
         issue_id: '1117540176',
       },
     },
@@ -260,7 +266,7 @@ describe('processSentryWebhook', () => {
       leaseOwner: acquisition.proposedCodeTaskId,
       leaseDurationMs: 300_000,
       event: expect.objectContaining({
-        organizationSlug: 'intexuraos-dev-pbuchman',
+        organizationSlug: 'intexuraos',
         projectId: '100',
         issueId: '4509001',
       }),
@@ -794,7 +800,8 @@ describe('processSentryWebhook', () => {
         issueId: '4509001',
         issueShortId: 'INTEXURAOS-DEVELOPMENT-7',
         issueTitle: 'TypeError',
-        issueUrl: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/',
+        issueUrl:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509001/',
         status: 'unresolved',
         eventId: undefined,
       }),

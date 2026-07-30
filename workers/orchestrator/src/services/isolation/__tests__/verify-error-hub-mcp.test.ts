@@ -83,6 +83,20 @@ describe('parseVerificationConfiguration', () => {
         INTEXURAOS_ERROR_HUB_HOST: 'errors.intexuraos.cloud:8443',
       },
     },
+    ...[
+      '.ts.net:8443',
+      'foo..ts.net:8443',
+      '_x.example.ts.net:8443',
+      '-host.example.ts.net:8443',
+      'host-.example.ts.net:8443',
+    ].map((host) => ({
+      name: `invalid tailnet DNS host ${host}`,
+      argv: [`https://${host}/organizations/intexuraos/issues/42/`, EVENT_ID],
+      env: {
+        ...validEnvironment(),
+        INTEXURAOS_ERROR_HUB_HOST: host,
+      },
+    })),
   ])('rejects $name before Docker starts', ({ argv, env }) => {
     expect(() => parseVerificationConfiguration(argv, env)).toThrow();
   });

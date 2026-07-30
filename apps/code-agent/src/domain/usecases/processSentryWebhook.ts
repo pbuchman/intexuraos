@@ -32,6 +32,8 @@ const SENTRY_AUTOMATION_SELF_ALERT_TITLES = new Set([
   'code worker auth not ready',
   'code worker auth not ready at startup',
 ]);
+const TAILNET_DNS_HOSTNAME_PATTERN =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
 
 export type VerifySentrySignature = (payload: Buffer, signature: string, secret: string) => boolean;
 export type ParseSentryIssueEvent = (
@@ -114,6 +116,21 @@ function normalizeToken(value: string | undefined): string | undefined {
 
 function normalizeTitle(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isPrivateSentryBoxIssueUrl(issueUrl: string): boolean {
+  try {
+    const url = new URL(issueUrl);
+    return url.protocol === 'https:'
+      && url.port === '8443'
+      && url.username === ''
+      && url.password === ''
+      && url.search === ''
+      && url.hash === ''
+      && TAILNET_DNS_HOSTNAME_PATTERN.test(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 function isTerminalIssueStatus(event: NormalizedSentryIssueEvent): boolean {
@@ -215,6 +232,18 @@ export async function processSentryWebhook(
       return { ok: true, outcome: 'ignored', message: parsed.error.message };
     }
     return { ok: false, reason: 'invalid_payload', message: parsed.error.message };
+  }
+
+  if (!isPrivateSentryBoxIssueUrl(parsed.value.issueUrl)) {
+    logger.warn(
+      { _skipSentry: true },
+      'Rejected Sentry webhook outside the private SentryBox host'
+    );
+    return {
+      ok: false,
+      reason: 'invalid_payload',
+      message: 'Sentry webhook issue URL is not a private SentryBox URL',
+    };
   }
 
   const classification = classifySentryIssueEvent(parsed.value);
