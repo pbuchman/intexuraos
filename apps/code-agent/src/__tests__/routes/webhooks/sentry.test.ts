@@ -22,14 +22,16 @@ const ERROR_HUB_EVENT_ALERT_RAW = readFileSync(
   'utf8',
 );
 
-function buildIssueBody(): Record<string, unknown> {
+function buildIssueBody(
+  issueUrl = 'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509001/'
+): Record<string, unknown> {
   return {
     action: 'created',
     data: {
       issue: {
         id: '4509001',
         title: 'TypeError: Cannot read properties of undefined',
-        permalink: 'https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/',
+        permalink: issueUrl,
         project: {
           slug: 'intexuraos-development',
         },
@@ -132,7 +134,7 @@ describe('POST /webhooks/sentry', () => {
     }));
   });
 
-  it('accepts a signed issue webhook and creates a Sentry code task', async () => {
+  it('accepts a signed SentryBox issue webhook and creates a Sentry code task', async () => {
     const rawBody = JSON.stringify(buildIssueBody());
 
     const response = await app.inject({
@@ -163,6 +165,34 @@ describe('POST /webhooks/sentry', () => {
         issueTitle: 'TypeError: Cannot read properties of undefined',
       }),
     }));
+  });
+
+  it('rejects a signed Legacy Sentry issue URL before reserving or creating a task', async () => {
+    const rawBody = JSON.stringify(
+      buildIssueBody('https://intexuraos-dev-pbuchman.sentry.io/issues/4509001/')
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/webhooks/sentry',
+      headers: {
+        'content-type': 'application/json',
+        'sentry-hook-resource': 'issue',
+        'sentry-hook-signature': sign(rawBody),
+      },
+      payload: rawBody,
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(JSON.parse(response.body)).toEqual(expect.objectContaining({
+      success: false,
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Sentry webhook issue URL is not a private SentryBox URL',
+      },
+    }));
+    expect(sentryReservationAcquire).not.toHaveBeenCalled();
+    expect(codeTaskCreate).not.toHaveBeenCalled();
   });
 
   it('accepts the exact signed Error Hub event_alert contract without route changes', async () => {

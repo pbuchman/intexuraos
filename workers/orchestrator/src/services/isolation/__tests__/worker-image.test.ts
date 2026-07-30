@@ -113,7 +113,9 @@ describe('code-worker image Codex skill bootstrap', () => {
     const linearCrossLinking = readFileSync(linearCrossLinkingPath, 'utf8');
 
     expect(existsSync(legacySentrySkillPath)).toBe(false);
-    expect(linearWorkflow).toContain('mcp__error_hub__get_issue_details');
+    expect(linearWorkflow).toContain('`execute_sentry_tool`');
+    expect(linearWorkflow).toContain('`get_issue_details`');
+    expect(linearWorkflow).not.toContain('mcp__error_hub__get_issue_details');
     expect(linearWorkflow).not.toContain('mcp__sentry__');
     expect(linearWorkflow).not.toContain('sentry.io');
     expect(linearWorkflow).not.toContain('Seer');

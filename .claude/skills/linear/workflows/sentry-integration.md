@@ -11,9 +11,11 @@ Legacy Sentry SaaS or a second error provider.
    and whose path matches `/organizations/intexuraos/issues/<id>/`.
 2. Verify the `error_hub` and Linear MCP servers are available. Do not fall back
    to a server named `sentry` or to a REST token.
-3. Call `mcp__error_hub__get_issue_details` with the exact issue URL. Extract
-   the title, project, environment, release, occurrence count, timestamps, and
-   stack evidence returned by SentryBox.
+3. Call the `error_hub` server's `execute_sentry_tool` tool with
+   `name`: `get_issue_details` and
+   `arguments`: `{ issueUrl: <exact issue URL> }`.
+   Extract the title, project, environment, release, occurrence count,
+   timestamps, and stack evidence returned by SentryBox.
 4. Search Linear for an existing issue with the same SentryBox issue URL or
    title. If a match exists, report it instead of creating a duplicate.
 5. Create one unassigned Linear issue in team `IntexuraOS`, state `Backlog`,

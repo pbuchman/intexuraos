@@ -449,9 +449,11 @@ function validatePrivateHost(value) {
   } catch {
     throw new TypeError('INTEXURAOS_ERROR_HUB_HOST is invalid');
   }
+  const tailnetDnsHostnamePattern =
+    /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
   if (
     origin.hostname === '' ||
-    !origin.hostname.endsWith('.ts.net') ||
+    !tailnetDnsHostnamePattern.test(origin.hostname.toLowerCase()) ||
     origin.port !== '8443' ||
     origin.host.toLowerCase() !== value.toLowerCase() ||
     origin.username !== '' ||

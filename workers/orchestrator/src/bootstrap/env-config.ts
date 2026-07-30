@@ -122,6 +122,9 @@ function readOptionalString(env: EnvReader, name: string): string | undefined {
   return raw !== undefined && raw !== '' ? raw : undefined;
 }
 
+const TAILNET_DNS_HOSTNAME_PATTERN =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.){2,}ts\.net$/u;
+
 function readErrorHubHost(env: EnvReader): string {
   const value = getRequiredEnv('INTEXURAOS_ERROR_HUB_HOST', env);
   let origin: URL | undefined;
@@ -136,7 +139,7 @@ function readErrorHubHost(env: EnvReader): string {
   if (
     origin === undefined ||
     origin.hostname === '' ||
-    !origin.hostname.endsWith('.ts.net') ||
+    !TAILNET_DNS_HOSTNAME_PATTERN.test(origin.hostname.toLowerCase()) ||
     origin.port !== '8443' ||
     origin.host.toLowerCase() !== value.toLowerCase() ||
     origin.username !== '' ||
