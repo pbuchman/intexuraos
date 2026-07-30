@@ -4,13 +4,13 @@ All issues must be linked between systems for full traceability.
 
 ## Link Directions
 
-| Direction       | Method                                                             |
-| --------------- | ------------------------------------------------------------------ |
-| Linear → GitHub | PR title contains `INT-XXX` (enables auto-attachment)              |
-| GitHub → Linear | GitHub integration attaches PR (when title + branch have issue ID) |
-| Linear → GitHub | `Fixes INT-XXX` in PR body (for issue closing behavior)            |
-| Sentry → Linear | `[sentry] <title>` naming + link in description                    |
-| Linear → Sentry | Comment on Sentry issue                                            |
+| Direction          | Method                                                             |
+| ------------------ | ------------------------------------------------------------------ |
+| Linear → GitHub    | PR title contains `INT-XXX` (enables auto-attachment)              |
+| GitHub → Linear    | GitHub integration attaches PR (when title + branch have issue ID) |
+| Linear → GitHub    | `Fixes INT-XXX` in PR body (for issue closing behavior)            |
+| SentryBox → Linear | Code Agent webhook creates an issue with the SentryBox URL         |
+| Linear → SentryBox | The issue description retains the original SentryBox evidence URL  |
 
 ## GitHub Integration (Automatic Attachment)
 
@@ -56,22 +56,20 @@ Always verify after creating a PR:
 # If missing, the naming convention wasn't followed
 ```
 
-## Sentry Integration
+## SentryBox Integration
 
-### Creating Linear Issue from Sentry
+### Creating a Linear Issue from SentryBox
 
-1. Title format: `[sentry] <error-message>`
-2. Description includes:
-   - Sentry issue link
-   - Stacktrace excerpt
-   - Error context
+The Code Agent webhook creates the Linear issue automatically. Its description includes:
 
-### Linking Linear Issue to Sentry
+- SentryBox issue URL
+- organization and project
+- SentryBox issue ID
+- webhook resource and action
+- triggering event ID
 
-After creating Linear issue, add comment to Sentry with:
-
-- Linear issue link
-- Brief summary of planned fix
+Do not create a second Linear issue manually and do not attempt to write comments back to
+SentryBox. The retained SentryBox URL in the generated issue is the canonical evidence link.
 
 ## PR Body Links
 
@@ -81,7 +79,7 @@ Include these in every PR:
 ## Cross-References
 
 - **Linear Issue**: [INT-XXX](https://linear.app/pbuchman/issue/INT-XXX)
-- **Sentry Issue** (if applicable): [Error Title](https://sentry.io/...)
+- **SentryBox Issue** (if applicable): [Error Title](https://<ERROR_HUB_HOST>/organizations/<org>/issues/<id>/)
 ```
 
 ## Why Comments Don't Work

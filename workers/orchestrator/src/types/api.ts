@@ -33,7 +33,7 @@ export interface CreateTaskRequest {
     | 'remediation'
     | 'ask_agent'
     | 'sentry';
-  /** Sentry issue context for Sentry-triggered code tasks. */
+  /** SentryBox issue context for error-triggered code tasks. */
   sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;

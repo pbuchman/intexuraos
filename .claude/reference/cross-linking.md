@@ -2,13 +2,13 @@
 
 All artifacts must be connected:
 
-| From   | To     | Method                                          |
-| ------ | ------ | ----------------------------------------------- |
-| Linear | GitHub | PR title contains `INT-XXX`                     |
-| GitHub | Linear | `Fixes INT-XXX` in PR body                      |
-| Sentry | Linear | `[sentry] <title>` prefix + link in description |
-| Linear | Sentry | Comment on Sentry issue with Linear link        |
-| PR     | Sentry | Sentry link in PR description                   |
+| From      | To        | Method                                                         |
+| --------- | --------- | -------------------------------------------------------------- |
+| Linear    | GitHub    | PR title contains `INT-XXX`                                    |
+| GitHub    | Linear    | `Fixes INT-XXX` in PR body                                     |
+| SentryBox | Linear    | Code Agent webhook creates an issue with the evidence URL      |
+| Linear    | SentryBox | Generated issue description retains the SentryBox evidence URL |
+| PR        | SentryBox | SentryBox issue link in PR description when applicable         |
 
 ## Rules
 

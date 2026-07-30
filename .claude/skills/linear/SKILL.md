@@ -1,7 +1,7 @@
 ---
 name: linear
 description: Linear issue management with automatic workflow orchestration. Handles issue creation, state transitions, and automatic splitting of large plans into tiered child issues. Use when creating issues, tracking tasks, working on INT-XXX issues, or managing Linear workflow.
-argument-hint: '[INT-XXX | task description | sentry-url]'
+argument-hint: '[INT-XXX | task description | sentrybox-url]'
 ---
 
 # Linear Issue Management
@@ -18,7 +18,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 /linear                           # NON-INTERACTIVE: Pick random Todo issue
 /linear <task description>        # Create new issue
 /linear INT-123                   # Work on existing issue
-/linear <sentry-url>              # Create issue from Sentry error
+/linear <sentrybox-url>           # Create issue from a SentryBox error
 ```
 
 ## Core Mandates (6 Essential Rules)
@@ -27,7 +27,7 @@ Manage Linear issues, branches, and PRs with enforced workflow and cross-linking
 2. **Branch First**: EVERY task starts with branch from `origin/development`. Working on `main` = task failure.
 3. **CI Gate**: `pnpm run ci:tracked` MUST pass before commit. NON-NEGOTIABLE.
 4. **State Management**: Issues transition: Backlog → In Progress → In Review. Never skip states.
-5. **Cross-Linking**: Every issue links Linear ↔ GitHub ↔ Sentry. PRs require `[INT-XXX]` in title.
+5. **Cross-Linking**: Every issue links Linear ↔ GitHub ↔ SentryBox. PRs require `[INT-XXX]` in title.
 6. **Never Assign Issues**: NEVER set `assignee`, `assigneeId`, or `delegate` on any Linear issue. Assignment is exclusively the user's responsibility. Enforced by PreToolUse hook.
 
 ---
@@ -96,12 +96,12 @@ This applies to:
 
 The skill automatically detects intent from input:
 
-| Input Pattern                   | Type               | Workflow                                                 |
-| ------------------------------- | ------------------ | -------------------------------------------------------- |
-| `/linear` (no args)             | Random Todo        | [random-todo.md](workflows/random-todo.md)               |
-| `/linear <task description>`    | Create New         | [create-issue.md](workflows/create-issue.md)             |
-| `/linear INT-<number>`          | Work Existing      | [work-existing.md](workflows/work-existing.md)\*         |
-| `/linear https://sentry.io/...` | Sentry Integration | [sentry-integration.md](workflows/sentry-integration.md) |
+| Input Pattern                                                                         | Type                  | Workflow                                                 |
+| ------------------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------- |
+| `/linear` (no args)                                                                   | Random Todo           | [random-todo.md](workflows/random-todo.md)               |
+| `/linear <task description>`                                                          | Create New            | [create-issue.md](workflows/create-issue.md)             |
+| `/linear INT-<number>`                                                                | Work Existing         | [work-existing.md](workflows/work-existing.md)\*         |
+| `/linear https://home-dev.taild6ad57.ts.net:8443/organizations/intexuraos/issues/...` | SentryBox Integration | [sentry-integration.md](workflows/sentry-integration.md) |
 
 \*Routes to [parent-execution.md](workflows/parent-execution.md) if issue has child subissues
 

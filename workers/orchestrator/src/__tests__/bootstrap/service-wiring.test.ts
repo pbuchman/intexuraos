@@ -33,7 +33,7 @@ function makeRegistry(overrides: {
   } as unknown as WorkerAuthRegistry;
 }
 
-function makeParsedEnv(errorHubHost?: string): BootstrapEnvConfig {
+function makeParsedEnv(errorHubHost = 'home-dev.example.ts.net:8443'): BootstrapEnvConfig {
   return loadEnvConfig({
     INTEXURAOS_REPOSITORY_URL: 'https://github.com/example/repo.git',
     INTEXURAOS_CODE_AGENT_URL: 'https://code-agent.test',
@@ -46,7 +46,7 @@ function makeParsedEnv(errorHubHost?: string): BootstrapEnvConfig {
     GOOGLE_APPLICATION_CREDENTIALS: '/path/to/sa.json',
     INTEXURAOS_LINEAR_API_KEY: 'linear-key',
     INTEXURAOS_SENTRY_AUTH_TOKEN: 'sentry-token',
-    ...(errorHubHost !== undefined ? { INTEXURAOS_ERROR_HUB_HOST: errorHubHost } : {}),
+    INTEXURAOS_ERROR_HUB_HOST: errorHubHost,
     INTEXURAOS_MINIMAX_APP_API_KEY: 'minimax-key',
     INTEXURAOS_MIMO_APP_API_KEY: 'mimo-key',
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
@@ -174,10 +174,12 @@ describe('buildTaskDispatcherWorkerSecrets', () => {
   it('forwards the parsed Error Hub host to task dispatcher worker secrets', () => {
     const env = makeParsedEnv('home-dev.example.ts.net:8443');
 
-    expect(buildTaskDispatcherWorkerSecrets(env, 'anthropic-token')).toEqual({
+    const secrets = buildTaskDispatcherWorkerSecrets(env, 'anthropic-token');
+
+    expect(secrets).not.toHaveProperty('SENTRY_AUTH_TOKEN');
+    expect(secrets).toEqual({
       ANTHROPIC_API_KEY: 'anthropic-token',
       LINEAR_API_KEY: 'linear-key',
-      SENTRY_AUTH_TOKEN: 'sentry-token',
       ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
       MINIMAX_API_KEY: 'minimax-key',
       MIMO_API_KEY: 'mimo-key',
@@ -185,11 +187,5 @@ describe('buildTaskDispatcherWorkerSecrets', () => {
       KIMI_API_KEY: 'kimi-key',
       OPENROUTER_API_KEY: 'openrouter-key',
     });
-  });
-
-  it('keeps historical-only worker secrets free of an Error Hub host', () => {
-    expect(buildTaskDispatcherWorkerSecrets(makeParsedEnv(), 'anthropic-token')).not.toHaveProperty(
-      'ERROR_HUB_HOST'
-    );
   });
 });

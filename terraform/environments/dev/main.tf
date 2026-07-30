@@ -553,8 +553,7 @@ module "secret_manager" {
     "INTEXURAOS_KIMI_APP_API_KEY"       = "Kimi Code API key for orchestrator kimi worker containers"
     "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"
     # External service API keys for worker containers
-    "INTEXURAOS_LINEAR_API_KEY"    = "Linear API key passed to code worker containers"
-    "INTEXURAOS_SENTRY_AUTH_TOKEN" = "Sentry auth token passed to code worker containers"
+    "INTEXURAOS_LINEAR_API_KEY" = "Linear API key passed to code worker containers"
     # Code worker secrets (INT-156)
     "INTEXURAOS_ORCHESTRATOR_SECRET"   = "HMAC signing secret for orchestrator communication"
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"

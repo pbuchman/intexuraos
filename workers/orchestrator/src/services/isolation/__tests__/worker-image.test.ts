@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const dockerfilePath = fileURLToPath(
@@ -13,6 +13,19 @@ const entrypointPath = fileURLToPath(
 );
 const codexConfigPath = fileURLToPath(
   new URL('../../../../../../docker/code-worker/config-defaults/codex-config.toml', import.meta.url)
+);
+const claudeMcpConfigPath = fileURLToPath(new URL('../../../../../../.mcp.json', import.meta.url));
+const legacySentrySkillPath = fileURLToPath(
+  new URL('../../../../../../.claude/skills/sentry/SKILL.md', import.meta.url)
+);
+const linearSentryWorkflowPath = fileURLToPath(
+  new URL(
+    '../../../../../../.claude/skills/linear/workflows/sentry-integration.md',
+    import.meta.url
+  )
+);
+const linearCrossLinkingPath = fileURLToPath(
+  new URL('../../../../../../.claude/skills/linear/reference/cross-linking.md', import.meta.url)
 );
 
 describe('code-worker image Codex skill bootstrap', () => {
@@ -55,7 +68,7 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(dockerfile).not.toContain('@sentry/mcp-server@latest');
   });
 
-  it('bakes and restores Codex MCP config with Linear, Sentry, and Error Hub access', () => {
+  it('bakes and restores Codex MCP config with Linear and Error Hub access only', () => {
     const dockerfile = readFileSync(dockerfilePath, 'utf8');
     const entrypoint = readFileSync(entrypointPath, 'utf8');
     const codexConfig = readFileSync(codexConfigPath, 'utf8');
@@ -67,15 +80,45 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(entrypoint).toContain('cp -a /opt/codex-home/.codex/. /home/claude/.codex/');
     expect(codexConfig).toContain('[mcp_servers.linear]');
     expect(codexConfig).toContain('bearer_token_env_var = "LINEAR_API_KEY"');
-    expect(codexConfig).toContain('[mcp_servers.sentry]');
     expect(codexConfig).toContain('command = "sh"');
-    expect(codexConfig).toContain('exec sentry-mcp --access-token "$SENTRY_AUTH_TOKEN"');
+    expect(codexConfig).not.toContain('[mcp_servers.sentry]');
+    expect(codexConfig).not.toContain('SENTRY_AUTH_TOKEN');
     expect(codexConfig).toContain('[mcp_servers.error_hub]');
     expect(codexConfig).toContain(
       'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer'
     );
     expect(codexConfig).not.toContain('npx @sentry/mcp-server');
     expect(codexConfig).not.toContain('@latest');
+  });
+
+  it('gives Claude the same direct Error Hub MCP contract as Codex', () => {
+    const expectedCommand =
+      'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer';
+    const claudeConfig = JSON.parse(readFileSync(claudeMcpConfigPath, 'utf8')) as {
+      mcpServers: Record<string, { command?: string; args?: string[] }>;
+    };
+    const codexConfig = readFileSync(codexConfigPath, 'utf8');
+
+    expect(Object.keys(claudeConfig.mcpServers)).toEqual(['linear', 'error_hub']);
+    expect(claudeConfig.mcpServers['error_hub']).toEqual({
+      command: 'sh',
+      args: ['-lc', expectedCommand],
+    });
+    expect(codexConfig).toContain(expectedCommand);
+    expect(readFileSync(dockerfilePath, 'utf8')).toContain('@sentry/mcp-server@0.37.0');
+  });
+
+  it('removes active Legacy Sentry skill routing from Claude workers', () => {
+    const linearWorkflow = readFileSync(linearSentryWorkflowPath, 'utf8');
+    const linearCrossLinking = readFileSync(linearCrossLinkingPath, 'utf8');
+
+    expect(existsSync(legacySentrySkillPath)).toBe(false);
+    expect(linearWorkflow).toContain('mcp__error_hub__get_issue_details');
+    expect(linearWorkflow).not.toContain('mcp__sentry__');
+    expect(linearWorkflow).not.toContain('sentry.io');
+    expect(linearWorkflow).not.toContain('Seer');
+    expect(linearCrossLinking).toContain('SentryBox');
+    expect(linearCrossLinking).not.toContain('sentry.io');
   });
 
   it('emits explicit bootstrap and runtime evidence lines for Codex runs', () => {

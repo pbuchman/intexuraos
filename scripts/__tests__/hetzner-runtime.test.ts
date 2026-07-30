@@ -33,10 +33,6 @@ const lifecycleBackfillRunbookPath = resolve(
   repoRoot,
   'docs/operations/code-task-lifecycle-backfill.md'
 );
-const sentryAutomationRunbookPath = resolve(
-  repoRoot,
-  'docs/operations/sentry-code-task-automation.md'
-);
 const firestoreCollectionsPath = resolve(repoRoot, 'firestore-collections.json');
 const firestoreIndexesPath = resolve(repoRoot, 'firestore.indexes.json');
 const contextAttachmentsRunbookPath = resolve(
@@ -945,20 +941,6 @@ describe('Hetzner web asset deployment', () => {
       owner: 'code-agent',
     });
     expect(indexes).not.toContain('code_task_lifecycle_maintenance_locks');
-  });
-
-  it('documents Sentry API auth on the home-dev systemd orchestrator without exposing it to Hetzner', () => {
-    const runbook = readRequired(sentryAutomationRunbookPath);
-
-    expect(runbook).toContain('home-dev');
-    expect(runbook).toContain('~/.code-orchestrator/env');
-    expect(runbook).toContain('chmod 600');
-    expect(runbook).toContain('intexuraos-orchestrator@pbuchman');
-    expect(runbook).toContain('INTEXURAOS_SENTRY_AUTH_TOKEN');
-    expect(runbook).toContain('SENTRY_AUTH_TOKEN');
-    expect(runbook).toContain('HTTP 200');
-    expect(runbook).toContain('does **not** load');
-    expect(runbook).toContain('Do not use `systemctl show ... Environment`');
   });
 
   it('deploys Hetzner production automatically after development receives a merge', () => {
@@ -1912,6 +1894,14 @@ describe('Hetzner secret loader', () => {
     expect(script).not.toContain('INTEXURAOS_MINIMAX_APP_API_KEY');
     expect(script).not.toContain('INTEXURAOS_SENTRY_AUTH_TOKEN');
     expect(script).not.toContain('INTEXURAOS_SSL_PRIVATE_KEY');
+  });
+
+  it('does not provision or inventory the removed Legacy Sentry worker token', () => {
+    const terraform = readRequired(terraformDevMainPath);
+    const retainedGcp = readRequired(terraformHetznerRetainedGcpPath);
+
+    expect(terraform).not.toContain('INTEXURAOS_SENTRY_AUTH_TOKEN');
+    expect(retainedGcp).not.toContain('INTEXURAOS_SENTRY_AUTH_TOKEN');
   });
 
   it('writes the code-agent task callback base URL as non-secret runtime config', () => {

@@ -276,7 +276,7 @@ describe('TaskDispatcher', () => {
     getSecrets: () => ({
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
-      SENTRY_AUTH_TOKEN: 'test-sentry-token',
+      ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
       MINIMAX_API_KEY: 'test-minimax-key',
       MIMO_API_KEY: 'test-mimo-key',
       DASHSCOPE_API_KEY: 'test-dashscope-key',

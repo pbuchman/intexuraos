@@ -129,9 +129,8 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
 export interface WorkerSecrets {
   ANTHROPIC_API_KEY: string;
   LINEAR_API_KEY: string;
-  SENTRY_AUTH_TOKEN: string;
   /** Non-secret private routing target, carried with the worker environment values. */
-  ERROR_HUB_HOST?: string;
+  ERROR_HUB_HOST: string;
   MINIMAX_API_KEY: string;
   MIMO_API_KEY: string;
   DASHSCOPE_API_KEY: string;

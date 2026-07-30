@@ -95,7 +95,7 @@ export interface Task {
     | 'remediation'
     | 'ask_agent'
     | 'sentry';
-  /** Sentry issue context provided by code-agent for Sentry-triggered code tasks. */
+  /** SentryBox issue context provided by code-agent for error-triggered code tasks. */
   sentryIssue?: SentryIssueTaskContext;
   /** Prompt-ready execution memory context prepared by code-agent retrieval. */
   executionMemoryContext?: ExecutionMemoryPromptContext;

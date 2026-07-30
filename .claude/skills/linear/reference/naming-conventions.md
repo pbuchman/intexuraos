@@ -8,7 +8,7 @@ Standardized naming patterns for Linear issues, branches, and PRs.
 | ------------- | ------------------ | ------------------------- |
 | Bug           | `fix/INT-XXX`      | `fix/INT-42`              |
 | Feature       | `feature/INT-XXX`  | `feature/INT-42`          |
-| Sentry        | `fix/sentry-XXX`   | `fix/sentry-INTEXURAOS-4` |
+| SentryBox     | `fix/sentry-XXX`   | `fix/sentry-INTEXURAOS-4` |
 | Refactor      | `refactor/INT-XXX` | `refactor/INT-42`         |
 | Documentation | `docs/INT-XXX`     | `docs/INT-42`             |
 
@@ -20,7 +20,7 @@ Standardized naming patterns for Linear issues, branches, and PRs.
 | ------------- | ----------------------------------- | --------------------------------------------------- |
 | Bug           | `[bug] <short-error-message>`       | `[bug] Cannot read property 'id' of undefined`      |
 | Feature       | `[feature] <action-object-context>` | `[feature] Add OAuth token refresh for calendar`    |
-| Sentry        | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object`         |
+| SentryBox     | `[sentry] <error-name>`             | `[sentry] TypeError: null is not an object`         |
 | Coverage      | `[coverage][<app>] <description>`   | `[coverage][user-service] Add tests for validation` |
 | Refactoring   | `[refactor] <component-name>`       | `[refactor] Extract shared HTTP client utilities`   |
 | Documentation | `[docs] <topic>`                    | `[docs] API authentication flow`                    |

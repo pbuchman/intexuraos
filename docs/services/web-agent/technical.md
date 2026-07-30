@@ -353,7 +353,7 @@ All required vars are validated at startup via `validateRequiredEnv()`. `INTEXUR
 
 **PromptBuilder versioning** — Both `summaryPrompt` and `summaryRepairPrompt` use the `PromptBuilder` interface with semver `version: '2.0.0'`. Bump the version when changing prompt content.
 
-**Sentry logging** — Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to Sentry.
+**SentryBox logging** — Uses `createAppLogger()` from `@intexuraos/infra-sentry` for automatic error forwarding to SentryBox.
 
 **Response contract** — All internal routes use `reply.ok()` / `reply.fail()` instead of raw `reply.send()` / `reply.status()`.
 

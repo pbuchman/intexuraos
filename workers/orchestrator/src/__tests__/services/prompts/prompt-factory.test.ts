@@ -132,7 +132,7 @@ describe('buildSystemPrompt dispatch', () => {
     expect(prompt).toContain('- Short ID: CODE-1');
     expect(prompt).toContain('- Event ID: event-1');
     expect(prompt).toContain('https://intexura.sentry.io/issues/123456/');
-    expect(prompt).toContain('Fetch current Sentry issue details');
+    expect(prompt).toContain('Fetch current SentryBox issue details');
     expect(prompt).toContain('recent events');
     expect(prompt).toContain('attempt reproduction');
     expect(prompt).toContain('SENTRY_AGENT_FINAL:');
@@ -154,7 +154,7 @@ describe('buildSystemPrompt dispatch', () => {
 
     expect(prompt).toContain('- Organization: unknown');
     expect(prompt).toContain('- Issue URL: unknown');
-    expect(prompt).toContain('- Sentry: <Sentry issue URL>');
+    expect(prompt).toContain('- SentryBox: <SentryBox issue URL>');
     expect(prompt).toContain(
       '- Worker Type: `<auto|opus|sonnet|minimax|mimo-pro|glm|qwen|kimi|codex|codex-xhigh|openrouter-free>`'
     );

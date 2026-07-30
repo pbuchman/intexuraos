@@ -22,7 +22,7 @@
 interface WorkerSecrets {
   ANTHROPIC_API_KEY: string;
   LINEAR_API_KEY: string;
-  SENTRY_AUTH_TOKEN: string;
+  ERROR_HUB_HOST: string;
   MINIMAX_API_KEY: string;
   DASHSCOPE_API_KEY: string;
   OPENROUTER_API_KEY: string;
@@ -227,7 +227,7 @@ const handle = await provider.createWorker({
   secrets: {
     ANTHROPIC_API_KEY: 'sk-ant-...',
     LINEAR_API_KEY: 'lin_api_...',
-    SENTRY_AUTH_TOKEN: 'sntrys_...',
+    ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
     MINIMAX_API_KEY: '',
     DASHSCOPE_API_KEY: '',
     OPENROUTER_API_KEY: '',

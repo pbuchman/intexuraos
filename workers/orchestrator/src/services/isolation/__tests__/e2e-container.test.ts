@@ -152,7 +152,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
       secrets: {
         ANTHROPIC_API_KEY: 'test-key',
         LINEAR_API_KEY: 'test-linear',
-        SENTRY_AUTH_TOKEN: 'test-sentry',
+        ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
         MINIMAX_API_KEY: 'test-minimax',
         MIMO_API_KEY: 'test-mimo',
         DASHSCOPE_API_KEY: 'test-dashscope',
@@ -371,7 +371,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
           secrets: {
             ANTHROPIC_API_KEY: 'test-key',
             LINEAR_API_KEY: 'test-linear',
-            SENTRY_AUTH_TOKEN: 'test-sentry',
+            ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
             MINIMAX_API_KEY: 'test-minimax',
             MIMO_API_KEY: 'test-mimo',
             DASHSCOPE_API_KEY: 'test-dashscope',

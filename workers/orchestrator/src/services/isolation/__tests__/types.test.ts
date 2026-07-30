@@ -120,7 +120,6 @@ describe('WORKER_TYPES configuration', () => {
     const workerSecretsKeys: ReadonlySet<string> = new Set<keyof WorkerSecrets>([
       'ANTHROPIC_API_KEY',
       'LINEAR_API_KEY',
-      'SENTRY_AUTH_TOKEN',
       'MINIMAX_API_KEY',
       'MIMO_API_KEY',
       'DASHSCOPE_API_KEY',

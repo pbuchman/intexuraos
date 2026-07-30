@@ -66,7 +66,7 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
   const env = [
     `TASK_ID=${taskId}`,
     `LINEAR_API_KEY=${config.secrets.LINEAR_API_KEY}`,
-    `SENTRY_AUTH_TOKEN=${config.secrets.SENTRY_AUTH_TOKEN}`,
+    `ERROR_HUB_HOST=${config.secrets.ERROR_HUB_HOST}`,
     `GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json`,
     `WORKER_RUNTIME=${runtime}`,
     'CODE_WORKER_MODE=1',
@@ -78,10 +78,6 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
     'NPM_CONFIG_IGNORE_SCRIPTS=true',
     'npm_config_ignore_scripts=true',
   ];
-
-  if (config.secrets.ERROR_HUB_HOST !== undefined) {
-    env.push(`ERROR_HUB_HOST=${config.secrets.ERROR_HUB_HOST}`);
-  }
 
   if (runtime === 'claude') {
     env.push('CLAUDE_PROJECT_DIR=/repo');

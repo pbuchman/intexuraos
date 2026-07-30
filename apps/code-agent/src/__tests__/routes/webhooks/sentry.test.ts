@@ -46,6 +46,7 @@ describe('POST /webhooks/sentry', () => {
   let app: FastifyInstance;
   let codeTaskCreate: ReturnType<typeof vi.fn>;
   let sentryReservationAcquire: ReturnType<typeof vi.fn>;
+  let sentryRouteSchema: unknown;
 
   beforeEach(async () => {
     process.env['INTEXURAOS_SENTRY_WEBHOOK_SECRET'] = WEBHOOK_SECRET;
@@ -104,6 +105,11 @@ describe('POST /webhooks/sentry', () => {
     } as unknown as ServiceContainer);
 
     app = fastify({ logger: false });
+    app.addHook('onRoute', (routeOptions) => {
+      if (routeOptions.url === '/webhooks/sentry') {
+        sentryRouteSchema = routeOptions.schema;
+      }
+    });
     await app.register(intexuraFastifyPlugin);
     await app.register(sentryWebhookRoute);
     await app.ready();
@@ -116,6 +122,14 @@ describe('POST /webhooks/sentry', () => {
     delete process.env['INTEXURAOS_SENTRY_AUTOMATION_USER_ID'];
     delete process.env['INTEXURAOS_ORCHESTRATOR_SECRET'];
     vi.clearAllMocks();
+  });
+
+  it('describes the compatibility webhook as SentryBox automation', () => {
+    expect(sentryRouteSchema).toEqual(expect.objectContaining({
+      summary: 'Receive SentryBox issue webhook events',
+      description:
+        'Receives SentryBox issue and event_alert webhook events and creates a SentryBox code task.',
+    }));
   });
 
   it('accepts a signed issue webhook and creates a Sentry code task', async () => {

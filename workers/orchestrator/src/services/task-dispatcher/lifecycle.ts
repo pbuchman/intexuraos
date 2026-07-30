@@ -62,7 +62,7 @@ export function pickAgentLabel(task: Task): string {
             : task.agentType === 'ask_agent'
               ? 'Ask Agent'
               : task.agentType === 'sentry'
-                ? 'Sentry Agent'
+                ? 'SentryBox Agent'
                 : hasCodeTaskLabel(task.linearIssueLabels)
                   ? 'Execution Agent'
                   : 'Planning Agent';
@@ -82,8 +82,8 @@ export function describeAgent(agentLabel: string): string {
         ? 'Remediation Agent — address review findings on the existing PR branch and decide if re-review is needed'
         : agentLabel === 'Ask Agent'
           ? 'Ask Agent — interactive code assistant, respond to user questions'
-          : agentLabel === 'Sentry Agent'
-            ? 'Sentry Agent — fix or code-suppress a Sentry issue and create a PR'
+          : agentLabel === 'SentryBox Agent'
+            ? 'SentryBox Agent — fix or code-suppress a SentryBox issue and create a PR'
             : agentLabel === 'Execution Agent'
               ? 'Execution Agent — implement autonomously, run CI, create PR'
               : 'Planning Agent — create planning artifacts only, no implementation coding';
