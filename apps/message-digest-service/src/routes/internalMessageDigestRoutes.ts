@@ -30,6 +30,7 @@ interface PubSubPushBody {
     publishTime: string;
   };
   subscription: string;
+  deliveryAttempt?: number | undefined;
 }
 
 interface MessageDigestRunRequest {
@@ -88,6 +89,7 @@ const pubsubPushBodySchema = {
       },
     },
     subscription: { type: 'string', minLength: 1, maxLength: 1_024 },
+    deliveryAttempt: { type: 'integer', minimum: 0 },
   },
 } as const;
 
