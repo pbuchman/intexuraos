@@ -26,9 +26,11 @@ export async function readPrivateWhatsAppDigestSource(
   if (windowStart === undefined || windowEnd === undefined) {
     return err({ code: 'VALIDATION_ERROR', message: 'Invalid private digest source query' });
   }
-
-  return ok({
-    messages: projectPrivateDigestMessages(rawPage.value.messages, ({ messageId, projectionKey }) =>
+  const windowStartTime = Date.parse(windowStart);
+  const windowEndTime = Date.parse(windowEnd);
+  const projectedMessages = projectPrivateDigestMessages(
+    rawPage.value.messages,
+    ({ messageId, projectionKey }) =>
       deps.tokens.createMessageRef({
         userId: input.userId,
         sourceAccountId: input.sourceAccountId,
@@ -40,7 +42,13 @@ export async function readPrivateWhatsAppDigestSource(
         messageId,
         projectionKey,
       })
-    ),
+  );
+
+  return ok({
+    messages: projectedMessages.filter((message) => {
+      const eventTime = Date.parse(message.eventTimestamp);
+      return Number.isFinite(eventTime) && eventTime >= windowStartTime && eventTime < windowEndTime;
+    }),
     sourceRevision: rawPage.value.sourceRevision,
     highWatermark: rawPage.value.highWatermark,
     nextCursor: rawPage.value.nextCursor,
