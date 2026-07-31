@@ -28,6 +28,8 @@ interface PubSubPushBody {
     data: string;
     messageId: string;
     publishTime: string;
+    attributes?: Record<string, string> | undefined;
+    orderingKey?: string | undefined;
   };
   subscription: string;
   deliveryAttempt?: number | undefined;
@@ -86,6 +88,13 @@ const pubsubPushBodySchema = {
         data: { type: 'string', minLength: 4, maxLength: 400_000 },
         messageId: { type: 'string', minLength: 1, maxLength: 256 },
         publishTime: { type: 'string', format: 'date-time' },
+        attributes: {
+          type: 'object',
+          maxProperties: 100,
+          propertyNames: { type: 'string', minLength: 1, maxLength: 256 },
+          additionalProperties: { type: 'string', maxLength: 1_024 },
+        },
+        orderingKey: { type: 'string', maxLength: 1_024 },
       },
     },
     subscription: { type: 'string', minLength: 1, maxLength: 1_024 },

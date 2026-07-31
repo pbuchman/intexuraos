@@ -26,6 +26,31 @@ top-level field, deploy the exact tested commit, and resume the existing queued 
 This change is deliberately narrow: keep the Message Digest push envelope closed and add only
 the documented optional field. Do not log, persist, or use `deliveryAttempt` in business logic.
 
+## Post-deployment continuation: nested Pub/Sub message metadata
+
+The first deployed fix exposed the next validation error from the same real envelope:
+`body/message must NOT have additional properties`. A selected DLQ replay and a second publish of
+the exact frozen payload without explicit operator attributes both reproduced it before the run
+processor. The run therefore remains `queued`, generation attempts remain zero, delivery remains
+`not_sent`, and the original selected DLQ message remains unacknowledged.
+
+Google's wrapped `PubsubMessage` contract permits optional string `attributes` and an optional
+`orderingKey`. Complete the same closed-envelope fix as follows before another replay:
+
+1. RED — extend the route regression test with top-level `deliveryAttempt`, a bounded string
+   attributes map, and an ordering key. Require HTTP 200 and one processor call. In the same test,
+   prove an unrelated nested message field is still HTTP 400 and does not invoke the processor
+   again.
+2. Confirm the deployed-equivalent schema fails the new valid envelope with HTTP 400.
+3. GREEN — add optional `attributes` and `orderingKey` to the TypeScript envelope and JSON schema.
+   Bound attributes to Pub/Sub's key/value/count limits, keep both message-level and top-level
+   `additionalProperties: false`, and neither log nor pass the metadata into business logic.
+4. Repeat focused tests, read-only review, the one required final `ci:tracked` gate, PR, exact-tree
+   deployment, and only then resume the selected one-message recovery.
+5. After the exact run has one terminal WhatsApp receipt, ACK the original selected DLQ record and
+   classify/ACK only the operator-created poison replay copies with the same payload hash; never
+   replay those copies again.
+
 ## Files
 
 - Modify `apps/message-digest-service/src/__tests__/internalMessageDigestRoutes.test.ts`.
@@ -127,8 +152,9 @@ Use Computer Use only with the already-running system Google Chrome and its exis
 ### Modified
 
 - `POST /internal/message-digests/pubsub/run`: the wrapped Google Pub/Sub request body now permits
-  the documented optional top-level non-negative integer `deliveryAttempt`. The decoded business
-  payload, authentication, status mapping, and response contract are unchanged.
+  the documented optional top-level non-negative integer `deliveryAttempt` plus bounded optional
+  `message.attributes` and `message.orderingKey` metadata. The decoded business payload,
+  authentication, status mapping, and response contract are unchanged.
 
 ### Created
 
