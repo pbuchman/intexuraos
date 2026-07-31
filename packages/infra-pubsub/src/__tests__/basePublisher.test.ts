@@ -60,6 +60,27 @@ class TestPublisher extends BasePubSubPublisher {
       'test safe receipt event'
     );
   }
+
+  async publishSafely(
+    topicName: string,
+    event: unknown,
+    context: PublishContext
+  ): Promise<Result<void, PublishError>> {
+    return await this.publishToTopicSafely(topicName, event, context, 'test safe event');
+  }
+
+  async publishOptionalSafely(
+    topicName: string | null,
+    event: unknown,
+    context: PublishContext
+  ): Promise<Result<void, PublishError>> {
+    return await this.publishToOptionalTopicSafely(
+      topicName,
+      event,
+      context,
+      'test safe optional event'
+    );
+  }
 }
 
 describe('BasePubSubPublisher', () => {
@@ -86,11 +107,12 @@ describe('BasePubSubPublisher', () => {
 
     it('redacts provider failures from the safe receipt result and application logs', async () => {
       const privateProviderError = 'private-provider-error-fixture';
+      const info = vi.fn();
       const error = vi.fn();
       const safePublisher = new TestPublisher({
         projectId: 'test-project',
         logger: {
-          info: vi.fn(),
+          info,
           error,
         } as unknown as pino.Logger,
       });
@@ -99,7 +121,7 @@ describe('BasePubSubPublisher', () => {
       const result = await safePublisher.publishWithSafeReceipt(
         'test-topic',
         { data: 'private-payload-fixture' },
-        { eventKind: 'matrix_corpus_ingest' }
+        { messageId: 'private-context-fixture' }
       );
 
       expect(result).toEqual({
@@ -108,6 +130,43 @@ describe('BasePubSubPublisher', () => {
       });
       expect(JSON.stringify(error.mock.calls)).not.toContain(privateProviderError);
       expect(JSON.stringify(error.mock.calls)).not.toContain('private-payload-fixture');
+      expect(JSON.stringify(error.mock.calls)).not.toContain('private-context-fixture');
+      expect(JSON.stringify(info.mock.calls)).not.toContain('private-context-fixture');
+    });
+
+    it('returns a content-free failure from the safe void publishing seam', async () => {
+      const privateProviderError = 'private-provider-error-fixture';
+      const error = vi.fn();
+      const safePublisher = new TestPublisher({
+        projectId: 'test-project',
+        logger: { info: vi.fn(), error } as unknown as pino.Logger,
+      });
+      mockPublishMessage.mockRejectedValueOnce(new Error(privateProviderError));
+
+      const result = await safePublisher.publishSafely(
+        'test-topic',
+        { text: 'private-payload-fixture' },
+        { messageId: 'private-context-fixture' }
+      );
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub publication failed' },
+      });
+      expect(JSON.stringify(error.mock.calls)).not.toContain(privateProviderError);
+      expect(JSON.stringify(error.mock.calls)).not.toContain('private-payload-fixture');
+      expect(JSON.stringify(error.mock.calls)).not.toContain('private-context-fixture');
+    });
+
+    it('returns success without exposing the provider receipt from the safe void seam', async () => {
+      const result = await publisher.publishSafely(
+        'test-topic',
+        { text: 'private-payload-fixture' },
+        { messageId: 'private-context-fixture' }
+      );
+
+      expect(result).toEqual({ ok: true, value: undefined });
+      expect(mockPublishMessage).toHaveBeenCalledTimes(1);
     });
 
     it('publishes event successfully', async () => {
@@ -171,6 +230,28 @@ describe('BasePubSubPublisher', () => {
       expect(mockPublishMessage).not.toHaveBeenCalled();
     });
 
+    it('does not write the skipped event payload to application logs', async () => {
+      const debug = vi.fn();
+      const privatePublisher = new TestPublisher({
+        projectId: 'test-project',
+        logger: { debug } as unknown as pino.Logger,
+      });
+
+      await privatePublisher.publishOptionalSafely(
+        null,
+        { messageId: 'private-message-id', text: 'private-message-body' },
+        { messageId: 'private-context-id' }
+      );
+
+      expect(debug).toHaveBeenCalledWith(
+        {},
+        'Topic not configured, skipping test safe optional event'
+      );
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('private-message-id');
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('private-message-body');
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('private-context-id');
+    });
+
     it('publishes when topic is provided', async () => {
       const result = await publisher.publishOptional(
         'optional-topic',
@@ -179,6 +260,17 @@ describe('BasePubSubPublisher', () => {
       );
 
       expect(result.ok).toBe(true);
+      expect(mockPublishMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('publishes safely when the optional topic is provided', async () => {
+      const result = await publisher.publishOptionalSafely(
+        'optional-topic',
+        { text: 'private-payload-fixture' },
+        { messageId: 'private-context-fixture' }
+      );
+
+      expect(result).toEqual({ ok: true, value: undefined });
       expect(mockPublishMessage).toHaveBeenCalledTimes(1);
     });
 

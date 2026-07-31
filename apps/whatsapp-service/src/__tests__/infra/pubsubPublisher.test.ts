@@ -8,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GcpPubSubPublisher } from '../../infra/pubsub/index.js';
 
 const mockPublishToTopic = vi.fn();
+const mockPublishToTopicSafely = vi.fn();
 const mockPublishToTopicWithSafeReceipt = vi.fn();
 const mockPublishToOptionalTopic = vi.fn();
+const mockPublishToOptionalTopicSafely = vi.fn();
 
 vi.mock('@intexuraos/infra-pubsub', () => ({
   BasePubSubPublisher: class {
@@ -41,6 +43,28 @@ vi.mock('@intexuraos/infra-pubsub', () => ({
       return mockPublishToOptionalTopic(topicName, data, attributes);
     }
 
+    async publishToTopicSafely(
+      topicName: string,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToTopicSafely(topicName, data, attributes);
+    }
+
+    async publishToOptionalTopicSafely(
+      topicName: string | null,
+      data: unknown,
+      attributes: Record<string, string>,
+      _description: string
+    ): Promise<
+      { ok: true; value: undefined } | { ok: false; error: { code: string; message: string } }
+    > {
+      return mockPublishToOptionalTopicSafely(topicName, data, attributes);
+    }
+
     async publishToTopicWithSafeReceipt(
       topicName: string,
       data: unknown,
@@ -59,14 +83,18 @@ describe('GcpPubSubPublisher', () => {
 
   beforeEach(() => {
     mockPublishToTopic.mockReset();
+    mockPublishToTopicSafely.mockReset();
     mockPublishToTopicWithSafeReceipt.mockReset();
     mockPublishToOptionalTopic.mockReset();
+    mockPublishToOptionalTopicSafely.mockReset();
     mockPublishToTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToTopicSafely.mockResolvedValue({ ok: true, value: undefined });
     mockPublishToTopicWithSafeReceipt.mockResolvedValue({
       ok: true,
       value: 'provider-receipt-private',
     });
     mockPublishToOptionalTopic.mockResolvedValue({ ok: true, value: undefined });
+    mockPublishToOptionalTopicSafely.mockResolvedValue({ ok: true, value: undefined });
     publisher = new GcpPubSubPublisher({
       projectId: 'test-project',
       mediaCleanupTopic: 'media-cleanup-topic',
@@ -121,15 +149,15 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishMediaCleanup(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('media-cleanup-topic', event, {
-        messageId: 'msg-123',
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith('media-cleanup-topic', event, {
+        eventKind: 'media_cleanup',
       });
     });
 
     it('returns error when publish fails', async () => {
-      mockPublishToTopic.mockResolvedValue({
+      mockPublishToTopicSafely.mockResolvedValue({
         ok: false,
-        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub unavailable' },
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub publication failed' },
       });
 
       const result = await publisher.publishMediaCleanup({
@@ -143,7 +171,7 @@ describe('GcpPubSubPublisher', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Pub/Sub unavailable');
+        expect(result.error.message).toBe('Pub/Sub publication failed');
       }
     });
   });
@@ -163,8 +191,30 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishAudioStored(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('audio-stored-topic', event, {
-        messageId: 'stored-audio-1',
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith('audio-stored-topic', event, {
+        eventKind: 'audio_stored',
+      });
+    });
+  });
+
+  describe('publishMediaTranscriptionRequested', () => {
+    it('publishes to the audio topic with content-free logging context', async () => {
+      const event = {
+        type: 'whatsapp.media.transcription.requested' as const,
+        messageId: 'private-message-id',
+        userId: 'private-user-id',
+        mediaId: 'private-media-id',
+        gcsPath: 'whatsapp/private-user-id/private-message-id/audio.ogg',
+        mimeType: 'audio/ogg',
+        mediaKind: 'audio' as const,
+        timestamp: new Date().toISOString(),
+      };
+
+      const result = await publisher.publishMediaTranscriptionRequested(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith('audio-stored-topic', event, {
+        eventKind: 'media_transcription_requested',
       });
     });
   });
@@ -184,10 +234,10 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishIntexMessageIngest(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('intex-message-ingest-topic', event, {
-        messageId: 'wamid.abc',
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith('intex-message-ingest-topic', event, {
+        eventKind: 'intex_message_ingest',
       });
-      expect(mockPublishToOptionalTopic).not.toHaveBeenCalled();
+      expect(mockPublishToOptionalTopicSafely).not.toHaveBeenCalled();
     });
   });
 
@@ -249,8 +299,8 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishWebhookProcess(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
-        eventId: 'event-123',
+      expect(mockPublishToOptionalTopicSafely).toHaveBeenCalledWith(null, event, {
+        eventKind: 'webhook_process',
       });
     });
 
@@ -275,9 +325,11 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishWebhookProcess(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
-        eventId: 'event-123',
-      });
+      expect(mockPublishToOptionalTopicSafely).toHaveBeenCalledWith(
+        'webhook-process-topic',
+        event,
+        { eventKind: 'webhook_process' }
+      );
     });
 
     it('returns error when publish fails', async () => {
@@ -289,9 +341,9 @@ describe('GcpPubSubPublisher', () => {
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
-      mockPublishToOptionalTopic.mockResolvedValue({
+      mockPublishToOptionalTopicSafely.mockResolvedValue({
         ok: false,
-        error: { code: 'PUBLISH_FAILED', message: 'Connection failed' },
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub publication failed' },
       });
 
       const result = await publisherWithTopic.publishWebhookProcess({
@@ -305,7 +357,7 @@ describe('GcpPubSubPublisher', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Connection failed');
+        expect(result.error.message).toBe('Pub/Sub publication failed');
       }
     });
   });
@@ -330,9 +382,8 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishConversationAssistantPreparation(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
-        sessionId: 'whatsapp-conv-session-123',
-        userId: 'user-456',
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith('webhook-process-topic', event, {
+        eventKind: 'conversation_assistant_preparation',
         attempt: '2',
       });
     });
@@ -352,7 +403,7 @@ describe('GcpPubSubPublisher', () => {
           message: 'Conversation Assistant preparation topic is not configured',
         },
       });
-      expect(mockPublishToTopic).not.toHaveBeenCalled();
+      expect(mockPublishToTopicSafely).not.toHaveBeenCalled();
     });
   });
 
@@ -379,10 +430,13 @@ describe('GcpPubSubPublisher', () => {
         await publisherWithTopic.publishConversationAssistantContextAttachmentPreparation(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith(
         'webhook-process-topic',
         event,
-        { attempt: '2' }
+        {
+          eventKind: 'conversation_assistant_context_attachment_preparation',
+          attempt: '2',
+        }
       );
     });
 
@@ -403,7 +457,7 @@ describe('GcpPubSubPublisher', () => {
           message: 'Conversation Assistant context attachment preparation topic is not configured',
         },
       });
-      expect(mockPublishToTopic).not.toHaveBeenCalled();
+      expect(mockPublishToTopicSafely).not.toHaveBeenCalled();
     });
   });
 
@@ -429,12 +483,12 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishPrivateWhatsAppErasure(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToTopic).toHaveBeenCalledWith(
+      expect(mockPublishToTopicSafely).toHaveBeenCalledWith(
         'webhook-process-topic',
         event,
-        { attempt: '3' }
+        { eventKind: 'private_whatsapp_erasure', attempt: '3' }
       );
-      expect(JSON.stringify(mockPublishToTopic.mock.calls[0]?.[2])).not.toContain('secret');
+      expect(JSON.stringify(mockPublishToTopicSafely.mock.calls[0]?.[2])).not.toContain('secret');
     });
 
     it('returns an explicit retryable error when the process topic is not configured', async () => {
@@ -447,7 +501,7 @@ describe('GcpPubSubPublisher', () => {
           message: 'Private WhatsApp erasure topic is not configured',
         },
       });
-      expect(mockPublishToTopic).not.toHaveBeenCalled();
+      expect(mockPublishToTopicSafely).not.toHaveBeenCalled();
     });
   });
 
@@ -463,8 +517,8 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisher.publishExtractLinkPreviews(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith(null, event, {
-        messageId: 'msg-123',
+      expect(mockPublishToOptionalTopicSafely).toHaveBeenCalledWith(null, event, {
+        eventKind: 'extract_link_previews',
       });
     });
 
@@ -488,9 +542,11 @@ describe('GcpPubSubPublisher', () => {
       const result = await publisherWithTopic.publishExtractLinkPreviews(event);
 
       expect(result.ok).toBe(true);
-      expect(mockPublishToOptionalTopic).toHaveBeenCalledWith('webhook-process-topic', event, {
-        messageId: 'msg-123',
-      });
+      expect(mockPublishToOptionalTopicSafely).toHaveBeenCalledWith(
+        'webhook-process-topic',
+        event,
+        { eventKind: 'extract_link_previews' }
+      );
     });
 
     it('returns error when publish fails', async () => {
@@ -502,9 +558,9 @@ describe('GcpPubSubPublisher', () => {
         webhookProcessTopic: 'webhook-process-topic',
         logger: pino({ name: 'test', level: 'silent' }),
       });
-      mockPublishToOptionalTopic.mockResolvedValue({
+      mockPublishToOptionalTopicSafely.mockResolvedValue({
         ok: false,
-        error: { code: 'PUBLISH_FAILED', message: 'Network error' },
+        error: { code: 'PUBLISH_FAILED', message: 'Pub/Sub publication failed' },
       });
 
       const result = await publisherWithTopic.publishExtractLinkPreviews({
@@ -517,7 +573,7 @@ describe('GcpPubSubPublisher', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('INTERNAL_ERROR');
-        expect(result.error.message).toContain('Network error');
+        expect(result.error.message).toBe('Pub/Sub publication failed');
       }
     });
   });
