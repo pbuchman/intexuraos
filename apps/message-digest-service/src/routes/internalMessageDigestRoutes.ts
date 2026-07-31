@@ -27,7 +27,9 @@ interface PubSubPushBody {
   message: {
     data: string;
     messageId: string;
+    message_id?: string | undefined;
     publishTime: string;
+    publish_time?: string | undefined;
     attributes?: Record<string, string> | undefined;
     orderingKey?: string | undefined;
   };
@@ -82,7 +84,7 @@ const pubsubPushBodySchema = {
   properties: {
     message: {
       type: 'object',
-      additionalProperties: false,
+      additionalProperties: true,
       required: ['data', 'messageId', 'publishTime'],
       properties: {
         data: { type: 'string', minLength: 4, maxLength: 400_000 },
