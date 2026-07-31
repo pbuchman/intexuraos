@@ -136,8 +136,6 @@ export class IngestPrivateWhatsAppEventsUseCase {
       if (!storeResult.ok) {
         logger.error(
           {
-            matrixEventId: event.matrixEventId,
-            sourceAccountId: input.sourceAccountId,
             error: storeResult.error,
           },
           'Failed to store private WhatsApp event'
@@ -169,7 +167,6 @@ export class IngestPrivateWhatsAppEventsUseCase {
     const summary = summarize(messages);
     logger.info(
       {
-        sourceAccountId: input.sourceAccountId,
         deliveryMode: input.deliveryMode,
         accepted: summary.accepted,
         duplicates: summary.duplicates,

@@ -133,7 +133,7 @@ export class ProcessWebhookEventUseCase {
       logger.info(
         {
           eventId: savedEvent.id,
-          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { fromNumber }),
+          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { hasSender: true }),
           messageType,
           hasText: messageText !== null,
           hasImage: imageMedia !== null,
@@ -240,7 +240,7 @@ export class ProcessWebhookEventUseCase {
       logger.info(
         {
           eventId: savedEvent.id,
-          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { fromNumber }),
+          ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { hasSender: true }),
         },
         'Looking up user by phone number'
       );
@@ -254,7 +254,7 @@ export class ProcessWebhookEventUseCase {
                 matrixCorpusReserved: true,
                 reason: 'mapping_lookup_failed',
               }
-            : { eventId: savedEvent.id, fromNumber, error: userIdResult.error },
+            : { eventId: savedEvent.id, error: userIdResult.error },
           'Failed to look up user by phone number'
         );
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
@@ -269,7 +269,7 @@ export class ProcessWebhookEventUseCase {
         logger.info(
           {
             eventId: savedEvent.id,
-            ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { fromNumber }),
+            ...(isMatrixCorpusReserved ? { matrixCorpusReserved: true } : { hasSender: true }),
           },
           'No user mapping found for phone number'
         );
@@ -295,7 +295,7 @@ export class ProcessWebhookEventUseCase {
           eventId: savedEvent.id,
           ...(isMatrixCorpusReserved
             ? { matrixCorpusReserved: true }
-            : { fromNumber, userId }),
+            : { hasSender: true, userId }),
         },
         'User mapping found for phone number'
       );

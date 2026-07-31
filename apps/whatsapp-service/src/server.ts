@@ -18,6 +18,47 @@ import { getServices, initServices } from './services.js';
 
 const SERVICE_NAME = 'whatsapp-service';
 const SERVICE_VERSION = '0.0.4';
+const WHATSAPP_LOG_REDACTION = {
+  paths: [
+    'bodyPreview',
+    'rawBody',
+    'signatureReceived',
+    'userId',
+    'ownerUserId',
+    'auth0UserId',
+    'sourceAccountId',
+    'chatId',
+    'matrixEventId',
+    'matrixRoomId',
+    'phoneNumber',
+    'normalizedPhone',
+    'fromNumber',
+    'recipientPhone',
+    'phoneNumberId',
+    'displayPhoneNumber',
+    'senderPhoneNumber',
+    'whatsappSender',
+    'wabaId',
+    'receivedWabaId',
+    'receivedPhoneNumberId',
+    'receivedDisplayPhoneNumber',
+    'allowedWabaIds',
+    'allowedPhoneNumberIds',
+    'messageId',
+    'waMessageId',
+    'wamid',
+    'replyToWamid',
+    'replyToMessageId',
+    'mediaId',
+    'body.phoneNumber',
+    'body.userId',
+    'error.details.phoneNumber',
+    'error.details.userId',
+    'err.details.phoneNumber',
+    'err.details.userId',
+  ],
+  censor: '[Redacted]',
+};
 
 /**
  * Probe required secrets using this service's bespoke validation logic
@@ -152,11 +193,12 @@ export async function buildServer(
     // produce the documented validation response.
     routerOptions: { maxParamLength: 512 },
     logger: testLoggerStream
-      ? { level: 'info', stream: testLoggerStream }
+      ? { level: 'info', redact: WHATSAPP_LOG_REDACTION, stream: testLoggerStream }
       : process.env['NODE_ENV'] === 'test'
         ? false
         : {
             level: process.env['LOG_LEVEL'] ?? 'info',
+            redact: WHATSAPP_LOG_REDACTION,
             stream: createLogStream(),
           },
     disableRequestLogging: true, // We'll handle logging ourselves to skip health checks

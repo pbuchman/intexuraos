@@ -354,8 +354,13 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
   it('keeps an ordinary new-session text message byte-compatible', async () => {
     const { savedEvent, useCase, userMappingRepository, webhookEventRepository, messageRepository, eventPublisher, whatsappCloudApi } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
+    const privacyLogger = logger();
 
-    await useCase.execute(createTextPayload('new session: normal message'), savedEvent, logger());
+    await useCase.execute(
+      createTextPayload('new session: normal message'),
+      savedEvent,
+      privacyLogger
+    );
 
     expect(messageRepository.getAll()[0]?.text).toBe('new session: normal message');
     expect(eventPublisher.getIntexMessageIngestEvents()[0]).toMatchObject({ text: 'new session: normal message', sourceType: 'whatsapp_text' });
@@ -363,6 +368,14 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(1);
     const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
     expect(eventResult.ok && eventResult.value?.status).toBe('completed');
+    expect(
+      JSON.stringify([
+        vi.mocked(privacyLogger.info).mock.calls,
+        vi.mocked(privacyLogger.warn).mock.calls,
+        vi.mocked(privacyLogger.error).mock.calls,
+        vi.mocked(privacyLogger.debug).mock.calls,
+      ])
+    ).not.toContain('15551234567');
   });
 
   it('completes audio messages without sending a response when phoneNumberId is missing', async () => {

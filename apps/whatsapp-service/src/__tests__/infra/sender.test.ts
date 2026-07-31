@@ -897,11 +897,12 @@ describe('WhatsAppCloudApiSender', () => {
 
     it('never writes the full or normalized recipient to success and failure logs', async () => {
       const recipient = '+48123456789';
+      const privateWamid = 'wamid.digest-private';
       const scenarios = [
         vi.fn().mockResolvedValue({
           ok: true,
           json: (): Promise<{ messages: { id: string }[] }> =>
-            Promise.resolve({ messages: [{ id: 'wamid.digest-private' }] }),
+            Promise.resolve({ messages: [{ id: privateWamid }] }),
         }),
         vi.fn().mockResolvedValue({
           ok: false,
@@ -920,6 +921,9 @@ describe('WhatsAppCloudApiSender', () => {
         );
         expect(JSON.stringify([infoSpy.mock.calls, warnSpy.mock.calls, errorSpy.mock.calls])).not.toContain(
           recipient.slice(1)
+        );
+        expect(JSON.stringify([infoSpy.mock.calls, warnSpy.mock.calls, errorSpy.mock.calls])).not.toContain(
+          privateWamid
         );
         infoSpy.mockClear();
         warnSpy.mockClear();

@@ -247,7 +247,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       };
       const wamid = responseBody.messages?.[0]?.id ?? `unknown-${String(Date.now())}`;
 
-      logger.info({ recipientHint, wamid }, `${messageTypeLabel} message sent successfully`);
+      logger.info({ recipientHint }, `${messageTypeLabel} message sent successfully`);
       return ok({ wamid });
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
