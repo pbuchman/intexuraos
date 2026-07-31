@@ -33,6 +33,11 @@
  * POST   /internal/whatsapp/private/events        → ./privateSyncRoutes.ts
  * POST   /internal/whatsapp/private/accounts/:sourceAccountId/erasure → ./privateErasureRoutes.ts
  * GET    /internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId → ./privateErasureRoutes.ts
+ * POST   /internal/whatsapp/private/digest-source/validate → ./privateDigestSourceRoutes.ts
+ * POST   /internal/whatsapp/private/digest-source/messages/query → ./privateDigestSourceRoutes.ts
+ * POST   /internal/whatsapp/delivery-readiness/get → ./outboundDeliveryRoutes.ts
+ * POST   /internal/whatsapp/outbound-deliveries/get → ./outboundDeliveryRoutes.ts
+ * POST   /internal/whatsapp/outbound-deliveries/retry → ./outboundDeliveryRoutes.ts
  * ─────────────────────────────────────────────────────────────
  */
 

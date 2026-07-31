@@ -5,12 +5,8 @@ import type {
   CreateFishingKnowledgePageInput,
   FishingChat,
   FishingChatMessage,
-  FishingDigestDetail,
-  FishingDigestGroup,
-  FishingDigestListResponse,
   FishingKnowledgeFolder,
   FishingKnowledgePage,
-  ListFishingDigestsOptions,
   SendFishingChatMessageResponse,
   UpdateFishingKnowledgeFolderInput,
   UpdateFishingKnowledgePageInput,
@@ -137,52 +133,6 @@ function normalizeChatMessage(message: FishingChatMessageResponse): FishingChatM
     ...message,
     createdAt: toIsoString(message.createdAt),
   };
-}
-
-function buildDigestQuery(options: ListFishingDigestsOptions): string {
-  const params = new URLSearchParams();
-  params.set('groupKey', options.groupKey);
-  params.set('dateFrom', options.dateFrom);
-  params.set('dateTo', options.dateTo);
-  if (options.terms !== undefined && options.terms.length > 0) {
-    params.set('terms', options.terms.join(','));
-  }
-  if (options.limit !== undefined) {
-    params.set('limit', String(options.limit));
-  }
-  return params.toString();
-}
-
-export async function listFishingDigestGroups(accessToken: string): Promise<FishingDigestGroup[]> {
-  const response = await apiRequest<{ items: FishingDigestGroup[] }>(
-    config.fishingAssistantServiceUrl,
-    '/digest-groups',
-    accessToken
-  );
-  return response.items;
-}
-
-export async function listFishingDigests(
-  accessToken: string,
-  options: ListFishingDigestsOptions
-): Promise<FishingDigestListResponse> {
-  return await apiRequest<FishingDigestListResponse>(
-    config.fishingAssistantServiceUrl,
-    `/digests?${buildDigestQuery(options)}`,
-    accessToken
-  );
-}
-
-export async function getFishingDigestDetail(
-  accessToken: string,
-  groupKey: string,
-  date: string
-): Promise<FishingDigestDetail> {
-  return await apiRequest<FishingDigestDetail>(
-    config.fishingAssistantServiceUrl,
-    `/digests/${encodeURIComponent(groupKey)}/${encodeURIComponent(date)}`,
-    accessToken
-  );
 }
 
 export async function listFishingKnowledgeFolders(

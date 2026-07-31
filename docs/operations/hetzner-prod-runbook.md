@@ -24,7 +24,9 @@ with ad-hoc bulk commands.
 | `/opt/intexuraos` | Repo checkout run by PM2 |
 | `/etc/intexuraos/.env.prod` | `deploy:deploy` mode-600 environment material generated from GCP Secret Manager |
 | `/etc/intexuraos/internal-auth-token` | `root:www-data` mode-640 internal auth token injected by nginx after Google OIDC verification |
-| `/var/www/intexuraos/web/dist` | Static Vite bundle served by nginx |
+| `/var/www/intexuraos/web/releases/<commit-sha>` | Immutable complete Vite bundle for one release |
+| `/var/www/intexuraos/web/current` | Atomically replaced symlink to the Vite release served by nginx |
+| `/var/www/intexuraos/web/dist` | Legacy bootstrap bundle retained for the first atomic cutover only |
 | `/etc/nginx/sites-available/intexuraos.conf` | Installed nginx site config |
 | `/etc/nginx/lua/jwt-verify.lua` | Google OIDC verifier for `/internal/*` |
 
@@ -197,8 +199,9 @@ sudo -iu deploy env INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}" \
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 ```
 
-`deploy-web.sh` builds `apps/web` with `/api/*` service URLs and publishes
-`apps/web/dist` to `/var/www/intexuraos/web/dist`. It clears inherited
+`deploy-web.sh` builds `apps/web` with `/api/*` service URLs, stages the complete bundle in
+`/var/www/intexuraos/web/releases/<commit-sha>`, and atomically switches
+`/var/www/intexuraos/web/current` only after the release is ready. It clears inherited
 `INTEXURAOS_*` variables and temporarily replaces `apps/web/.env*` files with
 a sanitized `.env.production.local` containing only web-safe Auth0/Firebase/
 Sentry values plus generated public API paths, so ignored local env files
@@ -508,4 +511,5 @@ that route is configured before the linear scheduler routes.
 `/share/*` and `/images/*` continue to proxy to retained public GCS buckets.
 nginx clears browser `Authorization`, `Cookie`, `X-Internal-Auth`, and `From`
 headers before proxying those retained-bucket requests.
-The SPA itself is served from `/var/www/intexuraos/web/dist`.
+The SPA itself is served through `/var/www/intexuraos/web/current`; the pointer resolves to one
+immutable `/var/www/intexuraos/web/releases/<commit-sha>` directory.

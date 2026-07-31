@@ -9,10 +9,13 @@ SITE_TARGET="/etc/nginx/sites-available/intexuraos.conf"
 SITE_ENABLED="/etc/nginx/sites-enabled/intexuraos.conf"
 LUA_TARGET_DIR="/etc/nginx/lua"
 NGINX_HASH_CONFIG_TARGET="/etc/nginx/conf.d/intexuraos-hash.conf"
+MESSAGE_DIGEST_UPSTREAM_TARGET="/etc/nginx/intexuraos-message-digest-upstream.conf"
+MESSAGE_DIGEST_PUBLIC_TARGET="/etc/nginx/intexuraos-message-digests-public.conf"
+MESSAGE_DIGEST_MODE="public"
 RELOAD_NGINX=1
 
 usage() {
-  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s [--skip-reload]\n' "$(basename "$0")"
+  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s [--skip-reload] [--message-digests-candidate-unavailable|--message-digests-full-cutover-hold|--message-digests-public]\n' "$(basename "$0")"
 }
 
 fail() {
@@ -39,6 +42,18 @@ parse_args() {
         RELOAD_NGINX=0
         shift
         ;;
+      --message-digests-candidate-unavailable)
+        MESSAGE_DIGEST_MODE="candidate-unavailable"
+        shift
+        ;;
+      --message-digests-full-cutover-hold)
+        MESSAGE_DIGEST_MODE="full-cutover-hold"
+        shift
+        ;;
+      --message-digests-public)
+        MESSAGE_DIGEST_MODE="public"
+        shift
+        ;;
       -h|--help)
         usage
         exit 0
@@ -48,6 +63,37 @@ parse_args() {
         ;;
     esac
   done
+}
+
+install_message_digest_admission_config() {
+  local public_source=""
+  local upstream_address=""
+  local upstream_temp=""
+
+  case "${MESSAGE_DIGEST_MODE}" in
+    candidate-unavailable)
+      upstream_address="127.0.0.1:18135"
+      public_source="${NGINX_SOURCE_DIR}/message-digests-candidate-unavailable.conf"
+      ;;
+    full-cutover-hold)
+      upstream_address="127.0.0.1:8135"
+      public_source="${NGINX_SOURCE_DIR}/message-digests-full-cutover-hold.conf"
+      ;;
+    public)
+      upstream_address="127.0.0.1:8135"
+      public_source="${NGINX_SOURCE_DIR}/message-digests-public-active.conf"
+      ;;
+    *)
+      fail "Unsupported Message Digest nginx admission mode"
+      ;;
+  esac
+
+  [[ -r "${public_source}" ]] || fail "Missing Message Digest public ingress snippet"
+  upstream_temp="$(mktemp "${TMPDIR:-/tmp}/intexuraos-message-digest-upstream.XXXXXX")"
+  printf 'server %s;\n' "${upstream_address}" > "${upstream_temp}"
+  install -m 644 -o root -g root "${upstream_temp}" "${MESSAGE_DIGEST_UPSTREAM_TARGET}"
+  install -m 644 -o root -g root "${public_source}" "${MESSAGE_DIGEST_PUBLIC_TARGET}"
+  rm -f "${upstream_temp}"
 }
 
 reload_nginx() {
@@ -103,6 +149,7 @@ main() {
   install -d -m 755 "$(dirname "${SITE_TARGET}")" "$(dirname "${SITE_ENABLED}")" "${LUA_TARGET_DIR}"
   install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/intexuraos.conf" "${SITE_TARGET}"
   install -m 644 -o root -g root "${NGINX_SOURCE_DIR}/jwt-verify.lua" "${LUA_TARGET_DIR}/jwt-verify.lua"
+  install_message_digest_admission_config
   write_nginx_hash_config
   ln -sfn "${SITE_TARGET}" "${SITE_ENABLED}"
   rm -f /etc/nginx/sites-enabled/default

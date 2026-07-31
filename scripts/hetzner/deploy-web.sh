@@ -6,7 +6,13 @@ IFS=$'\n\t'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
 ENV_FILE="${ENV_FILE:-/etc/intexuraos/.env.prod}"
-WEB_ROOT="${WEB_ROOT:-/var/www/intexuraos/web/dist}"
+WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-/var/www/intexuraos/web/releases}"
+WEB_CURRENT_LINK="${WEB_CURRENT_LINK:-/var/www/intexuraos/web/current}"
+WEB_ROOT="${WEB_ROOT:-}"
+ACTIVATE_WEB="true"
+if [[ -n "${WEB_ROOT}" ]]; then
+  ACTIVATE_WEB="false"
+fi
 WEB_SAFE_SECRETS=(
   INTEXURAOS_AUTH0_DOMAIN
   INTEXURAOS_AUTH0_SPA_CLIENT_ID
@@ -85,10 +91,12 @@ parse_args() {
         shift
         [[ $# -gt 0 ]] || fail "--web-root requires a value"
         WEB_ROOT="$1"
+        ACTIVATE_WEB="false"
         shift
         ;;
       --web-root=*)
         WEB_ROOT="${1#*=}"
+        ACTIVATE_WEB="false"
         shift
         ;;
       -h|--help)
@@ -237,16 +245,60 @@ restore_web_env_files() {
   fi
 }
 
-build_and_publish() {
-  WEB_ROOT="${WEB_ROOT%/}"
-
+build_web() {
   cd "${REPO_DIR}"
   prepare_sanitized_web_env_file
   pnpm --filter @intexuraos/web build
 
   [[ -f apps/web/dist/index.html ]] || fail "apps/web/dist/index.html was not produced"
+}
+
+publish_inactive_web_root() {
+  [[ -n "${WEB_ROOT}" ]] || fail "WEB_ROOT is required for a non-activating Web build"
+  WEB_ROOT="${WEB_ROOT%/}"
   install -d -m 755 "${WEB_ROOT}"
   rsync -a --delete apps/web/dist/ "${WEB_ROOT}/"
+}
+
+stage_web_release() {
+  local staging_dir=""
+  local differences=""
+  WEB_ROOT="${WEB_RELEASES_ROOT%/}/${COMMIT_SHA}"
+  install -d -m 755 "${WEB_RELEASES_ROOT}"
+  if [[ -e "${WEB_ROOT}" || -L "${WEB_ROOT}" ]]; then
+    [[ -d "${WEB_ROOT}" && ! -L "${WEB_ROOT}" && -f "${WEB_ROOT}/index.html" ]] \
+      || fail "Existing Web release target is invalid"
+    differences="$(rsync -rcln --delete --itemize-changes --exclude deployment.json \
+      apps/web/dist/ "${WEB_ROOT}/")"
+    [[ -z "${differences}" ]] || fail "Existing Web release differs from the verified build"
+    return 0
+  fi
+  staging_dir="$(mktemp -d "${WEB_RELEASES_ROOT}/.${COMMIT_SHA}.XXXXXX")"
+  rsync -a --delete apps/web/dist/ "${staging_dir}/"
+  [[ -f "${staging_dir}/index.html" ]] || fail "Staged Web release is incomplete"
+  chmod 755 "${staging_dir}"
+  mv -T "${staging_dir}" "${WEB_ROOT}"
+}
+
+activate_web_release() {
+  local next_link=""
+  [[ -d "${WEB_ROOT}" && ! -L "${WEB_ROOT}" && -f "${WEB_ROOT}/index.html" ]] \
+    || fail "Web release is not ready for activation"
+  install -d -m 755 "$(dirname "${WEB_CURRENT_LINK}")"
+  next_link="$(mktemp "${WEB_CURRENT_LINK}.next.XXXXXX")"
+  rm -f -- "${next_link}"
+  ln -s "${WEB_ROOT}" "${next_link}"
+  mv -Tf "${next_link}" "${WEB_CURRENT_LINK}"
+}
+
+build_and_publish() {
+  build_web
+  if [[ "${ACTIVATE_WEB}" == "false" ]]; then
+    publish_inactive_web_root
+    return 0
+  fi
+  stage_web_release
+  activate_web_release
 }
 
 main() {

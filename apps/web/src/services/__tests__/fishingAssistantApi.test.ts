@@ -5,12 +5,9 @@ import {
   createFishingKnowledgePage,
   deleteFishingKnowledgeFolder,
   deleteFishingKnowledgePage,
-  getFishingDigestDetail,
   getFishingKnowledgePage,
   listFishingChatMessages,
   listFishingChats,
-  listFishingDigestGroups,
-  listFishingDigests,
   listFishingKnowledgeFolders,
   listFishingKnowledgePages,
   reindexFishingKnowledgePage,
@@ -21,9 +18,6 @@ import {
 import type {
   FishingChat,
   FishingChatMessage,
-  FishingDigestDetail,
-  FishingDigestGroup,
-  FishingDigestListResponse,
   FishingKnowledgeFolder,
   FishingKnowledgePage,
 } from '@/types/fishingAssistant';
@@ -43,75 +37,6 @@ describe('fishingAssistantApi', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('lists digest groups from the fishing assistant service', async () => {
-    const groups: FishingDigestGroup[] = [{ groupKey: 'feeder', displayName: 'Feeder Team' }];
-    const { apiRequest } = await import('../apiClient.js');
-    vi.mocked(apiRequest).mockResolvedValue({ items: groups });
-
-    const result = await listFishingDigestGroups(accessToken);
-
-    expect(apiRequest).toHaveBeenCalledWith(
-      'https://fishing-assistant.test',
-      '/digest-groups',
-      accessToken
-    );
-    expect(result).toEqual(groups);
-  });
-
-  it('lists digests for a selected group and date range', async () => {
-    const response: FishingDigestListResponse = {
-      items: [
-        {
-          groupKey: 'feeder',
-          date: '2026-05-01',
-          title: 'May 1',
-          summaryMarkdown: '- spring bait',
-          messageCount: 12,
-        },
-      ],
-      truncated: false,
-    };
-    const { apiRequest } = await import('../apiClient.js');
-    vi.mocked(apiRequest).mockResolvedValue(response);
-
-    const result = await listFishingDigests(accessToken, {
-      groupKey: 'feeder',
-      dateFrom: '2026-05-01',
-      dateTo: '2026-05-03',
-    });
-
-    expect(apiRequest).toHaveBeenCalledWith(
-      'https://fishing-assistant.test',
-      '/digests?groupKey=feeder&dateFrom=2026-05-01&dateTo=2026-05-03',
-      accessToken
-    );
-    expect(result).toEqual(response);
-  });
-
-  it('fetches digest detail with state', async () => {
-    const detail: FishingDigestDetail = {
-      digest: {
-        groupKey: 'feeder',
-        date: '2026-05-01',
-        title: 'May 1',
-        summaryMarkdown: '- spring bait',
-        messageCount: 12,
-      },
-      state: null,
-    };
-    const { apiRequest } = await import('../apiClient.js');
-    vi.mocked(apiRequest).mockResolvedValue(detail);
-
-    const result = await getFishingDigestDetail(accessToken, 'feeder', '2026-05-01');
-
-    expect(apiRequest).toHaveBeenCalledWith(
-      'https://fishing-assistant.test',
-      '/digests/feeder/2026-05-01',
-      accessToken
-    );
-    expect(result).toEqual(detail);
   });
 
   it('lists folders and pages from the knowledge base', async () => {

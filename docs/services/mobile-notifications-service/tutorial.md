@@ -1,568 +1,68 @@
 # Mobile Notifications Service — Tutorial
 
-> **Time:** 25-35 minutes
-> **Prerequisites:** Auth0 access token, Android device with Tasker or Automate
-> **You will learn:** How to pair a device, capture notifications, browse and filter them, manage saved filters, and explore AI-generated digests
-
----
-
-## What You Will Build
-
-A working integration that:
-
-- Pairs an Android device with IntexuraOS via signature token
-- Captures mobile notifications through a webhook pipeline
-- Lists and filters stored notifications
-- Creates and manages saved filter presets
-- Reads AI-generated WhatsApp group digests
-- Triggers a manual digest regeneration
-- Understands which internal digest evidence endpoints Fishing Assistant consumes
-
----
+This tutorial connects an Android automation, sends one notification, verifies deduplication, and creates a saved filter.
 
 ## Prerequisites
 
-Before starting, ensure you have:
-
-- [ ] Auth0 access token (Bearer JWT) for public endpoints
-- [ ] Internal auth token (for internal query endpoint only)
-- [ ] Android device with Tasker or Automate installed
-- [ ] Access to the IntexuraOS production or development environment
+- An IntexuraOS bearer token.
+- An Android device with Tasker, Automate, or a compatible webhook client.
+- The production base URL `https://intexuraos.cloud/api/notifications` or its development equivalent.
 
 ```bash
-export BASE_URL="https://intexuraos.cloud/api/notifications"
-# Development environment:
-# export BASE_URL="https://dev.intexuraos.cloud/api/notifications"
+export NOTIFICATIONS_URL="https://intexuraos.cloud/api/notifications"
 ```
 
----
-
-## Part 1: Connect Your Device (5 minutes)
-
-Register your device to receive a signature token.
-
-### Step 1.1: Create a Connection
+## 1. Create a connection
 
 ```bash
-curl -X POST "$BASE_URL/connect" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+curl -X POST "$NOTIFICATIONS_URL/connect" \
+  -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "deviceLabel": "Pixel 8 Pro"
-  }'
+  -d '{"deviceLabel":"Android phone"}'
 ```
 
-**Expected response:**
+Copy the returned signature immediately. It is shown once and replaces any older connection for the user.
 
-```json
-{
-  "success": true,
-  "data": {
-    "connectionId": "abc123def456",
-    "signature": "a1b2c3d4e5f6...64-hex-characters"
-  }
-}
-```
+## 2. Configure the phone
 
-**Important:** Copy the `signature` value immediately. It is shown only once. The service stores only a SHA-256 hash. If you lose this token, you must create a new connection (which deletes the previous one).
+Create an automation triggered by a new notification. Send a JSON webhook to `$NOTIFICATIONS_URL/webhooks` with the connection signature in the documented mobile-signature header. Map the source, device, app package, notification identity, title, text, and source timestamp.
 
-### Step 1.2: Verify Connection Status
+Keep the signature in the automation's protected secret storage. Do not place it in screenshots, logs, or shared configuration.
+
+## 3. Verify capture
 
 ```bash
-curl "$BASE_URL/status" \
-  -H "Authorization: Bearer YOUR_TOKEN"
+curl "$NOTIFICATIONS_URL/status" \
+  -H "Authorization: Bearer <access-token>"
+
+curl "$NOTIFICATIONS_URL/?limit=20&app=com.example.app" \
+  -H "Authorization: Bearer <access-token>"
 ```
 
-**Expected response:**
+The first endpoint confirms the connection and latest receive time. The second returns the user's matching notification history.
 
-```json
-{
-  "success": true,
-  "data": {
-    "configured": true,
-    "lastNotificationAt": null
-  }
-}
-```
+Send the same webhook identity twice. The second response should report an ignored duplicate and the list should still contain one row.
 
-`lastNotificationAt` is null because no notifications have been received yet.
-
-### What Just Happened?
-
-The service generated a 256-bit random token (64 hex characters), computed its SHA-256 hash, stored the hash in Firestore, and returned the plaintext to you. Any existing signature for your user was deleted first — only one active signature per user at a time.
-
----
-
-## Part 2: Send a Test Notification (5 minutes)
-
-Simulate what Tasker/Automate sends when a notification appears on your device.
-
-### Step 2.1: Post to the Webhook
+## 4. Create a saved filter
 
 ```bash
-curl -X POST "$BASE_URL/webhooks" \
-  -H "X-Mobile-Notifications-Signature: a1b2c3d4e5f6...your-signature-here" \
+curl -X POST "$NOTIFICATIONS_URL/filters/saved" \
+  -H "Authorization: Bearer <access-token>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "source": "tasker",
-    "device": "Pixel 8 Pro",
-    "app": "com.whatsapp",
-    "notification_id": "test-notif-001",
-    "title": "Alice: hey!",
-    "text": "are you free tonight?",
-    "timestamp": 1771761600,
-    "post_time": "1771761600"
-  }'
+  -d '{"name":"Delivery alerts","app":["com.example.delivery"]}'
 ```
 
-**Expected response:**
+Read `/filters` to see discovered options and saved presets. Delete a preset with `DELETE /filters/saved/:id`.
 
-```json
-{
-  "success": true,
-  "data": {
-    "status": "accepted",
-    "id": "firestore-doc-id"
-  }
-}
-```
-
-### Step 2.2: Test Idempotency
-
-Send the same request again with the same `notification_id`:
+## 5. Delete a notification
 
 ```bash
-curl -X POST "$BASE_URL/webhooks" \
-  -H "X-Mobile-Notifications-Signature: a1b2c3d4e5f6...your-signature-here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source": "tasker",
-    "device": "Pixel 8 Pro",
-    "app": "com.whatsapp",
-    "notification_id": "test-notif-001",
-    "title": "Alice: hey!",
-    "text": "are you free tonight?",
-    "timestamp": 1771761600,
-    "post_time": "1771761600"
-  }'
+curl -X DELETE "$NOTIFICATIONS_URL/<notification-id>" \
+  -H "Authorization: Bearer <access-token>"
 ```
 
-**Expected response:**
+Only the owner can delete the row.
 
-```json
-{
-  "success": true,
-  "data": {
-    "status": "ignored",
-    "reason": "duplicate"
-  }
-}
-```
+## WhatsApp summaries
 
-The duplicate is silently ignored. No error, no duplicate entry.
-
-**Checkpoint:** Your connection status should now show `lastNotificationAt` with a timestamp.
-
----
-
-## Part 3: List and Filter Notifications (10 minutes)
-
-### Step 3.1: List All Notifications
-
-```bash
-curl "$BASE_URL/" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "notifications": [
-      {
-        "id": "firestore-doc-id",
-        "source": "tasker",
-        "device": "Pixel 8 Pro",
-        "app": "com.whatsapp",
-        "title": "Alice: hey!",
-        "text": "are you free tonight?",
-        "timestamp": 1771761600,
-        "postTime": "1771761600",
-        "receivedAt": "2026-02-22T12:00:00.123Z"
-      }
-    ]
-  }
-}
-```
-
-### Step 3.2: Filter by App
-
-```bash
-curl "$BASE_URL/?app=com.whatsapp" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-Multiple apps use comma separation: `?app=com.whatsapp,com.telegram`
-
-### Step 3.3: Search by Title
-
-```bash
-curl "$BASE_URL/?title=alice" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-Title search is case-insensitive partial match performed in memory after the Firestore query.
-
-### Step 3.4: Paginate Results
-
-```bash
-curl "$BASE_URL/?limit=2" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-If the response includes `nextCursor`, pass it to get the next page:
-
-```bash
-curl "$BASE_URL/?limit=2&cursor=CURSOR_VALUE" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
----
-
-## Part 4: Manage Saved Filters (5 minutes)
-
-### Step 4.1: View Available Filter Options
-
-```bash
-curl "$BASE_URL/filters" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "userId": "user123",
-    "options": {
-      "app": ["com.whatsapp"],
-      "device": ["Pixel 8 Pro"],
-      "source": ["tasker"]
-    },
-    "savedFilters": [],
-    "createdAt": "2026-02-22T12:00:00Z",
-    "updatedAt": "2026-02-22T12:00:01Z"
-  }
-}
-```
-
-The `options` arrays auto-populate from received notifications as they arrive.
-
-### Step 4.2: Create a Saved Filter
-
-```bash
-curl -X POST "$BASE_URL/filters/saved" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Work Chats",
-    "app": ["com.slack", "com.microsoft.teams"]
-  }'
-```
-
-**Expected response (201):**
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid-of-saved-filter",
-    "name": "Work Chats",
-    "app": ["com.slack", "com.microsoft.teams"],
-    "createdAt": "2026-02-22T12:05:00Z"
-  }
-}
-```
-
-### Step 4.3: Delete a Saved Filter
-
-```bash
-curl -X DELETE "$BASE_URL/filters/saved/uuid-of-saved-filter" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-Returns **204 No Content** on success (empty body).
-
----
-
-## Part 5: Explore Digests (5 minutes)
-
-If the digest pipeline is configured for your user and group, you can browse AI-generated daily summaries.
-
-### Step 5.1: List Digests for a Date Range
-
-```bash
-curl "$BASE_URL/digests?groupKey=my-group&fromDate=2026-04-14&toDate=2026-04-21&limit=7" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "items": [
-      {
-        "summary": {
-          "date": "2026-04-21",
-          "groupKey": "my-group",
-          "messageCount": 142,
-          "headline": "Tournament rules finalized; new member introductions",
-          "bullets": [
-            "Admin posted updated tournament rules for the spring series",
-            "Three new members introduced themselves",
-            "Debate about catch-and-release policy continued from yesterday"
-          ],
-          "threads": [],
-          "moderatorPosts": [],
-          "openQuestions": [],
-          "activityOutliers": []
-        },
-        "generation": 1,
-        "generatedAt": "2026-04-22T06:00:00Z",
-        "modelId": "google/gemini-2.0-flash-001"
-      }
-    ]
-  }
-}
-```
-
-### Step 5.2: Get a Single Digest
-
-```bash
-curl "$BASE_URL/digests/my-group/2026-04-21" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-Returns the full digest for that specific day, or 404 if none exists.
-
-### Step 5.3: Regenerate a Digest
-
-```bash
-curl -X POST "$BASE_URL/digests/run" \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "groupKey": "my-group",
-    "date": "2026-04-21"
-  }'
-```
-
-**Expected response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "summaryDocId": "user123_my-group_2026-04-21",
-    "generation": 2,
-    "messageCount": 142,
-    "modelId": "google/gemini-2.0-flash-001",
-    "regenerated": true
-  }
-}
-```
-
-The `generation` field increments on each regeneration. WhatsApp notifications are only sent on first generation.
-
----
-
-## Part 6: Delete a Notification (2 minutes)
-
-```bash
-curl -X DELETE "$BASE_URL/firestore-doc-id" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-**Expected response (200):**
-
-```json
-{
-  "success": true,
-  "data": {}
-}
-```
-
-Returns 404 if not found, 403 if the notification belongs to another user.
-
----
-
-## Part 7: Fishing Assistant Evidence Context (3 minutes)
-
-Fishing Assistant does not call the public digest browsing endpoints directly. It uses internal client methods backed by:
-
-- `POST /internal/notifications/digest-subscriptions/list`
-- `POST /internal/notifications/digests/query`
-- `POST /internal/notifications/digests/get`
-- `POST /internal/notifications/digest-state/get`
-- `POST /internal/notifications/group-messages/query`
-
-Those routes require `X-Internal-Auth` and verify that the requested user owns the hard-coded digest subscription before returning data. The chat retrieval path lists digest groups, queries persisted digest Markdown, and queries cleaned group messages in parallel for the requested date range.
-
-Do not use these routes from a browser or mobile automation client. They are service-to-service endpoints for Fishing Assistant and other internal consumers.
-
----
-
-## Part 8: Handle Errors (3 minutes)
-
-### Missing Signature Header
-
-```bash
-curl -X POST "$BASE_URL/webhooks" \
-  -H "Content-Type: application/json" \
-  -d '{ "source": "tasker", "device": "Test", "app": "com.test", "notification_id": "1", "title": "t", "text": "b", "timestamp": 0, "post_time": "0" }'
-```
-
-**Response (400):**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "Missing X-Mobile-Notifications-Signature header"
-  }
-}
-```
-
-### Invalid Signature
-
-**Response (401):**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Invalid signature"
-  }
-}
-```
-
-### No Digest Subscription
-
-Attempting to run a digest for a group you are not subscribed to:
-
-**Response (400):**
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "no digest subscription for groupKey=unknown-group"
-  }
-}
-```
-
----
-
-## Response Format
-
-All endpoints return a standardized response contract:
-
-- **Success:** `{ "success": true, "data": { ... } }`
-- **Error:** `{ "success": false, "error": { "code": "...", "message": "..." } }`
-- **Exception:** `DELETE /filters/saved/:id` returns 204 No Content (empty body)
-
----
-
-## Troubleshooting
-
-| Issue                           | Solution                                                |
-| ------------------------------- | ------------------------------------------------------- |
-| Lost signature                  | Reconnect device (`POST /connect` gives new signature)  |
-| Webhook 400 (missing header)    | Ensure `X-Mobile-Notifications-Signature` header is set |
-| Webhook 401 (invalid signature) | Signature does not match stored hash; reconnect         |
-| Empty filter options            | No notifications received yet; options auto-populate    |
-| Duplicate notification ignored  | Normal; `notification_id` deduplication is intentional  |
-| 403 on DELETE                   | You do not own that notification                        |
-| Digest 404                      | No digest exists for that group/date; run one first     |
-| Digest lockSkipped              | Another digest run is in progress; wait and retry       |
-| Fishing Assistant has no digest evidence | Confirm the user has a matching `DIGEST_SUBSCRIPTIONS` entry and that digests or matching group messages exist for the requested date range |
-
----
-
-## Exercises
-
-Test your understanding:
-
-1. **Easy:** Connect a device, send 3 notifications from different apps, and list them filtered by one app
-2. **Medium:** Send 5+ notifications and paginate through them with `limit=2`, following the `nextCursor` chain
-3. **Hard:** Create a saved filter for two apps, verify it appears in `GET /filters`, then delete it
-
-<details>
-<summary>Solutions</summary>
-
-### Exercise 1: Connect and Filter
-
-```bash
-# Connect
-curl -X POST "$BASE_URL/connect" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"deviceLabel": "Test Device"}'
-
-# Save the signature from the response, then send 3 notifications from different apps
-for APP in com.whatsapp com.telegram com.slack; do
-  curl -X POST "$BASE_URL/webhooks" \
-    -H "X-Mobile-Notifications-Signature: $SIGNATURE" \
-    -H "Content-Type: application/json" \
-    -d "{\"source\":\"tasker\",\"device\":\"Test\",\"app\":\"$APP\",\"notification_id\":\"$APP-001\",\"title\":\"Test\",\"text\":\"Hello\",\"timestamp\":$(date +%s),\"post_time\":\"$(date +%s)\"}"
-done
-
-# Filter by one app
-curl "$BASE_URL/?app=com.whatsapp" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-### Exercise 2: Pagination
-
-```bash
-# List with limit=2
-curl "$BASE_URL/?limit=2" -H "Authorization: Bearer $TOKEN"
-# Copy nextCursor from response, then get next page
-curl "$BASE_URL/?limit=2&cursor=CURSOR" -H "Authorization: Bearer $TOKEN"
-```
-
-### Exercise 3: Saved Filters
-
-```bash
-# Create saved filter
-curl -X POST "$BASE_URL/filters/saved" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"name":"Messaging","app":["com.whatsapp","com.telegram"]}'
-
-# Verify it appears
-curl "$BASE_URL/filters" -H "Authorization: Bearer $TOKEN"
-
-# Delete it (use the id from the create response)
-curl -X DELETE "$BASE_URL/filters/saved/FILTER_ID" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-</details>
-
----
-
-## Next Steps
-
-Now that you understand the basics:
-
-1. Configure Tasker or Automate on your Android device to forward notifications to the webhook endpoint
-2. Read the [Technical Reference](technical.md) for full API details and domain model documentation
-3. Explore the digest pipeline endpoints to browse AI-generated WhatsApp group summaries
-4. Check the internal query and digest evidence endpoints for building data aggregation pipelines
+To configure a scheduled group or direct-chat summary, use **WhatsApp → Message Digests** in the web application. That workflow uses private WhatsApp data and does not depend on captured Android notifications.

@@ -8,6 +8,7 @@ const packageJson = JSON.parse(readFileSync(resolve(repoRoot, 'package.json'), '
 };
 const devSetupSource = readFileSync(resolve(repoRoot, 'scripts/dev-setup.mjs'), 'utf8');
 const ecosystemSource = readFileSync(resolve(repoRoot, 'ecosystem.config.cjs'), 'utf8');
+const logViewerSource = readFileSync(resolve(repoRoot, 'scripts/log-viewer.mjs'), 'utf8');
 
 describe('local development scripts', () => {
   it('refreshes PM2 environment when starting services', () => {
@@ -37,6 +38,12 @@ describe('local development scripts', () => {
     );
 
     expect(setupPorts).toEqual(expect.arrayContaining(ecosystemPorts));
+  });
+
+  it('registers Message Digest consistently in local setup and compact logs', () => {
+    expect(devSetupSource).toContain("{ name: 'message-digest-service', port: 8135 }");
+    expect(logViewerSource).toContain("'message-digest-service': 'digests'");
+    expect(logViewerSource).toContain("'message-': 'digests'");
   });
 
   it('runs emulator compose commands through the Docker config wrapper', () => {

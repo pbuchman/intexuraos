@@ -274,7 +274,8 @@ Verifies that committed `firestore.indexes.json` and `firestore.rules` still mat
 
 ### verify-hash-routing.mjs
 
-Verifies that `apps/web` uses `HashRouter` and not `BrowserRouter` (required for GCS static hosting).
+Verifies that `apps/web` uses complete declarative or data hash-router wiring and no browser-history
+router (required for GCS static hosting).
 
 ### verify-llm-architecture.ts
 

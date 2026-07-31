@@ -216,6 +216,9 @@
       .event.bookmark-summarize {
         border-left-color: #ec4899;
       }
+      .event.message-digest-runs {
+        border-left-color: #f59e0b;
+      }
 
       .event-header {
         display: flex;
@@ -280,6 +283,10 @@
       .bookmark-summarize .event-badge {
         background: #ec4899;
         color: white;
+      }
+      .message-digest-runs .event-badge {
+        background: #f59e0b;
+        color: #0f172a;
       }
 
       .event-time {
@@ -498,6 +505,7 @@
               <option value="llm-call">llm-call</option>
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
+              <option value="message-digest-runs">message-digest-runs</option>
             </select>
           </div>
 
@@ -607,6 +615,14 @@
           type: 'bookmarks.summarize',
           bookmarkId: 'bookmark-{timestamp}',
           userId: '{userId}',
+        },
+        'message-digest-runs': {
+          type: 'message-digest.run',
+          version: 1,
+          userId: '{userId}',
+          definitionId: 'md_test-digest-001',
+          runId: 'mdr_test-run-001',
+          requestedAt: '{isoTimestamp}',
         },
       };
 
@@ -777,6 +793,7 @@
         const data = JSON.parse(
           JSON.stringify(template)
             .replace(/{userId}/g, userId)
+            .replace(/{isoTimestamp}/g, new Date(timestamp).toISOString())
             .replace(/{timestamp}/g, String(timestamp))
         );
 

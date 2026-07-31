@@ -1,6 +1,6 @@
 # WhatsApp Service Agent Reference
 
-Use whatsapp-service for WhatsApp Business webhook intake, user phone verification, outbound message delivery, text ingestion into Intex Agent, and private WhatsApp mirror reads.
+Use whatsapp-service for WhatsApp Business webhook intake, user phone verification, outbound message delivery, text ingestion into Intex Agent, private WhatsApp mirror reads, and the fenced source/delivery boundary used by Message Digest Service.
 
 ## Current Inbound Behavior
 
@@ -26,3 +26,13 @@ Use whatsapp-service for WhatsApp Business webhook intake, user phone verificati
 - Keep webhook handlers idempotent and log incoming internal requests before auth validation.
 - Do not mutate private WhatsApp messages through read routes.
 - Do not expose raw Matrix events or Matrix room IDs from authenticated private read responses. `/private/account` exposes the authenticated user's `sourceAccountId`; collection read routes must derive it server-side and reject caller-supplied values.
+
+## Message Digest Contracts
+
+- `POST /internal/whatsapp/private/digest-source/validate` validates one user-owned group or direct chat and issues a source revision.
+- `POST /internal/whatsapp/private/digest-source/messages/query` reads one bounded window only when account generation and source revision still match.
+- `POST /internal/whatsapp/delivery-readiness/get` reports whether the first mapped phone can receive a message; it does not expose a destination selector.
+- `POST /internal/whatsapp/outbound-deliveries/get` reconciles idempotent provider state.
+- `POST /internal/whatsapp/outbound-deliveries/retry` permits only a byte-identical retry of a definitively failed send.
+
+Never log source request bodies, message projections, phone numbers, prompts, or summary text. Never retry an ambiguous provider outcome. Message Digest delivery must use the frozen template and acquire run authorization from message-digest-service before the provider call.

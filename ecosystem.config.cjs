@@ -111,6 +111,7 @@ const API_DOCS_HUB_OPENAPI_URLS = {
   INTEXURAOS_NOTION_SERVICE_OPENAPI_URL: 'http://localhost:8112/openapi.json',
   INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL: 'http://localhost:8113/openapi.json',
   INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL: 'http://localhost:8114/openapi.json',
+  INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL: 'http://localhost:8135/openapi.json',
   INTEXURAOS_FISHING_ASSISTANT_SERVICE_OPENAPI_URL: 'http://localhost:8119/openapi.json',
   INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL: 'http://localhost:8116/openapi.json',
   INTEXURAOS_IMAGE_SERVICE_OPENAPI_URL: 'http://localhost:8120/openapi.json',
@@ -260,10 +261,14 @@ const SERVICE_ENV_MAPPINGS = {
   'llm-usage-service': {
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
   },
-  'mobile-notifications-service': {
+  'message-digest-service': {
+    FIRESTORE_EMULATOR_HOST: 'localhost:8101',
+    PUBSUB_EMULATOR_HOST: 'localhost:8102',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
     INTEXURAOS_DIGEST_LLM_MODEL:
       process.env.INTEXURAOS_DIGEST_LLM_MODEL ?? 'or:google/gemini-3-flash-preview',
-    INTEXURAOS_OPENROUTER_APP_API_KEY: process.env.INTEXURAOS_OPENROUTER_APP_API_KEY,
+    INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC:
+      process.env.INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC ?? 'message-digest-runs',
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
   },
@@ -366,6 +371,7 @@ module.exports = {
     createServiceConfig('hellscript-agent', 8131),
     createServiceConfig('llm-usage-service', 8132),
     createServiceConfig('intex-agent', 8134),
+    createServiceConfig('message-digest-service', 8135),
 
     // Services that depend on app-settings-service (fetch pricing at startup)
     // Poll health endpoint until app-settings-service is ready (max 30s)

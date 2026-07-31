@@ -14,6 +14,36 @@ export interface WhatsAppInteractiveButton {
   };
 }
 
+export const MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS = 1_024;
+// Exact non-variable copy in the frozen template verified by the cutover preflight.
+export const MESSAGE_DIGEST_TEMPLATE_FIXED_BODY_CODE_POINTS = 68;
+export const MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS = 80;
+export const MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS =
+  MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_FIXED_BODY_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS;
+export const MESSAGE_DIGEST_EVENT_MESSAGE = 'Message Digest delivery';
+
+/**
+ * Frozen presentation contract for the approved Message Digest Utility template.
+ */
+export interface WhatsAppMessageDigestPresentation {
+  kind: 'message_digest_v1';
+  digestName: string;
+  digestExcerpt: string;
+  runUrlSuffix: string;
+}
+
+/**
+ * Non-secret identity used by whatsapp-service to acquire a just-in-time
+ * Message Digest delivery authorization before calling the provider.
+ */
+export interface WhatsAppMessageDigestDeliveryAuthorization {
+  kind: 'message_digest_delivery_v1';
+  definitionId: string;
+  runId: string;
+}
+
 /**
  * Event to send a WhatsApp message.
  * This is the payload format expected by whatsapp-service's Pub/Sub handler.
@@ -51,6 +81,21 @@ export interface SendMessageEvent {
    * Cannot be combined with buttons (WhatsApp API constraint).
    */
   ctaUrl?: { displayText: string; url: string };
+
+  /**
+   * Optional approved-template presentation. Message Digests use this instead of
+   * a free-form WhatsApp message so scheduled delivery works outside the 24-hour window.
+   */
+  presentation?: WhatsAppMessageDigestPresentation;
+
+  /** Required cancellation fence identity for Message Digest template events. */
+  deliveryAuthorization?: WhatsAppMessageDigestDeliveryAuthorization;
+
+  /**
+   * Whether whatsapp-service may retain message text for reply correlation.
+   * Defaults to true. Message Digests explicitly set this to false.
+   */
+  retainMessageText?: boolean;
 
   /**
    * Optional: marks the message as important so whatsapp-service delivers it

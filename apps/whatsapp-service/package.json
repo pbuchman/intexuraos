@@ -42,5 +42,8 @@
     "pino": "catalog:",
     "sharp": "^0.33.5",
     "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@intexuraos/whatsapp-pubsub-client": "workspace:*"
   }
 }

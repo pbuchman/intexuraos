@@ -6,6 +6,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
+import { AUTH_RETURN_PATH_KEY } from '@/components/routing/authReturnPath';
 
 interface MockAuthValue {
   isAuthenticated: boolean;
@@ -37,6 +38,14 @@ function SessionsPageMock(): React.JSX.Element {
   return <div>Intex Agent Sessions Page</div>;
 }
 
+function LegacyRedirectPageMock(): React.JSX.Element {
+  return <div>Legacy Message Digest redirect</div>;
+}
+
+function MessageDigestRunPageMock(): React.JSX.Element {
+  return <div>Message Digest run</div>;
+}
+
 vi.mock('@auth0/auth0-react', (): { Auth0Provider: typeof PassthroughProvider } => ({
   Auth0Provider: PassthroughProvider,
 }));
@@ -54,6 +63,20 @@ vi.mock(
     ThemeProvider: PassthroughProvider,
     useAuth: (): MockAuthValue => mockAuth,
   }),
+);
+
+vi.mock(
+  '@/pages/MessageDigestLegacyRedirectPage',
+  (): { MessageDigestLegacyRedirectPage: typeof LegacyRedirectPageMock } => ({
+    MessageDigestLegacyRedirectPage: LegacyRedirectPageMock,
+  })
+);
+
+vi.mock(
+  '@/pages/WhatsAppMessageDigestRunPage',
+  (): { WhatsAppMessageDigestRunPage: typeof MessageDigestRunPageMock } => ({
+    WhatsAppMessageDigestRunPage: MessageDigestRunPageMock,
+  })
 );
 
 vi.mock('@/context/pwa-context', (): { PWAProvider: typeof PassthroughProvider } => ({
@@ -98,6 +121,7 @@ function LocationProbe(): React.JSX.Element {
 describe('App authenticated landing routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -119,5 +143,49 @@ describe('App authenticated landing routes', () => {
         '/intex-agent/sessions',
       );
     });
+  });
+
+  it('returns an authenticated callback to the exact legacy digest URL once', async () => {
+    sessionStorage.setItem(
+      AUTH_RETURN_PATH_KEY,
+      '/notifications/digests/grupa-wedkarska-skool/2026-07-27'
+    );
+    const { AppRoutes } = await import('../App.js');
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <LocationProbe />
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="location"]')?.textContent).toBe(
+        '/notifications/digests/grupa-wedkarska-skool/2026-07-27'
+      );
+    });
+    expect(sessionStorage.getItem(AUTH_RETURN_PATH_KEY)).toBeNull();
+  });
+
+  it('returns an authenticated WhatsApp CTA to the exact canonical run route once', async () => {
+    sessionStorage.setItem(
+      AUTH_RETURN_PATH_KEY,
+      '/whatsapp/message-digests/digest-cta/history/run-cta'
+    );
+    const { AppRoutes } = await import('../App.js');
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <LocationProbe />
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="location"]')?.textContent).toBe(
+        '/whatsapp/message-digests/digest-cta/history/run-cta'
+      );
+    });
+    expect(sessionStorage.getItem(AUTH_RETURN_PATH_KEY)).toBeNull();
   });
 });

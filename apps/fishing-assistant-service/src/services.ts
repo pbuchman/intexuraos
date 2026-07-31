@@ -2,10 +2,12 @@ import type { Logger } from '@intexuraos/common-core';
 import { getFirestore, type Firestore } from '@intexuraos/infra-firestore';
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import {
-  createMobileNotificationsServiceClient,
+  createMessageDigestServiceClient,
   createUserServiceClient,
-  type MobileNotificationsServiceClient,
+  createWhatsAppServiceClient,
+  type MessageDigestServiceClient,
   type UserServiceClient,
+  type WhatsAppServiceClient,
 } from '@intexuraos/internal-clients';
 import { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import OpenAI from 'openai';
@@ -40,7 +42,8 @@ export interface ServiceContainer {
   embeddingClient: KnowledgeEmbeddingClient;
   openAiClient: OpenAI;
   userServiceClient: UserServiceClient;
-  mobileNotificationsClient: MobileNotificationsServiceClient;
+  messageDigestClient: MessageDigestServiceClient;
+  whatsappClient: WhatsAppServiceClient;
   usageSink: HttpInternalAuthUsageSink;
   chatAdapter: FixedModelChatAdapter;
 }
@@ -92,10 +95,17 @@ export function initServices(config: Config): void {
     embeddingClient: createOpenAiKnowledgeEmbeddingClient({ openAiClient, logger }),
     openAiClient,
     userServiceClient,
-    mobileNotificationsClient: createMobileNotificationsServiceClient({
-      baseUrl: config.mobileNotificationsServiceUrl,
+    messageDigestClient: createMessageDigestServiceClient({
+      baseUrl: config.messageDigestServiceUrl,
       internalAuthToken: config.internalAuthToken,
       logger,
+      defaultTimeoutMs: 5_000,
+    }),
+    whatsappClient: createWhatsAppServiceClient({
+      baseUrl: config.whatsappServiceUrl,
+      internalAuthToken: config.internalAuthToken,
+      logger,
+      defaultTimeoutMs: 5_000,
     }),
     usageSink,
     chatAdapter: createFixedGeminiFlashClient({

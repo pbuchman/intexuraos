@@ -2,12 +2,16 @@ import express from 'express';
 import { PubSub } from '@google-cloud/pubsub';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import {
+  createPubSubPushEnvelope,
+  resolvePubSubProjectId,
+  resolvePubSubProjectIds,
+} from './pubsub-forwarding.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const PORT = process.env.PORT || 8105;
-const PROJECT_ID = process.env.PUBSUB_PROJECT_ID || 'demo-intexuraos';
 const INTEXURAOS_INTERNAL_AUTH_TOKEN =
   process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN || 'local-dev-token';
 
@@ -24,6 +28,7 @@ const TOPICS = [
   'bookmark-enrich',
   'bookmark-summarize',
   'pr-triage',
+  'message-digest-runs',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -41,6 +46,7 @@ const TOPIC_ENDPOINTS = {
   'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
   'pr-triage': 'http://host.docker.internal:8128/internal/code/pubsub/pr-triage',
+  'message-digest-runs': 'http://host.docker.internal:8135/internal/message-digests/pubsub/run',
 };
 
 const app = express();
@@ -58,7 +64,67 @@ app.use((req, res, next) => {
 
 const clients = new Set();
 
-const pubsub = new PubSub({ projectId: PROJECT_ID });
+const pubsubClients = new Map();
+
+function getPubSubClient(projectId) {
+  const existing = pubsubClients.get(projectId);
+  if (existing) return existing;
+  const client = new PubSub({ projectId });
+  pubsubClients.set(projectId, client);
+  return client;
+}
+
+async function setupTopicSubscription(topicName, projectId) {
+  const pubsub = getPubSubClient(projectId);
+  const topic = pubsub.topic(topicName);
+  const [exists] = await topic.exists();
+
+  if (!exists) {
+    await topic.create();
+    console.log(`[PubSub UI] Created topic: ${topicName} (${projectId})`);
+  }
+
+  const subscriptionName = `${topicName}-ui-monitor`;
+  const subscription = topic.subscription(subscriptionName);
+  const [subExists] = await subscription.exists();
+
+  if (!subExists) {
+    await subscription.create();
+    console.log(`[PubSub UI] Created subscription: ${subscriptionName} (${projectId})`);
+  }
+
+  subscription.on('message', async (message) => {
+    const event = {
+      topic: topicName,
+      messageId: message.id,
+      publishTime: message.publishTime,
+      data: JSON.parse(message.data.toString()),
+      attributes: message.attributes,
+      receivedAt: new Date().toISOString(),
+    };
+
+    console.log(`[PubSub UI] Received message on ${topicName}:`, event.data.type);
+
+    broadcastToClients({
+      type: 'event',
+      event,
+    });
+
+    const forwarded = await forwardToServiceEndpoint(topicName, message);
+
+    if (forwarded) {
+      message.ack();
+    } else {
+      message.nack();
+    }
+  });
+
+  subscription.on('error', (error) => {
+    console.error(`[PubSub UI] Subscription error on ${topicName} (${projectId}):`, error);
+  });
+
+  console.log(`[PubSub UI] Listening on ${topicName} (${projectId})`);
+}
 
 async function forwardToServiceEndpoint(topicName, message) {
   const endpoint = TOPIC_ENDPOINTS[topicName];
@@ -68,14 +134,7 @@ async function forwardToServiceEndpoint(topicName, message) {
   }
 
   try {
-    const pubsubMessage = {
-      message: {
-        data: message.data.toString('base64'),
-        messageId: message.id,
-        publishTime: message.publishTime,
-      },
-      subscription: `${topicName}-push`,
-    };
+    const pubsubMessage = createPubSubPushEnvelope(topicName, message);
 
     console.log(`[PubSub UI] ┌─ Forwarding ${topicName}`);
     console.log(`[PubSub UI] │  Endpoint: ${endpoint}`);
@@ -125,7 +184,14 @@ async function setupTopicsAndSubscriptions() {
   console.log('[PubSub UI] ===========================================');
   console.log('[PubSub UI] Configuration:');
   console.log('[PubSub UI]   PORT:', PORT);
-  console.log('[PubSub UI]   PROJECT_ID:', PROJECT_ID);
+  console.log(
+    '[PubSub UI]   PROJECT_ID:',
+    resolvePubSubProjectId('whatsapp-send-message', process.env)
+  );
+  console.log(
+    '[PubSub UI]   MESSAGE_DIGEST_PROJECT_ID:',
+    resolvePubSubProjectId('message-digest-runs', process.env)
+  );
   console.log('[PubSub UI]   PUBSUB_EMULATOR_HOST:', process.env.PUBSUB_EMULATOR_HOST);
   console.log(
     '[PubSub UI]   AUTH_TOKEN:',
@@ -140,57 +206,12 @@ async function setupTopicsAndSubscriptions() {
   console.log('[PubSub UI] Setting up topics and subscriptions...');
 
   for (const topicName of TOPICS) {
-    try {
-      const topic = pubsub.topic(topicName);
-      const [exists] = await topic.exists();
-
-      if (!exists) {
-        await topic.create();
-        console.log(`[PubSub UI] Created topic: ${topicName}`);
+    for (const projectId of resolvePubSubProjectIds(topicName, process.env)) {
+      try {
+        await setupTopicSubscription(topicName, projectId);
+      } catch (error) {
+        console.error(`[PubSub UI] Error setting up ${topicName} (${projectId}):`, error);
       }
-
-      const subscriptionName = `${topicName}-ui-monitor`;
-      const subscription = topic.subscription(subscriptionName);
-      const [subExists] = await subscription.exists();
-
-      if (!subExists) {
-        await subscription.create();
-        console.log(`[PubSub UI] Created subscription: ${subscriptionName}`);
-      }
-
-      subscription.on('message', async (message) => {
-        const event = {
-          topic: topicName,
-          messageId: message.id,
-          publishTime: message.publishTime,
-          data: JSON.parse(message.data.toString()),
-          attributes: message.attributes,
-          receivedAt: new Date().toISOString(),
-        };
-
-        console.log(`[PubSub UI] Received message on ${topicName}:`, event.data.type);
-
-        broadcastToClients({
-          type: 'event',
-          event,
-        });
-
-        const forwarded = await forwardToServiceEndpoint(topicName, message);
-
-        if (forwarded) {
-          message.ack();
-        } else {
-          message.nack();
-        }
-      });
-
-      subscription.on('error', (error) => {
-        console.error(`[PubSub UI] Subscription error on ${topicName}:`, error);
-      });
-
-      console.log(`[PubSub UI] Listening on ${topicName}`);
-    } catch (error) {
-      console.error(`[PubSub UI] Error setting up ${topicName}:`, error);
     }
   }
 
@@ -216,6 +237,7 @@ app.post('/publish', async (req, res) => {
   }
 
   try {
+    const pubsub = getPubSubClient(resolvePubSubProjectId(topic, process.env));
     const pubsubTopic = pubsub.topic(topic);
     const dataBuffer = Buffer.from(JSON.stringify(data));
     const messageId = await pubsubTopic.publishMessage({ data: dataBuffer });

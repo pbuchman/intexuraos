@@ -93,7 +93,8 @@ function createServices(): Omit<RouteTestContext, 'app'> {
     },
     openAiClient: {} as OpenAI,
     userServiceClient: {} as ServiceContainer['userServiceClient'],
-    mobileNotificationsClient: {} as ServiceContainer['mobileNotificationsClient'],
+    messageDigestClient: {} as ServiceContainer['messageDigestClient'],
+    whatsappClient: {} as ServiceContainer['whatsappClient'],
     usageSink: {} as ServiceContainer['usageSink'],
     chatAdapter: {} as ServiceContainer['chatAdapter'],
   });

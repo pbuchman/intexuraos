@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ok } from '@intexuraos/common-core';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
 import {
   createOutboundMessage,
@@ -16,6 +17,7 @@ import type { OutboundMessage } from '../../domain/whatsapp/index.js';
 interface IdempotentDeliveryRepository {
   reserveIdempotentDelivery(
     input: Readonly<{
+      userId?: string;
       idempotencyKey: string;
       payloadDigest: string;
       now: string;
@@ -40,6 +42,17 @@ interface IdempotentDeliveryRepository {
   >;
   markIdempotentDeliveryAmbiguous(
     input: Readonly<{
+      idempotencyKey: string;
+      payloadDigest: string;
+      now: string;
+    }>
+  ): Promise<
+    | Readonly<{ ok: true; disposition: 'applied' | 'already_applied' }>
+    | Readonly<{ ok: false; code: string }>
+  >;
+  authorizeIdempotentDeliveryRetry(
+    input: Readonly<{
+      userId: string;
       idempotencyKey: string;
       payloadDigest: string;
       now: string;
@@ -85,6 +98,23 @@ describe('outboundMessageRepository', () => {
       const result = await repository.save(message);
 
       expect(result.ok).toBe(true);
+    });
+
+    it('stores a content-minimal Message Digest receipt without a messageText field', async () => {
+      const message = createTestOutboundMessage({
+        wamid: 'wamid.digest-no-content',
+        correlationId: 'mdr_run_no_content',
+      });
+
+      await expect(repository.save(message)).resolves.toEqual({ ok: true, value: undefined });
+      await expect(repository.findByWamid(message.wamid)).resolves.toEqual({
+        ok: true,
+        value: message,
+      });
+      const stored = await repository.findByWamid(message.wamid);
+      expect(stored.ok && stored.value !== null ? stored.value : {}).not.toHaveProperty(
+        'messageText'
+      );
     });
 
     it('overwrites existing message with same wamid', async () => {
@@ -234,6 +264,18 @@ describe('outboundMessageRepository', () => {
       };
     }
 
+    function validV2Receipt(
+      overrides: Readonly<Record<string, unknown>> = {}
+    ): Readonly<Record<string, unknown>> {
+      return validReceipt({
+        version: 2,
+        userIdDigest: createHash('sha256')
+          .update('synthetic-digest-user', 'utf8')
+          .digest('hex'),
+        ...overrides,
+      });
+    }
+
     async function seedReceipt(value: unknown): Promise<void> {
       fakeFirestore.seedCollection(OUTBOUND_DELIVERY_RECEIPTS_COLLECTION, [
         { id: keyDigest(), data: value as never },
@@ -277,6 +319,304 @@ describe('outboundMessageRepository', () => {
         expiresAt: 1_800_000_000,
       });
       expect(JSON.stringify(snapshot.data())).not.toContain(idempotencyKey);
+    });
+
+    it('creates a user-bound v2 receipt and exposes pending only to its owner', async () => {
+      await repository.reserveIdempotentDelivery({
+        userId: 'synthetic-digest-user',
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(ok({ status: 'pending' }));
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'foreign-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(ok({ status: 'missing' }));
+
+      const snapshot = await fakeFirestore
+        .collection(OUTBOUND_DELIVERY_RECEIPTS_COLLECTION)
+        .doc(keyDigest())
+        .get();
+      expect(snapshot.data()).toEqual({
+        version: 2,
+        idempotencyKeyDigest: keyDigest(),
+        userIdDigest: createHash('sha256').update('synthetic-digest-user', 'utf8').digest('hex'),
+        payloadDigest,
+        state: 'sending',
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: 1_800_000_000,
+      });
+      expect(JSON.stringify(snapshot.data())).not.toContain('synthetic-digest-user');
+      expect(JSON.stringify(snapshot.data())).not.toContain(idempotencyKey);
+    });
+
+    it('persists and replays a terminal failed v2 receipt', async () => {
+      await repository.reserveIdempotentDelivery({
+        userId: 'synthetic-digest-user',
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:00:01.000Z',
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(
+        ok({
+          status: 'failed',
+          failedAt: '2026-07-20T10:00:01.000Z',
+          failureCode: 'MAPPING_MISSING',
+        })
+      );
+      await expect(
+        repository.reserveIdempotentDelivery({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:00:02.000Z',
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'duplicate_failed' });
+    });
+
+    it.each([
+      'MAPPING_MISSING',
+      'DISCONNECTED',
+      'DELIVERY_DISABLED',
+      'PROVIDER_REJECTED',
+      'DELIVERY_AUTHORIZATION_UNAVAILABLE',
+    ])(
+      'authorizes one byte-identical retry after definitive pre-provider %s',
+      async (failureCode) => {
+        await repository.reserveIdempotentDelivery({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        });
+        await repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:00:01.000Z',
+          failureCode,
+        });
+        const delivery = deliveryRepository();
+
+        await expect(
+          delivery.authorizeIdempotentDeliveryRetry({
+            userId: 'synthetic-digest-user',
+            idempotencyKey,
+            payloadDigest,
+            now: '2026-07-20T10:00:02.000Z',
+          })
+        ).resolves.toEqual({ ok: true, disposition: 'applied' });
+        await expect(
+          repository.getIdempotentDeliveryState({
+            userId: 'synthetic-digest-user',
+            idempotencyKey,
+          })
+        ).resolves.toEqual(ok({ status: 'pending' }));
+        await expect(
+          delivery.authorizeIdempotentDeliveryRetry({
+            userId: 'synthetic-digest-user',
+            idempotencyKey,
+            payloadDigest,
+            now: '2026-07-20T10:00:03.000Z',
+          })
+        ).resolves.toEqual({ ok: true, disposition: 'already_applied' });
+        await expect(
+          delivery.reserveIdempotentDelivery({
+            userId: 'synthetic-digest-user',
+            idempotencyKey,
+            payloadDigest,
+            now: '2026-07-20T10:00:04.000Z',
+            expiresAt: 1_800_000_000,
+          })
+        ).resolves.toEqual({ ok: true, disposition: 'acquired' });
+        await expect(
+          delivery.reserveIdempotentDelivery({
+            idempotencyKey,
+            payloadDigest,
+            now: '2026-07-20T10:00:04.500Z',
+            expiresAt: 1_800_000_000,
+          })
+        ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+        await expect(
+          delivery.reserveIdempotentDelivery({
+            userId: 'synthetic-digest-user',
+            idempotencyKey,
+            payloadDigest,
+            now: '2026-07-20T10:00:05.000Z',
+            expiresAt: 1_800_000_000,
+          })
+        ).resolves.toEqual({ ok: true, disposition: 'duplicate_in_flight' });
+      }
+    );
+
+    it('refuses retry authorization for unsafe, foreign, changed, or externally uncertain receipts', async () => {
+      await repository.reserveIdempotentDelivery({
+        userId: 'synthetic-digest-user',
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      await repository.markIdempotentDeliveryFailed({
+        idempotencyKey,
+        payloadDigest,
+        now: '2026-07-20T10:00:01.000Z',
+        failureCode: 'DELIVERY_RECEIPT_MISSING',
+      });
+      const delivery = deliveryRepository();
+      for (const input of [
+        {
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:00:02.000Z',
+        },
+        {
+          userId: 'foreign-user',
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:00:02.000Z',
+        },
+        {
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest: 'b'.repeat(64),
+          now: '2026-07-20T10:00:02.000Z',
+        },
+      ]) {
+        await expect(delivery.authorizeIdempotentDeliveryRetry(input)).resolves.toMatchObject({
+          ok: false,
+        });
+      }
+    });
+
+    it('keeps a revoked delivery authorization terminal for the exact owner and payload', async () => {
+      await repository.reserveIdempotentDelivery({
+        userId: 'synthetic-digest-user',
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      await repository.markIdempotentDeliveryFailed({
+        idempotencyKey,
+        payloadDigest,
+        now: '2026-07-20T10:00:01.000Z',
+        failureCode: 'DELIVERY_AUTHORIZATION_REVOKED',
+      });
+      const delivery = deliveryRepository();
+
+      await expect(
+        delivery.authorizeIdempotentDeliveryRetry({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now: '2026-07-20T10:00:02.000Z',
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_STATE' });
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(
+        ok({
+          status: 'failed',
+          failedAt: '2026-07-20T10:00:01.000Z',
+          failureCode: 'DELIVERY_AUTHORIZATION_REVOKED',
+        })
+      );
+    });
+
+    it('projects sent and ambiguous v2 receipts without provider identifiers', async () => {
+      await repository.reserveIdempotentDelivery({
+        userId: 'synthetic-sent-user',
+        idempotencyKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      const outboundMessage = createTestOutboundMessage({
+        userId: 'synthetic-sent-user',
+        sentAt: '2026-07-20T10:00:03.000Z',
+      });
+      await repository.completeIdempotentDelivery({
+        idempotencyKey,
+        payloadDigest,
+        outboundMessage,
+      });
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-sent-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(ok({ status: 'sent', acceptedAt: outboundMessage.sentAt }));
+
+      const ambiguousKey = 'imc_reply_ambiguous_v2';
+      await repository.reserveIdempotentDelivery({
+        userId: 'synthetic-ambiguous-user',
+        idempotencyKey: ambiguousKey,
+        payloadDigest,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      await repository.markIdempotentDeliveryAmbiguous({
+        idempotencyKey: ambiguousKey,
+        payloadDigest,
+        now: '2026-07-20T10:00:04.000Z',
+      });
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-ambiguous-user',
+          idempotencyKey: ambiguousKey,
+        })
+      ).resolves.toEqual(ok({ status: 'ambiguous', acceptedAt: now }));
+    });
+
+    it('keeps legacy v1 receipts deduplicating but hides them from user-bound lookup', async () => {
+      await seedReceipt(validReceipt());
+      await expect(
+        repository.reserveIdempotentDelivery({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now,
+          expiresAt: 1_800_000_000,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'duplicate_in_flight' });
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(ok({ status: 'missing' }));
     });
 
     it('rejects a changed payload replay for the same key', async () => {
@@ -337,6 +677,36 @@ describe('outboundMessageRepository', () => {
         ok: true,
         value: outboundMessage,
       });
+    });
+
+    it('atomically completes a Message Digest receipt without persisting digest content', async () => {
+      const delivery = deliveryRepository();
+      const digestKey = 'message-digest:mdr_run_no_content';
+      const digestPayload = 'c'.repeat(64);
+      await delivery.reserveIdempotentDelivery({
+        userId: 'synthetic-digest-user',
+        idempotencyKey: digestKey,
+        payloadDigest: digestPayload,
+        now,
+        expiresAt: 1_800_000_000,
+      });
+      const outboundMessage = createTestOutboundMessage({
+        wamid: 'wamid.digest-no-content-idempotent',
+        correlationId: 'mdr_run_no_content',
+        userId: 'synthetic-digest-user',
+      });
+
+      await expect(
+        delivery.completeIdempotentDelivery({
+          idempotencyKey: digestKey,
+          payloadDigest: digestPayload,
+          outboundMessage,
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+      const stored = await repository.findByWamid(outboundMessage.wamid);
+      expect(stored.ok && stored.value !== null ? stored.value : {}).not.toHaveProperty(
+        'messageText'
+      );
     });
 
     it('closes an uncertain external send without permitting a blind resend', async () => {
@@ -517,9 +887,7 @@ describe('outboundMessageRepository', () => {
         delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
       ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
 
-      await seedReceipt(
-        validReceipt({ state: 'sent', outboundMessageDigest: 'c'.repeat(64) })
-      );
+      await seedReceipt(validReceipt({ state: 'sent', outboundMessageDigest: 'c'.repeat(64) }));
       await expect(
         delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
       ).resolves.toEqual({ ok: false, code: 'INVALID_STATE' });
@@ -535,6 +903,169 @@ describe('outboundMessageRepository', () => {
       await expect(
         delivery.markIdempotentDeliveryAmbiguous({ idempotencyKey, payloadDigest, now })
       ).resolves.toEqual({ ok: false, code: 'PERSISTENCE_ERROR' });
+    });
+
+    it('fails closed for every terminal-failure receipt state and replays only the same code', async () => {
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey: '',
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: false, code: 'NOT_FOUND' });
+
+      await seedReceipt({ corrupt: true });
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: false, code: 'CORRUPT_RECEIPT' });
+
+      await seedReceipt(validV2Receipt({ payloadDigest: 'b'.repeat(64) }));
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: false, code: 'CORRELATED_REPLAY_CONFLICT' });
+
+      await seedReceipt(validReceipt());
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_STATE' });
+
+      await seedReceipt(validV2Receipt());
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'applied' });
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: true, disposition: 'already_applied' });
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'DISCONNECTED',
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_STATE' });
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('transaction failed')
+      );
+      await expect(
+        repository.markIdempotentDeliveryFailed({
+          idempotencyKey,
+          payloadDigest,
+          now,
+          failureCode: 'MAPPING_MISSING',
+        })
+      ).resolves.toEqual({ ok: false, code: 'PERSISTENCE_ERROR' });
+    });
+
+    it('fails closed for invalid, missing, corrupt, and unavailable retry authorization', async () => {
+      const delivery = deliveryRepository();
+      await expect(
+        delivery.authorizeIdempotentDeliveryRetry({
+          userId: '',
+          idempotencyKey,
+          payloadDigest,
+          now,
+        })
+      ).resolves.toEqual({ ok: false, code: 'INVALID_INPUT' });
+      await expect(
+        delivery.authorizeIdempotentDeliveryRetry({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now,
+        })
+      ).resolves.toEqual({ ok: false, code: 'NOT_FOUND' });
+
+      await seedReceipt({ corrupt: true });
+      await expect(
+        delivery.authorizeIdempotentDeliveryRetry({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now,
+        })
+      ).resolves.toEqual({ ok: false, code: 'CORRUPT_RECEIPT' });
+
+      vi.spyOn(fakeFirestore, 'runTransaction').mockRejectedValueOnce(
+        new Error('transaction failed')
+      );
+      await expect(
+        delivery.authorizeIdempotentDeliveryRetry({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+          payloadDigest,
+          now,
+        })
+      ).resolves.toEqual({ ok: false, code: 'PERSISTENCE_ERROR' });
+    });
+
+    it('fails closed for invalid, missing, corrupt, and unavailable receipt lookup', async () => {
+      await expect(
+        repository.getIdempotentDeliveryState({ userId: '', idempotencyKey })
+      ).resolves.toEqual(
+        expect.objectContaining({ ok: false, error: expect.objectContaining({ code: 'VALIDATION_ERROR' }) })
+      );
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(ok({ status: 'missing' }));
+
+      await seedReceipt({ corrupt: true });
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(
+        expect.objectContaining({ ok: false, error: expect.objectContaining({ code: 'PERSISTENCE_ERROR' }) })
+      );
+
+      fakeFirestore.configure({ errorToThrow: new Error('read failed') });
+      await expect(
+        repository.getIdempotentDeliveryState({
+          userId: 'synthetic-digest-user',
+          idempotencyKey,
+        })
+      ).resolves.toEqual(
+        expect.objectContaining({ ok: false, error: expect.objectContaining({ code: 'PERSISTENCE_ERROR' }) })
+      );
     });
   });
 });
@@ -582,5 +1113,13 @@ describe('createOutboundMessage', () => {
 
     expect(message.sentAt >= before).toBe(true);
     expect(message.sentAt <= after).toBe(true);
+  });
+
+  it.each([
+    [{ wamid: '', correlationId: 'action-123', userId: 'user-456' }, 'wamid is required'],
+    [{ wamid: 'wamid.test', correlationId: '', userId: 'user-456' }, 'correlationId is required'],
+    [{ wamid: 'wamid.test', correlationId: 'action-123', userId: '' }, 'userId is required'],
+  ])('rejects a blank required outbound field', (params, message) => {
+    expect(() => createOutboundMessage(params)).toThrow(message);
   });
 });

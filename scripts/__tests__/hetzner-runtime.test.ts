@@ -8,6 +8,10 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = resolve(__dirname, '..', '..');
 const packageJsonPath = resolve(repoRoot, 'package.json');
 const nginxConfigPath = resolve(repoRoot, 'scripts/hetzner/nginx/intexuraos.conf');
+const messageDigestPublicIngressPath = resolve(
+  repoRoot,
+  'scripts/hetzner/nginx/message-digests-public-active.conf'
+);
 const jwtVerifierPath = resolve(repoRoot, 'scripts/hetzner/nginx/jwt-verify.lua');
 const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
@@ -29,6 +33,7 @@ const deploymentDocumentVerifierPath = resolve(
 const codeHealthVerifierPath = resolve(repoRoot, 'scripts/hetzner/verify-code-agent-health.mjs');
 const installPm2LogrotatePath = resolve(repoRoot, 'scripts/hetzner/install-pm2-logrotate.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
+const webHostingPath = resolve(repoRoot, 'docs/architecture/web-app-hosting.md');
 const lifecycleBackfillRunbookPath = resolve(
   repoRoot,
   'docs/operations/code-task-lifecycle-backfill.md'
@@ -76,11 +81,11 @@ const terraformHetznerCloudInitPath = resolve(
 );
 const terraformHetznerPubsubPath = resolve(repoRoot, 'terraform/hetzner-prod/pubsub.tf');
 const terraformHetznerSchedulerPath = resolve(repoRoot, 'terraform/hetzner-prod/scheduler.tf');
+const terraformHetznerRetainedGcpPath = resolve(repoRoot, 'terraform/hetzner-prod/retained-gcp.tf');
 const terraformHetznerRetiredAsyncCleanupPath = resolve(
   repoRoot,
   'terraform/hetzner-prod/retired-async-cleanup.tf'
 );
-const terraformHetznerRetainedGcpPath = resolve(repoRoot, 'terraform/hetzner-prod/retained-gcp.tf');
 const terraformHetznerVariablesPath = resolve(repoRoot, 'terraform/hetzner-prod/variables.tf');
 const terraformHetznerOutputsPath = resolve(repoRoot, 'terraform/hetzner-prod/outputs.tf');
 const terraformHetznerTfvarsExamplePath = resolve(
@@ -269,7 +274,7 @@ describe('Hetzner nginx runtime config', () => {
     const deploymentLocation = config.slice(deploymentLocationStart, deploymentLocationEnd);
 
     expect(deploymentLocationStart).toBeGreaterThanOrEqual(0);
-    expect(deploymentLocation).toContain('root /var/www/intexuraos/web/dist;');
+    expect(deploymentLocation).toContain('root /var/www/intexuraos/web/current;');
     expect(deploymentLocation).toContain('default_type application/json;');
     expect(deploymentLocation).toContain('try_files /deployment.json =404;');
     expect(deploymentLocation).toContain('add_header Cache-Control "no-store" always;');
@@ -279,6 +284,7 @@ describe('Hetzner nginx runtime config', () => {
 
   it('defines public API routes that exactly match apps/web/service-manifest.json', () => {
     const config = readRequired(nginxConfigPath);
+    const effectivePublicConfig = `${config}\n${readRequired(messageDigestPublicIngressPath)}`;
     const manifest = JSON.parse(readRequired(manifestPath)) as { services: ManifestService[] };
     const publicApiSection = config.slice(
       config.indexOf('location = /api/user'),
@@ -290,11 +296,11 @@ describe('Hetzner nginx runtime config', () => {
     )) {
       const upstream = upstreamName(service.name);
       if (service.name === 'code-agent') {
-        expect(config, service.apiPath).toContain(`location ^~ ${service.apiPath}/`);
+        expect(effectivePublicConfig, service.apiPath).toContain(`location ^~ ${service.apiPath}/`);
       } else {
-        expect(config, service.apiPath).toContain(`location ${service.apiPath}/`);
+        expect(effectivePublicConfig, service.apiPath).toContain(`location ${service.apiPath}/`);
       }
-      expect(config, service.apiPath).toContain(`proxy_pass http://${upstream}/;`);
+      expect(effectivePublicConfig, service.apiPath).toContain(`proxy_pass http://${upstream}/;`);
     }
 
     expect(config).toContain('location ~ ^/api/[a-z0-9-]+/internal(?:/|$)');
@@ -388,6 +394,7 @@ describe('Hetzner nginx runtime config', () => {
       ['/internal/linear/sync-all', 'linear_agent'],
       ['/internal/linear/prune-issues', 'linear_agent'],
       ['/internal/notifications/', 'mobile_notifications_service'],
+      ['/internal/message-digests/', 'message_digest_service'],
       ['/internal/drain-queue', 'code_agent'],
       ['/internal/users/', 'user_service'],
     ];
@@ -624,7 +631,7 @@ describe('Hetzner web asset deployment', () => {
     const headersPath = resolve(directory, 'headers.txt');
     const sha = 'a'.repeat(40);
     const runId = '12345';
-    const verify = (document: unknown, headers: string) => {
+    const verify = (document: unknown, headers: string): ReturnType<typeof spawnSync> => {
       writeFileSync(headersPath, headers, 'utf8');
       return spawnSync('node', [deploymentDocumentVerifierPath, sha, runId, headersPath], {
         cwd: repoRoot,
@@ -672,7 +679,11 @@ describe('Hetzner web asset deployment', () => {
     };
     const validHeaders =
       'HTTP/2 200\r\nContent-Type: application/json; charset=utf-8\r\nCache-Control: no-cache, no-store\r\n\r\n';
-    const verify = (status: string, body: unknown, headers = validHeaders) => {
+    const verify = (
+      status: string,
+      body: unknown,
+      headers = validHeaders
+    ): ReturnType<typeof spawnSync> => {
       writeFileSync(headersPath, headers, 'utf8');
       return spawnSync('node', [codeHealthVerifierPath, status, headersPath], {
         cwd: repoRoot,
@@ -705,6 +716,15 @@ describe('Hetzner web asset deployment', () => {
       script.indexOf('\n}\n\nsetup_ssh()')
     );
     const mainFlow = script.slice(script.indexOf('main() {'));
+    const synchronizedReleaseStart = mainFlow.indexOf('  else\n    sync_repo');
+    const synchronizedReleaseEnd = mainFlow.indexOf(
+      '  fi\n  verify_code_agent_readiness',
+      synchronizedReleaseStart
+    );
+    const synchronizedReleaseFlow = mainFlow.slice(
+      synchronizedReleaseStart,
+      synchronizedReleaseEnd
+    );
 
     expect(metadataFlow).toContain('git status --porcelain=v1 --untracked-files=all');
     expect(metadataFlow).toContain('Local checkout contains tracked or untracked changes');
@@ -715,7 +735,15 @@ describe('Hetzner web asset deployment', () => {
     expect(mainFlow.indexOf('resolve_commit_metadata')).toBeLessThan(mainFlow.indexOf('setup_ssh'));
     expect(mainFlow.indexOf('prepare_sync_source')).toBeLessThan(mainFlow.indexOf('setup_ssh'));
     expect(mainFlow.indexOf('resolve_commit_metadata')).toBeLessThan(
-      mainFlow.indexOf('withdraw_deployment_metadata')
+      mainFlow.indexOf('resolve_activation_context')
+    );
+    expect(mainFlow.indexOf('resolve_activation_context')).toBeLessThan(
+      mainFlow.indexOf('sync_repo')
+    );
+    expect(synchronizedReleaseStart).toBeGreaterThan(-1);
+    expect(synchronizedReleaseEnd).toBeGreaterThan(synchronizedReleaseStart);
+    expect(synchronizedReleaseFlow.indexOf('verify_remote_release_manifest')).toBeGreaterThan(
+      synchronizedReleaseFlow.indexOf('sync_repo')
     );
   });
 
@@ -757,7 +785,9 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('WORKFLOW_RUN_ID_VALUE="manual"');
     expect(script).toContain('DEPLOYMENT_METADATA_PUBLISHED="false"');
     expect(script).toContain('DEPLOYMENT_ATTESTATION_VERIFIED="false"');
-    expect(script).toContain('DEPLOYMENT_JSON_PATH="/var/www/intexuraos/web/dist/deployment.json"');
+    expect(script).toContain(
+      'DEPLOYMENT_JSON_PATH="/var/www/intexuraos/web/current/deployment.json"'
+    );
     expect(script).toContain('withdraw_deployment_metadata');
     expect(script).toContain('publish_deployment_metadata');
     expect(script).toContain('verify_deployment_document');
@@ -777,9 +807,7 @@ describe('Hetzner web asset deployment', () => {
     expect(attestationFlow.match(/\/deployment\.json/g)).toHaveLength(2);
     expect(attestationFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
     expect(attestationFlow).toContain('"https://${PUBLIC_DOMAIN}/deployment.json"');
-    expect(mainFlow.indexOf('withdraw_deployment_metadata')).toBeLessThan(
-      mainFlow.indexOf('sync_repo')
-    );
+    expect(mainFlow).not.toContain('withdraw_deployment_metadata');
     expect(mainFlow.indexOf('publish_deployment_metadata')).toBeGreaterThan(
       mainFlow.indexOf('verify_runtime_readiness')
     );
@@ -802,16 +830,21 @@ describe('Hetzner web asset deployment', () => {
       script.indexOf('deploy_web_and_edge() {'),
       script.indexOf('\n}\n\nverify_backend_readiness()')
     );
+    const ordinaryStart = mainFlow.indexOf('    else\n      deploy_runtime');
+    const ordinaryEnd = mainFlow.indexOf('    fi\n', ordinaryStart);
+    const ordinaryFlow = mainFlow.slice(ordinaryStart, ordinaryEnd);
 
     expect(backendFlow).toContain('scripts/hetzner/reload-pm2.sh');
     expect(backendFlow).toContain('INTEXURAOS_COMMIT_SHA=${commit_sha_quoted}');
     expect(backendFlow).not.toContain('run_remote_deploy_web');
     expect(webFlow).toContain('run_remote_deploy_web');
-    expect(mainFlow.indexOf('deploy_runtime')).toBeLessThan(
-      mainFlow.indexOf('verify_backend_readiness')
+    expect(ordinaryStart).toBeGreaterThan(-1);
+    expect(ordinaryEnd).toBeGreaterThan(ordinaryStart);
+    expect(ordinaryFlow.indexOf('deploy_runtime')).toBeLessThan(
+      ordinaryFlow.indexOf('verify_backend_readiness')
     );
-    expect(mainFlow.indexOf('verify_backend_readiness')).toBeLessThan(
-      mainFlow.indexOf('deploy_web_and_edge')
+    expect(ordinaryFlow.indexOf('verify_backend_readiness')).toBeLessThan(
+      ordinaryFlow.indexOf('deploy_web_and_edge')
     );
     expect(mainFlow.indexOf('deploy_web_and_edge')).toBeLessThan(
       mainFlow.indexOf('verify_runtime_readiness')
@@ -862,7 +895,7 @@ describe('Hetzner web asset deployment', () => {
   });
 
   it('fails closed when a manual web deploy omits or supplies a non-exact release SHA', () => {
-    const run = (commitSha: string | undefined) =>
+    const run = (commitSha: string | undefined): ReturnType<typeof spawnSync> =>
       spawnSync('bash', [deployWebPath], {
         cwd: repoRoot,
         encoding: 'utf8',
@@ -1005,6 +1038,20 @@ describe('Hetzner web asset deployment', () => {
     expect(script).not.toContain('gcloud builds triggers run');
   });
 
+  it('resumes durable Message Digest admission and rejects incomplete compensation', () => {
+    const script = readRequired(githubActionsDeployPath);
+
+    expect(script).toContain(
+      '[\\"in_progress\\",\\"compensating\\",\\"compensated\\",\\"admitting\\",\\"admitted\\",\\"complete\\"]'
+    );
+    expect(script).toContain('in_progress|compensated|admitting|admitted)');
+    expect(script).toContain('compensating)');
+    expect(script).toContain('Previous Message Digest compensation is incomplete');
+    expect(script).toContain(
+      'PREVIOUS_RELEASE_DIR="$(read_remote_cutover_field previousReleaseDir)"'
+    );
+  });
+
   it('allowlists native dependency build scripts needed by clean production installs', () => {
     const packageJson = JSON.parse(readRequired(packageJsonPath)) as { packageManager?: string };
     const workspace = readRequired(pnpmWorkspacePath);
@@ -1094,9 +1141,9 @@ describe('Hetzner web asset deployment', () => {
       )
     ) as { apps: { env?: { PORT?: string } }[] };
     const ports = renderedConfig.apps.map((app) => Number(app.env?.PORT));
-    expect(ports).toHaveLength(18);
+    expect(ports).toHaveLength(19);
     expect(ports.every((port) => Number.isInteger(port) && port > 0 && port <= 65535)).toBe(true);
-    expect(new Set(ports).size).toBe(18);
+    expect(new Set(ports).size).toBe(19);
   });
 
   it('bootstraps Corepack when an existing Node 22 install does not provide it', () => {
@@ -1142,10 +1189,11 @@ describe('Hetzner web asset deployment', () => {
     expect(mainFlow.indexOf('install_node_22')).toBeGreaterThan(mainFlow.indexOf('ensure_swap'));
   });
 
-  it('builds the SPA and publishes apps/web/dist into the nginx web root', () => {
+  it('builds the SPA into an inactive release and atomically switches the nginx web root', () => {
     const script = readRequired(deployWebPath);
     const provision = readRequired(provisionPath);
     const runbook = readRequired(runbookPath);
+    const webHosting = readRequired(webHostingPath);
 
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod');
     expect(script).toContain('WEB_SAFE_SECRETS=(');
@@ -1170,10 +1218,31 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('apps/web/service-manifest.json');
     expect(script).toContain('export "${env_var}=${api_path}"');
     expect(script).toContain('pnpm --filter @intexuraos/web build');
-    expect(script).toContain('rsync -a --delete apps/web/dist/ "${WEB_ROOT}/"');
+    expect(script).toContain(
+      'WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-/var/www/intexuraos/web/releases}"'
+    );
+    expect(script).toContain(
+      'WEB_CURRENT_LINK="${WEB_CURRENT_LINK:-/var/www/intexuraos/web/current}"'
+    );
+    expect(script).toContain('mktemp -d "${WEB_RELEASES_ROOT}/.${COMMIT_SHA}.XXXXXX"');
+    expect(script).toContain('rsync -a --delete apps/web/dist/ "${staging_dir}/"');
+    expect(script).toContain('mv -T "${staging_dir}" "${WEB_ROOT}"');
+    expect(script).toContain('mktemp "${WEB_CURRENT_LINK}.next.XXXXXX"');
+    expect(script).toContain('ln -s "${WEB_ROOT}" "${next_link}"');
+    expect(script).toContain('mv -Tf "${next_link}" "${WEB_CURRENT_LINK}"');
+    expect(script).toContain('ACTIVATE_WEB="false"');
     expect(script).toContain('apps/web/dist/index.html');
+    expect(readRequired(nginxConfigPath)).not.toContain('root /var/www/intexuraos/web/dist;');
     expect(provision).toContain('rsync');
     expect(runbook).toContain('scripts/hetzner/deploy-web.sh');
+    expect(runbook).toContain('/var/www/intexuraos/web/current');
+    expect(runbook).toContain('/var/www/intexuraos/web/releases/<commit-sha>');
+    expect(runbook).not.toContain('The SPA itself is served from `/var/www/intexuraos/web/dist`.');
+    expect(webHosting).toContain('/var/www/intexuraos/web/current');
+    expect(webHosting).toContain('/var/www/intexuraos/web/releases/<commit-sha>');
+    expect(webHosting).not.toContain(
+      'publishes the output to the Hetzner nginx web root:\n\n- `/var/www/intexuraos/web/dist`'
+    );
   });
 
   it('installs nginx hash sizing in http context before testing and reloading nginx', () => {
@@ -1423,6 +1492,98 @@ describe('Pub/Sub dead-letter reliability', () => {
   });
 });
 
+describe('Message Digest retained GCP control plane', () => {
+  it('owns the run topic and identity in dev before Hetzner owns its consumer and scheduler', () => {
+    const devTerraform = readRequired(terraformDevMainPath);
+    const iamMain = readRequired(terraformIamMainPath);
+    const iamOutputs = readRequired(terraformIamOutputsPath);
+    const hetznerMain = readRequired(terraformHetznerMainPath);
+    const hetznerPubsub = readRequired(terraformHetznerPubsubPath);
+    const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
+    const hetznerRetainedGcp = readRequired(terraformHetznerRetainedGcpPath);
+    const hetznerOutputs = readRequired(terraformHetznerOutputsPath);
+    const verifier = readRequired(jwtVerifierPath);
+
+    expect(devTerraform).toMatch(
+      /resource "google_service_account" "message_digest_service" \{[\s\S]*?account_id\s+=\s+"intexuraos-message-digest-\$\{var\.environment\}"/
+    );
+    expect(iamMain).not.toContain('resource "google_service_account" "message_digest_service"');
+    expect(iamOutputs).not.toContain('message_digest_service');
+
+    expect(devTerraform).toMatch(
+      /resource "google_pubsub_topic" "message_digest_runs" \{[\s\S]*?name\s+=\s+"intexuraos-message-digest-runs-\$\{var\.environment\}"/
+    );
+    expect(devTerraform).toMatch(
+      /resource "google_pubsub_topic_iam_member" "message_digest_publishes_runs" \{[\s\S]*?topic\s+=\s+google_pubsub_topic\.message_digest_runs\.name[\s\S]*?role\s+=\s+"roles\/pubsub\.publisher"[\s\S]*?google_service_account\.message_digest_service\.email/
+    );
+    const whatsappSend =
+      devTerraform.split('module "pubsub_whatsapp_send" {')[1]?.split('\n}')[0] ?? '';
+    expect(whatsappSend).not.toContain('message_digest_service');
+    expect(devTerraform).toMatch(
+      /resource "google_pubsub_topic_iam_member" "message_digest_publishes_whatsapp" \{[\s\S]*?topic\s+=\s+"intexuraos-whatsapp-send-\$\{var\.environment\}"[\s\S]*?role\s+=\s+"roles\/pubsub\.publisher"[\s\S]*?google_service_account\.message_digest_service\.email/
+    );
+
+    expect(hetznerMain).toContain(
+      'message_digest_service = "intexuraos-message-digest-${var.source_environment}"'
+    );
+    expect(hetznerMain).toMatch(
+      /message_digest_runs\s+=\s+"intexuraos-message-digest-runs-\$\{var\.source_environment\}"/
+    );
+    expect(hetznerMain).toContain('"/internal/message-digests/pubsub/run"');
+    expect(hetznerMain).toContain('"/internal/message-digests/scheduler/tick"');
+    expect(hetznerMain).not.toContain('"/internal/notifications/digest/run-yesterday"');
+
+    const messageDigestPush =
+      hetznerPubsub.split('message_digest_runs = {')[1]?.split('\n    whatsapp_send = {')[0] ?? '';
+    expect(messageDigestPush).toContain(
+      'subscription_name     = "intexuraos-message-digest-runs-prod-hetzner"'
+    );
+    expect(messageDigestPush).toContain(
+      'topic_name            = local.pubsub_topics.message_digest_runs'
+    );
+    expect(messageDigestPush).toContain(
+      'push_path             = "/internal/message-digests/pubsub/run"'
+    );
+    expect(messageDigestPush).toContain('service_account_key   = "message_digest_service"');
+    expect(messageDigestPush).toContain('ack_deadline_seconds  = 600');
+
+    const messageDigestScheduler =
+      hetznerScheduler
+        .split('message_digest_tick = {')[1]
+        ?.split('\n    linear_sync_hourly = {')[0] ?? '';
+    expect(messageDigestScheduler).toContain(
+      'job_name             = "intexuraos-message-digest-tick-prod-hetzner"'
+    );
+    expect(messageDigestScheduler).toContain('schedule             = "*/5 * * * *"');
+    expect(messageDigestScheduler).toContain(
+      'path                 = "/internal/message-digests/scheduler/tick"'
+    );
+    expect(messageDigestScheduler).toContain('body                 = base64encode("{}")');
+    expect(messageDigestScheduler).toContain(
+      'headers              = { "Content-Type" = "application/json" }'
+    );
+    expect(hetznerScheduler).not.toContain('mobile_notifications_digest_yesterday');
+    expect(hetznerScheduler).not.toContain('mobile-notifications-digest-yesterday');
+    expect(hetznerScheduler).not.toContain('/internal/notifications/digest/run-yesterday');
+
+    expect(hetznerRetainedGcp).toMatch(
+      /message_digest_runs\s+=\s+"intexuraos-message-digest-runs-\$\{local\.retained_gcp_environment\}"/
+    );
+    expect(hetznerRetainedGcp).toMatch(
+      /message_digest_service\s+=\s+"intexuraos-message-digest-\$\{local\.retained_gcp_environment\}@\$\{var\.project_id\}\.iam\.gserviceaccount\.com"/
+    );
+    expect(hetznerOutputs).not.toContain(
+      '"mobile-notifications-digest-yesterday-${var.source_environment}"'
+    );
+
+    expect(verifier).toContain('^/internal/message-digests/pubsub/run$');
+    expect(verifier).toContain(
+      'intexuraos-message-digest-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(verifier).toContain('caller_role = "message_digest_run_pubsub"');
+  });
+});
+
 describe('Hetzner async edge cutover', () => {
   it('stages retained GCP Pub/Sub and Scheduler consumers in the Hetzner Terraform root', () => {
     const script = readRequired(cutoverEdgePath);
@@ -1431,6 +1592,9 @@ describe('Hetzner async edge cutover', () => {
     const prTriageTerraform = readRequired(terraformDevPrTriagePath);
     const hetznerMain = readRequired(terraformHetznerMainPath);
     const hetznerPubsub = readRequired(terraformHetznerPubsubPath);
+
+    expect(script).not.toContain('mobile-notifications-digest-yesterday');
+    expect(script).not.toContain('/internal/notifications/digest/run-yesterday');
     const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
     const hetznerRetiredAsyncCleanup = readRequired(terraformHetznerRetiredAsyncCleanupPath);
     const hetznerVariables = readRequired(terraformHetznerVariablesPath);
@@ -1663,6 +1827,24 @@ describe('Hetzner async edge cutover', () => {
 });
 
 describe('Hetzner secret loader', () => {
+  it('keeps every Hetzner Matrix corpus credential out of retired Cloud Run IAM', () => {
+    const terraform = readRequired(terraformDevMainPath);
+    const hetznerRuntimeSecretsSection =
+      terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
+    const cloudRunExcludedSecretsSection =
+      terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
+    const matrixCorpusSecrets = [
+      ...hetznerRuntimeSecretsSection.matchAll(/"(INTEXURAOS_MATRIX_CORPUS_[A-Z0-9_]+)"/gu),
+    ].map((match) => match[1]);
+
+    expect(matrixCorpusSecrets.length).toBeGreaterThan(0);
+    expect(
+      matrixCorpusSecrets.filter(
+        (secretName) => !cloudRunExcludedSecretsSection.includes(`"${secretName}",`)
+      )
+    ).toEqual([]);
+  });
+
   it('isolates the retained dev transcription Sentry DSN from production runtimes', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
@@ -1730,6 +1912,7 @@ describe('Hetzner secret loader', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-secret-loader-'));
     const outputPath = resolve(directory, '.env.prod');
     const gcloudPath = resolve(directory, 'gcloud');
+    const idPath = resolve(directory, 'id');
     const installPath = resolve(directory, 'install');
     const secretValue = JSON.stringify({
       crv: 'Ed25519',
@@ -1738,13 +1921,22 @@ describe('Hetzner secret loader', () => {
       kty: 'OKP',
       x: 'x'.repeat(43),
     });
-    const currentUser = execFileSync('id', ['-u'], { encoding: 'utf8' }).trim();
     const currentGroup = execFileSync('id', ['-g'], { encoding: 'utf8' }).trim();
 
     try {
       writeFileSync(gcloudPath, '#!/usr/bin/env bash\nprintf \'%s\' "${MOCK_SECRET_VALUE}"\n', {
         mode: 0o755,
       });
+      writeFileSync(
+        idPath,
+        [
+          '#!/usr/bin/env bash',
+          'set -euo pipefail',
+          '[[ "${1:-}" == "-u" && "${2:-}" == "test-deploy" ]]',
+          '',
+        ].join('\n'),
+        { mode: 0o755 }
+      );
       writeFileSync(
         installPath,
         [
@@ -1775,7 +1967,7 @@ describe('Hetzner secret loader', () => {
             ...process.env,
             PATH: `${directory}:${process.env.PATH ?? ''}`,
             INTEXURAOS_ENVIRONMENT: 'prod',
-            DEPLOY_USER: currentUser,
+            DEPLOY_USER: 'test-deploy',
             NGINX_TOKEN_GROUP: currentGroup,
             MOCK_SECRET_VALUE: secretValue,
             PROVISIONER_SA_KEY_FILE: resolve(directory, 'missing-provisioner-key.json'),

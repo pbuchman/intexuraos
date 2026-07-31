@@ -6,7 +6,7 @@
 
 - **Name:** `fishing-assistant-service`
 - **Role:** User-scoped Fishing Assistant chat, knowledge-base, and digest API.
-- **Primary Goal:** Answer fishing questions from stored knowledge and mobile notification context with validated citations.
+- **Primary Goal:** Answer fishing questions from stored knowledge, canonical Message Digest summaries, and scoped private WhatsApp evidence with validated citations.
 
 ## Capabilities
 
@@ -30,7 +30,7 @@
 | PATCH | `/pages/:pageId` | Update and reindex page text. | Path `pageId`, body `{ rawText: string }` |
 | DELETE | `/pages/:pageId` | Delete a page and its chunks. | Path `pageId` |
 | POST | `/pages/:pageId/reindex` | Reindex a page's current raw text. | Path `pageId` |
-| GET | `/digest-groups` | List mobile notification digest subscriptions. | None |
+| GET | `/digest-groups` | List the migrated Fishing definition from message-digest-service. | None |
 | GET | `/digests` | Query digests. | Query `{ groupKey: string; dateFrom: string; dateTo: string; terms?: string; limit?: string }` |
 | GET | `/digests/:groupKey/:date` | Load one digest and digest state. | Path `groupKey`, `date` |
 
@@ -63,7 +63,8 @@
 - OpenAI embeddings through `src/infra/llm/embeddingClient.ts`.
 - Fixed chat model adapter in `src/infra/llm/fixedGeminiFlashClient.ts`.
 - user-service for user OpenRouter keys.
-- mobile-notifications-service for digest subscriptions, digest pages, digest state, and raw group messages.
+- message-digest-service for the migrated Fishing definition and canonical summary history.
+- whatsapp-service for definition-scoped private source-message evidence.
 - llm-usage-service through `HttpInternalAuthUsageSink`.
 
 ## Usage Patterns

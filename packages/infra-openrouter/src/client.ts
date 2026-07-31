@@ -146,6 +146,30 @@ class OpenRouterApiError extends Error {
   }
 }
 
+function readOpenRouterErrorEnvelope(value: unknown): OpenRouterApiError | undefined {
+  if (!isRecord(value)) return undefined;
+  const error = value['error'];
+  if (!isRecord(error)) return undefined;
+  const rawStatus = error['code'];
+  const status =
+    typeof rawStatus === 'number' &&
+    Number.isInteger(rawStatus) &&
+    rawStatus >= 400 &&
+    rawStatus <= 599
+      ? rawStatus
+      : 500;
+  const rawMessage = error['message'];
+  const message =
+    typeof rawMessage === 'string' && rawMessage.trim().length > 0
+      ? rawMessage
+      : 'OpenRouter returned an error response';
+  return new OpenRouterApiError(status, message);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function toOpenRouterUsageErrorCategory(error: unknown): string {
   if (error instanceof OpenRouterApiError) {
     return `OPENROUTER_HTTP_${String(error.status)}`;
@@ -250,7 +274,10 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
           const errorText = await response.text();
           throw new OpenRouterApiError(response.status, errorText);
         }
-        return (await response.json()) as T;
+        const data: unknown = await response.json();
+        const providerError = readOpenRouterErrorEnvelope(data);
+        if (providerError !== undefined) throw providerError;
+        return data as T;
       }
     );
   }

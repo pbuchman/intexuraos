@@ -5,6 +5,7 @@ import type {
   LlmProvider,
 } from '@intexuraos/llm-contract';
 export type * from './intexAgentTestRuns.js';
+export * from './messageDigests.js';
 /**
  * API Response types matching backend response format.
  */
@@ -835,6 +836,7 @@ export interface AppConfig {
   whatsappServiceUrl: string;
   notionServiceUrl: string;
   mobileNotificationsServiceUrl: string;
+  messageDigestServiceUrl: string;
   fishingAssistantServiceUrl: string;
   ResearchAgentUrl: string;
   notesAgentUrl: string;
@@ -1894,20 +1896,11 @@ export type {
   FishingEvidenceSourceType,
   FishingChatRole,
   FishingAnswerConfidence,
-  FishingDigestGroup,
-  FishingDigestItem,
-  FishingDigestListResponse,
-  FishingIdentityLedgerEntry,
-  FishingModeratorEvent,
-  FishingOpenThread,
-  FishingDigestState,
-  FishingDigestDetail,
   FishingKnowledgeFolder,
   FishingKnowledgePage,
   FishingMessageCitation,
   FishingChat,
   FishingChatMessage,
-  ListFishingDigestsOptions,
   CreateFishingKnowledgeFolderInput,
   UpdateFishingKnowledgeFolderInput,
   CreateFishingKnowledgePageInput,

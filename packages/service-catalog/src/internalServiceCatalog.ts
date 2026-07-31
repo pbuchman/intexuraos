@@ -49,6 +49,13 @@ export const INTERNAL_API_SERVICE_CATALOG: InternalApiServiceCatalogEntry[] = [
     openApiUrlEnvVar: 'INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL',
   },
   {
+    key: 'message-digest-service',
+    name: 'Message Digest Service',
+    apiDocsName: 'Message Digest Service API',
+    baseUrlEnvVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
+    openApiUrlEnvVar: 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL',
+  },
+  {
     key: 'research-agent',
     name: 'Research Agent',
     apiDocsName: 'Research Agent API',

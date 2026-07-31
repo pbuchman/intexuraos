@@ -300,6 +300,21 @@ async function matrixTimeoutAfterAbort(signal: AbortSignal): Promise<MatrixTarge
 
 function createWhatsAppBoundary(state: SharedState): WhatsAppServiceClient {
   return {
+    async validatePrivateDigestSource() {
+      throw new Error('unexpected private digest source validation call');
+    },
+    async queryPrivateDigestMessages() {
+      throw new Error('unexpected private digest message query call');
+    },
+    async getWhatsAppDeliveryReadiness() {
+      throw new Error('unexpected WhatsApp delivery readiness call');
+    },
+    async getOutboundDeliveryState() {
+      throw new Error('unexpected outbound delivery state call');
+    },
+    async authorizeOutboundDeliveryRetry() {
+      throw new Error('unexpected outbound delivery retry authorization call');
+    },
     async getMatrixCorpusReadiness() {
       return { ok: true, value: { status: 'ready' } };
     },

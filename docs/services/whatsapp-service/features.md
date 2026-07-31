@@ -2,6 +2,8 @@
 
 WhatsApp Service is the mobile edge for IntexuraOS. It receives WhatsApp Business webhooks, stores inbound messages, verifies phone ownership, sends outbound notifications, and maintains the private WhatsApp mirror used by the private workspace.
 
+It is also the source and delivery boundary for Message Digests. Group and direct-chat summaries read a fenced projection of private WhatsApp messages, and completed summaries are delivered to the user's first connected mapping without a second destination setting.
+
 ## Text To Intex Agent
 
 Text messages are persisted and forwarded as `intex.message.ingest` events with `sourceType: "whatsapp_text"`. Intex Agent handles the assistant session and any permitted actions downstream.
@@ -54,3 +56,11 @@ Interactive button replies from retired workflows are also ignored. They are mar
 Other services can publish outbound WhatsApp messages through the send-message topic. Messages can carry an importance flag so user notification preferences can suppress low-priority updates.
 
 Outbound sends can be plain text, interactive buttons, or CTA URL messages. Successful sends are recorded best-effort for reply correlation.
+
+Message Digest sends use the frozen `intexuraos_message_digest_v1` template, a run-scoped idempotency key, and an authorization acquired from Message Digest Service. WhatsApp Service resolves the user's first mapped phone, records pending/sent/ambiguous/failed delivery state, and permits a byte-identical retry only after a definitive failure. An ambiguous provider outcome is never retried blindly.
+
+## Message Digest Source
+
+Message Digest Service can validate one owned private group or direct chat and query only that chat's messages in a bounded time window. The resulting source revision binds account generation, chat identity, chat type, and context-change sequence. Reconnects, redactions, late imports, or other context changes invalidate stale reads instead of silently mixing versions.
+
+Source projections omit raw Matrix identifiers and exclude deleted or redacted content. Request logging for these internal routes uses no body preview.

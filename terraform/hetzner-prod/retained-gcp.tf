@@ -11,6 +11,7 @@ locals {
   }
 
   retained_gcp_pubsub_topics = {
+    message_digest_runs      = "intexuraos-message-digest-runs-${local.retained_gcp_environment}"
     whatsapp_media_cleanup   = "intexuraos-whatsapp-media-cleanup-${local.retained_gcp_environment}"
     whatsapp_webhook_process = "intexuraos-whatsapp-webhook-process-${local.retained_gcp_environment}"
     audio_stored             = "intexuraos-audio-stored-${local.retained_gcp_environment}"
@@ -49,6 +50,7 @@ locals {
 
   retained_gcp_service_accounts = {
     cloud_scheduler              = "intexuraos-scheduler-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
+    message_digest_service       = "intexuraos-message-digest-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     cloud_functions              = "intexuraos-functions-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     transcription_function       = "ixos-transcription-fn-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
     user_service                 = "intexuraos-user-svc-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"

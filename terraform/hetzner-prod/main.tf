@@ -20,12 +20,13 @@ locals {
   }
 
   service_account_ids = {
-    whatsapp_service = "intexuraos-whatsapp-svc-${var.source_environment}"
-    intex_agent      = "intexuraos-intex-agent-${var.source_environment}"
-    research_agent   = "intexuraos-research-agent-${var.source_environment}"
-    code_agent       = "intexuraos-code-${var.source_environment}"
-    calendar_agent   = "intexuraos-calendar-${var.source_environment}"
-    bookmarks_agent  = "intexuraos-bookmarks-${var.source_environment}"
+    whatsapp_service       = "intexuraos-whatsapp-svc-${var.source_environment}"
+    message_digest_service = "intexuraos-message-digest-${var.source_environment}"
+    intex_agent            = "intexuraos-intex-agent-${var.source_environment}"
+    research_agent         = "intexuraos-research-agent-${var.source_environment}"
+    code_agent             = "intexuraos-code-${var.source_environment}"
+    calendar_agent         = "intexuraos-calendar-${var.source_environment}"
+    bookmarks_agent        = "intexuraos-bookmarks-${var.source_environment}"
   }
 
   cloud_scheduler_service_account_id = "intexuraos-scheduler-${var.source_environment}"
@@ -35,6 +36,7 @@ locals {
   pubsub_staging_filter = "attributes.intexuraos_hetzner_cutover = \"active\""
 
   pubsub_topics = {
+    message_digest_runs      = "intexuraos-message-digest-runs-${var.source_environment}"
     whatsapp_send            = "intexuraos-whatsapp-send-${var.source_environment}"
     whatsapp_media_cleanup   = "intexuraos-whatsapp-media-cleanup-${var.source_environment}"
     whatsapp_webhook_process = "intexuraos-whatsapp-webhook-process-${var.source_environment}"
@@ -70,7 +72,8 @@ locals {
     "/internal/llm/pubsub/report-analytics"                                          = "research-agent"
     "/internal/merge-conflicts/reconcile"                                            = "code-agent"
     "/internal/merge-queue/tick"                                                     = "code-agent"
-    "/internal/notifications/digest/run-yesterday"                                   = "mobile-notifications-service"
+    "/internal/message-digests/pubsub/run"                                           = "message-digest-service"
+    "/internal/message-digests/scheduler/tick"                                       = "message-digest-service"
     "/internal/users/"                                                               = "user-service"
     "/internal/whatsapp/private/accounts/:sourceAccountId/erasure"                   = "whatsapp-service"
     "/internal/whatsapp/private/accounts/:sourceAccountId/erasure/:erasureRequestId" = "whatsapp-service"

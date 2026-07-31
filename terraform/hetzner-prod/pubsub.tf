@@ -1,5 +1,15 @@
 locals {
   hetzner_pubsub_push_subscriptions = {
+    message_digest_runs = {
+      subscription_name     = "intexuraos-message-digest-runs-prod-hetzner"
+      topic_name            = local.pubsub_topics.message_digest_runs
+      push_path             = "/internal/message-digests/pubsub/run"
+      service_account_key   = "message_digest_service"
+      ack_deadline_seconds  = 600
+      retry_minimum_backoff = "10s"
+      retry_maximum_backoff = "600s"
+      max_delivery_attempts = 5
+    }
     whatsapp_send = {
       subscription_name     = "intexuraos-whatsapp-send-prod-hetzner"
       topic_name            = local.pubsub_topics.whatsapp_send

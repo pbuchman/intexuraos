@@ -2,16 +2,22 @@
  * WhatsApp Cloud API Message Sender.
  * Sends messages using the WhatsApp Business Cloud API.
  */
-import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
+import { err, ok, type Result } from '@intexuraos/common-core';
 import { performHttpFetch } from '@intexuraos/common-http';
 import { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from '@intexuraos/http-contracts';
 import { createAppLogger, SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
-import type { WhatsAppMessageSender, WhatsAppInteractiveButton } from '../../domain/whatsapp/index.js';
+import type {
+  WhatsAppInteractiveButton,
+  WhatsAppMessageDigestTemplate,
+  WhatsAppMessageSender,
+} from '../../domain/whatsapp/index.js';
+import { WHATSAPP_MESSAGE_SEND_TIMEOUT_MS } from '../../domain/whatsapp/ports/messageSender.js';
 import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
-const REQUEST_TIMEOUT_MS = 30000;
 const MAX_TEXT_BODY_LENGTH = 4096;
+const MESSAGE_DIGEST_TEMPLATE_NAME = 'intexuraos_message_digest_v1';
+const MESSAGE_DIGEST_TEMPLATE_LANGUAGE = 'en_US';
 
 const logger = createAppLogger({ name: 'whatsapp-sender' });
 
@@ -22,16 +28,48 @@ type WhatsAppMessageBody =
       interactive:
         | { type: 'button'; body: { text: string }; action: { buttons: { type: string; reply: { id: string; title: string } }[] } }
         | { type: 'cta_url'; body: { text: string }; action: { name: 'cta_url'; parameters: { display_text: string; url: string } } };
+    }
+  | {
+      type: 'template';
+      template: {
+        name: typeof MESSAGE_DIGEST_TEMPLATE_NAME;
+        language: { code: typeof MESSAGE_DIGEST_TEMPLATE_LANGUAGE };
+        components: [
+          {
+            type: 'body';
+            parameters: [
+              { type: 'text'; text: string },
+              { type: 'text'; text: string },
+            ];
+          },
+          {
+            type: 'button';
+            sub_type: 'url';
+            index: '0';
+            parameters: [{ type: 'text'; text: string }];
+          },
+        ];
+      };
     };
 
-type MessageTypeLabel = 'text' | 'interactive' | 'CTA URL';
+type MessageTypeLabel = 'text' | 'interactive' | 'CTA URL' | 'Message Digest template';
+
+interface ProviderErrorMetadata {
+  providerCode?: number;
+  providerSubcode?: number;
+}
 
 function truncateBody(message: string, maxLength: number, messageType: MessageTypeLabel, phoneNumber: string): string {
   if (message.length <= maxLength) {
     return message;
   }
   logger.warn(
-    { phoneNumber, originalLength: message.length, maxLength, [SKIP_SENTRY_KEY]: true },
+    {
+      recipientHint: getRecipientLogHint(phoneNumber),
+      originalLength: message.length,
+      maxLength,
+      [SKIP_SENTRY_KEY]: true,
+    },
     `Truncated ${messageType} message body to fit WhatsApp limit`
   );
   return message.substring(0, maxLength);
@@ -117,16 +155,52 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     return await this.sendRequest(phoneNumber, ctaUrlBody, 'CTA URL');
   }
 
+  async sendMessageDigestTemplate(
+    phoneNumber: string,
+    template: WhatsAppMessageDigestTemplate
+  ): Promise<Result<{ wamid: string }, WhatsAppError>> {
+    return await this.sendRequest(
+      phoneNumber,
+      {
+        type: 'template',
+        template: {
+          name: MESSAGE_DIGEST_TEMPLATE_NAME,
+          language: { code: MESSAGE_DIGEST_TEMPLATE_LANGUAGE },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: template.digestName },
+                { type: 'text', text: template.digestExcerpt },
+              ],
+            },
+            {
+              type: 'button',
+              sub_type: 'url',
+              index: '0',
+              parameters: [{ type: 'text', text: template.runUrlSuffix }],
+            },
+          ],
+        },
+      },
+      'Message Digest template'
+    );
+  }
+
   private async sendRequest(
     phoneNumber: string,
     body: WhatsAppMessageBody,
     messageTypeLabel: MessageTypeLabel
   ): Promise<Result<{ wamid: string }, WhatsAppError>> {
-    logger.info({ phoneNumber, messageType: messageTypeLabel }, `Sending WhatsApp ${messageTypeLabel} message`);
+    const recipientHint = getRecipientLogHint(phoneNumber);
+    logger.info(
+      { recipientHint, messageType: messageTypeLabel },
+      `Sending WhatsApp ${messageTypeLabel} message`
+    );
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       controller.abort();
-    }, REQUEST_TIMEOUT_MS);
+    }, WHATSAPP_MESSAGE_SEND_TIMEOUT_MS);
 
     try {
       // Remove + prefix if present for WhatsApp API
@@ -147,14 +221,22 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
       if (!response.ok) {
         const errorBody = await response.text();
-        logger.error({ phoneNumber, status: response.status, errorBody, [SKIP_SENTRY_KEY]: true }, `WhatsApp API returned error for ${messageTypeLabel}`);
+        const providerErrorMetadata = extractProviderErrorMetadata(errorBody);
+        logger.error(
+          {
+            status: response.status,
+            responseBytes: Buffer.byteLength(errorBody, 'utf8'),
+            ...providerErrorMetadata,
+            errorClass: 'provider_response',
+            [SKIP_SENTRY_KEY]: true,
+          },
+          `WhatsApp API returned error for ${messageTypeLabel}`
+        );
         return err({
           code: 'PERSISTENCE_ERROR',
-          message: `WhatsApp API error: ${String(response.status)} - ${errorBody}`,
+          message: `WhatsApp API request failed with status ${String(response.status)}`,
           httpStatus: response.status,
         });
       }
@@ -165,24 +247,71 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
       };
       const wamid = responseBody.messages?.[0]?.id ?? `unknown-${String(Date.now())}`;
 
-      logger.info({ phoneNumber, normalizedPhone, wamid }, `${messageTypeLabel} message sent successfully`);
+      logger.info({ recipientHint, wamid }, `${messageTypeLabel} message sent successfully`);
       return ok({ wamid });
     } catch (error) {
-      clearTimeout(timeoutId);
-
       if (error instanceof Error && error.name === 'AbortError') {
-        logger.error({ phoneNumber, timeoutMs: REQUEST_TIMEOUT_MS, [SKIP_SENTRY_KEY]: true }, 'WhatsApp request timed out');
+        logger.error(
+          {
+            recipientHint,
+            timeoutMs: WHATSAPP_MESSAGE_SEND_TIMEOUT_MS,
+            [SKIP_SENTRY_KEY]: true,
+          },
+          'WhatsApp request timed out'
+        );
         return err({
           code: 'PERSISTENCE_ERROR',
-          message: `WhatsApp request timed out after ${String(REQUEST_TIMEOUT_MS)}ms`,
+          message: `WhatsApp request timed out after ${String(WHATSAPP_MESSAGE_SEND_TIMEOUT_MS)}ms`,
         });
       }
 
-      logger.error({ phoneNumber, error: getErrorMessage(error), [SKIP_SENTRY_KEY]: true }, `Failed to send WhatsApp ${messageTypeLabel} message`);
+      logger.error(
+        {
+          recipientHint,
+          errorClass: classifyTransportError(error),
+          [SKIP_SENTRY_KEY]: true,
+        },
+        `Failed to send WhatsApp ${messageTypeLabel} message`
+      );
       return err({
         code: 'PERSISTENCE_ERROR',
-        message: `Failed to send WhatsApp ${messageTypeLabel} message: ${getErrorMessage(error)}`,
+        message: `Failed to send WhatsApp ${messageTypeLabel} message`,
       });
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
+}
+
+function extractProviderErrorMetadata(responseText: string): ProviderErrorMetadata {
+  try {
+    const payload: unknown = JSON.parse(responseText);
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return {};
+    const error = (payload as Record<string, unknown>)['error'];
+    if (typeof error !== 'object' || error === null || Array.isArray(error)) return {};
+    const record = error as Record<string, unknown>;
+    const code = record['code'];
+    const subcode = record['error_subcode'];
+    return {
+      ...(isSafeProviderCode(code) ? { providerCode: code } : {}),
+      ...(isSafeProviderCode(subcode) ? { providerSubcode: subcode } : {}),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function isSafeProviderCode(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function classifyTransportError(error: unknown): 'type_error' | 'error' | 'non_error' {
+  if (error instanceof TypeError) return 'type_error';
+  return error instanceof Error ? 'error' : 'non_error';
+}
+
+function getRecipientLogHint(phoneNumber: string): string {
+  const normalized = phoneNumber.startsWith('+') ? phoneNumber.slice(1) : phoneNumber;
+  const suffix = normalized.slice(-2);
+  return suffix === '' ? '[redacted]' : `***${suffix}`;
 }

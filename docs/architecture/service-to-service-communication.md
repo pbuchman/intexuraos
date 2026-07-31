@@ -31,13 +31,14 @@ All internal endpoints follow the pattern:
 | `image-service`                | `images`                          | AI image generation and storage              |
 | `intex-agent`                  | `intex-agent`                     | WhatsApp text direct tools                   |
 | `linear-agent`                 | `linear`                          | Linear issue sync and action processing      |
-| `mobile-notifications-service` | `mobile-notifications`            | Push notification delivery                   |
+| `message-digest-service`       | `message-digests`                 | Digest scheduling, runs, and delivery authorization |
+| `mobile-notifications-service` | `mobile-notifications`            | Captured Android notification queries        |
 | `notes-agent`                  | `notes`                           | Note management                              |
 | `notion-service`               | `notion`                          | Notion integration and page preview          |
 | `research-agent`               | `llm`, `research`                 | LLM orchestration and research processing    |
 | `user-service`                 | `users`                           | User settings, LLM API keys, OAuth tokens    |
 | `web-agent`                    | `link-previews`, `page-summaries` | Web scraping and link preview                |
-| `whatsapp-service`             | (webhook receiver)                | WhatsApp inbound webhook handling            |
+| `whatsapp-service`             | `whatsapp`                        | WhatsApp webhooks, private source reads, and outbound delivery |
 | `api-docs-hub`                 | (no internal routes)              | OpenAPI documentation aggregator             |
 | `web`                          | (frontend — no routes)            | React SPA                                    |
 

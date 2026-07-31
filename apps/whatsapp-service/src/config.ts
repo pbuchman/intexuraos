@@ -164,6 +164,13 @@ const configSchema = z.object({
   userServiceUrl: z.string().min(1, 'INTEXURAOS_USER_SERVICE_URL is required'),
 
   /**
+   * Message Digest service URL for last-moment delivery authorization.
+   */
+  messageDigestServiceUrl: z
+    .string()
+    .min(1, 'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL is required'),
+
+  /**
    * OpenRouter model used for frozen WhatsApp Conversation Assistant sessions.
    */
   conversationAssistantModel: z
@@ -287,6 +294,7 @@ export function loadConfig(): Config {
     internalAuthToken: process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
     llmUsageServiceUrl: process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'],
     userServiceUrl: process.env['INTEXURAOS_USER_SERVICE_URL'],
+    messageDigestServiceUrl: process.env['INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL'],
     conversationAssistantModel:
       conversationAssistantModelEnv === undefined || conversationAssistantModelEnv === ''
         ? undefined
@@ -326,6 +334,7 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_LLM_USAGE_SERVICE_URL',
     'INTEXURAOS_USER_SERVICE_URL',
+    'INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL',
     'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
     'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN',
   ];

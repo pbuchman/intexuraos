@@ -5,6 +5,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { List, Plus, Settings } from 'lucide-react';
 import { CollapsibleNavSection } from '../CollapsibleNavSection.js';
@@ -131,5 +132,49 @@ describe('CollapsibleNavSection', () => {
 
     expect(onToggle).toHaveBeenCalledWith(true);
     expect(screen.getByTestId('location')).toHaveTextContent('/current');
+  });
+
+  it('opens by keyboard, closes by pointer, and exposes the expanded state', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter>
+        <CollapsibleNavSection
+          label="WhatsApp"
+          icon={Settings}
+          items={items}
+          isOpen={false}
+          onToggle={onToggle}
+          isCollapsed={false}
+          rootPath="/foo"
+        />
+      </MemoryRouter>
+    );
+
+    const trigger = screen.getByRole('button', { name: 'WhatsApp' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(onToggle).toHaveBeenLastCalledWith(true);
+
+    rerender(
+      <MemoryRouter>
+        <CollapsibleNavSection
+          label="WhatsApp"
+          icon={Settings}
+          items={items}
+          isOpen
+          onToggle={onToggle}
+          isCollapsed={false}
+          rootPath="/foo"
+        />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('button', { name: 'WhatsApp' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    await user.click(screen.getByRole('button', { name: 'WhatsApp' }));
+    expect(onToggle).toHaveBeenLastCalledWith(false);
   });
 });

@@ -21,12 +21,17 @@ describe('navigation structure', () => {
 
   it('keeps promoted items inside their owning submenus', () => {
     expect(sidebarSource).not.toContain('label="Battlefield"');
-    expect(sidebarSource).not.toContain('label="Digests"');
+    expect(sidebarSource).not.toContain('label="Message Digests"');
     expect(navItemsSource).toMatch(
       /export const codeTasksItems[\s\S]*to: '\/code-tasks', label: 'Battlefield'/
     );
-    expect(notificationsSectionSource).toContain('to="/notifications/digests"');
+    expect(navItemsSource).toMatch(
+      /export const whatsappItems[\s\S]*to: '\/whatsapp\/message-digests', label: 'Message Digests'/
+    );
+    expect(notificationsSectionSource).not.toContain('/notifications/digests');
     expect(navItemsSource).not.toContain("to: '/whatsapp/sessions'");
+    expect(navItemsSource).not.toContain("to: '/fishing-assistant/digests'");
+    expect(navItemsSource).not.toContain("label: 'Current Digests'");
   });
 
   it('keeps Intex Agent first and sessions as the authenticated landing route', () => {

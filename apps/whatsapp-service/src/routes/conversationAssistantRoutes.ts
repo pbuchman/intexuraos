@@ -24,6 +24,7 @@ import {
   streamConversationAssistantTurn,
 } from '../domain/conversation-assistant/sessionUseCases.js';
 import type { ConversationAssistantDeps } from '../domain/conversation-assistant/ports.js';
+import { adaptConversationAssistantPreparationPublication } from '../domain/conversation-assistant/preparationPublisherAdapter.js';
 import type {
   CheckConversationAssistantContextInput,
   ConversationAssistantError,
@@ -1277,13 +1278,9 @@ async function getConversationAssistantDeps(
     llmClientFactory: services.llmClientFactory,
     preparationPublisher: {
       async publish(event) {
-        const result = await services.eventPublisher.publishConversationAssistantPreparation(event);
-        return result.ok
-          ? { ok: true as const, value: undefined }
-          : {
-              ok: false as const,
-              error: { code: 'INTERNAL_ERROR' as const, message: result.error.message },
-            };
+        return adaptConversationAssistantPreparationPublication(
+          await services.eventPublisher.publishConversationAssistantPreparation(event)
+        );
       },
     },
     defaultModel: services.conversationAssistantModel,

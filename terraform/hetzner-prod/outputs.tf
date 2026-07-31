@@ -190,7 +190,6 @@ output "cutover_cloud_run_subscriptions_to_pause_or_remove" {
 output "cutover_cloud_run_scheduler_jobs_to_pause_or_remove" {
   description = "Existing Cloud Run-targeted scheduler jobs to pause or remove during the named cutover step to prevent duplicate processing."
   value = [
-    "mobile-notifications-digest-yesterday-${var.source_environment}",
     "intexuraos-linear-sync-hourly-${var.source_environment}",
     "intexuraos-linear-issues-prune-hourly-${var.source_environment}",
     "intexuraos-drain-task-queue-${var.source_environment}",

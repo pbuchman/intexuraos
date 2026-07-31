@@ -30,7 +30,8 @@ export type IdempotentDeliveryReserveResult =
         | 'acquired'
         | 'duplicate_in_flight'
         | 'duplicate_sent'
-        | 'duplicate_ambiguous';
+        | 'duplicate_ambiguous'
+        | 'duplicate_failed';
     }>
   | Readonly<{
       ok: false;
@@ -49,6 +50,12 @@ export type IdempotentDeliveryMutationResult =
         | 'CORRUPT_RECEIPT'
         | 'PERSISTENCE_ERROR';
     }>;
+
+export type OutboundDeliveryState =
+  | Readonly<{ status: 'pending' | 'missing' }>
+  | Readonly<{ status: 'sent'; acceptedAt: string }>
+  | Readonly<{ status: 'ambiguous'; acceptedAt?: string | undefined }>
+  | Readonly<{ status: 'failed'; failedAt: string; failureCode: string }>;
 
 /**
  * Port for storing and retrieving outbound message records.
@@ -74,6 +81,7 @@ export interface OutboundMessageRepository {
   deleteByWamid(wamid: string): Promise<Result<void, WhatsAppError>>;
 
   reserveIdempotentDelivery(input: Readonly<{
+    userId?: string | undefined;
     idempotencyKey: string;
     payloadDigest: string;
     now: string;
@@ -91,4 +99,23 @@ export interface OutboundMessageRepository {
     payloadDigest: string;
     now: string;
   }>): Promise<IdempotentDeliveryMutationResult>;
+
+  markIdempotentDeliveryFailed(input: Readonly<{
+    idempotencyKey: string;
+    payloadDigest: string;
+    now: string;
+    failureCode: string;
+  }>): Promise<IdempotentDeliveryMutationResult>;
+
+  authorizeIdempotentDeliveryRetry(input: Readonly<{
+    userId: string;
+    idempotencyKey: string;
+    payloadDigest: string;
+    now: string;
+  }>): Promise<IdempotentDeliveryMutationResult>;
+
+  getIdempotentDeliveryState(input: Readonly<{
+    userId: string;
+    idempotencyKey: string;
+  }>): Promise<Result<OutboundDeliveryState, WhatsAppError>>;
 }

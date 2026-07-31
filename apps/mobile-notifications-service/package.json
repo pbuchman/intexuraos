@@ -23,14 +23,8 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
-    "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
-    "@intexuraos/llm-factory": "workspace:*",
-    "@intexuraos/llm-pricing": "workspace:*",
-    "@intexuraos/llm-prompts": "workspace:*",
-    "@intexuraos/whatsapp-pubsub-client": "workspace:*",
     "fastify": "catalog:",
-    "pino": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

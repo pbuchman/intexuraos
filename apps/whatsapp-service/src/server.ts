@@ -124,8 +124,15 @@ export async function buildServer(
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
+    ...(process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] === undefined
+      ? {}
+      : {
+          internalAuthTokenPrevious:
+            process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'],
+        }),
     llmUsageServiceUrl: config.llmUsageServiceUrl,
     userServiceUrl: config.userServiceUrl,
+    messageDigestServiceUrl: config.messageDigestServiceUrl,
     conversationAssistantModel: config.conversationAssistantModel,
     matrixOutboundAdapterBaseUrl: process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] ?? '',
     matrixOutboundAdapterAuthToken:

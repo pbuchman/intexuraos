@@ -219,6 +219,7 @@ IntexuraOS provides a central API documentation hub (`api-docs-hub`) that aggreg
 | `INTEXURAOS_USER_SERVICE_OPENAPI_URL`                 | user-service                 |
 | `INTEXURAOS_NOTION_SERVICE_OPENAPI_URL`               | notion-service               |
 | `INTEXURAOS_WHATSAPP_SERVICE_OPENAPI_URL`             | whatsapp-service             |
+| `INTEXURAOS_MESSAGE_DIGEST_SERVICE_OPENAPI_URL`       | message-digest-service       |
 | `INTEXURAOS_MOBILE_NOTIFICATIONS_SERVICE_OPENAPI_URL` | mobile-notifications-service |
 | `INTEXURAOS_RESEARCH_AGENT_OPENAPI_URL`               | research-agent               |
 | `INTEXURAOS_INTEX_AGENT_OPENAPI_URL`                  | intex-agent                  |

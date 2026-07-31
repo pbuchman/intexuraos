@@ -15,6 +15,100 @@ export interface WhatsAppServiceClientConfig {
   authorizationHeaderProvider?: () => Promise<string>;
 }
 
+export type DigestChatType = 'group' | 'direct';
+
+export interface ValidatePrivateDigestSourceInput {
+  userId: string;
+  chatId: string;
+  expectedGenerationId?: string;
+}
+
+export interface ValidatedPrivateDigestSource {
+  sourceAccountId: string;
+  generationId: string;
+  chatId: string;
+  chatType: DigestChatType;
+  displayName: string;
+  messageCount: number;
+  participantCount?: number | undefined;
+  lastActivityAt?: string | undefined;
+  sourceRevision: string;
+}
+
+export interface QueryPrivateDigestMessagesInput {
+  userId: string;
+  sourceAccountId: string;
+  generationId: string;
+  chatId: string;
+  chatType: DigestChatType;
+  windowStart: string;
+  windowEnd: string;
+  limit: number;
+  cursor?: string;
+}
+
+export interface PrivateDigestMessage {
+  messageRef: string;
+  eventTimestamp: string;
+  direction: 'inbound' | 'outbound' | 'system';
+  authorLabel: string;
+  text: string;
+  contentKind: 'text' | 'media_caption' | 'transcription' | 'reaction' | 'system';
+}
+
+export interface QueryPrivateDigestMessagesResult {
+  messages: PrivateDigestMessage[];
+  sourceRevision: string;
+  highWatermark: string | null;
+  nextCursor: string | null;
+}
+
+export interface WhatsAppDeliveryReadiness {
+  status: 'ready' | 'mapping_missing' | 'disconnected' | 'delivery_disabled';
+  maskedPrimaryNumber?: string;
+  observationVersion: string;
+  observedAt: string;
+}
+
+export interface GetOutboundDeliveryStateInput {
+  userId: string;
+  idempotencyKey: string;
+}
+
+export interface AuthorizeOutboundDeliveryRetryInput extends GetOutboundDeliveryStateInput {
+  payloadDigest: string;
+}
+
+export interface AuthorizeOutboundDeliveryRetryResult {
+  authorized: true;
+}
+
+export interface OutboundDeliveryState {
+  status: 'pending' | 'sent' | 'ambiguous' | 'failed' | 'missing';
+  acceptedAt?: string | undefined;
+  failedAt?: string | undefined;
+  failureCode?: string | undefined;
+}
+
+export type WhatsAppDigestClientFailureCode =
+  | 'invalid_request'
+  | 'timeout'
+  | 'unavailable'
+  | 'source_changed'
+  | 'not_found'
+  | 'rejected'
+  | 'invalid_response';
+
+export type WhatsAppDigestClientResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | {
+      readonly ok: false;
+      readonly error: {
+        readonly code: WhatsAppDigestClientFailureCode;
+        readonly httpStatus?: number;
+      };
+    };
+
 export type PrivateMatrixDeliveryStatus =
   | { status: 'ready'; deliverable: true }
   | { status: 'setup_required'; deliverable: false; reason: string }
@@ -33,6 +127,21 @@ export type SendPrivateOutboundMatrixMessageResult =
   | { status: 'error'; message: string };
 
 export interface WhatsAppServiceClient {
+  validatePrivateDigestSource(
+    input: ValidatePrivateDigestSourceInput
+  ): Promise<WhatsAppDigestClientResult<ValidatedPrivateDigestSource>>;
+  queryPrivateDigestMessages(
+    input: QueryPrivateDigestMessagesInput
+  ): Promise<WhatsAppDigestClientResult<QueryPrivateDigestMessagesResult>>;
+  getWhatsAppDeliveryReadiness(
+    userId: string
+  ): Promise<WhatsAppDigestClientResult<WhatsAppDeliveryReadiness>>;
+  getOutboundDeliveryState(
+    input: GetOutboundDeliveryStateInput
+  ): Promise<WhatsAppDigestClientResult<OutboundDeliveryState>>;
+  authorizeOutboundDeliveryRetry(
+    input: AuthorizeOutboundDeliveryRetryInput
+  ): Promise<WhatsAppDigestClientResult<AuthorizeOutboundDeliveryRetryResult>>;
   getMatrixCorpusReadiness(): Promise<
     MatrixCorpusClientResult<{
       readonly status: 'ready';

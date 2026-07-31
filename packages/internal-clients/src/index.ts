@@ -1,6 +1,6 @@
 export * from './user-service/index.js';
 export * from './usage-service/index.js';
-export * from './mobile-notifications-service/index.js';
+export * from './message-digest-service/index.js';
 export * from './bookmarks-agent/index.js';
 export * from './calendar-agent/index.js';
 export * from './code-agent/index.js';

@@ -40,6 +40,7 @@ node scripts/pubsub-publish-test.mjs llm-analytics
 node scripts/pubsub-publish-test.mjs llm-call
 node scripts/pubsub-publish-test.mjs bookmark-enrich
 node scripts/pubsub-publish-test.mjs bookmark-summarize
+node scripts/pubsub-publish-test.mjs message-digest-run
 ```
 
 ## Monitored Topics
@@ -57,6 +58,7 @@ node scripts/pubsub-publish-test.mjs bookmark-summarize
 | `llm-call`                         | Purple       | LLM API calls               |
 | `bookmark-enrich`                  | Orange       | Bookmark metadata enriching |
 | `bookmark-summarize`               | Teal         | Bookmark AI summarization   |
+| `message-digest-runs`              | Amber        | Message Digest generation   |
 
 ## Architecture
 
@@ -106,15 +108,23 @@ node scripts/pubsub-publish-test.mjs bookmark-summarize
 - `llm-call` → `POST /internal/llm/pubsub/process-llm-call` (:8116)
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
+- `message-digest-runs` → `POST /internal/message-digests/pubsub/run` (:8135)
 
 ## Environment Variables
 
-| Variable               | Default                  | Description                         |
-| ---------------------- | ------------------------ | ----------------------------------- |
-| `PUBSUB_EMULATOR_HOST` | `firebase-emulator:8102` | Pub/Sub emulator address            |
-| `PUBSUB_PROJECT_ID`    | `demo-intexuraos`        | GCP project ID                      |
-| `PORT`                 | `8105`                   | UI server port                      |
-| `INTERNAL_AUTH_TOKEN`  | `local-dev-token`        | Token for push endpoint auth header |
+| Variable                           | Default                               | Description                                 |
+| ---------------------------------- | ------------------------------------- | ------------------------------------------- |
+| `PUBSUB_EMULATOR_HOST`             | `firebase-emulator:8102`              | Pub/Sub emulator address                    |
+| `PUBSUB_PROJECT_ID`                | `demo-intexuraos`                     | Default emulator project ID                 |
+| `MESSAGE_DIGEST_PUBSUB_PROJECT_ID` | `intexuraos-message-digest-mvp-local` | Isolated Message Digest emulator project ID |
+| `PORT`                             | `8105`                                | UI server port                              |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`   | `local-dev-token`                     | Token for push endpoint auth header         |
+
+Message Digest events use a separate emulator project so their lifecycle remains isolated from
+other local service data until the coordinated production cutover. The forwarder also listens for
+`whatsapp-send-message` in both the default and isolated projects, because Message Digest publishes
+its delivery outbox through the same isolated local client; manual UI publishing remains on the
+default project.
 
 ## Development
 
@@ -146,6 +156,7 @@ const TOPICS = [
   'llm-call',
   'bookmark-enrich',
   'bookmark-summarize',
+  'message-digest-runs',
   'your-new-topic', // Add here
 ];
 ```

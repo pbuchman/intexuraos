@@ -45,6 +45,18 @@ describe('apps/web/service-manifest.json', () => {
     );
   });
 
+  it('wires the standalone Message Digest service on its canonical local route', () => {
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+    expect(manifest.services).toContainEqual({
+      name: 'message-digest-service',
+      envSuffix: 'MESSAGE_DIGEST_SERVICE',
+      apiPath: '/api/message-digests',
+      proxyTarget: 'http://localhost:8135',
+      serviceUrl: 'http://localhost:8135',
+    });
+  });
+
   it('each entry has valid name, envSuffix, apiPath, proxyTarget, and serviceUrl fields', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
     for (const entry of manifest.services) {

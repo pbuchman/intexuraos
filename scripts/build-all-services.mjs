@@ -8,6 +8,7 @@ const services = [
   'notion-service',
   'user-service',
   'whatsapp-service',
+  'message-digest-service',
 ];
 
 for (const service of services) {

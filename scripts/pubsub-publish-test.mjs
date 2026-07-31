@@ -14,6 +14,7 @@
  *   - llm-call
  *   - bookmark-enrich
  *   - bookmark-summarize
+ *   - message-digest-run
  *   - all (publishes one of each)
  */
 import { PubSub } from '@google-cloud/pubsub';
@@ -155,6 +156,17 @@ const EVENTS = {
       type: 'bookmarks.summarize',
       bookmarkId: 'bookmark-' + Date.now(),
       userId: 'test-user-303',
+    },
+  },
+  'message-digest-run': {
+    topic: 'message-digest-runs',
+    data: {
+      type: 'message-digest.run',
+      version: 1,
+      userId: 'test-user-404',
+      definitionId: 'md_test-digest-001',
+      runId: 'mdr_test-run-001',
+      requestedAt: new Date().toISOString(),
     },
   },
 };

@@ -40,6 +40,14 @@ local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
     },
   },
   {
+    pattern = [[^/internal/message-digests/pubsub/run$]],
+    caller_role = "message_digest_run_pubsub",
+    allowed_methods = { POST = true },
+    allowed_service_accounts = {
+      ["intexuraos-message-digest-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
+  {
     pattern = [[^/internal/evals/(?:whatsapp|intex-agent)/matrix-corpus(?:/|$)]],
     caller_role = "matrix_corpus_runner",
     allowed_service_accounts = {

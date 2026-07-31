@@ -2,7 +2,7 @@
  * Service wiring for whatsapp-service.
  * Provides class-based adapters for domain use cases.
  */
-import { createPrivateKey, randomUUID } from 'node:crypto';
+import { createHash, createPrivateKey, randomUUID } from 'node:crypto';
 
 import { createAppLogger } from '@intexuraos/infra-sentry';
 import { createMetricsClient } from '@intexuraos/common-metrics';
@@ -30,6 +30,9 @@ import type {
   LinkPreviewFetcherPort,
   MediaStoragePort,
   PrivateWhatsAppRepository,
+  PrivateWhatsAppDigestSourceRepository,
+  PrivateDigestSourceTokenCodec,
+  WhatsAppDeliveryReadinessPort,
   PrivateWhatsAppErasurePublisher,
   PrivateWhatsAppErasureRepository,
   NotificationPreferencesRepository,
@@ -41,6 +44,7 @@ import type {
   WhatsAppMessageSender,
   WhatsAppUserMappingRepository,
   WhatsAppWebhookEventRepository,
+  MessageDigestDeliveryAuthorizationClient,
 } from './domain/whatsapp/index.js';
 import type { MatrixOutboundGateway } from './domain/whatsapp/ports/matrixOutboundGateway.js';
 import type {
@@ -62,6 +66,9 @@ import type {
 import { createConversationAssistantContextAttachmentDeltaBuilder } from './domain/conversation-assistant/contextAttachmentDeltaBuilder.js';
 import { createOutboundMessageRepository } from './infra/firestore/outboundMessageRepository.js';
 import { createPrivateWhatsAppRepository } from './infra/firestore/privateWhatsAppRepository.js';
+import { createPrivateWhatsAppDigestSourceRepository } from './infra/firestore/privateWhatsAppDigestSourceRepository.js';
+import { createPrivateDigestSourceTokenCodec } from './infra/security/privateDigestSourceToken.js';
+import { createWhatsAppDeliveryReadiness } from './domain/whatsapp/usecases/whatsappDeliveryReadiness.js';
 import { createPrivateWhatsAppErasureRepository } from './infra/firestore/privateWhatsAppErasureRepository.js';
 import { createConversationAssistantRepository } from './infra/firestore/conversationAssistantRepository.js';
 import { createConversationAssistantContextAttachmentRepository } from './infra/firestore/conversationAssistantContextAttachmentRepository.js';
@@ -99,6 +106,7 @@ import type { IntexAgentMatrixCorpusClient } from './domain/matrixCorpus/ports/i
 import type { MatrixCorpusTimerScheduler } from './jobs/matrixCorpusLeaseSweeper.js';
 import type { MatrixCorpusIngressPort } from './domain/matrixCorpus/ports/matrixCorpusIngress.js';
 import { FirestoreMatrixCorpusIngress } from './infra/firestore/matrixCorpusIngress.js';
+import { createMessageDigestDeliveryAuthorizationClient } from './infra/http/messageDigestDeliveryAuthorizationClient.js';
 
 export function composeWhatsAppMatrixCorpusFeature<T>(
   config: WhatsAppMatrixCorpusConfig,
@@ -121,8 +129,10 @@ export interface ServiceConfig {
   whatsappPhoneNumberId: string;
   webAgentUrl: string;
   internalAuthToken: string;
+  internalAuthTokenPrevious?: string;
   llmUsageServiceUrl: string;
   userServiceUrl: string;
+  messageDigestServiceUrl: string;
   conversationAssistantModel: ConversationAssistantModel;
   matrixOutboundAdapterBaseUrl: string;
   matrixOutboundAdapterAuthToken: string;
@@ -161,7 +171,11 @@ export interface ServiceContainer {
   outboundMessageRepository: OutboundMessageRepository;
   phoneVerificationRepository: PhoneVerificationRepository;
   notificationPreferencesRepository: NotificationPreferencesRepository;
+  messageDigestDeliveryAuthorizationClient?: MessageDigestDeliveryAuthorizationClient;
   privateWhatsAppRepository: PrivateWhatsAppRepository;
+  privateWhatsAppDigestSourceRepository?: PrivateWhatsAppDigestSourceRepository;
+  privateDigestSourceTokens?: PrivateDigestSourceTokenCodec;
+  whatsAppDeliveryReadiness?: WhatsAppDeliveryReadinessPort;
   privateWhatsAppErasureRepository?: PrivateWhatsAppErasureRepository;
   privateWhatsAppErasurePublisher?: PrivateWhatsAppErasurePublisher;
   matrixOutboundGateway: MatrixOutboundGateway;
@@ -211,19 +225,26 @@ export function getServices(): ServiceContainer {
   const initializedConfig = serviceConfig;
 
   const privateWhatsAppRepository = createPrivateWhatsAppRepository();
+  const privateDigestSourceTokens = createPrivateDigestSourceTokenCodec({
+    currentKey: tokenKey(serviceConfig.internalAuthToken),
+    ...(serviceConfig.internalAuthTokenPrevious === undefined
+      ? {}
+      : { previousKeys: [tokenKey(serviceConfig.internalAuthTokenPrevious)] }),
+  });
   const llmClientFactory = createConversationAssistantLlmClientFactory(serviceConfig);
   const telemetryLogger = createAppLogger({
     name: 'whatsapp-conversation-assistant-operational-telemetry',
   });
-  const conversationAssistantOperationalTelemetry =
-    createConversationAssistantOperationalTelemetry({
+  const conversationAssistantOperationalTelemetry = createConversationAssistantOperationalTelemetry(
+    {
       metrics: createMetricsClient({
         projectId: serviceConfig.gcpProjectId,
         serviceName: 'whatsapp-service',
         logger: telemetryLogger,
       }),
       logger: telemetryLogger,
-    });
+    }
+  );
   const conversationAssistantContextAttachmentRepository =
     createConversationAssistantContextAttachmentRepository({
       telemetry: conversationAssistantOperationalTelemetry,
@@ -236,7 +257,22 @@ export function getServices(): ServiceContainer {
     outboundMessageRepository: createOutboundMessageRepository(),
     phoneVerificationRepository: new PhoneVerificationRepositoryAdapter(),
     notificationPreferencesRepository: new NotificationPreferencesRepositoryAdapter(),
+    messageDigestDeliveryAuthorizationClient: createMessageDigestDeliveryAuthorizationClient({
+      baseUrl: serviceConfig.messageDigestServiceUrl,
+      internalAuthToken: serviceConfig.internalAuthToken,
+      logger: createAppLogger({ name: 'messageDigestDeliveryAuthorizationClient' }),
+    }),
     privateWhatsAppRepository,
+    privateWhatsAppDigestSourceRepository: createPrivateWhatsAppDigestSourceRepository({
+      tokens: privateDigestSourceTokens,
+    }),
+    privateDigestSourceTokens,
+    whatsAppDeliveryReadiness: createWhatsAppDeliveryReadiness({
+      mappingRepository: new UserMappingRepositoryAdapter(),
+      deliveryEnabled: () => Promise.resolve(ok(true)),
+      observationSecret: serviceConfig.internalAuthToken,
+      now: (): string => new Date().toISOString(),
+    }),
     privateWhatsAppErasureRepository: createPrivateWhatsAppErasureRepository(),
     privateWhatsAppErasurePublisher: eventPublisher,
     matrixOutboundGateway: createMatrixOutboundAdapterClient({
@@ -265,10 +301,9 @@ export function getServices(): ServiceContainer {
         warningMessageThreshold: 5_000,
         warningTokenThreshold: 50_000,
       }),
-    conversationAssistantTurnRequestRepository:
-      createConversationAssistantTurnRequestRepository({
-        telemetry: conversationAssistantOperationalTelemetry,
-      }),
+    conversationAssistantTurnRequestRepository: createConversationAssistantTurnRequestRepository({
+      telemetry: conversationAssistantOperationalTelemetry,
+    }),
     conversationAssistantTurnRequestRunner: createConversationAssistantTurnRunner({
       llmClientFactory,
     }),
@@ -286,11 +321,15 @@ export function getServices(): ServiceContainer {
         eventPublisher,
       })
   );
-  container =
-    matrixCorpus === null
-      ? ordinaryContainer
-      : { ...ordinaryContainer, matrixCorpus };
+  container = matrixCorpus === null ? ordinaryContainer : { ...ordinaryContainer, matrixCorpus };
   return container;
+}
+
+function tokenKey(secret: string): { version: string; secret: string } {
+  return {
+    version: createHash('sha256').update(secret, 'utf8').digest('hex').slice(0, 16),
+    secret,
+  };
 }
 
 interface CreateWhatsAppMatrixCorpusRuntimeInput {
@@ -315,8 +354,7 @@ export function createWhatsAppMatrixCorpusRuntime(
     throw new Error('INTEXURAOS_INTEX_AGENT_URL is invalid');
   }
 
-  const logger =
-    input.dependencies?.logger ?? createAppLogger({ name: 'whatsapp-matrix-corpus' });
+  const logger = input.dependencies?.logger ?? createAppLogger({ name: 'whatsapp-matrix-corpus' });
   const firestore = input.dependencies?.firestore ?? getFirestore();
   const digests = createMatrixCorpusKeyedDigests(input.config.evaluatorBindingHmacKey);
   const sha256 = createMatrixCorpusSha256();
@@ -419,8 +457,7 @@ export function createWhatsAppMatrixCorpusRuntime(
       privateKey,
     });
   const issueControlAuthorization = createMatrixCorpusControlAuthorizationIssuer({
-    getTransportStatus: async (authority) =>
-      await routeControlPlane.getTransportStatus(authority),
+    getTransportStatus: async (authority) => await routeControlPlane.getTransportStatus(authority),
     sign: signAttestation,
     now: (): string => clock.now(),
     eventId: (): string => `imc_control_${randomUUID()}`,
@@ -527,17 +564,20 @@ export function createConversationAssistantLlmClientFactory(
       if (openRouterKey === undefined) {
         return err({
           code: 'LLM_ERROR',
-          message: 'No OpenRouter API key configured. Please add your OpenRouter API key in settings.',
+          message:
+            'No OpenRouter API key configured. Please add your OpenRouter API key in settings.',
         });
       }
-      return ok(createLlmClient({
-        apiKey: openRouterKey,
-        model: model as never,
-        userId,
-        logger: createAppLogger({ name: 'whatsapp-conversation-assistant-llm' }),
-        usageSink,
-        ownerType: 'user',
-      }));
+      return ok(
+        createLlmClient({
+          apiKey: openRouterKey,
+          model: model as never,
+          userId,
+          logger: createAppLogger({ name: 'whatsapp-conversation-assistant-llm' }),
+          usageSink,
+          ownerType: 'user',
+        })
+      );
     },
   };
 }

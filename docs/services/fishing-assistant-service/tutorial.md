@@ -85,6 +85,8 @@ Messages are returned in creation order. The same history is used as prompt cont
 
 ## Part 3: Digest Context
 
+These compatibility endpoints retain the existing Fishing Assistant UI contract. They read migrated summaries from Message Digest Service; supporting raw-message evidence used by chat is queried directly from the source-fenced private WhatsApp API.
+
 ### List digest groups
 
 ```bash
@@ -115,3 +117,4 @@ curl -X GET "$FISHING_ASSISTANT_URL/digests/$GROUP_KEY/2026-05-05" \
 | No OpenRouter key | `NO_API_KEY` | Add the user's OpenRouter key in user-service. |
 | Folder contains pages | `FOLDER_NOT_EMPTY` | Delete or move pages before deleting a folder. |
 | Digest not found | `NOT_FOUND` from `/digests/:groupKey/:date` | Verify the group key and date. |
+| Digest dependency unavailable | `DOWNSTREAM_ERROR` | Check message-digest-service health and the configured internal service URL. |
