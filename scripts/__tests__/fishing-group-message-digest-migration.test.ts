@@ -515,6 +515,27 @@ describe('fishing Message Digest migration dry-run', () => {
     expect(fixture.ports.publish).not.toHaveBeenCalled();
   });
 
+  it('keeps later legacy states as audit while freezing continuity at the last meaningful checkpoint', async () => {
+    const fixture = dryRunFixture();
+    fixture.archive.states.push(legacyStateDocument('2026-07-30'));
+
+    const result = await runDryRun(fixture);
+
+    expect(result.report).toMatchObject({
+      counts: {
+        frozenLegacyStateDocuments: 1,
+        postCheckpointLegacyStateDocuments: 1,
+      },
+      hashes: {
+        legacyStates: fixture.binding.expectedLegacyStateHash,
+        postCheckpointLegacyStates: expect.stringMatching(/^[0-9a-f]{64}$/u),
+      },
+    });
+    expect(result.preflight.legacyStates.map((document) => document.data.date)).toEqual([
+      '2026-07-03',
+    ]);
+  });
+
   it.each([
     { label: 'zero source matches', sourceMatches: [] },
     {
@@ -803,6 +824,19 @@ describe('fishing Message Digest migration apply', () => {
     });
     expect(fixture.candidate.state?.continuityMemoryMarkdown.length).toBeLessThanOrEqual(8_000);
     expect(fixture.candidate.activation?.replayHash).toBe(ordered.at(-1)?.runHash);
+  });
+
+  it('builds imported continuity from the exact meaningful checkpoint, not a later audit state', async () => {
+    const fixture = applyFixture();
+    fixture.archive.states.push(legacyStateDocument('2026-07-30'));
+
+    await runApply(fixture);
+
+    const checkpointRun = fixture.candidate.runs.find(
+      (run) => run.provenance === 'legacy_mobile_notification' && run.migrationDate === '2026-07-03'
+    );
+    expect(checkpointRun?.continuityMemoryMarkdown).toContain('2026-07-03T03:06:00.000Z');
+    expect(checkpointRun?.continuityMemoryMarkdown).not.toContain('2026-07-30T03:06:00.000Z');
   });
 
   it('resumes a partial failure invisibly and does not regenerate already staged days', async () => {

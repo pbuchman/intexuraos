@@ -17,6 +17,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   AUDIT_CUTOFF_DATE,
   FISHING_GROUP_KEY,
+  LAST_MEANINGFUL_LEGACY_DATE,
   hashArchiveDocuments,
   hashLegacyDocuments,
 } from './fishing-group-migration.mjs';
@@ -52,7 +53,14 @@ export async function resolveFishingMigrationBinding(options) {
   const auditedDigests = digests.filter(
     (document) => typeof document.data.date === 'string' && document.data.date <= AUDIT_CUTOFF_DATE
   );
-  if (auditedDigests.length === 0 || states.length === 0) {
+  const frozenStates = states.filter(
+    (document) =>
+      typeof document.data.date === 'string' && document.data.date <= LAST_MEANINGFUL_LEGACY_DATE
+  );
+  const checkpointStates = frozenStates.filter(
+    (document) => document.data.date === LAST_MEANINGFUL_LEGACY_DATE
+  );
+  if (auditedDigests.length === 0 || frozenStates.length === 0 || checkpointStates.length !== 1) {
     throw safeError('MIGRATION_BINDING_LEGACY_EMPTY');
   }
   const candidate = await resolveWhatsAppMigrationBinding({
@@ -70,7 +78,7 @@ export async function resolveFishingMigrationBinding(options) {
     INTEXURAOS_MESSAGE_DIGEST_MIGRATION_CHAT_ID: candidate.chatId,
     INTEXURAOS_MESSAGE_DIGEST_MIGRATION_GROUP_NAME: candidate.displayName,
     INTEXURAOS_MESSAGE_DIGEST_MIGRATION_LEGACY_DIGEST_HASH: hashLegacyDocuments(auditedDigests),
-    INTEXURAOS_MESSAGE_DIGEST_MIGRATION_LEGACY_STATE_HASH: hashArchiveDocuments(states),
+    INTEXURAOS_MESSAGE_DIGEST_MIGRATION_LEGACY_STATE_HASH: hashArchiveDocuments(frozenStates),
   };
 }
 
