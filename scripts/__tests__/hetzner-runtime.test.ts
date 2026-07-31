@@ -2238,6 +2238,7 @@ describe('Hetzner secret loader', () => {
       'roles/iam.serviceAccountViewer',
       'roles/pubsub.admin',
       'roles/serviceusage.serviceUsageConsumer',
+      'roles/serviceusage.serviceUsageViewer',
     ]) {
       expect(projectRoles).toContain(`"${role}"`);
     }
