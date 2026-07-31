@@ -509,7 +509,7 @@ describe('Message Digest internal routes', () => {
     );
   });
 
-  it('accepts documented Pub/Sub delivery metadata while keeping the envelope closed', async () => {
+  it('accepts and ignores provider-owned Pub/Sub metadata while keeping known fields bounded', async () => {
     const envelope = pubsubEnvelope(runRequest());
     const message = envelope['message'] as Record<string, unknown>;
     const response = await app.inject({
@@ -521,7 +521,9 @@ describe('Message Digest internal routes', () => {
         message: {
           ...message,
           attributes: { intexuraos_operator_replay: 'synthetic-hotfix' },
+          message_id: 'synthetic-provider-alias-must-be-ignored',
           orderingKey: 'synthetic-ordering-key',
+          publish_time: '2026-07-27T12:59:00.000Z',
         },
       },
     });
@@ -549,9 +551,22 @@ describe('Message Digest internal routes', () => {
     const unexpectedMessageField = await app.inject({
       method: 'POST',
       url: '/internal/message-digests/pubsub/run',
-      payload: { ...envelope, message: { ...message, unexpectedField: 1 } },
+      payload: {
+        ...envelope,
+        message: { ...message, providerOwnedMetadata: { opaque: true } },
+      },
     });
-    expect(unexpectedMessageField.statusCode).toBe(400);
+    expect(unexpectedMessageField.statusCode).toBe(200);
+    expect(processMessageDigestRun).toHaveBeenNthCalledWith(
+      2,
+      {
+        userId: 'synthetic-user-001',
+        definitionId: 'md_definition_001',
+        runId: 'mdr_run_001',
+        workerId: 'pubsub:synthetic-message-001',
+      },
+      expect.any(Object)
+    );
 
     const tooManyAttributes = Object.fromEntries(
       Array.from({ length: 101 }, (_, index) => [`key-${String(index)}`, 'value'])
@@ -578,7 +593,7 @@ describe('Message Digest internal routes', () => {
       payload: { ...envelope, unexpectedField: 1 },
     });
     expect(unexpected.statusCode).toBe(400);
-    expect(processMessageDigestRun).toHaveBeenCalledTimes(1);
+    expect(processMessageDigestRun).toHaveBeenCalledTimes(2);
   });
 
   it('acks terminal duplicates and asks Pub/Sub to retry a busy lease', async () => {

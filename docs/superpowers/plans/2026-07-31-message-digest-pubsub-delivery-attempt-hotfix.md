@@ -51,6 +51,33 @@ Google's wrapped `PubsubMessage` contract permits optional string `attributes` a
    classify/ACK only the operator-created poison replay copies with the same payload hash; never
    replay those copies again.
 
+## Final provider-envelope correction: metadata is not an application contract
+
+The second deployed fix accepted `attributes` and `orderingKey`, but the same production push was
+still rejected before the processor. The current official Google wrapped-push example includes
+both camel-case and snake-case aliases (`messageId` plus `message_id`, and `publishTime` plus
+`publish_time`). The prior fixture covered only the camel-case representation, so the strict
+message-level schema was modeling an incomplete provider envelope. The production run remains
+queued with zero generation attempts and no delivery.
+
+Fix the boundary once rather than enumerating provider-owned metadata indefinitely:
+
+1. RED — use the complete official wrapped envelope in the route test, including
+   `deliveryAttempt`, `attributes`, `orderingKey`, `message_id`, and `publish_time`. Require HTTP
+   200 and exactly one processor call. Confirm the current deployed schema returns HTTP 400.
+2. GREEN — keep the top-level push object closed and keep strict bounds on every application-used
+   field, especially the required base64 `message.data`. Change only the nested provider-owned
+   `message` object to tolerate additional metadata. The handler must continue to decode and pass
+   only `message.data`; metadata must not be logged, persisted, or forwarded.
+3. Replace the obsolete assertion that an unknown nested metadata key returns HTTP 400 with proof
+   that provider metadata is ignored and cannot alter the single decoded processor input. Retain
+   all malformed known-field, unknown top-level, authentication, and duplicate-call assertions.
+4. Run the focused RED/GREEN route test, the complete Message Digest service suite and coverage,
+   typecheck/lint/format, one read-only review, and one final repository `ci:tracked` gate.
+5. Deploy the exact tested tree through a single PR, verify exact production SHA and health, then
+   replay one selected frozen run message. ACK only after one terminal generation result and one
+   sent receipt; clean matching poison copies without replay.
+
 ## Files
 
 - Modify `apps/message-digest-service/src/__tests__/internalMessageDigestRoutes.test.ts`.
