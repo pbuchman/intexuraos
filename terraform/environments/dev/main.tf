@@ -646,6 +646,7 @@ resource "google_project_iam_member" "hetzner_provisioner_deployment_roles" {
     "roles/iam.serviceAccountViewer",
     "roles/pubsub.admin",
     "roles/serviceusage.serviceUsageConsumer",
+    "roles/serviceusage.serviceUsageViewer",
   ])
 
   project = var.project_id
