@@ -19,6 +19,8 @@ LEGACY_WEB_ROOT="${LEGACY_WEB_ROOT:-/var/www/intexuraos/web/dist}"
 WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-/var/www/intexuraos/web/releases}"
 WEB_CURRENT_LINK="${WEB_CURRENT_LINK:-/var/www/intexuraos/web/current}"
 PROJECT_ID="${PROJECT_ID:-intexuraos-dev-pbuchman}"
+TERRAFORM_GITHUB_OWNER="${TERRAFORM_GITHUB_OWNER:-pbuchman}"
+TERRAFORM_GITHUB_CONNECTION_NAME="${TERRAFORM_GITHUB_CONNECTION_NAME:-pbuchman-github}"
 STATE_HELPER="${RELEASE_DIR}/scripts/hetzner/message-digest-cutover-state.mjs"
 SUPPORT_HELPER="${RELEASE_DIR}/scripts/hetzner/message-digest-cutover-support.mjs"
 TEMPLATE_VERIFIER="${RELEASE_DIR}/scripts/hetzner/verify-whatsapp-message-digest-template.mjs"
@@ -45,7 +47,6 @@ CUTOVER_DEADLINE=""
 CUTOVER_STATUS=""
 
 DEV_TERRAFORM_TARGETS=(
-  '-target=google_service_account.message_digest_service'
   '-target=google_pubsub_topic.message_digest_runs'
   '-target=google_pubsub_topic_iam_member.message_digest_publishes_runs'
   '-target=google_pubsub_topic_iam_member.message_digest_publishes_whatsapp'
@@ -437,6 +438,9 @@ terraform_environment() {
     -u FIRESTORE_EMULATOR_HOST \
     -u PUBSUB_EMULATOR_HOST \
     GOOGLE_APPLICATION_CREDENTIALS="${HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS:-/home/deploy/provisioner-sa-key.json}" \
+    TF_VAR_project_id="${PROJECT_ID}" \
+    TF_VAR_github_owner="${TERRAFORM_GITHUB_OWNER}" \
+    TF_VAR_github_connection_name="${TERRAFORM_GITHUB_CONNECTION_NAME}" \
     "$@"
 }
 
@@ -459,15 +463,65 @@ plan_terraform() {
   shift 4
   local target_args=("$@")
   local plan_json="${plan_file}.json"
-  mkdir -p "${data_dir}" "$(dirname "${plan_file}")"
+  mkdir -p "${data_dir}" "$(dirname "${plan_file}")" || return $?
   terraform_environment TF_DATA_DIR="${data_dir}" \
-    terraform -chdir="${root}" init -input=false -reconfigure
+    terraform -chdir="${root}" init -input=false -reconfigure || return $?
   terraform_environment TF_DATA_DIR="${data_dir}" \
     terraform -chdir="${root}" plan -input=false -lock-timeout=5m \
-    "${target_args[@]}" -out="${plan_file}"
+    "${target_args[@]}" -out="${plan_file}" || return $?
   terraform_environment TF_DATA_DIR="${data_dir}" \
-    terraform -chdir="${root}" show -json "${plan_file}" > "${plan_json}"
-  validate_terraform_plan "${contract}" "${plan_json}"
+    terraform -chdir="${root}" show -json "${plan_file}" > "${plan_json}" || return $?
+  validate_terraform_plan "${contract}" "${plan_json}" || return $?
+}
+
+write_durable_marker() {
+  local marker_path="$1"
+  node --input-type=module - "${marker_path}" <<'NODE'
+import {
+  closeSync,
+  fsyncSync,
+  openSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { basename, dirname, isAbsolute } from 'node:path';
+
+const markerPath = process.argv[2];
+if (
+  !isAbsolute(markerPath) ||
+  !/^terraform-(?:dev|prod)-forward\.apply-started$/u.test(basename(markerPath))
+) {
+  process.exit(1);
+}
+
+const directory = dirname(markerPath);
+const temporaryPath = `${markerPath}.${process.pid}.${Date.now()}.tmp`;
+let markerDescriptor;
+let renamed = false;
+try {
+  markerDescriptor = openSync(temporaryPath, 'wx', 0o600);
+  writeFileSync(markerDescriptor, 'apply-started\n', 'utf8');
+  fsyncSync(markerDescriptor);
+  closeSync(markerDescriptor);
+  markerDescriptor = undefined;
+  renameSync(temporaryPath, markerPath);
+  renamed = true;
+  const directoryDescriptor = openSync(directory, 'r');
+  try {
+    fsyncSync(directoryDescriptor);
+  } finally {
+    closeSync(directoryDescriptor);
+  }
+} finally {
+  if (markerDescriptor !== undefined) closeSync(markerDescriptor);
+  if (!renamed) {
+    try {
+      unlinkSync(temporaryPath);
+    } catch {}
+  }
+}
+NODE
 }
 
 plan_and_apply_terraform() {
@@ -475,35 +529,39 @@ plan_and_apply_terraform() {
   local root="$2"
   local data_dir="$3"
   local plan_file="$4"
-  shift 4
+  local apply_started_marker="$5"
+  shift 5
   local target_args=("$@")
   plan_terraform \
     "${contract}" \
     "${root}" \
     "${data_dir}" \
     "${plan_file}" \
-    "${target_args[@]}"
+    "${target_args[@]}" || return $?
+  if [[ -n "${apply_started_marker}" ]]; then
+    write_durable_marker "${apply_started_marker}" || return $?
+  fi
   terraform_environment TF_DATA_DIR="${data_dir}" \
-    terraform -chdir="${root}" apply -input=false -auto-approve "${plan_file}"
+    terraform -chdir="${root}" apply -input=false -auto-approve "${plan_file}" || return $?
 }
 
 forward_terraform_dev() {
-  : > "${ATTEMPT_DIR}/terraform-dev-forward.started"
   plan_and_apply_terraform \
     dev \
     "${RELEASE_DIR}/terraform/environments/dev" \
     "${TERRAFORM_DATA_ROOT}/dev-forward" \
     "${TERRAFORM_PLAN_ROOT}/dev-forward.tfplan" \
+    "${ATTEMPT_DIR}/terraform-dev-forward.apply-started" \
     "${DEV_TERRAFORM_TARGETS[@]}"
 }
 
 forward_terraform_prod() {
-  : > "${ATTEMPT_DIR}/terraform-prod-forward.started"
   plan_and_apply_terraform \
     prod \
     "${RELEASE_DIR}/terraform/hetzner-prod" \
     "${TERRAFORM_DATA_ROOT}/prod-forward" \
     "${TERRAFORM_PLAN_ROOT}/prod-forward.tfplan" \
+    "${ATTEMPT_DIR}/terraform-prod-forward.apply-started" \
     "${PROD_TERRAFORM_TARGETS[@]}"
 }
 
@@ -733,6 +791,7 @@ rollback_terraform_prod() {
     "${PREVIOUS_RELEASE_DIR}/terraform/hetzner-prod" \
     "${TERRAFORM_DATA_ROOT}/prod-inverse" \
     "${TERRAFORM_PLAN_ROOT}/prod-inverse.tfplan" \
+    "" \
     "${PROD_TERRAFORM_TARGETS[@]}"
 }
 
@@ -742,6 +801,7 @@ rollback_terraform_dev() {
     "${PREVIOUS_RELEASE_DIR}/terraform/environments/dev" \
     "${TERRAFORM_DATA_ROOT}/dev-inverse" \
     "${TERRAFORM_PLAN_ROOT}/dev-inverse.tfplan" \
+    "" \
     "${DEV_TERRAFORM_TARGETS[@]}"
 }
 
@@ -813,13 +873,13 @@ rollback_pre_admission() {
       rollback_failed=1
     fi
   fi
-  if [[ -f "${ATTEMPT_DIR}/terraform-prod-forward.started" ]]; then
+  if [[ -f "${ATTEMPT_DIR}/terraform-prod-forward.apply-started" ]]; then
     if ! rollback_terraform_prod; then
       printf 'ERROR: Could not restore the production Terraform root\n' >&2
       rollback_failed=1
     fi
   fi
-  if [[ -f "${ATTEMPT_DIR}/terraform-dev-forward.started" ]]; then
+  if [[ -f "${ATTEMPT_DIR}/terraform-dev-forward.apply-started" ]]; then
     if ! rollback_terraform_dev; then
       printf 'ERROR: Could not restore the development Terraform root\n' >&2
       rollback_failed=1

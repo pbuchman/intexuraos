@@ -1,5 +1,13 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -239,13 +247,12 @@ migration_activate
     expect(
       validateTerraformPlan('dev', {
         resource_changes: [
-          change('google_service_account.message_digest_service', ['create']),
           change('google_pubsub_topic.message_digest_runs', ['create']),
           change('google_pubsub_topic_iam_member.message_digest_publishes_runs', ['create']),
           change('google_pubsub_topic_iam_member.message_digest_publishes_whatsapp', ['create']),
         ],
       })
-    ).toHaveLength(4);
+    ).toHaveLength(3);
 
     expect(
       validateTerraformPlan('prod', {
@@ -307,7 +314,6 @@ migration_activate
     ).toThrow('CUTOVER_TERRAFORM_PLAN_UNSAFE');
 
     const completeDevInverse = [
-      change('google_service_account.message_digest_service', ['delete']),
       change('google_pubsub_topic.message_digest_runs', ['delete']),
       change('google_pubsub_topic_iam_member.message_digest_publishes_runs', ['delete']),
       change('google_pubsub_topic_iam_member.message_digest_publishes_whatsapp', ['delete']),
@@ -335,7 +341,7 @@ migration_activate
       validateTerraformPlan('dev-inverse-complete', {
         resource_changes: completeDevInverse,
       })
-    ).toHaveLength(4);
+    ).toHaveLength(3);
     expect(
       validateTerraformPlan('prod-inverse-complete', {
         resource_changes: completeProdInverse,
@@ -352,7 +358,6 @@ migration_activate
     const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-terraform-targets-'));
     const tracePath = resolve(directory, 'terraform-plan-trace.txt');
     const devTargets = [
-      '-target=google_service_account.message_digest_service',
       '-target=google_pubsub_topic.message_digest_runs',
       '-target=google_pubsub_topic_iam_member.message_digest_publishes_runs',
       '-target=google_pubsub_topic_iam_member.message_digest_publishes_whatsapp',
@@ -425,6 +430,197 @@ cat "$TRACE_FILE"
     }
   });
 
+  it('does not mark a Terraform mutation before the forward plan passes validation', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-terraform-pre-plan-'));
+    try {
+      const result = runShellLibrary(
+        cutoverPath,
+        `
+terraform_environment() { return 42; }
+ATTEMPT_DIR="$TEST_ATTEMPT_DIR"
+TERRAFORM_DATA_ROOT="$ATTEMPT_DIR/terraform-data"
+TERRAFORM_PLAN_ROOT="$ATTEMPT_DIR/terraform-plans"
+mkdir -p "$TERRAFORM_DATA_ROOT" "$TERRAFORM_PLAN_ROOT"
+forward_terraform_dev
+`,
+        {
+          RELEASE_DIR: repoRoot,
+          TEST_ATTEMPT_DIR: directory,
+        }
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(existsSync(resolve(directory, 'terraform-dev-forward.started'))).toBe(false);
+      expect(existsSync(resolve(directory, 'terraform-dev-forward.apply-started'))).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('records Terraform apply intent after validation and before invoking apply', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-terraform-apply-intent-'));
+    const tracePath = resolve(directory, 'trace.txt');
+    try {
+      const result = runShellLibrary(
+        cutoverPath,
+        `
+TRACE_FILE="$TEST_TRACE_FILE"
+terraform_environment() {
+  local argument=""
+  local operation=""
+  for argument in "$@"; do
+    case "$argument" in
+      init|plan|show|apply) operation="$argument" ;;
+    esac
+  done
+  printf '%s\n' "$operation" >> "$TRACE_FILE"
+  if [[ "$operation" == "show" ]]; then
+    printf '{"resource_changes":[]}\n'
+  elif [[ "$operation" == "apply" ]]; then
+    return 42
+  fi
+}
+validate_terraform_plan() { printf 'validated\n' >> "$TRACE_FILE"; }
+ATTEMPT_DIR="$TEST_ATTEMPT_DIR"
+TERRAFORM_DATA_ROOT="$ATTEMPT_DIR/terraform-data"
+TERRAFORM_PLAN_ROOT="$ATTEMPT_DIR/terraform-plans"
+mkdir -p "$TERRAFORM_DATA_ROOT" "$TERRAFORM_PLAN_ROOT"
+forward_terraform_dev
+`,
+        {
+          RELEASE_DIR: repoRoot,
+          TEST_ATTEMPT_DIR: directory,
+          TEST_TRACE_FILE: tracePath,
+        }
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(readFileSync(tracePath, 'utf8').trim().split('\n')).toEqual([
+        'init',
+        'plan',
+        'show',
+        'validated',
+        'apply',
+      ]);
+      expect(existsSync(resolve(directory, 'terraform-dev-forward.started'))).toBe(false);
+      expect(existsSync(resolve(directory, 'terraform-dev-forward.apply-started'))).toBe(true);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('persists Terraform apply intent durably before remote mutation begins', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-durable-marker-'));
+    const markerPath = resolve(directory, 'terraform-dev-forward.apply-started');
+    try {
+      const result = runShellLibrary(cutoverPath, 'write_durable_marker "$TEST_MARKER_PATH"', {
+        TEST_MARKER_PATH: markerPath,
+      });
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(readFileSync(markerPath, 'utf8')).toBe('apply-started\n');
+      expect(statSync(markerPath).mode & 0o777).toBe(0o600);
+
+      const cutover = readFileSync(cutoverPath, 'utf8');
+      const writer = cutover.slice(
+        cutover.indexOf('write_durable_marker() {'),
+        cutover.indexOf('\n}\n\nplan_and_apply_terraform()')
+      );
+      expect(writer).toContain('fsyncSync(markerDescriptor)');
+      expect(writer).toContain('renameSync(temporaryPath, markerPath)');
+      expect(writer).toContain('fsyncSync(directoryDescriptor)');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('runs inverse Terraform only when a forward apply could have mutated state', () => {
+    const invokeRollback = (marker: string): string[] => {
+      const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-terraform-rollback-'));
+      const attemptDirectory = resolve(directory, 'attempt');
+      const tracePath = resolve(directory, 'trace.txt');
+      const statePath = resolve(directory, 'state.json');
+      mkdirSync(attemptDirectory);
+      writeFileSync(resolve(attemptDirectory, marker), '', 'utf8');
+      writeFileSync(statePath, '{}\n', 'utf8');
+      try {
+        const result = runShellLibrary(
+          cutoverPath,
+          `
+TRACE_FILE="$TEST_TRACE_FILE"
+ATTEMPT_DIR="$TEST_ATTEMPT_DIR"
+STATE_PATH="$TEST_STATE_PATH"
+CUTOVER_ADMITTED="false"
+ROLLBACK_RUNNING="false"
+MERGE_SHA="${'a'.repeat(40)}"
+DEPLOYMENT_ID="deployment-123"
+node() { :; }
+state_completed_count() { printf '5'; }
+hold_affected_ingress_fail_closed() { printf 'hold\n' >> "$TRACE_FILE"; }
+restore_previous_runtime() { printf 'runtime\n' >> "$TRACE_FILE"; }
+rollback_terraform_prod() { printf 'prod-inverse\n' >> "$TRACE_FILE"; }
+rollback_terraform_dev() { printf 'dev-inverse\n' >> "$TRACE_FILE"; }
+restore_previous_ingress() { printf 'ingress\n' >> "$TRACE_FILE"; }
+rollback_pre_admission
+cat "$TRACE_FILE"
+`,
+          {
+            TEST_ATTEMPT_DIR: attemptDirectory,
+            TEST_STATE_PATH: statePath,
+            TEST_TRACE_FILE: tracePath,
+          }
+        );
+
+        expect(result.status, result.stderr).toBe(0);
+        return result.stdout.trim().split('\n');
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    };
+
+    expect(invokeRollback('terraform-dev-forward.started')).toEqual(['hold', 'runtime', 'ingress']);
+    expect(invokeRollback('terraform-dev-forward.apply-started')).toEqual([
+      'hold',
+      'runtime',
+      'dev-inverse',
+      'ingress',
+    ]);
+  });
+
+  it('does not apply an inverse plan after planning fails inside rollback error handling', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-terraform-fail-fast-'));
+    const tracePath = resolve(directory, 'trace.txt');
+    try {
+      const result = runShellLibrary(
+        cutoverPath,
+        `
+TRACE_FILE="$TEST_TRACE_FILE"
+plan_terraform() { printf 'plan\n' >> "$TRACE_FILE"; return 42; }
+terraform_environment() { printf 'apply\n' >> "$TRACE_FILE"; }
+PREVIOUS_RELEASE_DIR="$TEST_PREVIOUS_RELEASE_DIR"
+TERRAFORM_DATA_ROOT="$TEST_ATTEMPT_DIR/terraform-data"
+TERRAFORM_PLAN_ROOT="$TEST_ATTEMPT_DIR/terraform-plans"
+if rollback_terraform_dev; then
+  printf 'rollback-success\n' >> "$TRACE_FILE"
+else
+  printf 'rollback-failed\n' >> "$TRACE_FILE"
+fi
+cat "$TRACE_FILE"
+`,
+        {
+          TEST_ATTEMPT_DIR: directory,
+          TEST_PREVIOUS_RELEASE_DIR: repoRoot,
+          TEST_TRACE_FILE: tracePath,
+        }
+      );
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim().split('\n')).toEqual(['plan', 'rollback-failed']);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('reviews complete inverse plans from the previous release after both forward applies', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-inverse-proof-'));
     const tracePath = resolve(directory, 'terraform-trace.txt');
@@ -432,7 +628,6 @@ cat "$TRACE_FILE"
     const currentRelease = resolve(directory, 'current-release');
     const previousRelease = resolve(directory, 'previous-release');
     const devAddresses = [
-      'google_service_account.message_digest_service',
       'google_pubsub_topic.message_digest_runs',
       'google_pubsub_topic_iam_member.message_digest_publishes_runs',
       'google_pubsub_topic_iam_member.message_digest_publishes_whatsapp',
@@ -587,8 +782,9 @@ command cat "$TRACE_FILE"
       resolve(repoRoot, 'scripts/hetzner/message-digest-cutover-support.mjs'),
       'utf8'
     );
+    expect(cutover).not.toContain('google_service_account.message_digest_service');
+    expect(support).not.toContain('google_service_account.message_digest_service');
     for (const source of [cutover, support]) {
-      expect(source).toContain('google_service_account.message_digest_service');
       expect(source).not.toContain('module.iam.google_service_account.message_digest_service');
       expect(source).toContain('google_pubsub_topic_iam_member.message_digest_publishes_whatsapp');
       expect(source).not.toContain(
@@ -1195,7 +1391,7 @@ run_message_digest_cutover
     const result = runShellLibrary(
       cutoverPath,
       `
-terraform_environment bash -c 'printf "google=%s\\nhcloud=%s\\nfirestore=%s\\nstorage=%s\\npubsub=%s\\n" "$GOOGLE_APPLICATION_CREDENTIALS" "\${HCLOUD_TOKEN-unset}" "\${FIRESTORE_EMULATOR_HOST-unset}" "\${STORAGE_EMULATOR_HOST-unset}" "\${PUBSUB_EMULATOR_HOST-unset}"'
+terraform_environment bash -c 'printf "google=%s\\nhcloud=%s\\nfirestore=%s\\nstorage=%s\\npubsub=%s\\nproject=%s\\nowner=%s\\nconnection=%s\\n" "$GOOGLE_APPLICATION_CREDENTIALS" "\${HCLOUD_TOKEN-unset}" "\${FIRESTORE_EMULATOR_HOST-unset}" "\${STORAGE_EMULATOR_HOST-unset}" "\${PUBSUB_EMULATOR_HOST-unset}" "$TF_VAR_project_id" "$TF_VAR_github_owner" "$TF_VAR_github_connection_name"'
 `,
       {
         HCLOUD_TOKEN: 'must-not-flow',
@@ -1203,13 +1399,16 @@ terraform_environment bash -c 'printf "google=%s\\nhcloud=%s\\nfirestore=%s\\nst
         STORAGE_EMULATOR_HOST: 'must-not-flow',
         PUBSUB_EMULATOR_HOST: 'must-not-flow',
         HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS: '/safe/provisioner.json',
+        PROJECT_ID: 'synthetic-project',
+        TERRAFORM_GITHUB_OWNER: 'synthetic-owner',
+        TERRAFORM_GITHUB_CONNECTION_NAME: 'synthetic-connection',
       }
     );
 
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout).toBe(
-      'google=/safe/provisioner.json\nhcloud=unset\nfirestore=unset\nstorage=unset\npubsub=unset\n'
+      'google=/safe/provisioner.json\nhcloud=unset\nfirestore=unset\nstorage=unset\npubsub=unset\nproject=synthetic-project\nowner=synthetic-owner\nconnection=synthetic-connection\n'
     );
   });
 

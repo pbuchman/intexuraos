@@ -6,7 +6,6 @@ const THIRTY_MINUTES_MS = 30 * 60 * 1_000;
 
 const TERRAFORM_CONTRACTS = Object.freeze({
   dev: new Map([
-    ['google_service_account.message_digest_service', 'create'],
     ['google_pubsub_topic.message_digest_runs', 'create'],
     ['google_pubsub_topic_iam_member.message_digest_publishes_runs', 'create'],
     ['google_pubsub_topic_iam_member.message_digest_publishes_whatsapp', 'create'],
@@ -24,7 +23,6 @@ const TERRAFORM_CONTRACTS = Object.freeze({
     ['google_cloud_scheduler_job.hetzner_http["mobile_notifications_digest_yesterday"]', 'delete'],
   ]),
   'dev-inverse': new Map([
-    ['google_service_account.message_digest_service', 'delete'],
     ['google_pubsub_topic.message_digest_runs', 'delete'],
     ['google_pubsub_topic_iam_member.message_digest_publishes_runs', 'delete'],
     ['google_pubsub_topic_iam_member.message_digest_publishes_whatsapp', 'delete'],

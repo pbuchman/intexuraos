@@ -2210,6 +2210,82 @@ describe('Hetzner secret loader', () => {
     }
   });
 
+  it('grants the Hetzner provisioner the standard roles required for Terraform deployment', () => {
+    const terraform = readRequired(terraformDevMainPath);
+    const resourceStart = terraform.indexOf(
+      'resource "google_storage_bucket_iam_member" "hetzner_provisioner_terraform_state" {'
+    );
+    const resourceEnd = terraform.indexOf('\n}\n', resourceStart) + 3;
+    const resource = terraform.slice(resourceStart, resourceEnd);
+
+    expect(resourceStart).toBeGreaterThanOrEqual(0);
+    expect(resource).toContain('bucket = "${var.project_id}-terraform-state"');
+    expect(resource).toContain('role   = "roles/storage.objectAdmin"');
+    expect(resource).toContain(
+      'member = "serviceAccount:${google_service_account.hetzner_provisioner.email}"'
+    );
+    expect(resource).not.toContain('roles/storage.admin');
+
+    const projectRolesStart = terraform.indexOf(
+      'resource "google_project_iam_member" "hetzner_provisioner_deployment_roles" {'
+    );
+    const projectRolesEnd = terraform.indexOf('\n}\n', projectRolesStart) + 3;
+    const projectRoles = terraform.slice(projectRolesStart, projectRolesEnd);
+
+    expect(projectRolesStart).toBeGreaterThanOrEqual(0);
+    for (const role of [
+      'roles/cloudscheduler.admin',
+      'roles/iam.serviceAccountViewer',
+      'roles/pubsub.admin',
+      'roles/serviceusage.serviceUsageConsumer',
+    ]) {
+      expect(projectRoles).toContain(`"${role}"`);
+    }
+    expect(projectRoles).not.toContain('roles/editor');
+    expect(projectRoles).not.toContain('roles/owner');
+    expect(projectRoles).not.toContain('roles/iam.serviceAccountAdmin');
+    expect(projectRoles).not.toContain('roles/iam.serviceAccountCreator');
+    expect(projectRoles).not.toContain('roles/iam.serviceAccountDeleter');
+    expect(projectRoles).not.toContain('roles/iam.serviceAccountUser');
+    expect(projectRoles).toContain('project = var.project_id');
+    expect(projectRoles).toContain(
+      'member  = "serviceAccount:${google_service_account.hetzner_provisioner.email}"'
+    );
+
+    const messageDigestUserStart = terraform.indexOf(
+      'resource "google_service_account_iam_member" "hetzner_provisioner_message_digest_user" {'
+    );
+    const messageDigestUserEnd = terraform.indexOf('\n}\n', messageDigestUserStart) + 3;
+    const messageDigestUser = terraform.slice(messageDigestUserStart, messageDigestUserEnd);
+
+    expect(messageDigestUserStart).toBeGreaterThanOrEqual(0);
+    expect(messageDigestUser).toContain(
+      'service_account_id = google_service_account.message_digest_service.name'
+    );
+    expect(messageDigestUser).toContain('role               = "roles/iam.serviceAccountUser"');
+    expect(messageDigestUser).toContain(
+      'member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"'
+    );
+    expect(messageDigestUser).not.toContain('condition {');
+
+    const schedulerUserStart = terraform.indexOf(
+      'resource "google_service_account_iam_member" "hetzner_provisioner_scheduler_user" {'
+    );
+    const schedulerUserEnd = terraform.indexOf('\n}\n', schedulerUserStart) + 3;
+    const schedulerUser = terraform.slice(schedulerUserStart, schedulerUserEnd);
+
+    expect(schedulerUserStart).toBeGreaterThanOrEqual(0);
+    expect(schedulerUser).toContain(
+      'service_account_id = google_service_account.cloud_scheduler.name'
+    );
+    expect(schedulerUser).toContain('role               = "roles/iam.serviceAccountUser"');
+    expect(schedulerUser).toContain(
+      'member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"'
+    );
+    expect(schedulerUser).not.toContain('condition {');
+    expect(terraform).not.toContain('roles/iam.serviceAccountDeleter');
+  });
+
   it('removes the legacy GCP web app hosting knobs after Hetzner cutover', () => {
     const terraform = readRequired(terraformDevMainPath);
     const tfvarsExample = readRequired(terraformDevTfvarsExamplePath);
