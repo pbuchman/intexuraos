@@ -313,6 +313,44 @@ describe('fishing migration replay aggregator', () => {
     });
   });
 
+  it('normalizes an internal OpenRouter selector before provider and usage requests', async () => {
+    const requests: { url: string; body: Record<string, unknown> }[] = [];
+    const aggregate = createFishingMigrationAggregator({
+      apiKey: 'private-openrouter-key',
+      model: 'or:google/gemini-3-flash-preview',
+      usageServiceUrl: 'https://usage.internal.example',
+      internalAuthToken: 'private-internal-token',
+      fetchImplementation: vi.fn(async (url: string | URL, init?: RequestInit) => {
+        requests.push({
+          url: String(url),
+          body: JSON.parse(String(init?.body)) as Record<string, unknown>,
+        });
+        if (String(url).includes('openrouter.ai')) {
+          return jsonResponse(
+            openRouterResponse({
+              headline: 'Wędkarskie ustalenia',
+              summaryMarkdown: '- Ustalono termin spotkania.',
+              evidenceMessageRefs: [SOURCE_REF],
+              continuityMemoryMarkdown: 'Termin pozostaje aktualny.',
+            })
+          );
+        }
+        return jsonResponse({ success: true, data: { accepted: 1 } });
+      }),
+      randomUUID: () => '00000000-0000-4000-8000-000000000005',
+      now: () => '2026-07-28T12:00:00.000Z',
+      environment: 'prod',
+    });
+
+    await expect(aggregate(aggregateInput())).resolves.toMatchObject({
+      model: 'or:google/gemini-3-flash-preview',
+    });
+    expect(requests[0]?.body).toMatchObject({ model: 'google/gemini-3-flash-preview' });
+    expect(requests[1]?.body).toMatchObject({
+      events: [{ request: { model: 'google/gemini-3-flash-preview' } }],
+    });
+  });
+
   it('chunks a large safe day, synthesizes it once, and accounts for every provider call', async () => {
     const input = aggregateInput();
     const firstMessage = required(input.messages[0]);

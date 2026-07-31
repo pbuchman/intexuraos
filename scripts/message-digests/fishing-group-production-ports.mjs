@@ -107,7 +107,11 @@ export function createFishingMigrationSourcePort(config) {
 
 export function createFishingMigrationAggregator(config) {
   const apiKey = requiredOperationalString(config?.apiKey, 'MIGRATION_LLM_CONFIG_INVALID');
-  const model = requiredOperationalString(config?.model, 'MIGRATION_LLM_CONFIG_INVALID');
+  const configuredModel = requiredOperationalString(config?.model, 'MIGRATION_LLM_CONFIG_INVALID');
+  const providerModel = requiredOperationalString(
+    configuredModel.startsWith('or:') ? configuredModel.slice(3) : configuredModel,
+    'MIGRATION_LLM_CONFIG_INVALID'
+  );
   const usageServiceUrl = normalizeBaseUrl(config?.usageServiceUrl);
   const internalAuthToken = requiredOperationalString(
     config?.internalAuthToken,
@@ -133,7 +137,7 @@ export function createFishingMigrationAggregator(config) {
     try {
       result = await requestOpenRouter({
         apiKey,
-        model,
+        model: providerModel,
         prompt,
         fetchImplementation,
       });
@@ -146,7 +150,7 @@ export function createFishingMigrationAggregator(config) {
         now,
         environment,
         userId,
-        model,
+        model: providerModel,
         promptType,
         requestId,
         startedAt,
@@ -164,7 +168,7 @@ export function createFishingMigrationAggregator(config) {
       now,
       environment,
       userId,
-      model,
+      model: providerModel,
       promptType,
       requestId,
       startedAt,
@@ -225,7 +229,7 @@ export function createFishingMigrationAggregator(config) {
     return {
       ...final.aggregate,
       promptVersion: `${final.promptIdentity.promptType}@${final.promptIdentity.version}`,
-      model,
+      model: configuredModel,
       usage,
     };
   };
