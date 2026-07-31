@@ -69,20 +69,20 @@ export class GcpPubSubPublisher
   }
 
   async publishMediaCleanup(event: MediaCleanupEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.mediaCleanupTopic,
       event,
-      { messageId: event.messageId },
+      { eventKind: 'media_cleanup' },
       'media cleanup'
     );
     return this.mapToWhatsAppError(result);
   }
 
   async publishAudioStored(event: AudioStoredEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.audioStoredTopic,
       event,
-      { messageId: event.messageId },
+      { eventKind: 'audio_stored' },
       'audio stored'
     );
     return this.mapToWhatsAppError(result);
@@ -91,10 +91,10 @@ export class GcpPubSubPublisher
   async publishMediaTranscriptionRequested(
     event: MediaTranscriptionRequestedEvent
   ): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.audioStoredTopic,
       event,
-      { messageId: event.messageId },
+      { eventKind: 'media_transcription_requested' },
       'media transcription requested'
     );
     return this.mapToWhatsAppError(result);
@@ -103,10 +103,10 @@ export class GcpPubSubPublisher
   async publishIntexMessageIngest(
     event: IntexMessageIngestEvent
   ): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.intexMessageIngestTopic,
       event,
-      { messageId: event.messageId },
+      { eventKind: 'intex_message_ingest' },
       'intex message ingest'
     );
     return this.mapToWhatsAppError(result);
@@ -132,10 +132,10 @@ export class GcpPubSubPublisher
   }
 
   async publishWebhookProcess(event: WebhookProcessEvent): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToOptionalTopic(
+    const result = await this.publishToOptionalTopicSafely(
       this.webhookProcessTopic,
       event,
-      { eventId: event.eventId },
+      { eventKind: 'webhook_process' },
       'webhook process'
     );
     return this.mapToWhatsAppError(result);
@@ -144,10 +144,10 @@ export class GcpPubSubPublisher
   async publishExtractLinkPreviews(
     event: ExtractLinkPreviewsEvent
   ): Promise<Result<void, WhatsAppError>> {
-    const result = await this.publishToOptionalTopic(
+    const result = await this.publishToOptionalTopicSafely(
       this.webhookProcessTopic,
       event,
-      { messageId: event.messageId },
+      { eventKind: 'extract_link_previews' },
       'extract link previews'
     );
     return this.mapToWhatsAppError(result);
@@ -162,10 +162,10 @@ export class GcpPubSubPublisher
         message: 'Conversation Assistant preparation topic is not configured',
       });
     }
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.webhookProcessTopic,
       event,
-      { sessionId: event.sessionId, userId: event.userId, attempt: String(event.attempt) },
+      { eventKind: 'conversation_assistant_preparation', attempt: String(event.attempt) },
       'conversation assistant preparation'
     );
     return this.mapToWhatsAppError(result);
@@ -181,10 +181,13 @@ export class GcpPubSubPublisher
           'Conversation Assistant context attachment preparation topic is not configured',
       });
     }
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.webhookProcessTopic,
       event,
-      { attempt: String(event.attempt) },
+      {
+        eventKind: 'conversation_assistant_context_attachment_preparation',
+        attempt: String(event.attempt),
+      },
       'conversation assistant context attachment preparation'
     );
     return this.mapToWhatsAppError(result);
@@ -199,10 +202,10 @@ export class GcpPubSubPublisher
         message: 'Private WhatsApp erasure topic is not configured',
       });
     }
-    const result = await this.publishToTopic(
+    const result = await this.publishToTopicSafely(
       this.webhookProcessTopic,
       event,
-      { attempt: String(event.attempt) },
+      { eventKind: 'private_whatsapp_erasure', attempt: String(event.attempt) },
       'private WhatsApp erasure'
     );
     return this.mapToWhatsAppError(result);
