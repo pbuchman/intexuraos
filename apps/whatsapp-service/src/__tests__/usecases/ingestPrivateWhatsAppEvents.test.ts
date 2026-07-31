@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import {
   type AudioStoredEvent,
@@ -349,6 +349,34 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     expect(repository.stored[0]?.deliveryMode).toBe('live');
     expect(repository.stored[0]?.message.text).toBe('hello from private whatsapp');
     expect(repository.stored[0]?.message.direction).toBe('incoming');
+  });
+
+  it('does not write private source-account identifiers to success or failure logs', async () => {
+    const privateSourceAccountId = 'private-source-account-must-not-be-logged';
+    const privacyLogger: Logger = {
+      info: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const success = await useCase.execute(
+      createInput({ sourceAccountId: privateSourceAccountId }),
+      privacyLogger
+    );
+    expect(success.ok).toBe(true);
+
+    repository.failNextStore = true;
+    const failure = await useCase.execute(
+      createInput({ sourceAccountId: privateSourceAccountId }),
+      privacyLogger
+    );
+    expect(failure.ok).toBe(false);
+
+    expect(
+      JSON.stringify([
+        vi.mocked(privacyLogger.info).mock.calls,
+        vi.mocked(privacyLogger.error).mock.calls,
+      ])
+    ).not.toContain(privateSourceAccountId);
   });
 
   it('stores outgoing Matrix events from the private account owner', async () => {

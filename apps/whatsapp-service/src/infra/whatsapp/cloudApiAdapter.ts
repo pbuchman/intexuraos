@@ -29,11 +29,11 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
   }
 
   async getMediaUrl(mediaId: string): Promise<Result<MediaUrlInfo, WhatsAppError>> {
-    logger.info({ mediaId }, 'Fetching media URL from WhatsApp');
+    logger.info({}, 'Fetching media URL from WhatsApp');
     const result = await this.mediaClient.getMediaUrl(mediaId);
 
     if (!result.ok) {
-      logger.error({ mediaId, code: result.error.code }, 'Failed to fetch media URL');
+      logger.error({ code: result.error.code }, 'Failed to fetch media URL');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
@@ -44,18 +44,18 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
   }
 
   async downloadMedia(url: string): Promise<Result<Buffer, WhatsAppError>> {
-    logger.info({ url }, 'Downloading media from WhatsApp');
+    logger.info({}, 'Downloading media from WhatsApp');
     const result = await this.mediaClient.downloadMedia(url);
 
     if (!result.ok) {
-      logger.error({ url, code: result.error.code }, 'Failed to download media');
+      logger.error({ code: result.error.code }, 'Failed to download media');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
       });
     }
 
-    logger.info({ url, contentLength: result.value.length }, 'Media downloaded successfully');
+    logger.info({ contentLength: result.value.length }, 'Media downloaded successfully');
     return ok(result.value);
   }
 
@@ -66,7 +66,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     replyToMessageId?: string
   ): Promise<Result<SendMessageResult, WhatsAppError>> {
     logger.info(
-      { phoneNumberId, recipientPhone, messageLength: message.length, replyToMessageId },
+      { messageLength: message.length, hasReplyToMessageId: replyToMessageId !== undefined },
       'Sending WhatsApp message'
     );
     const client = createWhatsAppClient({
@@ -84,19 +84,19 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     const result = await client.sendTextMessage(params);
 
     if (!result.ok) {
-      logger.error({ phoneNumberId, recipientPhone, code: result.error.code }, 'Failed to send message');
+      logger.error({ code: result.error.code }, 'Failed to send message');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
       });
     }
 
-    logger.info({ phoneNumberId, recipientPhone, messageId: result.value.messageId }, 'Message sent successfully');
+    logger.info({}, 'Message sent successfully');
     return ok({ messageId: result.value.messageId });
   }
 
   async markAsRead(phoneNumberId: string, messageId: string): Promise<Result<void, WhatsAppError>> {
-    logger.info({ phoneNumberId, messageId }, 'Marking message as read');
+    logger.info({}, 'Marking message as read');
     const client = createWhatsAppClient({
       accessToken: this.accessToken,
       phoneNumberId,
@@ -105,14 +105,14 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     const result = await client.markAsRead(messageId);
 
     if (!result.ok) {
-      logger.error({ phoneNumberId, messageId, code: result.error.code }, 'Failed to mark message as read');
+      logger.error({ code: result.error.code }, 'Failed to mark message as read');
       return err({
         code: 'INTERNAL_ERROR',
         message: result.error.message,
       });
     }
 
-    logger.info({ phoneNumberId, messageId }, 'Message marked as read successfully');
+    logger.info({}, 'Message marked as read successfully');
     return ok(undefined);
   }
 
@@ -120,7 +120,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
     phoneNumberId: string,
     messageId: string
   ): Promise<Result<void, WhatsAppError>> {
-    logger.info({ phoneNumberId, messageId }, 'Marking message as read with typing indicator');
+    logger.info({}, 'Marking message as read with typing indicator');
     const client = createWhatsAppClient({
       accessToken: this.accessToken,
       phoneNumberId,
@@ -130,7 +130,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
 
     if (!result.ok) {
       logger.error(
-        { phoneNumberId, messageId, code: result.error.code },
+        { code: result.error.code },
         'Failed to mark message as read with typing'
       );
       return err({
@@ -139,7 +139,7 @@ export class WhatsAppCloudApiAdapter implements WhatsAppCloudApiPort {
       });
     }
 
-    logger.info({ phoneNumberId, messageId }, 'Message marked as read with typing indicator successfully');
+    logger.info({}, 'Message marked as read with typing indicator successfully');
     return ok(undefined);
   }
 }

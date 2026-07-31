@@ -1540,7 +1540,7 @@ describe('Webhook async processing', () => {
       expect(messages[0]?.toNumber).toBe(''); // Empty string fallback
     });
 
-    it('handles null wabaId in error message (uses "null" fallback)', async () => {
+    it('rejects a missing wabaId without reflecting the identifier', async () => {
       // Create payload with null WABA ID (missing entry)
       const payload = {
         object: 'whatsapp_business_account',
@@ -1563,11 +1563,11 @@ describe('Webhook async processing', () => {
       // Should reject with 403
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('waba_id');
-      expect(body.error.message).toContain('null');
+      expect(body.error.message).toBe('Webhook rejected: waba_id not allowed');
+      expect(body.error.message).not.toContain('null');
     });
 
-    it('handles null phoneNumberId in error message (uses "null" fallback)', async () => {
+    it('rejects a missing phoneNumberId without reflecting the identifier', async () => {
       // Create payload with valid WABA but missing phone_number_id
       const payload = {
         object: 'whatsapp_business_account',
@@ -1606,8 +1606,8 @@ describe('Webhook async processing', () => {
       // Should reject with 403
       expect(response.statusCode).toBe(403);
       const body = JSON.parse(response.body) as { error: { message: string } };
-      expect(body.error.message).toContain('phone_number_id');
-      expect(body.error.message).toContain('null');
+      expect(body.error.message).toBe('Webhook rejected: phone_number_id not allowed');
+      expect(body.error.message).not.toContain('null');
     });
 
     it('handles null messageType in error message (uses "unknown" fallback)', async () => {
