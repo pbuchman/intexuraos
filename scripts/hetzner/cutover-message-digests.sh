@@ -383,6 +383,14 @@ start_candidate_compensation_stack() {
   done
 }
 
+restart_candidate_stack_for_resumed_pre_activation() {
+  local completed=""
+  completed="$(state_completed_count)"
+  if ((completed >= 3 && completed < 14)); then
+    start_candidate_compensation_stack
+  fi
+}
+
 stop_candidate_compensation_stack() {
   local service=""
   local failed="0"
@@ -932,6 +940,7 @@ main() {
   if [[ "${CUTOVER_STATUS}" == "compensating" ]]; then
     fail "Previous Message Digest compensation is incomplete"
   fi
+  restart_candidate_stack_for_resumed_pre_activation
 
   run_step "verify-tested-release" verify_tested_release
   run_step "assert-pending-migration-128" assert_pending_migration_128

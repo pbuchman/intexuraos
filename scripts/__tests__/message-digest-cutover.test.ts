@@ -1261,6 +1261,56 @@ command cat "$TRACE_FILE"
 });
 
 describe('Message Digest candidate stack and cutover script', () => {
+  it('keeps silent Hetzner cutover SSH sessions alive and fails dead transports promptly', () => {
+    const deploy = readFileSync(deployPath, 'utf8');
+    const sshCommand = deploy.slice(
+      deploy.indexOf('ssh_command_string() {'),
+      deploy.indexOf('\n}\n\nprepare_remote_terraform()')
+    );
+    const remoteCommand = deploy.slice(
+      deploy.indexOf('run_remote_at() {'),
+      deploy.indexOf('\n}\n\nrun_remote()')
+    );
+
+    for (const block of [sshCommand, remoteCommand]) {
+      expect(block).toContain('ServerAliveInterval=15');
+      expect(block).toContain('ServerAliveCountMax=8');
+    }
+  });
+
+  it('restarts hidden candidate services only when resuming a pre-activation checkpoint', () => {
+    const invoke = (completedStepCount: number): ReturnType<typeof spawnSync> =>
+      runShellLibrary(
+        cutoverPath,
+        `
+state_completed_count() { printf '%s' "$TEST_COMPLETED_STEP_COUNT"; }
+start_candidate_compensation_stack() { printf 'restart-candidate\\n'; }
+restart_candidate_stack_for_resumed_pre_activation
+`,
+        { TEST_COMPLETED_STEP_COUNT: String(completedStepCount) }
+      );
+
+    for (const completedStepCount of [0, 1, 2, 14, 15, 16, 17]) {
+      const freshOrSwitched = invoke(completedStepCount);
+      expect(freshOrSwitched.status, freshOrSwitched.stderr).toBe(0);
+      expect(freshOrSwitched.stdout).toBe('');
+    }
+    for (const completedStepCount of [3, 11, 12, 13]) {
+      const resumedCandidate = invoke(completedStepCount);
+      expect(resumedCandidate.status, resumedCandidate.stderr).toBe(0);
+      expect(resumedCandidate.stdout).toBe('restart-candidate\n');
+    }
+
+    const cutover = readFileSync(cutoverPath, 'utf8');
+    const main = cutover.slice(cutover.indexOf('main() {'));
+    expect(main.indexOf('acquire_durable_lease')).toBeLessThan(
+      main.indexOf('restart_candidate_stack_for_resumed_pre_activation')
+    );
+    expect(main.indexOf('restart_candidate_stack_for_resumed_pre_activation')).toBeLessThan(
+      main.indexOf('run_step "verify-tested-release"')
+    );
+  });
+
   it('stages one pinned and hash-verified Terraform runtime outside the immutable release', () => {
     const deploy = readFileSync(deployPath, 'utf8');
     const main = deploy.slice(deploy.indexOf('main() {'));
