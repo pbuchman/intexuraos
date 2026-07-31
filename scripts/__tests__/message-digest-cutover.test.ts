@@ -1117,6 +1117,37 @@ prepare_remote_terraform
     }
   });
 
+  it('repairs the deploy-owned Web release layout before either activation path', () => {
+    const deploy = readFileSync(deployPath, 'utf8');
+    const main = deploy.slice(deploy.indexOf('main() {'));
+    const result = runShellLibrary(
+      deployPath,
+      `
+run_remote_at() { printf 'directory=%s\\ncommand=%s\\n' "$1" "$2"; }
+prepare_remote_web_layout
+`,
+      {}
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout).toContain('directory=/opt/intexuraos');
+    expect(result.stdout).toContain('web_owner="$(id -un)"');
+    expect(result.stdout).toContain('web_group="$(id -gn)"');
+    expect(result.stdout).toContain(
+      'sudo -n install -d -o "${web_owner}" -g "${web_group}" -m 755 -- /var/www/intexuraos/web /var/www/intexuraos/web/releases'
+    );
+    expect(result.stdout).toContain('test -w /var/www/intexuraos/web');
+    expect(result.stdout).toContain('test -w /var/www/intexuraos/web/releases');
+    expect(main.indexOf('prepare_remote_web_layout')).toBeGreaterThan(-1);
+    expect(main.indexOf('prepare_remote_web_layout')).toBeLessThan(
+      main.indexOf('run_message_digest_cutover')
+    );
+    expect(main.indexOf('prepare_remote_web_layout')).toBeLessThan(
+      main.indexOf('deploy_web_and_edge')
+    );
+  });
+
   it('runs first activation without forwarding a Hetzner provider credential', () => {
     const result = runShellLibrary(
       deployPath,

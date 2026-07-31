@@ -43,7 +43,7 @@ resource "terraform_data" "bootstrap_prod" {
   provisioner "remote-exec" {
     inline = [
       "cloud-init status --wait || true",
-      "install -d -o deploy -g deploy -m 755 /opt/intexuraos /var/www/intexuraos/web/dist",
+      "install -d -o deploy -g deploy -m 755 /opt/intexuraos /var/www/intexuraos/web /var/www/intexuraos/web/dist /var/www/intexuraos/web/releases",
       "install -d -o deploy -g deploy -m 700 /home/deploy/.ssh",
       "printf '%s\\n' '${var.deploy_ssh_public_key}' > /home/deploy/.ssh/authorized_keys",
       "chown deploy:deploy /home/deploy/.ssh /home/deploy/.ssh/authorized_keys",
