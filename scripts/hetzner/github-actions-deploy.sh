@@ -286,6 +286,13 @@ run_remote() {
   run_remote_at "${REMOTE_RELEASE_DIR}" "$1"
 }
 
+prepare_remote_web_layout() {
+  # Identity expansion must happen on the remote host.
+  # shellcheck disable=SC2016
+  run_remote_at "${REMOTE_REPO_DIR}" \
+    'web_owner="$(id -un)"; web_group="$(id -gn)"; sudo -n install -d -o "${web_owner}" -g "${web_group}" -m 755 -- /var/www/intexuraos/web /var/www/intexuraos/web/releases; test -w /var/www/intexuraos/web; test -w /var/www/intexuraos/web/releases'
+}
+
 read_remote_cutover_status() {
   local state_path_quoted=""
   printf -v state_path_quoted '%q' "${REMOTE_CUTOVER_STATE_PATH}"
@@ -663,6 +670,7 @@ main() {
     sync_repo
     verify_remote_release_manifest
     cleanup_retired_remote_paths
+    prepare_remote_web_layout
     prepare_runtime_dependencies
     if [[ "${ACTIVATION_MODE}" == "cutover" ]]; then
       run_message_digest_cutover

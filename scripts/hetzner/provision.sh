@@ -10,6 +10,7 @@ DOMAIN="${DOMAIN:-intexuraos.cloud}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/intexuraos}"
 WEB_ROOT="${WEB_ROOT:-/var/www/intexuraos/web/dist}"
+WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-$(dirname "${WEB_ROOT}")/releases}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 SWAP_FILE="${SWAP_FILE:-/swapfile}"
 SWAP_SIZE="${SWAP_SIZE:-4G}"
@@ -197,8 +198,11 @@ prepare_user_and_directories() {
   printf '%s ALL=(ALL) NOPASSWD:ALL\n' "${DEPLOY_USER}" > "/etc/sudoers.d/90-intexuraos-${DEPLOY_USER}"
   chmod 0440 "/etc/sudoers.d/90-intexuraos-${DEPLOY_USER}"
 
-  install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 "${DEPLOY_DIR}"
-  install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 "${WEB_ROOT}"
+  install -d -o "${DEPLOY_USER}" -g "${DEPLOY_USER}" -m 755 \
+    "${DEPLOY_DIR}" \
+    "$(dirname "${WEB_ROOT}")" \
+    "${WEB_ROOT}" \
+    "${WEB_RELEASES_ROOT}"
   install -d -o root -g root -m 755 /etc/intexuraos
 }
 

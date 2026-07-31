@@ -1192,6 +1192,7 @@ describe('Hetzner web asset deployment', () => {
   it('builds the SPA into an inactive release and atomically switches the nginx web root', () => {
     const script = readRequired(deployWebPath);
     const provision = readRequired(provisionPath);
+    const bootstrap = readRequired(terraformHetznerBootstrapPath);
     const runbook = readRequired(runbookPath);
     const webHosting = readRequired(webHostingPath);
 
@@ -1232,6 +1233,15 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('mv -Tf "${next_link}" "${WEB_CURRENT_LINK}"');
     expect(script).toContain('ACTIVATE_WEB="false"');
     expect(script).toContain('apps/web/dist/index.html');
+    expect(provision).toContain(
+      'WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-$(dirname "${WEB_ROOT}")/releases}"'
+    );
+    expect(provision).toContain('"$(dirname "${WEB_ROOT}")"');
+    expect(provision).toContain('"${WEB_ROOT}"');
+    expect(provision).toContain('"${WEB_RELEASES_ROOT}"');
+    expect(bootstrap).toContain(
+      '/var/www/intexuraos/web /var/www/intexuraos/web/dist /var/www/intexuraos/web/releases'
+    );
     expect(readRequired(nginxConfigPath)).not.toContain('root /var/www/intexuraos/web/dist;');
     expect(provision).toContain('rsync');
     expect(runbook).toContain('scripts/hetzner/deploy-web.sh');
