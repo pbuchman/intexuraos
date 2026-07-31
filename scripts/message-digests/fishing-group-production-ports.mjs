@@ -1101,7 +1101,7 @@ function createMigrationStore(firestore) {
           checkpointAt: input.state.checkpointAt,
           lastRunAt: input.run.completedAt,
           latestRun: latestRunProjection(input.run),
-          updatedAt: input.run.updatedAt,
+          updatedAt: laterInstant(definition.updatedAt, input.run.updatedAt),
         });
         return { disposition: 'created', run: input.run };
       });
@@ -1156,7 +1156,7 @@ function createMigrationStore(firestore) {
           checkpointAt: state.checkpointAt,
           lastRunAt: lastRun.completedAt,
           latestRun: latestRunProjection(lastRun),
-          updatedAt: input.finalState.updatedAt,
+          updatedAt: laterInstant(definition.updatedAt, input.finalState.updatedAt),
         });
         return { disposition: 'staged' };
       });
@@ -1399,6 +1399,15 @@ function latestRunProjection(run) {
     processingStage: run.processingStage,
     deliveryStatus: run.delivery?.status,
   };
+}
+
+function laterInstant(left, right) {
+  const leftTimestamp = Date.parse(left);
+  const rightTimestamp = Date.parse(right);
+  if (!Number.isFinite(leftTimestamp) || !Number.isFinite(rightTimestamp)) {
+    throw safeError('MIGRATION_DOCUMENT_INVALID');
+  }
+  return leftTimestamp >= rightTimestamp ? left : right;
 }
 
 function isAlreadyActive(definition, state, activation, runs, outbox, input) {

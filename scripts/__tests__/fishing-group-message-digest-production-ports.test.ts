@@ -623,6 +623,14 @@ describe('fishing migration Firestore ports', () => {
         state: firstState,
       })
     ).resolves.toMatchObject({ disposition: 'created', run: first });
+    await expect(
+      ports.migration.inspectCandidate({
+        migrationId: 'mdm_release_001',
+        definitionId: 'md_definition',
+      })
+    ).resolves.toMatchObject({
+      definition: { updatedAt: shell.definition.updatedAt },
+    });
 
     const second = canonicalRun('mdr_second', '2026-07-02', first.runHash, 'b'.repeat(64));
     const secondState = migrationState({
@@ -665,7 +673,11 @@ describe('fishing migration Firestore ports', () => {
       definitionId: 'md_definition',
     });
     expect(candidate).toMatchObject({
-      definition: { status: 'migrating', hasRuns: true },
+      definition: {
+        status: 'migrating',
+        hasRuns: true,
+        updatedAt: shell.definition.updatedAt,
+      },
       state: secondState,
       activation: {
         status: 'staging',
