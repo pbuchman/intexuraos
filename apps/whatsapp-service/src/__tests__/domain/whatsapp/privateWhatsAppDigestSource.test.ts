@@ -866,6 +866,93 @@ describe('private WhatsApp digest source', () => {
     expect(serialized).not.toContain('@private-sender');
   });
 
+  it('keeps projected reactions inside the exact half-open source window', async () => {
+    const repository = {
+      queryMessages: vi.fn().mockResolvedValue(
+        ok({
+          messages: [
+            message({
+              id: 'reaction-target',
+              reactions: [
+                {
+                  id: 'before-window',
+                  emoji: '1️⃣',
+                  direction: 'incoming',
+                  eventTimestamp: '2026-07-26T23:59:59.999Z',
+                },
+                {
+                  id: 'at-window-start',
+                  emoji: '2️⃣',
+                  direction: 'incoming',
+                  eventTimestamp: '2026-07-27T00:00:00.000Z',
+                },
+                {
+                  id: 'inside-window',
+                  emoji: '3️⃣',
+                  direction: 'outgoing',
+                  eventTimestamp: '2026-07-27T23:59:59.999Z',
+                },
+                {
+                  id: 'at-window-end',
+                  emoji: '4️⃣',
+                  direction: 'incoming',
+                  eventTimestamp: '2026-07-28T00:00:00.000Z',
+                },
+                {
+                  id: 'after-window',
+                  emoji: '5️⃣',
+                  direction: 'incoming',
+                  eventTimestamp: '2026-07-28T00:00:00.001Z',
+                },
+              ],
+            }),
+          ],
+          sourceRevision: 'opaque-revision',
+          highWatermark: 'opaque-watermark',
+          nextCursor: null,
+        })
+      ),
+    };
+    const createMessageRef = vi
+      .fn()
+      .mockImplementation(
+        (input: { projectionKey: string }) => `opaque-reference:${input.projectionKey}`
+      );
+
+    const result = await readPrivateWhatsAppDigestSource(
+      {
+        userId: 'user-1',
+        sourceAccountId: 'source-1',
+        generationId: 'generation-1',
+        chatId: 'chat-1',
+        chatType: 'group',
+        windowStart: '2026-07-27T00:00:00.000Z',
+        windowEnd: '2026-07-28T00:00:00.000Z',
+        limit: 50,
+      },
+      { repository, tokens: { createMessageRef } }
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        messages: [
+          { contentKind: 'text', eventTimestamp: '2026-07-27T07:00:00.000Z' },
+          {
+            messageRef: 'opaque-reference:reaction:at-window-start',
+            contentKind: 'reaction',
+            eventTimestamp: '2026-07-27T00:00:00.000Z',
+          },
+          {
+            messageRef: 'opaque-reference:reaction:inside-window',
+            contentKind: 'reaction',
+            eventTimestamp: '2026-07-27T23:59:59.999Z',
+          },
+        ],
+      },
+    });
+  });
+
   it('maps repository and timestamp failures to content-free read errors', async () => {
     const baseInput = {
       userId: 'user-1',
