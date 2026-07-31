@@ -509,6 +509,43 @@ describe('Message Digest internal routes', () => {
     );
   });
 
+  it('accepts the documented Pub/Sub delivery attempt while keeping the envelope closed', async () => {
+    const envelope = pubsubEnvelope(runRequest());
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/message-digests/pubsub/run',
+      payload: { ...envelope, deliveryAttempt: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(processMessageDigestRun).toHaveBeenCalledWith(
+      {
+        userId: 'synthetic-user-001',
+        definitionId: 'md_definition_001',
+        runId: 'mdr_run_001',
+        workerId: 'pubsub:synthetic-message-001',
+      },
+      expect.any(Object)
+    );
+
+    for (const invalidDeliveryAttempt of [-1, 1.5]) {
+      const invalid = await app.inject({
+        method: 'POST',
+        url: '/internal/message-digests/pubsub/run',
+        payload: { ...envelope, deliveryAttempt: invalidDeliveryAttempt },
+      });
+      expect(invalid.statusCode).toBe(400);
+    }
+
+    const unexpected = await app.inject({
+      method: 'POST',
+      url: '/internal/message-digests/pubsub/run',
+      payload: { ...envelope, unexpectedField: 1 },
+    });
+    expect(unexpected.statusCode).toBe(400);
+    expect(processMessageDigestRun).toHaveBeenCalledTimes(1);
+  });
+
   it('acks terminal duplicates and asks Pub/Sub to retry a busy lease', async () => {
     vi.mocked(processMessageDigestRun).mockResolvedValueOnce({
       ok: true,
