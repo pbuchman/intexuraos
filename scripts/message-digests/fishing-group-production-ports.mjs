@@ -1609,6 +1609,7 @@ function createVisibilityStore(firestore) {
         .collection(DEFINITIONS_COLLECTION)
         .where('userId', '==', input.userId)
         .where('legacyAlias.groupKey', '==', input.legacyGroupKey)
+        .where('status', 'in', ['active', 'paused'])
         .get();
       const definitions = snapshot.docs
         .map(ownedData)
@@ -1616,6 +1617,8 @@ function createVisibilityStore(firestore) {
           (definition) =>
             definition.userId === input.userId &&
             definition.legacyAlias?.groupKey === input.legacyGroupKey &&
+            ['active', 'paused'].includes(definition.status) &&
+            definition.activeMigrationId !== null &&
             definition.source?.chatType === 'group'
         );
       if (definitions.length > 1) throw safeError('MIGRATION_VISIBILITY_CONFLICT');

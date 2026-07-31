@@ -780,6 +780,25 @@ describe('fishing migration Firestore ports', () => {
     ).toBe(true);
   });
 
+  it('ignores an older compensated alias while verifying a replacement candidate', async () => {
+    const previous = structuredClone(migrationShell().definition);
+    previous.definitionId = 'md_previous_hidden';
+    fake.seedCollection('message_digest_definitions', [
+      { id: 'md_previous_hidden', data: previous },
+    ]);
+    const ports = createFishingMigrationFirestorePorts({
+      firestore: fake as unknown as Firestore,
+    });
+    await seedStagedCandidate(ports);
+
+    await expect(
+      ports.visibility.readFishing({
+        userId: 'owner-001',
+        legacyGroupKey: 'fishing-group',
+      })
+    ).resolves.toEqual({ definitions: [], runs: [] });
+  });
+
   it('atomically restages a compensated hidden chain for the same migration identity', async () => {
     const ports = createFishingMigrationFirestorePorts({
       firestore: fake as unknown as Firestore,
