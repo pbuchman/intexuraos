@@ -634,6 +634,37 @@ resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_ssl_priv
   member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
 }
 
+resource "google_storage_bucket_iam_member" "hetzner_provisioner_terraform_state" {
+  bucket = "${var.project_id}-terraform-state"
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_project_iam_member" "hetzner_provisioner_deployment_roles" {
+  for_each = toset([
+    "roles/cloudscheduler.admin",
+    "roles/iam.serviceAccountViewer",
+    "roles/pubsub.admin",
+    "roles/serviceusage.serviceUsageConsumer",
+  ])
+
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_provisioner_message_digest_user" {
+  service_account_id = google_service_account.message_digest_service.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
+resource "google_service_account_iam_member" "hetzner_provisioner_scheduler_user" {
+  service_account_id = google_service_account.cloud_scheduler.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
   for_each = local.hetzner_runtime_secret_names
 
