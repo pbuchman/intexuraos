@@ -9,6 +9,11 @@ REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-/opt/intexuraos}"
 REMOTE_RELEASES_DIR="${REMOTE_REPO_DIR%/}/releases"
 REMOTE_RELEASE_DIR=""
 REMOTE_CUTOVER_STATE_PATH="${REMOTE_REPO_DIR%/}/.deployment-state/message-digests/state.json"
+TERRAFORM_VERSION="1.5.0"
+TERRAFORM_ARCHIVE_SHA256="9ae1bcfef088e9aaabeaf6fdc6cce01187dc4936f1564899ee6fa6baec5ad19c"
+TERRAFORM_TOOL_DIR=""
+REMOTE_TERRAFORM_TOOLS_DIR="${REMOTE_REPO_DIR%/}/.deployment-tools/terraform/${TERRAFORM_VERSION}"
+REMOTE_TERRAFORM_BIN_DIR=""
 PUBLIC_DOMAIN="${PUBLIC_DOMAIN:-intexuraos.cloud}"
 SSH_PORT="${SSH_PORT:-22}"
 DEPLOY_NGINX="${DEPLOY_NGINX:-true}"
@@ -56,6 +61,9 @@ cleanup() {
   [[ -n "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}"
   [[ -n "${CODE_HEALTH_RESPONSE_BODY_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_BODY_FILE}"
   [[ -n "${RELEASE_ATTESTATION_FILE}" ]] && rm -f "${RELEASE_ATTESTATION_FILE}"
+  if [[ -n "${TERRAFORM_TOOL_DIR}" && -d "${TERRAFORM_TOOL_DIR}" ]]; then
+    rm -rf -- "${TERRAFORM_TOOL_DIR}"
+  fi
   if [[ -n "${SYNC_SOURCE_DIR}" && -d "${SYNC_SOURCE_DIR}" ]]; then
     rm -rf -- "${SYNC_SOURCE_DIR}"
   fi
@@ -65,6 +73,28 @@ cleanup() {
 require_command() {
   local command_name="$1"
   command -v "${command_name}" >/dev/null 2>&1 || fail "${command_name} is required"
+}
+
+sha256_file() {
+  local path="$1"
+  node -e '
+const { createHash } = require("node:crypto");
+const { createReadStream } = require("node:fs");
+const hash = createHash("sha256");
+createReadStream(process.argv[1])
+  .on("data", (chunk) => hash.update(chunk))
+  .on("end", () => process.stdout.write(hash.digest("hex")));
+' "${path}"
+}
+
+verify_sha256() {
+  local path="$1"
+  local expected_hash="$2"
+  local observed_hash=""
+
+  observed_hash="$(sha256_file "${path}")"
+  [[ "${observed_hash}" == "${expected_hash}" ]] \
+    || fail "SHA-256 verification failed for $(basename "${path}")"
 }
 
 validate_inputs() {
@@ -165,6 +195,77 @@ ssh_command_string() {
     "${KNOWN_HOSTS_FILE}"
 }
 
+prepare_remote_terraform() {
+  local archive_path=""
+  local terraform_binary=""
+  local terraform_url=""
+  local binary_hash=""
+  local ssh_command=""
+  local remote_dir_quoted=""
+  local remote_candidate_path=""
+  local remote_candidate_quoted=""
+  local remote_binary_path=""
+  local remote_binary_quoted=""
+  local binary_hash_quoted=""
+  local version_quoted=""
+
+  TERRAFORM_TOOL_DIR="$(mktemp -d "${TMPDIR:-/tmp}/intexuraos-terraform.XXXXXX")"
+  archive_path="${TERRAFORM_TOOL_DIR}/terraform.zip"
+  terraform_binary="${TERRAFORM_TOOL_DIR}/terraform"
+  terraform_url="https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip"
+
+  curl \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --proto '=https' \
+    --tlsv1.2 \
+    --output "${archive_path}" \
+    "${terraform_url}"
+  verify_sha256 "${archive_path}" "${TERRAFORM_ARCHIVE_SHA256}"
+  unzip -q "${archive_path}" -d "${TERRAFORM_TOOL_DIR}"
+  [[ -f "${terraform_binary}" ]] || fail "Terraform archive did not contain the expected binary"
+  chmod 755 "${terraform_binary}"
+
+  PATH="${TERRAFORM_TOOL_DIR}:${PATH}" terraform version -json \
+    | node -e '
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => { input += chunk; });
+process.stdin.on("end", () => {
+  const value = JSON.parse(input);
+  if (value.terraform_version !== process.argv[1] || value.platform !== "linux_amd64") {
+    process.exit(1);
+  }
+});
+' "${TERRAFORM_VERSION}" \
+    || fail "Downloaded Terraform runtime has an unexpected version or platform"
+
+  binary_hash="$(sha256_file "${terraform_binary}")"
+  [[ "${binary_hash}" =~ ^[0-9a-f]{64}$ ]] || fail "Could not hash the Terraform binary"
+  remote_candidate_path="${REMOTE_TERRAFORM_TOOLS_DIR}/.terraform.${WORKFLOW_RUN_ID_VALUE}.candidate"
+  remote_binary_path="${REMOTE_TERRAFORM_TOOLS_DIR}/terraform"
+  printf -v remote_dir_quoted '%q' "${REMOTE_TERRAFORM_TOOLS_DIR}"
+  printf -v remote_candidate_quoted '%q' "${remote_candidate_path}"
+  printf -v remote_binary_quoted '%q' "${remote_binary_path}"
+  printf -v binary_hash_quoted '%q' "${binary_hash}"
+  printf -v version_quoted '%q' "${TERRAFORM_VERSION}"
+
+  run_remote_at "${REMOTE_REPO_DIR}" "install -d -m 755 ${remote_dir_quoted}"
+  ssh_command="$(ssh_command_string)"
+  rsync -a \
+    -e "${ssh_command}" \
+    "${terraform_binary}" \
+    "${REMOTE_USER}@${HETZNER_PROD_HOST}:${remote_candidate_path}"
+  run_remote_at "${REMOTE_REPO_DIR}" \
+    "observed_hash=\$(node -e 'const { createHash } = require(\"node:crypto\"); const { createReadStream } = require(\"node:fs\"); const hash = createHash(\"sha256\"); createReadStream(process.argv[1]).on(\"data\", (chunk) => hash.update(chunk)).on(\"end\", () => process.stdout.write(hash.digest(\"hex\")));' ${remote_candidate_quoted}); if [[ \"\${observed_hash}\" != ${binary_hash_quoted} ]]; then rm -f -- ${remote_candidate_quoted}; exit 1; fi; chmod 755 ${remote_candidate_quoted}; mv -f -- ${remote_candidate_quoted} ${remote_binary_quoted}"
+  run_remote_at "${REMOTE_REPO_DIR}" \
+    "PATH=${remote_dir_quoted}:\$PATH terraform version -json | node -e 'let input = \"\"; process.stdin.setEncoding(\"utf8\"); process.stdin.on(\"data\", (chunk) => { input += chunk; }); process.stdin.on(\"end\", () => { const value = JSON.parse(input); if (value.terraform_version !== process.argv[1] || value.platform !== \"linux_amd64\") process.exit(1); });' ${version_quoted}"
+
+  REMOTE_TERRAFORM_BIN_DIR="${REMOTE_TERRAFORM_TOOLS_DIR}"
+}
+
 run_remote_at() {
   local directory="$1"
   local command="$2"
@@ -225,7 +326,7 @@ snapshot_legacy_release() {
   printf -v previous_dir_quoted '%q' "${PREVIOUS_RELEASE_DIR}"
   printf -v repo_dir_quoted '%q' "${REMOTE_REPO_DIR%/}/"
   run_remote_at "${REMOTE_REPO_DIR}" \
-    "install -d -m 755 ${releases_dir_quoted} ${previous_dir_quoted}; rsync -a --delete --exclude '/releases/' --exclude '/.deployment-state/' ${repo_dir_quoted} ${previous_dir_quoted}/; test -f ${previous_dir_quoted}/ecosystem.config.prod.cjs"
+    "install -d -m 755 ${releases_dir_quoted} ${previous_dir_quoted}; rsync -a --delete --exclude '/releases/' --exclude '/.deployment-state/' --exclude '/.deployment-tools/' ${repo_dir_quoted} ${previous_dir_quoted}/; test -f ${previous_dir_quoted}/ecosystem.config.prod.cjs"
 }
 
 read_served_deployment_sha() {
@@ -354,6 +455,7 @@ deploy_runtime() {
 
 run_message_digest_cutover() {
   local cutover_start=""
+  local remote_terraform_bin_dir_quoted=""
   local release_dir_quoted=""
   local previous_dir_quoted=""
   local previous_sha_quoted=""
@@ -362,7 +464,9 @@ run_message_digest_cutover() {
   local deployment_id_quoted=""
   local manifest_hash_quoted=""
   local cutover_start_quoted=""
+  [[ -n "${REMOTE_TERRAFORM_BIN_DIR}" ]] || fail "Remote Terraform runtime is unresolved"
   cutover_start="$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')"
+  printf -v remote_terraform_bin_dir_quoted '%q' "${REMOTE_TERRAFORM_BIN_DIR}"
   printf -v release_dir_quoted '%q' "${REMOTE_RELEASE_DIR}"
   printf -v previous_dir_quoted '%q' "${PREVIOUS_RELEASE_DIR}"
   printf -v previous_sha_quoted '%q' "${PREVIOUS_RELEASE_SHA}"
@@ -372,7 +476,7 @@ run_message_digest_cutover() {
   printf -v manifest_hash_quoted '%q' "${RELEASE_MANIFEST_HASH}"
   printf -v cutover_start_quoted '%q' "${cutover_start}"
   run_remote \
-    "RELEASE_DIR=${release_dir_quoted} PREVIOUS_RELEASE_DIR=${previous_dir_quoted} PREVIOUS_RELEASE_SHA=${previous_sha_quoted} MERGE_SHA=${merge_sha_quoted} TESTED_TREE=${tested_tree_quoted} DEPLOYMENT_ID=${deployment_id_quoted} RELEASE_MANIFEST_HASH=${manifest_hash_quoted} CUTOVER_START=${cutover_start_quoted} bash scripts/hetzner/cutover-message-digests.sh"
+    "PATH=${remote_terraform_bin_dir_quoted}:\$PATH RELEASE_DIR=${release_dir_quoted} PREVIOUS_RELEASE_DIR=${previous_dir_quoted} PREVIOUS_RELEASE_SHA=${previous_sha_quoted} MERGE_SHA=${merge_sha_quoted} TESTED_TREE=${tested_tree_quoted} DEPLOYMENT_ID=${deployment_id_quoted} RELEASE_MANIFEST_HASH=${manifest_hash_quoted} CUTOVER_START=${cutover_start_quoted} bash scripts/hetzner/cutover-message-digests.sh"
 }
 
 point_current_release() {
@@ -543,11 +647,15 @@ main() {
   require_command git
   require_command node
   require_command tar
+  require_command unzip
   validate_inputs
   resolve_commit_metadata
   prepare_sync_source
   setup_ssh
   resolve_activation_context
+  if [[ "${ACTIVATION_MODE}" == "cutover" ]]; then
+    prepare_remote_terraform
+  fi
   if [[ "${ACTIVATION_MODE}" == "cutover_complete" ]]; then
     verify_remote_release_manifest
     verify_backend_readiness

@@ -1065,6 +1065,58 @@ command cat "$TRACE_FILE"
 });
 
 describe('Message Digest candidate stack and cutover script', () => {
+  it('stages one pinned and hash-verified Terraform runtime outside the immutable release', () => {
+    const deploy = readFileSync(deployPath, 'utf8');
+    const main = deploy.slice(deploy.indexOf('main() {'));
+
+    expect(deploy).toContain('TERRAFORM_VERSION="1.5.0"');
+    expect(deploy).toContain(
+      'TERRAFORM_ARCHIVE_SHA256="9ae1bcfef088e9aaabeaf6fdc6cce01187dc4936f1564899ee6fa6baec5ad19c"'
+    );
+    expect(deploy).toContain(
+      'https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip'
+    );
+    expect(deploy).toContain('REMOTE_TERRAFORM_TOOLS_DIR=');
+    expect(deploy).toContain('/.deployment-tools/terraform/${TERRAFORM_VERSION}');
+    expect(deploy).toContain('verify_sha256');
+    expect(deploy).toContain('observed_hash');
+    expect(deploy).toContain('terraform version -json');
+    expect(deploy).toContain("--exclude '/.deployment-tools/'");
+    expect(deploy).not.toContain('/usr/local/bin/terraform');
+    expect(main.indexOf('prepare_remote_terraform')).toBeGreaterThan(-1);
+    expect(main.indexOf('prepare_remote_terraform')).toBeLessThan(
+      main.indexOf('run_message_digest_cutover')
+    );
+  });
+
+  it('fails before extracting or staging Terraform when archive verification fails', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-terraform-runtime-'));
+    const tracePath = resolve(directory, 'trace.txt');
+    try {
+      const result = runShellLibrary(
+        deployPath,
+        `
+curl() { printf 'curl\\n' >> "$TEST_TRACE_PATH"; }
+sha256_file() { printf 'unexpected-hash'; }
+unzip() { printf 'unzip\\n' >> "$TEST_TRACE_PATH"; }
+rsync() { printf 'rsync\\n' >> "$TEST_TRACE_PATH"; }
+run_remote_at() { printf 'remote\\n' >> "$TEST_TRACE_PATH"; }
+prepare_remote_terraform
+`,
+        {
+          TEST_TRACE_PATH: tracePath,
+          TMPDIR: directory,
+        }
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('SHA-256 verification failed for terraform.zip');
+      expect(readFileSync(tracePath, 'utf8')).toBe('curl\n');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('runs first activation without forwarding a Hetzner provider credential', () => {
     const result = runShellLibrary(
       deployPath,
@@ -1076,6 +1128,7 @@ COMMIT_SHA_VALUE="${'a'.repeat(40)}"
 TESTED_TREE_VALUE="${'c'.repeat(40)}"
 WORKFLOW_RUN_ID_VALUE="123456"
 RELEASE_MANIFEST_HASH="${'d'.repeat(64)}"
+REMOTE_TERRAFORM_BIN_DIR="/opt/intexuraos/.deployment-tools/terraform/1.5.0"
 run_remote() { printf '%s\n' "$1"; }
 run_message_digest_cutover
 `,
@@ -1085,6 +1138,7 @@ run_message_digest_cutover
     expect(result.status).toBe(0);
     expect(result.stderr).toBe('');
     expect(result.stdout).toContain('cutover-message-digests.sh');
+    expect(result.stdout).toContain('PATH=/opt/intexuraos/.deployment-tools/terraform/1.5.0:$PATH');
     expect(result.stdout).not.toContain('HCLOUD_TOKEN');
   });
 
