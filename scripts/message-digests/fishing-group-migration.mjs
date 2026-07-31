@@ -327,11 +327,7 @@ export async function runFishingMigrationDryRun(input, ports) {
       documents: normalizedArchive.digests,
       expectedHash: binding.expectedLegacyDigestHash,
     });
-    const stateHash = hashArchiveDocuments(normalizedArchive.states);
-    if (stateHash !== binding.expectedLegacyStateHash) {
-      throw contractError('LEGACY_STATE_BASELINE_CHANGED');
-    }
-    validateLegacyStateCheckpoint(normalizedArchive.states, binding);
+    const stateBaseline = analyzeLegacyStateBaseline(normalizedArchive.states, binding);
 
     const definitionId = deterministicDefinitionId(migrationId);
     const candidate = await ports.migration.inspectCandidate({ migrationId, definitionId });
@@ -397,6 +393,8 @@ export async function runFishingMigrationDryRun(input, ports) {
         auditedLegacyDocuments: baseline.auditedDocumentCount,
         meaningfulLegacyDocuments: baseline.auditedMeaningfulCount,
         postAuditDocuments: baseline.postAuditDocumentCount,
+        frozenLegacyStateDocuments: stateBaseline.frozenDocumentCount,
+        postCheckpointLegacyStateDocuments: stateBaseline.postCheckpointDocumentCount,
         replayDates: plan.replayDates.length,
         visibleReplayRuns,
         sourceMessages,
@@ -404,7 +402,8 @@ export async function runFishingMigrationDryRun(input, ports) {
       },
       hashes: {
         baseline: baseline.digestHash,
-        legacyStates: stateHash,
+        legacyStates: stateBaseline.frozenHash,
+        postCheckpointLegacyStates: stateBaseline.postCheckpointHash,
         postAudit: baseline.postAuditHash,
         sourcePlan: sourcePlanHash,
       },
@@ -418,7 +417,7 @@ export async function runFishingMigrationDryRun(input, ports) {
         binding,
         plan,
         baseline,
-        legacyStates: normalizedArchive.states,
+        legacyStates: stateBaseline.checkpointDocuments,
         source,
         readiness,
         effects,
@@ -1503,12 +1502,16 @@ function renderLegacySummaryMarkdown(summary) {
 }
 
 function renderLegacyContinuityMarkdown(states, summaries) {
-  const latestState = [...states]
-    .sort((left, right) => left.data.date.localeCompare(right.data.date))
-    .at(-1);
+  const checkpointStates = states.filter(
+    (document) => document.data.date === LAST_MEANINGFUL_LEGACY_DATE
+  );
+  if (checkpointStates.length !== 1) {
+    throw contractError('LEGACY_STATE_BASELINE_CHANGED');
+  }
+  const checkpointState = checkpointStates[0];
   const content = [
     '## Legacy continuity checkpoint',
-    latestState === undefined ? '' : stableSerialize(latestState.data.state),
+    stableSerialize(checkpointState.data.state),
     '## Previous summaries',
     ...summaries.map((document) => renderLegacySummaryMarkdown(document.data.summary)),
   ].join('\n');
@@ -1598,7 +1601,7 @@ function isOwnedLegacyRecord(value, binding) {
   );
 }
 
-function validateLegacyStateCheckpoint(states, binding) {
+function analyzeLegacyStateBaseline(states, binding) {
   if (states.length === 0) throw contractError('LEGACY_STATE_BASELINE_CHANGED');
   for (const document of states) {
     if (
@@ -1612,13 +1615,30 @@ function validateLegacyStateCheckpoint(states, binding) {
       throw contractError('LEGACY_STATE_BASELINE_CHANGED');
     }
   }
-  const latest = states
-    .map((document) => document.data.date)
-    .sort((left, right) => left.localeCompare(right))
-    .at(-1);
-  if (latest !== LAST_MEANINGFUL_LEGACY_DATE) {
+  const frozenDocuments = states.filter(
+    (document) => document.data.date <= LAST_MEANINGFUL_LEGACY_DATE
+  );
+  const checkpointDocuments = frozenDocuments.filter(
+    (document) => document.data.date === LAST_MEANINGFUL_LEGACY_DATE
+  );
+  const postCheckpointDocuments = states.filter(
+    (document) => document.data.date > LAST_MEANINGFUL_LEGACY_DATE
+  );
+  const frozenHash = hashArchiveDocuments(frozenDocuments);
+  if (
+    frozenDocuments.length === 0 ||
+    checkpointDocuments.length !== 1 ||
+    frozenHash !== binding.expectedLegacyStateHash
+  ) {
     throw contractError('LEGACY_STATE_BASELINE_CHANGED');
   }
+  return {
+    frozenDocumentCount: frozenDocuments.length,
+    postCheckpointDocumentCount: postCheckpointDocuments.length,
+    frozenHash,
+    postCheckpointHash: hashArchiveDocuments(postCheckpointDocuments),
+    checkpointDocuments,
+  };
 }
 
 function isCompatibleCandidate(candidate, migrationId, definitionId) {

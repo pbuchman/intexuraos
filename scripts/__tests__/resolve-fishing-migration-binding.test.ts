@@ -2,7 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { FISHING_GROUP_KEY } from '../message-digests/fishing-group-migration.mjs';
+import {
+  FISHING_GROUP_KEY,
+  hashArchiveDocuments,
+} from '../message-digests/fishing-group-migration.mjs';
 import { resolveFishingMigrationBinding } from '../message-digests/resolve-fishing-migration-binding.mjs';
 
 interface StoredDocument {
@@ -167,6 +170,50 @@ describe('Fishing migration binding resolver', () => {
   it('rejects empty audited legacy ownership', async () => {
     const fixture = createFixture({
       digests: [legacyDigest('post-audit', { date: '2026-07-27' })],
+    });
+    try {
+      await expect(resolveBinding(fixture)).rejects.toThrow('MIGRATION_BINDING_LEGACY_EMPTY');
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('freezes the state hash at the last meaningful checkpoint and ignores later audit states', async () => {
+    const frozenState = legacyState('state-frozen');
+    const fixture = createFixture({
+      states: [
+        frozenState,
+        legacyState('state-later', {
+          date: '2026-07-30',
+          state: {
+            userId: 'user-owner',
+            groupKey: FISHING_GROUP_KEY,
+            updatedAt: '2026-07-30T03:06:00.000Z',
+          },
+        }),
+      ],
+    });
+    try {
+      await expect(resolveBinding(fixture)).resolves.toMatchObject({
+        INTEXURAOS_MESSAGE_DIGEST_MIGRATION_LEGACY_STATE_HASH: hashArchiveDocuments([frozenState]),
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it('rejects an archive that has later audit states but no frozen checkpoint state', async () => {
+    const fixture = createFixture({
+      states: [
+        legacyState('state-later', {
+          date: '2026-07-30',
+          state: {
+            userId: 'user-owner',
+            groupKey: FISHING_GROUP_KEY,
+            updatedAt: '2026-07-30T03:06:00.000Z',
+          },
+        }),
+      ],
     });
     try {
       await expect(resolveBinding(fixture)).rejects.toThrow('MIGRATION_BINDING_LEGACY_EMPTY');
@@ -356,7 +403,7 @@ function legacyDigest(id: string, overrides: Record<string, unknown> = {}): Stor
   };
 }
 
-function legacyState(id: string): StoredDocument {
+function legacyState(id: string, overrides: Record<string, unknown> = {}): StoredDocument {
   return {
     id,
     data: {
@@ -364,6 +411,7 @@ function legacyState(id: string): StoredDocument {
       groupKey: FISHING_GROUP_KEY,
       date: '2026-07-03',
       state: { userId: 'user-owner', groupKey: FISHING_GROUP_KEY },
+      ...overrides,
     },
   };
 }
