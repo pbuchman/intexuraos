@@ -509,12 +509,21 @@ describe('Message Digest internal routes', () => {
     );
   });
 
-  it('accepts the documented Pub/Sub delivery attempt while keeping the envelope closed', async () => {
+  it('accepts documented Pub/Sub delivery metadata while keeping the envelope closed', async () => {
     const envelope = pubsubEnvelope(runRequest());
+    const message = envelope['message'] as Record<string, unknown>;
     const response = await app.inject({
       method: 'POST',
       url: '/internal/message-digests/pubsub/run',
-      payload: { ...envelope, deliveryAttempt: 1 },
+      payload: {
+        ...envelope,
+        deliveryAttempt: 1,
+        message: {
+          ...message,
+          attributes: { intexuraos_operator_replay: 'synthetic-hotfix' },
+          orderingKey: 'synthetic-ordering-key',
+        },
+      },
     });
 
     expect(response.statusCode).toBe(200);
@@ -533,6 +542,32 @@ describe('Message Digest internal routes', () => {
         method: 'POST',
         url: '/internal/message-digests/pubsub/run',
         payload: { ...envelope, deliveryAttempt: invalidDeliveryAttempt },
+      });
+      expect(invalid.statusCode).toBe(400);
+    }
+
+    const unexpectedMessageField = await app.inject({
+      method: 'POST',
+      url: '/internal/message-digests/pubsub/run',
+      payload: { ...envelope, message: { ...message, unexpectedField: 1 } },
+    });
+    expect(unexpectedMessageField.statusCode).toBe(400);
+
+    const tooManyAttributes = Object.fromEntries(
+      Array.from({ length: 101 }, (_, index) => [`key-${String(index)}`, 'value'])
+    );
+    for (const invalidMessage of [
+      { ...message, attributes: { invalid: { nested: true } } },
+      { ...message, orderingKey: { nested: true } },
+      { ...message, attributes: tooManyAttributes },
+      { ...message, attributes: { ['k'.repeat(257)]: 'value' } },
+      { ...message, attributes: { key: 'v'.repeat(1_025) } },
+      { ...message, orderingKey: 'o'.repeat(1_025) },
+    ]) {
+      const invalid = await app.inject({
+        method: 'POST',
+        url: '/internal/message-digests/pubsub/run',
+        payload: { ...envelope, message: invalidMessage },
       });
       expect(invalid.statusCode).toBe(400);
     }
