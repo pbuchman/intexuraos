@@ -189,7 +189,7 @@ setup_ssh() {
 }
 
 ssh_command_string() {
-  printf 'ssh -i %q -p %q -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%q' \
+  printf 'ssh -i %q -p %q -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=%q' \
     "${KEY_FILE}" \
     "${SSH_PORT}" \
     "${KNOWN_HOSTS_FILE}"
@@ -275,6 +275,8 @@ run_remote_at() {
   ssh -i "${KEY_FILE}" \
     -p "${SSH_PORT}" \
     -o BatchMode=yes \
+    -o ServerAliveInterval=15 \
+    -o ServerAliveCountMax=8 \
     -o StrictHostKeyChecking=yes \
     -o UserKnownHostsFile="${KNOWN_HOSTS_FILE}" \
     "${REMOTE_USER}@${HETZNER_PROD_HOST}" \
