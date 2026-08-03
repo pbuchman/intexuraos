@@ -3,7 +3,7 @@ import { safeMessageDigestPromptJson } from './aggregatePrompt.js';
 import type { MessageDigestRepairPromptInput } from './types.js';
 
 export const MESSAGE_DIGEST_REPAIR_PROMPT = {
-  version: '1.1.0',
+  version: '2.0.0',
   promptType: 'message-digest-repair',
 } as const;
 
@@ -39,15 +39,17 @@ ${safeMessageDigestPromptJson(allowedEvidenceMessageRefs)}
 </allowed_evidence_message_refs_json>
 
 Return ONLY one strict JSON object with exactly:
-{ "headline", "summaryMarkdown", "evidenceMessageRefs", "continuityMemoryMarkdown" }
+{ "headline", "summaryMarkdown", "whatsappPreview", "evidenceMessageRefs", "continuityMemoryMarkdown" }
 
 Requirements:
 1. Preserve only facts justified by the original prompt's current-window evidence.
 2. headline is non-empty and at most 200 characters.
 3. summaryMarkdown is at most 12000 characters.
-4. continuityMemoryMarkdown is at most 8000 characters.
-5. evidenceMessageRefs contains no duplicates and only values from the allowed list above.
-6. Do not output Markdown or HTML links or images. The application owns every actionable link.
-7. Do not add application-owned metadata or additional keys.
-8. Output valid JSON without markdown fences, comments, or trailing commas.`;
+4. whatsappPreview has 1 to at most 3 importance-ordered sections. Every icon is exactly one of: attention, people, location, decision, question, sentiment, update. Every title is non-empty and at most 48 characters. Every section has 1 or 2 complete, non-empty items of at most 240 characters each.
+5. continuityMemoryMarkdown is at most 8000 characters.
+6. evidenceMessageRefs contains no duplicates and only values from the allowed list above.
+7. Never copy an evidence messageRef into headline, summaryMarkdown, whatsappPreview, or continuityMemoryMarkdown.
+8. Do not output Markdown or HTML links or images. The application owns every actionable link.
+9. Do not add application-owned metadata or additional keys.
+10. Output valid JSON without markdown fences, comments, or trailing commas.`;
 }

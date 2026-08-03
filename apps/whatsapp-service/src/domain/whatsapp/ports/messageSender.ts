@@ -27,11 +27,25 @@ export interface WhatsAppInteractiveButton {
   };
 }
 
-export interface WhatsAppMessageDigestTemplate {
+export interface WhatsAppMessageDigestV1Template {
+  kind?: 'message_digest_v1';
   digestName: string;
   digestExcerpt: string;
   runUrlSuffix: string;
 }
+
+export interface WhatsAppMessageDigestV2Template {
+  kind: 'message_digest_v2';
+  digestName: string;
+  windowLabel: string;
+  headline: string;
+  digestBody: string;
+  runUrlSuffix: string;
+}
+
+export type WhatsAppMessageDigestTemplate =
+  | WhatsAppMessageDigestV1Template
+  | WhatsAppMessageDigestV2Template;
 
 /**
  * Port for sending WhatsApp messages.

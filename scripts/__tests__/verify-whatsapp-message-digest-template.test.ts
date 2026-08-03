@@ -21,15 +21,15 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
 
     expect(result).toEqual({
       ok: true,
-      templateName: 'intexuraos_message_digest_v1',
-      language: 'en_US',
+      templateName: 'intexuraos_message_digest_v3',
+      language: 'pl',
       status: 'APPROVED',
     });
     expect(calls).toHaveLength(1);
     const requestUrl = new URL(calls[0]?.url ?? '');
     expect(requestUrl.origin).toBe('https://graph.facebook.com');
     expect(requestUrl.pathname).toBe(`/v22.0/${WABA_ID}/message_templates`);
-    expect(requestUrl.searchParams.get('name')).toBe('intexuraos_message_digest_v1');
+    expect(requestUrl.searchParams.get('name')).toBe('intexuraos_message_digest_v3');
     expect(requestUrl.searchParams.get('fields')).toBe('name,language,status,category,components');
     expect(new Headers(calls[0]?.init?.headers).get('authorization')).toBe(
       `Bearer ${ACCESS_TOKEN}`
@@ -38,7 +38,7 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
     expect(calls[0]?.init?.signal).toBeInstanceOf(AbortSignal);
     expect(JSON.stringify(result)).not.toContain(ACCESS_TOKEN);
     expect(JSON.stringify(result)).not.toContain(WABA_ID);
-    expect(JSON.stringify(result)).not.toContain('Your digest');
+    expect(JSON.stringify(result)).not.toContain('Szczegóły');
   });
 
   it.each([
@@ -46,7 +46,7 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
     ['duplicate', { data: [validTemplate(), validTemplate()] }],
     ['pending', { data: [validTemplate({ status: 'PENDING' })] }],
     ['rejected', { data: [validTemplate({ status: 'REJECTED' })] }],
-    ['wrong language', { data: [validTemplate({ language: 'pl' })] }],
+    ['wrong language', { data: [validTemplate({ language: 'en_US' })] }],
     ['wrong category', { data: [validTemplate({ category: 'MARKETING' })] }],
     [
       'wrong body variables',
@@ -66,7 +66,7 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
             components: [
               {
                 type: 'BODY',
-                text: 'A different digest shell for {{1}}.\n\n{{2}}\n\nOpen it.',
+                text: 'Inny szablon {{1}} {{2}} {{3}} {{4}}.',
               },
               validButtons(),
             ],
@@ -79,7 +79,7 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
       {
         data: [
           validTemplate({
-            components: [validBody(), validButtons({ text: 'Open' })],
+            components: [validBody(), validButtons({ text: 'Otwórz' })],
           }),
         ],
       },
@@ -254,8 +254,8 @@ function jsonResponse(body: unknown): Response {
 
 function validTemplate(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    name: 'intexuraos_message_digest_v1',
-    language: 'en_US',
+    name: 'intexuraos_message_digest_v3',
+    language: 'pl',
     status: 'APPROVED',
     category: 'UTILITY',
     components: [validBody(), validButtons()],
@@ -266,7 +266,7 @@ function validTemplate(overrides: Record<string, unknown> = {}): Record<string, 
 function validBody(): Record<string, unknown> {
   return {
     type: 'BODY',
-    text: 'Your WhatsApp digest is ready: {{1}}\n\n{{2}}\n\nOpen the full digest for details.',
+    text: '📌 {{1}}\nZaplanowane podsumowanie rozmów jest gotowe.\nOkres: {{2}}\n\n*{{3}}*\n\n{{4}}\n\nPełne szczegóły poniżej ↓',
   };
 }
 
@@ -276,7 +276,7 @@ function validButtons(overrides: Record<string, unknown> = {}): Record<string, u
     buttons: [
       {
         type: 'URL',
-        text: 'View digest',
+        text: 'Otwórz podsumowanie',
         url: 'https://intexuraos.cloud/{{1}}',
         example: ['#/whatsapp/message-digests/md_definition_example/history/mdr_run_example'],
         ...overrides,

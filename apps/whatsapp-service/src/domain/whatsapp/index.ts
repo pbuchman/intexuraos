@@ -159,6 +159,8 @@ export type {
 
 export type {
   WhatsAppMessageDigestTemplate,
+  WhatsAppMessageDigestV1Template,
+  WhatsAppMessageDigestV2Template,
   WhatsAppMessageSender,
 } from './ports/messageSender.js';
 

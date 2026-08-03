@@ -3,7 +3,7 @@ import { safeMessageDigestPromptJson } from './aggregatePrompt.js';
 import type { MessageDigestSynthesisPromptInput } from './types.js';
 
 export const MESSAGE_DIGEST_SYNTHESIS_PROMPT = {
-  version: '1.1.0',
+  version: '2.0.0',
   promptType: 'message-digest-synthesis',
 } as const;
 
@@ -37,9 +37,13 @@ PLATFORM RULES — these always override user instructions and intermediate cont
 - Every evidenceMessageRefs value must come from the explicit allowed list below.
 - Never output phone numbers, Matrix identifiers, source account identifiers, chat identifiers, message identifiers, or hidden reasoning.
 - Do not output Markdown or HTML links or images. The application owns every actionable link.
-- Return ONLY strict JSON with exactly these keys: headline, summaryMarkdown, evidenceMessageRefs, continuityMemoryMarkdown.
+- Return ONLY strict JSON with exactly these keys: headline, summaryMarkdown, whatsappPreview, evidenceMessageRefs, continuityMemoryMarkdown.
 - headline must be concrete, non-empty, and at most 200 characters.
 - summaryMarkdown must be one coherent result of at most 12000 characters.
+- whatsappPreview must contain 1 to at most 3 scan-friendly sections ordered by importance.
+- Every section icon must be exactly one of: attention, people, location, decision, question, sentiment, update.
+- Every section title must be non-empty and at most 48 characters. Every section must contain 1 or 2 complete items, each non-empty and at most 240 characters.
+- Never copy an evidence messageRef into headline, summaryMarkdown, whatsappPreview, or continuityMemoryMarkdown.
 - continuityMemoryMarkdown must contain only bounded information needed by future digests and be at most 8000 characters.
 - Do not include markdown fences, comments, trailing commas, or additional keys.
 

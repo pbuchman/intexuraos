@@ -1098,6 +1098,69 @@ describe('Pub/Sub Routes', () => {
       expect(messageDigestDeliveryAuthorizationClient.release).toHaveBeenCalledTimes(2);
     });
 
+    it('accepts a bounded v2 digest and preserves its scan-friendly hierarchy for the sender', async () => {
+      await userMappingRepository.saveMapping('user-digest-v2', ['+48111222333']);
+      const presentation = {
+        kind: 'message_digest_v2',
+        digestName: 'Grupa wędkarska SKOOL',
+        windowLabel: '27 lip, 09:00 – 27 lip, 14:00',
+        headline: 'Wyjazd wymaga potwierdzenia',
+        digestBody: '🔴 WYMAGA UWAGI\nPotwierdź udział.\n\n📍 ZAWODY\nPod Krakowem.',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_v2/history/mdr_run_v2',
+      };
+      const event = createMessageDigestSendEvent('user-digest-v2', 'v2', { presentation });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/send-message',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: createPubSubBody(event),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(messageSender.getSentMessages()).toEqual([
+        {
+          phoneNumber: '48111222333',
+          message: presentation.digestBody,
+          digestTemplate: presentation,
+        },
+      ]);
+      expect(outboundMessageRepository.getMessages()[0]).not.toHaveProperty('messageText');
+    });
+
+    it('rejects malformed v2 digest fields before resolving or sending to a phone number', async () => {
+      await userMappingRepository.saveMapping('user-digest-v2-invalid', ['+48111222333']);
+      const validPresentation = {
+        kind: 'message_digest_v2',
+        digestName: 'n'.repeat(80),
+        windowLabel: 'w'.repeat(80),
+        headline: 'h'.repeat(200),
+        digestBody: `A\n\n${'b'.repeat(573)}`,
+        runUrlSuffix:
+          '#/whatsapp/message-digests/md_definition_v2_invalid/history/mdr_run_v2_invalid',
+      };
+      for (const [field, value] of [
+        ['digestName', 'n'.repeat(81)],
+        ['windowLabel', 'w'.repeat(81)],
+        ['headline', 'h'.repeat(201)],
+        ['digestBody', 'b'.repeat(577)],
+        ['digestBody', 'unsafe\rbreak'],
+      ] as const) {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/internal/whatsapp/pubsub/send-message',
+          headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+          payload: createPubSubBody(
+            createMessageDigestSendEvent('user-digest-v2-invalid', 'v2_invalid', {
+              presentation: { ...validPresentation, [field]: value },
+            })
+          ),
+        });
+        expect(response.statusCode, `${field}:${String(value).slice(0, 20)}`).toBe(200);
+      }
+      expect(messageSender.getSentMessages()).toEqual([]);
+    });
+
     it('authorizes a Message Digest after preflight and immediately before receipt reservation', async () => {
       await userMappingRepository.saveMapping('user-digest-authorized', ['+48111222333']);
       const mapping = vi.spyOn(userMappingRepository, 'getMapping');

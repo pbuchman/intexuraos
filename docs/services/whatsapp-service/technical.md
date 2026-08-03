@@ -90,7 +90,7 @@ Every internal route must call `logIncomingRequest()` before auth validation.
 
 `/internal/whatsapp/delivery-readiness/get` inspects the user's mapping in stored order. It reports `ready` with only a masked primary number, or `mapping_missing`, `disconnected`, or `delivery_disabled`. The actual destination is always the first mapped phone number; callers cannot override it.
 
-Message Digest Pub/Sub events use `kind: message_digest_v1`, the approved `intexuraos_message_digest_v1` Meta template, two bounded body parameters, a validated run deep-link suffix, and `message-digest:<runId>` idempotency. Before provider execution, WhatsApp Service acquires a run-bound authorization from Message Digest Service. Delivery receipts distinguish `pending`, `sent`, `ambiguous`, and definitive `failed`; retry authorization requires the identical payload digest and rejects ambiguous state.
+New Message Digest Pub/Sub events use `kind: message_digest_v2`, the approved Polish `intexuraos_message_digest_v3` Meta template, four bounded body parameters, deliberate line breaks, a validated run deep-link suffix, and `message-digest:<runId>` idempotency. The consumer retains v1 decoding only for already-frozen outbox deliveries. Before provider execution, WhatsApp Service acquires a run-bound authorization from Message Digest Service. Delivery receipts distinguish `pending`, `sent`, `ambiguous`, and definitive `failed`; retry authorization requires the identical payload digest and rejects ambiguous state.
 
 ## Event Contract
 

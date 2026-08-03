@@ -21,6 +21,7 @@ import type {
   TranscriptionCompletedEvent,
   TranscriptionState,
   WhatsAppMessage,
+  WhatsAppMessageDigestTemplate,
   WebhookProcessEvent,
 } from '../domain/whatsapp/index.js';
 import {
@@ -101,6 +102,15 @@ const MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS =
   MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS -
   MESSAGE_DIGEST_TEMPLATE_FIXED_BODY_CODE_POINTS -
   MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS;
+const MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS = 80;
+const MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS = 200;
+const MESSAGE_DIGEST_TEMPLATE_V2_FIXED_BODY_CODE_POINTS = 88;
+const MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS =
+  MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_V2_FIXED_BODY_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS;
 const MESSAGE_DIGEST_EVENT_MESSAGE = 'Message Digest delivery';
 const MESSAGE_DIGEST_RUN_URL_SUFFIX_PATTERN =
   /^#\/whatsapp\/message-digests\/md_[A-Za-z0-9_-]{3,120}\/history\/mdr_[A-Za-z0-9_-]{3,160}$/u;
@@ -113,11 +123,7 @@ type ParsedMessageDigestPresentation =
   | {
       disposition: 'valid';
       value: {
-        template: {
-          digestName: string;
-          digestExcerpt: string;
-          runUrlSuffix: string;
-        };
+        template: WhatsAppMessageDigestTemplate;
         authorization: {
           definitionId: string;
           runId: string;
@@ -150,17 +156,9 @@ function parseMessageDigestPresentation(event: SendMessageEvent): ParsedMessageD
   }
   const record = value as Record<string, unknown>;
   const authorization = authorizationValue as Record<string, unknown>;
+  const template = parseMessageDigestTemplate(record);
   if (
-    Object.keys(record).length !== 4 ||
-    record['kind'] !== 'message_digest_v1' ||
-    !isBoundedMessageDigestTemplateText(
-      record['digestName'],
-      MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS
-    ) ||
-    !isBoundedMessageDigestTemplateText(
-      record['digestExcerpt'],
-      MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS
-    ) ||
+    template === null ||
     typeof record['runUrlSuffix'] !== 'string' ||
     !MESSAGE_DIGEST_RUN_URL_SUFFIX_PATTERN.test(record['runUrlSuffix']) ||
     Object.keys(authorization).length !== 3 ||
@@ -178,16 +176,69 @@ function parseMessageDigestPresentation(event: SendMessageEvent): ParsedMessageD
   return {
     disposition: 'valid',
     value: {
-      template: {
-        digestName: record['digestName'],
-        digestExcerpt: record['digestExcerpt'],
-        runUrlSuffix: record['runUrlSuffix'],
-      },
+      template,
       authorization: {
         definitionId: authorization['definitionId'],
         runId: authorization['runId'],
       },
     },
+  };
+}
+
+function parseMessageDigestTemplate(
+  record: Record<string, unknown>
+): WhatsAppMessageDigestTemplate | null {
+  if (record['kind'] === 'message_digest_v1') {
+    if (
+      Object.keys(record).length !== 4 ||
+      !isBoundedMessageDigestTemplateText(
+        record['digestName'],
+        MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS
+      ) ||
+      !isBoundedMessageDigestTemplateText(
+        record['digestExcerpt'],
+        MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS
+      ) ||
+      typeof record['runUrlSuffix'] !== 'string'
+    ) {
+      return null;
+    }
+    return {
+      digestName: record['digestName'],
+      digestExcerpt: record['digestExcerpt'],
+      runUrlSuffix: record['runUrlSuffix'],
+    };
+  }
+  if (
+    record['kind'] !== 'message_digest_v2' ||
+    Object.keys(record).length !== 6 ||
+    !isBoundedMessageDigestTemplateText(
+      record['digestName'],
+      MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS
+    ) ||
+    !isBoundedMessageDigestTemplateText(
+      record['windowLabel'],
+      MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS
+    ) ||
+    !isBoundedMessageDigestTemplateText(
+      record['headline'],
+      MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS
+    ) ||
+    !isBoundedMessageDigestMultilineText(
+      record['digestBody'],
+      MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS
+    ) ||
+    typeof record['runUrlSuffix'] !== 'string'
+  ) {
+    return null;
+  }
+  return {
+    kind: 'message_digest_v2',
+    digestName: record['digestName'],
+    windowLabel: record['windowLabel'],
+    headline: record['headline'],
+    digestBody: record['digestBody'],
+    runUrlSuffix: record['runUrlSuffix'],
   };
 }
 
@@ -209,6 +260,33 @@ export function isBoundedMessageDigestTemplateText(
       codePoint === 10 ||
       codePoint === 13 ||
       (codePoint >= 0 && codePoint <= 31) ||
+      (codePoint >= 127 && codePoint <= 159) ||
+      (codePoint >= 0x202a && codePoint <= 0x202e) ||
+      (codePoint >= 0x2066 && codePoint <= 0x2069)
+    );
+  });
+}
+
+function isBoundedMessageDigestMultilineText(
+  value: unknown,
+  maxCodePoints: number
+): value is string {
+  if (
+    typeof value !== 'string' ||
+    value === '' ||
+    value.trim() !== value ||
+    Array.from(value).length > maxCodePoints
+  ) {
+    return false;
+  }
+  return !Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) as number;
+    return (
+      codePoint === 13 ||
+      (codePoint >= 0 && codePoint <= 9) ||
+      codePoint === 11 ||
+      codePoint === 12 ||
+      (codePoint >= 14 && codePoint <= 31) ||
       (codePoint >= 127 && codePoint <= 159) ||
       (codePoint >= 0x202a && codePoint <= 0x202e) ||
       (codePoint >= 0x2066 && codePoint <= 0x2069)

@@ -201,9 +201,20 @@ describe('fishing migration Private WhatsApp source port', () => {
 describe('fishing migration replay aggregator', () => {
   it('keeps aggregate, synthesis, and repair prompts byte-identical to the runtime builders', () => {
     const input = aggregateInput();
+    const aggregatePromptInput = {
+      chatType: input.chatType,
+      conversationLabel: input.conversationLabel,
+      windowStart: input.windowStart,
+      windowEnd: input.windowEnd,
+      instructions: input.instructions,
+      continuityMemoryMarkdown: input.continuityMemoryMarkdown,
+      previousSummaries: input.previousSummaries,
+      sourceMessages: input.messages,
+    };
     const aggregate = {
       headline: 'Synthetic headline',
       summaryMarkdown: '- Synthetic fact',
+      whatsappPreview: whatsappPreview('Synthetic fact'),
       evidenceMessageRefs: [SOURCE_REF],
       continuityMemoryMarkdown: 'Synthetic continuity',
     };
@@ -214,9 +225,10 @@ describe('fishing migration replay aggregator', () => {
       allowedEvidenceMessageRefs: [SOURCE_REF],
     };
 
-    expect(buildFishingMigrationAggregatePrompt(input)).toBe(
-      buildMessageDigestAggregatePrompt(input)
-    );
+    const migrationAggregatePrompt = buildFishingMigrationAggregatePrompt(aggregatePromptInput);
+    expect(migrationAggregatePrompt).toContain(SOURCE_REF);
+    expect(migrationAggregatePrompt).toContain('Spotkanie odbędzie się jutro.');
+    expect(migrationAggregatePrompt).toBe(buildMessageDigestAggregatePrompt(aggregatePromptInput));
     expect(
       buildFishingMigrationSynthesisPrompt({
         ...input,
@@ -243,6 +255,7 @@ describe('fishing migration replay aggregator', () => {
           openRouterResponse({
             headline: 'Wędkarskie ustalenia',
             summaryMarkdown: '- Ustalono termin spotkania.',
+            whatsappPreview: whatsappPreview('Ustalono termin spotkania.'),
             evidenceMessageRefs: [SOURCE_REF],
             continuityMemoryMarkdown: 'Termin pozostaje aktualny.',
           })
@@ -264,9 +277,10 @@ describe('fishing migration replay aggregator', () => {
     await expect(aggregate(aggregateInput())).resolves.toEqual({
       headline: 'Wędkarskie ustalenia',
       summaryMarkdown: '- Ustalono termin spotkania.',
+      whatsappPreview: whatsappPreview('Ustalono termin spotkania.'),
       evidenceMessageRefs: [SOURCE_REF],
       continuityMemoryMarkdown: 'Termin pozostaje aktualny.',
-      promptVersion: 'message-digest-aggregate@2.1.0',
+      promptVersion: 'message-digest-aggregate@3.0.0',
       model: 'anthropic/synthetic-model',
       usage: { inputTokens: 100, outputTokens: 25, totalTokens: 125, costUsd: 0.0042 },
     });
@@ -330,6 +344,7 @@ describe('fishing migration replay aggregator', () => {
             openRouterResponse({
               headline: 'Wędkarskie ustalenia',
               summaryMarkdown: '- Ustalono termin spotkania.',
+              whatsappPreview: whatsappPreview('Ustalono termin spotkania.'),
               evidenceMessageRefs: [SOURCE_REF],
               continuityMemoryMarkdown: 'Termin pozostaje aktualny.',
             })
@@ -367,18 +382,21 @@ describe('fishing migration replay aggregator', () => {
       {
         headline: 'Pierwsza część',
         summaryMarkdown: '- Fakt z pierwszej części.',
+        whatsappPreview: whatsappPreview('Fakt z pierwszej części.'),
         evidenceMessageRefs: [SOURCE_REF],
         continuityMemoryMarkdown: 'Pierwsza ciągłość.',
       },
       {
         headline: 'Druga część',
         summaryMarkdown: '- Fakt z drugiej części.',
+        whatsappPreview: whatsappPreview('Fakt z drugiej części.'),
         evidenceMessageRefs: [SOURCE_REF_2],
         continuityMemoryMarkdown: 'Druga ciągłość.',
       },
       {
         headline: 'Cały dzień',
         summaryMarkdown: '- Oba fakty zostały połączone.',
+        whatsappPreview: whatsappPreview('Oba fakty zostały połączone.'),
         evidenceMessageRefs: [SOURCE_REF, SOURCE_REF_2],
         continuityMemoryMarkdown: 'Połączona ciągłość.',
       },
@@ -407,7 +425,7 @@ describe('fishing migration replay aggregator', () => {
     await expect(aggregate(input)).resolves.toMatchObject({
       headline: 'Cały dzień',
       evidenceMessageRefs: [SOURCE_REF, SOURCE_REF_2],
-      promptVersion: 'message-digest-synthesis@1.1.0',
+      promptVersion: 'message-digest-synthesis@2.0.0',
       usage: { inputTokens: 300, outputTokens: 75, totalTokens: 375, costUsd: 0.0126 },
     });
     expect(openRouterCalls).toBe(3);
@@ -419,12 +437,14 @@ describe('fishing migration replay aggregator', () => {
       openRouterResponse({
         headline: 'Invalid',
         summaryMarkdown: '- Invalid unknown evidence.',
+        whatsappPreview: whatsappPreview('Invalid unknown evidence.'),
         evidenceMessageRefs: ['f'.repeat(64)],
         continuityMemoryMarkdown: '',
       }),
       openRouterResponse({
         headline: 'Still invalid',
         summaryMarkdown: 'https://unsafe.example',
+        whatsappPreview: whatsappPreview('Still invalid.'),
         evidenceMessageRefs: [SOURCE_REF],
         continuityMemoryMarkdown: '',
       }),
@@ -1063,6 +1083,12 @@ function openRouterResponse(aggregate: Record<string, unknown>): Record<string, 
       total_tokens: 125,
       cost: 0.0042,
     },
+  };
+}
+
+function whatsappPreview(item: string): Record<string, unknown> {
+  return {
+    sections: [{ icon: 'update', title: 'Najważniejsze', items: [item] }],
   };
 }
 

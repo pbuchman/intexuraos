@@ -652,6 +652,52 @@ describe('WhatsAppCloudApiSender', () => {
       });
     });
 
+    it('sends the Polish scan-friendly v2 Utility template with four ordered body parameters', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+      const v2Presentation = {
+        kind: 'message_digest_v2' as const,
+        digestName: 'Grupa wędkarska SKOOL',
+        windowLabel: '27 lip, 09:00 – 27 lip, 14:00',
+        headline: 'Wyjazd wymaga potwierdzenia',
+        digestBody: '🔴 WYMAGA UWAGI\nPotwierdź udział.\n\n📍 ZAWODY\nPod Krakowem.',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      };
+
+      await expect(
+        sender.sendMessageDigestTemplate('+48123456789', v2Presentation)
+      ).resolves.toEqual({ ok: true, value: { wamid: 'wamid.digest-v2' } });
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(callArgs[1].body as string)).toMatchObject({
+        type: 'template',
+        template: {
+          name: 'intexuraos_message_digest_v3',
+          language: { code: 'pl' },
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: v2Presentation.digestName },
+                { type: 'text', text: v2Presentation.windowLabel },
+                { type: 'text', text: v2Presentation.headline },
+                { type: 'text', text: v2Presentation.digestBody },
+              ],
+            },
+            {
+              type: 'button',
+              sub_type: 'url',
+              index: '0',
+              parameters: [{ type: 'text', text: v2Presentation.runUrlSuffix }],
+            },
+          ],
+        },
+      });
+    });
+
     it('keeps an already-normalized phone number unchanged', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,

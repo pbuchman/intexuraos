@@ -19,7 +19,7 @@ describe('MessageDigestAggregator', () => {
       aggregate: null,
       metadata: {
         effectiveMessageCount: 0,
-        promptVersion: 'message-digest-aggregate@2.1.0',
+        promptVersion: 'message-digest-aggregate@3.0.0',
         model: 'or:synthetic/digest-model',
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
       },
@@ -43,7 +43,7 @@ describe('MessageDigestAggregator', () => {
         },
         metadata: {
           effectiveMessageCount: 1,
-          promptVersion: 'message-digest-aggregate@2.1.0',
+          promptVersion: 'message-digest-aggregate@3.0.0',
           model: 'or:synthetic/digest-model',
           usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
         },
@@ -75,12 +75,33 @@ describe('MessageDigestAggregator', () => {
           required: [
             'headline',
             'summaryMarkdown',
+            'whatsappPreview',
             'evidenceMessageRefs',
             'continuityMemoryMarkdown',
           ],
           properties: {
             headline: { type: 'string' },
             summaryMarkdown: { type: 'string' },
+            whatsappPreview: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['sections'],
+              properties: {
+                sections: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    required: ['icon', 'title', 'items'],
+                    properties: {
+                      icon: { type: 'string' },
+                      title: { type: 'string' },
+                      items: { type: 'array', items: { type: 'string' } },
+                    },
+                  },
+                },
+              },
+            },
             evidenceMessageRefs: { type: 'array', items: { type: 'string' } },
             continuityMemoryMarkdown: { type: 'string' },
           },
@@ -135,7 +156,7 @@ describe('MessageDigestAggregator', () => {
       },
       metadata: {
         effectiveMessageCount: 2,
-        promptVersion: 'message-digest-synthesis@1.1.0',
+        promptVersion: 'message-digest-synthesis@2.0.0',
         usage: { inputTokens: 30, outputTokens: 15, totalTokens: 45, costUsd: 0.003 },
       },
     });
@@ -165,7 +186,7 @@ describe('MessageDigestAggregator', () => {
       ok: true,
       aggregate: { headline: 'Repaired synthesis', evidenceMessageRefs: [REF_A, REF_B] },
       metadata: {
-        promptVersion: 'message-digest-repair@1.1.0',
+        promptVersion: 'message-digest-repair@2.0.0',
         usage: { inputTokens: 40, outputTokens: 20, totalTokens: 60, costUsd: 0.004 },
       },
     });
@@ -240,7 +261,7 @@ describe('MessageDigestAggregator', () => {
     expect(result).toMatchObject({
       ok: true,
       aggregate: { evidenceMessageRefs: [REF_A] },
-      metadata: { promptVersion: 'message-digest-repair@1.1.0' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
     });
   });
 
@@ -256,7 +277,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: '- Safe repaired fact.' },
-      metadata: { promptVersion: 'message-digest-repair@1.1.0' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
     expect(harness.generate.mock.calls[1]?.[1]).toMatchObject({
@@ -291,7 +312,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'Container link removed.' },
-      metadata: { promptVersion: 'message-digest-repair@1.1.0' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -312,7 +333,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'Unsafe construct removed.' },
-      metadata: { promptVersion: 'message-digest-repair@1.1.0' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -341,7 +362,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'No generated links remain.' },
-      metadata: { promptVersion: 'message-digest-repair@1.1.0' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -375,6 +396,72 @@ describe('MessageDigestAggregator', () => {
     expect(harness.generate).toHaveBeenCalledTimes(2);
     expect(harness.generate.mock.calls[1]?.[0]).toContain(REF_A);
     expect(harness.generate.mock.calls[1]?.[0]).not.toContain(`"${REF_C}"`);
+  });
+
+  it.each([
+    { summaryMarkdown: `Visible [${REF_A}]` },
+    { headline: `Visible ${REF_A}` },
+    { headline: `Historic ${REF_B}` },
+    { continuityMemoryMarkdown: `Invented ${'AB'.repeat(32)}` },
+    {
+      whatsappPreview: {
+        sections: [{ icon: 'update' as const, title: 'Najważniejsze', items: [`Fact ${REF_A}`] }],
+      },
+    },
+    { continuityMemoryMarkdown: `Remember ${REF_A}` },
+  ])('repairs an evidence reference leaked into user-visible content', async (unsafePatch) => {
+    const harness = createHarness([
+      validResponse(REF_A, unsafePatch),
+      validResponse(REF_A, { summaryMarkdown: 'Safe repaired fact.' }),
+    ]);
+
+    await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
+      ok: true,
+      aggregate: { summaryMarkdown: 'Safe repaired fact.' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+    });
+    expect(harness.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    'Open https://tracking.invalid now.',
+    '[Open](/private)',
+    '![Pixel](/tracking.png)',
+    '[Open][private]\n\n[private]: /private',
+  ])('repairs an actionable link construct in the WhatsApp preview: %s', async (unsafe) => {
+    const harness = createHarness([
+      validResponse(REF_A, {
+        whatsappPreview: {
+          sections: [{ icon: 'update', title: 'Najważniejsze', items: [unsafe] }],
+        },
+      }),
+      validResponse(REF_A),
+    ]);
+
+    await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
+      ok: true,
+      aggregate: { whatsappPreview: { sections: [{ items: ['Concrete summary.'] }] } },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+    });
+    expect(harness.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    'Open https://tracking.invalid now.',
+    '[Open](/private)',
+    '![Pixel](/tracking.png)',
+  ])('repairs an actionable link construct in the WhatsApp headline: %s', async (unsafe) => {
+    const harness = createHarness([
+      validResponse(REF_A, { headline: unsafe }),
+      validResponse(REF_A),
+    ]);
+
+    await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
+      ok: true,
+      aggregate: { headline: 'Concrete headline' },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+    });
+    expect(harness.generate).toHaveBeenCalledTimes(2);
   });
 
   it('fails before an LLM call when the source or one message exceeds its explicit budget', async () => {
@@ -492,6 +579,9 @@ describe('MessageDigestAggregator', () => {
       JSON.stringify({
         headline: `Safe ${unsafe} headline`,
         summaryMarkdown: `<tag>${unsafe}</tag>`,
+        whatsappPreview: {
+          sections: [{ icon: 'update', title: `Safe ${unsafe}`, items: [`Fact ${unsafe}`] }],
+        },
         evidenceMessageRefs: [REF_A],
         continuityMemoryMarkdown: `<memory>${unsafe}</memory>`,
       }),
@@ -504,9 +594,42 @@ describe('MessageDigestAggregator', () => {
       aggregate: {
         headline: 'Safe headline',
         summaryMarkdown: '&lt;tag&gt;&lt;/tag&gt;',
+        whatsappPreview: {
+          sections: [{ icon: 'update', title: 'Safe', items: ['Fact'] }],
+        },
         continuityMemoryMarkdown: '&lt;memory&gt;&lt;/memory&gt;',
       },
     });
+  });
+
+  it.each([
+    ['missing sections', {}],
+    ['non-object section', { sections: [null] }],
+    [
+      'non-array items',
+      { sections: [{ icon: 'update', title: 'Najważniejsze', items: 'Concrete summary.' }] },
+    ],
+    [
+      'non-string title',
+      { sections: [{ icon: 'update', title: 42, items: ['Concrete summary.'] }] },
+    ],
+    [
+      'non-string item',
+      { sections: [{ icon: 'update', title: 'Najważniejsze', items: [42] }] },
+    ],
+  ])('repairs a structurally malformed WhatsApp preview: %s', async (_label, whatsappPreview) => {
+    const initial = JSON.parse(validResponse(REF_A)) as Record<string, unknown>;
+    const harness = createHarness([
+      JSON.stringify({ ...initial, whatsappPreview }),
+      validResponse(REF_A),
+    ]);
+
+    await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
+      ok: true,
+      aggregate: { whatsappPreview: { sections: [{ items: ['Concrete summary.'] }] } },
+      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+    });
+    expect(harness.generate).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an invalid synthesized aggregate and preserves bounded synthesized continuity', async () => {
@@ -616,12 +739,22 @@ function validResponse(
   overrides: {
     headline?: string;
     summaryMarkdown?: string;
+    whatsappPreview?: {
+      sections: {
+        icon: 'attention' | 'people' | 'location' | 'decision' | 'question' | 'sentiment' | 'update';
+        title: string;
+        items: string[];
+      }[];
+    };
     continuityMemoryMarkdown?: string;
   } = {}
 ): string {
   return JSON.stringify({
     headline: overrides.headline ?? 'Concrete headline',
     summaryMarkdown: overrides.summaryMarkdown ?? 'Concrete summary.',
+    whatsappPreview: overrides.whatsappPreview ?? {
+      sections: [{ icon: 'update', title: 'Najważniejsze', items: ['Concrete summary.'] }],
+    },
     evidenceMessageRefs: Array.isArray(evidenceRef) ? evidenceRef : [evidenceRef],
     continuityMemoryMarkdown:
       overrides.continuityMemoryMarkdown ?? 'Remember the concrete follow-up.',

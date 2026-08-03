@@ -1,13 +1,18 @@
 import { createHash } from 'node:crypto';
+import {
+  MESSAGE_DIGEST_EVENT_MESSAGE,
+  MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS,
+} from '@intexuraos/whatsapp-pubsub-client';
+import type { MessageDigestWhatsAppPreview } from '@intexuraos/llm-prompts';
 import { describe, expect, it } from 'vitest';
-import { MESSAGE_DIGEST_EVENT_MESSAGE } from '@intexuraos/whatsapp-pubsub-client';
 import type { MessageDigestRun } from '../../domain/models/messageDigestRun.js';
 import { formatWhatsAppDigest } from './formatWhatsAppDigest.js';
 
 describe('formatWhatsAppDigest', () => {
-  it('builds the bounded primary-user template event with exact run suffix', () => {
+  it('builds a Polish scan-friendly v2 template event with exact run suffix', () => {
     const result = formatWhatsAppDigest({
       run: completedRun(),
+      preview: fishingPreview(),
       webAppUrl: 'https://intexuraos.cloud/',
     });
 
@@ -21,9 +26,21 @@ describe('formatWhatsAppDigest', () => {
           correlationId: 'mdr_run_001',
           timestamp: '2026-07-27T12:02:00.000Z',
           presentation: {
-            kind: 'message_digest_v1',
+            kind: 'message_digest_v2',
             digestName: 'Fishing daily',
-            digestExcerpt: 'Meet at the lake at 07:00. Bring the nets.',
+            windowLabel: '27 lip, 09:00 – 27 lip, 14:00',
+            headline: 'Jutrzejsze spotkanie ustalone',
+            digestBody: [
+              '🔴 WYMAGA UWAGI',
+              'Potwierdź udział Michałowi.',
+              'Na liście: 8 osób · Termin: nie podano',
+              '',
+              '👥 NOWE POTWIERDZENIA',
+              'Ireneusz, Mateusz, Adam i Tomasz',
+              '',
+              '📍 ZAWODY',
+              'Pod Krakowem · Szczegóły na Skoolu',
+            ].join('\n'),
             runUrlSuffix:
               '#/whatsapp/message-digests/md_definition_001/history/mdr_run_001',
           },
@@ -45,181 +62,299 @@ describe('formatWhatsAppDigest', () => {
     expect(result.value.payloadDigest).toBe(
       createHash('sha256').update(result.value.payloadJson, 'utf8').digest('hex')
     );
-    expect(result.value.payloadJson).not.toContain('phone');
     expect(result.value.payloadJson).not.toContain('sourceAccountId');
+    expect(result.value.payloadJson).not.toContain('summaryMarkdown');
   });
 
-  it('normalizes Markdown into a readable bounded template excerpt without source evidence', () => {
+  it('renders the same deterministic hierarchy for a direct-conversation sentiment digest', () => {
     const result = formatWhatsAppDigest({
       run: completedRun({
-        summaryMarkdown: [
-          '# Plan',
-          '',
-          '- Meet **Anna** at [the lake](https://example.com/private).',
-          '- Bring `two nets`.',
-          '',
-          `Private marker ${'x'.repeat(1_100)} PRIVATE_EVENT_TAIL_SENTINEL`,
-        ].join('\n'),
-        evidenceMessageRefs: ['EVIDENCE_PRIVATE_SENTINEL'],
-        sourceSnapshot: {
-          ...completedRun().sourceSnapshot,
-          sourceAccountId: 'SOURCE_ACCOUNT_PRIVATE_SENTINEL',
-          chatId: 'CHAT_PRIVATE_SENTINEL',
+        sourceSnapshot: { ...completedRun().sourceSnapshot, chatType: 'direct' },
+        headline: 'Nastrój rozmowy poprawił się',
+      }),
+      preview: {
+        sections: [
+          { icon: 'sentiment', title: 'Sentyment', items: ['Od napięcia do spokojnego tonu.'] },
+          { icon: 'decision', title: 'Ustalenie', items: ['Rozmowa będzie kontynuowana jutro.'] },
+        ],
+      },
+      webAppUrl: 'https://intexuraos.cloud',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        event: {
+          presentation: {
+            kind: 'message_digest_v2',
+            headline: 'Nastrój rozmowy poprawił się',
+            digestBody:
+              '💬 SENTYMENT\nOd napięcia do spokojnego tonu.\n\n✅ USTALENIE\nRozmowa będzie kontynuowana jutro.',
+          },
         },
-      }),
-      webAppUrl: 'https://intexuraos.cloud',
+      },
     });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error(result.code);
-    expect(result.value.event.presentation).toMatchObject({
-      kind: 'message_digest_v1',
-      digestName: 'Fishing daily',
-      digestExcerpt: expect.stringMatching(
-        /^Plan Meet Anna at the lake\. Bring two nets\. Private marker/u
-      ),
-    });
-    if (result.value.event.presentation?.kind !== 'message_digest_v1') {
-      throw new Error('Expected Message Digest presentation');
-    }
-    expect(Array.from(result.value.event.presentation.digestExcerpt).length).toBe(876);
-    expect(result.value.event.presentation.digestExcerpt.endsWith('…')).toBe(true);
-    expect(JSON.stringify(result.value.event.presentation)).not.toContain(
-      'EVIDENCE_PRIVATE_SENTINEL'
-    );
-    expect(JSON.stringify(result.value.event.presentation)).not.toContain(
-      'SOURCE_ACCOUNT_PRIVATE_SENTINEL'
-    );
-    expect(JSON.stringify(result.value.event.presentation)).not.toContain('CHAT_PRIVATE_SENTINEL');
-    expect(result.value.payloadJson).not.toContain('PRIVATE_EVENT_TAIL_SENTINEL');
-    expect(result.value.event.message).toBe(MESSAGE_DIGEST_EVENT_MESSAGE);
   });
 
-  it('uses the bounded configured name without duplicating the generated headline', () => {
-    const headline = `PRIVATE_HEADLINE_SENTINEL ${'h'.repeat(170)}`;
+  it('keeps only complete highest-priority sections when the WhatsApp body budget is exhausted', () => {
+    const omittedSentinel = 'OMITTED_PRIVATE_TAIL_SENTINEL';
     const result = formatWhatsAppDigest({
-      run: completedRun({
-        definitionNameSnapshot: 'n'.repeat(80),
-        headline,
-        summaryMarkdown: 's'.repeat(2_000),
-      }),
+      run: completedRun(),
+      preview: {
+        sections: [
+          {
+            icon: 'attention',
+            title: 'Wymaga uwagi',
+            items: ['A'.repeat(240), 'B'.repeat(240)],
+          },
+          {
+            icon: 'update',
+            title: 'Pozostałe',
+            items: [`${'C'.repeat(200)} ${omittedSentinel}`],
+          },
+        ],
+      },
       webAppUrl: 'https://intexuraos.cloud',
     });
 
     expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error(result.code);
-    expect(result.value.event.presentation).toMatchObject({
-      kind: 'message_digest_v1',
-      digestName: 'n'.repeat(80),
-    });
-    if (result.value.event.presentation?.kind !== 'message_digest_v1') {
-      throw new Error('Expected Message Digest presentation');
+    if (!result.ok || result.value.event.presentation?.kind !== 'message_digest_v2') {
+      throw new Error('Expected Message Digest v2 presentation');
     }
-    expect(Array.from(result.value.event.presentation.digestExcerpt)).toHaveLength(876);
-    expect(result.value.event.presentation.digestExcerpt.endsWith('…')).toBe(true);
-    expect(
-      68 +
-        Array.from(result.value.event.presentation.digestName).length +
-        Array.from(result.value.event.presentation.digestExcerpt).length
-    ).toBe(1_024);
-    expect(result.value.event.message).toBe(MESSAGE_DIGEST_EVENT_MESSAGE);
-    expect(result.value.payloadJson).not.toContain('PRIVATE_HEADLINE_SENTINEL');
+    const { digestBody } = result.value.event.presentation;
+    expect(Array.from(digestBody).length).toBeLessThanOrEqual(
+      MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS
+    );
+    expect(digestBody).toContain('A'.repeat(240));
+    expect(digestBody).toContain('B'.repeat(240));
+    expect(digestBody).not.toContain(omittedSentinel);
+    expect(digestBody).toContain('Więcej w pełnym podsumowaniu');
+    expect(digestBody.endsWith('…')).toBe(true);
   });
 
-  it('keeps the envelope neutral while bounding the Unicode template excerpt', () => {
-    const run = completedRun({
-      headline: 'Headline\u202e',
-      summaryMarkdown: `${'🎣'.repeat(4_000)}\u0000 hidden control`,
-    });
-
-    const result = formatWhatsAppDigest({ run, webAppUrl: 'https://intexuraos.cloud' });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error(result.code);
-    expect(result.value.event.message).toBe(MESSAGE_DIGEST_EVENT_MESSAGE);
-    expect(result.value.payloadJson).not.toContain('\u202e');
-    expect(result.value.payloadJson).not.toContain('\u0000');
-    expect(Array.from(result.value.event.presentation?.digestExcerpt ?? '')).toHaveLength(876);
-    expect(result.value.event.presentation?.digestExcerpt.endsWith('\ud83c')).toBe(false);
-  });
-
-  it('serializes byte-identically for the same immutable run', () => {
-    const input = { run: completedRun(), webAppUrl: 'https://intexuraos.cloud' };
-
-    const first = formatWhatsAppDigest(input);
-    const second = formatWhatsAppDigest(input);
-
-    expect(second).toEqual(first);
-  });
-
-  it('rejects incomplete output and unsafe application URLs without constructing a payload', () => {
+  it('rejects a first section whose localized uppercase expansion exceeds the body budget', () => {
     expect(
       formatWhatsAppDigest({
-        run: completedRun({ generationStatus: 'processing', processingStage: 'aggregating' }),
-        webAppUrl: 'https://intexuraos.cloud',
-      })
-    ).toEqual({ ok: false, code: 'RUN_NOT_COMPLETED' });
-    expect(
-      formatWhatsAppDigest({
-        run: completedRun({ summaryMarkdown: null }),
+        run: completedRun(),
+        preview: {
+          sections: [
+            {
+              icon: 'attention',
+              title: 'ß'.repeat(48),
+              items: ['A'.repeat(240), 'B'.repeat(240)],
+            },
+          ],
+        },
         webAppUrl: 'https://intexuraos.cloud',
       })
     ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
-    expect(formatWhatsAppDigest({ run: completedRun(), webAppUrl: 'javascript:alert(1)' })).toEqual(
-      { ok: false, code: 'INVALID_WEB_APP_URL' }
-    );
   });
 
-  it('rejects each incomplete lifecycle and blank output shape', () => {
+  it.each([
+    ['headline', { run: completedRun({ headline: `Leak ${'b'.repeat(64)}` }), preview: fishingPreview() }],
+    [
+      'section title',
+      {
+        run: completedRun(),
+        preview: {
+          sections: [{ icon: 'update' as const, title: 'b'.repeat(64), items: ['Safe fact.'] }],
+        },
+      },
+    ],
+    [
+      'section item',
+      {
+        run: completedRun(),
+        preview: {
+          sections: [{ icon: 'update' as const, title: 'Updates', items: [`Leak ${'b'.repeat(64)}`] }],
+        },
+      },
+    ],
+  ] as const)('fails closed when an evidence reference reaches the visible %s', (_label, input) => {
+    expect(
+      formatWhatsAppDigest({
+        run: input.run,
+        preview: input.preview,
+        webAppUrl: 'https://intexuraos.cloud',
+      })
+    ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
+  });
+
+  it.each([
+    ['historic lowercase ref', `Historic ${'c'.repeat(64)}`],
+    ['invented uppercase ref', `Invented ${'AB'.repeat(32)}`],
+    ['bare URL', 'Open https://tracking.invalid now.'],
+    ['Markdown link', '[Open](/private)'],
+  ])('fails closed for a %s in a preview item', (_label, unsafe) => {
+    expect(
+      formatWhatsAppDigest({
+        run: completedRun(),
+        preview: {
+          sections: [{ icon: 'update', title: 'Najważniejsze', items: [unsafe] }],
+        },
+        webAppUrl: 'https://intexuraos.cloud',
+      })
+    ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
+  });
+
+  it.each([
+    ['headline URL', { headline: 'Open https://tracking.invalid now.' }],
+    ['headline Markdown link', { headline: '[Open](/private)' }],
+    ['digest name URL', { definitionNameSnapshot: 'https://tracking.invalid' }],
+  ])('fails closed for an actionable link in the %s', (_label, runPatch) => {
+    expect(
+      formatWhatsAppDigest({
+        run: completedRun(runPatch),
+        preview: fishingPreview(),
+        webAppUrl: 'https://intexuraos.cloud',
+      })
+    ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
+  });
+
+  it('sanitizes unsafe controls while preserving deliberate line breaks and Unicode', () => {
+    const result = formatWhatsAppDigest({
+      run: completedRun({ headline: 'Ważne\u202e ustalenie' }),
+      preview: {
+        sections: [
+          {
+            icon: 'question',
+            title: 'Pytanie\u0000',
+            items: ['Czy zabrać 🎣?\u000b'],
+          },
+        ],
+      },
+      webAppUrl: 'https://intexuraos.cloud',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        event: {
+          presentation: {
+            kind: 'message_digest_v2',
+            headline: 'Ważne ustalenie',
+            digestBody: '❓ PYTANIE\nCzy zabrać 🎣?',
+          },
+        },
+      },
+    });
+  });
+
+  it('serializes byte-identically for the same immutable run and preview', () => {
+    const input = {
+      run: completedRun(),
+      preview: fishingPreview(),
+      webAppUrl: 'https://intexuraos.cloud',
+    };
+
+    expect(formatWhatsAppDigest(input)).toEqual(formatWhatsAppDigest(input));
+  });
+
+  it('rejects incomplete output, malformed previews, and unsafe application URLs', () => {
     for (const run of [
-      completedRun({ processingStage: 'aggregating' }),
+      completedRun({ generationStatus: 'processing', processingStage: 'aggregating' }),
       completedRun({ completedAt: null }),
     ]) {
-      expect(formatWhatsAppDigest({ run, webAppUrl: 'https://intexuraos.cloud' })).toEqual({
-        ok: false,
-        code: 'RUN_NOT_COMPLETED',
-      });
+      expect(
+        formatWhatsAppDigest({ run, preview: fishingPreview(), webAppUrl: 'https://intexuraos.cloud' })
+      ).toEqual({ ok: false, code: 'RUN_NOT_COMPLETED' });
     }
-    for (const run of [
-      completedRun({ headline: null }),
-      completedRun({ headline: ' \u0000 ' }),
-      completedRun({ summaryMarkdown: ' \u0000 ' }),
-      completedRun({ summaryMarkdown: '***' }),
+    for (const input of [
+      { run: completedRun({ headline: null }), preview: fishingPreview() },
+      { run: completedRun({ summaryMarkdown: null }), preview: fishingPreview() },
+      { run: completedRun(), preview: { sections: [] } },
+      {
+        run: completedRun(),
+        preview: { sections: [{ icon: 'update' as const, title: ' ', items: ['Fact.'] }] },
+      },
+      {
+        run: completedRun(),
+        preview: { sections: [{ icon: 'update' as const, title: 'Update', items: [] }] },
+      },
     ]) {
-      expect(formatWhatsAppDigest({ run, webAppUrl: 'https://intexuraos.cloud' })).toEqual({
-        ok: false,
-        code: 'INVALID_RUN_OUTPUT',
-      });
+      expect(
+        formatWhatsAppDigest({
+          run: input.run,
+          preview: input.preview,
+          webAppUrl: 'https://intexuraos.cloud',
+        })
+      ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
+    }
+    for (const webAppUrl of [
+      'https://user@example.com',
+      'https://example.com?query=1',
+      'https://example.com/#private',
+      'javascript:alert(1)',
+    ]) {
+      expect(
+        formatWhatsAppDigest({ run: completedRun(), preview: fishingPreview(), webAppUrl })
+      ).toEqual({ ok: false, code: 'INVALID_WEB_APP_URL' });
     }
   });
 
-  it('accepts a clean HTTP origin and rejects credentials, query, hash, and malformed URLs', () => {
+  it.each([
+    ['non-object preview', null],
+    ['non-object section', { sections: [null] }],
+    [
+      'non-string item',
+      { sections: [{ icon: 'update', title: 'Najważniejsze', items: [42] }] },
+    ],
+    [
+      'inherited object icon key',
+      { sections: [{ icon: '__proto__', title: 'Najważniejsze', items: ['Concrete fact.'] }] },
+    ],
+  ])('rejects a structurally malformed %s', (_label, preview) => {
     expect(
-      formatWhatsAppDigest({ run: completedRun(), webAppUrl: 'http://localhost:3000' })
-    ).toMatchObject({ ok: true });
-    for (const webAppUrl of [
-      'https://user@example.com',
-      'https://user:password@example.com',
-      'https://example.com?query=1',
-      'https://example.com/#private',
-      'not-a-url',
-    ]) {
-      expect(formatWhatsAppDigest({ run: completedRun(), webAppUrl })).toEqual({
-        ok: false,
-        code: 'INVALID_WEB_APP_URL',
-      });
-    }
+      formatWhatsAppDigest({
+        run: completedRun(),
+        preview: preview as unknown as MessageDigestWhatsAppPreview,
+        webAppUrl: 'https://intexuraos.cloud',
+      })
+    ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
+  });
+
+  it('rejects an invalid source window timestamp', () => {
+    expect(
+      formatWhatsAppDigest({
+        run: completedRun({ windowStart: 'not-an-instant' }),
+        preview: fishingPreview(),
+        webAppUrl: 'https://intexuraos.cloud',
+      })
+    ).toEqual({ ok: false, code: 'INVALID_RUN_OUTPUT' });
   });
 
   it('maps an invalid outbound event without exposing internal validation', () => {
     expect(
       formatWhatsAppDigest({
         run: completedRun({ userId: '' }),
+        preview: fishingPreview(),
         webAppUrl: 'https://intexuraos.cloud',
       })
     ).toEqual({ ok: false, code: 'INVALID_EVENT' });
   });
 });
+
+function fishingPreview(): MessageDigestWhatsAppPreview {
+  return {
+    sections: [
+      {
+        icon: 'attention',
+        title: 'Wymaga uwagi',
+        items: ['Potwierdź udział Michałowi.', 'Na liście: 8 osób · Termin: nie podano'],
+      },
+      {
+        icon: 'people',
+        title: 'Nowe potwierdzenia',
+        items: ['Ireneusz, Mateusz, Adam i Tomasz'],
+      },
+      {
+        icon: 'location',
+        title: 'Zawody',
+        items: ['Pod Krakowem · Szczegóły na Skoolu'],
+      },
+    ],
+  };
+}
 
 function completedRun(overrides: Partial<MessageDigestRun> = {}): MessageDigestRun {
   return {
@@ -256,12 +391,12 @@ function completedRun(overrides: Partial<MessageDigestRun> = {}): MessageDigestR
       revision: '1',
     },
     scheduleSnapshot: { kind: 'daily', localTime: '09:00', timeZone: 'Europe/Warsaw' },
-    headline: 'Tomorrow morning agreed',
-    summaryMarkdown: '- Meet at the lake at 07:00.\n- Bring the nets.',
+    headline: 'Jutrzejsze spotkanie ustalone',
+    summaryMarkdown: '- Spotkanie odbędzie się jutro.',
     evidenceMessageRefs: ['b'.repeat(64)],
     continuityMemoryMarkdown: 'Meet tomorrow.',
     effectiveMessageCount: 2,
-    promptVersion: '1.0.0',
+    promptVersion: '3.0.0',
     model: 'or:synthetic/model',
     usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
     delivery: {

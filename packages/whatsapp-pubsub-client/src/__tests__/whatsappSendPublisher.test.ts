@@ -5,7 +5,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import pino from 'pino';
 import { buildSendMessageEvent, createWhatsAppSendPublisher } from '../whatsappSendPublisher.js';
-import { MESSAGE_DIGEST_EVENT_MESSAGE, type WhatsAppSendPublisherConfig } from '../types.js';
+import {
+  MESSAGE_DIGEST_EVENT_MESSAGE,
+  MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS,
+  type WhatsAppSendPublisherConfig,
+} from '../types.js';
 
 const mockPublishMessage = vi.fn();
 
@@ -132,6 +136,80 @@ describe('createWhatsAppSendPublisher', () => {
         },
       },
     });
+  });
+
+  it('builds the exact scan-friendly Message Digest v2 presentation with deliberate line breaks', () => {
+    const params = {
+      userId: ' user-123 ',
+      message: MESSAGE_DIGEST_EVENT_MESSAGE,
+      correlationId: 'mdr_run_123',
+      idempotencyKey: 'message-digest:mdr_run_123',
+      timestamp: '2026-07-28T07:00:00.000Z',
+      important: true,
+      presentation: {
+        kind: 'message_digest_v2' as const,
+        digestName: 'Wędkarskie podsumowanie',
+        windowLabel: '27 lip, 09:00 – 27 lip, 14:00',
+        headline: 'Wyjazd wymaga potwierdzenia',
+        digestBody: '🔴 WYMAGA UWAGI\nPotwierdź udział.\n\n📍 ZAWODY\nPod Krakowem.',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      },
+      deliveryAuthorization: {
+        kind: 'message_digest_delivery_v1' as const,
+        definitionId: 'md_definition_123',
+        runId: 'mdr_run_123',
+      },
+      retainMessageText: false,
+    };
+
+    expect(buildSendMessageEvent(params)).toMatchObject({
+      ok: true,
+      value: { event: { presentation: params.presentation } },
+    });
+  });
+
+  it('enforces every Message Digest v2 parameter boundary while allowing LF in its body only', () => {
+    const valid = {
+      userId: 'user-123',
+      message: MESSAGE_DIGEST_EVENT_MESSAGE,
+      correlationId: 'mdr_run_123',
+      idempotencyKey: 'message-digest:mdr_run_123',
+      timestamp: '2026-07-28T07:00:00.000Z',
+      presentation: {
+        kind: 'message_digest_v2' as const,
+        digestName: 'n'.repeat(80),
+        windowLabel: 'w'.repeat(80),
+        headline: 'h'.repeat(200),
+        digestBody: `A\n\n${'b'.repeat(MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS - 3)}`,
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      },
+      deliveryAuthorization: {
+        kind: 'message_digest_delivery_v1' as const,
+        definitionId: 'md_definition_123',
+        runId: 'mdr_run_123',
+      },
+      retainMessageText: false,
+      important: true,
+    };
+
+    expect(Array.from(valid.presentation.digestBody)).toHaveLength(
+      MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS
+    );
+    expect(buildSendMessageEvent(valid)).toMatchObject({ ok: true });
+    for (const [field, value] of [
+      ['digestName', 'n'.repeat(81)],
+      ['windowLabel', 'w'.repeat(81)],
+      ['headline', 'h'.repeat(201)],
+      ['digestBody', 'b'.repeat(MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS + 1)],
+      ['digestBody', 'unsafe\rbreak'],
+    ] as const) {
+      expect(
+        buildUncheckedSendMessageEvent({
+          ...valid,
+          presentation: { ...valid.presentation, [field]: value },
+        })
+      ).toMatchObject({ ok: false });
+    }
   });
 
   it('validates Message Digest template parameter boundaries before publication', () => {
