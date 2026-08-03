@@ -406,8 +406,8 @@ export const internalMessageDigestRoutes: FastifyPluginAsync = (app) => {
             store: services.messageDigestStore,
             whatsappClient: services.messageDigestWhatsAppClient,
             aggregator: services.messageDigestAggregator,
-            formatDelivery: (run) =>
-              formatWhatsAppDigest({ run, webAppUrl: services.config.webAppUrl }),
+            formatDelivery: (run, preview) =>
+              formatWhatsAppDigest({ run, preview, webAppUrl: services.config.webAppUrl }),
             dispatchOutbox: async (outboxId) =>
               await dispatchMessageDigestOutbox(
                 { outboxId, workerId: `delivery:${request.body.message.messageId}` },

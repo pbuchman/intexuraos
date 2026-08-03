@@ -19,6 +19,9 @@ const NOW = '2026-07-27T12:02:00.000Z';
 const OWNER_DIGEST = '8e76b360b0c1703677910871310f75176861a96c854868706fa5f1accda7d18c';
 const REF_A = 'a'.repeat(64);
 const REF_B = 'b'.repeat(64);
+const WHATSAPP_PREVIEW = {
+  sections: [{ icon: 'update' as const, title: 'Najważniejsze', items: ['Two concrete facts.'] }],
+};
 
 describe('processMessageDigestRun', () => {
   it('leases, validates, pages the frozen source, aggregates, commits, and dispatches delivery', async () => {
@@ -68,7 +71,8 @@ describe('processMessageDigestRun', () => {
         generationStatus: 'completed',
         headline: 'Two concrete facts',
         delivery: expect.objectContaining({ status: 'pending' }),
-      })
+      }),
+      WHATSAPP_PREVIEW
     );
     const completion = harness.completeRun.mock.calls[0]?.[0];
     expect(completion).toMatchObject({
@@ -242,6 +246,7 @@ describe('processMessageDigestRun', () => {
       aggregate: {
         headline: 'Two concrete facts',
         summaryMarkdown: '- First fact\n- Second fact',
+        whatsappPreview: WHATSAPP_PREVIEW,
         evidenceMessageRefs: [REF_A, REF_B],
         continuityMemoryMarkdown: 'New continuity.',
       },
@@ -282,6 +287,7 @@ describe('processMessageDigestRun', () => {
       aggregate: {
         headline: 'Late aggregate',
         summaryMarkdown: 'Lease ownership was lost before commit.',
+        whatsappPreview: WHATSAPP_PREVIEW,
         evidenceMessageRefs: [REF_A],
         continuityMemoryMarkdown: 'Late continuity.',
       },
@@ -805,6 +811,7 @@ describe('processMessageDigestRun', () => {
             ? {
                 headline: 'Unexpected',
                 summaryMarkdown: 'Unexpected',
+                whatsappPreview: WHATSAPP_PREVIEW,
                 evidenceMessageRefs: [],
                 continuityMemoryMarkdown: 'Unexpected',
               }
@@ -999,6 +1006,7 @@ function buildHarness(options: HarnessOptions): Harness {
       aggregate: {
         headline: 'Two concrete facts',
         summaryMarkdown: '- First fact\n- Second fact',
+        whatsappPreview: WHATSAPP_PREVIEW,
         evidenceMessageRefs: [REF_A, REF_B],
         continuityMemoryMarkdown: 'New continuity.',
       },

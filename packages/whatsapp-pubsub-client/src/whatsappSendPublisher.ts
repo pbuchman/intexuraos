@@ -15,6 +15,9 @@ import {
   MESSAGE_DIGEST_EVENT_MESSAGE,
   MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS,
   MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS,
+  MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS,
+  MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS,
+  MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS,
 } from './types.js';
 
 const MESSAGE_DIGEST_RUN_URL_SUFFIX_PATTERN =
@@ -183,9 +186,7 @@ function isValidMessageDigestPresentation(
   const record = presentation as Record<string, unknown>;
   const authorization = deliveryAuthorization as Record<string, unknown>;
   if (
-    record['kind'] !== 'message_digest_v1' ||
-    !isBoundedPlainText(record['digestName'], MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS) ||
-    !isBoundedPlainText(record['digestExcerpt'], MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS) ||
+    !isValidMessageDigestPresentationBody(record) ||
     typeof record['runUrlSuffix'] !== 'string' ||
     !MESSAGE_DIGEST_RUN_URL_SUFFIX_PATTERN.test(record['runUrlSuffix']) ||
     Object.keys(authorization).length !== 3 ||
@@ -200,7 +201,28 @@ function isValidMessageDigestPresentation(
   ) {
     return false;
   }
-  return Object.keys(record).length === 4;
+  return true;
+}
+
+function isValidMessageDigestPresentationBody(record: Record<string, unknown>): boolean {
+  if (record['kind'] === 'message_digest_v1') {
+    return (
+      Object.keys(record).length === 4 &&
+      isBoundedPlainText(record['digestName'], MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS) &&
+      isBoundedPlainText(record['digestExcerpt'], MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS)
+    );
+  }
+  return (
+    record['kind'] === 'message_digest_v2' &&
+    Object.keys(record).length === 6 &&
+    isBoundedPlainText(record['digestName'], MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS) &&
+    isBoundedPlainText(
+      record['windowLabel'],
+      MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS
+    ) &&
+    isBoundedPlainText(record['headline'], MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS) &&
+    isBoundedMultilineText(record['digestBody'], MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS)
+  );
 }
 
 function isBoundedPlainText(value: unknown, maxCodePoints: number): value is string {
@@ -218,6 +240,30 @@ function isBoundedPlainText(value: unknown, maxCodePoints: number): value is str
       codePoint === 10 ||
       codePoint === 13 ||
       (codePoint >= 0 && codePoint <= 31) ||
+      (codePoint >= 127 && codePoint <= 159) ||
+      (codePoint >= 0x202a && codePoint <= 0x202e) ||
+      (codePoint >= 0x2066 && codePoint <= 0x2069)
+    );
+  });
+}
+
+function isBoundedMultilineText(value: unknown, maxCodePoints: number): value is string {
+  if (
+    typeof value !== 'string' ||
+    value.trim() !== value ||
+    value === '' ||
+    Array.from(value).length > maxCodePoints
+  ) {
+    return false;
+  }
+  return !Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0) as number;
+    return (
+      codePoint === 13 ||
+      (codePoint >= 0 && codePoint <= 9) ||
+      codePoint === 11 ||
+      codePoint === 12 ||
+      (codePoint >= 14 && codePoint <= 31) ||
       (codePoint >= 127 && codePoint <= 159) ||
       (codePoint >= 0x202a && codePoint <= 0x202e) ||
       (codePoint >= 0x2066 && codePoint <= 0x2069)

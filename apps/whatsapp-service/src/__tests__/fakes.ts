@@ -4065,7 +4065,7 @@ export class FakeMessageSender implements WhatsAppMessageSender {
     }
     this.sentMessages.push({
       phoneNumber,
-      message: template.digestExcerpt,
+      message: template.kind === 'message_digest_v2' ? template.digestBody : template.digestExcerpt,
       digestTemplate: template,
     });
     const wamid = `fake-wamid-${String(Date.now())}-${randomUUID().slice(0, 8)}`;

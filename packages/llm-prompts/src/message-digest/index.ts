@@ -10,6 +10,10 @@ export {
   MESSAGE_DIGEST_EVIDENCE_REF_MAX_COUNT,
   MESSAGE_DIGEST_HEADLINE_MAX_LENGTH,
   MESSAGE_DIGEST_SUMMARY_MAX_LENGTH,
+  MESSAGE_DIGEST_WHATSAPP_PREVIEW_ITEM_MAX_LENGTH,
+  MESSAGE_DIGEST_WHATSAPP_PREVIEW_MAX_ITEMS_PER_SECTION,
+  MESSAGE_DIGEST_WHATSAPP_PREVIEW_MAX_SECTIONS,
+  MESSAGE_DIGEST_WHATSAPP_PREVIEW_SECTION_TITLE_MAX_LENGTH,
   MessageDigestAggregateSchema,
   createMessageDigestAggregateSchema,
 } from './schemas.js';
@@ -38,4 +42,7 @@ export type {
   MessageDigestSynthesisPromptInput,
   MessageDigestSourceContentKind,
   MessageDigestSourceMessage,
+  MessageDigestWhatsAppPreview,
+  MessageDigestWhatsAppPreviewIcon,
+  MessageDigestWhatsAppPreviewSection,
 } from './types.js';

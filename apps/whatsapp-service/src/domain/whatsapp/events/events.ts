@@ -234,12 +234,21 @@ export interface SendMessageEvent {
   ctaUrl?: { displayText: string; url: string };
 
   /** Approved-template presentation for a Message Digest delivery. */
-  presentation?: {
-    kind: 'message_digest_v1';
-    digestName: string;
-    digestExcerpt: string;
-    runUrlSuffix: string;
-  };
+  presentation?:
+    | {
+        kind: 'message_digest_v1';
+        digestName: string;
+        digestExcerpt: string;
+        runUrlSuffix: string;
+      }
+    | {
+        kind: 'message_digest_v2';
+        digestName: string;
+        windowLabel: string;
+        headline: string;
+        digestBody: string;
+        runUrlSuffix: string;
+      };
 
   /** Private delivery fence for a Message Digest event. */
   deliveryAuthorization?: {

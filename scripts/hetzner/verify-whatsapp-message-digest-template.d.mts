@@ -1,7 +1,7 @@
 export interface WhatsAppMessageDigestTemplateVerificationResult {
   ok: true;
-  templateName: 'intexuraos_message_digest_v1';
-  language: 'en_US';
+  templateName: 'intexuraos_message_digest_v3';
+  language: 'pl';
   status: 'APPROVED';
 }
 

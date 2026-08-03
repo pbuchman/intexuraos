@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type {
   MessageDigestPreviousSummary,
   MessageDigestSourceMessage,
+  MessageDigestWhatsAppPreview,
 } from '@intexuraos/llm-prompts';
 import type { MessageDigestDispatchOutbox, MessageDigestRun } from '../models/messageDigestRun.js';
 import { getMessageDigestDeliveryOutboxId } from '../messageDigestIds.js';
@@ -45,7 +46,7 @@ export interface ProcessMessageDigestRunDependencies {
     'validateSource' | 'getDeliveryReadiness' | 'queryMessages'
   >;
   aggregator: MessageDigestAggregator;
-  formatDelivery(run: MessageDigestRun):
+  formatDelivery(run: MessageDigestRun, preview: MessageDigestWhatsAppPreview):
     | { ok: true; value: { payloadJson: string; payloadDigest: string } }
     | { ok: false; code: string };
   dispatchOutbox(outboxId: string): Promise<unknown>;
@@ -271,7 +272,7 @@ export async function processMessageDigestRun(
     updatedAt: completedAt,
     completedAt,
   };
-  const formatted = dependencies.formatDelivery(completedCandidate);
+  const formatted = dependencies.formatDelivery(completedCandidate, aggregate.whatsappPreview);
   if (!formatted.ok || !isValidFrozenPayload(formatted.value)) {
     return await recordFailure(dependencies, lease, 'DELIVERY_FORMAT_INVALID');
   }

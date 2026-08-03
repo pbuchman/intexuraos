@@ -31,24 +31,28 @@ The wrapper owns durable checkpoints, candidate services, Terraform plans, migra
 5. The previous immutable release, production env file, and GCP credentials are readable. The closed
    Message Digest Terraform targets are GCP-only and explicitly strip any ambient `HCLOUD_TOKEN`.
 6. Migration `128_message-digest-service-indexes` is the only pending Firestore migration.
-7. A read-only Meta Graph preflight confirms that `intexuraos_message_digest_v1` is the exact
-   `en_US`, `APPROVED`, `UTILITY` template expected by the frozen two-body-parameter and dynamic
-   `View digest` URL contract. This runs before any production mutation and again immediately before
+7. A read-only Meta Graph preflight confirms that `intexuraos_message_digest_v3` is the exact
+   Polish, `APPROVED`, `UTILITY` template expected by the frozen four-body-parameter and dynamic
+   `Otwórz podsumowanie` URL contract. This runs before any production mutation and again immediately before
    migration activation; failure is content-free and stops the cutover.
 8. No other production deploy or infrastructure change is running.
 
 The fixed body copy is exactly:
 
 ```text
-Your WhatsApp digest is ready: {{1}}
+📌 {{1}}
+Zaplanowane podsumowanie rozmów jest gotowe.
+Okres: {{2}}
 
-{{2}}
+*{{3}}*
 
-Open the full digest for details.
+{{4}}
+
+Pełne szczegóły poniżej ↓
 ```
 
-Parameter 1 is the configured Digest name and parameter 2 is the bounded plain-text excerpt. The
-only button is `View digest`, with dynamic URL base `https://intexuraos.cloud/{{1}}`; the runtime
+Parameters are, in order: configured Digest name, localized source window, concrete headline, and
+the bounded scan-friendly section body. The only button is `Otwórz podsumowanie`, with dynamic URL base `https://intexuraos.cloud/{{1}}`; the runtime
 parameter is the canonical `#/whatsapp/message-digests/.../history/...` suffix. Do not create a
 second name, language variant, fallback, footer, header, or additional button.
 

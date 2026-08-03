@@ -46,9 +46,29 @@ export interface MessageDigestSynthesisPromptInput {
   readonly chunkAggregates: readonly MessageDigestAggregate[];
 }
 
+export type MessageDigestWhatsAppPreviewIcon =
+  | 'attention'
+  | 'people'
+  | 'location'
+  | 'decision'
+  | 'question'
+  | 'sentiment'
+  | 'update';
+
+export interface MessageDigestWhatsAppPreviewSection {
+  readonly icon: MessageDigestWhatsAppPreviewIcon;
+  readonly title: string;
+  readonly items: readonly string[];
+}
+
+export interface MessageDigestWhatsAppPreview {
+  readonly sections: readonly MessageDigestWhatsAppPreviewSection[];
+}
+
 export interface MessageDigestAggregate {
   readonly headline: string;
   readonly summaryMarkdown: string;
+  readonly whatsappPreview: MessageDigestWhatsAppPreview;
   readonly evidenceMessageRefs: string[];
   readonly continuityMemoryMarkdown: string;
 }

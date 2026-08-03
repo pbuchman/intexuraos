@@ -89,7 +89,8 @@ describe('WhatsApp Message Digest active documentation', () => {
     }
     expect(runbook).toContain('production root first');
     expect(runbook).toContain('development root second');
-    expect(runbook).toContain('intexuraos_message_digest_v1');
+    expect(runbook).toContain('intexuraos_message_digest_v3');
+    expect(runbook).toContain('Otwórz podsumowanie');
     expect(runbook).toContain('APPROVED');
     expect(runbook).toContain('before any production mutation');
     expect(runbook).toContain('counts, hashes, and opaque evidence references only');

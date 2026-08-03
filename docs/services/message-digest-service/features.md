@@ -29,7 +29,7 @@ Only the selected conversation is read. The definition is bound to the user's pr
 
 Completed summaries are sent by WhatsApp Service to the user's first mapped phone number. There is no separate destination setting in Message Digests. If the user has no deliverable WhatsApp mapping, the UI shows the readiness problem and no send is attempted.
 
-Delivery uses the approved `intexuraos_message_digest_v1` WhatsApp template and links back to the exact run in the web application. Retries are idempotent and ambiguous provider outcomes are reconciled before another send can occur.
+Delivery uses the approved Polish `intexuraos_message_digest_v3` WhatsApp template. It presents the source window, headline, and up to three importance-ordered sections before linking back to the exact run in the web application. Retries are idempotent and ambiguous provider outcomes are reconciled before another send can occur.
 
 ## Reliability and privacy
 

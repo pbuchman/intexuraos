@@ -23,16 +23,39 @@ export const MESSAGE_DIGEST_TEMPLATE_EXCERPT_MAX_CODE_POINTS =
   MESSAGE_DIGEST_TEMPLATE_FIXED_BODY_CODE_POINTS -
   MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS;
 export const MESSAGE_DIGEST_EVENT_MESSAGE = 'Message Digest delivery';
+export const MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS = 80;
+export const MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS = 200;
+export const MESSAGE_DIGEST_TEMPLATE_V2_FIXED_BODY_CODE_POINTS = 88;
+export const MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS =
+  MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_V2_FIXED_BODY_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_NAME_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_V2_WINDOW_LABEL_MAX_CODE_POINTS -
+  MESSAGE_DIGEST_TEMPLATE_V2_HEADLINE_MAX_CODE_POINTS;
 
 /**
  * Frozen presentation contract for the approved Message Digest Utility template.
  */
-export interface WhatsAppMessageDigestPresentation {
+export interface WhatsAppMessageDigestV1Presentation {
   kind: 'message_digest_v1';
   digestName: string;
   digestExcerpt: string;
   runUrlSuffix: string;
 }
+
+/** Scan-friendly presentation contract for the Polish Message Digest Utility template. */
+export interface WhatsAppMessageDigestV2Presentation {
+  kind: 'message_digest_v2';
+  digestName: string;
+  windowLabel: string;
+  headline: string;
+  digestBody: string;
+  runUrlSuffix: string;
+}
+
+export type WhatsAppMessageDigestPresentation =
+  | WhatsAppMessageDigestV1Presentation
+  | WhatsAppMessageDigestV2Presentation;
 
 /**
  * Non-secret identity used by whatsapp-service to acquire a just-in-time

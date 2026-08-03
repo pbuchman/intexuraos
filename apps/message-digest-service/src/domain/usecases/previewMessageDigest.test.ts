@@ -403,6 +403,9 @@ function createHarness(options: HarnessOptions = {}): {
           aggregate: {
             headline: 'Invalid content',
             summaryMarkdown: '- Must not exist.',
+            whatsappPreview: {
+              sections: [{ icon: 'update', title: 'Najważniejsze', items: ['Must not exist.'] }],
+            },
             evidenceMessageRefs: [],
             continuityMemoryMarkdown: '',
           },
@@ -426,6 +429,11 @@ function createHarness(options: HarnessOptions = {}): {
             : {
                 headline: 'Two concrete facts',
                 summaryMarkdown: '- First fact\n- Second fact',
+                whatsappPreview: {
+                  sections: [
+                    { icon: 'update', title: 'Najważniejsze', items: ['Two concrete facts.'] },
+                  ],
+                },
                 evidenceMessageRefs: [REF_A, REF_B],
                 continuityMemoryMarkdown: 'Internal continuity only.',
               },

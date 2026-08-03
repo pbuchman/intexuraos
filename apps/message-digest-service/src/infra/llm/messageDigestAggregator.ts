@@ -29,10 +29,36 @@ const RESPONSE_FORMAT = {
     schema: {
       type: 'object',
       additionalProperties: false,
-      required: ['headline', 'summaryMarkdown', 'evidenceMessageRefs', 'continuityMemoryMarkdown'],
+      required: [
+        'headline',
+        'summaryMarkdown',
+        'whatsappPreview',
+        'evidenceMessageRefs',
+        'continuityMemoryMarkdown',
+      ],
       properties: {
         headline: { type: 'string' },
         summaryMarkdown: { type: 'string' },
+        whatsappPreview: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['sections'],
+          properties: {
+            sections: {
+              type: 'array',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['icon', 'title', 'items'],
+                properties: {
+                  icon: { type: 'string' },
+                  title: { type: 'string' },
+                  items: { type: 'array', items: { type: 'string' } },
+                },
+              },
+            },
+          },
+        },
         evidenceMessageRefs: {
           type: 'array',
           items: { type: 'string' },
@@ -248,6 +274,7 @@ function parseAggregate(
       typeof candidate['continuityMemoryMarkdown'] === 'string'
         ? sanitizeMarkdown(candidate['continuityMemoryMarkdown'])
         : undefined;
+    const whatsappPreview = sanitizeWhatsAppPreview(candidate['whatsappPreview']);
     if (summaryMarkdown === null || continuityMemoryMarkdown === null) return null;
     const sanitized = {
       ...candidate,
@@ -255,6 +282,7 @@ function parseAggregate(
         ? { headline: sanitizeHeadline(candidate['headline']) }
         : {}),
       ...(summaryMarkdown === undefined ? {} : { summaryMarkdown }),
+      ...(whatsappPreview === undefined ? {} : { whatsappPreview }),
       ...(continuityMemoryMarkdown === undefined ? {} : { continuityMemoryMarkdown }),
     };
     const result = createMessageDigestAggregateSchema(allowedRefs).safeParse(sanitized);
@@ -262,6 +290,42 @@ function parseAggregate(
   } catch {
     return null;
   }
+}
+
+function sanitizeWhatsAppPreview(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  const preview = value as Record<string, unknown>;
+  if (!Array.isArray(preview['sections'])) return value;
+  const sections = preview['sections'] as unknown[];
+  return {
+    ...preview,
+    sections: sections.map((section: unknown): unknown => {
+      if (section === null || typeof section !== 'object' || Array.isArray(section)) return section;
+      const candidate = section as Record<string, unknown>;
+      const items = Array.isArray(candidate['items'])
+        ? (candidate['items'] as unknown[])
+        : null;
+      return {
+        ...candidate,
+        ...(typeof candidate['title'] === 'string'
+          ? { title: sanitizePreviewText(candidate['title']) }
+          : {}),
+        ...(items !== null
+          ? {
+              items: items.map((item: unknown): unknown =>
+                typeof item === 'string' ? sanitizePreviewText(item) : item
+              ),
+            }
+          : {}),
+      };
+    }),
+  };
+}
+
+function sanitizePreviewText(value: string): string | null {
+  const normalized = sanitizeText(value);
+  if (containsUnsafeMarkdownConstruct(normalized)) return null;
+  return normalized.replace(/[<>]/gu, '').replace(/\s+/gu, ' ').trim();
 }
 
 function stableMessages(messages: MessageDigestSourceMessage[]): MessageDigestSourceMessage[] {
@@ -298,8 +362,10 @@ function chunkMessages(
   return chunks;
 }
 
-function sanitizeHeadline(value: string): string {
-  return sanitizeText(value).replace(/\s+/gu, ' ').trim();
+function sanitizeHeadline(value: string): string | null {
+  const normalized = sanitizeText(value);
+  if (containsUnsafeMarkdownConstruct(normalized)) return null;
+  return normalized.replace(/\s+/gu, ' ').trim();
 }
 
 function sanitizeMarkdown(value: string): string | null {

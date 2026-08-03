@@ -16,8 +16,10 @@ import type { WhatsAppError } from '../../domain/whatsapp/models/error.js';
 
 const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
 const MAX_TEXT_BODY_LENGTH = 4096;
-const MESSAGE_DIGEST_TEMPLATE_NAME = 'intexuraos_message_digest_v1';
-const MESSAGE_DIGEST_TEMPLATE_LANGUAGE = 'en_US';
+const MESSAGE_DIGEST_TEMPLATE_V1_NAME = 'intexuraos_message_digest_v1';
+const MESSAGE_DIGEST_TEMPLATE_V1_LANGUAGE = 'en_US';
+const MESSAGE_DIGEST_TEMPLATE_V2_NAME = 'intexuraos_message_digest_v3';
+const MESSAGE_DIGEST_TEMPLATE_V2_LANGUAGE = 'pl';
 
 const logger = createAppLogger({ name: 'whatsapp-sender' });
 
@@ -32,15 +34,12 @@ type WhatsAppMessageBody =
   | {
       type: 'template';
       template: {
-        name: typeof MESSAGE_DIGEST_TEMPLATE_NAME;
-        language: { code: typeof MESSAGE_DIGEST_TEMPLATE_LANGUAGE };
+        name: string;
+        language: { code: string };
         components: [
           {
             type: 'body';
-            parameters: [
-              { type: 'text'; text: string },
-              { type: 'text'; text: string },
-            ];
+            parameters: { type: 'text'; text: string }[];
           },
           {
             type: 'button';
@@ -159,19 +158,30 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     phoneNumber: string,
     template: WhatsAppMessageDigestTemplate
   ): Promise<Result<{ wamid: string }, WhatsAppError>> {
+    const isV2 = template.kind === 'message_digest_v2';
     return await this.sendRequest(
       phoneNumber,
       {
         type: 'template',
         template: {
-          name: MESSAGE_DIGEST_TEMPLATE_NAME,
-          language: { code: MESSAGE_DIGEST_TEMPLATE_LANGUAGE },
+          name: isV2 ? MESSAGE_DIGEST_TEMPLATE_V2_NAME : MESSAGE_DIGEST_TEMPLATE_V1_NAME,
+          language: {
+            code: isV2
+              ? MESSAGE_DIGEST_TEMPLATE_V2_LANGUAGE
+              : MESSAGE_DIGEST_TEMPLATE_V1_LANGUAGE,
+          },
           components: [
             {
               type: 'body',
               parameters: [
                 { type: 'text', text: template.digestName },
-                { type: 'text', text: template.digestExcerpt },
+                ...(isV2
+                  ? [
+                      { type: 'text' as const, text: template.windowLabel },
+                      { type: 'text' as const, text: template.headline },
+                      { type: 'text' as const, text: template.digestBody },
+                    ]
+                  : [{ type: 'text' as const, text: template.digestExcerpt }]),
               ],
             },
             {

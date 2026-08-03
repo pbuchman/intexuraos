@@ -684,6 +684,11 @@ describe('Message Digest public routes', () => {
       aggregate: {
         headline: 'Tomorrow morning agreed',
         summaryMarkdown: '- The participants agreed on tomorrow morning.',
+        whatsappPreview: {
+          sections: [
+            { icon: 'decision', title: 'Ustalenie', items: ['Tomorrow morning agreed.'] },
+          ],
+        },
         evidenceMessageRefs: ['a'.repeat(64)],
         continuityMemoryMarkdown: 'Private continuity memory.',
       },

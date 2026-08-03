@@ -183,7 +183,9 @@ describe('Message Digest internal routes', () => {
     );
 
     vi.mocked(processMessageDigestRun).mockImplementationOnce(async (_input, dependencies) => {
-      dependencies.formatDelivery({} as never);
+      dependencies.formatDelivery({} as never, {
+        sections: [{ icon: 'update', title: 'Najważniejsze', items: ['One fact.'] }],
+      });
       await dependencies.dispatchOutbox('mdo_delivery_001');
       return { ok: true, disposition: 'completed', run: {} as never };
     });
@@ -195,6 +197,9 @@ describe('Message Digest internal routes', () => {
     expect(worker.statusCode).toBe(200);
     expect(formatWhatsAppDigest).toHaveBeenCalledWith({
       run: {},
+      preview: {
+        sections: [{ icon: 'update', title: 'Najważniejsze', items: ['One fact.'] }],
+      },
       webAppUrl: 'https://intexuraos.cloud',
     });
     expect(dispatchMessageDigestOutbox).toHaveBeenCalledWith(
