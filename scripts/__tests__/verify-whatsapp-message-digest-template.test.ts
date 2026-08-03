@@ -21,7 +21,7 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
 
     expect(result).toEqual({
       ok: true,
-      templateName: 'intexuraos_message_digest_v3',
+      templateName: 'intexuraos_message_digest_v4',
       language: 'pl',
       status: 'APPROVED',
     });
@@ -29,7 +29,7 @@ describe('WhatsApp Message Digest provider-template verifier', () => {
     const requestUrl = new URL(calls[0]?.url ?? '');
     expect(requestUrl.origin).toBe('https://graph.facebook.com');
     expect(requestUrl.pathname).toBe(`/v22.0/${WABA_ID}/message_templates`);
-    expect(requestUrl.searchParams.get('name')).toBe('intexuraos_message_digest_v3');
+    expect(requestUrl.searchParams.get('name')).toBe('intexuraos_message_digest_v4');
     expect(requestUrl.searchParams.get('fields')).toBe('name,language,status,category,components');
     expect(new Headers(calls[0]?.init?.headers).get('authorization')).toBe(
       `Bearer ${ACCESS_TOKEN}`
@@ -254,7 +254,7 @@ function jsonResponse(body: unknown): Response {
 
 function validTemplate(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    name: 'intexuraos_message_digest_v3',
+    name: 'intexuraos_message_digest_v4',
     language: 'pl',
     status: 'APPROVED',
     category: 'UTILITY',
@@ -266,7 +266,7 @@ function validTemplate(overrides: Record<string, unknown> = {}): Record<string, 
 function validBody(): Record<string, unknown> {
   return {
     type: 'BODY',
-    text: '📌 {{1}}\nZaplanowane podsumowanie rozmów jest gotowe.\nOkres: {{2}}\n\n*{{3}}*\n\n{{4}}\n\nPełne szczegóły poniżej ↓',
+    text: '📌 {{1}}\nZaplanowane podsumowanie rozmów jest gotowe.\nOkres: {{2}}\n\n*{{3}}*\n\n🔴 *NAJWAŻNIEJSZE*\n{{4}}\n\n✅ *USTALENIA I FAKTY*\n{{5}}\n\n➡️ *CO DALEJ*\n{{6}}\n\nPełne szczegóły poniżej ↓',
   };
 }
 

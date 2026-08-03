@@ -19,7 +19,7 @@ describe('MessageDigestAggregator', () => {
       aggregate: null,
       metadata: {
         effectiveMessageCount: 0,
-        promptVersion: 'message-digest-aggregate@3.0.0',
+        promptVersion: 'message-digest-aggregate@4.0.0',
         model: 'or:synthetic/digest-model',
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 },
       },
@@ -43,7 +43,7 @@ describe('MessageDigestAggregator', () => {
         },
         metadata: {
           effectiveMessageCount: 1,
-          promptVersion: 'message-digest-aggregate@3.0.0',
+          promptVersion: 'message-digest-aggregate@4.0.0',
           model: 'or:synthetic/digest-model',
           usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUsd: 0.001 },
         },
@@ -156,7 +156,7 @@ describe('MessageDigestAggregator', () => {
       },
       metadata: {
         effectiveMessageCount: 2,
-        promptVersion: 'message-digest-synthesis@2.0.0',
+        promptVersion: 'message-digest-synthesis@3.0.0',
         usage: { inputTokens: 30, outputTokens: 15, totalTokens: 45, costUsd: 0.003 },
       },
     });
@@ -186,7 +186,7 @@ describe('MessageDigestAggregator', () => {
       ok: true,
       aggregate: { headline: 'Repaired synthesis', evidenceMessageRefs: [REF_A, REF_B] },
       metadata: {
-        promptVersion: 'message-digest-repair@2.0.0',
+        promptVersion: 'message-digest-repair@3.0.0',
         usage: { inputTokens: 40, outputTokens: 20, totalTokens: 60, costUsd: 0.004 },
       },
     });
@@ -261,7 +261,7 @@ describe('MessageDigestAggregator', () => {
     expect(result).toMatchObject({
       ok: true,
       aggregate: { evidenceMessageRefs: [REF_A] },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
   });
 
@@ -277,7 +277,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: '- Safe repaired fact.' },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
     expect(harness.generate.mock.calls[1]?.[1]).toMatchObject({
@@ -312,7 +312,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'Container link removed.' },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -333,7 +333,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'Unsafe construct removed.' },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -362,7 +362,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'No generated links remain.' },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -418,7 +418,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { summaryMarkdown: 'Safe repaired fact.' },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -441,7 +441,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { whatsappPreview: { sections: [{ items: ['Concrete summary.'] }] } },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -459,7 +459,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { headline: 'Concrete headline' },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });
@@ -627,7 +627,7 @@ describe('MessageDigestAggregator', () => {
     await expect(harness.aggregator.aggregate(input())).resolves.toMatchObject({
       ok: true,
       aggregate: { whatsappPreview: { sections: [{ items: ['Concrete summary.'] }] } },
-      metadata: { promptVersion: 'message-digest-repair@2.0.0' },
+      metadata: { promptVersion: 'message-digest-repair@3.0.0' },
     });
     expect(harness.generate).toHaveBeenCalledTimes(2);
   });

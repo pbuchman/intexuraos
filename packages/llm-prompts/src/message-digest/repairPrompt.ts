@@ -3,7 +3,7 @@ import { safeMessageDigestPromptJson } from './aggregatePrompt.js';
 import type { MessageDigestRepairPromptInput } from './types.js';
 
 export const MESSAGE_DIGEST_REPAIR_PROMPT = {
-  version: '2.0.0',
+  version: '3.0.0',
   promptType: 'message-digest-repair',
 } as const;
 
@@ -45,7 +45,7 @@ Requirements:
 1. Preserve only facts justified by the original prompt's current-window evidence.
 2. headline is non-empty and at most 200 characters.
 3. summaryMarkdown is at most 12000 characters.
-4. whatsappPreview has 1 to at most 3 importance-ordered sections. Every icon is exactly one of: attention, people, location, decision, question, sentiment, update. Every title is non-empty and at most 48 characters. Every section has 1 or 2 complete, non-empty items of at most 240 characters each.
+4. whatsappPreview has 1 to at most 3 importance-ordered sections. When three sections are justified: put the most important action or observation first, concrete facts and outcomes second, and open questions or next steps third. Use fewer sections instead of inventing filler. Use the question icon for every section whose purpose is open questions, requested actions, or next steps. Every icon is exactly one of: attention, people, location, decision, question, sentiment, update. Every title is non-empty and at most 48 characters. Every section has 1 or 2 complete, non-empty items of at most 240 characters each.
 5. continuityMemoryMarkdown is at most 8000 characters.
 6. evidenceMessageRefs contains no duplicates and only values from the allowed list above.
 7. Never copy an evidence messageRef into headline, summaryMarkdown, whatsappPreview, or continuityMemoryMarkdown.

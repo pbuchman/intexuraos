@@ -4,12 +4,12 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v22.0';
-const TEMPLATE_NAME = 'intexuraos_message_digest_v3';
+const TEMPLATE_NAME = 'intexuraos_message_digest_v4';
 const TEMPLATE_LANGUAGE = 'pl';
 const TEMPLATE_CATEGORY = 'UTILITY';
 const TEMPLATE_STATUS = 'APPROVED';
 const TEMPLATE_BODY_TEXT =
-  '📌 {{1}}\nZaplanowane podsumowanie rozmów jest gotowe.\nOkres: {{2}}\n\n*{{3}}*\n\n{{4}}\n\nPełne szczegóły poniżej ↓';
+  '📌 {{1}}\nZaplanowane podsumowanie rozmów jest gotowe.\nOkres: {{2}}\n\n*{{3}}*\n\n🔴 *NAJWAŻNIEJSZE*\n{{4}}\n\n✅ *USTALENIA I FAKTY*\n{{5}}\n\n➡️ *CO DALEJ*\n{{6}}\n\nPełne szczegóły poniżej ↓';
 const TEMPLATE_BUTTON_TEXT = 'Otwórz podsumowanie';
 const TEMPLATE_BUTTON_URL = 'https://intexuraos.cloud/{{1}}';
 const MAX_RESPONSE_BYTES = 128 * 1024;
@@ -148,11 +148,13 @@ function isExpectedTemplate(template) {
   const variables = body.text.match(/\{\{[0-9]+\}\}/gu);
   if (
     variables === null ||
-    variables.length !== 4 ||
+    variables.length !== 6 ||
     variables[0] !== '{{1}}' ||
     variables[1] !== '{{2}}' ||
     variables[2] !== '{{3}}' ||
-    variables[3] !== '{{4}}'
+    variables[3] !== '{{4}}' ||
+    variables[4] !== '{{5}}' ||
+    variables[5] !== '{{6}}'
   ) {
     return false;
   }

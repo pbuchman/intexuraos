@@ -57,7 +57,7 @@ Other services can publish outbound WhatsApp messages through the send-message t
 
 Outbound sends can be plain text, interactive buttons, or CTA URL messages. Successful sends are recorded best-effort for reply correlation.
 
-Message Digest sends use the frozen Polish `intexuraos_message_digest_v3` template, a run-scoped idempotency key, and an authorization acquired from Message Digest Service. The template preserves a scan-friendly heading and section hierarchy, while WhatsApp Service resolves the user's first mapped phone, records pending/sent/ambiguous/failed delivery state, and permits a byte-identical retry only after a definitive failure. An ambiguous provider outcome is never retried blindly.
+Message Digest sends use the frozen Polish `intexuraos_message_digest_v4` template, a run-scoped idempotency key, and an authorization acquired from Message Digest Service. The approved template owns the scan-friendly line breaks and section hierarchy; each runtime value is compacted to one provider-safe line. WhatsApp Service resolves the user's first mapped phone, records pending/sent/ambiguous/failed delivery state, and permits a byte-identical retry only after a definitive failure. An ambiguous provider outcome is never retried blindly.
 
 ## Message Digest Source
 

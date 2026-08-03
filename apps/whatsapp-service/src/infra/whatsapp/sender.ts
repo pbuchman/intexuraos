@@ -18,8 +18,11 @@ const WHATSAPP_API_BASE = 'https://graph.facebook.com/v22.0';
 const MAX_TEXT_BODY_LENGTH = 4096;
 const MESSAGE_DIGEST_TEMPLATE_V1_NAME = 'intexuraos_message_digest_v1';
 const MESSAGE_DIGEST_TEMPLATE_V1_LANGUAGE = 'en_US';
-const MESSAGE_DIGEST_TEMPLATE_V2_NAME = 'intexuraos_message_digest_v3';
+const MESSAGE_DIGEST_TEMPLATE_V2_NAME = 'intexuraos_message_digest_v4';
 const MESSAGE_DIGEST_TEMPLATE_V2_LANGUAGE = 'pl';
+const MESSAGE_DIGEST_EMPTY_SECTION = '—';
+const MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS = 1_024;
+const MESSAGE_DIGEST_TEMPLATE_V2_FIXED_BODY_CODE_POINTS = 146;
 
 const logger = createAppLogger({ name: 'whatsapp-sender' });
 
@@ -56,6 +59,103 @@ type MessageTypeLabel = 'text' | 'interactive' | 'CTA URL' | 'Message Digest tem
 interface ProviderErrorMetadata {
   providerCode?: number;
   providerSubcode?: number;
+}
+
+interface CompactMessageDigestSection {
+  content: string;
+  isQuestion: boolean;
+  isStandalone: boolean;
+}
+
+function compactMessageDigestSections(
+  digestBody: string,
+  fixedParameters: readonly string[]
+): [string, string, string] {
+  const sections = digestBody
+    .split(/\n{2,}/u)
+    .map((section) => {
+      const lines = section
+        .split(/\n+/u)
+        .map((line) => line.replace(/\s+/gu, ' ').trim())
+        .filter((line) => line !== '');
+      const title = lines[0] ?? '';
+      const items = lines.slice(1);
+      return {
+        content: items.length === 0 ? title : items.join(' • '),
+        isQuestion: isFollowUpSection(title),
+        isStandalone: items.length === 0,
+      } satisfies CompactMessageDigestSection;
+    })
+    .filter((section) => section.content !== '')
+    .slice(0, 3);
+
+  const slots: [string, string, string] = ['', '', ''];
+  const firstSection = sections[0];
+  let lastUsedSlot: 0 | 1 | 2 = 0;
+  if (firstSection !== undefined) slots[0] = firstSection.content;
+  for (const section of sections.slice(1)) {
+    const targetSlot: 0 | 1 | 2 = section.isStandalone
+      ? lastUsedSlot
+      : section.isQuestion
+        ? 2
+        : 1;
+    slots[targetSlot] =
+      slots[targetSlot] === ''
+        ? section.content
+        : `${slots[targetSlot]} • ${section.content}`;
+    lastUsedSlot = targetSlot;
+  }
+
+  const padded: [string, string, string] = [
+    slots[0] === '' ? MESSAGE_DIGEST_EMPTY_SECTION : slots[0],
+    slots[1] === '' ? MESSAGE_DIGEST_EMPTY_SECTION : slots[1],
+    slots[2] === '' ? MESSAGE_DIGEST_EMPTY_SECTION : slots[2],
+  ];
+  const sectionBudget = Math.max(
+    3,
+    MESSAGE_DIGEST_TEMPLATE_BODY_MAX_CODE_POINTS -
+      MESSAGE_DIGEST_TEMPLATE_V2_FIXED_BODY_CODE_POINTS -
+      fixedParameters.reduce((total, value) => total + codePointLength(value), 0)
+  );
+  let overflow =
+    padded.reduce((total, section) => total + codePointLength(section), 0) - sectionBudget;
+  for (const index of [2, 1, 0] as const) {
+    if (overflow <= 0) break;
+    const currentLength = codePointLength(padded[index]);
+    const targetLength = Math.max(2, currentLength - overflow);
+    padded[index] = truncateCodePoints(padded[index], targetLength);
+    overflow -= currentLength - codePointLength(padded[index]);
+  }
+
+  return padded;
+}
+
+function isFollowUpSection(title: string): boolean {
+  if (title.startsWith('❓')) return true;
+  const normalizedTitle = title.toLocaleUpperCase('pl-PL');
+  return [
+    'CO DALEJ',
+    'NASTĘPN',
+    'DALSZY KROK',
+    'DALSZE KROKI',
+    'OTWARTE PYTAN',
+    'DO ZROBIENIA',
+    'DO WYKONANIA',
+    'WYMAGA DZIAŁANIA',
+    'NEXT STEP',
+    'NEXT STEPS',
+    'FOLLOW-UP',
+    'FOLLOW UP',
+  ].some((marker) => normalizedTitle.includes(marker));
+}
+
+function codePointLength(value: string): number {
+  return Array.from(value).length;
+}
+
+function truncateCodePoints(value: string, maxCodePoints: number): string {
+  if (codePointLength(value) <= maxCodePoints) return value;
+  return `${Array.from(value).slice(0, maxCodePoints - 1).join('').trimEnd()}…`;
 }
 
 function truncateBody(message: string, maxLength: number, messageType: MessageTypeLabel, phoneNumber: string): string {
@@ -159,6 +259,17 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
     template: WhatsAppMessageDigestTemplate
   ): Promise<Result<{ wamid: string }, WhatsAppError>> {
     const isV2 = template.kind === 'message_digest_v2';
+    const bodyParameters = isV2
+      ? [
+          template.windowLabel,
+          template.headline,
+          ...compactMessageDigestSections(template.digestBody, [
+            template.digestName,
+            template.windowLabel,
+            template.headline,
+          ]),
+        ]
+      : [template.digestExcerpt];
     return await this.sendRequest(
       phoneNumber,
       {
@@ -175,13 +286,7 @@ export class WhatsAppCloudApiSender implements WhatsAppMessageSender {
               type: 'body',
               parameters: [
                 { type: 'text', text: template.digestName },
-                ...(isV2
-                  ? [
-                      { type: 'text' as const, text: template.windowLabel },
-                      { type: 'text' as const, text: template.headline },
-                      { type: 'text' as const, text: template.digestBody },
-                    ]
-                  : [{ type: 'text' as const, text: template.digestExcerpt }]),
+                ...bodyParameters.map((text) => ({ type: 'text' as const, text })),
               ],
             },
             {

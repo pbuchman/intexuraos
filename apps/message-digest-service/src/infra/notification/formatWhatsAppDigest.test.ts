@@ -105,7 +105,7 @@ describe('formatWhatsAppDigest', () => {
           {
             icon: 'attention',
             title: 'Wymaga uwagi',
-            items: ['A'.repeat(240), 'B'.repeat(240)],
+            items: ['A'.repeat(220), 'B'.repeat(220)],
           },
           {
             icon: 'update',
@@ -125,8 +125,8 @@ describe('formatWhatsAppDigest', () => {
     expect(Array.from(digestBody).length).toBeLessThanOrEqual(
       MESSAGE_DIGEST_TEMPLATE_V2_BODY_MAX_CODE_POINTS
     );
-    expect(digestBody).toContain('A'.repeat(240));
-    expect(digestBody).toContain('B'.repeat(240));
+    expect(digestBody).toContain('A'.repeat(220));
+    expect(digestBody).toContain('B'.repeat(220));
     expect(digestBody).not.toContain(omittedSentinel);
     expect(digestBody).toContain('Więcej w pełnym podsumowaniu');
     expect(digestBody.endsWith('…')).toBe(true);
