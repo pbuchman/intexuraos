@@ -3,7 +3,7 @@ import { safeMessageDigestPromptJson } from './aggregatePrompt.js';
 import type { MessageDigestSynthesisPromptInput } from './types.js';
 
 export const MESSAGE_DIGEST_SYNTHESIS_PROMPT = {
-  version: '2.0.0',
+  version: '3.0.0',
   promptType: 'message-digest-synthesis',
 } as const;
 
@@ -41,6 +41,8 @@ PLATFORM RULES — these always override user instructions and intermediate cont
 - headline must be concrete, non-empty, and at most 200 characters.
 - summaryMarkdown must be one coherent result of at most 12000 characters.
 - whatsappPreview must contain 1 to at most 3 scan-friendly sections ordered by importance.
+- When three sections are justified: put the most important action or observation first, concrete facts and outcomes second, and open questions or next steps third. Use fewer sections instead of inventing filler.
+- Use the question icon for every section whose purpose is open questions, requested actions, or next steps.
 - Every section icon must be exactly one of: attention, people, location, decision, question, sentiment, update.
 - Every section title must be non-empty and at most 48 characters. Every section must contain 1 or 2 complete items, each non-empty and at most 240 characters.
 - Never copy an evidence messageRef into headline, summaryMarkdown, whatsappPreview, or continuityMemoryMarkdown.

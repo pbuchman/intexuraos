@@ -652,7 +652,7 @@ describe('WhatsAppCloudApiSender', () => {
       });
     });
 
-    it('sends the Polish scan-friendly v2 Utility template with four ordered body parameters', async () => {
+    it('sends the Polish scan-friendly v2 Utility template with provider-safe section parameters', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: (): Promise<{ messages: { id: string }[] }> =>
@@ -664,7 +664,8 @@ describe('WhatsAppCloudApiSender', () => {
         digestName: 'Grupa wędkarska SKOOL',
         windowLabel: '27 lip, 09:00 – 27 lip, 14:00',
         headline: 'Wyjazd wymaga potwierdzenia',
-        digestBody: '🔴 WYMAGA UWAGI\nPotwierdź udział.\n\n📍 ZAWODY\nPod Krakowem.',
+        digestBody:
+          '🔴 WYMAGA UWAGI\nPotwierdź udział.\nRezerwacja wymaga decyzji.\n\n✅ USTALENIA\nNa liście jest osiem osób.\nZawody odbędą się pod Krakowem.\n\n❓ CO DALEJ\nSprawdź szczegóły na platformie Skool.',
         runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
       };
 
@@ -675,7 +676,7 @@ describe('WhatsAppCloudApiSender', () => {
       expect(JSON.parse(callArgs[1].body as string)).toMatchObject({
         type: 'template',
         template: {
-          name: 'intexuraos_message_digest_v3',
+          name: 'intexuraos_message_digest_v4',
           language: { code: 'pl' },
           components: [
             {
@@ -684,7 +685,18 @@ describe('WhatsAppCloudApiSender', () => {
                 { type: 'text', text: v2Presentation.digestName },
                 { type: 'text', text: v2Presentation.windowLabel },
                 { type: 'text', text: v2Presentation.headline },
-                { type: 'text', text: v2Presentation.digestBody },
+                {
+                  type: 'text',
+                  text: 'Potwierdź udział. • Rezerwacja wymaga decyzji.',
+                },
+                {
+                  type: 'text',
+                  text: 'Na liście jest osiem osób. • Zawody odbędą się pod Krakowem.',
+                },
+                {
+                  type: 'text',
+                  text: 'Sprawdź szczegóły na platformie Skool.',
+                },
               ],
             },
             {
@@ -696,6 +708,249 @@ describe('WhatsAppCloudApiSender', () => {
           ],
         },
       });
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyComponent = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      );
+      expect(bodyComponent?.parameters).toHaveLength(6);
+      expect(bodyComponent?.parameters.every((parameter) => !/[\n\r\t]/u.test(parameter.text))).toBe(
+        true
+      );
+    });
+
+    it('keeps an already-frozen two-section v2 delivery retry compatible with template v4', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-retry' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'Sentyment rozmowy z Intex',
+        windowLabel: '3 sie, 01:00 – 3 sie, 13:30',
+        headline: 'Spokojna i pomocna rozmowa',
+        digestBody:
+          '💬 ANALIZA NASTROJU\nRozmówca był spokojny i wspierający.\nNie odnotowano napięć.\n\n✅ KLUCZOWE USTALENIA\nPrzekazano konkretne informacje.\nPozostały szczegóły do weryfikacji.',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      expect(bodyParameters?.slice(3)).toEqual([
+        {
+          type: 'text',
+          text: 'Rozmówca był spokojny i wspierający. • Nie odnotowano napięć.',
+        },
+        {
+          type: 'text',
+          text: 'Przekazano konkretne informacje. • Pozostały szczegóły do weryfikacji.',
+        },
+        { type: 'text', text: '—' },
+      ]);
+    });
+
+    it('keeps a second question section under the fixed CO DALEJ heading', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-question' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'Grupa wędkarska',
+        windowLabel: '3 sie, 01:00 – 3 sie, 13:30',
+        headline: 'Potrzebna jest decyzja',
+        digestBody:
+          '🔴 WYMAGA UWAGI\nPotwierdź udział do wieczora.\n\n❓ CO DALEJ\nKto rezerwuje ostatnie miejsce?',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      expect(bodyParameters?.slice(3)).toEqual([
+        { type: 'text', text: 'Potwierdź udział do wieczora.' },
+        { type: 'text', text: '—' },
+        { type: 'text', text: 'Kto rezerwuje ostatnie miejsce?' },
+      ]);
+    });
+
+    it('keeps a second next-step section under CO DALEJ even when its icon is not question', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-next-step' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'Grupa wędkarska',
+        windowLabel: '3 sie, 01:00 – 3 sie, 13:30',
+        headline: 'Potrzebna jest decyzja',
+        digestBody:
+          '🔴 WYMAGA UWAGI\nPotwierdź udział do wieczora.\n\n✅ NASTĘPNY KROK\nZadzwoń do organizatora jutro.',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      expect(bodyParameters?.slice(3)).toEqual([
+        { type: 'text', text: 'Potwierdź udział do wieczora.' },
+        { type: 'text', text: '—' },
+        { type: 'text', text: 'Zadzwoń do organizatora jutro.' },
+      ]);
+    });
+
+    it('bounds the fully resolved v4 body for a maximal frozen v2 retry', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-max' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'N'.repeat(80),
+        windowLabel: 'W'.repeat(80),
+        headline: 'H'.repeat(200),
+        digestBody: `🔴 WAŻNE\n${'a'.repeat(565)}`,
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      const resolvedBodyCodePoints =
+        146 +
+        (bodyParameters ?? []).reduce(
+          (total, parameter) => total + Array.from(parameter.text).length,
+          0
+        );
+      expect(resolvedBodyCodePoints).toBeLessThanOrEqual(1024);
+      expect(bodyParameters?.[3]?.text.endsWith('…')).toBe(true);
+    });
+
+    it('keeps a standalone omission line single-line and pads the remaining provider slots', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-omitted' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'Krótki digest',
+        windowLabel: '3 sie, 01:00 – 3 sie, 13:30',
+        headline: 'Jedna ważna informacja',
+        digestBody: 'Więcej w pełnym podsumowaniu…',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      expect(bodyParameters?.slice(3)).toEqual([
+        { type: 'text', text: 'Więcej w pełnym podsumowaniu…' },
+        { type: 'text', text: '—' },
+        { type: 'text', text: '—' },
+      ]);
+    });
+
+    it('keeps a later standalone omission note with the last populated semantic slot', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-truncated-preview' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'Grupa wędkarska',
+        windowLabel: '3 sie, 01:00 – 3 sie, 13:30',
+        headline: 'Najważniejsze informacje',
+        digestBody:
+          '🔴 WYMAGA UWAGI\nPotwierdź udział.\n\n✅ USTALENIA\nTermin pozostaje bez zmian.\n\nWięcej w pełnym podsumowaniu…',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      expect(bodyParameters?.slice(3)).toEqual([
+        { type: 'text', text: 'Potwierdź udział.' },
+        {
+          type: 'text',
+          text: 'Termin pozostaje bez zmian. • Więcej w pełnym podsumowaniu…',
+        },
+        { type: 'text', text: '—' },
+      ]);
+    });
+
+    it('pads every provider slot when a defensive caller supplies a blank digest body', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: (): Promise<{ messages: { id: string }[] }> =>
+          Promise.resolve({ messages: [{ id: 'wamid.digest-v2-blank' }] }),
+      });
+      vi.stubGlobal('fetch', mockFetch);
+
+      await sender.sendMessageDigestTemplate('+48123456789', {
+        kind: 'message_digest_v2',
+        digestName: 'Krótki digest',
+        windowLabel: '3 sie, 01:00 – 3 sie, 13:30',
+        headline: 'Brak treści',
+        digestBody: '\n\n',
+        runUrlSuffix: '#/whatsapp/message-digests/md_definition_123/history/mdr_run_123',
+      });
+
+      const callArgs = mockFetch.mock.calls[0] as [string, RequestInit];
+      const requestBody = JSON.parse(callArgs[1].body as string) as {
+        template: { components: { type: string; parameters: { text: string }[] }[] };
+      };
+      const bodyParameters = requestBody.template.components.find(
+        (component) => component.type === 'body'
+      )?.parameters;
+      expect(bodyParameters?.slice(3)).toEqual([
+        { type: 'text', text: '—' },
+        { type: 'text', text: '—' },
+        { type: 'text', text: '—' },
+      ]);
     });
 
     it('keeps an already-normalized phone number unchanged', async () => {
