@@ -261,8 +261,8 @@ describe('Webhook async processing', () => {
     });
   });
 
-  describe('markMessageAsRead', () => {
-    it('marks message as read when text webhook is successfully processed', async () => {
+  describe('markMessageAsReadWithTyping', () => {
+    it('marks text messages as read with typing when handed to Intex', async () => {
       // Setup user mapping
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
@@ -285,7 +285,7 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing including mark as read
+      // Wait for async processing including mark as read with typing
       await triggerWebhookProcessing();
 
       // Verify event was processed
@@ -293,9 +293,13 @@ describe('Webhook async processing', () => {
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('completed');
 
-      // Verify message was marked as read via whatsappCloudApi
-      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
-      expect(markedAsRead.length).toBeGreaterThan(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toEqual([
+        {
+          phoneNumberId: '123456789012345',
+          messageId: 'wamid.HBgNMTU1NTEyMzQ1Njc4FQIAEhgUM0VCMDRBNzYwREQ0RjMwMjYzMDcA',
+        },
+      ]);
     });
 
     it('handles sendWhatsAppMessage failure gracefully', async () => {
@@ -649,7 +653,7 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('failed');
     });
 
-    it('marks message as read after successful image processing', async () => {
+    it('marks image messages as read with typing when handed to Intex', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -682,9 +686,8 @@ describe('Webhook async processing', () => {
 
       await triggerWebhookProcessing();
 
-      // Verify message was marked as read via whatsappCloudApi
-      const markedAsRead = ctx.whatsappCloudApi.getMarkedAsReadMessages();
-      expect(markedAsRead.length).toBeGreaterThan(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
     });
   });
 
@@ -1945,6 +1948,7 @@ describe('Webhook async processing', () => {
           },
         }),
       ]);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
     });
 
     it('ignores interactive buttons without publishing Intex messages', async () => {
@@ -1976,6 +1980,8 @@ describe('Webhook async processing', () => {
       expect(events[0]?.status).toBe('ignored');
       expect(events[0]?.ignoredReason?.code).toBe('BUTTON_NOT_SUPPORTED');
       expect(ctx.eventPublisher.getIntexMessageIngestEvents()).toHaveLength(0);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(1);
+      expect(ctx.whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
     });
   });
 
