@@ -4463,6 +4463,7 @@ describe('Pub/Sub Routes', () => {
       });
       expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
       expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+      expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
     });
 
     it('returns 400 when the transcription event type is unexpected', async () => {
@@ -4690,6 +4691,36 @@ describe('Pub/Sub Routes', () => {
       expect(response.statusCode).toBe(200);
       expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
       expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
+      expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toEqual([
+        { phoneNumberId: '123456789012345', messageId: 'wamid.voice.1' },
+      ]);
+    });
+
+    it('continues after the typing indicator fails for an accepted transcript', async () => {
+      setStoredAudioMessage();
+      whatsappCloudApi.setFailMarkAsRead(true);
+
+      const body = createPubSubBody({
+        type: 'srt.transcription.completed',
+        userId: 'user-audio',
+        messageId: 'stored-audio-1',
+        jobId: 'job-123',
+        status: 'completed',
+        transcript: 'Buy milk.',
+        timestamp: '2026-06-28T10:00:00.000Z',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/whatsapp/pubsub/transcription-completed',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: body,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(eventPublisher.getIntexMessageIngestEvents()).toHaveLength(1);
+      expect(whatsappCloudApi.getSentMessages()).toHaveLength(1);
+      expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
     });
 
     it('acks the transcription when saving reply correlation fails after sending the reply', async () => {
@@ -4758,6 +4789,9 @@ describe('Pub/Sub Routes', () => {
           messageId: expect.any(String),
         },
       ]);
+      expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toEqual([
+        { phoneNumberId: '123456789012345', messageId: 'wamid.voice.1' },
+      ]);
       expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([
         {
           type: 'intex.message.ingest',
@@ -4821,6 +4855,9 @@ describe('Pub/Sub Routes', () => {
           whatsappSender: '15551234567',
           timestamp: '2026-06-28T10:05:00.000Z',
         },
+      ]);
+      expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toEqual([
+        { phoneNumberId: '123456789012345', messageId: 'wamid.video.1' },
       ]);
     });
 

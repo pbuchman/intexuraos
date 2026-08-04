@@ -567,7 +567,7 @@ export class ProcessWebhookEventUseCase {
       throw new RetryableWebhookProcessingError(failureDetails);
     }
 
-    await this.markMessageAsRead(payload, savedEvent, logger);
+    await this.markMessageAsReadWithTyping(payload, savedEvent, logger);
   }
 
   /**
@@ -622,7 +622,7 @@ export class ProcessWebhookEventUseCase {
     }
 
     if (phoneNumberId !== null) {
-      await this.markAudioAsReadWithTyping(payload, savedEvent, whatsappCloudApi, logger);
+      await this.markMessageAsReadWithTyping(payload, savedEvent, logger);
     } else {
       logger.info(
         { eventId: savedEvent.id },
@@ -683,7 +683,7 @@ export class ProcessWebhookEventUseCase {
     }
 
     if (phoneNumberId !== null) {
-      await this.markAudioAsReadWithTyping(payload, savedEvent, whatsappCloudApi, logger);
+      await this.markMessageAsReadWithTyping(payload, savedEvent, logger);
     } else {
       logger.info(
         { eventId: savedEvent.id },
@@ -705,26 +705,7 @@ export class ProcessWebhookEventUseCase {
     buttonResponse: { buttonId: string; buttonTitle: string; replyToWamid: string },
     logger: Logger
   ): Promise<void> {
-    const { webhookEventRepository, whatsappCloudApi, eventPublisher } = this.deps;
-
-    // Fire-and-forget: mark as read + show typing indicator
-    const originalMessageId = extractMessageId(payload);
-    const phoneNumberId = extractPhoneNumberId(payload);
-    if (phoneNumberId !== null && originalMessageId !== null) {
-      whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId).then(
-        (result) => {
-          if (!result.ok) {
-            logger.error(
-              { eventId: savedEvent.id, error: result.error, messageId: originalMessageId },
-              'Failed to mark button message as read with typing'
-            );
-          }
-        },
-        (error: unknown) => {
-          logger.error({ error }, 'markAsReadWithTyping threw unexpectedly');
-        }
-      );
-    }
+    const { webhookEventRepository, eventPublisher } = this.deps;
 
     if (buttonResponse.buttonId.startsWith('intex_confirm:')) {
       logger.info(
@@ -762,6 +743,7 @@ export class ProcessWebhookEventUseCase {
         throw new RetryableWebhookProcessingError(failureDetails);
       }
 
+      await this.markMessageAsReadWithTyping(payload, savedEvent, logger);
       await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
       return;
     }
@@ -776,6 +758,7 @@ export class ProcessWebhookEventUseCase {
       },
       'Ignoring button message because Intex is text-only'
     );
+    await this.markMessageAsReadOnly(payload, savedEvent, logger);
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'ignored', {
       ignoredReason: {
         code: 'BUTTON_NOT_SUPPORTED',
@@ -964,6 +947,8 @@ export class ProcessWebhookEventUseCase {
       throw new RetryableWebhookProcessingError(failureDetails);
     }
 
+    await this.markMessageAsReadWithTyping(payload, savedEvent, logger);
+
     // Publish link preview extraction event to Pub/Sub
     const linkPreviewPublishResult = await eventPublisher.publishExtractLinkPreviews({
       type: 'whatsapp.linkpreview.extract',
@@ -985,7 +970,6 @@ export class ProcessWebhookEventUseCase {
     );
 
     await webhookEventRepository.updateEventStatus(savedEvent.id, 'completed', {});
-    await this.markMessageAsRead(payload, savedEvent, logger);
   }
 
   private async resolveReplyContext(
@@ -1043,11 +1027,8 @@ export class ProcessWebhookEventUseCase {
     return undefined;
   }
 
-  /**
-   * Mark the incoming message as read (displays two blue check marks).
-   * Used for text and image messages instead of sending a confirmation message.
-   */
-  private async markMessageAsRead(
+  /** Mark an ignored message as read without suggesting that Intex will answer it. */
+  private async markMessageAsReadOnly(
     payload: WebhookPayload,
     savedEvent: { id: string },
     logger: Logger
@@ -1056,9 +1037,10 @@ export class ProcessWebhookEventUseCase {
     const phoneNumberId = extractPhoneNumberId(payload);
 
     if (phoneNumberId !== null && originalMessageId !== null) {
-      const { whatsappCloudApi } = this.deps;
-
-      const markResult = await whatsappCloudApi.markAsRead(phoneNumberId, originalMessageId);
+      const markResult = await this.deps.whatsappCloudApi.markAsRead(
+        phoneNumberId,
+        originalMessageId
+      );
 
       if (markResult.ok) {
         logger.info(
@@ -1075,33 +1057,33 @@ export class ProcessWebhookEventUseCase {
   }
 
   /**
-   * Mark audio message as read with typing indicator.
-   * This shows the user something is happening (typing indicator shows for up to 25s
-   * or until the next message is sent).
+   * Mark an accepted message as read and show the typing indicator while Intex prepares a reply.
    */
-  private async markAudioAsReadWithTyping(
+  private async markMessageAsReadWithTyping(
     payload: WebhookPayload,
     savedEvent: { id: string },
-    whatsappCloudApi: WhatsAppCloudApiPort,
     logger: Logger
   ): Promise<void> {
     const originalMessageId = extractMessageId(payload);
     const phoneNumberId = extractPhoneNumberId(payload);
 
-    /* v8 ignore start -- ts-type: audio webhook payloads always include phoneNumberId and messageId @preserve */
     if (phoneNumberId !== null && originalMessageId !== null) {
-      /* v8 ignore stop @preserve */
-      const result = await whatsappCloudApi.markAsReadWithTyping(phoneNumberId, originalMessageId);
+      const { whatsappCloudApi } = this.deps;
 
-      if (result.ok) {
+      const markResult = await whatsappCloudApi.markAsReadWithTyping(
+        phoneNumberId,
+        originalMessageId
+      );
+
+      if (markResult.ok) {
         logger.info(
           { eventId: savedEvent.id, messageId: originalMessageId },
-          'Marked audio message as read with typing indicator'
+          'Marked message as read with typing indicator'
         );
       } else {
         logger.error(
-          { eventId: savedEvent.id, error: result.error, messageId: originalMessageId },
-          'Failed to mark audio message as read with typing indicator'
+          { eventId: savedEvent.id, error: markResult.error, messageId: originalMessageId },
+          'Failed to mark message as read with typing indicator'
         );
       }
     }

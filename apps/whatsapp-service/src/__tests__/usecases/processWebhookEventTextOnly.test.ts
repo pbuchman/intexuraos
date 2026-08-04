@@ -365,7 +365,8 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     expect(messageRepository.getAll()[0]?.text).toBe('new session: normal message');
     expect(eventPublisher.getIntexMessageIngestEvents()[0]).toMatchObject({ text: 'new session: normal message', sourceType: 'whatsapp_text' });
     expect(eventPublisher.getExtractLinkPreviewsEvents()).toHaveLength(1);
-    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(1);
+    expect(whatsappCloudApi.getMarkedAsReadMessages()).toHaveLength(0);
+    expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
     const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
     expect(eventResult.ok && eventResult.value?.status).toBe('completed');
     expect(
@@ -494,7 +495,7 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     expect(whatsappCloudApi.getSentMessages()).toHaveLength(0);
   });
 
-  it('ignores button messages even when marking the source message as read fails', async () => {
+  it('keeps unsupported button read failures non-fatal without showing typing', async () => {
     const { savedEvent, useCase, userMappingRepository, webhookEventRepository, whatsappCloudApi } =
       await createHarness();
     const log = logger();
@@ -514,15 +515,22 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
     const eventResult = await webhookEventRepository.getEvent(savedEvent.id);
     expect(eventResult.ok && eventResult.value?.status).toBe('ignored');
     expect(eventResult.ok && eventResult.value?.ignoredReason?.code).toBe('BUTTON_NOT_SUPPORTED');
+    expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
     expect(log.error).toHaveBeenCalledWith(
       expect.objectContaining({ messageId: expect.stringMatching(/^wamid\.button/) }),
-      'Failed to mark button message as read with typing'
+      'Failed to mark message as read'
     );
   });
 
   it('publishes Intex confirmation button messages to the ingest topic', async () => {
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, eventPublisher } =
-      await createHarness();
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
 
     await useCase.execute(
@@ -553,11 +561,18 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
         timestamp: '1234567890',
       },
     ]);
+    expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(1);
   });
 
   it('marks Intex confirmation button publishing failures as retryable', async () => {
-    const { savedEvent, useCase, userMappingRepository, webhookEventRepository, eventPublisher } =
-      await createHarness();
+    const {
+      savedEvent,
+      useCase,
+      userMappingRepository,
+      webhookEventRepository,
+      eventPublisher,
+      whatsappCloudApi,
+    } = await createHarness();
     await userMappingRepository.saveMapping('user-1', ['15551234567']);
     eventPublisher.setIntexMessageIngestFailure('pubsub unavailable');
 
@@ -582,6 +597,7 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
       'Failed to publish intex message ingest: pubsub unavailable'
     );
     expect(eventPublisher.getIntexMessageIngestEvents()).toEqual([]);
+    expect(whatsappCloudApi.getMarkedAsReadWithTypingMessages()).toHaveLength(0);
   });
 
   it('ignores button messages without attempting read receipts when phoneNumberId is missing', async () => {

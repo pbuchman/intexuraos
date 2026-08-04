@@ -385,6 +385,30 @@ async function sendTranscriptionReplyIfPossible(
   }
 }
 
+async function showAgentTypingAfterTranscription(
+  message: WhatsAppMessage,
+  request: FastifyRequest
+): Promise<void> {
+  const phoneNumberId = message.metadata?.phoneNumberId;
+  if (phoneNumberId === undefined || phoneNumberId.trim() === '') return;
+
+  const result = await getServices().whatsappCloudApi.markAsReadWithTyping(
+    phoneNumberId,
+    message.waMessageId
+  );
+  if (!result.ok) {
+    request.log.error(
+      {
+        userId: message.userId,
+        messageId: message.id,
+        waMessageId: message.waMessageId,
+        error: result.error.message,
+      },
+      'Failed to show typing indicator after transcription'
+    );
+  }
+}
+
 /**
  * Creates Pub/Sub routes plugin with config.
  */
@@ -1640,6 +1664,7 @@ export function createPubsubRoutes(): FastifyPluginCallback {
             `transcription:${eventData.messageId}:${eventData.jobId}`,
             request
           );
+          await showAgentTypingAfterTranscription(message, request);
         } else {
           await sendTranscriptionReplyIfPossible(
             message,
