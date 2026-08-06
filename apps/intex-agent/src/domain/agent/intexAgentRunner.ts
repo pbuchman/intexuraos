@@ -288,10 +288,6 @@ const COMPLETED_REPLIES = {
     en: 'No Intex Agent preferences are defined yet.',
     pl: 'Nie zdefiniowano jeszcze preferencji agenta Intex.',
   },
-  preferenceUpdatedState: {
-    en: 'User Preferences:\n- Updated preference entry.',
-    pl: 'Preferencje:\n- Zaktualizowany wpis.',
-  },
   linkUrl: { en: 'Saved the link.', pl: 'Zapisałem link.' },
 } satisfies Record<string, LocalizedText>;
 
@@ -2633,18 +2629,18 @@ function buildCompletedReply(
   }
 
   if (isPreferenceToolName(toolName)) {
+    if (toolName !== 'get_user_preferences') {
+      return { reply: COMPLETED_REPLIES.preference[replyLanguage] };
+    }
     const promptBlock = readRawString(result, 'promptBlock');
     const renderedPromptBlock =
       promptBlock !== undefined && promptBlock.trim() !== '' ? promptBlock : undefined;
-    const overlayBlock =
-      toolName === 'get_user_preferences' ? renderPreferenceOverlayItems(result) : undefined;
+    const overlayBlock = renderPreferenceOverlayItems(result);
     return {
       reply:
         renderedPromptBlock ??
         overlayBlock ??
-        (toolName === 'get_user_preferences' || toolName === 'delete_user_preference'
-          ? COMPLETED_REPLIES.preferencesEmpty[replyLanguage]
-          : COMPLETED_REPLIES.preferenceUpdatedState[replyLanguage]),
+        COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
     };
   }
 
