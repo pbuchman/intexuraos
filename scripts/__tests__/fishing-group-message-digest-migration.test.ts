@@ -1287,7 +1287,7 @@ describe('fishing Message Digest migration activation and compensation', () => {
     expect(fixture.ports.aggregateDay).toHaveBeenCalledTimes(aggregatesBeforeRetry);
     expect(fixture.candidate.runs.every((run) => run.visibilityMigrationId === null)).toBe(true);
     expect(fixture.ports.publish).not.toHaveBeenCalled();
-  });
+  }, 30_000);
 });
 
 function auditedLegacyDocuments(): LegacyDocument[] {

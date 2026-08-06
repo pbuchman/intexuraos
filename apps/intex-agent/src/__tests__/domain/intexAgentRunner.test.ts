@@ -8275,7 +8275,54 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
-  it('returns the updated preference block after a confirmed preference add succeeds', async () => {
+  it.each([
+    [
+      'add_user_preference',
+      { text: 'Prefer focus blocks before noon.', expectedVersion: 0 },
+    ],
+    [
+      'update_user_preference',
+      {
+        itemId: 'pref_focus',
+        text: 'Prefer focus blocks before 10:00.',
+        expectedVersion: 0,
+      },
+    ],
+    ['delete_user_preference', { itemId: 'pref_focus', expectedVersion: 0 }],
+  ] as const)('keeps the updated preference block internal after confirmed %s succeeds', async (
+    toolName,
+    toolArgs
+  ) => {
+    const promptBlock =
+      'User Preferences v1:\n1. (id: pref_focus) "Prefer focus blocks before noon."';
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        addUserPreference: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+        updateUserPreference: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+        deleteUserPreference: async () =>
+          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        toolName,
+        toolArgs,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      reply: 'Updated the instruction memory.',
+      toolName,
+      toolResult: { status: 'completed', currentVersion: 1, promptBlock },
+    });
+  });
+
+  it('localizes the confirmed preference reply without exposing the internal block', async () => {
     const promptBlock =
       'User Preferences v1:\n1. (id: pref_focus) "Prefer focus blocks before noon."';
     const runner = createIntexAgentRunner({
@@ -8289,16 +8336,14 @@ describe('createIntexAgentRunner', () => {
     await expect(
       runner.executeConfirmed({
         session: session(),
+        events: [event('user_message', { text: 'Dodaj tę preferencję.' })],
         toolName: 'add_user_preference',
-        toolArgs: {
-          text: 'Prefer focus blocks before noon.',
-          expectedVersion: 0,
-        },
+        toolArgs: { text: 'Preferuj poranne spotkania.', expectedVersion: 0 },
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toMatchObject({
       outcome: 'completed',
-      reply: promptBlock,
+      reply: 'Zaktualizowałem pamięć instrukcji.',
       toolName: 'add_user_preference',
       toolResult: { status: 'completed', currentVersion: 1, promptBlock },
     });
@@ -8308,17 +8353,17 @@ describe('createIntexAgentRunner', () => {
     [
       'add_user_preference',
       { text: 'Prefer concise replies.', expectedVersion: 0 },
-      'User Preferences:\n- Updated preference entry.',
+      'Updated the instruction memory.',
     ],
     [
       'update_user_preference',
       { itemId: 'pref_synthetic', text: 'Prefer concise replies.', expectedVersion: 0 },
-      'User Preferences:\n- Updated preference entry.',
+      'Updated the instruction memory.',
     ],
     [
       'delete_user_preference',
       { itemId: 'pref_synthetic', expectedVersion: 0 },
-      'No Intex Agent preferences are defined yet.',
+      'Updated the instruction memory.',
     ],
   ] as const)(
     'reports a successful %s strict-mock mutation even when the result has no prompt block',

@@ -156,7 +156,7 @@ describe('test tool mocks', () => {
     expect(deleted['promptBlock']).toBe('');
   });
 
-  it('returns the actual sanitized resulting-state replies for preference mutations', async () => {
+  it('returns friendly sanitized replies for preference mutations', async () => {
     const calls: CapturedToolCall[] = [];
     const runner = createIntexAgentRunner({
       client: {} as Parameters<typeof createIntexAgentRunner>[0]['client'],
@@ -201,9 +201,9 @@ describe('test tool mocks', () => {
     );
 
     expect(sanitizedReplies.map((reply) => reply.message)).toEqual([
-      'User Preferences: [redacted] [redacted-preference-item]',
-      'User Preferences: [redacted] [redacted-preference-item]',
-      'No Intex Agent preferences are defined yet.',
+      'Updated the instruction memory.',
+      'Updated the instruction memory.',
+      'Updated the instruction memory.',
     ]);
     expect(calls.map((call) => call.toolName)).toEqual([
       'add_user_preference',
