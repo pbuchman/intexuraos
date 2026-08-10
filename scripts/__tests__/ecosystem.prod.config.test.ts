@@ -218,8 +218,10 @@ describe('ecosystem.config.prod.cjs', () => {
       expect(app.env.GOOGLE_APPLICATION_CREDENTIALS, app.name).toBe(
         '/home/deploy/runtime-sa-key.json'
       );
+      expect(app.env.GOOGLE_CLOUD_QUOTA_PROJECT, app.name).toBe('intexuraos-dev-pbuchman');
       expect(app.filter_env, app.name).toContain('INTEXURAOS_');
       expect(app.filter_env, app.name).toContain('GOOGLE_APPLICATION_CREDENTIALS');
+      expect(app.filter_env, app.name).toContain('GOOGLE_CLOUD_QUOTA_PROJECT');
       expect(app.filter_env, app.name).toContain(
         'HETZNER_PROVISIONER_GOOGLE_APPLICATION_CREDENTIALS'
       );

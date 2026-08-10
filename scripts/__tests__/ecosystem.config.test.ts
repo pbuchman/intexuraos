@@ -439,6 +439,17 @@ describe('ecosystem.config.cjs', () => {
     }
   });
 
+  it('pins the Google Cloud quota project to the retained GCP project', () => {
+    const config = loadDevConfig({
+      INTEXURAOS_GCP_PROJECT_ID: 'intexuraos-dev-pbuchman',
+      GOOGLE_CLOUD_QUOTA_PROJECT: 'stale-project',
+    });
+
+    for (const app of config.apps) {
+      expect(app.env.GOOGLE_CLOUD_QUOTA_PROJECT, app.name).toBe('intexuraos-dev-pbuchman');
+    }
+  });
+
   it('passes the untracked selector subject and platform key to User Service only while enabled', () => {
     const absent = loadDevConfig();
     const absentUserService = absent.apps.find((app) => app.name === 'user-service');
