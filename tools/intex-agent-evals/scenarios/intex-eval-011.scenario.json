@@ -42,6 +42,7 @@
         "forbiddenToolCalls": [
           "create_note",
           "create_calendar_event",
+          "update_calendar_event",
           "create_research",
           "create_link",
           "create_code_task",

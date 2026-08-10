@@ -12,6 +12,8 @@ import {
   calendarCreateEventDataSchema,
   calendarCreateEventInputSchema,
   calendarCreateEventRequestSchema,
+  calendarUpdateEventAttendeesDataSchema,
+  calendarUpdateEventAttendeesRequestSchema,
   calendarCreatedEventSchema,
   calendarEventDateTimeSchema,
   calendarGeneratePreviewRequestSchema,
@@ -226,6 +228,14 @@ export const contractComponentSchemas = {
   CalendarCreateEventData: toOpenApiComponentSchema(
     'CalendarCreateEventData',
     calendarCreateEventDataSchema
+  ),
+  CalendarUpdateEventAttendeesRequest: toOpenApiComponentSchema(
+    'CalendarUpdateEventAttendeesRequest',
+    calendarUpdateEventAttendeesRequestSchema
+  ),
+  CalendarUpdateEventAttendeesData: toOpenApiComponentSchema(
+    'CalendarUpdateEventAttendeesData',
+    calendarUpdateEventAttendeesDataSchema
   ),
   CalendarListEventsRequest: toOpenApiComponentSchema(
     'CalendarListEventsRequest',

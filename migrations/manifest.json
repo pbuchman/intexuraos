@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "128",
+  "lastReservedId": "129",
   "entries": [
     {
       "id": "001",
@@ -640,6 +640,11 @@
       "id": "128",
       "name": "message-digest-service-indexes",
       "checksum": "sha256:db990c64119e9bfa14fe34ca5ebd1fe828a5db3c1e123c40625b2c81d71b7a9c"
+    },
+    {
+      "id": "129",
+      "name": "github-pr-summaries-reconciliation-index",
+      "checksum": "sha256:9c96446b16991f2d7bc4a960f72bea98762f94144a7618355364b0ddc7da755f"
     }
   ]
 }

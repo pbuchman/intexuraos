@@ -133,7 +133,37 @@ function mockResult(
         eventId: `mock_event_${suffix}`,
         summary: `Synthetic event for ${scenarioId}`,
       };
+    case 'update_calendar_event':
+      return {
+        toolName,
+        status: 'completed',
+        eventId: `mock_event_${suffix}`,
+        summary:
+          scenarioId === 'intex-eval-008'
+            ? 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01'
+            : `Synthetic event for ${scenarioId}`,
+        attendeesAdded: ['synthetic-attendee@example.com'],
+      };
     case 'query_calendar_events':
+      if (scenarioId === 'intex-eval-008') {
+        return {
+          toolName,
+          status: 'completed',
+          mode: 'list',
+          count: 1,
+          truncated: false,
+          events: [
+            {
+              eventId: `mock_event_${suffix}`,
+              etag: `"mock_event_${suffix}_v1"`,
+              summary: 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01',
+              start: { dateTime: '2026-07-23T15:00:00+02:00' },
+              end: { dateTime: '2026-07-23T16:00:00+02:00' },
+              calendarId: 'primary',
+            },
+          ],
+        };
+      }
       return { toolName, status: 'completed', mode: 'list', count: 0, events: [] };
     case 'create_research':
       return {

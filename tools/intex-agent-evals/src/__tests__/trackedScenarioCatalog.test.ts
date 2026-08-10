@@ -33,6 +33,7 @@ const EXPECTED_SCENARIO_IDS = [
 const MUTATING_TOOL_NAMES = new Set<IntexAgentToolName>([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'create_research',
   'create_link',
   'create_code_task',
@@ -127,7 +128,7 @@ const REDACTED_CONFIRMATION_CASES = [
   {
     scenarioId: 'intex-eval-008',
     turnIndex: 1,
-    labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]'],
+    labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]', 'Attendees: [redacted]'],
   },
   {
     scenarioId: 'intex-eval-010',
@@ -374,7 +375,8 @@ describe('tracked scenario catalog', () => {
         {
           "id": "intex-eval-008",
           "positiveTools": [
-            "create_calendar_event",
+            "query_calendar_events",
+            "update_calendar_event",
           ],
           "turnCount": 3,
         },
@@ -560,8 +562,18 @@ describe('tracked scenario catalog', () => {
         if (turn?.kind !== 'confirmation_button') continue;
 
         const requestExpectation = scenario.expected.turns[turn.previousTurnIndex];
-        expect(requestExpectation?.requiredToolCalls).toEqual([]);
-        expect(requestExpectation?.forbiddenToolCalls).toEqual([...INTEX_AGENT_TOOL_NAMES]);
+        if (mutatingCalls.some((call) => call.toolName === 'update_calendar_event')) {
+          expect(requestExpectation?.requiredToolCalls).toEqual([
+            expect.objectContaining({ toolName: 'query_calendar_events', count: 1 }),
+          ]);
+        } else {
+          expect(requestExpectation?.requiredToolCalls).toEqual([]);
+        }
+        if (requestExpectation !== undefined) {
+          expect(requestExpectation.forbiddenToolCalls).toEqual(
+            expectedForbiddenTools(requestExpectation)
+          );
+        }
         expect(requestExpectation?.timeline.requiredEventTypes).toContain('confirmation_requested');
 
         for (const call of mutatingCalls) {
@@ -864,7 +876,7 @@ describe('tracked scenario catalog', () => {
     );
   });
 
-  it('uses endpoint-observable exact calendar ranges without requiring a tool timezone', () => {
+  it('uses endpoint-observable calendar ranges and complete attendee-update snapshot evidence', () => {
     const calendar002 = findRequiredToolCall(
       findScenario(scenarios, 'intex-eval-002'),
       'create_calendar_event'
@@ -888,26 +900,34 @@ describe('tracked scenario catalog', () => {
       ])
     );
 
-    const calendar008 = findRequiredToolCall(
-      findScenario(scenarios, 'intex-eval-008'),
-      'create_calendar_event'
-    );
-    expect(calendar008.argumentAssertions).toEqual(
-      expect.arrayContaining([
-        { path: 'start', operator: 'contains', value: '2026-09-10T15:00' },
-        { path: 'end', operator: 'contains', value: '2026-09-10T16:00' },
-      ])
-    );
-
     for (const toolCall of [
       calendar002,
       findRequiredToolCall(scenario003, 'create_calendar_event'),
-      calendar008,
     ]) {
       expect(toolCall.argumentAssertions.map((assertion) => assertion.path)).not.toContain(
         'timeZone'
       );
     }
+
+    const scenario008 = findScenario(scenarios, 'intex-eval-008');
+    expect(findRequiredToolCall(scenario008, 'query_calendar_events').argumentAssertions).toEqual(
+      expect.arrayContaining([
+        { path: 'mode', operator: 'equals', value: 'list' },
+        { path: 'queryLength', operator: 'exists' },
+        { path: 'timeMin', operator: 'exists' },
+        { path: 'timeMax', operator: 'exists' },
+      ])
+    );
+    expect(findRequiredToolCall(scenario008, 'update_calendar_event').argumentAssertions).toEqual(
+      expect.arrayContaining([
+        { path: 'attendeesToAddCount', operator: 'equals', value: 1 },
+        { path: 'hasEventId', operator: 'equals', value: true },
+        { path: 'hasCalendarId', operator: 'equals', value: true },
+        { path: 'hasExpectedEtag', operator: 'equals', value: true },
+        { path: 'hasEventStart', operator: 'equals', value: true },
+        { path: 'hasEventEnd', operator: 'equals', value: true },
+      ])
+    );
 
     const query011 = findRequiredToolCall(
       findScenario(scenarios, 'intex-eval-011'),
@@ -1145,7 +1165,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      'c9e1bc9c9ada1ace85b9b8d49a27cc18f3bb631cef078f5f1a2a88ebd7a26f0f'
+      '0744686819add640420489d3ce82d173f40580cae8be8b6a76be08a91eed1ad3'
     );
   });
 });

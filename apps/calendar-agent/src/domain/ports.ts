@@ -11,6 +11,7 @@ import type {
 import type { ExtractedCalendarEvent } from '@intexuraos/llm-prompts';
 import type {
   CalendarEvent,
+  CalendarEventsPage,
   CreateEventInput,
   FreeBusyInput,
   FreeBusySlot,
@@ -30,6 +31,11 @@ import type { WhatsAppScheduleClient } from './schedules/types.js';
 
 export type { UserServiceClient, OAuthTokenResult, ExtractedCalendarEvent };
 
+export interface UpdateEventOptions {
+  sendUpdates?: 'all' | 'externalOnly' | 'none';
+  expectedEtag?: string;
+}
+
 export interface GoogleCalendarClient {
   getCalendarTimezone(
     accessToken: string,
@@ -42,7 +48,7 @@ export interface GoogleCalendarClient {
     calendarId: string,
     options: ListEventsInput,
     logger: Logger
-  ): Promise<Result<CalendarEvent[], CalendarError>>;
+  ): Promise<Result<CalendarEventsPage, CalendarError>>;
 
   getEvent(
     accessToken: string,
@@ -63,7 +69,8 @@ export interface GoogleCalendarClient {
     calendarId: string,
     eventId: string,
     event: UpdateEventInput,
-    logger: Logger
+    logger: Logger,
+    options?: UpdateEventOptions
   ): Promise<Result<CalendarEvent, CalendarError>>;
 
   deleteEvent(

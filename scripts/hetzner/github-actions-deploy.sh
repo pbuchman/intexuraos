@@ -284,8 +284,12 @@ run_remote_at() {
 }
 
 run_remote() {
+  local command="$1"
+  local quoted_command=""
+
   [[ -n "${REMOTE_RELEASE_DIR}" ]] || fail "Remote release directory is unresolved"
-  run_remote_at "${REMOTE_RELEASE_DIR}" "$1"
+  printf -v quoted_command '%q' "${command}"
+  run_remote_at "${REMOTE_RELEASE_DIR}" "bash -o pipefail -c ${quoted_command}"
 }
 
 prepare_remote_web_layout() {
@@ -538,13 +542,30 @@ verify_code_agent_readiness() {
     "https://${PUBLIC_DOMAIN}/api/code/health"
 }
 
+verify_semantic_health() {
+  local label="$1"
+  local url="$2"
+  local expected_service="$3"
+  local required_check="$4"
+  shift 4
+
+  if ! curl --fail --silent --show-error --max-time 15 \
+    "$@" "${url}" \
+    | node scripts/hetzner/verify-semantic-health.mjs "${expected_service}" "${required_check}"; then
+    fail "Semantic health contract failed through ${label}"
+  fi
+}
+
 verify_backend_readiness() {
-  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/whatsapp/health >/dev/null'
-  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/intex-agent/health >/dev/null'
+  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/whatsapp/health | node scripts/hetzner/verify-semantic-health.mjs whatsapp-service firestore'
+  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/intex-agent/health | node scripts/hetzner/verify-semantic-health.mjs intex-agent firestore'
   run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/verify-matrix-corpus-runtime.sh'
-  curl --fail --silent --show-error --max-time 15 \
-    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
-    "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
+  verify_semantic_health \
+    "direct-origin WhatsApp" \
+    "https://${PUBLIC_DOMAIN}/api/whatsapp/health" \
+    "whatsapp-service" \
+    "firestore" \
+    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"
   verify_code_agent_readiness
 }
 
@@ -627,13 +648,22 @@ verify_runtime_readiness() {
   curl --fail --silent --show-error --max-time 15 \
     --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
     "https://${PUBLIC_DOMAIN}/api/settings/health" >/dev/null
-  curl --fail --silent --show-error --max-time 15 \
-    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}" \
-    "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
-  curl --fail --silent --show-error --max-time 15 \
-    "https://${PUBLIC_DOMAIN}/api/whatsapp/health" >/dev/null
-  curl --fail --silent --show-error --max-time 15 \
-    "https://${PUBLIC_DOMAIN}/api/intex-agent/health" >/dev/null
+  verify_semantic_health \
+    "direct-origin WhatsApp" \
+    "https://${PUBLIC_DOMAIN}/api/whatsapp/health" \
+    "whatsapp-service" \
+    "firestore" \
+    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"
+  verify_semantic_health \
+    "public-DNS WhatsApp" \
+    "https://${PUBLIC_DOMAIN}/api/whatsapp/health" \
+    "whatsapp-service" \
+    "firestore"
+  verify_semantic_health \
+    "public-DNS Intex Agent" \
+    "https://${PUBLIC_DOMAIN}/api/intex-agent/health" \
+    "intex-agent" \
+    "firestore"
   verify_non_404_route "/api/code/internal/logs"
 }
 

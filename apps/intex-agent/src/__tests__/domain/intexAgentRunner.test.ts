@@ -75,6 +75,7 @@ const POLISH_EXTERNAL_SAVE_FAILED_REPLY =
 
 type PreviewToolName =
   | 'create_calendar_event'
+  | 'update_calendar_event'
   | 'create_research'
   | 'create_link'
   | 'create_code_task'
@@ -181,7 +182,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('22.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('24.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -194,14 +195,15 @@ describe('createIntexAgentRunner', () => {
       'When bold text is useful in the reply value, wrap it in single asterisks'
     );
     expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
-    expect(client.calls[0]?.systemPrompt).toContain('answer whether existing events are present');
+    expect(client.calls[0]?.systemPrompt).toContain('look up or count calendar events');
     expect(client.calls[0]?.systemPrompt).toContain('For "next week", use the next calendar week after the current week');
     expect(client.calls[0]?.systemPrompt).toContain(
       'copy the exact timeMin and timeMax from Whole-day local bounds'
     );
     expect(client.calls[0]?.systemPrompt).toContain('previous calendar month unless the user says "last 30 days"');
     expect(client.calls[0]?.systemPrompt).toContain('put the event name in query and set mode to count');
-    expect(client.calls[0]?.systemPrompt).toContain('Never use query_calendar_events to create, update, delete, or reschedule events');
+    expect(client.calls[0]?.systemPrompt).toContain('required lookup step before update_calendar_event');
+    expect(client.calls[0]?.systemPrompt).toContain('Never claim query_calendar_events changed an event');
     expect(client.calls[0]?.systemPrompt).toContain('Plain URL shares are the exception');
     expect(client.calls[0]?.systemPrompt).toContain('keywords inside URLs');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -5044,6 +5046,49 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('returns a targeted retry message when calendar-update output is malformed', async () => {
+    const client = new FakeToolCallingClient([
+      ok({
+        content: 'malformed runner output',
+        toolCallsMade: 0,
+        iterationCount: 1,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok({
+        content: 'still malformed after repair',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka na istniejące wydarzenie Bagrowa jutro.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply:
+        'Nie udało mi się przygotować zmiany istniejącego wydarzenia w kalendarzu. Wyślij prośbę ponownie.',
+      blockerReason: 'not_enough_context',
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Ponów prośbę o zmianę istniejącego wydarzenia w kalendarzu.',
+      fallbackReason: 'runner_output_malformed',
+      fallbackSourceOutcome: 'raw_response',
+    });
+    expect(responseRepairClient.calls).toHaveLength(1);
+  });
+
   it('finishes an empty preference read from the tool result without another model iteration', async () => {
     let getUserPreferencesCalls = 0;
     const client = new ToolExecutingFakeToolCallingClient(
@@ -5683,7 +5728,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('22.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('24.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -6423,6 +6468,1007 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
+  it.each(['id', 'eventId'] as const)(
+    'queries an existing event before preparing an attendee-update confirmation with %s identity',
+    async (eventIdentityField) => {
+      let queryCalls = 0;
+      let updateCalls = 0;
+      let confirmedArgs: Record<string, unknown> | undefined;
+      const queryResult = {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [
+          {
+            [eventIdentityField]: 'event-bagrowa',
+            etag: '"event-bagrowa-v1"',
+            summary: 'Bagrowa',
+            calendarId: 'primary',
+            start: { dateTime: '2026-06-25T18:00:00+02:00' },
+            end: { dateTime: '2026-06-25T20:30:00+02:00' },
+          },
+        ],
+      };
+      const client = new ToolExecutingFakeToolCallingClient(
+        [
+          {
+            toolName: 'query_calendar_events',
+            args: {
+              mode: 'list',
+              timeMin: '2026-06-25T00:00:00+02:00',
+              timeMax: '2026-06-26T00:00:00+02:00',
+              query: 'Bagrowa',
+            },
+          },
+          {
+            toolName: 'update_calendar_event',
+            args: {
+              eventId: 'event-bagrowa',
+              eventSummary: 'Bagrowa',
+              attendeesToAdd: ['patryk@example.com'],
+            },
+          },
+        ],
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Ready.',
+              toolName: 'update_calendar_event',
+            })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => {
+            queryCalls += 1;
+            return JSON.stringify(queryResult);
+          },
+          updateCalendarEvent: async (args) => {
+            updateCalls += 1;
+            confirmedArgs = { ...args };
+            return JSON.stringify({ status: 'completed' });
+          },
+        }),
+      });
+
+    const preview = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Zaproś Patryka na Bagrową jutro.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(preview).toEqual({
+      outcome: 'needs_confirmation',
+      reply: [
+        'Czy dodać uczestników do istniejącego wydarzenia w kalendarzu?',
+        '',
+        'Tytuł: Bagrowa',
+        'Początek: 25 czerwca 2026, 18:00',
+        'Koniec: 25 czerwca 2026, 20:30',
+        'Uczestnicy: patryk@example.com',
+        'Pozostałe dane wydarzenia pozostaną bez zmian.',
+      ].join('\n'),
+      toolName: 'update_calendar_event',
+      toolArgs: {
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'primary',
+        expectedEtag: '"event-bagrowa-v1"',
+        eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
+        eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
+      },
+      supportingToolCompletions: [
+        {
+          toolName: 'query_calendar_events',
+          result: queryResult,
+        },
+      ],
+    });
+      expect(queryCalls).toBe(1);
+      expect(updateCalls).toBe(0);
+      if (preview.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
+
+      await expect(
+        runner.executeConfirmed({
+          session: session(),
+          toolName: preview.toolName,
+          toolArgs: preview.toolArgs,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'completed',
+        toolName: 'update_calendar_event',
+      });
+      expect(updateCalls).toBe(1);
+      expect(confirmedArgs).toEqual(preview.toolArgs);
+    }
+  );
+
+  it('keeps the event dates and attendees visible when the matched calendar title is very long', async () => {
+    const summary = 'Bagrowa '.repeat(300).trim();
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: summary,
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 1,
+            truncated: false,
+            events: [
+              {
+                id: 'event-bagrowa',
+                etag: '"event-bagrowa-v1"',
+                summary,
+                calendarId: 'primary',
+                start: { dateTime: '2026-06-25T18:00:00+02:00' },
+                end: { dateTime: '2026-06-25T20:30:00+02:00' },
+              },
+            ],
+          }),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Zaproś Patryka na Bagrową.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result.outcome).toBe('needs_confirmation');
+    expect(result.reply.length).toBeLessThanOrEqual(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
+    expect(result.reply).toContain('Początek: 25 czerwca 2026, 18:00');
+    expect(result.reply).toContain('Koniec: 25 czerwca 2026, 20:30');
+    expect(result.reply).toContain('Uczestnicy: patryk@example.com');
+  });
+
+  it.each([
+    {
+      label: 'no lookup',
+      calls: [
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: undefined,
+    },
+    {
+      label: 'multiple lookup results',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa-1',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 2,
+        truncated: false,
+        events: [
+          { id: 'event-bagrowa-1', summary: 'Bagrowa' },
+          { id: 'event-bagrowa-2', summary: 'Bagrowa' },
+        ],
+      },
+    },
+    {
+      label: 'a non-array event collection',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: { id: 'event-bagrowa' },
+      },
+    },
+    {
+      label: 'a lookup without an explicit pagination verdict',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        events: [{ id: 'event-bagrowa', summary: 'Bagrowa' }],
+      },
+    },
+    {
+      label: 'a lookup with an invalid pagination verdict',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: 'false',
+        events: [{ id: 'event-bagrowa', summary: 'Bagrowa' }],
+      },
+    },
+    {
+      label: 'a matching lookup without a version tag',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [
+          {
+            id: 'event-bagrowa',
+            summary: 'Bagrowa',
+            calendarId: 'primary',
+            start: { dateTime: '2026-06-25T18:00:00+02:00' },
+            end: { dateTime: '2026-06-25T20:30:00+02:00' },
+          },
+        ],
+      },
+    },
+    {
+      label: 'a lookup capped at one result',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+            maxResults: 1,
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa-1',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: true,
+        events: [{ id: 'event-bagrowa-1', summary: 'Bagrowa' }],
+      },
+    },
+    {
+      label: 'a lookup claiming completeness despite a one-result cap',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+            maxResults: 1,
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [{ id: 'event-bagrowa', summary: 'Bagrowa' }],
+      },
+    },
+    {
+      label: 'a count-only lookup',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'count',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'count',
+        count: 1,
+      },
+    },
+    {
+      label: 'mismatched event identity',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+            calendarId: 'team@example.com',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'invented-event',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [
+          {
+            id: 'event-bagrowa',
+            etag: '"event-bagrowa-v1"',
+            summary: 'Bagrowa',
+            calendarId: 'team@example.com',
+            start: { dateTime: '2026-06-25T18:00:00+02:00' },
+            end: { dateTime: '2026-06-25T20:30:00+02:00' },
+          },
+        ],
+      },
+    },
+    {
+      label: 'a requested calendar different from the matched calendar',
+      calls: [
+        {
+          toolName: 'query_calendar_events' as const,
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+            calendarId: 'team@example.com',
+          },
+        },
+        {
+          toolName: 'update_calendar_event' as const,
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+            calendarId: 'primary',
+          },
+        },
+      ],
+      queryResult: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [
+          {
+            id: 'event-bagrowa',
+            etag: '"event-bagrowa-v1"',
+            summary: 'Bagrowa',
+            calendarId: 'team@example.com',
+            start: { dateTime: '2026-06-25T18:00:00+02:00' },
+            end: { dateTime: '2026-06-25T20:30:00+02:00' },
+          },
+        ],
+      },
+    },
+  ])('refuses an attendee update with $label', async ({ calls, queryResult }) => {
+    const client = new ToolExecutingFakeToolCallingClient(calls, [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Ready.',
+          toolName: 'update_calendar_event',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply:
+        'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+      blockerReason: 'missing_required_details',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+    });
+  });
+
+  it.each([
+    { label: 'an array snapshot', start: [] },
+    { label: 'a snapshot without a date', start: {} },
+    {
+      label: 'an empty time zone',
+      start: { dateTime: '2026-06-25T18:00:00+02:00', timeZone: '' },
+    },
+    { label: 'an impossible date-time', start: { dateTime: '2026-02-30T18:00:00+02:00' } },
+    { label: 'a malformed date', start: { date: 'not-a-date' } },
+    { label: 'an out-of-range date', start: { date: '2026-99-99' } },
+    { label: 'an impossible date', start: { date: '2026-02-30' } },
+  ])('refuses an attendee update with $label in the lookup snapshot', async ({ start }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready.',
+            toolName: 'update_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 1,
+            truncated: false,
+            events: [
+              {
+                id: 'event-bagrowa',
+                etag: '"event-bagrowa-v1"',
+                summary: 'Bagrowa',
+                calendarId: 'primary',
+                start,
+                end: { dateTime: '2026-06-25T20:30:00+02:00' },
+              },
+            ],
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      candidateIntents: ['update_calendar_event'],
+    });
+  });
+
+  it.each([
+    {
+      message: 'Zaproś Patryka na Bagrową.',
+      expectedStart: 'Początek: 25 czerwca 2026',
+      expectedEnd: 'Koniec: 26 czerwca 2026',
+    },
+    {
+      message: 'Invite Patryk to the Bagrowa event.',
+      expectedStart: 'Start: 25 June 2026',
+      expectedEnd: 'End: 26 June 2026',
+    },
+  ])('renders validated all-day lookup snapshots in the confirmation language', async (testCase) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-27T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['patryk@example.com'],
+          },
+        },
+      ],
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready.',
+            toolName: 'update_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 1,
+            truncated: false,
+            events: [
+              {
+                id: 'event-bagrowa',
+                etag: '"event-bagrowa-v1"',
+                summary: 'Bagrowa',
+                calendarId: 'primary',
+                start: { date: '2026-06-25', timeZone: 'Europe/Warsaw' },
+                end: { date: '2026-06-26', timeZone: 'Europe/Warsaw' },
+              },
+            ],
+          }),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: testCase.message,
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({ outcome: 'needs_confirmation' });
+    expect(result.reply).toContain(testCase.expectedStart);
+    expect(result.reply).toContain(testCase.expectedEnd);
+  });
+
+  it('rejects a non-update completion for a calendar-update intent', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'get_user_preferences', args: {} },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Loaded preferences.',
+            toolName: 'get_user_preferences',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier([
+        'update_calendar_event',
+        'get_user_preferences',
+      ]),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Add patryk@example.com to the Bagrowa calendar event.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      fallbackReason: 'tool_result_mismatch',
+    });
+  });
+
+  it('omits a supporting completion whose tool result is not JSON', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00Z',
+            timeMax: '2026-06-26T00:00:00Z',
+          },
+        },
+        { toolName: 'create_note', args: { content: 'Calendar follow-up' } },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events', 'create_note']),
+      toolExecutor: fakeToolExecutor({ queryCalendarEvents: async () => 'not-json' }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Check my calendar and create a follow-up note.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_confirmation',
+      reply: 'Add this note?\nContent: Calendar follow-up',
+      toolName: 'create_note',
+      toolArgs: { content: 'Calendar follow-up' },
+    });
+  });
+
+  it('does not complete a multi-tool response after one execution fails', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00Z',
+            timeMax: '2026-06-26T00:00:00Z',
+          },
+        },
+        { toolName: 'create_note', args: { content: 'Calendar follow-up' } },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events', 'create_note']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => {
+          throw new Error('Calendar unavailable');
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Check my calendar and create a follow-up note.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      fallbackReason: 'tool_result_mismatch',
+    });
+  });
+
+  it('does not treat a lookup-only turn as a completed calendar update', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00+02:00',
+          timeMax: '2026-06-26T00:00:00+02:00',
+          query: 'Bagrowa',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Zaktualizowałem wydarzenie.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 1,
+            events: [{ id: 'event-bagrowa', summary: 'Bagrowa' }],
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply:
+        'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+      blockerReason: 'missing_required_details',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+    });
+  });
+
+  it.each([
+    {
+      label: 'no_action',
+      runnerOutput: toolResult({ outcome: 'no_action', reply: 'Nic nie zmieniłem.' }),
+    },
+    {
+      label: 'unsupported',
+      runnerOutput: toolResult({
+        outcome: 'unsupported',
+        reply: 'Nie mogę tego zrobić.',
+        blockerReason: 'unsupported_action',
+        suggestedNextStep: 'Spróbuj inaczej.',
+      }),
+    },
+  ])('does not complete an update after lookup-only $label output', async ({ runnerOutput }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00+02:00',
+          timeMax: '2026-06-26T00:00:00+02:00',
+          query: 'Bagrowa',
+        },
+      },
+      [ok(runnerOutput)]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 1,
+            events: [{ id: 'event-bagrowa', summary: 'Bagrowa' }],
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply:
+        'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+      blockerReason: 'missing_required_details',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+    });
+  });
+
+  it('preserves a lookup-only clarification for a calendar update', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00+02:00',
+          timeMax: '2026-06-26T00:00:00+02:00',
+          query: 'Bagrowa',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'needs_clarification',
+            reply: 'Które wydarzenie Bagrowa masz na myśli?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+            suggestedNextStep: 'Podaj datę wydarzenia.',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 2,
+            events: [
+              { id: 'event-bagrowa-1', summary: 'Bagrowa' },
+              { id: 'event-bagrowa-2', summary: 'Bagrowa' },
+            ],
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Które wydarzenie Bagrowa masz na myśli?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Podaj datę wydarzenia.',
+    });
+  });
+
   it.each([
     {
       toolName: 'create_calendar_event' as const,
@@ -6856,6 +7902,28 @@ describe('createIntexAgentRunner', () => {
           }),
       },
       expectedReply: 'Created the calendar event: /calendar/events/event-1',
+      expectedCtaUrl: undefined,
+    },
+    {
+      toolName: 'update_calendar_event' as const,
+      message: 'Add patryk@example.com to the Bagrowa calendar event',
+      args: {
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'primary',
+        expectedEtag: '"event-bagrowa-v1"',
+        eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
+        eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
+      },
+      executorOverride: {
+        updateCalendarEvent: async (): Promise<string> =>
+          JSON.stringify({
+            status: 'completed',
+            htmlLink: '/calendar/events/event-bagrowa',
+          }),
+      },
+      expectedReply: 'Updated the calendar event: /calendar/events/event-bagrowa',
       expectedCtaUrl: undefined,
     },
     {
@@ -7390,6 +8458,47 @@ describe('createIntexAgentRunner', () => {
       errorCategory: 'version_conflict',
       isRetryable: true,
       attemptedAction: 'update_user_preference',
+    });
+  });
+
+  it('asks for a fresh calendar request when the event changed after confirmation', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        updateCalendarEvent: async (): Promise<string> => {
+          throw new Error(
+            'Failed to update calendar event: CONFLICT: Calendar event changed after confirmation; repeat the request'
+          );
+        },
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Zaproś Patryka na Bagrową.' })],
+        toolName: 'update_calendar_event',
+        toolArgs: {
+          eventId: 'event-bagrowa',
+          eventSummary: 'Bagrowa',
+          attendeesToAdd: ['patryk@example.com'],
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
+          eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'tool_failed',
+      reply:
+        'Wydarzenie w kalendarzu zmieniło się po potwierdzeniu. Wyślij prośbę ponownie, żebym użył jego najnowszej wersji.',
+      toolName: 'update_calendar_event',
+      error:
+        'Failed to update calendar event: CONFLICT: Calendar event changed after confirmation; repeat the request',
+      errorCategory: 'version_conflict',
+      isRetryable: true,
+      attemptedAction: 'update_calendar_event',
     });
   });
 
@@ -8991,6 +10100,7 @@ function fakeToolExecutor(overrides: Partial<IntexAgentToolExecutor> = {}): Inte
   return {
     createNote: async () => 'note-1',
     createCalendarEvent: async () => 'event-1',
+    updateCalendarEvent: async () => 'event-1',
     queryCalendarEvents: async () => 'calendar-query-1',
     createResearch: async () => 'research-1',
     createLink: async () => 'bookmark-1',
@@ -9016,6 +10126,13 @@ function toolArgsFor(toolName: PreviewToolName): Record<string, unknown> {
       end: '2026-06-25T10:00:00+02:00',
       location: 'Dental Clinic',
       attendees: ['pat@example.com'],
+    };
+  }
+  if (toolName === 'update_calendar_event') {
+    return {
+      eventId: 'event-bagrowa',
+      eventSummary: 'Bagrowa',
+      attendeesToAdd: ['pat@example.com'],
     };
   }
   if (toolName === 'create_research') {
@@ -9045,6 +10162,9 @@ function explicitMessageFor(toolName: PreviewToolName): string {
   if (toolName === 'create_calendar_event') {
     return 'Create a calendar event for Dentist tomorrow 9-10am.';
   }
+  if (toolName === 'update_calendar_event') {
+    return 'Add pat@example.com to the existing Bagrowa calendar event.';
+  }
   if (toolName === 'create_research') {
     return 'Create research draft about this topic.';
   }
@@ -9070,6 +10190,15 @@ function expectedConfirmationReplyFor(toolName: PreviewToolName): string {
       'End: 25 June 2026, 10:00',
       'Location: Dental Clinic',
       'Attendees: pat@example.com',
+    ].join('\n');
+  }
+  if (toolName === 'update_calendar_event') {
+    return [
+      'Add attendees to this existing calendar event?',
+      '',
+      'Title: Bagrowa',
+      'Attendees: pat@example.com',
+      'All other event details will remain unchanged.',
     ].join('\n');
   }
   if (toolName === 'create_research') {

@@ -102,14 +102,75 @@ describe('Fastify Schemas', () => {
           events?: {
             type?: string;
           };
+          truncated?: {
+            type?: string;
+          };
         };
       };
 
       expect(requestSchema.required).toEqual(['userId', 'timeMin', 'timeMax']);
       expect(requestSchema.properties?.maxResults?.minimum).toBe(1);
       expect(requestSchema.properties?.maxResults?.maximum).toBe(2500);
-      expect(dataSchema.required).toEqual(['events']);
+      expect(dataSchema.required).toEqual(['events', 'truncated']);
       expect(dataSchema.properties?.events?.type).toBe('array');
+      expect(dataSchema.properties?.truncated?.type).toBe('boolean');
+    });
+
+    it('includes strict calendar attendee update schemas', () => {
+      expect(contractFastifySchemas).toHaveProperty('CalendarUpdateEventAttendeesRequest');
+      expect(contractFastifySchemas).toHaveProperty('CalendarUpdateEventAttendeesData');
+
+      const requestSchema = contractFastifySchemas.CalendarUpdateEventAttendeesRequest as {
+        additionalProperties?: boolean;
+        required?: string[];
+        properties?: {
+          attendeesToAdd?: {
+            type?: string;
+            minItems?: number;
+            items?: {
+              type?: string;
+              additionalProperties?: boolean;
+              required?: string[];
+              properties?: {
+                email?: {
+                  type?: string;
+                  format?: string;
+                };
+              };
+            };
+          };
+        };
+      };
+      const dataSchema = contractFastifySchemas.CalendarUpdateEventAttendeesData as {
+        additionalProperties?: boolean;
+        required?: string[];
+        properties?: {
+          event?: {
+            type?: string;
+            required?: string[];
+          };
+        };
+      };
+
+      expect(requestSchema.additionalProperties).toBe(false);
+      expect(requestSchema.required).toEqual([
+        'userId',
+        'calendarId',
+        'expectedEtag',
+        'attendeesToAdd',
+      ]);
+      expect(requestSchema.properties?.attendeesToAdd?.type).toBe('array');
+      expect(requestSchema.properties?.attendeesToAdd?.minItems).toBe(1);
+      expect(requestSchema.properties?.attendeesToAdd?.items?.type).toBe('object');
+      expect(requestSchema.properties?.attendeesToAdd?.items?.additionalProperties).toBe(false);
+      expect(requestSchema.properties?.attendeesToAdd?.items?.required).toEqual(['email']);
+      expect(requestSchema.properties?.attendeesToAdd?.items?.properties?.email?.format).toBe(
+        'email'
+      );
+      expect(dataSchema.additionalProperties).toBe(false);
+      expect(dataSchema.required).toEqual(['event']);
+      expect(dataSchema.properties?.event?.type).toBe('object');
+      expect(dataSchema.properties?.event?.required).toEqual(['id', 'summary', 'start', 'end']);
     });
   });
 
@@ -128,6 +189,12 @@ describe('Fastify Schemas', () => {
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarCreateEventRequest);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarListEventsRequest);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarListEventsData);
+      expect(addSchema).toHaveBeenCalledWith(
+        contractFastifySchemas.CalendarUpdateEventAttendeesRequest
+      );
+      expect(addSchema).toHaveBeenCalledWith(
+        contractFastifySchemas.CalendarUpdateEventAttendeesData
+      );
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarCreatedEvent);
       expect(addSchema).toHaveBeenCalledWith(contractFastifySchemas.CalendarPreview);
     });

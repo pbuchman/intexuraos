@@ -1,5 +1,5 @@
-export const MATRIX_CORPUS_DRAIN_INTERVAL_MS = 5_000;
-export const MATRIX_CORPUS_SWEEP_INTERVAL_MS = 30_000;
+export const MATRIX_CORPUS_DRAIN_INTERVAL_MS = 5 * 60 * 1000;
+export const MATRIX_CORPUS_SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 export const MATRIX_CORPUS_RECOVERY_BATCH_SIZE = 32;
 
 export interface MatrixCorpusTimerScheduler {

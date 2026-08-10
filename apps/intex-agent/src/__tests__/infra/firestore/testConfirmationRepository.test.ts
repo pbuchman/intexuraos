@@ -158,6 +158,46 @@ describe('FirestoreTestConfirmationRepository', () => {
       expect(stored.data()).not.toHaveProperty(forbiddenField);
   });
 
+  it('round-trips a complete calendar snapshot only through encrypted confirmation arguments', async () => {
+    const { firestore, repository } = fixture();
+    const toolArgs = {
+      eventId: 'mock_event_private',
+      eventSummary: 'Private event summary',
+      attendeesToAdd: ['private.person@example.com'],
+      calendarId: 'mock_calendar_private',
+      expectedEtag: '"private-event-v1"',
+      eventStart: { dateTime: '2026-08-20T10:00:00.000Z' },
+      eventEnd: { dateTime: '2026-08-20T11:00:00.000Z' },
+    };
+
+    await repository.createOrGet(
+      pendingInput({ toolName: 'update_calendar_event', toolArgs })
+    );
+
+    await expect(repository.getExact({ ...identity(), now: createdAt })).resolves.toMatchObject({
+      ok: true,
+      confirmation: { toolName: 'update_calendar_event', toolArgs },
+    });
+    const stored = await firestore
+      .collection(INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION)
+      .doc('confirmation_1')
+      .get();
+    const serialized = JSON.stringify(stored.data());
+    for (const privateValue of [
+      toolArgs.eventId,
+      toolArgs.eventSummary,
+      toolArgs.attendeesToAdd[0],
+      toolArgs.calendarId,
+      toolArgs.expectedEtag,
+      toolArgs.eventStart.dateTime,
+      toolArgs.eventEnd.dateTime,
+    ]) {
+      expect(serialized).not.toContain(privateValue);
+    }
+    expect(stored.data()).not.toHaveProperty('toolArgs');
+    expect(stored.data()).toHaveProperty('encryptedToolArgs');
+  });
+
   it('rejects tampered ciphertext and ciphertext replay under another confirmation identity', async () => {
     const { firestore, repository } = fixture();
     await repository.createOrGet(pendingInput());

@@ -6,7 +6,7 @@ import { err, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type { CalendarError } from '../errors.js';
 import { mapUserServiceError } from '../errors.js';
-import type { CalendarEvent, ListEventsInput } from '../models.js';
+import type { CalendarEventsPage, ListEventsInput } from '../models.js';
 import type { GoogleCalendarClient, UserServiceClient } from '../ports.js';
 
 export interface ListEventsDeps {
@@ -24,7 +24,7 @@ export interface ListEventsRequest {
 export async function listEvents(
   request: ListEventsRequest,
   deps: ListEventsDeps
-): Promise<Result<CalendarEvent[], CalendarError>> {
+): Promise<Result<CalendarEventsPage, CalendarError>> {
   const { userId, calendarId = 'primary', options = {} } = request;
   const { userServiceClient, googleCalendarClient, logger } = deps;
 
@@ -44,7 +44,10 @@ export async function listEvents(
   );
 
   if (result.ok) {
-    logger.info({ userId, calendarId, eventCount: result.value.length }, 'listEvents: success');
+    logger.info(
+      { userId, calendarId, eventCount: result.value.events.length, truncated: result.value.truncated },
+      'listEvents: success'
+    );
   } else {
     logger.error({ userId, calendarId, error: result.error }, 'listEvents: failed to list events');
   }

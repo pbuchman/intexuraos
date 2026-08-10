@@ -212,18 +212,28 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
       testCase.configure(current.userMappingRepository);
       const capturedLogger = logger();
 
-      await current.useCase.execute(createTextPayload(matrixCorpusText()), current.savedEvent, capturedLogger);
+      const result = await current.useCase.execute(
+        createTextPayload(matrixCorpusText()),
+        current.savedEvent,
+        capturedLogger
+      );
 
       const eventResult = await current.webhookEventRepository.getEvent(current.savedEvent.id);
       expect(eventResult.ok && eventResult.value?.status).toBe(testCase.status);
       expect(JSON.stringify(eventResult.ok && eventResult.value)).toContain(testCase.expected);
+      if (testCase.status === 'failed') {
+        expect(eventResult.ok && eventResult.value?.retryable).toBe(true);
+        expect(result).toEqual({ ok: false, retryable: true, failureDetails: testCase.expected });
+      } else {
+        expect(result).toBeUndefined();
+      }
       expect(JSON.stringify(vi.mocked(capturedLogger.info).mock.calls)).not.toContain(
         '15551234567'
       );
     }
   });
 
-  it('returns a static failure when reserved Matrix processing throws unexpectedly', async () => {
+  it('returns a static retryable failure when the reserved Matrix mapping lookup throws', async () => {
     const current = await createHarness({
       consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
     });
@@ -234,9 +244,118 @@ describe('ProcessWebhookEventUseCase text-only branches', () => {
       current.useCase.execute(createTextPayload(matrixCorpusText()), current.savedEvent, logger())
     ).resolves.toEqual({
       ok: false,
+      retryable: true,
+      failureDetails: 'Matrix corpus user mapping lookup failed',
+    });
+    await expect(current.webhookEventRepository.getEvent(current.savedEvent.id)).resolves.toEqual(
+      ok(expect.objectContaining({ status: 'failed', retryable: true }))
+    );
+  });
+
+  it('returns a closed retryable failure when the reserved Matrix mapping lookup returns an error', async () => {
+    const current = await createHarness({
+      consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
+    });
+    current.userMappingRepository.setMappingForPhone('15551234567', 'user-1');
+    current.userMappingRepository.setFailGetMapping(true);
+    const capturedLogger = logger();
+
+    await expect(
+      current.useCase.execute(
+        createTextPayload(matrixCorpusText()),
+        current.savedEvent,
+        capturedLogger
+      )
+    ).resolves.toEqual({
+      ok: false,
+      retryable: true,
+      failureDetails: 'Matrix corpus user mapping lookup failed',
+    });
+    await expect(current.webhookEventRepository.getEvent(current.savedEvent.id)).resolves.toEqual(
+      ok(
+        expect.objectContaining({
+          status: 'failed',
+          retryable: true,
+          failureDetails: 'Matrix corpus user mapping lookup failed',
+        })
+      )
+    );
+    const errorLogs = JSON.stringify(vi.mocked(capturedLogger.error).mock.calls);
+    expect(errorLogs).toContain('mapping_load_failed');
+    expect(errorLogs).not.toContain('15551234567');
+    expect(errorLogs).not.toContain('user-1');
+    expect(errorLogs).not.toContain('Simulated getMapping failure');
+  });
+
+  it('closes unexpected reserved Matrix failures without logging private error details', async () => {
+    const current = await createHarness({
+      consumeReservedMessage: vi.fn().mockResolvedValue({ code: 'INGEST_ENQUEUED' }),
+    });
+    await current.userMappingRepository.saveMapping('user-1', ['15551234567']);
+    vi.spyOn(current.webhookEventRepository, 'updateEventStatus').mockRejectedValueOnce(
+      new Error('private storage detail')
+    );
+    const capturedLogger = logger();
+
+    await expect(
+      current.useCase.execute(
+        createTextPayload(matrixCorpusText()),
+        current.savedEvent,
+        capturedLogger
+      )
+    ).resolves.toEqual({
+      ok: false,
       retryable: false,
       failureDetails: 'Unexpected Matrix corpus webhook processing failure',
     });
+    await expect(current.webhookEventRepository.getEvent(current.savedEvent.id)).resolves.toEqual(
+      ok(
+        expect.objectContaining({
+          status: 'failed',
+          retryable: false,
+          failureDetails: 'Unexpected Matrix corpus webhook processing failure',
+        })
+      )
+    );
+    const errorLogs = JSON.stringify(vi.mocked(capturedLogger.error).mock.calls);
+    expect(errorLogs).toContain('unexpected_processing_failure');
+    expect(errorLogs).not.toContain('private storage detail');
+    expect(errorLogs).not.toContain('15551234567');
+    expect(errorLogs).not.toContain('user-1');
+  });
+
+  it('reports unexpected ordinary text failures with the original error message', async () => {
+    const current = await createHarness();
+    await current.userMappingRepository.saveMapping('user-1', ['15551234567']);
+    vi.spyOn(current.messageRepository, 'findByWaMessageId').mockRejectedValueOnce(
+      new Error('unexpected lookup failure')
+    );
+    const capturedLogger = logger();
+
+    await expect(
+      current.useCase.execute(
+        createTextPayload('ordinary message'),
+        current.savedEvent,
+        capturedLogger
+      )
+    ).resolves.toEqual({
+      ok: false,
+      retryable: false,
+      failureDetails: 'Unexpected error: unexpected lookup failure',
+    });
+    await expect(current.webhookEventRepository.getEvent(current.savedEvent.id)).resolves.toEqual(
+      ok(
+        expect.objectContaining({
+          status: 'failed',
+          retryable: false,
+          failureDetails: 'Unexpected error: unexpected lookup failure',
+        })
+      )
+    );
+    expect(capturedLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ error: 'unexpected lookup failure' }),
+      'Unexpected error during asynchronous webhook processing'
+    );
   });
 
   it('rejects malformed and closed-rejection Matrix ingress results without ordinary side effects', async () => {

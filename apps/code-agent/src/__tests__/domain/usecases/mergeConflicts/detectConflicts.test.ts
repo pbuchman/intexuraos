@@ -106,7 +106,7 @@ function createDetectDeps(): DetectConflictDeps {
       findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
       findOpenByRepository: vi.fn().mockResolvedValue(ok([])),
       findAllOpen: vi.fn().mockResolvedValue(ok([])),
-      findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+      findReconciliationCandidates: vi.fn().mockResolvedValue(ok([])),
       upsert: vi.fn().mockResolvedValue(ok(undefined)),
     },
     codeTaskRepo: {
@@ -702,9 +702,69 @@ describe('handleMergeConflictTransition', () => {
 });
 
 describe('reconcilePRSummaries', () => {
-  it('returns empty result when findRecentlyActive fails', async () => {
+  it('uses a hard-bounded candidate query and skips records checked inside the stale interval', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    const stale = createSummary({
+      pullRequestNumber: 41,
+      lastConflictCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+    });
+    const fresh = createSummary({
+      pullRequestNumber: 42,
+      lastConflictCheckedAt: new Date(),
+    });
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
+      ok([stale, fresh])
+    );
+    deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(ok([]));
+    const logger = createLogger();
+
+    const result = await reconcilePRSummaries(deps, logger);
+
+    expect(deps.gitHubPRSummaryRepo.findReconciliationCandidates).toHaveBeenCalledWith(10);
+    expect(result.processed).toBe(1);
+    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ pullRequestNumber: 41 })
+    );
+    expect(deps.gitHubPRSummaryRepo.upsert).not.toHaveBeenCalledWith(
+      expect.objectContaining({ pullRequestNumber: 42 })
+    );
+  });
+
+  it.each([
+    { label: 'unchanged', mergeable: false, previousStatus: 'conflicting' as const },
+    { label: 'unknown', mergeable: null, previousStatus: 'clean' as const },
+  ])('refreshes lastConflictCheckedAt after a successful $label mergeability check', async ({
+    mergeable,
+    previousStatus,
+  }) => {
+    const deps = createDetectDeps();
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
+      ok([createSummary({
+        mergeConflictStatus: previousStatus,
+        lastConflictCheckedAt: new Date(Date.now() - 60 * 60 * 1000),
+      })])
+    );
+    deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
+      ok([{ number: 42, title: 't', authorLogin: 'a', baseBranch: 'main', headBranch: 'f', createdAt: 'x' }])
+    );
+    deps.gitHubPRClient.getPullRequestDetails = vi.fn().mockResolvedValue(
+      ok(createPRDetails({ mergeable }))
+    );
+    const logger = createLogger();
+
+    await reconcilePRSummaries(deps, logger);
+
+    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pullRequestNumber: 42,
+        lastConflictCheckedAt: expect.any(Date),
+      })
+    );
+  });
+
+  it('returns empty result when findReconciliationCandidates fails', async () => {
+    const deps = createDetectDeps();
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       err({ code: 'X', message: 'm' })
     );
     const logger = createLogger();
@@ -714,7 +774,7 @@ describe('reconcilePRSummaries', () => {
 
   it('returns empty result when there are no summaries', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(ok([]));
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(ok([]));
     const logger = createLogger();
     const result = await reconcilePRSummaries(deps, logger);
     expect(result.processed).toBe(0);
@@ -722,7 +782,7 @@ describe('reconcilePRSummaries', () => {
 
   it('skips invalid repository format', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary({ repository: 'bad-format' })])
     );
     const logger = createLogger();
@@ -732,7 +792,7 @@ describe('reconcilePRSummaries', () => {
 
   it('skips repo without access context', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary({ authorLogin: null, managedConflictTaskOwnerUserId: null })])
     );
     deps.userServiceClient.resolveGitHubUsername = vi.fn().mockResolvedValue(ok(null));
@@ -745,7 +805,7 @@ describe('reconcilePRSummaries', () => {
 
   it('skips repo when listAllOpenPullRequests errors', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary()])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
@@ -760,9 +820,29 @@ describe('reconcilePRSummaries', () => {
     );
   });
 
+  it('advances the reconciliation marker when a candidate attempt fails', async () => {
+    const deps = createDetectDeps();
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
+      ok([createSummary({ lastConflictCheckedAt: null })])
+    );
+    deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
+      err({ code: 'X', message: 'GitHub unavailable' })
+    );
+    const logger = createLogger();
+
+    await reconcilePRSummaries(deps, logger);
+
+    expect(deps.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pullRequestNumber: 42,
+        lastConflictCheckedAt: expect.any(Date),
+      })
+    );
+  });
+
   it('closes PR summary when PR is no longer open', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary()])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(ok([]));
@@ -773,7 +853,7 @@ describe('reconcilePRSummaries', () => {
 
   it('re-opens summary when closed in Firestore but open on GitHub', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary({ state: 'closed' })])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
@@ -786,7 +866,7 @@ describe('reconcilePRSummaries', () => {
 
   it('refreshes merge conflict status when changed', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary({ mergeConflictStatus: 'clean' })])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
@@ -799,7 +879,7 @@ describe('reconcilePRSummaries', () => {
 
   it('logs getPullRequestDetails errors during reconcile', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary()])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
@@ -815,7 +895,7 @@ describe('reconcilePRSummaries', () => {
 
   it('catches thrown errors during summary processing', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary()])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
@@ -829,7 +909,7 @@ describe('reconcilePRSummaries', () => {
 
   it('skips refresh when status is unchanged', async () => {
     const deps = createDetectDeps();
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(
       ok([createSummary({ mergeConflictStatus: 'conflicting' })])
     );
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(
@@ -847,7 +927,7 @@ describe('reconcilePRSummaries', () => {
     const deps = createDetectDeps();
     const s1 = createSummary({ pullRequestNumber: 1 });
     const s2 = createSummary({ pullRequestNumber: 2, repository: 'other/repo' });
-    deps.gitHubPRSummaryRepo.findRecentlyActive = vi.fn().mockResolvedValue(ok([s1, s2]));
+    deps.gitHubPRSummaryRepo.findReconciliationCandidates = vi.fn().mockResolvedValue(ok([s1, s2]));
     deps.gitHubPRClient.listAllOpenPullRequests = vi.fn().mockResolvedValue(ok([]));
     const logger = createLogger();
     const result = await reconcilePRSummaries(deps, logger);

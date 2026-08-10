@@ -171,6 +171,12 @@ describe('OpenAPI Schemas', () => {
       expect((contractComponentSchemas.CalendarListEventsData as { type?: string }).type).toBe(
         'object'
       );
+      expect(
+        (contractComponentSchemas.CalendarUpdateEventAttendeesRequest as { type?: string }).type
+      ).toBe('object');
+      expect(
+        (contractComponentSchemas.CalendarUpdateEventAttendeesData as { type?: string }).type
+      ).toBe('object');
       expect((contractComponentSchemas.CalendarCreatedEvent as { type?: string }).type).toBe(
         'object'
       );
@@ -211,6 +217,36 @@ describe('OpenAPI Schemas', () => {
             };
           };
         };
+      const calendarUpdateEventAttendeesRequestSchema =
+        contractComponentSchemas.CalendarUpdateEventAttendeesRequest as {
+          additionalProperties?: boolean;
+          required?: string[];
+          properties?: {
+            attendeesToAdd?: {
+              type?: string;
+              minItems?: number;
+              items?: {
+                additionalProperties?: boolean;
+                required?: string[];
+                properties?: {
+                  email?: {
+                    format?: string;
+                  };
+                };
+              };
+            };
+          };
+        };
+      const calendarUpdateEventAttendeesDataSchema =
+        contractComponentSchemas.CalendarUpdateEventAttendeesData as {
+          additionalProperties?: boolean;
+          required?: string[];
+          properties?: {
+            event?: {
+              required?: string[];
+            };
+          };
+        };
 
       expect(notesSchema.additionalProperties).toBe(false);
       expect(calendarCreateEventRequestSchema.additionalProperties).toBe(false);
@@ -218,6 +254,35 @@ describe('OpenAPI Schemas', () => {
       expect(calendarListEventsRequestSchema.required).toEqual(['userId', 'timeMin', 'timeMax']);
       expect(calendarListEventsRequestSchema.properties?.maxResults?.minimum).toBe(1);
       expect(calendarListEventsRequestSchema.properties?.maxResults?.maximum).toBe(2500);
+      expect(calendarUpdateEventAttendeesRequestSchema.additionalProperties).toBe(false);
+      expect(calendarUpdateEventAttendeesRequestSchema.required).toEqual([
+        'userId',
+        'calendarId',
+        'expectedEtag',
+        'attendeesToAdd',
+      ]);
+      expect(calendarUpdateEventAttendeesRequestSchema.properties?.attendeesToAdd?.minItems).toBe(
+        1
+      );
+      expect(
+        calendarUpdateEventAttendeesRequestSchema.properties?.attendeesToAdd?.items
+          ?.additionalProperties
+      ).toBe(false);
+      expect(
+        calendarUpdateEventAttendeesRequestSchema.properties?.attendeesToAdd?.items?.required
+      ).toEqual(['email']);
+      expect(
+        calendarUpdateEventAttendeesRequestSchema.properties?.attendeesToAdd?.items?.properties
+          ?.email?.format
+      ).toBe('email');
+      expect(calendarUpdateEventAttendeesDataSchema.additionalProperties).toBe(false);
+      expect(calendarUpdateEventAttendeesDataSchema.required).toEqual(['event']);
+      expect(calendarUpdateEventAttendeesDataSchema.properties?.event?.required).toEqual([
+        'id',
+        'summary',
+        'start',
+        'end',
+      ]);
       expect(calendarCreateEventRequestSchema.properties?.event?.required).toEqual([
         'summary',
         'start',

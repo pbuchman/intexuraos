@@ -684,6 +684,13 @@ describe('IntexEvalScenarioSchema', () => {
     expectScenarioValid(scenario);
   });
 
+  it('accepts the documented synthetic e-mail domain', () => {
+    const scenario = createScenario();
+    const turn = scenario.turns[0];
+    if (turn !== undefined) turn.text = 'Invite synthetic-attendee@example.com';
+    expectScenarioValid(scenario);
+  });
+
   it('accepts all declared transition actions with valid optional previous reasons', () => {
     for (const action of INTEX_AGENT_TRANSITION_ACTIONS) {
       const scenario = createScenario();

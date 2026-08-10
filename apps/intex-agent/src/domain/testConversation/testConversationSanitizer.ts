@@ -43,6 +43,8 @@ const TOOL_ARG_SAFE_INTEGER_KEYS = [
   'locationLength',
   'descriptionLength',
   'attendeesCount',
+  'eventSummaryLength',
+  'attendeesToAddCount',
   'contentLength',
   'titleLength',
   'tagsCount',
@@ -56,6 +58,10 @@ const TOOL_ARG_SAFE_INTEGER_KEYS = [
 ] as const;
 const TOOL_ARG_BOOLEAN_KEYS = [
   'hasCalendarId',
+  'hasExpectedEtag',
+  'hasEventStart',
+  'hasEventEnd',
+  'hasEventId',
   'hasUrl',
   'hasLinearIssueId',
   'hasSourceUrl',
@@ -344,6 +350,14 @@ export function summarizeArgs(
     copySummaryStringLength(args, summary, 'location');
     copySummaryStringLength(args, summary, 'description');
     copySummaryArrayCount(args, summary, 'attendees');
+  } else if (toolName === 'update_calendar_event') {
+    copySummaryStringLength(args, summary, 'eventSummary');
+    copySummaryArrayCount(args, summary, 'attendeesToAdd');
+    copySummaryPresence(args, summary, 'eventId');
+    copySummaryPresence(args, summary, 'calendarId');
+    copySummaryPresence(args, summary, 'expectedEtag');
+    copySummaryPresence(args, summary, 'eventStart');
+    copySummaryPresence(args, summary, 'eventEnd');
   } else if (toolName === 'create_note') {
     copySummaryStringLength(args, summary, 'content');
     copySummaryStringLength(args, summary, 'title');
@@ -686,6 +700,7 @@ function isToolName(value: unknown): value is IntexAgentToolName {
   return (
     value === 'create_note' ||
     value === 'create_calendar_event' ||
+    value === 'update_calendar_event' ||
     value === 'query_calendar_events' ||
     value === 'create_research' ||
     value === 'create_link' ||

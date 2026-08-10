@@ -118,7 +118,11 @@ describe('test conversation sanitizer', () => {
     const summarizeArgs = (
       sanitizerModule as unknown as {
         summarizeArgs?: (
-          toolName: 'create_note' | 'create_calendar_event' | 'query_calendar_events',
+          toolName:
+            | 'create_note'
+            | 'create_calendar_event'
+            | 'update_calendar_event'
+            | 'query_calendar_events',
           args: Record<string, unknown>
         ) => Record<string, unknown>;
       }
@@ -176,6 +180,30 @@ describe('test conversation sanitizer', () => {
       syntheticMarkerDigest: markerDigest(['INTEX-EVAL-011-F01']),
     });
     expect(JSON.stringify(querySummary)).not.toMatch(/private search|INTEX-EVAL/iu);
+
+    const updateSummary = summarizeArgs('update_calendar_event', {
+      eventId: 'private-event-id',
+      eventSummary: 'Bagrowa',
+      attendeesToAdd: ['private.person@example.com'],
+      calendarId: 'private-calendar-id',
+      expectedEtag: 'private-etag',
+      eventStart: { dateTime: '2026-07-18T10:00:00+02:00' },
+      eventEnd: { dateTime: '2026-07-18T11:00:00+02:00' },
+    });
+    expect(updateSummary).toEqual({
+      eventSummaryLength: 'Bagrowa'.length,
+      attendeesToAddCount: 1,
+      hasEventId: true,
+      hasCalendarId: true,
+      hasExpectedEtag: true,
+      hasEventStart: true,
+      hasEventEnd: true,
+      syntheticMarkerCount: 0,
+      syntheticMarkerDigest: markerDigest([]),
+    });
+    expect(JSON.stringify(updateSummary)).not.toMatch(
+      /private-event-id|private\.person@example\.com|private-calendar-id|private-etag/u
+    );
 
     const calendar = summarizeArgs('create_calendar_event', {
       summary: 'Synthetic event',

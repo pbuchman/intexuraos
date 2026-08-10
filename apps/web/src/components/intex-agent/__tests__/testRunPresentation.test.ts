@@ -6,6 +6,7 @@ import {
   formatTestModel,
   formatTestNanoUsd,
   formatTestStatus,
+  formatTestToolName,
   scenarioMatchesTestRunFilters,
 } from '../testRunPresentation.js';
 import { testScenarioSummary } from '@/testFixtures/intexAgentTestRuns.js';
@@ -30,6 +31,7 @@ describe('Test Run presentation', () => {
     expect(formatTestNanoUsd(null)).toBe('Unavailable');
     expect(formatTestDuration(125_000)).toBe('2m 5s');
     expect(formatTestDuration(null)).toBe('In progress');
+    expect(formatTestToolName('update_calendar_event')).toBe('Update Calendar Event');
   });
 
   it('filters only by scenario number, catalog label, lifecycle, verdict, and safe tools', () => {

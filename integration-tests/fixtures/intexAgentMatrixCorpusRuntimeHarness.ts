@@ -700,47 +700,63 @@ function createDeepSeekBoundary(
       const context = params.matrixCorpusContext;
       if (context === undefined) throw new Error('DeepSeek boundary requires Matrix context');
       const entry = requiredEntry(catalog, context.scenarioId);
-      const selectedTool = expectedToolForNormalTurn(entry, context.turnIndex);
+      const selectedTools = expectedToolsForNormalTurn(entry, context.turnIndex);
       const expectsClarification =
         entry.scenario.expected.turns[context.turnIndex]?.timeline.requiredEventTypes.includes(
           'clarification_requested'
         ) === true;
       let toolCallsMade = 0;
       let content: string;
-      if (selectedTool === null && expectsClarification) {
+      if (selectedTools.length === 0 && expectsClarification) {
+        const isAttendeeUpdate = entry.scenario.id === 'intex-eval-008';
         content = JSON.stringify({
           outcome: 'needs_clarification',
-          reply: 'Which date should I use?',
+          reply: isAttendeeUpdate
+            ? 'What is the attendee email address?'
+            : 'Which date should I use?',
           blockerReason: 'missing_required_details',
-          missingFields: ['date'],
-          candidateIntents: ['create_calendar_event'],
-          suggestedNextStep: 'Provide the missing calendar date.',
-          clarification: 'Which date should I use?',
+          missingFields: [isAttendeeUpdate ? 'attendee_email' : 'date'],
+          candidateIntents: [isAttendeeUpdate ? 'update_calendar_event' : 'create_calendar_event'],
+          suggestedNextStep: isAttendeeUpdate
+            ? 'Provide the attendee email address.'
+            : 'Provide the missing calendar date.',
+          clarification: isAttendeeUpdate
+            ? 'What is the attendee email address?'
+            : 'Which date should I use?',
         });
-      } else if (selectedTool === null) {
+      } else if (selectedTools.length === 0) {
         content = JSON.stringify({
           outcome: 'completed',
           reply: `Scenario ${String(entry.scenarioNumber).padStart(3, '0')} turn ${String(context.turnIndex + 1)} acknowledged.`,
         });
       } else {
-        const tool = requiredTool(params.tools, selectedTool.toolName);
-        const args = toolArgs(
-          entry,
-          selectedTool.toolName,
-          params.messages.map(({ content }) => content)
-        );
-        await tool.run(args);
-        toolCallsMade = 1;
+        let terminalSelection: (typeof selectedTools)[number] | undefined;
+        let terminalArgs: Record<string, unknown> | undefined;
+        for (const selectedTool of selectedTools) {
+          const tool = requiredTool(params.tools, selectedTool.toolName);
+          const args = toolArgs(
+            entry,
+            selectedTool.toolName,
+            params.messages.map(({ content }) => content)
+          );
+          await tool.run(args);
+          terminalSelection = selectedTool;
+          terminalArgs = args;
+        }
+        if (terminalSelection === undefined || terminalArgs === undefined) {
+          throw new Error('DeepSeek boundary did not select a terminal tool');
+        }
+        toolCallsMade = selectedTools.length;
         content = JSON.stringify({
-          outcome: selectedTool.confirmationPreview ? 'needs_confirmation' : 'completed',
-          reply: selectedTool.confirmationPreview
+          outcome: terminalSelection.confirmationPreview ? 'needs_confirmation' : 'completed',
+          reply: terminalSelection.confirmationPreview
             ? 'Please confirm the synthetic action.'
             : 'The synthetic action completed.',
-          toolName: selectedTool.toolName,
-          ...(selectedTool.confirmationPreview ? { toolArgs: args } : {}),
+          toolName: terminalSelection.toolName,
+          ...(terminalSelection.confirmationPreview ? { toolArgs: terminalArgs } : {}),
         });
       }
-      const iterationCount = toolCallsMade === 0 ? 1 : 2;
+      const iterationCount = toolCallsMade + 1;
       const providerCalls = Array.from({ length: iterationCount }, (_, index) => {
         const callOrdinal = context.callOrdinal + index;
         metrics.deepSeekCalls.push({
@@ -778,28 +794,34 @@ function createCatalogIntentClassifier(catalog: CanonicalMatrixCorpus): IntexAge
   return {
     async classify(input) {
       const located = locateMessage(catalog, input.message);
-      const expected = expectedToolForNormalTurn(located.entry, located.turnIndex);
-      return expected === null
+      const expected = expectedToolsForNormalTurn(located.entry, located.turnIndex);
+      return expected.length === 0
         ? { kind: 'no_action' as const, reason: 'conversation' as const }
-        : { kind: 'tool' as const, allowedToolNames: [expected.toolName] };
+        : {
+            kind: 'tool' as const,
+            allowedToolNames: expected.map(({ toolName }) => toolName),
+          };
     },
   };
 }
 
-function expectedToolForNormalTurn(
+function expectedToolsForNormalTurn(
   entry: CanonicalMatrixCorpusScenario,
   turnIndex: number
-): Readonly<{
+): readonly Readonly<{
   toolName: CanonicalMatrixCorpusScenario['expectedToolSchedule'][number]['toolName'];
   confirmationPreview: boolean;
-}> | null {
-  const current = entry.scenario.expected.turns[turnIndex]?.requiredToolCalls[0];
-  if (current !== undefined) return { toolName: current.toolName, confirmationPreview: false };
+}>[] {
+  const current =
+    entry.scenario.expected.turns[turnIndex]?.requiredToolCalls.map(({ toolName }) => ({
+      toolName,
+      confirmationPreview: false,
+    })) ?? [];
   const nextTurn = entry.scenario.turns[turnIndex + 1];
   const next = entry.scenario.expected.turns[turnIndex + 1]?.requiredToolCalls[0];
   return nextTurn?.kind === 'confirmation_button' && next !== undefined
-    ? { toolName: next.toolName, confirmationPreview: true }
-    : null;
+    ? [...current, { toolName: next.toolName, confirmationPreview: true }]
+    : current;
 }
 
 function locateMessage(
@@ -851,7 +873,21 @@ function toolArgs(
         timeZone: 'Europe/Warsaw',
         location: 'Synthetic location',
       };
+    case 'update_calendar_event':
+      return {
+        eventId: mockCalendarEventField(configuredResult, 'eventId'),
+        eventSummary: mockCalendarEventField(configuredResult, 'summary'),
+        attendeesToAdd: ['synthetic-attendee@example.com'],
+      };
     case 'query_calendar_events':
+      if (entry.scenario.id === 'intex-eval-008') {
+        return {
+          mode: 'list',
+          timeMin: '2026-07-16T10:00:00+02:00',
+          timeMax: '2026-08-16T10:00:00+02:00',
+          query: 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01',
+        };
+      }
       return {
         mode: 'list',
         timeMin: '2026-07-17T00:00:00.000+02:00',
@@ -889,6 +925,18 @@ function toolArgs(
   }
 }
 
+function mockCalendarEventField(value: unknown, field: 'eventId' | 'summary'): string {
+  if (value === null || typeof value !== 'object') {
+    throw new Error(`calendar update mock result has no ${field}`);
+  }
+  const record = value as Record<string, unknown>;
+  const fieldValue = record[field];
+  if (typeof fieldValue !== 'string') {
+    throw new Error(`calendar update mock result has no ${field}`);
+  }
+  return fieldValue;
+}
+
 function preferencePreviousVersion(value: unknown): number {
   if (
     value === null ||
@@ -915,13 +963,13 @@ function preferenceChangedItemId(value: unknown): string {
 
 function calendarStart(scenarioId: string): string {
   if (scenarioId === 'intex-eval-002') return '2026-08-18T14:30:00+02:00';
-  if (scenarioId === 'intex-eval-008') return '2026-09-10T15:00:00+02:00';
+  if (scenarioId === 'intex-eval-008') return '2026-07-23T15:00:00+02:00';
   return '2026-07-21T12:00:00+02:00';
 }
 
 function calendarEnd(scenarioId: string): string {
   if (scenarioId === 'intex-eval-002') return '2026-08-18T15:15:00+02:00';
-  if (scenarioId === 'intex-eval-008') return '2026-09-10T16:00:00+02:00';
+  if (scenarioId === 'intex-eval-008') return '2026-07-23T16:00:00+02:00';
   return '2026-07-21T13:00:00+02:00';
 }
 

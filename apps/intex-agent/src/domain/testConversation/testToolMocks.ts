@@ -9,6 +9,7 @@ import type {
   IntexAgentToolExecutor,
   QueryCalendarEventsToolArgs,
   SaveExternalToolArgs,
+  UpdateCalendarEventToolArgs,
   UpdateUserPreferenceToolArgs,
 } from '../agent/toolDefinitions.js';
 import type { WhatsAppReplyPublisher } from '../messages/handleIncomingMessage.js';
@@ -74,6 +75,16 @@ export function createTestToolExecutor(input: CreateTestToolExecutorInput): Inte
         status: 'completed',
         eventId: 'mock-calendar-event',
         summary: args.summary,
+        htmlLink: 'https://calendar.google.com/calendar/event?eid=mock',
+      });
+    },
+    async updateCalendarEvent(args: UpdateCalendarEventToolArgs): Promise<string> {
+      requireCalendarUpdateSnapshot(args);
+      return await execute('update_calendar_event', { ...args }, {
+        status: 'completed',
+        eventId: args.eventId,
+        summary: args.eventSummary,
+        attendeesAdded: args.attendeesToAdd,
         htmlLink: 'https://calendar.google.com/calendar/event?eid=mock',
       });
     },
@@ -150,6 +161,19 @@ export function createTestToolExecutor(input: CreateTestToolExecutorInput): Inte
       });
     },
   };
+}
+
+function requireCalendarUpdateSnapshot(args: UpdateCalendarEventToolArgs): void {
+  if (
+    args.calendarId === undefined ||
+    args.calendarId.trim() === '' ||
+    args.expectedEtag === undefined ||
+    args.expectedEtag.trim() === '' ||
+    args.eventStart === undefined ||
+    args.eventEnd === undefined
+  ) {
+    throw new Error('Calendar event snapshot is missing or incomplete');
+  }
 }
 
 export function createCapturedReplyPublisher(

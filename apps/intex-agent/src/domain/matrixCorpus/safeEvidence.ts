@@ -21,6 +21,9 @@ export type SafeToolFactNameV1 =
   | 'hasUrl'
   | 'hasSourceUrl'
   | 'hasCalendarId'
+  | 'hasExpectedEtag'
+  | 'hasEventStart'
+  | 'hasEventEnd'
   | 'hasItemId'
   | 'hasLinearIssueId'
   | 'startMatchesCatalog'
@@ -92,6 +95,15 @@ function mapArgumentFacts(
         exactMatchFact('endMatchesCatalog', value['end'], catalog?.end),
         exactMatchFact('timeZoneMatchesCatalog', value['timeZone'], catalog?.timeZone)
       );
+    case 'update_calendar_event':
+      return facts(
+        lengthFact('summaryLength', value['eventSummary']),
+        arrayCountFact('attendeesCount', value['attendeesToAdd']),
+        presenceFact('hasCalendarId', value['calendarId']),
+        presenceFact('hasExpectedEtag', value['expectedEtag']),
+        recordPresenceFact('hasEventStart', value['eventStart']),
+        recordPresenceFact('hasEventEnd', value['eventEnd'])
+      );
     case 'query_calendar_events':
       return facts(
         lengthFact('queryLength', value['query']),
@@ -160,6 +172,11 @@ function mapResultFacts(
       return facts(lengthFact('messageLength', value['message']));
     case 'create_calendar_event':
       return facts(lengthFact('summaryLength', value['summary']));
+    case 'update_calendar_event':
+      return facts(
+        lengthFact('summaryLength', value['summary']),
+        arrayCountFact('attendeesCount', value['attendeesAdded'])
+      );
     case 'query_calendar_events':
       return facts(
         integerFact('resultCount', value['count']),
@@ -210,6 +227,11 @@ function integerFact(name: SafeToolFactNameV1, value: unknown): SafeToolFactV1 |
 
 function presenceFact(name: SafeToolFactNameV1, value: unknown): SafeToolFactV1 | null {
   return typeof value === 'string' ? { name, value: value.length > 0 } : null;
+}
+
+function recordPresenceFact(name: SafeToolFactNameV1, value: unknown): SafeToolFactV1 | null {
+  if (value === undefined) return null;
+  return { name, value: asRecord(value) !== null };
 }
 
 function exactMatchFact(

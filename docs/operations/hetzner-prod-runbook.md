@@ -208,10 +208,12 @@ Sentry values plus generated public API paths, so ignored local env files
 cannot leak backend secrets into Vite.
 `reload-pm2.sh` renders the CommonJS ecosystem config to a private JSON file
 before starting PM2, because PM2 treats `ecosystem.config.prod.cjs` as a plain
-script on the Hetzner host. It derives every local `/health` URL from the
-rendered app ports and requires three consecutive all-service passes before
-`pm2 save`. `PM2_HEALTH_URLS` remains an explicit override for controlled
-diagnostics; normal deployments must leave it unset.
+script on the Hetzner host. It derives every local `/health` URL and expected
+service name from the rendered app configuration, then requires three consecutive
+all-service semantic-health passes before `pm2 save`.
+`PM2_HEALTH_URLS` remains an explicit override for controlled diagnostics; each
+space-delimited entry must use `service-name|http://127.0.0.1:PORT/health`.
+Normal deployments must leave it unset.
 
 PM2 file logs are bounded by `/etc/logrotate.d/intexuraos-pm2`: daily rotation,
 early rotation at 100 MB per file, 14 retained rotations, compression with one

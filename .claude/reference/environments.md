@@ -14,6 +14,8 @@
 
 **Firestore is SHARED across local, dev, and prod.** Same database, same collections. Treat local data writes as writes to the shared retained project.
 
+**Budget background Firestore scans across every enabled runtime.** Pollers in local, dev, and prod consume the same retained project quota. Any new or changed scanner must avoid unbounded repeated reads, calculate its aggregate daily read floor across all enabled runtimes, and keep a test that enforces the intended budget.
+
 ## Environment Detection Signals
 
 | Signal                           | local                                             | dev                                       | prod                                |

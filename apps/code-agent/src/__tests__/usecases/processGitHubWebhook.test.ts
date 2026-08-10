@@ -380,7 +380,14 @@ describe('processGitHubWebhook', () => {
     expect(mocks.prTriagePublisher.publishPRTriage).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: 'evt_1', repository: 'intexuraos/intexuraos', pullRequestNumber: 7 }),
     );
-    expect(mocks.gitHubPRSummaryRepo.upsert).toHaveBeenCalledTimes(1);
+    expect(mocks.gitHubPRSummaryRepo.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repository: 'intexuraos/intexuraos',
+        pullRequestNumber: 7,
+        state: 'open',
+        lastConflictCheckedAt: null,
+      }),
+    );
   });
 
   it('falls back to the inline evaluator when triage publish fails', async () => {

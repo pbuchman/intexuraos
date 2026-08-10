@@ -29,6 +29,7 @@ export type IntexAgentToolName =
   | 'create_note'
   | 'create_calendar_event'
   | 'query_calendar_events'
+  | 'update_calendar_event'
   | 'create_research'
   | 'create_link'
   | 'create_code_task'

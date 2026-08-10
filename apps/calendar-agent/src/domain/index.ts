@@ -4,6 +4,7 @@
 
 export type {
   CalendarEvent,
+  CalendarEventsPage,
   CreateEventInput,
   UpdateEventInput,
   ListEventsInput,
@@ -26,6 +27,7 @@ export type { CalendarError, CalendarErrorCode } from './errors.js';
 
 export type {
   GoogleCalendarClient,
+  UpdateEventOptions,
   UserServiceClient,
   OAuthTokenResult,
   FailedEventRepository,
@@ -86,6 +88,11 @@ export {
   type UpdateEventRequest,
   type UpdateEventDeps,
 } from './useCases/updateEvent.js';
+export {
+  addEventAttendees,
+  type AddEventAttendeesRequest,
+  type AddEventAttendeesDeps,
+} from './useCases/addEventAttendees.js';
 export {
   deleteEvent,
   type DeleteEventRequest,

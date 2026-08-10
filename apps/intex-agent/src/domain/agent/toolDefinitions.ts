@@ -1,5 +1,9 @@
 import type { ToolDefinition } from '@intexuraos/llm-contract';
-import { calendarListEventsRequestSchema } from '@intexuraos/http-contracts';
+import {
+  calendarEventDateTimeSchema,
+  calendarListEventsRequestSchema,
+  calendarUpdateEventAttendeesRequestSchema,
+} from '@intexuraos/http-contracts';
 
 export interface CreateNoteToolArgs {
   content: string;
@@ -25,6 +29,22 @@ export interface QueryCalendarEventsToolArgs {
   query?: string;
   calendarId?: string;
   maxResults?: number;
+}
+
+export interface UpdateCalendarEventToolArgs {
+  eventId: string;
+  eventSummary: string;
+  attendeesToAdd: string[];
+  calendarId?: string;
+  expectedEtag?: string;
+  eventStart?: CalendarEventDateTimeSnapshot;
+  eventEnd?: CalendarEventDateTimeSnapshot;
+}
+
+export interface CalendarEventDateTimeSnapshot {
+  dateTime?: string;
+  date?: string;
+  timeZone?: string;
 }
 
 export interface CreateResearchToolArgs {
@@ -100,6 +120,7 @@ export interface IntexAgentToolExecutor {
   createNote(args: CreateNoteToolArgs): Promise<string>;
   createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string>;
   queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string>;
+  updateCalendarEvent(args: UpdateCalendarEventToolArgs): Promise<string>;
   createResearch(args: CreateResearchToolArgs): Promise<string>;
   createLink(args: CreateLinkToolArgs): Promise<string>;
   createCodeTask(args: CreateCodeTaskToolArgs): Promise<string>;
@@ -214,12 +235,13 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
       description: toolDescription({
         purpose: 'read-only calendar query tool for existing events.',
         useFor:
-          '"Show tomorrow\'s events", "How many dentist visits last month?", "Am I free Friday afternoon?"',
-        doNotUseFor: 'scheduling, canceling, updating, deleting, or rescheduling calendar events.',
+          '"Show tomorrow\'s events", "How many dentist visits last month?", "Am I free Friday afternoon?", and the required lookup before update_calendar_event.',
+        doNotUseFor:
+          'performing the mutation itself, creating, canceling, deleting, or rescheduling calendar events.',
         requiredInput:
           'mode, timeMin, and timeMax are required. Use mode list for event details/availability and count for count-only questions.',
         boundary:
-          'This tool never creates, updates, deletes, or schedules events. Empty event arrays are successful "no events found" results.',
+          'This tool never mutates calendar data. It may identify the exact event snapshot before update_calendar_event. Empty event arrays are successful "no events found" results.',
         examples:
           'Positive: "List my meetings tomorrow." Negative: "Schedule a meeting tomorrow."',
         result:
@@ -262,6 +284,52 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
       },
       run: async (args: Record<string, unknown>) =>
         await executor.queryCalendarEvents(toQueryCalendarEventsArgs(args)),
+    },
+    {
+      name: 'update_calendar_event',
+      description: toolDescription({
+        purpose: 'Add one or more attendees to one existing calendar event.',
+        useFor:
+          '"Invite Patryk to the existing Bagrowa event", "add anna@example.com to tomorrow\'s planning meeting".',
+        doNotUseFor:
+          'creating a new event, changing its title, time, description, or location, deleting it, or updating an event that was not identified from calendar results.',
+        requiredInput:
+          'eventId, eventSummary, and a non-empty attendeesToAdd email list are required. calendarId is optional.',
+        boundary:
+          'Use query_calendar_events first to identify exactly one existing event and reuse its calendarId when specified. If no event or multiple events match, ask a targeted clarification. This mutating action always requires confirmation and preserves every other event detail.',
+        examples:
+          'Positive: after one query result, add pat@example.com to that event. Negative: "Create dinner with Pat tomorrow".',
+        result: 'Returns status, event ID, summary, added attendees, and an optional calendar link.',
+        errors:
+          'Validation covers a missing event ID or empty attendee list; permission/configuration covers calendar access problems.',
+      }),
+      parameters: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['eventId', 'eventSummary', 'attendeesToAdd'],
+        properties: {
+          eventId: {
+            type: 'string',
+            description: 'Exact event ID returned by query_calendar_events.',
+          },
+          eventSummary: {
+            type: 'string',
+            description: 'Exact event summary returned by query_calendar_events for confirmation.',
+          },
+          attendeesToAdd: {
+            type: 'array',
+            minItems: 1,
+            items: { type: 'string', format: 'email' },
+            description: 'Attendee email addresses to add without replacing existing attendees.',
+          },
+          calendarId: {
+            type: 'string',
+            description: 'Optional calendar identifier. Omit to use the default calendar.',
+          },
+        },
+      },
+      run: async (args: Record<string, unknown>) =>
+        await executor.updateCalendarEvent(toUpdateCalendarEventArgs(args)),
     },
     {
       name: 'create_research',
@@ -808,6 +876,26 @@ function toQueryCalendarEventsArgs(args: Record<string, unknown>): QueryCalendar
   };
 }
 
+function toUpdateCalendarEventArgs(args: Record<string, unknown>): UpdateCalendarEventToolArgs {
+  const eventId = requiredString(args, 'eventId');
+  const eventSummary = requiredString(args, 'eventSummary');
+  const attendeesToAdd = requiredEmailArray(args, 'attendeesToAdd');
+  const calendarId = optionalString(args, 'calendarId');
+  const expectedEtag = optionalString(args, 'expectedEtag');
+  const eventStart = optionalCalendarDateTimeSnapshot(args, 'eventStart');
+  const eventEnd = optionalCalendarDateTimeSnapshot(args, 'eventEnd');
+
+  return {
+    eventId,
+    eventSummary,
+    attendeesToAdd,
+    ...(calendarId !== undefined ? { calendarId } : {}),
+    ...(expectedEtag !== undefined ? { expectedEtag } : {}),
+    ...(eventStart !== undefined ? { eventStart } : {}),
+    ...(eventEnd !== undefined ? { eventEnd } : {}),
+  };
+}
+
 function toCreateResearchArgs(args: Record<string, unknown>): CreateResearchToolArgs {
   const title = requiredString(args, 'title');
   const prompt = requiredString(args, 'prompt');
@@ -978,4 +1066,53 @@ function optionalStringArray(args: Record<string, unknown>, key: string): string
     throw new Error(`Tool argument ${key} must be an array of strings`);
   }
   return value;
+}
+
+function requiredNonEmptyStringArray(args: Record<string, unknown>, key: string): string[] {
+  const value = args[key];
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`Tool argument ${key} must be a non-empty string array`);
+  }
+  const strings: string[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== 'string' || item.trim() === '') {
+      throw new Error(`Tool argument ${key} must be a non-empty string array`);
+    }
+    strings.push(item);
+  }
+  return strings;
+}
+
+function requiredEmailArray(args: Record<string, unknown>, key: string): string[] {
+  const value = requiredNonEmptyStringArray(args, key);
+  const parsed = calendarUpdateEventAttendeesRequestSchema.safeParse({
+    userId: 'intex-agent-tool-validation',
+    calendarId: 'primary',
+    expectedEtag: '"validation-etag"',
+    attendeesToAdd: value.map((email) => ({ email })),
+  });
+  if (!parsed.success) {
+    throw new Error(`Tool argument ${key} must contain valid email addresses`);
+  }
+  return value;
+}
+
+function optionalCalendarDateTimeSnapshot(
+  args: Record<string, unknown>,
+  key: string
+): CalendarEventDateTimeSnapshot | undefined {
+  const value = args[key];
+  if (value === undefined) return undefined;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Tool argument ${key} must be a calendar date-time object`);
+  }
+  const parsed = calendarEventDateTimeSchema.safeParse(value);
+  if (!parsed.success || (parsed.data.dateTime === undefined && parsed.data.date === undefined)) {
+    throw new Error(`Tool argument ${key} must be a calendar date-time object`);
+  }
+  return {
+    ...(parsed.data.dateTime !== undefined ? { dateTime: parsed.data.dateTime } : {}),
+    ...(parsed.data.date !== undefined ? { date: parsed.data.date } : {}),
+    ...(parsed.data.timeZone !== undefined ? { timeZone: parsed.data.timeZone } : {}),
+  };
 }

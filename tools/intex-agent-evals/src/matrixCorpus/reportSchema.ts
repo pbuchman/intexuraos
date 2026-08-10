@@ -23,7 +23,8 @@ const CANONICAL_PASS_TOOL_ROWS = new Set([
   'intex-eval-006:1:create_note',
   'intex-eval-006:3:create_note',
   'intex-eval-007:1:create_note',
-  'intex-eval-008:2:create_calendar_event',
+  'intex-eval-008:1:query_calendar_events',
+  'intex-eval-008:2:update_calendar_event',
   'intex-eval-010:1:create_note',
   'intex-eval-011:0:query_calendar_events',
   'intex-eval-012:1:create_research',
@@ -410,8 +411,8 @@ export const MatrixCorpusReportV1Schema = z
         report.totals.repliesExpected === 59 &&
         report.totals.repliesObserved === 59 &&
         report.totals.repliesJudged === 59 &&
-        report.totals.toolSelections === 19 &&
-        report.totals.mockCompletions === 19 &&
+        report.totals.toolSelections === 20 &&
+        report.totals.mockCompletions === 20 &&
         report.totals.mockFailures === 0 &&
         (report.artifactDelivery.status === 'pending' ||
           report.artifactDelivery.status === 'ready') &&

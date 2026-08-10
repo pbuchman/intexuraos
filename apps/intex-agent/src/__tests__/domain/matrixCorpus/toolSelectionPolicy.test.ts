@@ -16,6 +16,7 @@ import { evaluateMatrixCorpusToolSelection } from '../../../domain/matrixCorpus/
 const tools = [
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'query_calendar_events',
   'create_research',
   'create_link',

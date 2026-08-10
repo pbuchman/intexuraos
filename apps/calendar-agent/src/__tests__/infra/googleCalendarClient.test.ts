@@ -48,10 +48,23 @@ describe('GoogleCalendarClientImpl', () => {
           items: [
             {
               id: 'event-1',
+              etag: '"event-1-v1"',
               summary: 'Meeting',
               start: { dateTime: '2025-01-08T10:00:00Z' },
               end: { dateTime: '2025-01-08T11:00:00Z' },
               status: 'confirmed',
+              attendeesOmitted: true,
+              attendees: [
+                {
+                  email: 'guest@example.com',
+                  id: 'profile-1',
+                  comment: 'Remote',
+                  additionalGuests: 1,
+                  organizer: false,
+                  resource: false,
+                  responseStatus: 'accepted',
+                },
+              ],
             },
             {
               id: 'event-2',
@@ -60,6 +73,7 @@ describe('GoogleCalendarClientImpl', () => {
               end: { date: '2025-01-08' },
               description: 'Team lunch',
               location: 'Restaurant',
+              attendeesOmitted: null,
             },
           ],
         });
@@ -71,12 +85,29 @@ describe('GoogleCalendarClientImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toHaveLength(2);
-        expect(result.value[0]?.id).toBe('event-1');
-        expect(result.value[0]?.summary).toBe('Meeting');
-        expect(result.value[0]?.status).toBe('confirmed');
-        expect(result.value[1]?.description).toBe('Team lunch');
-        expect(result.value[1]?.location).toBe('Restaurant');
+        expect(result.value.truncated).toBe(false);
+        expect(result.value.events).toHaveLength(2);
+        expect(result.value.events[0]?.id).toBe('event-1');
+        expect(result.value.events[0]?.summary).toBe('Meeting');
+        expect(result.value.events[0]?.status).toBe('confirmed');
+        expect(result.value.events[0]).toMatchObject({
+          etag: '"event-1-v1"',
+          attendees: [
+            {
+              email: 'guest@example.com',
+              id: 'profile-1',
+              comment: 'Remote',
+              additionalGuests: 1,
+              organizer: false,
+              resource: false,
+              responseStatus: 'accepted',
+            },
+          ],
+          attendeesOmitted: true,
+        });
+        expect(result.value.events[1]?.description).toBe('Team lunch');
+        expect(result.value.events[1]?.location).toBe('Restaurant');
+        expect(result.value.events[1]).not.toHaveProperty('attendeesOmitted');
       }
     });
 
@@ -90,8 +121,42 @@ describe('GoogleCalendarClientImpl', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value).toHaveLength(0);
+        expect(result.value).toEqual({ events: [], truncated: false });
       }
+    });
+
+    it('preserves pagination as truncated page metadata', async () => {
+      nock(GOOGLE_CALENDAR_API)
+        .get('/calendar/v3/calendars/primary/events')
+        .query(true)
+        .reply(200, {
+          items: [
+            {
+              id: 'event-1',
+              summary: 'Bagrowa',
+              start: { dateTime: '2026-06-25T18:00:00+02:00' },
+              end: { dateTime: '2026-06-25T20:30:00+02:00' },
+            },
+          ],
+          nextPageToken: 'next-page',
+        });
+
+      const result = await client.listEvents(
+        TEST_ACCESS_TOKEN,
+        TEST_CALENDAR_ID,
+        { maxResults: 20, q: 'Bagrowa' },
+        mockLogger
+      );
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          events: [
+            expect.objectContaining({ id: 'event-1', summary: 'Bagrowa' }),
+          ],
+          truncated: true,
+        },
+      });
     });
 
     it('returns error on API failure', async () => {
@@ -296,6 +361,7 @@ describe('GoogleCalendarClientImpl', () => {
         .get('/calendar/v3/calendars/primary/events/event-123')
         .reply(200, {
           id: 'event-123',
+          etag: '"event-123-v1"',
           summary: 'Important Meeting',
           start: { dateTime: '2025-01-08T10:00:00Z', timeZone: 'UTC' },
           end: { dateTime: '2025-01-08T11:00:00Z', timeZone: 'UTC' },
@@ -311,9 +377,14 @@ describe('GoogleCalendarClientImpl', () => {
           attendees: [
             {
               email: 'attendee@example.com',
+              id: 'attendee-profile-id',
               displayName: 'Jane Doe',
+              comment: 'Joining remotely',
+              additionalGuests: 2,
               responseStatus: 'accepted',
               optional: false,
+              organizer: true,
+              resource: false,
               self: true,
             },
           ],
@@ -324,12 +395,25 @@ describe('GoogleCalendarClientImpl', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.id).toBe('event-123');
+        expect(result.value.etag).toBe('"event-123-v1"');
         expect(result.value.summary).toBe('Important Meeting');
         expect(result.value.status).toBe('tentative');
         expect(result.value.htmlLink).toBe('https://calendar.google.com/event?eid=abc');
         expect(result.value.organizer?.email).toBe('organizer@example.com');
-        expect(result.value.attendees).toHaveLength(1);
-        expect(result.value.attendees?.[0]?.responseStatus).toBe('accepted');
+        expect(result.value.attendees).toEqual([
+          {
+            email: 'attendee@example.com',
+            id: 'attendee-profile-id',
+            displayName: 'Jane Doe',
+            comment: 'Joining remotely',
+            additionalGuests: 2,
+            responseStatus: 'accepted',
+            optional: false,
+            organizer: true,
+            resource: false,
+            self: true,
+          },
+        ]);
       }
     });
 
@@ -408,6 +492,75 @@ describe('GoogleCalendarClientImpl', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.summary).toBe('Updated Meeting');
+      }
+    });
+
+    it('preserves attendee metadata and sends invitations when requested', async () => {
+      const scope = nock(GOOGLE_CALENDAR_API)
+        .patch('/calendar/v3/calendars/primary/events/event-123', {
+          attendees: [
+            {
+              email: 'existing@example.com',
+              displayName: 'Existing guest',
+              self: false,
+              responseStatus: 'accepted',
+              optional: true,
+            },
+            { email: 'new@example.com' },
+          ],
+        })
+        .matchHeader('if-match', '"event-123-v1"')
+        .query({ sendUpdates: 'all' })
+        .reply(200, {
+          id: 'event-123',
+          summary: 'Meeting',
+          start: { dateTime: '2025-01-10T14:00:00Z' },
+          end: { dateTime: '2025-01-10T15:00:00Z' },
+          attendees: [
+            {
+              email: 'existing@example.com',
+              displayName: 'Existing guest',
+              self: false,
+              responseStatus: 'accepted',
+              optional: true,
+            },
+            { email: 'new@example.com', responseStatus: 'needsAction' },
+          ],
+        });
+
+      const result = await client.updateEvent(
+        TEST_ACCESS_TOKEN,
+        TEST_CALENDAR_ID,
+        'event-123',
+        {
+          attendees: [
+            {
+              email: 'existing@example.com',
+              displayName: 'Existing guest',
+              self: false,
+              responseStatus: 'accepted',
+              optional: true,
+            },
+            { email: 'new@example.com' },
+          ],
+        },
+        mockLogger,
+        { sendUpdates: 'all', expectedEtag: '"event-123-v1"' }
+      );
+
+      expect(scope.isDone()).toBe(true);
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.attendees).toEqual([
+          {
+            email: 'existing@example.com',
+            displayName: 'Existing guest',
+            self: false,
+            responseStatus: 'accepted',
+            optional: true,
+          },
+          { email: 'new@example.com', responseStatus: 'needsAction' },
+        ]);
       }
     });
 
@@ -908,6 +1061,22 @@ describe('GoogleCalendarClientImpl', () => {
 
       const result = mapErrorToCalendarError(error);
       expect(result.code).toBe('INVALID_REQUEST');
+    });
+
+    it('maps Google API 412 errors to CONFLICT', () => {
+      const error = {
+        response: {
+          data: {
+            error: {
+              code: 412,
+              message: 'Precondition failed',
+            },
+          },
+        },
+      };
+
+      const result = mapErrorToCalendarError(error);
+      expect(result).toEqual({ code: 'CONFLICT', message: 'Precondition failed' });
     });
 
     it('maps unknown errors to INTERNAL_ERROR', () => {

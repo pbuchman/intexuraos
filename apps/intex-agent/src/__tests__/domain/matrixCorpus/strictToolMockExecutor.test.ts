@@ -28,6 +28,21 @@ const toolCases = [
     [{ summary: 'Synthetic', start: '2026-07-20T10:00:00Z', end: '2026-07-20T11:00:00Z' }],
   ],
   [
+    'update_calendar_event',
+    'updateCalendarEvent',
+    [
+      {
+        eventId: 'mock_event_1',
+        eventSummary: 'Synthetic',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'mock_calendar_1',
+        expectedEtag: '"mock-event-1-v1"',
+        eventStart: { dateTime: '2026-07-20T10:00:00Z' },
+        eventEnd: { dateTime: '2026-07-20T11:00:00Z' },
+      },
+    ],
+  ],
+  [
     'query_calendar_events',
     'queryCalendarEvents',
     [{ mode: 'count', timeMin: '2026-07-20T00:00:00Z', timeMax: '2026-07-21T00:00:00Z' }],
@@ -40,7 +55,24 @@ const toolCases = [
 
 describe('strict Matrix corpus tool-mock executor', () => {
   it('shares one authorization between the runner gate and read-only mock execution', async () => {
-    const expected = resultFor('query_calendar_events');
+    const expected: StrictMockResultV1 = {
+      toolName: 'query_calendar_events',
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      truncated: true,
+      events: [
+        {
+          eventId: 'mock_event_1',
+          etag: '"mock-event-1-v1"',
+          summary: 'Synthetic',
+          start: { dateTime: '2026-07-20T10:00:00Z', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-07-20T11:00:00Z', timeZone: 'Europe/Warsaw' },
+          status: 'confirmed',
+          calendarId: 'mock_calendar_1',
+        },
+      ],
+    };
     const recordToolCallStarted = vi.fn(async () => undefined);
     const boundary = createStrictToolMockBoundary({
       profile: decode(baseProfile({ calls: [successCall('query_calendar_events', 1, expected)] })),
@@ -49,7 +81,7 @@ describe('strict Matrix corpus tool-mock executor', () => {
       recordToolCallStarted,
     });
     const args = {
-      mode: 'count' as const,
+      mode: 'list' as const,
       timeMin: '2026-07-20T00:00:00Z',
       timeMax: '2026-07-21T00:00:00Z',
     };
@@ -57,9 +89,8 @@ describe('strict Matrix corpus tool-mock executor', () => {
     await expect(
       boundary.selectionGate({ toolName: 'query_calendar_events', args })
     ).resolves.toEqual({ decision: 'allow', metadata: { turnIndex: 0, ordinal: 1 } });
-    await expect(boundary.executor.queryCalendarEvents(args)).resolves.toBe(
-      JSON.stringify(expected)
-    );
+    const result = await boundary.executor.queryCalendarEvents(args);
+    expect(JSON.parse(result)).toEqual(expected);
     expect(recordToolCallStarted).toHaveBeenCalledOnce();
   });
 
@@ -87,6 +118,31 @@ describe('strict Matrix corpus tool-mock executor', () => {
       code: 'MISSING_PREAUTHORIZED_SELECTION',
     });
   });
+
+  it.each(['calendarId', 'expectedEtag', 'eventStart', 'eventEnd'] as const)(
+    'fails closed when a confirmed calendar update loses its %s snapshot field',
+    async (missingField) => {
+      const result = resultFor('update_calendar_event');
+      const executor = executorFor([successCall('update_calendar_event', 1, result)]);
+      const completeArgs = {
+        eventId: 'mock_event_1',
+        eventSummary: 'Synthetic',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'mock_calendar_1',
+        expectedEtag: '"mock-event-1-v1"',
+        eventStart: { dateTime: '2026-07-20T10:00:00Z' },
+        eventEnd: { dateTime: '2026-07-20T11:00:00Z' },
+      };
+      const incompleteArgs = Object.fromEntries(
+        Object.entries(completeArgs).filter(([key]) => key !== missingField)
+      ) as unknown as Parameters<typeof executor.updateCalendarEvent>[0];
+
+      await expect(executor.updateCalendarEvent(incompleteArgs)).rejects.toMatchObject({
+        category: 'safety_stop',
+        code: 'MISSING_CALENDAR_EVENT_SNAPSHOT',
+      });
+    }
+  );
 
   it('authorizes a mutating preview from the immediately following confirmation turn without recording execution', async () => {
     const result = resultFor('create_note');
@@ -478,6 +534,14 @@ function resultFor(toolName: IntexAgentToolNameV1): StrictMockResultV1 {
       return { toolName, status: 'completed', message: 'Synthetic success' };
     case 'create_calendar_event':
       return { toolName, status: 'completed', eventId: 'mock_event_1', summary: 'Synthetic' };
+    case 'update_calendar_event':
+      return {
+        toolName,
+        status: 'completed',
+        eventId: 'mock_event_1',
+        summary: 'Synthetic',
+        attendeesAdded: ['patryk@example.com'],
+      };
     case 'query_calendar_events':
       return { toolName, status: 'completed', mode: 'count', count: 0 };
     case 'create_link':

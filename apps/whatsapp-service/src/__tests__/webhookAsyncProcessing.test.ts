@@ -987,7 +987,7 @@ describe('Webhook async processing', () => {
   });
 
   describe('unexpected error handling', () => {
-    it('handles unexpected exceptions in processWebhookAsync gracefully', async () => {
+    it('retries when the connected-mapping lookup throws unexpectedly', async () => {
       const senderPhone = '15551234567';
       const userId = 'test-user-id';
 
@@ -1010,19 +1010,19 @@ describe('Webhook async processing', () => {
         payload: payloadString,
       });
 
-      // Should still return 200 (webhook acknowledged) even if async processing throws
+      // The public Meta webhook is acknowledged after durable persistence.
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
+      // Pub/Sub must be rejected so the durable event is redelivered.
       const processingStatus = await triggerWebhookProcessing();
-      expect(processingStatus).toBe(200);
+      expect(processingStatus).toBe(500);
 
       // Event should be persisted (save happens before the error)
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
-      // Status is now FAILED - the catch block updates status to prevent stuck events
       expect(events[0]?.status).toBe('failed');
-      expect(events[0]?.retryable).toBe(false);
+      expect(events[0]?.retryable).toBe(true);
+      expect(events[0]?.failureDetails).toContain('Simulated unexpected error in getMapping');
     });
   });
 
@@ -1047,14 +1047,47 @@ describe('Webhook async processing', () => {
 
       expect(response.statusCode).toBe(200);
 
-      // Wait for async processing
-      await triggerWebhookProcessing();
+      // Retryable infrastructure failures must reject the Pub/Sub delivery so it is redelivered.
+      const processingStatus = await triggerWebhookProcessing();
+      expect(processingStatus).toBe(500);
 
       // Event should be marked as FAILED
       const events = ctx.webhookEventRepository.getAll();
       expect(events.length).toBe(1);
       expect(events[0]?.status).toBe('failed');
+      expect(events[0]?.retryable).toBe(true);
       expect(events[0]?.failureDetails).toContain('Simulated user lookup failure');
+    });
+
+    it('retries when loading the connected mapping returns an error', async () => {
+      const senderPhone = '15551234567';
+      const userId = 'test-user-id';
+      await ctx.userMappingRepository.saveMapping(userId, [senderPhone]);
+      ctx.userMappingRepository.setFailGetMapping(true);
+
+      const payload = createWebhookPayload();
+      const payloadString = JSON.stringify(payload);
+      const signature = createSignature(payloadString, testConfig.appSecret);
+
+      const response = await ctx.app.inject({
+        method: 'POST',
+        url: '/webhooks',
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': signature,
+        },
+        payload: payloadString,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(await triggerWebhookProcessing()).toBe(500);
+      expect(ctx.webhookEventRepository.getAll()).toEqual([
+        expect.objectContaining({
+          status: 'failed',
+          retryable: true,
+          failureDetails: 'Simulated getMapping failure',
+        }),
+      ]);
     });
   });
 

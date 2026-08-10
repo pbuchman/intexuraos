@@ -117,6 +117,7 @@ describe('Automation log integration flows', () => {
     mockSummaryRepo = {
       upsert: vi.fn().mockResolvedValue(ok(undefined)),
       findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+      findReconciliationCandidates: vi.fn().mockResolvedValue(ok([])),
       findByPullRequest: vi.fn().mockResolvedValue(ok(null)),
       findOpenByBaseBranch: vi.fn().mockResolvedValue(ok([])),
       findOpenByRepository: vi.fn().mockResolvedValue(ok([])),

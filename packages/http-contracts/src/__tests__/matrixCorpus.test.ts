@@ -341,19 +341,33 @@ describe('Matrix corpus shared contract', () => {
         eventId: 'mock_event_1',
         summary: 'standup',
       },
-      { toolName: 'query_calendar_events', status: 'completed', mode: 'count', count: 0 },
+      {
+        toolName: 'update_calendar_event',
+        status: 'completed',
+        eventId: 'mock_event_1',
+        summary: 'standup',
+        attendeesAdded: ['patryk@example.com'],
+      },
+      {
+        toolName: 'query_calendar_events',
+        status: 'completed',
+        mode: 'count',
+        count: 0,
+        truncated: false,
+      },
       {
         toolName: 'query_calendar_events',
         status: 'completed',
         mode: 'list',
         count: 1,
+        truncated: true,
         events: [
           {
             eventId: 'mock_event_1',
+            etag: '"mock-event-1-v1"',
             summary: 'standup',
-            start: now,
-            end: later,
-            timeZone: 'Europe/Warsaw',
+            start: { dateTime: now, timeZone: 'Europe/Warsaw' },
+            end: { dateTime: later, timeZone: 'Europe/Warsaw' },
             status: 'confirmed',
             calendarId: 'mock_calendar_1',
           },
@@ -398,7 +412,7 @@ describe('Matrix corpus shared contract', () => {
       expect(strictMockResultV1Schema.safeParse(result).success).toBe(true);
     expect(strictMockResultV1Schema.safeParse({ ...results[0], extra: true }).success).toBe(false);
     expect(
-      strictMockResultV1Schema.safeParse({ ...results[5], resourceUrl: 'https://real.example/x' })
+      strictMockResultV1Schema.safeParse({ ...results[6], resourceUrl: 'https://real.example/x' })
         .success
     ).toBe(false);
     expect(
@@ -409,14 +423,14 @@ describe('Matrix corpus shared contract', () => {
     ).toBe(false);
     expect(
       strictMockResultV1Schema.safeParse({
-        ...results[3],
+        ...results[4],
         count: 21,
-        events: Array.from({ length: 21 }, () => results[3]?.events?.[0]),
+        events: Array.from({ length: 21 }, () => results[4]?.events?.[0]),
       }).success
     ).toBe(false);
     expect(
       strictMockResultV1Schema.safeParse({
-        ...results[8],
+        ...results[9],
         items: Array.from({ length: 51 }, (_, index) => ({
           id: `mock_pref_${String(index)}`,
           text: 'bounded',
@@ -443,6 +457,39 @@ describe('Matrix corpus shared contract', () => {
         { turnIndex: 0, toolName: 'unknown_tool', ordinal: 1 },
       ]).success
     ).toBe(false);
+  });
+
+  it('validates all-day calendar event dates and their chronological order', () => {
+    const allDayResult = {
+      toolName: 'query_calendar_events',
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      events: [
+        {
+          eventId: 'mock_event_all_day',
+          summary: 'All-day event',
+          start: { date: '2026-02-28' },
+          end: { date: '2026-03-01' },
+          calendarId: 'primary',
+        },
+      ],
+    } as const;
+
+    expect(strictMockResultV1Schema.safeParse(allDayResult).success).toBe(true);
+    for (const invalidDate of ['2026-02-30', '9999-99-99']) {
+      expect(
+        strictMockResultV1Schema.safeParse({
+          ...allDayResult,
+          events: [
+            {
+              ...allDayResult.events[0],
+              start: { date: invalidDate },
+            },
+          ],
+        }).success
+      ).toBe(false);
+    }
   });
 
   it('enforces profile ordinals and no forbidden overlap', () => {
@@ -491,7 +538,7 @@ describe('Matrix corpus shared contract', () => {
     expect(
       strictToolMockProfileV1Schema.safeParse({
         ...profile,
-        forbiddenSelections: Array.from({ length: 221 }, () => ({
+        forbiddenSelections: Array.from({ length: 241 }, () => ({
           turnIndex: 0,
           toolName: 'create_note',
         })),

@@ -257,12 +257,14 @@ export class ProcessWebhookEventUseCase {
             : { eventId: savedEvent.id, error: userIdResult.error },
           'Failed to look up user by phone number'
         );
+        const failureDetails = isMatrixCorpusReserved
+          ? 'Matrix corpus user mapping lookup failed'
+          : userIdResult.error.message;
         await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
-          failureDetails: isMatrixCorpusReserved
-            ? 'Matrix corpus user mapping lookup failed'
-            : userIdResult.error.message,
+          failureDetails,
+          retryable: true,
         });
-        return;
+        return { ok: false, retryable: true, failureDetails };
       }
 
       if (userIdResult.value === null) {
@@ -301,8 +303,52 @@ export class ProcessWebhookEventUseCase {
       );
 
       // Check if user mapping is connected
-      const mappingResult = await userMappingRepository.getMapping(userId);
-      if (!mappingResult.ok || mappingResult.value?.connected !== true) {
+      let mappingResult: Awaited<ReturnType<typeof userMappingRepository.getMapping>>;
+      try {
+        mappingResult = await userMappingRepository.getMapping(userId);
+      } catch (error) {
+        const failureDetails = isMatrixCorpusReserved
+          ? 'Matrix corpus user mapping lookup failed'
+          : getErrorMessage(error);
+        logger.error(
+          isMatrixCorpusReserved
+            ? {
+                eventId: savedEvent.id,
+                matrixCorpusReserved: true,
+                reason: 'mapping_load_failed',
+              }
+            : { eventId: savedEvent.id, userId, error },
+          'Failed to load user mapping'
+        );
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+          failureDetails,
+          retryable: true,
+        });
+        return { ok: false, retryable: true, failureDetails };
+      }
+
+      if (!mappingResult.ok) {
+        const failureDetails = isMatrixCorpusReserved
+          ? 'Matrix corpus user mapping lookup failed'
+          : mappingResult.error.message;
+        logger.error(
+          isMatrixCorpusReserved
+            ? {
+                eventId: savedEvent.id,
+                matrixCorpusReserved: true,
+                reason: 'mapping_load_failed',
+              }
+            : { eventId: savedEvent.id, userId, error: mappingResult.error },
+          'Failed to load user mapping'
+        );
+        await webhookEventRepository.updateEventStatus(savedEvent.id, 'failed', {
+          failureDetails,
+          retryable: true,
+        });
+        return { ok: false, retryable: true, failureDetails };
+      }
+
+      if (mappingResult.value?.connected !== true) {
         logger.info(
           {
             eventId: savedEvent.id,

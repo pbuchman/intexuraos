@@ -4,6 +4,7 @@
 
 export interface CalendarEvent {
   id: string;
+  etag?: string;
   summary: string;
   description?: string;
   location?: string;
@@ -15,6 +16,12 @@ export interface CalendarEvent {
   updated?: string;
   organizer?: EventPerson;
   attendees?: EventAttendee[];
+  attendeesOmitted?: boolean;
+}
+
+export interface CalendarEventsPage {
+  events: CalendarEvent[];
+  truncated: boolean;
 }
 
 export interface EventDateTime {
@@ -30,8 +37,13 @@ export interface EventPerson {
 }
 
 export interface EventAttendee extends EventPerson {
+  id?: string;
+  comment?: string;
+  additionalGuests?: number;
   responseStatus?: 'needsAction' | 'declined' | 'tentative' | 'accepted';
   optional?: boolean;
+  organizer?: boolean;
+  resource?: boolean;
 }
 
 export interface FreeBusySlot {
@@ -54,7 +66,7 @@ export interface UpdateEventInput {
   location?: string;
   start?: EventDateTime;
   end?: EventDateTime;
-  attendees?: { email: string }[];
+  attendees?: EventAttendee[];
 }
 
 export interface ListEventsInput {

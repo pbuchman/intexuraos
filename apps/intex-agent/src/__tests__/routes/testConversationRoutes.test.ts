@@ -189,6 +189,10 @@ describe('test conversation routes', () => {
     ['calendar event mock field allowlist', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ token: 'secret' }] } } } }],
     ['calendar event mock string too long', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ summary: 'x'.repeat(2049) }] } } } }],
     ['calendar event mock unsupported type', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ summary: { nested: true } }] } } } }],
+    ['calendar event mock date field allowlist', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ start: { token: 'secret' } }] } } } }],
+    ['calendar event mock date field type', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ start: { dateTime: 123 } }] } } } }],
+    ['calendar event mock date string too long', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ start: { dateTime: 'x'.repeat(2049) } }] } } } }],
+    ['calendar event mock date identity', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 1, events: [{ start: { date: '2026-07-02', dateTime: '2026-07-02T10:00:00+02:00' } }] } } } }],
     ['calendar event mock array too large', { toolMocks: { query_calendar_events: { mode: 'success', result: { status: 'completed', mode: 'list', count: 21, events: Array.from({ length: 21 }, () => ({ summary: 'event' })) } } } }],
     ['preference item mock array objects blocked', { toolMocks: { get_user_preferences: { mode: 'success', result: { status: 'completed', currentVersion: 1, items: [{ id: 'pref_1' }] } } } }],
   ])('rejects invalid payload: %s', async (_label, override) => {
@@ -365,12 +369,15 @@ describe('test conversation routes', () => {
               status: 'completed',
               mode: 'list',
               count: 1,
+              truncated: true,
               events: [
                 {
                   id: 'event-1',
+                  etag: '"event-1-v1"',
                   summary: 'Dentist',
-                  start: '2026-07-02T10:00:00+02:00',
-                  end: '2026-07-02T10:30:00+02:00',
+                  calendarId: 'primary',
+                  start: { dateTime: '2026-07-02T10:00:00+02:00' },
+                  end: { dateTime: '2026-07-02T10:30:00+02:00' },
                 },
               ],
             },
@@ -381,6 +388,13 @@ describe('test conversation routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(testConversationRunner.calls).toHaveLength(1);
+    expect(testConversationRunner.calls[0]).toMatchObject({
+      toolMocks: {
+        query_calendar_events: {
+          result: { truncated: true },
+        },
+      },
+    });
   });
 
   it('accepts primitive preference item mock arrays without prompt blocks', async () => {

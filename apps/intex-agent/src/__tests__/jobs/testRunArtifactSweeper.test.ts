@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS,
   createTestRunArtifactSweepScheduler,
   createTestRunArtifactSweeper,
 } from '../../jobs/testRunArtifactSweeper.js';
@@ -167,7 +168,7 @@ describe('Test Run artifact deadline sweeper', () => {
     expect(repository.applyArtifactDelivery).not.toHaveBeenCalled();
   });
 
-  it('schedules one reentrancy-safe tick every thirty seconds and stops gracefully', async () => {
+  it('schedules one reentrancy-safe tick every five minutes and stops gracefully', async () => {
     vi.useFakeTimers();
     const runOnce = vi.fn(async () => ({
       skipped: false as const,
@@ -180,18 +181,28 @@ describe('Test Run artifact deadline sweeper', () => {
     scheduler.start();
     scheduler.start();
     expect(vi.getTimerCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
     expect(runOnce).toHaveBeenCalledOnce();
 
     await scheduler.stop();
     expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS * 2);
     expect(runOnce).toHaveBeenCalledOnce();
 
     scheduler.start();
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
     expect(runOnce).toHaveBeenCalledTimes(2);
     await scheduler.stop();
+  });
+
+  it('keeps the shared empty-scan cadence below 600 Firestore reads per day', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const sharedRuntimeCount = 2;
+    const dailyReads =
+      sharedRuntimeCount * Math.floor(dayMs / TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
+
+    expect(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS).toBe(5 * 60 * 1000);
+    expect(dailyReads).toBeLessThanOrEqual(600);
   });
 
   it('awaits an in-flight sweep during shutdown', async () => {
@@ -205,7 +216,7 @@ describe('Test Run artifact deadline sweeper', () => {
     );
     const scheduler = createTestRunArtifactSweepScheduler({ runOnce });
     scheduler.start();
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
 
     let stopped = false;
     const stopping = scheduler.stop().then(() => {
@@ -232,8 +243,8 @@ describe('Test Run artifact deadline sweeper', () => {
 
     await scheduler.stop();
     scheduler.start();
-    await vi.advanceTimersByTimeAsync(30_000);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
     expect(runOnce).toHaveBeenCalledOnce();
     rejectRun?.(new Error('sweep failed'));
     await scheduler.stop();
@@ -249,7 +260,7 @@ describe('Test Run artifact deadline sweeper', () => {
     });
 
     scheduler.start();
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS);
     await expect(scheduler.stop()).resolves.toBeUndefined();
   });
 });

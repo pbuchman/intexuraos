@@ -56,7 +56,10 @@ const PASS_TOOL_ROWS: Readonly<
     { turnIndex: 3, toolName: 'create_note' },
   ],
   'intex-eval-007': [{ turnIndex: 1, toolName: 'create_note' }],
-  'intex-eval-008': [{ turnIndex: 2, toolName: 'create_calendar_event' }],
+  'intex-eval-008': [
+    { turnIndex: 1, toolName: 'query_calendar_events' },
+    { turnIndex: 2, toolName: 'update_calendar_event' },
+  ],
   'intex-eval-010': [{ turnIndex: 1, toolName: 'create_note' }],
   'intex-eval-011': [{ turnIndex: 0, toolName: 'query_calendar_events' }],
   'intex-eval-012': [{ turnIndex: 1, toolName: 'create_research' }],
@@ -135,16 +138,19 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
       repliesExpected: 59,
       repliesObserved: 59,
       repliesJudged: 59,
-      toolSelections: 19,
-      mockCompletions: 19,
+      toolSelections: 20,
+      mockCompletions: 20,
       mockFailures: 0,
       productionExecutorResolutions: 0,
       productionExecutorAdmissions: 0,
     },
-    usage: { agent: usage(19), evaluator: usage(59), totalCostNanoUsd: 78, costComplete: true },
+    usage: { agent: usage(20), evaluator: usage(59), totalCostNanoUsd: 79, costComplete: true },
     scenarios: Array.from({ length: 20 }, (_, offset) => {
       const scenarioId = `intex-eval-${String(offset + 1).padStart(3, '0')}`;
       const plannedTurns = PASS_TURN_COUNTS[offset] ?? 0;
+      let agentLogicalCalls = 1;
+      if (offset === 7) agentLogicalCalls = 2;
+      if (offset === 8) agentLogicalCalls = 0;
       return {
         scenarioId,
         ordinal: offset + 1,
@@ -178,7 +184,7 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
           criteriaFailed: 0,
           usage: usage(plannedTurns),
         },
-        agentUsage: usage(offset === 8 ? 0 : 1),
+        agentUsage: usage(agentLogicalCalls),
         strictMockProof: {
           version: 1 as const,
           status: 'passed' as const,
@@ -553,7 +559,7 @@ describe('matrix corpus artifact lifecycle', () => {
       usage: {
         ...valid.usage,
         evaluator: usage(61),
-        totalCostNanoUsd: 80,
+        totalCostNanoUsd: 81,
       },
       scenarios: valid.scenarios.map((scenario, offset) =>
         offset === 0
@@ -575,7 +581,7 @@ describe('matrix corpus artifact lifecycle', () => {
         usage: {
           ...withQuorum.usage,
           evaluator: usage(64),
-          totalCostNanoUsd: 83,
+          totalCostNanoUsd: 84,
         },
         scenarios: withQuorum.scenarios.map((scenario, offset) =>
           offset === 0

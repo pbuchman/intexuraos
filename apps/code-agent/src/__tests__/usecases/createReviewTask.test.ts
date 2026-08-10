@@ -88,6 +88,7 @@ function createFakeGitHubPRSummaryRepo(lastReviewedCommitSha: string | null = nu
   return {
     upsert: vi.fn().mockResolvedValue(ok(undefined)),
     findRecentlyActive: vi.fn().mockResolvedValue(ok([])),
+    findReconciliationCandidates: vi.fn().mockResolvedValue(ok([])),
     findByPullRequest: vi.fn().mockResolvedValue(ok({
       repository: 'intexuraos/intexuraos',
       pullRequestNumber: 42,

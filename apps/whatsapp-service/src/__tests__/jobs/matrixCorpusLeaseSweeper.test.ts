@@ -10,7 +10,7 @@ import {
 } from '../../jobs/matrixCorpusLeaseSweeper.js';
 
 describe('MatrixCorpusRecoveryController', () => {
-  it('runs one immediate drain and schedules independent five/30-second loops', async () => {
+  it('runs one immediate drain and schedules independent five/ten-minute loops', async () => {
     const scheduler = new FakeScheduler();
     const drainBatch = vi.fn(async () => undefined);
     const sweepExpiredLeases = vi.fn(async () => undefined);
@@ -29,6 +29,21 @@ describe('MatrixCorpusRecoveryController', () => {
     await scheduler.fire(MATRIX_CORPUS_SWEEP_INTERVAL_MS);
     expect(drainBatch).toHaveBeenCalledTimes(2);
     expect(sweepExpiredLeases).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps shared empty recovery scans below 3,500 Firestore reads per day', () => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const sharedRuntimeCount = 2;
+    const outboxQueriesPerScan = 5;
+    const leaseQueriesPerScan = 1;
+    const dailyReads =
+      sharedRuntimeCount *
+      ((1 + Math.floor(dayMs / MATRIX_CORPUS_DRAIN_INTERVAL_MS)) * outboxQueriesPerScan +
+        Math.floor(dayMs / MATRIX_CORPUS_SWEEP_INTERVAL_MS) * leaseQueriesPerScan);
+
+    expect(MATRIX_CORPUS_DRAIN_INTERVAL_MS).toBe(5 * 60 * 1000);
+    expect(MATRIX_CORPUS_SWEEP_INTERVAL_MS).toBe(10 * 60 * 1000);
+    expect(dailyReads).toBeLessThanOrEqual(3_500);
   });
 
   it('coalesces overlapping drains while allowing the sweep to run independently', async () => {
