@@ -5072,7 +5072,8 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Zaproś Patryka na istniejące wydarzenie Bagrowa jutro.',
+        message:
+          'Zaproś Patryka (patryk@example.com) na istniejące wydarzenie Bagrowa jutro.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
@@ -6468,6 +6469,858 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
+  describe('calendar attendee email precondition', () => {
+    const emailClarification = {
+      outcome: 'needs_clarification',
+      reply: 'Jaki jest adres e-mail uczestnika?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['attendeeEmail'],
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Podaj adres e-mail uczestnika.',
+    } as const;
+    const passThroughResult = ok(
+      toolResult({
+        outcome: 'needs_clarification',
+        reply: 'Which existing event should I update?',
+        blockerReason: 'missing_required_details',
+        missingFields: ['event'],
+        candidateIntents: ['update_calendar_event'],
+        suggestedNextStep: 'Identify one event.',
+      })
+    );
+
+    it('asks for the attendee email before invoking the runner or calendar lookup', async () => {
+      let queryCalls = 0;
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => {
+            queryCalls += 1;
+            return 'unused';
+          },
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message:
+            'Zaproś Martę Testową A6F3 do istniejącego wydarzenia „INTEX-WA-E2E-ATTENDEE-20260810-A6F3” 11 sierpnia 2026 o 15:00.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual(emailClarification);
+      expect(client.calls).toHaveLength(0);
+      expect(queryCalls).toBe(0);
+    });
+
+    it('overrides a false event clarification and ignores an unrelated saved email mapping', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Które wydarzenie masz na myśli?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+        userPreferences:
+          'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub@example.com."\nUse expectedVersion 1 for preference mutation tools.',
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message:
+            'Zaproś Martę Testową A6F3 do istniejącego wydarzenia „INTEX-WA-E2E-ATTENDEE-20260810-A6F3” 11 sierpnia 2026 o 15:00.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual(emailClarification);
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('preserves classifier decision metadata while replacing a missing-email tool intent', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'tool' as const,
+              allowedToolNames: ['update_calendar_event' as const],
+              stylePreferenceAction: 'none' as const,
+              languageOverride: 'pl' as const,
+              decisionEvidence: 'The attendee email is absent.',
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Zaproś Martę na istniejące wydarzenie Bagrowa jutro.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual(emailClarification);
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('preserves a genuine event clarification when an email is already present', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Which event?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Invite Marta (marta@example.com) to an existing event.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        reply: 'Which event?',
+        missingFields: ['event'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it.each([
+      {
+        label: 'the current request',
+        message: 'Invite Jakub (jakub@example.com) to the existing Bagrowa event.',
+        replyContext: undefined,
+      },
+      {
+        label: 'an inbound user quote',
+        message: 'Invite Jakub to the existing Bagrowa event.',
+        replyContext: {
+          replyToWamid: 'wamid-inbound-email',
+          source: 'inbound_user_message' as const,
+          text: 'Jakub uses jakub@example.com.',
+          truncated: false,
+        },
+      },
+    ])('accepts a valid attendee email from $label', async ({ message, replyContext }) => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [],
+        message,
+        ...(replyContext !== undefined ? { replyContext } : {}),
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        label: 'an invalid address',
+        replyContext: undefined,
+        message: 'Invite Jakub (jakub@example) to the existing Bagrowa event.',
+      },
+      {
+        label: 'an address rejected by the calendar contract',
+        replyContext: undefined,
+        message: 'Invite Jakub (john..doe@example.com) to the existing Bagrowa event.',
+      },
+      {
+        label: 'an unrelated calendar address',
+        replyContext: undefined,
+        message: 'Invite Jakub to the event in team@example.com calendar.',
+      },
+      {
+        label: 'one address for multiple named attendees',
+        replyContext: undefined,
+        message:
+          'Invite Jakub and Anna (anna@example.com) to the existing Bagrowa event.',
+      },
+      {
+        label: 'alternative addresses for one attendee',
+        replyContext: undefined,
+        message:
+          'Invite Jakub (jakub.one@example.com or jakub.two@example.com) to the existing Bagrowa event.',
+      },
+      {
+        label: 'multiple unseparated addresses for one attendee',
+        replyContext: undefined,
+        message:
+          'Invite Jakub (jakub.one@example.com jakub.two@example.com) to the existing Bagrowa event.',
+      },
+      {
+        label: 'alternative addresses in an email reply',
+        replyContext: undefined,
+        message: 'Email: jakub.one@example.com or jakub.two@example.com.',
+      },
+      {
+        label: 'multiple bare addresses in an email reply',
+        replyContext: undefined,
+        message: 'jakub.one@example.com jakub.two@example.com',
+      },
+      {
+        label: 'an outbound assistant quote',
+        message: 'Invite Jakub to the existing Bagrowa event.',
+        replyContext: {
+          replyToWamid: 'wamid-outbound-email',
+          source: 'outbound_assistant_message' as const,
+          text: 'Jakub uses jakub@example.com.',
+          truncated: false,
+        },
+      },
+    ])('does not accept $label as attendee email context', async ({ message, replyContext }) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          ...(replyContext !== undefined ? { replyContext } : {}),
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('continues when an email-only reply answers the active attendee clarification', async () => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Which event?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Invite Marta to the existing Bagrowa event tomorrow.',
+          }),
+          event('clarification_requested', {
+            message: "What is the attendee's email address?",
+            blockerReason: 'missing_required_details',
+            missingFields: ['attendeeEmail'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: "What is the attendee's email address?" }),
+        ],
+        message: 'marta@example.com',
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it('continues when an inbound user quote answers the active attendee clarification', async () => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Which event?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Invite Marta to the existing Bagrowa event tomorrow.',
+          }),
+          event('clarification_requested', {
+            message: "What is the attendee's email address?",
+            blockerReason: 'missing_required_details',
+            missingFields: ['attendeeEmail'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: "What is the attendee's email address?" }),
+        ],
+        message: 'Use the quoted address.',
+        replyContext: {
+          replyToWamid: 'wamid-email-answer',
+          source: 'inbound_user_message',
+          text: 'marta@example.com',
+          truncated: false,
+        },
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it('keeps asking when one email answers a multi-attendee request', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: 'Invite Anna and Bob to the existing Bagrowa event tomorrow.',
+            }),
+            event('clarification_requested', {
+              message: "What is the attendees' email address?",
+              blockerReason: 'missing_required_details',
+              missingFields: ['attendeeEmail'],
+              candidateIntents: ['update_calendar_event'],
+            }),
+            event('assistant_message', { text: "What is the attendees' email address?" }),
+          ],
+          message: 'anna@example.com',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it.each([
+      'Actually invite Anna to the existing Dentist event tomorrow.',
+      'Actually invite Anna and Bob to the existing Dentist event tomorrow.',
+    ])('drops an inherited email after the attendee changes: %s', async (message) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+        userPreferences:
+          'User Preferences v1:\n1. (id: pref_marta) "Invite Marta via marta.saved@example.com."',
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: 'Invite Marta (marta@example.com) to an existing event.',
+            }),
+            event('clarification_requested', {
+              message: 'Which event?',
+              blockerReason: 'missing_required_details',
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event'],
+            }),
+            event('assistant_message', { text: 'Which event?' }),
+          ],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('carries an explicit email through an unresolved attendee-update clarification chain', async () => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Invite Marta (marta@example.com) to an existing calendar event.',
+          }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+          event('turn_processing_completed', {}),
+        ],
+        message: 'The Bagrowa event tomorrow at 18:00.',
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it('walks a multi-step attendee-update chain across query and diagnostic events', async () => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Invite Marta (marta@example.com) to an existing calendar event.',
+          }),
+          event('clarification_requested', {
+            message: 'Which day?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which day?' }),
+          event('turn_processing_completed', {}),
+          event('user_message', { text: 'Tomorrow.' }),
+          event('tool_call_started', { toolName: 'query_calendar_events' }),
+          event('tool_call_completed', { toolName: 'query_calendar_events' }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+          event('turn_processing_completed', {}),
+        ],
+        message: 'The Bagrowa event.',
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        label: 'a prior user event with only inbound reply context',
+        events: [
+          event('user_message', {
+            text: false,
+            replyContext: {
+              replyToWamid: 'wamid-prior-email',
+              source: 'inbound_user_message',
+              text: 'marta@example.com',
+              truncated: false,
+            },
+          }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+        ],
+      },
+      {
+        label: 'a prior user event without usable text',
+        events: [
+          event('user_message', { text: false }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+        ],
+      },
+      {
+        label: 'an earlier clarification for a different intent',
+        events: [
+          event('user_message', {
+            text: 'Invite Marta (marta@example.com) to an existing event.',
+          }),
+          event('clarification_requested', {
+            message: 'What note?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['content'],
+            candidateIntents: ['create_note'],
+          }),
+          event('assistant_message', { text: 'What note?' }),
+          event('user_message', { text: 'Tomorrow.' }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+        ],
+      },
+      {
+        label: 'a non-query tool boundary before the active clarification',
+        events: [
+          event('user_message', {
+            text: 'Invite Marta (marta@example.com) to an existing event.',
+          }),
+          event('tool_call_completed', { toolName: 'create_note' }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+        ],
+      },
+      {
+        label: 'a confirmation boundary between clarification turns',
+        events: [
+          event('user_message', {
+            text: 'Invite Marta (marta@example.com) to an existing event.',
+          }),
+          event('confirmation_requested', { toolName: 'update_calendar_event' }),
+          event('user_message', { text: 'Tomorrow.' }),
+          event('clarification_requested', {
+            message: 'Which event?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Which event?' }),
+        ],
+      },
+    ])('does not inherit an email across $label', async ({ events }) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events,
+          message: 'The Bagrowa event tomorrow.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it.each([
+      {
+        label: 'a non-update clarification',
+        events: [
+          event('clarification_requested', {
+            message: 'What note?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['content'],
+            candidateIntents: ['create_note'],
+          }),
+          event('assistant_message', { text: 'What note?' }),
+        ],
+      },
+      {
+        label: 'a trailing user-message boundary',
+        events: [event('user_message', { text: 'Old unrelated request.' })],
+      },
+    ])('does not open an attendee chain through $label', async ({ events }) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events,
+          message: 'Invite Marta to the existing Bagrowa event tomorrow.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('does not carry a stale email across a confirmation boundary', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: 'Invite Marta (old-marta@example.com) to an existing event.',
+            }),
+            event('clarification_requested', {
+              message: 'Which event?',
+              blockerReason: 'missing_required_details',
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event'],
+            }),
+            event('assistant_message', { text: 'Which event?' }),
+            event('confirmation_requested', {
+              toolName: 'update_calendar_event',
+              toolArgs: {},
+            }),
+            event('assistant_message', { text: 'Confirm this update.' }),
+          ],
+          message: 'Invite Anna to the existing Dentist event tomorrow.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it.each([
+      {
+        label: 'a rendered preference block',
+        userPreferences:
+          'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub@example.com."\nUse expectedVersion 1 for preference mutation tools.',
+      },
+      {
+        label: 'a Matrix prompt-context envelope',
+        userPreferences: JSON.stringify({
+          version: 1,
+          userPreferences:
+            'User Preferences v1:\n1. (id: pref_jakub) "Invite Jakub via jakub@example.com."',
+        }),
+      },
+      {
+        label: 'the documented event-specific mapping form',
+        userPreferences:
+          'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub to an event, invite jakub@example.com."',
+      },
+      {
+        label: 'the documented compact mapping form',
+        userPreferences:
+          'User Preferences v1:\n1. (id: pref_jakub) "When I invite Jakub, use jakub@example.com."',
+      },
+    ])('uses one unambiguous matching person-to-email mapping from $label', async ({ userPreferences }) => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+        userPreferences,
+      });
+
+      await runner.run({
+        session: session(),
+        events: [],
+        message: 'Invite Jakub to the existing Bagrowa event tomorrow.',
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it.each([
+      {
+        label: 'conflicting mappings',
+        rows: [
+          '1. (id: pref_jakub_1) "When I invite Jakub, use jakub.one@example.com."',
+          '2. (id: pref_jakub_2) "Invite Jakub via jakub.two@example.com."',
+        ],
+      },
+      {
+        label: 'multiple emails in one mapping',
+        rows: [
+          '1. (id: pref_jakub) "Invite Jakub via jakub.one@example.com and jakub.two@example.com."',
+        ],
+      },
+      {
+        label: 'a generic attendee label',
+        rows: ['1. (id: pref_generic) "Invite the attendee via generic@example.com."'],
+      },
+      {
+        label: 'a generic guest label',
+        rows: ['1. (id: pref_generic) "Invite my guest via generic@example.com."'],
+      },
+      {
+        label: 'one mapping for multiple named attendees',
+        rows: ['1. (id: pref_jakub) "Invite Jakub via jakub@example.com."'],
+        message: 'Invite Jakub and Anna to the existing Bagrowa event tomorrow.',
+      },
+      {
+        label: 'a mapping rejected by the calendar email contract',
+        rows: ['1. (id: pref_jakub) "Invite Jakub via john..doe@example.com."'],
+      },
+      {
+        label: 'a non-string canonical row payload',
+        rows: ['1. (id: pref_jakub) 123'],
+      },
+      {
+        label: 'an overlong person label',
+        rows: [
+          '1. (id: pref_long) "Invite One Two Three Four Five Six Seven via long@example.com."',
+        ],
+      },
+      {
+        label: 'a person label longer than the requested identity',
+        rows: ['1. (id: pref_jakub) "Invite Jakub Nowak via jakub@example.com."'],
+      },
+      {
+        label: 'an invalid address as the only attendee object',
+        rows: ['1. (id: pref_jakub) "Invite Jakub via jakub@example.com."'],
+        message: 'Invite john..doe@example.com to the existing Bagrowa event tomorrow.',
+      },
+    ])('asks for an email when saved preferences contain $label', async ({ rows, ...testCase }) => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+        userPreferences: ['User Preferences v2:', ...rows].join('\n'),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message:
+            'message' in testCase
+              ? testCase.message
+              : 'Invite Jakub to the existing Bagrowa event tomorrow.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('ignores a non-canonical Matrix preference envelope', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+        userPreferences: JSON.stringify({
+          version: 1,
+          userPreferences:
+            'User Preferences v1:\n1. (id: pref_jakub) "Invite Jakub via jakub@example.com."',
+          extra: true,
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Invite Jakub to the existing Bagrowa event tomorrow.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('preserves a genuinely ambiguous classifier result', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Should I update the event or save a note?',
+              blockerReason: 'multiple_possible_intents' as const,
+              candidateIntents: ['update_calendar_event' as const, 'create_note' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Add Marta to Bagrowa and remember it.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: 'Should I update the event or save a note?',
+        blockerReason: 'multiple_possible_intents',
+        candidateIntents: ['update_calendar_event', 'create_note'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+  });
+
   it.each(['id', 'eventId'] as const)(
     'queries an existing event before preparing an attendee-update confirmation with %s identity',
     async (eventIdentityField) => {
@@ -6539,7 +7392,7 @@ describe('createIntexAgentRunner', () => {
     const preview = await runner.run({
       session: session(),
       events: [],
-      message: 'Zaproś Patryka na Bagrową jutro.',
+      message: 'Zaproś Patryka (patryk@example.com) na Bagrową jutro.',
       currentDateTime: CURRENT_DATE_TIME,
       timeZone: 'Europe/Warsaw',
     });
@@ -6643,7 +7496,7 @@ describe('createIntexAgentRunner', () => {
     const result = await runner.run({
       session: session(),
       events: [],
-      message: 'Zaproś Patryka na Bagrową.',
+      message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
       currentDateTime: CURRENT_DATE_TIME,
       timeZone: 'Europe/Warsaw',
     });
@@ -7013,7 +7866,7 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Zaproś Patryka na Bagrową.',
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
@@ -7098,7 +7951,7 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Zaproś Patryka na Bagrową.',
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
@@ -7110,12 +7963,12 @@ describe('createIntexAgentRunner', () => {
 
   it.each([
     {
-      message: 'Zaproś Patryka na Bagrową.',
+      message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
       expectedStart: 'Początek: 25 czerwca 2026',
       expectedEnd: 'Koniec: 26 czerwca 2026',
     },
     {
-      message: 'Invite Patryk to the Bagrowa event.',
+      message: 'Invite Patryk (patryk@example.com) to the Bagrowa event.',
       expectedStart: 'Start: 25 June 2026',
       expectedEnd: 'End: 26 June 2026',
     },
@@ -7335,7 +8188,7 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Zaproś Patryka na Bagrową.',
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
@@ -7395,7 +8248,7 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Zaproś Patryka na Bagrową.',
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
@@ -7455,7 +8308,7 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message: 'Zaproś Patryka na Bagrową.',
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
