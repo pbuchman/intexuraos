@@ -4765,6 +4765,285 @@ describe('createIntexAgentRunner', () => {
     expect(getUserPreferencesCalls).toBe(1);
   });
 
+  it('falls back to the verified calendar list when the final model envelope stays malformed', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-10T00:00:00.000+02:00',
+          timeMax: '2026-08-11T00:00:00.000+02:00',
+        },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok({
+        content: 'still malformed after repair',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]);
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      timeMin: '2026-08-10T00:00:00.000+02:00',
+      timeMax: '2026-08-11T00:00:00.000+02:00',
+      events: [
+        {
+          id: 'event-1',
+          summary: 'Daily stand-up',
+          start: { dateTime: '2026-08-10T07:00:00.000Z' },
+          end: { dateTime: '2026-08-10T07:30:00.000Z' },
+          location: 'Meet',
+        },
+        {
+          id: 'event-2',
+          summary: 'Urlop',
+          start: { date: '2026-08-10' },
+          end: { date: '2026-08-11' },
+        },
+      ],
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Podsumuj mój dzisiejszy kalendarz.',
+        currentDateTime: '2026-08-10T06:00:00.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply:
+        'Wydarzenia w kalendarzu (2):\n- 10 sierpnia 2026, 09:00 — Daily stand-up (miejsce: Meet)\n- 10 sierpnia 2026 — Urlop',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+    expect(responseRepairClient.calls).toHaveLength(1);
+  });
+
+  it('falls back to the verified calendar count when the final model envelope is malformed', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'count',
+          timeMin: '2026-08-01T00:00:00.000Z',
+          timeMax: '2026-09-01T00:00:00.000Z',
+          query: 'Dentist',
+        },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'count',
+      count: 3,
+      query: 'Dentist',
+      timeMin: '2026-08-01T00:00:00.000Z',
+      timeMax: '2026-09-01T00:00:00.000Z',
+    };
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'How many Dentist events are in my calendar this month?',
+        currentDateTime: '2026-08-10T06:00:00.000Z',
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Calendar events matching “Dentist” in the requested period: 3.',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+  });
+
+  it('keeps malformed runner output fail-closed when the calendar result is inconsistent', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-10T00:00:00.000Z',
+          timeMax: '2026-08-11T00:00:00.000Z',
+        },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 2,
+            events: [
+              {
+                id: 'event-1',
+                summary: 'Only event',
+                start: { date: '2026-08-10' },
+                end: { date: '2026-08-11' },
+              },
+            ],
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Show my calendar today.',
+        currentDateTime: '2026-08-10T06:00:00.000Z',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      fallbackReason: 'runner_output_malformed',
+    });
+  });
+
+  it.each([
+    {
+      message: 'Pokaż mój kalendarz na dziś.',
+      expectedReply: 'Brak wydarzeń w kalendarzu w podanym okresie.',
+    },
+    {
+      message: 'Show my calendar today.',
+      expectedReply: 'There are no calendar events in the requested period.',
+    },
+  ])('renders a safe empty calendar fallback for: $message', async ({ message, expectedReply }) => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 0,
+      events: [],
+    };
+
+    await expect(
+      runMalformedCalendarResult(JSON.stringify(toolResultValue), message)
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: expectedReply,
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+  });
+
+  it('marks a capped calendar count as a lower bound without echoing an absent query', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'count',
+      count: 2500,
+      truncated: true,
+    };
+
+    await expect(
+      runMalformedCalendarResult(
+        JSON.stringify(toolResultValue),
+        'Ile wydarzeń mam w kalendarzu?'
+      )
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Wydarzenia w kalendarzu w podanym okresie: co najmniej 2500.',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+  });
+
+  it('renders an English calendar event fallback with a location', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      events: [
+        {
+          id: 'event-1',
+          summary: 'Planning',
+          start: { dateTime: '2026-08-10T09:00:00.000Z' },
+          end: { dateTime: '2026-08-10T10:00:00.000Z' },
+          location: 'Room 3',
+        },
+      ],
+    };
+
+    await expect(
+      runMalformedCalendarResult(JSON.stringify(toolResultValue), 'Show my calendar today.')
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Calendar events (1):\n- 10 August 2026, 09:00 — Planning (location: Room 3)',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+  });
+
+  it.each([
+    ['a non-JSON tool result', 'calendar-query-1'],
+    ['a missing completion status', JSON.stringify({ mode: 'list', count: 0, events: [] })],
+    ['a non-integer count', JSON.stringify({ status: 'completed', mode: 'list', count: '1', events: [] })],
+    ['a negative count', JSON.stringify({ status: 'completed', mode: 'list', count: -1, events: [] })],
+    ['an excessive count', JSON.stringify({ status: 'completed', mode: 'list', count: 2501, events: [] })],
+    ['an unknown mode', JSON.stringify({ status: 'completed', mode: 'search', count: 0, events: [] })],
+    ['a scalar event collection', JSON.stringify({ status: 'completed', mode: 'list', count: 0, events: 'none' })],
+    ['a null event', calendarListResult(null)],
+    ['an array event', calendarListResult([])],
+    ['a scalar event', calendarListResult('event')],
+    ['a missing summary', calendarListResult({ start: { date: '2026-08-10' } })],
+    ['a missing start', calendarListResult({ summary: 'Planning' })],
+    ['a null start', calendarListResult({ summary: 'Planning', start: null })],
+    ['an array start', calendarListResult({ summary: 'Planning', start: [] })],
+    ['a scalar start', calendarListResult({ summary: 'Planning', start: 'today' })],
+    ['an invalid date-time', calendarListResult({ summary: 'Planning', start: { dateTime: 'later' } })],
+    ['a missing date', calendarListResult({ summary: 'Planning', start: {} })],
+    ['a malformed date', calendarListResult({ summary: 'Planning', start: { date: '2026/08/10' } })],
+    ['an impossible date', calendarListResult({ summary: 'Planning', start: { date: '2026-02-30' } })],
+  ])('keeps the malformed calendar fallback fail-closed for $label', async (_label, rawResult) => {
+    await expect(runMalformedCalendarResult(rawResult, 'Show my calendar today.')).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      fallbackReason: 'runner_output_malformed',
+    });
+  });
+
   it('finishes an empty preference read from the tool result without another model iteration', async () => {
     let getUserPreferencesCalls = 0;
     const client = new ToolExecutingFakeToolCallingClient(
@@ -8629,6 +8908,53 @@ function toolResult(content: Record<string, unknown>): ToolCallingResult {
     iterationCount: 2,
     usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUsd: 0.001 },
   };
+}
+
+function calendarListResult(eventValue: unknown): string {
+  return JSON.stringify({
+    status: 'completed',
+    mode: 'list',
+    count: 1,
+    events: [eventValue],
+  });
+}
+
+async function runMalformedCalendarResult(
+  rawToolResult: string,
+  message: string
+): Promise<Awaited<ReturnType<TestRunner['run']>>> {
+  const client = new ToolExecutingFakeToolCallingClient(
+    {
+      toolName: 'query_calendar_events',
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-10T00:00:00.000Z',
+        timeMax: '2026-08-11T00:00:00.000Z',
+      },
+    },
+    [
+      ok({
+        content: 'malformed runner output',
+        toolCallsMade: 1,
+        iterationCount: 2,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    ]
+  );
+  const runner = createIntexAgentRunner({
+    client,
+    intentClassifier: toolIntentClassifier(['query_calendar_events']),
+    toolExecutor: fakeToolExecutor({
+      queryCalendarEvents: async () => rawToolResult,
+    }),
+  });
+
+  return await runner.run({
+    session: session(),
+    events: [],
+    message,
+    currentDateTime: '2026-08-10T06:00:00.000Z',
+  });
 }
 
 function generateResult(content: Record<string, unknown>): StructuredGenerateResult {
