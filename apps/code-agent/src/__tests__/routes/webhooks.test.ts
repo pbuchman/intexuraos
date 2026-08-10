@@ -112,6 +112,10 @@ class FakeGitHubPRSummaryRepo implements GitHubPRSummaryRepository {
     return ok([]);
   }
 
+  async findReconciliationCandidates(): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+    return ok([]);
+  }
+
   async findByPullRequest(repository: string, prNumber: number): Promise<Result<GitHubPRSummary | null, SummaryRepositoryError>> {
     return ok(this.summaries.get(this.key(repository, prNumber)) ?? null);
   }

@@ -227,6 +227,7 @@ export type MatrixCorpusVisibleMessageParseResult =
 export const intexAgentToolNameV1Schema = z.enum([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'query_calendar_events',
   'create_research',
   'create_link',
@@ -241,20 +242,46 @@ export type IntexAgentToolNameV1 = z.infer<typeof intexAgentToolNameV1Schema>;
 
 const syntheticIdSchema = z.string().regex(MOCK_ID_PATTERN);
 const mockUrlSchema = z.string().regex(/^https:\/\/mock\.invalid\/[A-Za-z0-9_/-]{1,180}$/);
+const calendarDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const instant = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(instant.getTime()) && instant.toISOString().slice(0, 10) === value;
+  }, 'Expected a valid calendar date');
+const calendarDateTimeSnapshotSchema = z
+  .object({
+    dateTime: rfc3339Schema.optional(),
+    date: calendarDateSchema.optional(),
+    timeZone: ianaTimeZoneSchema.optional(),
+  })
+  .strict()
+  .refine((value) => (value.dateTime === undefined) !== (value.date === undefined), {
+    message: 'Calendar snapshot requires exactly one of dateTime or date',
+  });
+const calendarEventTimeSchema = z.union([rfc3339Schema, calendarDateTimeSnapshotSchema]);
+
+function calendarEventTimeMs(value: z.infer<typeof calendarEventTimeSchema>): number {
+  return Date.parse(
+    typeof value === 'string' ? value : (value.dateTime ?? `${String(value.date)}T00:00:00Z`)
+  );
+}
+
 const calendarEventSchema = z
   .object({
     eventId: syntheticIdSchema,
+    etag: z.string().min(1).max(256).optional(),
     summary: z.string().min(1).max(256),
-    start: rfc3339Schema,
-    end: rfc3339Schema,
-    timeZone: ianaTimeZoneSchema,
+    start: calendarEventTimeSchema,
+    end: calendarEventTimeSchema,
+    timeZone: ianaTimeZoneSchema.optional(),
     location: z.string().min(1).max(256).optional(),
     description: z.string().min(1).max(1024).optional(),
-    status: z.enum(['confirmed', 'tentative', 'cancelled']),
-    calendarId: syntheticIdSchema,
+    status: z.enum(['confirmed', 'tentative', 'cancelled']).optional(),
+    calendarId: z.union([syntheticIdSchema, z.literal('primary')]),
   })
   .strict()
-  .refine((event) => Date.parse(event.end) > Date.parse(event.start), {
+  .refine((event) => calendarEventTimeMs(event.end) > calendarEventTimeMs(event.start), {
     message: 'Calendar event end must follow start',
   });
 
@@ -276,10 +303,20 @@ export const strictMockResultV1Schema = z.union([
     .strict(),
   z
     .object({
+      toolName: z.literal('update_calendar_event'),
+      status: z.literal('completed'),
+      eventId: syntheticIdSchema,
+      summary: z.string().min(1).max(256),
+      attendeesAdded: z.array(z.string().email().max(320)).min(1).max(50),
+    })
+    .strict(),
+  z
+    .object({
       toolName: z.literal('query_calendar_events'),
       status: z.literal('completed'),
       mode: z.literal('count'),
       count: z.number().int().min(0).max(20),
+      truncated: z.boolean().optional(),
     })
     .strict(),
   z
@@ -289,6 +326,7 @@ export const strictMockResultV1Schema = z.union([
       mode: z.literal('list'),
       count: z.number().int().min(0).max(20),
       events: z.array(calendarEventSchema).max(20),
+      truncated: z.boolean().optional(),
     })
     .strict()
     .refine((result) => result.count === result.events.length, {
@@ -387,7 +425,7 @@ export const strictToolMockProfileV1Schema = z
   .object({
     version: z.literal(1),
     calls: z.array(strictMockCallSchema).max(200),
-    forbiddenSelections: z.array(forbiddenSelectionSchema).max(220),
+    forbiddenSelections: z.array(forbiddenSelectionSchema).max(240),
     unexpectedKnownToolPolicy: z.literal('behavioral_failure_no_execution'),
   })
   .strict()

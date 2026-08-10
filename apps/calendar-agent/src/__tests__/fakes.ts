@@ -6,6 +6,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type {
   CalendarError,
   CalendarEvent,
+  CalendarEventsPage,
   CreateEventInput,
   FailedEvent,
   CreateFailedEventInput,
@@ -16,6 +17,7 @@ import type {
   ListEventsInput,
   OAuthTokenResult,
   UpdateEventInput,
+  UpdateEventOptions,
   UserServiceClient,
   ProcessedAction,
   ProcessedActionRepository,
@@ -105,9 +107,16 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     calendarId: string;
     options: ListEventsInput;
   }[] = [];
+  readonly updateEventCalls: {
+    accessToken: string;
+    calendarId: string;
+    eventId: string;
+    updates: UpdateEventInput;
+    options?: UpdateEventOptions;
+  }[] = [];
 
   private events: CalendarEvent[] = [];
-  private listResult: Result<CalendarEvent[], CalendarError> | null = null;
+  private listResult: Result<CalendarEventsPage, CalendarError> | null = null;
   private getResult: Result<CalendarEvent, CalendarError> | null = null;
   private createResult: Result<CalendarEvent, CalendarError> | null = null;
   private updateResult: Result<CalendarEvent, CalendarError> | null = null;
@@ -120,7 +129,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     this.events.push(event);
   }
 
-  setListResult(result: Result<CalendarEvent[], CalendarError>): void {
+  setListResult(result: Result<CalendarEventsPage, CalendarError>): void {
     this.listResult = result;
   }
 
@@ -168,12 +177,12 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     calendarId: string,
     options: ListEventsInput,
     _logger: unknown
-  ): Promise<Result<CalendarEvent[], CalendarError>> {
+  ): Promise<Result<CalendarEventsPage, CalendarError>> {
     this.listEventsCalls.push({ accessToken, calendarId, options });
     if (this.listResult !== null) {
       return this.listResult;
     }
-    return ok(this.events);
+    return ok({ events: this.events, truncated: false });
   }
 
   async getEvent(
@@ -218,12 +227,20 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
   }
 
   async updateEvent(
-    _accessToken: string,
-    _calendarId: string,
+    accessToken: string,
+    calendarId: string,
     eventId: string,
     updates: UpdateEventInput,
-    _logger: unknown
+    _logger: unknown,
+    options?: UpdateEventOptions
   ): Promise<Result<CalendarEvent, CalendarError>> {
+    this.updateEventCalls.push({
+      accessToken,
+      calendarId,
+      eventId,
+      updates,
+      ...(options === undefined ? {} : { options }),
+    });
     if (this.updateResult !== null) {
       return this.updateResult;
     }
@@ -250,6 +267,9 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
     }
     if (updates.end !== undefined) {
       updated.end = updates.end;
+    }
+    if (updates.attendees !== undefined) {
+      updated.attendees = updates.attendees;
     }
     this.events[eventIndex] = updated;
     return ok(updated);

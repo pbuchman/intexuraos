@@ -109,6 +109,49 @@ describe('test tool mocks', () => {
     expect(JSON.stringify(calls)).not.toContain('wamid-1');
   });
 
+  it.each(['calendarId', 'expectedEtag', 'eventStart', 'eventEnd'] as const)(
+    'fails closed when a confirmed calendar update has no %s snapshot field',
+    async (missingField) => {
+      const calls: CapturedToolCall[] = [];
+      const executor = createTestToolExecutor({ calls });
+      const args = {
+        eventId: 'mock-event-1',
+        eventSummary: 'Synthetic event',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'primary',
+        expectedEtag: '"mock-event-1-v1"',
+        eventStart: { dateTime: '2026-07-20T10:00:00Z' },
+        eventEnd: { dateTime: '2026-07-20T11:00:00Z' },
+      };
+      const incompleteArgs = Object.fromEntries(
+        Object.entries(args).filter(([key]) => key !== missingField)
+      ) as unknown as Parameters<typeof executor.updateCalendarEvent>[0];
+
+      await expect(executor.updateCalendarEvent(incompleteArgs)).rejects.toThrow(
+        'Calendar event snapshot is missing or incomplete'
+      );
+      expect(calls).toEqual([]);
+    }
+  );
+
+  it('executes a confirmed calendar update with a complete snapshot', async () => {
+    const calls: CapturedToolCall[] = [];
+    const executor = createTestToolExecutor({ calls });
+
+    await expect(
+      executor.updateCalendarEvent({
+        eventId: 'mock-event-1',
+        eventSummary: 'Synthetic event',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'primary',
+        expectedEtag: '"mock-event-1-v1"',
+        eventStart: { dateTime: '2026-07-20T10:00:00Z' },
+        eventEnd: { dateTime: '2026-07-20T11:00:00Z' },
+      })
+    ).resolves.toContain('"status":"completed"');
+    expect(calls).toHaveLength(1);
+  });
+
   it('records canonical marker evidence without changing it when surrounding secrets change', async () => {
     const calls: CapturedToolCall[] = [];
     const executor = createTestToolExecutor({ calls });

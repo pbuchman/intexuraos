@@ -20,6 +20,14 @@ export interface GitHubPRSummaryRepository {
   findRecentlyActive(withinDays: number): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>>;
 
   /**
+   * Find the oldest open PR summaries by reconciliation-attempt time.
+   * The caller supplies the hard Firestore read bound and filters fresh rows.
+   */
+  findReconciliationCandidates(
+    limit: number
+  ): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>>;
+
+  /**
    * Find a PR summary by repository and pull request number.
    */
   findByPullRequest(

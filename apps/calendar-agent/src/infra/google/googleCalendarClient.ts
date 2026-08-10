@@ -7,6 +7,7 @@ import { err, ok, type Result } from '@intexuraos/common-core';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   CalendarEvent,
+  CalendarEventsPage,
   CreateEventInput,
   EventAttendee,
   EventPerson,
@@ -17,6 +18,7 @@ import type {
 } from '../../domain/models.js';
 import type { CalendarError } from '../../domain/errors.js';
 import type { GoogleCalendarClient } from '../../domain/ports.js';
+import type { UpdateEventOptions } from '../../domain/ports.js';
 
 type GoogleEvent = calendar_v3.Schema$Event;
 
@@ -59,8 +61,23 @@ function buildEventAttendee(attendee: calendar_v3.Schema$EventAttendee): EventAt
   if (attendee.displayName !== undefined && attendee.displayName !== null) {
     result.displayName = attendee.displayName;
   }
+  if (attendee.id !== undefined && attendee.id !== null) {
+    result.id = attendee.id;
+  }
+  if (attendee.comment !== undefined && attendee.comment !== null) {
+    result.comment = attendee.comment;
+  }
+  if (attendee.additionalGuests !== undefined && attendee.additionalGuests !== null) {
+    result.additionalGuests = attendee.additionalGuests;
+  }
   if (attendee.self !== undefined && attendee.self !== null) {
     result.self = attendee.self;
+  }
+  if (attendee.organizer !== undefined && attendee.organizer !== null) {
+    result.organizer = attendee.organizer;
+  }
+  if (attendee.resource !== undefined && attendee.resource !== null) {
+    result.resource = attendee.resource;
   }
   const rs = attendee.responseStatus;
   if (rs === 'needsAction' || rs === 'declined' || rs === 'tentative' || rs === 'accepted') {
@@ -80,6 +97,9 @@ function mapGoogleEventToCalendarEvent(event: GoogleEvent): CalendarEvent {
     end: buildEventDateTime(event.end),
   };
 
+  if (event.etag !== undefined && event.etag !== null) {
+    result.etag = event.etag;
+  }
   if (event.description !== undefined && event.description !== null) {
     result.description = event.description;
   }
@@ -106,7 +126,9 @@ function mapGoogleEventToCalendarEvent(event: GoogleEvent): CalendarEvent {
   if (event.attendees !== undefined) {
     result.attendees = event.attendees.map(buildEventAttendee);
   }
-
+  if (event.attendeesOmitted !== undefined && event.attendeesOmitted !== null) {
+    result.attendeesOmitted = event.attendeesOmitted;
+  }
   return result;
 }
 
@@ -162,6 +184,9 @@ export function mapErrorToCalendarError(error: unknown): CalendarError {
   if (code === 400) {
     return { code: 'INVALID_REQUEST', message };
   }
+  if (code === 412) {
+    return { code: 'CONFLICT', message };
+  }
 
   return { code: 'INTERNAL_ERROR', message, details: error };
 }
@@ -204,7 +229,7 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     calendarId: string,
     options: ListEventsInput,
     logger: Logger
-  ): Promise<Result<CalendarEvent[], CalendarError>> {
+  ): Promise<Result<CalendarEventsPage, CalendarError>> {
     logger.debug({ calendarId, options }, 'GoogleCalendarClient.listEvents: request');
     try {
       const oauth2Client = new google.auth.OAuth2();
@@ -226,7 +251,11 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
       const response = await calendar.events.list(params);
       const events = (response.data.items ?? []).map(mapGoogleEventToCalendarEvent);
       logger.debug({ calendarId, eventCount: events.length }, 'GoogleCalendarClient.listEvents: response');
-      return ok(events);
+      return ok({
+        events,
+        truncated:
+          response.data.nextPageToken !== undefined && response.data.nextPageToken !== null,
+      });
     } catch (error) {
       const calendarError = mapErrorToCalendarError(error);
       logger.error({ calendarId, error: calendarError }, 'GoogleCalendarClient.listEvents: error');
@@ -295,7 +324,8 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
     calendarId: string,
     eventId: string,
     event: UpdateEventInput,
-    logger: Logger
+    logger: Logger,
+    options?: UpdateEventOptions
   ): Promise<Result<CalendarEvent, CalendarError>> {
     logger.debug({ calendarId, eventId, updates: Object.keys(event) }, 'GoogleCalendarClient.updateEvent: request');
     try {
@@ -312,11 +342,21 @@ export class GoogleCalendarClientImpl implements GoogleCalendarClient {
         attendees: event.attendees,
       });
 
-      const response = await calendar.events.patch({
+      const params: calendar_v3.Params$Resource$Events$Patch = {
         calendarId,
         eventId,
         requestBody,
-      });
+      };
+      if (options?.sendUpdates !== undefined) {
+        params.sendUpdates = options.sendUpdates;
+      }
+
+      const response = await calendar.events.patch(
+        params,
+        options?.expectedEtag === undefined
+          ? undefined
+          : { headers: { 'If-Match': options.expectedEtag } }
+      );
       logger.debug({ calendarId, eventId, title: response.data.summary }, 'GoogleCalendarClient.updateEvent: response');
       return ok(mapGoogleEventToCalendarEvent(response.data));
     } catch (error) {

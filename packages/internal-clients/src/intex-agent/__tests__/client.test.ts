@@ -156,7 +156,19 @@ describe('Intex Agent Matrix corpus internal client', () => {
         data: {
           version: 1,
           eventRevision: 0,
-          toolEvidence: [],
+          toolEvidence: [
+            {
+              event: 'mock_completed',
+              toolName: 'update_calendar_event',
+              turnIndex: 2,
+              ordinal: 1,
+              facts: [
+                { name: 'hasExpectedEtag', value: true },
+                { name: 'hasEventStart', value: true },
+                { name: 'hasEventEnd', value: true },
+              ],
+            },
+          ],
           agentUsage: [],
           agentUsageTotals: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costNanoUsd: 0 },
           sessionProof: {

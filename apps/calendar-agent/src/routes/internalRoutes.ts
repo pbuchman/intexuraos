@@ -9,10 +9,12 @@ import type {
   CalendarCreateEventRequest,
   CalendarListEvent,
   CalendarListEventsRequest,
+  CalendarUpdateEventAttendeesRequest,
 } from '@intexuraos/http-contracts';
 import { getServices } from '../services.js';
 import {
   createEvent,
+  addEventAttendees,
   listEvents,
   processCalendarAction,
   generateCalendarPreview,
@@ -20,6 +22,7 @@ import {
   type CalendarEvent,
   type CalendarPreview,
   type CreateEventRequest,
+  type AddEventAttendeesRequest,
   type ListEventsInput,
   type ListEventsRequest,
 } from '../domain/index.js';
@@ -60,6 +63,10 @@ interface DirectPreviewBody {
 
 interface GetPreviewParams {
   actionId: string;
+}
+
+interface UpdateEventAttendeesParams {
+  eventId: string;
 }
 
 interface GeneratePreviewInput {
@@ -208,6 +215,149 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     }
   );
 
+  fastify.patch<{
+    Params: UpdateEventAttendeesParams;
+    Body: CalendarUpdateEventAttendeesRequest;
+  }>(
+    '/internal/calendar/events/:eventId',
+    {
+      schema: {
+        operationId: 'updateInternalCalendarEventAttendees',
+        summary: 'Add attendees to an existing calendar event',
+        description:
+          'Internal service endpoint for adding attendees without changing other event details',
+        tags: ['internal'],
+        params: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['eventId'],
+          properties: {
+            eventId: { type: 'string', minLength: 1 },
+          },
+        },
+        body: { $ref: 'CalendarUpdateEventAttendeesRequest#' },
+        response: {
+          200: {
+            description: 'Success',
+            type: 'object',
+            required: ['success', 'data'],
+            properties: {
+              success: { type: 'boolean', enum: [true] },
+              data: { $ref: 'CalendarUpdateEventAttendeesData#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          400: {
+            description: 'Bad Request',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          401: {
+            description: 'Unauthorized',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          403: {
+            description: 'Forbidden',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          404: {
+            description: 'Not Found',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          409: {
+            description: 'Conflict',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+          500: {
+            description: 'Internal Server Error',
+            type: 'object',
+            properties: {
+              success: { type: 'boolean', enum: [false] },
+              error: { $ref: 'ErrorBody#' },
+              diagnostics: { $ref: 'Diagnostics#' },
+            },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: UpdateEventAttendeesParams;
+        Body: CalendarUpdateEventAttendeesRequest;
+      }>,
+      reply: FastifyReply
+    ) => {
+      logIncomingRequest(request, { includeParams: true });
+
+      const authResult = validateInternalAuth(request);
+      if (!authResult.valid) {
+        reply.status(401);
+        return await reply.fail('UNAUTHORIZED', 'Unauthorized');
+      }
+
+      const services = getServices();
+      const updateRequest: AddEventAttendeesRequest = {
+        userId: request.body.userId,
+        calendarId: request.body.calendarId,
+        eventId: request.params.eventId,
+        expectedEtag: request.body.expectedEtag,
+        attendeesToAdd: request.body.attendeesToAdd,
+      };
+
+      request.log.info(
+        {
+          userId: request.body.userId,
+          calendarId: request.body.calendarId,
+          eventId: request.params.eventId,
+          attendeeCount: request.body.attendeesToAdd.length,
+        },
+        'internal/updateCalendarEventAttendees: updating event'
+      );
+
+      const result = await addEventAttendees(updateRequest, {
+        userServiceClient: services.userServiceClient,
+        googleCalendarClient: services.googleCalendarClient,
+        logger: request.log,
+      });
+
+      if (!result.ok) {
+        return await handleCalendarError(result.error, reply);
+      }
+
+      request.log.info(
+        { userId: request.body.userId, eventId: result.value.id }, // @allow-result-access -- guarded by !result.ok check above
+        'internal/updateCalendarEventAttendees: complete'
+      );
+
+      reply.status(200);
+      return await reply.ok({ event: result.value }); // @allow-result-access -- guarded by !result.ok check above
+    }
+  );
+
   fastify.post<{ Body: CalendarListEventsRequest }>(
     '/internal/calendar/events/query',
     {
@@ -332,11 +482,18 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       request.log.info(
-        { userId: request.body.userId, eventCount: result.value.length }, // @allow-result-access -- guarded by !result.ok check above
+        {
+          userId: request.body.userId,
+          eventCount: result.value.events.length, // @allow-result-access -- guarded by !result.ok check above
+          truncated: result.value.truncated, // @allow-result-access -- guarded by !result.ok check above
+        },
         'internal/queryCalendarEvents: complete'
       );
 
-      return await reply.ok({ events: result.value.map(toCalendarListEvent) }); // @allow-result-access -- guarded by !result.ok check above
+      return await reply.ok({
+        events: result.value.events.map(toCalendarListEvent), // @allow-result-access -- guarded by !result.ok check above
+        truncated: result.value.truncated, // @allow-result-access -- guarded by !result.ok check above
+      });
     }
   );
 
@@ -838,6 +995,7 @@ function toCalendarListEvent(event: CalendarEvent): CalendarListEvent {
     summary: event.summary,
     start: event.start,
     end: event.end,
+    ...(event.etag !== undefined ? { etag: event.etag } : {}),
     ...(event.location !== undefined ? { location: event.location } : {}),
     ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
   };

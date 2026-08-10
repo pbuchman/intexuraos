@@ -568,6 +568,7 @@ export async function processGitHubWebhook(
         mergedAt: parsedEvent.mergedAt ?? null,
         baseBranch: parsedEvent.baseBranch,
         authorLogin: parsedEvent.prAuthorLogin,
+        ...(parsedEvent.state === 'open' && { lastConflictCheckedAt: null }),
       }),
     };
     const summaryResult = await gitHubPRSummaryRepo.upsert(summaryInput);

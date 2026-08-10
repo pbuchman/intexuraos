@@ -5,6 +5,10 @@ import {
   bookmarksCreateBookmarkDataSchema,
   bookmarksCreateBookmarkRequestSchema,
   calendarListEventsRequestSchema,
+  calendarListEventsDataSchema,
+  calendarUpdateEventAttendeesDataSchema,
+  calendarUpdateEventAttendeesRequestSchema,
+  calendarUpdateEventAttendeesResponseSchema,
   imageGenerateImageRequestSchema,
   imageGeneratePromptRequestSchema,
   notionPagePreviewSchema,
@@ -107,6 +111,134 @@ describe('Zod contracts', () => {
         timeMin: '2026-06-29T00:00:00.000Z',
       })
     ).toThrow();
+  });
+
+  it('parses strict calendar attendee update requests and response data', () => {
+    const snapshot = {
+      calendarId: 'primary',
+      expectedEtag: '"event-1-v1"',
+    };
+    expect(
+      calendarUpdateEventAttendeesRequestSchema.parse({
+        userId: 'user-1',
+        ...snapshot,
+        attendeesToAdd: [{ email: 'karol@example.com' }, { email: 'anna@example.com' }],
+      })
+    ).toEqual({
+      userId: 'user-1',
+      ...snapshot,
+      attendeesToAdd: [{ email: 'karol@example.com' }, { email: 'anna@example.com' }],
+    });
+
+    const event = {
+      id: 'event-1',
+      summary: 'Karol na Bagrowej',
+      description: 'Wieczorne spotkanie',
+      location: 'Bagrowa',
+      start: {
+        dateTime: '2026-08-11T18:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+      end: {
+        dateTime: '2026-08-11T19:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+      status: 'confirmed' as const,
+      htmlLink: 'https://calendar.google.com/calendar/event?eid=event-1',
+      created: '2026-08-10T08:00:00.000Z',
+      updated: '2026-08-10T08:30:00.000Z',
+      organizer: {
+        email: 'owner@example.com',
+        displayName: 'Owner',
+        self: true,
+      },
+      attendees: [
+        {
+          email: 'karol@example.com',
+          displayName: 'Karol',
+          self: false,
+          responseStatus: 'needsAction' as const,
+          optional: false,
+        },
+      ],
+    };
+
+    expect(calendarUpdateEventAttendeesDataSchema.parse({ event })).toEqual({ event });
+    expect(
+      calendarUpdateEventAttendeesResponseSchema.parse({
+        success: true,
+        data: { event },
+      })
+    ).toEqual({
+      success: true,
+      data: { event },
+    });
+  });
+
+  it('rejects empty, invalid, and non-strict calendar attendee update requests', () => {
+    const snapshot = {
+      calendarId: 'primary',
+      expectedEtag: '"event-1-v1"',
+    };
+    expect(() =>
+      calendarUpdateEventAttendeesRequestSchema.parse({
+        userId: 'user-1',
+        ...snapshot,
+        attendeesToAdd: [],
+      })
+    ).toThrow();
+
+    expect(() =>
+      calendarUpdateEventAttendeesRequestSchema.parse({
+        userId: 'user-1',
+        ...snapshot,
+        attendeesToAdd: [{ email: 'not-an-email' }],
+      })
+    ).toThrow();
+
+    expect(() =>
+      calendarUpdateEventAttendeesRequestSchema.parse({
+        userId: 'user-1',
+        ...snapshot,
+        attendeesToAdd: [{ email: 'karol@example.com', displayName: 'Karol' }],
+      })
+    ).toThrow();
+
+    expect(() =>
+      calendarUpdateEventAttendeesRequestSchema.parse({
+        userId: 'user-1',
+        ...snapshot,
+        attendeesToAdd: [{ email: 'karol@example.com' }],
+        eventId: 'event-1',
+      })
+    ).toThrow();
+
+    for (const missingField of ['calendarId', 'expectedEtag'] as const) {
+      const complete = {
+        userId: 'user-1',
+        ...snapshot,
+        attendeesToAdd: [{ email: 'a@example.com' }],
+      };
+      const invalid = Object.fromEntries(
+        Object.entries(complete).filter(([key]) => key !== missingField)
+      );
+      expect(() => calendarUpdateEventAttendeesRequestSchema.parse(invalid)).toThrow();
+    }
+  });
+
+  it('preserves event versions in calendar list data', () => {
+    const event = {
+      id: 'event-1',
+      etag: '"event-1-v1"',
+      summary: 'Bagrowa',
+      start: { dateTime: '2026-08-11T18:00:00+02:00' },
+      end: { dateTime: '2026-08-11T19:00:00+02:00' },
+    };
+
+    expect(calendarListEventsDataSchema.parse({ events: [event], truncated: false })).toEqual({
+      events: [event],
+      truncated: false,
+    });
   });
 
   it('parses the remaining internal-client request and response payloads', () => {

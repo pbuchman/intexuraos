@@ -17,6 +17,7 @@ import type {
   IntexAgentToolExecutor,
   QueryCalendarEventsToolArgs,
   SaveExternalToolArgs,
+  UpdateCalendarEventToolArgs,
   UpdateUserPreferenceToolArgs,
 } from '../agent/toolDefinitions.js';
 import { mapSafeToolFacts, type SafeToolFactV1 } from './safeEvidence.js';
@@ -34,6 +35,7 @@ type PreferenceMutationToolName =
 const CONFIRMATION_MUTATION_TOOL_NAMES = new Set<IntexAgentToolNameV1>([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'create_research',
   'create_link',
   'create_code_task',
@@ -83,6 +85,7 @@ export type MatrixCorpusStrictToolMockErrorCode =
   | Exclude<MatrixCorpusToolSelectionDecision, { decision: 'allow' }>['code']
   | 'MOCK_TOOL_FAILURE'
   | 'MISSING_PREAUTHORIZED_SELECTION'
+  | 'MISSING_CALENDAR_EVENT_SNAPSHOT'
   | 'MISSING_PREFERENCE_OVERLAY'
   | 'PREFERENCE_OVERLAY_REJECTED'
   | 'PREFERENCE_OVERLAY_RESULT_MISMATCH'
@@ -307,6 +310,15 @@ export function createStrictToolMockExecutor(
     async createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string> {
       return await execute('create_calendar_event', toRecord(args));
     },
+    async updateCalendarEvent(args: UpdateCalendarEventToolArgs): Promise<string> {
+      if (!hasCompleteCalendarUpdateSnapshot(args)) {
+        throw new MatrixCorpusStrictToolMockError(
+          'safety_stop',
+          'MISSING_CALENDAR_EVENT_SNAPSHOT'
+        );
+      }
+      return await execute('update_calendar_event', toRecord(args));
+    },
     async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
       return await execute('query_calendar_events', toRecord(args));
     },
@@ -412,6 +424,17 @@ export function matrixCorpusPreferenceMutationReceipt(
       'utf8'
     )
     .digest('hex');
+}
+
+function hasCompleteCalendarUpdateSnapshot(args: UpdateCalendarEventToolArgs): boolean {
+  return (
+    typeof args.calendarId === 'string' &&
+    args.calendarId.trim() !== '' &&
+    typeof args.expectedEtag === 'string' &&
+    args.expectedEtag.trim() !== '' &&
+    args.eventStart !== undefined &&
+    args.eventEnd !== undefined
+  );
 }
 
 function isPreferenceMutationTool(

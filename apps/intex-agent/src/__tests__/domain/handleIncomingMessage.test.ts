@@ -378,6 +378,43 @@ describe('handleIncomingMessage', () => {
     ]);
   });
 
+  it('persists supporting tool completions with and without selection metadata', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_confirmation',
+        reply: 'Add this note?\nContent: Calendar follow-up',
+        toolName: 'create_note',
+        toolArgs: { content: 'Calendar follow-up' },
+        supportingToolCompletions: [
+          {
+            toolName: 'query_calendar_events',
+            result: { status: 'completed', mode: 'list', count: 0, truncated: false },
+            toolSelection: { turnIndex: 0, ordinal: 1 },
+          },
+          {
+            toolName: 'get_user_preferences',
+            result: { status: 'completed', currentVersion: 0 },
+          },
+        ],
+      },
+    ]);
+
+    await handleIncomingMessage(message(), deps(repo, runner, new FakeReplyPublisher()));
+
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([
+      {
+        toolName: 'query_calendar_events',
+        result: { status: 'completed', mode: 'list', count: 0, truncated: false },
+        toolSelection: { turnIndex: 0, ordinal: 1 },
+      },
+      {
+        toolName: 'get_user_preferences',
+        result: { status: 'completed', currentVersion: 0 },
+      },
+    ]);
+  });
+
   it('resolves and propagates the user IANA time zone to the runner', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([{ outcome: 'no_action', reply: 'Got it.' }]);
@@ -605,6 +642,90 @@ describe('handleIncomingMessage', () => {
     );
 
     expect(createCodeTaskCalls).toEqual([canonicalArgs]);
+  });
+
+  it('persists the exact calendar snapshot and uses it when the user confirms the attendee update', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const updateCalendarCalls: Record<string, unknown>[] = [];
+    const runner = createIntexAgentRunner({
+      client: forcedCalendarAttendeeUpdateToolClient(),
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'tool',
+            allowedToolNames: ['query_calendar_events', 'update_calendar_event'] as const,
+          };
+        },
+      },
+      toolExecutor: calendarUpdateCapturingExecutor(updateCalendarCalls),
+      toolSelectionGate: async ({ toolName }) => ({
+        decision: 'allow',
+        metadata: {
+          turnIndex: 0,
+          ordinal: toolName === 'query_calendar_events' ? 1 : 2,
+        },
+      }),
+    });
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-calendar-update-request',
+        text: 'Zaproś Patryka na Bagrową jutro.',
+      }),
+      deps(repo, runner, replies, { now: () => NOW }, async () =>
+        ok({
+          status: 'available',
+          effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+          explicitModel: null,
+          source: 'default_absent',
+          revision: 0,
+          timeZone: 'Europe/Warsaw',
+        })
+      )
+    );
+
+    const canonicalArgs = {
+      eventId: 'event-bagrowa',
+      eventSummary: 'Bagrowa',
+      attendeesToAdd: ['patryk@example.com'],
+      calendarId: 'primary',
+      expectedEtag: '"event-bagrowa-v1"',
+      eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
+      eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
+    };
+    const supportingCompletion = eventPayloads(repo, 'tool_call_completed')[0];
+    expect(supportingCompletion).toMatchObject({
+      toolName: 'query_calendar_events',
+      result: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+      },
+      toolSelection: { turnIndex: 0, ordinal: 1 },
+    });
+    const confirmationPayload = eventPayloads(repo, 'confirmation_requested')[0];
+    expect(confirmationPayload?.['toolArgs']).toEqual(canonicalArgs);
+    const confirmationId = confirmationPayload?.['confirmationId'];
+    if (typeof confirmationId !== 'string') throw new Error('Expected confirmation id');
+    expect(replies.messages[0]?.message).toContain('Początek: 25 czerwca 2026, 18:00');
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-calendar-update-confirmation',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: `intex_confirm:${confirmationId}:yes`,
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-calendar-update-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(updateCalendarCalls).toEqual([canonicalArgs]);
   });
 
   it('records a failed confirmed execution and does not reinterpret the request', async () => {
@@ -2234,6 +2355,43 @@ function forcedCodeTaskToolClient(args: Record<string, unknown>): ToolCallingCli
   };
 }
 
+function forcedCalendarAttendeeUpdateToolClient(): ToolCallingClient {
+  return {
+    async run(params): ReturnType<ToolCallingClient['run']> {
+      const queryTool = params.tools.find(
+        (candidate) => candidate.name === 'query_calendar_events'
+      );
+      const updateTool = params.tools.find(
+        (candidate) => candidate.name === 'update_calendar_event'
+      );
+      if (queryTool === undefined || updateTool === undefined) {
+        throw new Error('Missing calendar attendee-update tools');
+      }
+      await queryTool.run({
+        mode: 'list',
+        timeMin: '2026-06-25T00:00:00+02:00',
+        timeMax: '2026-06-26T00:00:00+02:00',
+        query: 'Bagrowa',
+      });
+      await updateTool.run({
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['patryk@example.com'],
+      });
+      return ok({
+        content: JSON.stringify({
+          outcome: 'completed',
+          reply: 'Ready.',
+          toolName: 'update_calendar_event',
+        }),
+        toolCallsMade: 2,
+        iterationCount: 3,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      } satisfies ToolCallingResult);
+    },
+  };
+}
+
 function codeTaskCapturingExecutor(
   createCodeTaskCalls: Record<string, unknown>[]
 ): IntexAgentToolExecutor {
@@ -2241,6 +2399,7 @@ function codeTaskCapturingExecutor(
   return {
     createNote: unsupported,
     createCalendarEvent: unsupported,
+    updateCalendarEvent: unsupported,
     queryCalendarEvents: unsupported,
     createResearch: unsupported,
     createLink: unsupported,
@@ -2248,6 +2407,51 @@ function codeTaskCapturingExecutor(
       createCodeTaskCalls.push({ ...args });
       return JSON.stringify({ status: 'completed', id: 'task-1' });
     },
+    saveExternal: unsupported,
+    getUserPreferences: unsupported,
+    addUserPreference: unsupported,
+    updateUserPreference: unsupported,
+    deleteUserPreference: unsupported,
+  };
+}
+
+function calendarUpdateCapturingExecutor(
+  updateCalendarCalls: Record<string, unknown>[]
+): IntexAgentToolExecutor {
+  const unsupported = async (): Promise<string> => JSON.stringify({ status: 'completed' });
+  return {
+    createNote: unsupported,
+    createCalendarEvent: unsupported,
+    async updateCalendarEvent(args): Promise<string> {
+      updateCalendarCalls.push(structuredClone({ ...args }));
+      return JSON.stringify({
+        status: 'completed',
+        eventId: args.eventId,
+        summary: args.eventSummary,
+        attendeesAdded: args.attendeesToAdd,
+      });
+    },
+    async queryCalendarEvents(): Promise<string> {
+      return JSON.stringify({
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [
+          {
+            id: 'event-bagrowa',
+            etag: '"event-bagrowa-v1"',
+            summary: 'Bagrowa',
+            calendarId: 'primary',
+            start: { dateTime: '2026-06-25T18:00:00+02:00' },
+            end: { dateTime: '2026-06-25T20:30:00+02:00' },
+          },
+        ],
+      });
+    },
+    createResearch: unsupported,
+    createLink: unsupported,
+    createCodeTask: unsupported,
     saveExternal: unsupported,
     getUserPreferences: unsupported,
     addUserPreference: unsupported,

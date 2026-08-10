@@ -1177,6 +1177,120 @@ describe('Matrix corpus execution service', () => {
     expect(JSON.stringify(confirmationEvent)).not.toContain('raw synthetic argument');
   });
 
+  it('persists a safe supporting lookup completion before an update confirmation', async () => {
+    const lookupResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      truncated: false,
+      events: [
+        {
+          eventId: 'mock_event_1',
+          etag: 'private-etag',
+          summary: 'Private calendar title',
+          calendarId: 'primary',
+          start: { dateTime: '2026-07-23T15:00:00+02:00' },
+          end: { dateTime: '2026-07-23T16:00:00+02:00' },
+        },
+      ],
+    };
+    const runner = {
+      run: vi.fn(async () => ({
+        outcome: 'needs_confirmation' as const,
+        reply: 'Confirm the attendee update.',
+        toolName: 'update_calendar_event' as const,
+        toolArgs: {
+          eventId: 'mock_event_1',
+          eventSummary: 'Private calendar title',
+          attendeesToAdd: ['private-attendee@example.com'],
+          calendarId: 'primary',
+          expectedEtag: 'private-etag',
+          eventStart: { dateTime: '2026-07-23T15:00:00+02:00' },
+          eventEnd: { dateTime: '2026-07-23T16:00:00+02:00' },
+        },
+        toolSelection: { turnIndex: 0, ordinal: 2 },
+        supportingToolCompletions: [
+          {
+            toolName: 'query_calendar_events' as const,
+            result: lookupResult,
+            toolSelection: { turnIndex: 0, ordinal: 1 },
+          },
+        ],
+      })),
+      executeConfirmed: vi.fn(),
+    };
+    const current = fixture(runner);
+    current.confirmationRepository.createOrGet.mockResolvedValueOnce({
+      ok: true,
+      disposition: 'applied',
+      confirmation: {} as never,
+    });
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: true });
+
+    const persistedEvents = current.sessionRepository.appendMatrixCorpusEvent.mock.calls.map(
+      ([input]) => input.event
+    );
+    const supportingEvent = persistedEvents.find(
+      (event) =>
+        event.type === 'tool_call_completed' &&
+        event.payload['toolName'] === 'query_calendar_events'
+    );
+    expect(supportingEvent).toEqual(
+      expect.objectContaining({
+        type: 'tool_call_completed',
+        payload: {
+          toolName: 'query_calendar_events',
+          turnIndex: 0,
+          ordinal: 1,
+          status: 'mock_completed',
+          facts: [
+            { name: 'resultCount', value: 1 },
+            { name: 'mode', value: 'list' },
+          ],
+        },
+      })
+    );
+    expect(persistedEvents.map(({ type }) => type).indexOf('tool_call_completed')).toBeLessThan(
+      persistedEvents.map(({ type }) => type).indexOf('confirmation_requested')
+    );
+    expect(JSON.stringify(supportingEvent)).not.toContain('private-etag');
+    expect(JSON.stringify(supportingEvent)).not.toContain('private-attendee@example.com');
+    expect(JSON.stringify(supportingEvent)).not.toContain('Private calendar title');
+  });
+
+  it('rejects a supporting lookup completion without strict selection metadata', async () => {
+    const current = fixture({
+      run: vi.fn(async () => ({
+        outcome: 'needs_confirmation' as const,
+        reply: 'Confirm the attendee update.',
+        toolName: 'update_calendar_event' as const,
+        toolArgs: {},
+        toolSelection: { turnIndex: 0, ordinal: 2 },
+        supportingToolCompletions: [
+          {
+            toolName: 'query_calendar_events' as const,
+            result: { status: 'completed', mode: 'list', count: 0, events: [] },
+          },
+        ],
+      })),
+      executeConfirmed: vi.fn(),
+    });
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow('Matrix corpus supporting tool completion is missing strict metadata');
+    expect(current.confirmationRepository.createOrGet).not.toHaveBeenCalled();
+  });
+
   it('handles a rejected exact confirmation with no runner or LLM construction', async () => {
     const runner = { run: vi.fn(), executeConfirmed: vi.fn() };
     const {

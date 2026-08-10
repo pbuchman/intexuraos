@@ -49,6 +49,7 @@ const MAX_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 const toolNames = new Set([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'query_calendar_events',
   'create_research',
   'create_link',

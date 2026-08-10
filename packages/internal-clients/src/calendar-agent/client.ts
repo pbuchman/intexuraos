@@ -15,22 +15,26 @@ import type {
   CalendarAgentServiceClient,
   CalendarAgentServiceConfig,
   CalendarEvent,
+  CalendarEventsPage,
   CalendarPreview,
   CreateCalendarEventRequest,
   CreatedCalendarEvent,
   GeneratePreviewRequest,
   ListCalendarEventsRequest,
   ProcessCalendarRequest,
+  UpdateCalendarEventAttendeesRequest,
 } from './types.js';
 
 const CREATE_EVENT_TIMEOUT_MS = 60_000;
 const LIST_EVENTS_TIMEOUT_MS = 30_000;
+const UPDATE_EVENT_ATTENDEES_TIMEOUT_MS = 30_000;
 const PROCESS_ACTION_TIMEOUT_MS = 60_000;
 const GENERATE_PREVIEW_TIMEOUT_MS = 30_000;
 
 interface CalendarErrorEnvelope {
   success?: boolean;
   error?: {
+    code?: string;
     message?: string;
   };
 }
@@ -98,6 +102,7 @@ function toCalendarListEvent(event: ContractCalendarListEvent): CalendarEvent {
     summary: event.summary,
     start: event.start,
     end: event.end,
+    ...(event.etag !== undefined ? { etag: event.etag } : {}),
     ...(event.location !== undefined ? { location: event.location } : {}),
     ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
   };
@@ -109,7 +114,11 @@ function mapCalendarHttpError(error: InternalHttpClientError, errorPrefix: strin
     const message =
       (responseBody.success === true ? undefined : responseBody.error?.message) ??
       `HTTP ${String(error.status)}: ${error.statusText}`;
-    return new Error(message);
+    return new Error(
+      responseBody.success !== true && responseBody.error?.code === 'CONFLICT'
+        ? `CONFLICT: ${message}`
+        : message
+    );
   }
 
   if (error.code === 'ENVELOPE_ERROR' || error.code === 'MALFORMED_ENVELOPE') {
@@ -149,8 +158,11 @@ async function listEvents(
   httpClient: InternalHttpClient,
   request: ListCalendarEventsRequest,
   options: CalendarAgentRequestOptions | undefined
-): Promise<Result<CalendarEvent[]>> {
-  const result = await httpClient.request<{ events: ContractCalendarListEvent[] }>({
+): Promise<Result<CalendarEventsPage>> {
+  const result = await httpClient.request<{
+    events: ContractCalendarListEvent[];
+    truncated: boolean;
+  }>({
     path: '/internal/calendar/events/query',
     method: 'POST',
     body: request,
@@ -159,10 +171,38 @@ async function listEvents(
   });
 
   if (result.ok) {
-    return ok(result.value.events.map(toCalendarListEvent));
+    if (!Array.isArray(result.value.events) || typeof result.value.truncated !== 'boolean') {
+      return err(new Error('Invalid response from calendar-agent'));
+    }
+    return ok({
+      events: result.value.events.map(toCalendarListEvent),
+      truncated: result.value.truncated,
+    });
   }
 
   return err(mapCalendarHttpError(result.error, 'Failed to list calendar events'));
+}
+
+async function updateEventAttendees(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: UpdateCalendarEventAttendeesRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CreatedCalendarEvent>> {
+  const { eventId, ...body } = request;
+  const result = await httpClient.request<{ event: ContractCalendarCreatedEvent }>({
+    path: `/internal/calendar/events/${encodeURIComponent(eventId)}`,
+    method: 'PATCH',
+    body,
+    timeoutMs: resolveTimeoutMs(UPDATE_EVENT_ATTENDEES_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) {
+    return ok(toCreatedCalendarEvent(result.value.event));
+  }
+
+  return err(mapCalendarHttpError(result.error, 'Failed to update calendar event attendees'));
 }
 
 async function readPreviewResponse(
@@ -211,8 +251,15 @@ export function createCalendarAgentServiceClient(
     async listEvents(
       request: ListCalendarEventsRequest,
       options?: CalendarAgentRequestOptions
-    ): Promise<Result<CalendarEvent[]>> {
+    ): Promise<Result<CalendarEventsPage>> {
       return await listEvents(config, httpClient, request, options);
+    },
+
+    async updateEventAttendees(
+      request: UpdateCalendarEventAttendeesRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CreatedCalendarEvent>> {
+      return await updateEventAttendees(config, httpClient, request, options);
     },
 
     async processAction(

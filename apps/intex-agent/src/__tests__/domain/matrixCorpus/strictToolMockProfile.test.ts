@@ -16,6 +16,7 @@ import {
 const allTools = [
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'query_calendar_events',
   'create_research',
   'create_link',
@@ -28,7 +29,7 @@ const allTools = [
 ] as const satisfies readonly IntexAgentToolNameV1[];
 
 describe('strict Matrix corpus tool-mock profile', () => {
-  it('decodes the closed schedule for all 11 canonical tools and freezes the snapshot', () => {
+  it('decodes the closed schedule for all 12 canonical tools and freezes the snapshot', () => {
     const profile = profileForAllTools();
     const decoded = decodeStrictToolMockProfile({
       profile,
@@ -184,6 +185,14 @@ function resultFor(toolName: IntexAgentToolNameV1): StrictMockResultV1 {
         status: 'completed',
         eventId: 'mock_event_1',
         summary: 'Synthetic event',
+      };
+    case 'update_calendar_event':
+      return {
+        toolName,
+        status: 'completed',
+        eventId: 'mock_event_1',
+        summary: 'Synthetic event',
+        attendeesAdded: ['patryk@example.com'],
       };
     case 'query_calendar_events':
       return { toolName, status: 'completed', mode: 'count', count: 0 };

@@ -24,6 +24,10 @@ export async function handleCalendarError(
     reply.status(400);
     return await reply.fail('INVALID_REQUEST', error.message);
   }
+  if (error.code === 'CONFLICT') {
+    reply.status(409);
+    return await reply.fail('CONFLICT', error.message);
+  }
   reply.status(500);
   return await reply.fail('DOWNSTREAM_ERROR', error.message);
 }

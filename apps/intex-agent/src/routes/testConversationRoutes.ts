@@ -17,7 +17,14 @@ const SECRET_TEXT_PATTERN =
 const TOOL_MOCK_ALLOWED_RESULT_FIELDS: Record<IntexAgentToolName, ReadonlySet<string>> = {
   create_note: new Set(['status', 'message', 'resourceUrl']),
   create_calendar_event: new Set(['status', 'eventId', 'summary', 'htmlLink']),
-  query_calendar_events: new Set(['status', 'mode', 'count', 'events']),
+  update_calendar_event: new Set([
+    'status',
+    'eventId',
+    'summary',
+    'attendeesAdded',
+    'htmlLink',
+  ]),
+  query_calendar_events: new Set(['status', 'mode', 'count', 'events', 'truncated']),
   create_research: new Set(['status', 'message', 'resourceUrl']),
   create_link: new Set(['status', 'bookmarkId', 'resourceUrl', 'url']),
   create_code_task: new Set(['status', 'message', 'codeTaskId', 'resourceUrl']),
@@ -30,6 +37,8 @@ const TOOL_MOCK_ALLOWED_RESULT_FIELDS: Record<IntexAgentToolName, ReadonlySet<st
 const TOOL_MOCK_URL_FIELDS = new Set(['resourceUrl', 'htmlLink', 'url']);
 const CALENDAR_EVENT_MOCK_FIELDS = new Set([
   'id',
+  'eventId',
+  'etag',
   'summary',
   'start',
   'end',
@@ -42,6 +51,7 @@ const CALENDAR_EVENT_MOCK_FIELDS = new Set([
 const KNOWN_TOOL_NAMES = new Set<IntexAgentToolName>([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'query_calendar_events',
   'create_research',
   'create_link',
@@ -382,6 +392,11 @@ function validateCalendarEventMocks(events: readonly unknown[]): string | null {
       if (!CALENDAR_EVENT_MOCK_FIELDS.has(key) || SECRET_FIELD_PATTERN.test(key)) {
         return `toolMocks calendar event field is not allowed: ${key}`;
       }
+      if ((key === 'start' || key === 'end') && isRecord(value)) {
+        const dateTimeError = validateCalendarEventDateTimeMock(value, key);
+        if (dateTimeError !== null) return dateTimeError;
+        continue;
+      }
       const stringError =
         typeof value === 'string' ? validateBoundedString(value, `toolMocks calendar event field ${key}`) : null;
       if (stringError !== null) {
@@ -393,6 +408,31 @@ function validateCalendarEventMocks(events: readonly unknown[]): string | null {
     }
   }
   return null;
+}
+
+function validateCalendarEventDateTimeMock(
+  value: Readonly<Record<string, unknown>>,
+  key: string
+): string | null {
+  const allowedFields = new Set(['dateTime', 'date', 'timeZone']);
+  for (const [nestedKey, nestedValue] of Object.entries(value)) {
+    if (!allowedFields.has(nestedKey) || SECRET_FIELD_PATTERN.test(nestedKey)) {
+      return `toolMocks calendar event ${key} field is not allowed: ${nestedKey}`;
+    }
+    if (typeof nestedValue !== 'string') {
+      return `toolMocks calendar event ${key} field is unsupported: ${nestedKey}`;
+    }
+    const stringError = validateBoundedString(
+      nestedValue,
+      `toolMocks calendar event ${key} field ${nestedKey}`
+    );
+    if (stringError !== null) return stringError;
+  }
+  const hasDateTime = typeof value['dateTime'] === 'string' && value['dateTime'].trim() !== '';
+  const hasDate = typeof value['date'] === 'string' && value['date'].trim() !== '';
+  return hasDateTime !== hasDate
+    ? null
+    : `toolMocks calendar event ${key} requires exactly one date or dateTime`;
 }
 
 function validateBoundedString(value: string, label: string): string | null {

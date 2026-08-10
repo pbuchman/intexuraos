@@ -61,6 +61,7 @@ const SESSION_END_REASONS = {
 const TOOL_NAMES = {
   create_note: true,
   create_calendar_event: true,
+  update_calendar_event: true,
   query_calendar_events: true,
   create_research: true,
   create_link: true,

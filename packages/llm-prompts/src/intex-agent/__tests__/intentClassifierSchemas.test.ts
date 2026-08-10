@@ -11,6 +11,9 @@ describe('IntexAgentIntentClassifierToolNameSchema', () => {
       IntexAgentIntentClassifierToolNameSchema.safeParse('query_calendar_events').success
     ).toBe(true);
     expect(
+      IntexAgentIntentClassifierToolNameSchema.safeParse('update_calendar_event').success
+    ).toBe(true);
+    expect(
       IntexAgentIntentClassifierToolNameSchema.safeParse('delete_user_preference').success
     ).toBe(true);
   });
@@ -28,6 +31,18 @@ describe('IntexAgentIntentClassifierOutputSchema', () => {
       allowedToolNames: ['create_calendar_event'],
       stylePreferenceAction: 'none',
       reason: 'User accepted prior calendar proposal.',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts an existing calendar event update intent', () => {
+    const result = IntexAgentIntentClassifierOutputSchema.safeParse({
+      outcome: 'tool',
+      confidence: 0.96,
+      allowedToolNames: ['update_calendar_event'],
+      stylePreferenceAction: 'none',
+      reason: 'The user asked to invite an attendee to an existing event.',
     });
 
     expect(result.success).toBe(true);

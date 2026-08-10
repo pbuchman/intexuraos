@@ -61,6 +61,27 @@ describe('mapSafeToolFacts', () => {
       },
     },
     {
+      toolName: 'update_calendar_event' as const,
+      source: 'arguments' as const,
+      value: {
+        eventId: 'raw-id-123',
+        eventSummary: 'Planning',
+        attendeesToAdd: ['contact+private@pbuchman.com'],
+        calendarId: 'raw-id-123',
+        expectedEtag: 'private-etag',
+        eventStart: { dateTime: '2026-07-20T10:00:00.000Z' },
+        eventEnd: { dateTime: '2026-07-20T11:00:00.000Z' },
+      },
+      expected: [
+        fact('summaryLength', 8),
+        fact('attendeesCount', 1),
+        fact('hasCalendarId', true),
+        fact('hasExpectedEtag', true),
+        fact('hasEventStart', true),
+        fact('hasEventEnd', true),
+      ],
+    },
+    {
       toolName: 'query_calendar_events' as const,
       source: 'arguments' as const,
       value: {
@@ -279,6 +300,10 @@ describe('mapSafeToolFacts', () => {
     [
       'create_calendar_event',
       { summary: 1, location: null, description: [], attendees: {}, start: 1, end: 1, timeZone: 1 },
+    ],
+    [
+      'update_calendar_event',
+      { eventSummary: 1, attendeesToAdd: {}, calendarId: {}, expectedEtag: 1 },
     ],
     [
       'query_calendar_events',

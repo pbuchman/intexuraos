@@ -20,7 +20,7 @@ const SYNTHETIC_URL_PATTERN = /^https?:\/\/example\.com(?:[/?#]|$)/iu;
 const PRIVATE_VALUE_PATTERNS = [
   {
     label: 'e-mail address',
-    pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu,
+    pattern: /\b[A-Z0-9._%+-]+@(?!example\.com\b)[A-Z0-9.-]+\.[A-Z]{2,}\b/iu,
   },
   {
     label: 'Auth0 subject',

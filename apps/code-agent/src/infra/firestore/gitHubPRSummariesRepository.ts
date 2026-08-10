@@ -173,6 +173,28 @@ export function createFirestoreGitHubPRSummariesRepository(deps: {
       }
     },
 
+    async findReconciliationCandidates(
+      limit: number
+    ): Promise<Result<GitHubPRSummary[], SummaryRepositoryError>> {
+      try {
+        const snapshot = await collection
+          .where('state', '==', 'open')
+          .orderBy('lastConflictCheckedAt', 'asc')
+          .limit(limit)
+          .get();
+
+        return ok(
+          snapshot.docs.map((doc) => mapSummaryData(doc.data() as Record<string, unknown>))
+        );
+      } catch (error) {
+        logger.error({ error, limit }, 'Failed to find GitHub PR summaries for reconciliation');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
     async findByPullRequest(
       repository: string,
       pullRequestNumber: number

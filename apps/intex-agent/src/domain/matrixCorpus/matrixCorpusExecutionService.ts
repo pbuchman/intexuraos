@@ -587,6 +587,39 @@ async function persistAndPublishResult(
     );
     const createdAt = input.input.claims.payload.ordinaryIngest.timestamp;
     const expiresAt = new Date(Date.parse(createdAt) + 5 * 60 * 1000).toISOString();
+    for (const [index, completion] of (
+      result.supportingToolCompletions ?? []
+    ).entries()) {
+      if (completion.toolSelection === undefined) {
+        throw new Error('Matrix corpus supporting tool completion is missing strict metadata');
+      }
+      await appendEvent({
+        deps: input.deps,
+        identity: input.identity,
+        event: {
+          id: deterministicId(
+            'imc_event',
+            input.input.claims.payload.context.ingestReceiptId,
+            `supporting_tool_completed_${String(index)}`
+          ),
+          sessionId: input.identity.sessionId,
+          userId: input.identity.userId,
+          type: 'tool_call_completed',
+          payload: {
+            toolName: completion.toolName,
+            turnIndex: completion.toolSelection.turnIndex,
+            ordinal: completion.toolSelection.ordinal,
+            status: 'mock_completed',
+            facts: mapSafeToolFacts({
+              toolName: completion.toolName,
+              source: 'result',
+              value: completion.result,
+            }),
+          },
+          createdAt,
+        },
+      });
+    }
     const confirmation = await input.deps.confirmationRepository.createOrGet({
       identity: {
         confirmationId,

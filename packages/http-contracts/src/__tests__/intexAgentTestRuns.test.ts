@@ -412,6 +412,15 @@ describe('Intex Agent Test Runs public contracts', () => {
     expect(safeToolEvidenceV1Schema.safeParse({ ...toolEvidence, ordinal: 21 }).success).toBe(
       false
     );
+    for (const name of ['hasExpectedEtag', 'hasEventStart', 'hasEventEnd'] as const) {
+      expect(
+        safeToolEvidenceV1Schema.safeParse({
+          ...toolEvidence,
+          toolName: 'update_calendar_event',
+          facts: [{ name, value: true }],
+        }).success
+      ).toBe(true);
+    }
 
     const check = {
       code: 'tool_name' as const,

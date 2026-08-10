@@ -23,6 +23,7 @@ import type {
   IntexAgentFallbackReason,
   IntexAgentRunner,
   IntexAgentRunnerResult,
+  IntexAgentSupportingToolCompletion,
   IntexAgentToolSelectionMetadata,
 } from '../messages/handleIncomingMessage.js';
 import {
@@ -39,7 +40,9 @@ import {
   type CreateLinkToolArgs,
   type CreateNoteToolArgs,
   type DeleteUserPreferenceToolArgs,
+  type CalendarEventDateTimeSnapshot,
   type QueryCalendarEventsToolArgs,
+  type UpdateCalendarEventToolArgs,
   type CreateResearchToolArgs,
   type SaveExternalToolArgs,
   type UpdateUserPreferenceToolArgs,
@@ -74,6 +77,7 @@ type MutatingIntexAgentToolName = Exclude<
 const MUTATING_TOOL_NAMES = new Set<MutatingIntexAgentToolName>([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'create_research',
   'create_link',
   'create_code_task',
@@ -169,6 +173,11 @@ const PREFERENCE_VERSION_CONFLICT_REPLIES: LocalizedText = {
   pl: 'Pamięć instrukcji zmieniła się przed zapisem. Wyślij prośbę ponownie, żebym użył najnowszej wersji.',
 };
 
+const CALENDAR_EVENT_VERSION_CONFLICT_REPLIES: LocalizedText = {
+  en: 'The calendar event changed after confirmation. Send the request again so I can use its latest version.',
+  pl: 'Wydarzenie w kalendarzu zmieniło się po potwierdzeniu. Wyślij prośbę ponownie, żebym użył jego najnowszej wersji.',
+};
+
 const RETAIN_ONLY_REPLIES: LocalizedText = {
   en: 'Noted for this session only. No note or other resource was created.',
   pl: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
@@ -253,6 +262,10 @@ const CONFIRMATION_INTROS: Record<MutatingIntexAgentToolName, LocalizedText> = {
     en: 'Add this calendar event?',
     pl: 'Czy dodać wydarzenie w kalendarzu?',
   },
+  update_calendar_event: {
+    en: 'Add attendees to this existing calendar event?',
+    pl: 'Czy dodać uczestników do istniejącego wydarzenia w kalendarzu?',
+  },
   create_research: { en: 'Create this research draft?', pl: 'Czy utworzyć szkic researchu?' },
   create_link: { en: 'Save this bookmark?', pl: 'Czy zapisać bookmark?' },
   create_code_task: { en: 'Create this code task?', pl: 'Czy utworzyć zadanie programistyczne?' },
@@ -284,6 +297,31 @@ const CONFIRMATION_PREVIEW_TRUNCATION_NOTICE: LocalizedText = {
   pl: 'Podgląd został skrócony. Po potwierdzeniu zostanie użyta pełna treść.',
 };
 
+const CALENDAR_UPDATE_PRESERVATION_NOTICE: LocalizedText = {
+  en: 'All other event details will remain unchanged.',
+  pl: 'Pozostałe dane wydarzenia pozostaną bez zmian.',
+};
+
+const CALENDAR_UPDATE_MALFORMED_REPLIES: LocalizedText = {
+  en: 'I could not prepare the existing calendar event update. Please send the request again.',
+  pl: 'Nie udało mi się przygotować zmiany istniejącego wydarzenia w kalendarzu. Wyślij prośbę ponownie.',
+};
+
+const CALENDAR_UPDATE_MALFORMED_NEXT_STEPS: LocalizedText = {
+  en: 'Repeat the request to update the existing calendar event.',
+  pl: 'Ponów prośbę o zmianę istniejącego wydarzenia w kalendarzu.',
+};
+
+const CALENDAR_UPDATE_LOOKUP_REPLIES: LocalizedText = {
+  en: 'I could not identify exactly one calendar event to update. Please clarify which event you mean.',
+  pl: 'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+};
+
+const CALENDAR_UPDATE_LOOKUP_NEXT_STEPS: LocalizedText = {
+  en: 'Identify exactly one existing calendar event.',
+  pl: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+};
+
 const CONFIRMATION_LABELS = {
   title: { en: 'Title', pl: 'Tytuł' },
   content: { en: 'Content', pl: 'Treść' },
@@ -306,6 +344,10 @@ const COMPLETED_REPLIES = {
   create_calendar_event: {
     en: 'Created the calendar event.',
     pl: 'Utworzyłem wydarzenie w kalendarzu.',
+  },
+  update_calendar_event: {
+    en: 'Updated the calendar event.',
+    pl: 'Zaktualizowałem wydarzenie w kalendarzu.',
   },
   create_research: { en: 'Created the research draft.', pl: 'Utworzyłem szkic researchu.' },
   create_link: { en: 'Saved the bookmark.', pl: 'Zapisałem bookmark.' },
@@ -558,6 +600,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       }
 
       const toolExecutions: IntexAgentToolExecution[] = [];
+      const allowedToolNames = resolveRunnerToolNames(intent);
       const tools = createIntexAgentToolDefinitions(
         createTrackingToolExecutor(
           createConfirmationPreviewExecutor(config.toolExecutor),
@@ -568,8 +611,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       )
         .filter(
           (tool) =>
-            intent.kind === 'tool' &&
-            intent.allowedToolNames.includes(tool.name as IntexAgentToolName)
+            allowedToolNames.includes(tool.name as IntexAgentToolName)
         )
         .map((tool) =>
           isMutatingToolName(tool.name as IntexAgentToolName) ||
@@ -1577,6 +1619,14 @@ function toolFailureMetadata(
     };
   }
 
+  if (toolName === 'update_calendar_event' && isCalendarEventVersionConflictMessage(errorMessage)) {
+    return {
+      errorCategory: 'version_conflict',
+      isRetryable: true,
+      attemptedAction: toolName,
+    };
+  }
+
   if (/HTTP 401|HTTP 403|Forbidden|Unauthorized/iu.test(errorMessage)) {
     return {
       errorCategory: 'permission',
@@ -1816,11 +1866,22 @@ async function parseRunnerContent(
         : {}),
     };
   }
+  const calendarUpdateArgs =
+    toolExecution?.toolName === 'update_calendar_event'
+      ? buildCalendarUpdateConfirmationArgs(toolExecutions, toolExecution)
+      : undefined;
+  if (toolExecution?.toolName === 'update_calendar_event' && calendarUpdateArgs === undefined) {
+    return calendarUpdateLookupResult(replyLanguage);
+  }
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
     const confirmationArgs = preserveCurrentTurnOpaqueReferences(
       toolExecution.toolName,
-      toolExecution.args,
+      calendarUpdateArgs ?? toolExecution.args,
       input.currentMessage
+    );
+    const supportingToolCompletions = collectSupportingToolCompletions(
+      toolExecutions,
+      toolExecution
     );
     return {
       outcome: 'needs_confirmation',
@@ -1836,8 +1897,17 @@ async function parseRunnerContent(
       ...(toolExecution.selectionMetadata !== undefined
         ? { toolSelection: toolExecution.selectionMetadata }
         : {}),
+      ...(supportingToolCompletions.length > 0 ? { supportingToolCompletions } : {}),
       ...(parsed?.summary !== undefined ? { summary: parsed.summary } : {}),
     };
+  }
+
+  if (
+    isCalendarUpdateIntent(input.intent) &&
+    toolExecution?.toolName === 'query_calendar_events' &&
+    parsed?.outcome !== 'needs_clarification'
+  ) {
+    return calendarUpdateLookupResult(replyLanguage);
   }
 
   if (parsed === null) {
@@ -1859,15 +1929,21 @@ async function parseRunnerContent(
         );
       }
     }
-    return fallbackClarificationResult(
-      replyLanguage,
-      fallbackReasonForInvalidRunnerContent(input.content)
-    );
+    const fallbackReason = fallbackReasonForInvalidRunnerContent(input.content);
+    if (fallbackReason === 'runner_output_malformed' && isCalendarUpdateIntent(input.intent)) {
+      return calendarUpdateMalformedResult(replyLanguage);
+    }
+    return fallbackClarificationResult(replyLanguage, fallbackReason);
   }
 
   if (
     toolExecution !== undefined &&
-    parsed.outcome !== 'completed'
+    parsed.outcome !== 'completed' &&
+    !(
+      parsed.outcome === 'needs_clarification' &&
+      isCalendarUpdateIntent(input.intent) &&
+      toolExecution.toolName === 'query_calendar_events'
+    )
   ) {
     return buildCompletedToolExecutionResult(
       toolExecution.toolName,
@@ -1926,6 +2002,12 @@ async function parseRunnerContent(
       if (toolExecution?.toolName !== parsed.toolName) {
         return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch');
       }
+      if (
+        isCalendarUpdateIntent(input.intent) &&
+        toolExecution.toolName !== 'update_calendar_event'
+      ) {
+        return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch');
+      }
       return buildCompletedToolExecutionResult(
         toolExecution.toolName,
         toolExecution.result,
@@ -1937,6 +2019,165 @@ async function parseRunnerContent(
       );
     }
   }
+}
+
+function collectSupportingToolCompletions(
+  toolExecutions: readonly IntexAgentToolExecution[],
+  terminalExecution: IntexAgentToolExecution
+): IntexAgentSupportingToolCompletion[] {
+  const terminalIndex = toolExecutions.indexOf(terminalExecution);
+  if (terminalIndex <= 0) return [];
+  return toolExecutions.slice(0, terminalIndex).flatMap((execution) => {
+    if (
+      isMutatingToolName(execution.toolName) ||
+      execution.error !== undefined ||
+      execution.result === undefined
+    ) {
+      return [];
+    }
+    return [
+      {
+        toolName: execution.toolName,
+        result: execution.result,
+        ...(execution.selectionMetadata !== undefined
+          ? { toolSelection: execution.selectionMetadata }
+          : {}),
+      },
+    ];
+  });
+}
+
+function isCalendarUpdateIntent(
+  intent: IntexAgentIntentClassification | IntexAgentIntentDecision
+): boolean {
+  return intent.kind === 'tool' && intent.allowedToolNames.includes('update_calendar_event');
+}
+
+function calendarUpdateMalformedResult(
+  replyLanguage: IntexAgentReplyLanguage
+): IntexAgentRunnerResult {
+  return {
+    outcome: 'needs_clarification',
+    reply: CALENDAR_UPDATE_MALFORMED_REPLIES[replyLanguage],
+    blockerReason: 'not_enough_context',
+    candidateIntents: ['update_calendar_event'],
+    suggestedNextStep: CALENDAR_UPDATE_MALFORMED_NEXT_STEPS[replyLanguage],
+    fallbackReason: 'runner_output_malformed',
+    fallbackSourceOutcome: 'raw_response',
+  };
+}
+
+function calendarUpdateLookupResult(
+  replyLanguage: IntexAgentReplyLanguage
+): IntexAgentRunnerResult {
+  return {
+    outcome: 'needs_clarification',
+    reply: CALENDAR_UPDATE_LOOKUP_REPLIES[replyLanguage],
+    blockerReason: 'missing_required_details',
+    missingFields: ['event'],
+    candidateIntents: ['update_calendar_event'],
+    suggestedNextStep: CALENDAR_UPDATE_LOOKUP_NEXT_STEPS[replyLanguage],
+  };
+}
+
+function buildCalendarUpdateConfirmationArgs(
+  toolExecutions: IntexAgentToolExecution[],
+  updateExecution: IntexAgentToolExecution
+): Record<string, unknown> | undefined {
+  const updateIndex = toolExecutions.indexOf(updateExecution);
+  const precedingExecutions = toolExecutions.slice(0, updateIndex);
+  const queryExecution = precedingExecutions
+    .reverse()
+    .find((execution) => execution.toolName === 'query_calendar_events');
+  if (queryExecution === undefined) return undefined;
+
+  if (
+    queryExecution.error !== undefined ||
+    queryExecution.args['mode'] !== 'list' ||
+    queryExecution.result?.['status'] !== 'completed' ||
+    queryExecution.result['mode'] !== 'list' ||
+    queryExecution.result['truncated'] !== false
+  ) {
+    return undefined;
+  }
+
+  const eventsValue: unknown = queryExecution.result['events'];
+  const events: unknown[] = Array.isArray(eventsValue) ? (eventsValue as unknown[]) : [];
+  if (events.length !== 1) return undefined;
+  const maxResults = queryExecution.args['maxResults'];
+  if (typeof maxResults === 'number' && events.length >= maxResults) return undefined;
+
+  const event: unknown = events[0];
+  /* v8 ignore start -- upstream: the typed Calendar Agent response cannot emit a non-object calendar event @preserve */
+  if (event === null || typeof event !== 'object' || Array.isArray(event)) return undefined;
+  /* v8 ignore stop @preserve */
+  const eventRecord = event as Record<string, unknown>;
+  const eventId = readNonEmptyString(eventRecord, 'id') ?? readNonEmptyString(eventRecord, 'eventId');
+  const eventSummary = readNonEmptyString(eventRecord, 'summary');
+  const expectedEtag = readNonEmptyString(eventRecord, 'etag');
+  const calendarId = readNonEmptyString(eventRecord, 'calendarId');
+  const eventStart = readCalendarEventDateTimeSnapshot(eventRecord, 'start');
+  const eventEnd = readCalendarEventDateTimeSnapshot(eventRecord, 'end');
+  if (
+    eventId === undefined ||
+    eventSummary === undefined ||
+    expectedEtag === undefined ||
+    calendarId === undefined ||
+    eventStart === undefined ||
+    eventEnd === undefined
+  ) {
+    return undefined;
+  }
+
+  const queriedCalendarId = readNonEmptyString(queryExecution.args, 'calendarId') ?? 'primary';
+  const requestedCalendarId = readNonEmptyString(updateExecution.args, 'calendarId');
+  if (
+    eventId !== readNonEmptyString(updateExecution.args, 'eventId') ||
+    eventSummary !== readNonEmptyString(updateExecution.args, 'eventSummary') ||
+    calendarId !== queriedCalendarId ||
+    (requestedCalendarId !== undefined && requestedCalendarId !== calendarId)
+  ) {
+    return undefined;
+  }
+
+  return {
+    ...updateExecution.args,
+    eventId,
+    eventSummary,
+    calendarId,
+    expectedEtag,
+    eventStart,
+    eventEnd,
+  };
+}
+
+function readNonEmptyString(
+  record: Record<string, unknown>,
+  key: string
+): string | undefined {
+  const value = record[key];
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+function readCalendarEventDateTimeSnapshot(
+  record: Record<string, unknown>,
+  key: string
+): CalendarEventDateTimeSnapshot | undefined {
+  const value = record[key];
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const snapshot = value as Record<string, unknown>;
+  const dateTime = readNonEmptyString(snapshot, 'dateTime');
+  const date = readNonEmptyString(snapshot, 'date');
+  const timeZone = readNonEmptyString(snapshot, 'timeZone');
+  if ((dateTime === undefined) === (date === undefined)) return undefined;
+  if (snapshot['timeZone'] !== undefined && timeZone === undefined) return undefined;
+  if (dateTime !== undefined && !isValidReplyDateTime(dateTime)) return undefined;
+  if (date !== undefined && !isValidCalendarDate(date)) return undefined;
+  return {
+    ...(dateTime !== undefined ? { dateTime } : {}),
+    ...(date !== undefined ? { date } : {}),
+    ...(timeZone !== undefined ? { timeZone } : {}),
+  };
 }
 
 function preserveCurrentTurnOpaqueReferences(
@@ -2085,6 +2326,9 @@ function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): In
     createCalendarEvent(): Promise<string> {
       return Promise.resolve(previewToolResult());
     },
+    updateCalendarEvent(): Promise<string> {
+      return Promise.resolve(previewToolResult());
+    },
     async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
       return await executor.queryCalendarEvents(args);
     },
@@ -2117,6 +2361,19 @@ function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): In
 
 function previewToolResult(): string {
   return JSON.stringify({ status: 'needs_confirmation' });
+}
+
+function resolveRunnerToolNames(
+  intent: IntexAgentIntentClassification | IntexAgentIntentDecision
+): IntexAgentToolName[] {
+  if (intent.kind !== 'tool') return [];
+  if (!intent.allowedToolNames.includes('update_calendar_event')) {
+    return intent.allowedToolNames;
+  }
+  return [
+    'query_calendar_events',
+    ...intent.allowedToolNames.filter((toolName) => toolName !== 'query_calendar_events'),
+  ];
 }
 
 function isMutatingToolName(toolName: IntexAgentToolName): toolName is MutatingIntexAgentToolName {
@@ -2186,6 +2443,13 @@ function createTrackingToolExecutor(
         'create_calendar_event',
         toRecord(args),
         async () => await executor.createCalendarEvent(args)
+      );
+    },
+    async updateCalendarEvent(args: UpdateCalendarEventToolArgs): Promise<string> {
+      return await track(
+        'update_calendar_event',
+        toRecord(args),
+        async () => await executor.updateCalendarEvent(args)
       );
     },
     async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
@@ -2323,12 +2587,20 @@ function buildConfirmedExecutionFailureReply(
     return PREFERENCE_VERSION_CONFLICT_REPLIES[replyLanguage];
   }
 
+  if (toolName === 'update_calendar_event' && isCalendarEventVersionConflictMessage(errorMessage)) {
+    return CALENDAR_EVENT_VERSION_CONFLICT_REPLIES[replyLanguage];
+  }
+
   const detail = normalizeExternalSaveFailureDetail(errorMessage);
   return `${GENERIC_EXECUTION_FAILURE_PREFIX[replyLanguage]}${detail}${GENERIC_EXECUTION_FAILURE_SUFFIX[replyLanguage]}`;
 }
 
 function isExternalSaveNotConfiguredError(errorMessage: string): boolean {
   return errorMessage.trim() === 'External save is not configured';
+}
+
+function isCalendarEventVersionConflictMessage(errorMessage: string): boolean {
+  return /\bCONFLICT:\s*Calendar event changed after confirmation\b/iu.test(errorMessage);
 }
 
 function normalizeExternalSaveFailureDetail(errorMessage: string): string {
@@ -2344,18 +2616,22 @@ function toRecord(args: object): Record<string, unknown> {
 function getCompletedToolExecution(
   toolExecutions: IntexAgentToolExecution[]
 ): IntexAgentToolExecution | undefined {
-  const uniqueExecutedToolNames = [...new Set(toolExecutions.map((execution) => execution.toolName))];
-  if (uniqueExecutedToolNames.length === 1 && toolExecutions.length === 1) {
+  if (toolExecutions.length === 1) {
     return toolExecutions[0];
   }
 
-  /* v8 ignore start -- schema: impossible after intent gating exposes at most one tool per turn @preserve */
-  if (uniqueExecutedToolNames.length > 1) {
+  if (
+    toolExecutions.some(
+      (execution) => execution.error !== undefined || execution.selectionRejection !== undefined
+    )
+  ) {
     return undefined;
   }
-  /* v8 ignore stop @preserve */
 
-  return undefined;
+  const mutatingExecutions = toolExecutions.filter((execution) =>
+    isMutatingToolName(execution.toolName)
+  );
+  return mutatingExecutions.length === 1 ? mutatingExecutions[0] : undefined;
 }
 
 function parseToolResult(rawResult: string): Record<string, unknown> | undefined {
@@ -2435,6 +2711,36 @@ function buildUnboundedConfirmationReply(
       CONFIRMATION_LABELS.attendees[replyLanguage],
       readStringArray(args, 'attendees')
     );
+    return lines.join('\n');
+  }
+
+  if (toolName === 'update_calendar_event') {
+    const lines = [CONFIRMATION_INTROS.update_calendar_event[replyLanguage]];
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.title[replyLanguage],
+      limitConfirmationField(readRawString(args, 'eventSummary'), 240)
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.start[replyLanguage],
+      formatCalendarEventDateTimeSnapshot(
+        args['eventStart'],
+        runtimeTimeZone,
+        replyLanguage
+      )
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.end[replyLanguage],
+      formatCalendarEventDateTimeSnapshot(args['eventEnd'], runtimeTimeZone, replyLanguage)
+    );
+    appendConfirmationListLine(
+      lines,
+      CONFIRMATION_LABELS.attendees[replyLanguage],
+      readStringArray(args, 'attendeesToAdd')
+    );
+    lines.push(CALENDAR_UPDATE_PRESERVATION_NOTICE[replyLanguage]);
     return lines.join('\n');
   }
 
@@ -2532,6 +2838,11 @@ function appendConfirmationLine(lines: string[], label: string, value: string | 
   lines.push(`${label}: ${value}`);
 }
 
+function limitConfirmationField(value: string | undefined, maxLength: number): string | undefined {
+  if (value === undefined || value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
 function formatCalendarConfirmationDateTime(
   value: string,
   toolTimeZone: string | undefined,
@@ -2557,6 +2868,37 @@ function formatCalendarConfirmationDateTime(
     hourCycle: 'h23',
   }).format(displayInstant);
   return `${date}, ${time}`;
+}
+
+function formatCalendarEventDateTimeSnapshot(
+  value: unknown,
+  runtimeTimeZone: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string | undefined {
+  /* v8 ignore start -- upstream: readCalendarEventDateTimeSnapshot guarantees a non-null, non-array snapshot object before confirmation formatting @preserve */
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  /* v8 ignore stop @preserve */
+  const snapshot = value as Record<string, unknown>;
+  const dateTime = readNonEmptyString(snapshot, 'dateTime');
+  if (dateTime !== undefined) {
+    return formatCalendarConfirmationDateTime(
+      dateTime,
+      readNonEmptyString(snapshot, 'timeZone'),
+      runtimeTimeZone,
+      replyLanguage
+    );
+  }
+  const date = readNonEmptyString(snapshot, 'date');
+  /* v8 ignore start -- upstream: prior snapshot validation guarantees a valid date whenever dateTime is absent @preserve */
+  if (date === undefined || !isValidCalendarDate(date)) return undefined;
+  /* v8 ignore stop @preserve */
+  const instant = new Date(`${date}T00:00:00.000Z`);
+  return new Intl.DateTimeFormat(replyLanguage === 'pl' ? 'pl-PL' : 'en-GB', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(instant);
 }
 
 function formatReplyDateRecords(
@@ -2845,15 +3187,21 @@ function buildCompletedReply(
 
   const htmlLink = readString(result, 'htmlLink');
   const absoluteHtmlLink = toAbsoluteUrl(htmlLink);
-  if (toolName === 'create_calendar_event' && absoluteHtmlLink !== undefined) {
+  if (
+    (toolName === 'create_calendar_event' || toolName === 'update_calendar_event') &&
+    absoluteHtmlLink !== undefined
+  ) {
     return {
-      reply: COMPLETED_REPLIES.create_calendar_event[replyLanguage],
+      reply: COMPLETED_REPLIES[toolName][replyLanguage],
       ctaUrl: { displayText: CTA_LABELS.openCalendar[replyLanguage], url: absoluteHtmlLink },
     };
   }
-  if (htmlLink !== undefined && toolName === 'create_calendar_event') {
+  if (
+    htmlLink !== undefined &&
+    (toolName === 'create_calendar_event' || toolName === 'update_calendar_event')
+  ) {
     return {
-      reply: `${COMPLETED_REPLIES.create_calendar_event[replyLanguage].replace(/\.$/u, '')}: ${htmlLink}`,
+      reply: `${COMPLETED_REPLIES[toolName][replyLanguage].replace(/\.$/u, '')}: ${htmlLink}`,
     };
   }
 
@@ -2887,6 +3235,9 @@ function defaultCompletedReply(
   }
   if (toolName === 'create_calendar_event') {
     return COMPLETED_REPLIES.create_calendar_event[replyLanguage];
+  }
+  if (toolName === 'update_calendar_event') {
+    return COMPLETED_REPLIES.update_calendar_event[replyLanguage];
   }
   if (toolName === 'create_research') {
     return COMPLETED_REPLIES.create_research[replyLanguage];

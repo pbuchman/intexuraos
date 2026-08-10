@@ -1,19 +1,19 @@
 {
   "schemaVersion": "1",
   "id": "intex-eval-008",
-  "title": "Clarify a missing calendar time",
-  "description": "Requests a missing time, incorporates the answer, then confirms and creates the synthetic event.",
+  "title": "Add an attendee to an existing calendar event",
+  "description": "Requests a missing attendee email, finds one exact event, then confirms and adds the attendee without replacing event details.",
   "currentDateTime": "2026-07-16T10:00:00+02:00",
   "timeZone": "Europe/Warsaw",
   "turns": [
     {
       "kind": "message",
-      "text": "Put INTEX-EVAL-008 project review INTEX-EVAL-008-F01 on my calendar for September 10 2026.",
+      "text": "Invite Marta to the existing INTEX-EVAL-008 project review INTEX-EVAL-008-F01.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "3 PM for one hour for INTEX-EVAL-008.",
+      "text": "Her email is marta.intex-eval-008@example.com.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -31,6 +31,7 @@
           "create_note",
           "create_calendar_event",
           "query_calendar_events",
+          "update_calendar_event",
           "create_research",
           "create_link",
           "create_code_task",
@@ -90,19 +91,43 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Asks what time the project review on September 10 2026 should start.",
-              "Does not create or claim to create a timed event before the missing time is supplied."
+              "Asks for Marta's email address before preparing an attendee update.",
+              "Does not query or update the calendar before the missing attendee email is supplied."
             ]
           }
         ]
       },
       {
         "turnIndex": 1,
-        "requiredToolCalls": [],
+        "requiredToolCalls": [
+          {
+            "toolName": "query_calendar_events",
+            "count": 1,
+            "argumentAssertions": [
+              {
+                "path": "mode",
+                "operator": "equals",
+                "value": "list"
+              },
+              {
+                "path": "queryLength",
+                "operator": "exists"
+              },
+              {
+                "path": "timeMin",
+                "operator": "exists"
+              },
+              {
+                "path": "timeMax",
+                "operator": "exists"
+              }
+            ]
+          }
+        ],
         "forbiddenToolCalls": [
           "create_note",
           "create_calendar_event",
-          "query_calendar_events",
+          "update_calendar_event",
           "create_research",
           "create_link",
           "create_code_task",
@@ -118,10 +143,15 @@
         "sessionAfterTurn": {
           "allowedStatuses": ["waiting_for_user"],
           "startReason": "no_active_session",
-          "activeTool": "create_calendar_event"
+          "activeTool": "update_calendar_event"
         },
         "timeline": {
-          "requiredEventTypes": ["user_message", "confirmation_requested", "assistant_message"],
+          "requiredEventTypes": [
+            "user_message",
+            "tool_call_completed",
+            "confirmation_requested",
+            "assistant_message"
+          ],
           "forbiddenEventTypes": [
             "session_started",
             "session_closed",
@@ -129,18 +159,61 @@
             "clarification_requested",
             "confirmation_resolved",
             "tool_call_started",
-            "tool_call_completed",
             "tool_call_failed",
             "unsupported_request"
           ],
           "payloadAssertions": [
+            {
+              "eventType": "tool_call_completed",
+              "assertions": [
+                {
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "query_calendar_events"
+                }
+              ]
+            },
             {
               "eventType": "confirmation_requested",
               "assertions": [
                 {
                   "path": "toolName",
                   "operator": "equals",
-                  "value": "create_calendar_event"
+                  "value": "update_calendar_event"
+                },
+                {
+                  "path": "argsSummary.eventSummaryLength",
+                  "operator": "exists"
+                },
+                {
+                  "path": "argsSummary.attendeesToAddCount",
+                  "operator": "equals",
+                  "value": 1
+                },
+                {
+                  "path": "argsSummary.hasEventId",
+                  "operator": "equals",
+                  "value": true
+                },
+                {
+                  "path": "argsSummary.hasCalendarId",
+                  "operator": "equals",
+                  "value": true
+                },
+                {
+                  "path": "argsSummary.hasExpectedEtag",
+                  "operator": "equals",
+                  "value": true
+                },
+                {
+                  "path": "argsSummary.hasEventStart",
+                  "operator": "equals",
+                  "value": true
+                },
+                {
+                  "path": "argsSummary.hasEventEnd",
+                  "operator": "equals",
+                  "value": true
                 },
                 {
                   "path": "argsSummary.syntheticMarkerCount",
@@ -160,10 +233,10 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Correctly identifies a complete calendar-event request, presents a reviewable sanitized preview using observable redacted structured labels for Title, Start, and End, and asks for explicit confirmation in an appropriate, concise tone.",
-              "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, and `End: [redacted]`.",
+              "Uses the closed single-event lookup result and asks for explicit confirmation before adding the supplied attendee to the existing event.",
+              "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, `End: [redacted]`, and `Attendees: [redacted]`.",
               "The redacted values are complete expected evidence for the judge and are not missing information.",
-              "Does not ask for the time again or expose raw argument content in the sanitized reply."
+              "Does not claim the attendee was already added, create a replacement event, or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -172,22 +245,42 @@
         "turnIndex": 2,
         "requiredToolCalls": [
           {
-            "toolName": "create_calendar_event",
+            "toolName": "update_calendar_event",
             "count": 1,
             "argumentAssertions": [
               {
-                "path": "summaryLength",
+                "path": "eventSummaryLength",
                 "operator": "exists"
               },
               {
-                "path": "start",
-                "operator": "contains",
-                "value": "2026-09-10T15:00"
+                "path": "attendeesToAddCount",
+                "operator": "equals",
+                "value": 1
               },
               {
-                "path": "end",
-                "operator": "contains",
-                "value": "2026-09-10T16:00"
+                "path": "hasEventId",
+                "operator": "equals",
+                "value": true
+              },
+              {
+                "path": "hasCalendarId",
+                "operator": "equals",
+                "value": true
+              },
+              {
+                "path": "hasExpectedEtag",
+                "operator": "equals",
+                "value": true
+              },
+              {
+                "path": "hasEventStart",
+                "operator": "equals",
+                "value": true
+              },
+              {
+                "path": "hasEventEnd",
+                "operator": "equals",
+                "value": true
               },
               {
                 "path": "syntheticMarkerCount",
@@ -204,6 +297,7 @@
         ],
         "forbiddenToolCalls": [
           "create_note",
+          "create_calendar_event",
           "query_calendar_events",
           "create_research",
           "create_link",
@@ -255,7 +349,7 @@
                 {
                   "path": "toolName",
                   "operator": "equals",
-                  "value": "create_calendar_event"
+                  "value": "update_calendar_event"
                 }
               ]
             }
@@ -265,8 +359,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the clarified calendar event was created successfully.",
-              "Does not request the missing time again or another confirmation."
+              "Clearly communicates that the attendee was added to the existing calendar event successfully.",
+              "Does not claim a new event was created or request another confirmation."
             ]
           }
         ]

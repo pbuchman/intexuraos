@@ -10,7 +10,7 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('7.0.0');
+    expect(intexAgentIntentClassifierPrompt.version).toBe('8.0.0');
     expect(intexAgentIntentClassifierRepairPrompt.version).toBe('3.0.0');
   });
 
@@ -101,6 +101,10 @@ describe('intexAgentIntentClassifierPrompt', () => {
     expect(prompt).toContain('reply in Polish unless I ask otherwise');
     expect(prompt).toContain('calendar event');
     expect(prompt).toContain('query_calendar_events');
+    expect(prompt).toContain('update_calendar_event');
+    expect(prompt).toContain('existing calendar event');
+    expect(prompt).toContain('add an attendee');
+    expect(prompt).toContain('"allowedToolNames":["update_calendar_event"]');
     expect(prompt).toContain('multiple_possible_intents');
     expect(prompt).toContain('unsupported_capability');
   });

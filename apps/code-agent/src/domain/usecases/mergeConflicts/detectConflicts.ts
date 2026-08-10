@@ -88,6 +88,8 @@ export interface SummaryUpdateParams {
 
 export const DEFAULT_RETRY_DELAY_MS = 500;
 export const DEFAULT_MERGEABILITY_RETRIES = 2;
+export const RECONCILIATION_BATCH_SIZE = 10;
+export const RECONCILIATION_STALE_AFTER_MS = 5 * 60 * 1000;
 
 export function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -579,6 +581,32 @@ interface ReconcileCounters {
   error: number;
 }
 
+async function markReconciliationAttempt(
+  deps: DetectConflictDeps,
+  logger: Logger,
+  summary: GitHubPRSummary,
+  attemptedAt: Date
+): Promise<void> {
+  try {
+    await upsertSummary(
+      deps.gitHubPRSummaryRepo,
+      {
+        repository: summary.repository,
+        pullRequestNumber: summary.pullRequestNumber,
+        lastActivityAt: summary.lastActivityAt,
+        firstSeenAt: summary.firstSeenAt,
+        lastConflictCheckedAt: attemptedAt,
+      },
+      logger
+    );
+  } catch (error) {
+    logger.error(
+      { error, repository: summary.repository, prNumber: summary.pullRequestNumber },
+      'Failed to advance PR reconciliation attempt marker'
+    );
+  }
+}
+
 async function reconcileSummary(
   deps: DetectConflictDeps,
   logger: Logger,
@@ -680,15 +708,20 @@ export async function reconcilePRSummaries(
   deps: DetectConflictDeps,
   logger: Logger
 ): Promise<ReconcileResult> {
-  const trackedResult = await deps.gitHubPRSummaryRepo.findRecentlyActive(30);
-  if (!trackedResult.ok) {
-    logger.warn({ error: trackedResult.error }, 'Failed to load PR summaries for reconciliation');
+  const candidatesResult = await deps.gitHubPRSummaryRepo.findReconciliationCandidates(
+    RECONCILIATION_BATCH_SIZE
+  );
+  if (!candidatesResult.ok) {
+    logger.warn({ error: candidatesResult.error }, 'Failed to load PR summaries for reconciliation');
     return EMPTY_RECONCILE_RESULT;
   }
 
-  const summaries = trackedResult.value;
+  const staleBefore = new Date(Date.now() - RECONCILIATION_STALE_AFTER_MS);
+  const summaries = candidatesResult.value.filter((summary) =>
+    summary.lastConflictCheckedAt === null || summary.lastConflictCheckedAt <= staleBefore
+  );
   if (summaries.length === 0) {
-    logger.debug({}, 'No tracked PR summaries to reconcile');
+    logger.debug({}, 'No stale PR summaries to reconcile');
     return EMPTY_RECONCILE_RESULT;
   }
 
@@ -703,6 +736,13 @@ export async function reconcilePRSummaries(
     skipped: 0,
     error: 0,
   };
+
+  const attemptedAt = new Date();
+  await Promise.all(
+    summaries.map(async (summary) => {
+      await markReconciliationAttempt(deps, logger, summary, attemptedAt);
+    })
+  );
 
   const byRepo = groupSummariesByRepository(summaries);
   const accessDeps: AccessContextDeps = {

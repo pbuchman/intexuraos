@@ -68,6 +68,12 @@ export interface IntexAgentToolSelectionMetadata {
   ordinal: number;
 }
 
+export interface IntexAgentSupportingToolCompletion {
+  toolName: IntexAgentToolName;
+  result: Record<string, unknown>;
+  toolSelection?: IntexAgentToolSelectionMetadata;
+}
+
 export type IntexAgentRunnerResult =
   | {
       outcome: 'completed';
@@ -88,6 +94,7 @@ export type IntexAgentRunnerResult =
       toolArgs: Record<string, unknown>;
       summary?: string;
       toolSelection?: IntexAgentToolSelectionMetadata;
+      supportingToolCompletions?: readonly IntexAgentSupportingToolCompletion[];
     }
   | {
       outcome: 'tool_failed';
@@ -209,6 +216,7 @@ export interface HandleIncomingMessageDeps {
 const CONFIRMABLE_TOOL_NAMES = new Set<IntexAgentToolName>([
   'create_note',
   'create_calendar_event',
+  'update_calendar_event',
   'create_research',
   'create_link',
   'create_code_task',
@@ -586,6 +594,15 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'needs_confirmation') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+    for (const completion of runnerResult.supportingToolCompletions ?? []) {
+      await appendEvent(deps, session, 'tool_call_completed', {
+        toolName: completion.toolName,
+        result: completion.result,
+        ...(completion.toolSelection !== undefined
+          ? { toolSelection: completion.toolSelection }
+          : {}),
+      });
+    }
     const confirmationId = deps.ids.confirmationId();
     await appendEvent(deps, session, 'confirmation_requested', {
       confirmationId,

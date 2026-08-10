@@ -2,7 +2,7 @@ import type { TestRunRepository } from '../domain/testRuns/ports/testRunReposito
 
 export const TEST_RUN_ARTIFACT_DEADLINE_MS = 10 * 60 * 1000;
 export const TEST_RUN_ARTIFACT_SWEEP_LIMIT = 20 as const;
-export const TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS = 30 * 1000;
+export const TEST_RUN_ARTIFACT_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 type SweeperRepository = Pick<
   TestRunRepository,

@@ -634,6 +634,65 @@ describe('createFirestoreGitHubPRSummariesRepository', () => {
     });
   });
 
+  describe('findReconciliationCandidates()', () => {
+    it('queries the oldest open conflict checks with a hard limit', async () => {
+      const summaryData = {
+        repository: 'intexuraos/test-repo',
+        pullRequestNumber: 42,
+        state: 'open',
+        lastConflictCheckedAt: null,
+        lastActivityAt: new Date('2026-08-10T10:00:00Z'),
+        firstSeenAt: new Date('2026-08-01T10:00:00Z'),
+      };
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(
+          createMockQuerySnapshot([createMockDocSnapshot(summaryData)])
+        ),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findReconciliationCandidates(10);
+
+      expect(result.ok).toBe(true);
+      expect(mockQuery.where).toHaveBeenCalledWith('state', '==', 'open');
+      expect(mockQuery.orderBy).toHaveBeenCalledWith('lastConflictCheckedAt', 'asc');
+      expect(mockQuery.limit).toHaveBeenCalledWith(10);
+      if (result.ok) {
+        expect(result.value).toHaveLength(1);
+        expect(result.value[0]?.lastConflictCheckedAt).toBeNull();
+      }
+    });
+
+    it('returns a repository error when the bounded query fails', async () => {
+      const mockQuery = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        get: vi.fn().mockRejectedValue(new Error('Query failed')),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => mockQuery),
+      } as never);
+
+      const repo = createFirestoreGitHubPRSummariesRepository({ logger: mockLogger });
+      const result = await repo.findReconciliationCandidates(10);
+
+      expect(result.ok).toBe(false);
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        expect.objectContaining({ limit: 10 }),
+        'Failed to find GitHub PR summaries for reconciliation'
+      );
+    });
+  });
+
   describe('findByPullRequest()', () => {
     it('returns the stored summary when it exists', async () => {
       const summaryData = {

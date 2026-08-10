@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('22.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('24.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('15.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('17.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -104,6 +104,30 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('show every event candidate you can identify');
     expect(prompt).toContain('create only one calendar event per confirmed tool call');
     expect(prompt).toContain('Current-date questions are answerable from Current date-time');
+  });
+
+  it('keeps attendee-update lookup instructions complete and non-contradictory', () => {
+    const prompt = buildIntexAgentSystemPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: TIME_ZONE,
+      userPreferences: null,
+    });
+
+    expect(prompt).toContain('create, save, or update resources');
+    expect(prompt).toContain('matching read tools');
+    expect(prompt).toContain(
+      'For create_calendar_event, ask a clarification before using the tool if title, date, time, start, or end is missing or ambiguous.'
+    );
+    expect(prompt).toContain(
+      'For an update_calendar_event lookup, omit maxResults or set it to at least 2. Never use maxResults: 1.'
+    );
+    expect(prompt).toContain(
+      'If the lookup returns truncated: true, narrow the title or time range and query again before updating; if it cannot be narrowed to exactly one complete result, ask a targeted clarification.'
+    );
+    expect(prompt).not.toContain('Supported tools create or save resources only.');
+    expect(prompt).not.toContain(
+      'For calendar events, ask a clarification before using the tool if title, date, time, start, or end is missing or ambiguous.'
+    );
   });
 
   it('requires explicit semantic Linear association and preserves exact identifiers across clarification', () => {

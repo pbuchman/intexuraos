@@ -19,6 +19,7 @@ import type {
   AddUserPreferenceToolArgs,
   DeleteUserPreferenceToolArgs,
   SaveExternalToolArgs,
+  UpdateCalendarEventToolArgs,
   UpdateUserPreferenceToolArgs,
   IntexAgentToolExecutor,
 } from './toolDefinitions.js';
@@ -34,11 +35,21 @@ export interface NotesToolClient {
 
 export interface CalendarToolClient {
   createEvent(input: CreateCalendarEventRequest): Promise<Result<CreatedCalendarEvent>>;
-  listEvents(input: ListCalendarEventsRequest): Promise<Result<CalendarQueryEvent[]>>;
+  listEvents(input: ListCalendarEventsRequest): Promise<
+    Result<{ events: CalendarQueryEvent[]; truncated: boolean }>
+  >;
+  updateEventAttendees(input: {
+    userId: string;
+    eventId: string;
+    calendarId: string;
+    expectedEtag: string;
+    attendeesToAdd: { email: string }[];
+  }): Promise<Result<CreatedCalendarEvent>>;
 }
 
 interface CalendarQueryEvent {
   id: string;
+  etag?: string | undefined;
   summary: string;
   start: {
     dateTime?: string | undefined;
@@ -149,6 +160,28 @@ export function createIntexAgentToolExecutor(
       });
     },
 
+    async updateCalendarEvent(args): Promise<string> {
+      const snapshot = requireCalendarUpdateSnapshot(args);
+      const result = await deps.calendarClient.updateEventAttendees({
+        userId: deps.userId,
+        eventId: args.eventId,
+        ...snapshot,
+        attendeesToAdd: args.attendeesToAdd.map((email) => ({ email })),
+      });
+
+      if (!result.ok) {
+        throw new Error(`Failed to update calendar event: ${getErrorMessage(result.error)}`);
+      }
+
+      return JSON.stringify({
+        status: 'completed',
+        eventId: result.value.id, // @allow-result-access -- guarded by !result.ok check above
+        summary: result.value.summary, // @allow-result-access -- guarded by !result.ok check above
+        attendeesAdded: args.attendeesToAdd,
+        ...(result.value.htmlLink !== undefined ? { htmlLink: result.value.htmlLink } : {}), // @allow-result-access -- guarded by !result.ok check above
+      });
+    },
+
     async queryCalendarEvents(args): Promise<string> {
       const maxResults = args.maxResults ?? (args.mode === 'count' ? 2500 : 20);
       const result = await deps.calendarClient.listEvents({
@@ -164,17 +197,27 @@ export function createIntexAgentToolExecutor(
         throw new Error(`Failed to query calendar events: ${getErrorMessage(result.error)}`);
       }
 
-      const events = result.value;
-      const truncated = args.mode === 'count' && events.length >= maxResults;
+      const events = result.value.events;
+      const paginationVerdict: unknown = result.value.truncated;
+      if (typeof paginationVerdict !== 'boolean') {
+        throw new Error('Calendar query response has no pagination verdict');
+      }
+      const truncated = paginationVerdict || events.length >= maxResults;
       return JSON.stringify({
         status: 'completed',
         mode: args.mode,
         count: events.length,
-        ...(truncated ? { truncated: true } : {}),
+        truncated,
         timeMin: args.timeMin,
         timeMax: args.timeMax,
         ...(args.query !== undefined ? { query: args.query } : {}),
-        ...(args.mode === 'list' ? { events: events.map(toCalendarQueryEvent) } : {}),
+        ...(args.mode === 'list'
+          ? {
+              events: events.map((event) =>
+                toCalendarQueryEvent(event, args.calendarId ?? 'primary')
+              ),
+            }
+          : {}),
       });
     },
 
@@ -380,9 +423,11 @@ function toCalendarEventInput(
   };
 }
 
-function toCalendarQueryEvent(event: CalendarQueryEvent): {
+function toCalendarQueryEvent(event: CalendarQueryEvent, calendarId: string): {
   id: string;
+  etag?: string;
   summary: string;
+  calendarId: string;
   start: CalendarQueryEvent['start'];
   end: CalendarQueryEvent['end'];
   location?: string;
@@ -390,11 +435,33 @@ function toCalendarQueryEvent(event: CalendarQueryEvent): {
 } {
   return {
     id: event.id,
+    ...(event.etag !== undefined ? { etag: event.etag } : {}),
     summary: event.summary,
+    calendarId,
     start: event.start,
     end: event.end,
     ...(event.location !== undefined ? { location: event.location } : {}),
     ...(event.htmlLink !== undefined ? { htmlLink: event.htmlLink } : {}),
+  };
+}
+
+function requireCalendarUpdateSnapshot(args: UpdateCalendarEventToolArgs): {
+  calendarId: string;
+  expectedEtag: string;
+} {
+  if (
+    args.calendarId === undefined ||
+    args.calendarId.trim() === '' ||
+    args.expectedEtag === undefined ||
+    args.expectedEtag.trim() === '' ||
+    args.eventStart === undefined ||
+    args.eventEnd === undefined
+  ) {
+    throw new Error('Calendar event snapshot is missing or incomplete');
+  }
+  return {
+    calendarId: args.calendarId,
+    expectedEtag: args.expectedEtag,
   };
 }
 

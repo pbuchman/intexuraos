@@ -99,6 +99,8 @@ export interface SanitizedToolArgsSummary {
   locationLength?: number;
   descriptionLength?: number;
   attendeesCount?: number;
+  eventSummaryLength?: number;
+  attendeesToAddCount?: number;
   contentLength?: number;
   titleLength?: number;
   tagsCount?: number;
@@ -111,6 +113,10 @@ export interface SanitizedToolArgsSummary {
   syntheticMarkerCount?: number;
   syntheticMarkerDigest?: string;
   hasCalendarId?: boolean;
+  hasExpectedEtag?: boolean;
+  hasEventStart?: boolean;
+  hasEventEnd?: boolean;
+  hasEventId?: boolean;
   hasUrl?: boolean;
   hasLinearIssueId?: boolean;
   hasSourceUrl?: boolean;

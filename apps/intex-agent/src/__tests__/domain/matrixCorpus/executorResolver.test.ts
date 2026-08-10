@@ -208,6 +208,7 @@ function unusedExecutor(): IntexAgentToolExecutor {
   return {
     createNote: unused,
     createCalendarEvent: unused,
+    updateCalendarEvent: unused,
     queryCalendarEvents: unused,
     createResearch: unused,
     createLink: unused,

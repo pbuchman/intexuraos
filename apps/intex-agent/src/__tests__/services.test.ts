@@ -2237,6 +2237,7 @@ function emptyToolExecutor(
   return {
     createNote: async () => 'note-1',
     createCalendarEvent: async () => 'event-1',
+    updateCalendarEvent: async () => 'event-update-1',
     queryCalendarEvents: async () => 'calendar-query-1',
     createResearch: async () => 'research-1',
     createLink: async () => 'bookmark-1',

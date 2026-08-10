@@ -31,6 +31,7 @@ const deploymentDocumentVerifierPath = resolve(
   'scripts/hetzner/verify-deployment-document.mjs'
 );
 const codeHealthVerifierPath = resolve(repoRoot, 'scripts/hetzner/verify-code-agent-health.mjs');
+const semanticHealthVerifierPath = resolve(repoRoot, 'scripts/hetzner/verify-semantic-health.mjs');
 const installPm2LogrotatePath = resolve(repoRoot, 'scripts/hetzner/install-pm2-logrotate.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
 const webHostingPath = resolve(repoRoot, 'docs/architecture/web-app-hosting.md');
@@ -709,6 +710,42 @@ describe('Hetzner web asset deployment', () => {
     }
   });
 
+  it('rejects HTTP-success health bodies whose service or dependency status is down', () => {
+    const verify = (body: unknown, expectedService?: string, requiredCheck?: string) =>
+      spawnSync(
+        'node',
+        [
+          semanticHealthVerifierPath,
+          ...(expectedService === undefined ? [] : [expectedService]),
+          ...(requiredCheck === undefined ? [] : [requiredCheck]),
+        ],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          input: typeof body === 'string' ? body : JSON.stringify(body),
+        }
+      );
+    const validBody = {
+      status: 'ok',
+      serviceName: 'whatsapp-service',
+      checks: [{ name: 'firestore', status: 'ok', latencyMs: 4 }],
+    };
+
+    expect(verify(validBody).status).toBe(0);
+    expect(verify(validBody, 'whatsapp-service', 'firestore').status).toBe(0);
+    expect(verify(validBody, 'intex-agent', 'firestore').status).not.toBe(0);
+    expect(verify({ ...validBody, checks: [] }, 'whatsapp-service', 'firestore').status).not.toBe(
+      0
+    );
+    expect(verify({ ...validBody, status: 'down' }).status).not.toBe(0);
+    expect(
+      verify({ ...validBody, checks: [{ name: 'firestore', status: 'down', latencyMs: 3000 }] })
+        .status
+    ).not.toBe(0);
+    expect(verify({ ...validBody, checks: [] }).status).toBe(0);
+    expect(verify('{not-json').status).not.toBe(0);
+  });
+
   it('refuses to attest a dirty checkout before the first remote mutation', () => {
     const script = readRequired(githubActionsDeployPath);
     const metadataFlow = script.slice(
@@ -745,6 +782,16 @@ describe('Hetzner web asset deployment', () => {
     expect(synchronizedReleaseFlow.indexOf('verify_remote_release_manifest')).toBeGreaterThan(
       synchronizedReleaseFlow.indexOf('sync_repo')
     );
+  });
+
+  it('propagates failures from every command in remote deployment pipelines', () => {
+    const script = readRequired(githubActionsDeployPath);
+    const remoteFlow = script.slice(
+      script.indexOf('run_remote() {'),
+      script.indexOf('\n}\n\nsync_repo()')
+    );
+
+    expect(remoteFlow).toContain('bash -o pipefail -c');
   });
 
   it('pins retained Cloud Build targets to the workflow commit and verifies provenance', () => {
@@ -803,6 +850,7 @@ describe('Hetzner web asset deployment', () => {
     expect(readinessFlow).toContain('/api/intex-agent/health');
     expect(backendReadinessFlow).toContain('verify-matrix-corpus-runtime.sh');
     expect(backendReadinessFlow).toContain('/api/intex-agent/health');
+    expect(backendReadinessFlow).toContain('verify-semantic-health.mjs');
     expect(readinessFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
     expect(attestationFlow.match(/\/deployment\.json/g)).toHaveLength(2);
     expect(attestationFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
@@ -1094,15 +1142,19 @@ describe('Hetzner web asset deployment', () => {
     expect(script).toContain('derive_health_urls()');
     expect(script).toContain('config.apps');
     expect(script).toContain('app.env?.PORT');
-    expect(script).toContain('http://127.0.0.1:${port}/health');
+    expect(script).toContain('${app.name}|http://127.0.0.1:${port}/health');
     expect(script).toContain('wait_for_pm2_online()');
     expect(script).toContain('wait_for_http_health()');
+    expect(script).toContain('verify-semantic-health.mjs');
     expect(script).toContain('sync_pm2_systemd_service()');
     expect(script).toContain('pm2 jlist');
     expect(script).toContain("local IFS=' '");
     expect(script).toContain('healthy_passes=$((healthy_passes + 1))');
     expect(script).toContain('healthy_passes=0');
     expect(script).toContain('curl --fail --silent --show-error --max-time 5');
+    expect(script).toContain(
+      '| node scripts/hetzner/verify-semantic-health.mjs "${expected_service}"'
+    );
     expect(script).toContain('failed to reach online state');
     expect(script).toContain('PM2 health checks did not remain ready');
     expect(script).toContain('pm2 save');

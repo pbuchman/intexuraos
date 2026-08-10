@@ -96,22 +96,28 @@ if (!config || !Array.isArray(config.apps)) {
   throw new Error('Rendered PM2 config must contain apps');
 }
 
-const urls = config.apps.map((app) => {
+const targets = config.apps.map((app) => {
+  if (typeof app.name !== 'string' || !/^[a-z0-9][a-z0-9-]*$/u.test(app.name)) {
+    throw new Error('Rendered PM2 config contains an invalid app name');
+  }
   const port = Number(app.env?.PORT);
   if (!Number.isInteger(port) || port <= 0 || port > 65535) {
     throw new Error(`PM2 app ${app.name ?? 'unknown'} has invalid PORT`);
   }
-  return `http://127.0.0.1:${port}/health`;
+  return `${app.name}|http://127.0.0.1:${port}/health`;
 });
 
-if (urls.length === 0) {
+if (targets.length === 0) {
   throw new Error('Rendered PM2 config must contain at least one app');
 }
-if (new Set(urls).size !== urls.length) {
+if (new Set(targets.map((target) => target.split('|')[0])).size !== targets.length) {
+  throw new Error('Rendered PM2 config contains duplicate app names');
+}
+if (new Set(targets.map((target) => target.split('|')[1])).size !== targets.length) {
   throw new Error('Rendered PM2 config contains duplicate health ports');
 }
 
-process.stdout.write(urls.join(' '));
+process.stdout.write(targets.join(' '));
 NODE
 }
 
@@ -153,18 +159,23 @@ process.stdin.on("end", () => {
 wait_for_http_health() {
   local deadline=$((SECONDS + PM2_START_TIMEOUT_SECONDS))
   local failed_urls=""
-  local health_urls=()
+  local health_targets=()
   local healthy_passes=0
+  local target=""
+  local expected_service=""
   local url=""
   local IFS=' '
 
-  read -r -a health_urls <<< "${PM2_HEALTH_URLS}"
+  read -r -a health_targets <<< "${PM2_HEALTH_URLS}"
 
   while ((SECONDS < deadline)); do
     failed_urls=""
 
-    for url in "${health_urls[@]}"; do
-      if ! curl --fail --silent --show-error --max-time 5 "${url}" >/dev/null; then
+    for target in "${health_targets[@]}"; do
+      expected_service="${target%%|*}"
+      url="${target#*|}"
+      if ! curl --fail --silent --show-error --max-time 5 "${url}" \
+        | node scripts/hetzner/verify-semantic-health.mjs "${expected_service}"; then
         failed_urls="${failed_urls}${url}"$'\n'
       fi
     done

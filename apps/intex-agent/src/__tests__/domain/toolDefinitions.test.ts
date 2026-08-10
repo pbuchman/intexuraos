@@ -23,6 +23,7 @@ describe('createIntexAgentToolDefinitions', () => {
       'create_note',
       'create_calendar_event',
       'query_calendar_events',
+      'update_calendar_event',
       'create_research',
       'create_link',
       'create_code_task',
@@ -65,12 +66,39 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(calendarQueryTool?.description).toContain('read-only');
     expect(calendarQueryTool?.description).toContain('list');
     expect(calendarQueryTool?.description).toContain('count');
+    expect(calendarQueryTool?.description).toContain('lookup before update_calendar_event');
+    expect(calendarQueryTool?.description).not.toContain(
+      'Do not use for: scheduling, canceling, updating, deleting, or rescheduling calendar events.'
+    );
     expect(calendarQueryTool?.parameters['required']).toEqual(['mode', 'timeMin', 'timeMax']);
     expect(calendarQueryTool?.parameters['properties']).toMatchObject({
       maxResults: {
         type: 'integer',
         minimum: 1,
         maximum: 2500,
+      },
+    });
+  });
+
+  it('describes attendee updates for existing calendar events', () => {
+    const calendarUpdateTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'update_calendar_event'
+    );
+
+    expect(calendarUpdateTool?.description).toContain('existing');
+    expect(calendarUpdateTool?.description).toContain('attendee');
+    expect(calendarUpdateTool?.description).toContain('query_calendar_events');
+    expect(calendarUpdateTool?.description).toContain('confirmation');
+    expect(calendarUpdateTool?.parameters['required']).toEqual([
+      'eventId',
+      'eventSummary',
+      'attendeesToAdd',
+    ]);
+    expect(calendarUpdateTool?.parameters['properties']).toMatchObject({
+      attendeesToAdd: {
+        type: 'array',
+        minItems: 1,
+        items: { type: 'string', format: 'email' },
       },
     });
   });
@@ -390,6 +418,100 @@ describe('createIntexAgentToolDefinitions', () => {
         maxResults: 50,
       },
     ]);
+  });
+
+  it('delegates an existing-event attendee update to the injected executor', async () => {
+    const executor = createExecutor();
+    const calendarUpdateTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'update_calendar_event'
+    );
+
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'primary',
+        expectedEtag: '"event-bagrowa-v1"',
+        eventStart: {
+          dateTime: '2026-06-25T18:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+        eventEnd: { date: '2026-06-26' },
+      })
+    ).resolves.toBe('calendar-updated');
+    expect(executor.calendarUpdateArgs).toEqual([
+      {
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['patryk@example.com'],
+        calendarId: 'primary',
+        expectedEtag: '"event-bagrowa-v1"',
+        eventStart: {
+          dateTime: '2026-06-25T18:00:00+02:00',
+          timeZone: 'Europe/Warsaw',
+        },
+        eventEnd: { date: '2026-06-26' },
+      },
+    ]);
+  });
+
+  it('rejects an attendee update without a target or attendees', async () => {
+    const calendarUpdateTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'update_calendar_event'
+    );
+
+    await expect(
+      calendarUpdateTool?.run({
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['patryk@example.com'],
+      })
+    ).rejects.toThrow('Tool argument eventId must be a string');
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: [],
+      })
+    ).rejects.toThrow('Tool argument attendeesToAdd must be a non-empty string array');
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['Patryk'],
+      })
+    ).rejects.toThrow('Tool argument attendeesToAdd must contain valid email addresses');
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: [42],
+      })
+    ).rejects.toThrow('Tool argument attendeesToAdd must be a non-empty string array');
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-bagrowa',
+        eventSummary: 'Bagrowa',
+        attendeesToAdd: ['  '],
+      })
+    ).rejects.toThrow('Tool argument attendeesToAdd must be a non-empty string array');
+  });
+
+  it('rejects malformed optional calendar event snapshots', async () => {
+    const calendarUpdateTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'update_calendar_event'
+    );
+    const baseArgs = {
+      eventId: 'event-bagrowa',
+      eventSummary: 'Bagrowa',
+      attendeesToAdd: ['patryk@example.com'],
+    };
+
+    for (const eventStart of [null, 'not-an-object', [], { unexpected: true }, {}]) {
+      await expect(calendarUpdateTool?.run({ ...baseArgs, eventStart })).rejects.toThrow(
+        'Tool argument eventStart must be a calendar date-time object'
+      );
+    }
   });
 
   it('delegates research execution to the injected executor', async () => {
@@ -820,6 +942,7 @@ function createExecutor(): IntexAgentToolExecutor & {
   noteArgs: unknown[];
   calendarArgs: unknown[];
   calendarQueryArgs: unknown[];
+  calendarUpdateArgs: unknown[];
   researchArgs: unknown[];
   linkArgs: unknown[];
   codeTaskArgs: unknown[];
@@ -833,6 +956,7 @@ function createExecutor(): IntexAgentToolExecutor & {
     noteArgs: [],
     calendarArgs: [],
     calendarQueryArgs: [],
+    calendarUpdateArgs: [],
     researchArgs: [],
     linkArgs: [],
     codeTaskArgs: [],
@@ -852,6 +976,10 @@ function createExecutor(): IntexAgentToolExecutor & {
     queryCalendarEvents(args): Promise<string> {
       this.calendarQueryArgs.push(args);
       return Promise.resolve('calendar-query-completed');
+    },
+    updateCalendarEvent(args): Promise<string> {
+      this.calendarUpdateArgs.push(args);
+      return Promise.resolve('calendar-updated');
     },
     createResearch(args): Promise<string> {
       this.researchArgs.push(args);

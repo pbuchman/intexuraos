@@ -521,6 +521,18 @@ describe('createLlmIntexAgentIntentClassifier', () => {
       },
     ],
     [
+      'existing calendar attendee update',
+      {
+        outcome: 'tool',
+        allowedToolNames: ['update_calendar_event'],
+        confidence: 0.96,
+      },
+      {
+        kind: 'tool',
+        allowedToolNames: ['update_calendar_event'],
+      },
+    ],
+    [
       'mixed preference and non-preference tool list',
       {
         outcome: 'tool',

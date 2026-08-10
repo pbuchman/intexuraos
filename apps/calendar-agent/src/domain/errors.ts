@@ -8,6 +8,7 @@ export type CalendarErrorCode =
   | 'NOT_CONNECTED'
   | 'NOT_FOUND'
   | 'INVALID_REQUEST'
+  | 'CONFLICT'
   | 'PERMISSION_DENIED'
   | 'QUOTA_EXCEEDED'
   | 'INTERNAL_ERROR'
