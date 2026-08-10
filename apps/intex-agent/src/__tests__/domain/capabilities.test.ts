@@ -146,6 +146,49 @@ describe('Intex Agent capabilities replies', () => {
     ).toBe('en');
   });
 
+  it.each([
+    'marta@example.com',
+    'marta@example.com.',
+    'Email: marta@example.com',
+    'Marta: marta@example.com',
+  ])('treats the single-email contact detail %s as language-neutral', (text) => {
+    expect(
+      selectIntexAgentReplyLanguage({
+        currentMessage: { text },
+        priorMessages: [{ text: 'Podaj proszę jej adres e-mail.' }],
+      })
+    ).toBe('pl');
+    expect(
+      selectIntexAgentReplyLanguage({
+        currentMessage: { text },
+        priorMessages: [{ text: 'Please provide her email address.' }],
+      })
+    ).toBe('en');
+  });
+
+  it.each([
+    ['Jej adres e-mail to marta@example.com.', 'Podaj jej dane.', 'pl'],
+    ['Adres e-mail Marty to marta@example.com.', 'Podaj jej dane.', 'pl'],
+    ['To jest adres e-mail Marty: marta@example.com.', 'Podaj jej dane.', 'pl'],
+    ['Adres mailowy Marty: marta@example.com.', 'Podaj jej dane.', 'pl'],
+    ['Her email address is marta@example.com.', 'Please provide her details.', 'en'],
+    [
+      'Please reply in English. Her email address is marta@example.com.',
+      'Podaj proszę jej dane.',
+      'en',
+    ],
+  ] as const)(
+    'classifies an explicit email sentence in its own language: %s',
+    (text, priorText, expectedLanguage) => {
+      expect(
+        selectIntexAgentReplyLanguage({
+          currentMessage: { text },
+          priorMessages: [{ text: priorText }],
+        })
+      ).toBe(expectedLanguage);
+    }
+  );
+
   it('uses deterministic button language hints without classifying plain short text', () => {
     expect(
       selectIntexAgentReplyLanguage({

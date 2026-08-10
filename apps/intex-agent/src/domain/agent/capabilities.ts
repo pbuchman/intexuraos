@@ -52,6 +52,9 @@ const GREETING_REPLIES: Record<IntexAgentReplyLanguage, string> = {
   pl: 'Cześć! U mnie wszystko w porządku. W czym mogę pomóc?',
 };
 
+const EMAIL_ADDRESS_PATTERN =
+  /(?<![\p{Letter}\p{Number}._%+-])[\p{Letter}\p{Number}.!#$%&'*+/=?^_`{|}~-]+@[\p{Letter}\p{Number}](?:[\p{Letter}\p{Number}-]*[\p{Letter}\p{Number}])?(?:\.[\p{Letter}\p{Number}](?:[\p{Letter}\p{Number}-]*[\p{Letter}\p{Number}])?)+(?![\p{Letter}\p{Number}_%+-]|\.+[\p{Letter}\p{Number}])/giu;
+
 export function detectIntexAgentReplyLanguage(text: string): IntexAgentReplyLanguage {
   return isLikelyPolish(text) ? 'pl' : 'en';
 }
@@ -112,7 +115,7 @@ function isLikelyPolish(text: string): boolean {
     return true;
   }
 
-  return /\b(czy|jakie|jaki|jaka|mam|masz|mamy|mozesz|utworz|stworz|dodaj|zapisz|zapamietaj|wysl\w*|paragon\w*|firm\w*|rachun\w*|notatk\w*|kalendarz\w*|wydarzen\w*|spotkan\w*|termin\w*|woln\w*|dzisiaj|jutro|teraz|prosze|pomoc|preferencj\w*|brak|linku|dostal\w*|kup|bilet|koncert)\b/iu.test(
+  return /\b(czy|jakie|jaki|jaka|mam|masz|mamy|mozesz|utworz|stworz|dodaj|zapisz|zapamietaj|wysl\w*|adres\w*|paragon\w*|firm\w*|rachun\w*|notatk\w*|kalendarz\w*|wydarzen\w*|spotkan\w*|termin\w*|woln\w*|dzisiaj|jutro|teraz|prosze|pomoc|preferencj\w*|brak|linku|dostal\w*|kup|bilet|koncert)\b/iu.test(
     normalized
   );
 }
@@ -131,13 +134,17 @@ function classifyReasonableIntexAgentReplyLanguage(
   if (isBareLink(normalizedText) || isAttachmentOnlyMessage(message, normalizedText)) {
     return null;
   }
-  if (isTrivialGreeting(normalizedText) || isAmbiguousShortMessage(normalizedText)) {
+  const languageText = normalizedText.replace(EMAIL_ADDRESS_PATTERN, ' ').trim();
+  if (languageText === '') {
     return null;
   }
-  if (isLikelyPolish(normalizedText)) {
+  if (isTrivialGreeting(languageText) || isAmbiguousShortMessage(languageText)) {
+    return null;
+  }
+  if (isLikelyPolish(languageText)) {
     return 'pl';
   }
-  if (isLikelyEnglish(normalizedText)) {
+  if (isLikelyEnglish(languageText)) {
     return 'en';
   }
   return null;

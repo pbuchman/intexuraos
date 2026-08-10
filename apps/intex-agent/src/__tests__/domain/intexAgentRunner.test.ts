@@ -6763,6 +6763,106 @@ describe('createIntexAgentRunner', () => {
       expect(client.calls).toHaveLength(1);
     });
 
+    it('keeps a Polish attendee-update confirmation after a short email follow-up', async () => {
+      const eventSummary = 'INTEX-WA-E2E-ATTENDEE-20260810-B7G4';
+      const client = new ToolExecutingFakeToolCallingClient(
+        [
+          {
+            toolName: 'query_calendar_events',
+            args: {
+              mode: 'list',
+              timeMin: '2026-08-11T00:00:00+02:00',
+              timeMax: '2026-08-12T00:00:00+02:00',
+              query: eventSummary,
+            },
+          },
+          {
+            toolName: 'update_calendar_event',
+            args: {
+              eventId: 'event-b7g4',
+              eventSummary,
+              attendeesToAdd: ['marta.intex-eval-008@example.com'],
+            },
+          },
+        ],
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Ready.',
+              toolName: 'update_calendar_event',
+            })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Które wydarzenie masz na myśli?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () =>
+            JSON.stringify({
+              status: 'completed',
+              mode: 'list',
+              count: 1,
+              truncated: false,
+              events: [
+                {
+                  id: 'event-b7g4',
+                  etag: '"event-b7g4-v1"',
+                  summary: eventSummary,
+                  calendarId: 'primary',
+                  start: { dateTime: '2026-08-11T16:30:00+02:00' },
+                  end: { dateTime: '2026-08-11T17:30:00+02:00' },
+                },
+              ],
+            }),
+        }),
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: `Zaproś Martę Testową B7G4 do istniejącego wydarzenia „${eventSummary}” 11 sierpnia 2026 o 16:30.`,
+          }),
+          event('clarification_requested', {
+            message: 'Jaki jest adres e-mail uczestnika?',
+            blockerReason: 'missing_required_details',
+            missingFields: ['attendeeEmail'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: 'Jaki jest adres e-mail uczestnika?' }),
+        ],
+        message: 'Jej adres e-mail to marta.intex-eval-008@example.com.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result).toMatchObject({
+        outcome: 'needs_confirmation',
+        reply: [
+          'Czy dodać uczestników do istniejącego wydarzenia w kalendarzu?',
+          '',
+          `Tytuł: ${eventSummary}`,
+          'Początek: 11 sierpnia 2026, 16:30',
+          'Koniec: 11 sierpnia 2026, 17:30',
+          'Uczestnicy: marta.intex-eval-008@example.com',
+          'Pozostałe dane wydarzenia pozostaną bez zmian.',
+        ].join('\n'),
+        toolName: 'update_calendar_event',
+      });
+    });
+
     it('continues when an inbound user quote answers the active attendee clarification', async () => {
       const client = new FakeToolCallingClient([passThroughResult]);
       const runner = createIntexAgentRunner({
