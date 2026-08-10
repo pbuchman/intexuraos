@@ -1,5 +1,8 @@
 import { getErrorMessage } from '@intexuraos/common-core';
-import { WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH } from '@intexuraos/http-contracts';
+import {
+  calendarUpdateEventAttendeesRequestSchema,
+  WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH,
+} from '@intexuraos/http-contracts';
 import type {
   MatrixCorpusProviderCallUsageV1,
   ToolCallingClient,
@@ -322,6 +325,16 @@ const CALENDAR_UPDATE_LOOKUP_NEXT_STEPS: LocalizedText = {
   pl: 'Wskaż dokładnie jedno istniejące wydarzenie.',
 };
 
+const CALENDAR_UPDATE_EMAIL_CLARIFICATION_REPLIES: LocalizedText = {
+  en: "What is the attendee's email address?",
+  pl: 'Jaki jest adres e-mail uczestnika?',
+};
+
+const CALENDAR_UPDATE_EMAIL_CLARIFICATION_NEXT_STEPS: LocalizedText = {
+  en: 'Provide the attendee email address.',
+  pl: 'Podaj adres e-mail uczestnika.',
+};
+
 const CONFIRMATION_LABELS = {
   title: { en: 'Title', pl: 'Tytuł' },
   content: { en: 'Content', pl: 'Treść' },
@@ -535,11 +548,18 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         events: input.events,
         replyContext: input.replyContext,
       });
-      const intent = applyMissingCalendarDateClarification(queryNormalizedIntent, {
+      const dateNormalizedIntent = applyMissingCalendarDateClarification(queryNormalizedIntent, {
         message: input.message,
         events: input.events,
         replyContext: input.replyContext,
         replyLanguage: replyLanguageForIntent(queryNormalizedIntent, detectedReplyLanguage),
+      });
+      const intent = applyMissingCalendarAttendeeEmailClarification(dateNormalizedIntent, {
+        message: input.message,
+        events: input.events,
+        replyContext: input.replyContext,
+        replyLanguage: replyLanguageForIntent(dateNormalizedIntent, detectedReplyLanguage),
+        userPreferences: config.userPreferences ?? null,
       });
       const replyLanguage = replyLanguageForIntent(intent, detectedReplyLanguage);
       if (intent.kind === 'unsupported') {
@@ -1075,6 +1095,406 @@ function applyDerivedCalendarQueryContext(
     ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
     ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
   };
+}
+
+function applyMissingCalendarAttendeeEmailClarification(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+    replyLanguage: IntexAgentReplyLanguage;
+    userPreferences: string | null;
+  }>
+): IntexAgentIntentClassification {
+  const isUpdateToolIntent =
+    intent.kind === 'tool' && intent.allowedToolNames.includes('update_calendar_event');
+  const isSingleUpdateClarification =
+    intent.kind === 'needs_clarification' &&
+    intent.blockerReason === 'missing_required_details' &&
+    intent.candidateIntents?.length === 1 &&
+    intent.candidateIntents[0] === 'update_calendar_event';
+
+  if (!isUpdateToolIntent && !isSingleUpdateClarification) {
+    return intent;
+  }
+
+  if (hasCalendarAttendeeEmailContext(context)) {
+    return isSingleUpdateClarification &&
+      isAnsweringActiveCalendarAttendeeEmailClarification(context)
+      ? clarificationToToolIntent(intent, 'update_calendar_event')
+      : intent;
+  }
+
+  return {
+    kind: 'needs_clarification',
+    question: CALENDAR_UPDATE_EMAIL_CLARIFICATION_REPLIES[context.replyLanguage],
+    blockerReason: 'missing_required_details',
+    missingFields: ['attendeeEmail'],
+    candidateIntents: ['update_calendar_event'],
+    suggestedNextStep: CALENDAR_UPDATE_EMAIL_CLARIFICATION_NEXT_STEPS[context.replyLanguage],
+    ...(intent.stylePreferenceAction !== undefined
+      ? { stylePreferenceAction: intent.stylePreferenceAction }
+      : {}),
+    ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
+    ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
+function hasCalendarAttendeeEmailContext(
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+    userPreferences: string | null;
+  }>
+): boolean {
+  const userTurns = activeCalendarAttendeeUserTurns(context);
+  const attendeeTurnIndex = userTurns.findIndex((turn) =>
+    turn.some((text) => extractCalendarAttendeeSegments(text).length > 0)
+  );
+  const relevantTurns =
+    attendeeTurnIndex === -1 ? userTurns.slice(0, 1) : userTurns.slice(0, attendeeTurnIndex + 1);
+  const relevantTexts = relevantTurns.flat();
+  if (
+    relevantTexts
+      .flatMap(extractCalendarAttendeeSegments)
+      .some(isAmbiguousCalendarAttendeeSegment)
+  ) {
+    return false;
+  }
+  return (
+    relevantTexts.some(containsAssociatedAttendeeEmailSignal) ||
+    hasUnambiguousMatchingAttendeeEmailPreference(context.userPreferences, relevantTexts)
+  );
+}
+
+function isAnsweringActiveCalendarAttendeeEmailClarification(
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): boolean {
+  const activeClarification = findActiveCalendarAttendeeClarification(context.events);
+  const missingFields = activeClarification?.event.payload['missingFields'];
+  if (!Array.isArray(missingFields) || !missingFields.includes('attendeeEmail')) return false;
+
+  return [
+    context.message,
+    ...(context.replyContext?.source === 'inbound_user_message' ? [context.replyContext.text] : []),
+  ].some(containsAssociatedAttendeeEmailSignal);
+}
+
+function activeCalendarAttendeeUserTurns(
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): string[][] {
+  const currentTurn = [context.message];
+  if (context.replyContext?.source === 'inbound_user_message') {
+    currentTurn.push(context.replyContext.text);
+  }
+  const turns = [currentTurn];
+
+  const activeClarification = findActiveCalendarAttendeeClarification(context.events);
+  if (activeClarification === undefined) return turns;
+
+  let expectsUserMessage = true;
+
+  for (let index = activeClarification.index - 1; index >= 0; index -= 1) {
+    const event = context.events[index];
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires a fallback despite the bounded array index @preserve */
+    if (event === undefined) continue;
+    /* v8 ignore stop @preserve */
+
+    if (expectsUserMessage) {
+      if (event.type === 'user_message') {
+        const turn: string[] = [];
+        const priorMessage = event.payload['text'];
+        if (typeof priorMessage === 'string') turn.push(priorMessage);
+        const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
+        if (priorReplyContext?.source === 'inbound_user_message') {
+          turn.push(priorReplyContext.text);
+        }
+        if (turn.length > 0) turns.push(turn);
+        expectsUserMessage = false;
+        continue;
+      }
+      if (isCalendarAttendeeClarificationBridgeEvent(event)) continue;
+      break;
+    }
+
+    if (event.type === 'clarification_requested') {
+      if (!isCalendarAttendeeUpdateClarification(event)) break;
+      expectsUserMessage = true;
+      continue;
+    }
+    if (isCalendarAttendeeClarificationBridgeEvent(event)) continue;
+    break;
+  }
+
+  return turns;
+}
+
+function findActiveCalendarAttendeeClarification(
+  events: readonly IntexAgentSessionEvent[]
+): Readonly<{ event: IntexAgentSessionEvent; index: number }> | undefined {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires a fallback despite the bounded array index @preserve */
+    if (event === undefined) continue;
+    /* v8 ignore stop @preserve */
+    if (event.type === 'clarification_requested') {
+      return isCalendarAttendeeUpdateClarification(event) ? { event, index } : undefined;
+    }
+    if (event.type === 'user_message') return undefined;
+    if (!isCalendarAttendeeClarificationTrailEvent(event)) return undefined;
+  }
+
+  return undefined;
+}
+
+function isCalendarAttendeeUpdateClarification(event: IntexAgentSessionEvent): boolean {
+  const candidateIntents = event.payload['candidateIntents'];
+  return (
+    event.payload['blockerReason'] === 'missing_required_details' &&
+    Array.isArray(candidateIntents) &&
+    candidateIntents.length === 1 &&
+    candidateIntents[0] === 'update_calendar_event'
+  );
+}
+
+function isCalendarAttendeeClarificationTrailEvent(event: IntexAgentSessionEvent): boolean {
+  return (
+    event.type === 'assistant_message' ||
+    event.type === 'agent_fallback' ||
+    event.type === 'llm_call_usage' ||
+    event.type === 'llm_usage_summary' ||
+    event.type === 'turn_processing_completed' ||
+    event.type === 'matrix_corpus_execution_boundary'
+  );
+}
+
+function isCalendarAttendeeClarificationBridgeEvent(event: IntexAgentSessionEvent): boolean {
+  return (
+    isCalendarAttendeeClarificationTrailEvent(event) ||
+    ((event.type === 'tool_call_started' || event.type === 'tool_call_completed') &&
+      event.payload['toolName'] === 'query_calendar_events')
+  );
+}
+
+function hasUnambiguousMatchingAttendeeEmailPreference(
+  userPreferences: string | null,
+  userTexts: readonly string[]
+): boolean {
+  const attendeeObjects = userTexts.flatMap(extractCalendarAttendeeObjects);
+  if (attendeeObjects.length === 0) return false;
+
+  const matchingEmails = new Set<string>();
+  for (const preferenceText of parseCanonicalPreferenceTexts(userPreferences)) {
+    const parsedMapping = parseAttendeeEmailPreference(preferenceText);
+    if (parsedMapping === undefined) {
+      if (
+        extractAttendeeEmailCandidates(preferenceText).length > 0 &&
+        attendeeObjects.some((attendee) => sharesPersonToken(attendee, preferenceText))
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (!attendeeObjects.some((attendee) => isExactPersonLabelMatch(attendee, parsedMapping.person))) {
+      continue;
+    }
+    if (parsedMapping.email === null) return false;
+    matchingEmails.add(parsedMapping.email);
+  }
+
+  return matchingEmails.size === 1;
+}
+
+function parseCanonicalPreferenceTexts(userPreferences: string | null): string[] {
+  const rendered = unwrapRenderedUserPreferences(userPreferences);
+  if (rendered === null) return [];
+
+  return rendered.split('\n').flatMap((line) => {
+    const match = /^\d+\.\s+\(id:\s+[^)]+\)\s+(.+)$/u.exec(line);
+    if (match?.[1] === undefined) return [];
+    try {
+      const decoded: unknown = JSON.parse(match[1]);
+      return typeof decoded === 'string' ? [decoded] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function unwrapRenderedUserPreferences(userPreferences: string | null): string | null {
+  if (userPreferences === null) return null;
+  const normalized = userPreferences.trim();
+  if (!normalized.startsWith('{')) return normalized;
+
+  try {
+    const envelope: unknown = JSON.parse(normalized);
+    return isMatrixPromptContextEnvelope(envelope) ? envelope.userPreferences : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseAttendeeEmailPreference(
+  preferenceText: string
+): Readonly<{ person: string; email: string | null }> | undefined {
+  const emailCandidates = extractAttendeeEmailCandidates(preferenceText);
+  const validEmails = emailCandidates.filter(isValidCalendarAttendeeEmail);
+  const normalized = normalizePreferenceMappingText(preferenceText, emailCandidates);
+  const person =
+    /^(?:when i ask to invite|when i invite)\s+(.+?)(?:\s+to an event)?\s*,\s*(?:invite|use)\s+__email__\.?$/u.exec(
+      normalized
+    )?.[1] ?? /^invite\s+(.+?)\s+via\s+__email__\.?$/u.exec(normalized)?.[1];
+  if (person === undefined || !isSpecificPersonLabel(person)) return undefined;
+  const soleValidEmail = validEmails.length === 1 ? validEmails[0] : undefined;
+  return {
+    person,
+    email:
+      emailCandidates.length === 1 && soleValidEmail !== undefined
+        ? soleValidEmail.toLocaleLowerCase('en-US')
+        : null,
+  };
+}
+
+function normalizePreferenceMappingText(preferenceText: string, emails: readonly string[]): string {
+  let normalized = preferenceText.normalize('NFKC').toLocaleLowerCase('en-US');
+  for (const email of emails) {
+    normalized = normalized.replace(email.toLocaleLowerCase('en-US'), '__email__');
+  }
+  return normalized.trim().replace(/\s+/gu, ' ');
+}
+
+function extractCalendarAttendeeObjects(message: string): string[] {
+  return extractCalendarAttendeeSegments(message).flatMap((segment) => {
+    let withoutEmails = segment;
+    for (const email of extractAttendeeEmailCandidates(segment)) {
+      withoutEmails = withoutEmails.replace(email, ' ');
+    }
+    return isSpecificPersonLabel(withoutEmails) ? [withoutEmails] : [];
+  });
+}
+
+function extractCalendarAttendeeSegments(message: string): string[] {
+  const patterns = [
+    /\b(?:invite|add)\s+(.+?)\s+(?:to|into)\b/giu,
+    /\b(?:zaproś|zapros|dodaj)\s+(.+?)\s+(?:do|na)\b/giu,
+  ];
+  return patterns.flatMap((pattern) =>
+    [...message.matchAll(pattern)].map((match) => match[1] as string)
+  );
+}
+
+function isSpecificPersonLabel(value: string): boolean {
+  const tokens = personTokens(value);
+  if (tokens.length === 0 || tokens.length > 6) return false;
+  const genericTokens = new Set([
+    'attendee',
+    'a',
+    'an',
+    'guest',
+    'her',
+    'him',
+    'my',
+    'participant',
+    'person',
+    'someone',
+    'the',
+    'this',
+    'them',
+    'uczestnik',
+    'uczestnika',
+    'uczestniczke',
+  ]);
+  return tokens.every((token) => token.length >= 2 && !genericTokens.has(token));
+}
+
+function isExactPersonLabelMatch(attendeeObject: string, person: string): boolean {
+  const attendeeTokens = personTokens(attendeeObject);
+  const personLabelTokens = personTokens(person);
+  if (personLabelTokens.length === 0 || personLabelTokens.length > attendeeTokens.length) return false;
+
+  return attendeeTokens.some((_token, startIndex) =>
+    personLabelTokens.every(
+      (personToken, offset) => attendeeTokens[startIndex + offset] === personToken
+    )
+  );
+}
+
+function sharesPersonToken(attendeeObject: string, preferenceText: string): boolean {
+  const attendeeTokens = personTokens(attendeeObject).filter((token) => token.length >= 3);
+  const preferenceTokens = new Set(personTokens(preferenceText));
+  return attendeeTokens.some((token) => preferenceTokens.has(token));
+}
+
+function personTokens(value: string): string[] {
+  return value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLocaleLowerCase('en-US')
+    .match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function containsAssociatedAttendeeEmailSignal(message: string): boolean {
+  const emails = extractAttendeeEmailCandidates(message).filter(isValidCalendarAttendeeEmail);
+  if (emails.length === 0) return false;
+  const attendeeSegmentsWithEmail = extractCalendarAttendeeSegments(message).filter((segment) =>
+    extractAttendeeEmailCandidates(segment).some(isValidCalendarAttendeeEmail)
+  );
+  if (
+    attendeeSegmentsWithEmail.some(
+      (segment) =>
+        extractAttendeeEmailCandidates(segment).filter(isValidCalendarAttendeeEmail).length !== 1
+    )
+  ) {
+    return false;
+  }
+  if (attendeeSegmentsWithEmail.length > 0) {
+    return true;
+  }
+  if (emails.length !== 1) return false;
+
+  let withoutEmails = message;
+  for (const email of emails) {
+    withoutEmails = withoutEmails.replace(email, ' ');
+  }
+  if (withoutEmails.replace(/[\s.,;:!?()[\]{}"'“”„-]+/gu, '') === '') return true;
+  return /\b(?:adres(?:\s+e-?mail)?|e-?mail|uses?|używa|uzywa)\b/iu.test(message);
+}
+
+function isAmbiguousCalendarAttendeeSegment(segment: string): boolean {
+  let withoutEmails = segment;
+  for (const email of extractAttendeeEmailCandidates(segment)) {
+    withoutEmails = withoutEmails.replace(email, ' ');
+  }
+  return /\b(?:and|or|i|lub|oraz)\b|[,&;/]/iu.test(withoutEmails);
+}
+
+function extractAttendeeEmailCandidates(message: string): string[] {
+  return (
+    message
+      .normalize('NFKC')
+      .match(
+        /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,63}(?![\p{L}\p{N}_%+-]|\.[\p{L}\p{N}])/giu
+      ) ?? []
+  );
+}
+
+function isValidCalendarAttendeeEmail(email: string): boolean {
+  return calendarUpdateEventAttendeesRequestSchema.safeParse({
+    userId: 'intex-agent-email-precondition',
+    calendarId: 'primary',
+    expectedEtag: 'email-precondition',
+    attendeesToAdd: [{ email }],
+  }).success;
 }
 
 function applyMissingCalendarDateClarification(

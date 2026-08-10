@@ -671,7 +671,7 @@ describe('handleIncomingMessage', () => {
     await handleIncomingMessage(
       message({
         messageId: 'wamid-calendar-update-request',
-        text: 'Zaproś Patryka na Bagrową jutro.',
+        text: 'Zaproś Patryka (patryk@example.com) na Bagrową jutro.',
       }),
       deps(repo, runner, replies, { now: () => NOW }, async () =>
         ok({
