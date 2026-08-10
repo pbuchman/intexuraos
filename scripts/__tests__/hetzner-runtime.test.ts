@@ -850,7 +850,13 @@ describe('Hetzner web asset deployment', () => {
     expect(readinessFlow).toContain('/api/intex-agent/health');
     expect(backendReadinessFlow).toContain('verify-matrix-corpus-runtime.sh');
     expect(backendReadinessFlow).toContain('/api/intex-agent/health');
-    expect(backendReadinessFlow).toContain('verify-semantic-health.mjs');
+    expect(backendReadinessFlow.match(/verify_semantic_health/g)).toHaveLength(2);
+    expect(backendReadinessFlow).not.toContain('http://127.0.0.1/api/');
+    expect(
+      backendReadinessFlow.match(/--resolve "\$\{PUBLIC_DOMAIN\}:443:\$\{HETZNER_PROD_HOST\}"/g)
+    ).toHaveLength(2);
+    expect(backendReadinessFlow).toContain('"direct-origin WhatsApp"');
+    expect(backendReadinessFlow).toContain('"direct-origin Intex Agent"');
     expect(readinessFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');
     expect(attestationFlow.match(/\/deployment\.json/g)).toHaveLength(2);
     expect(attestationFlow).toContain('--resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"');

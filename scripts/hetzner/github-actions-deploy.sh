@@ -557,13 +557,17 @@ verify_semantic_health() {
 }
 
 verify_backend_readiness() {
-  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/whatsapp/health | node scripts/hetzner/verify-semantic-health.mjs whatsapp-service firestore'
-  run_remote 'curl --fail --silent --show-error --max-time 10 http://127.0.0.1/api/intex-agent/health | node scripts/hetzner/verify-semantic-health.mjs intex-agent firestore'
   run_remote 'INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/verify-matrix-corpus-runtime.sh'
   verify_semantic_health \
     "direct-origin WhatsApp" \
     "https://${PUBLIC_DOMAIN}/api/whatsapp/health" \
     "whatsapp-service" \
+    "firestore" \
+    --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"
+  verify_semantic_health \
+    "direct-origin Intex Agent" \
+    "https://${PUBLIC_DOMAIN}/api/intex-agent/health" \
+    "intex-agent" \
     "firestore" \
     --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"
   verify_code_agent_readiness
