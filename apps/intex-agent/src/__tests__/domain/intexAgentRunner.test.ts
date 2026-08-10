@@ -6628,6 +6628,12 @@ describe('createIntexAgentRunner', () => {
           truncated: false,
         },
       },
+      {
+        label: 'the same address repeated with different casing',
+        message:
+          'Invite Jakub (jakub@example.com JAKUB@EXAMPLE.COM) to the existing Bagrowa event.',
+        replyContext: undefined,
+      },
     ])('accepts a valid attendee email from $label', async ({ message, replyContext }) => {
       const client = new FakeToolCallingClient([passThroughResult]);
       const runner = createIntexAgentRunner({
@@ -6721,6 +6727,156 @@ describe('createIntexAgentRunner', () => {
         outcome: 'needs_clarification',
         missingFields: ['attendeeEmail'],
       });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('rejects conflicting attendee addresses between the request and an inbound quote', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Invite Jakub (jakub@example.com) to the existing Bagrowa event.',
+          replyContext: {
+            replyToWamid: 'wamid-conflicting-email',
+            source: 'inbound_user_message',
+            text: 'anna@example.com',
+            truncated: false,
+          },
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+      });
+      expect(client.calls).toHaveLength(0);
+    });
+
+    it('rejects a second active email outside the addressed attendee segment', async () => {
+      let queryCalls = 0;
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => {
+            queryCalls += 1;
+            return JSON.stringify(calendarUpdateLookupResult());
+          },
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message:
+            'Invite Jakub (jakub@example.com) to the existing Bagrowa event. Email: anna@example.com.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+        candidateIntents: ['update_calendar_event'],
+      });
+      expect(client.calls).toHaveLength(0);
+      expect(queryCalls).toBe(0);
+    });
+
+    it('accepts one addressed attendee segment as an active email-clarification answer', async () => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Which event?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [
+          event('user_message', {
+            text: 'Invite Jakub to the existing Bagrowa event.',
+          }),
+          event('clarification_requested', {
+            message: "What is the attendee's email address?",
+            blockerReason: 'missing_required_details',
+            missingFields: ['attendeeEmail'],
+            candidateIntents: ['update_calendar_event'],
+          }),
+          event('assistant_message', { text: "What is the attendee's email address?" }),
+        ],
+        message: 'Invite Jakub (jakub@example.com) to the existing Bagrowa event.',
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
+    it('rejects a quoted address when the active attendee segment contains multiple addresses', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification' as const,
+              question: 'Which event?',
+              blockerReason: 'missing_required_details' as const,
+              missingFields: ['event'],
+              candidateIntents: ['update_calendar_event' as const],
+            };
+          },
+        },
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: 'Invite Jakub to the existing Bagrowa event.',
+            }),
+            event('clarification_requested', {
+              message: "What is the attendee's email address?",
+              blockerReason: 'missing_required_details',
+              missingFields: ['attendeeEmail'],
+              candidateIntents: ['update_calendar_event'],
+            }),
+            event('assistant_message', { text: "What is the attendee's email address?" }),
+          ],
+          message:
+            'Invite Jakub (jakub.one@example.com jakub.two@example.com) to the existing Bagrowa event.',
+          replyContext: {
+            replyToWamid: 'wamid-authoritative-email',
+            source: 'inbound_user_message',
+            text: 'jakub.confirmed@example.com',
+            truncated: false,
+          },
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['attendeeEmail'],
+        candidateIntents: ['update_calendar_event'],
+      });
+
       expect(client.calls).toHaveLength(0);
     });
 
@@ -7202,7 +7358,7 @@ describe('createIntexAgentRunner', () => {
       expect(client.calls).toHaveLength(0);
     });
 
-    it('does not carry a stale email across a confirmation boundary', async () => {
+    it('does not carry a stale email across a rejected confirmation boundary', async () => {
       const client = new FakeToolCallingClient([]);
       const runner = createIntexAgentRunner({
         client,
@@ -7227,6 +7383,10 @@ describe('createIntexAgentRunner', () => {
             event('confirmation_requested', {
               toolName: 'update_calendar_event',
               toolArgs: {},
+            }),
+            event('confirmation_resolved', {
+              toolName: 'update_calendar_event',
+              accepted: false,
             }),
             event('assistant_message', { text: 'Confirm this update.' }),
           ],
@@ -7981,6 +8141,68 @@ describe('createIntexAgentRunner', () => {
     });
   });
 
+  it('uses the authoritative attendee email when the model proposes a different address', async () => {
+    const selectionGateCalls: {
+      toolName: IntexAgentToolName;
+      args: Record<string, unknown>;
+    }[] = [];
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        { toolName: 'query_calendar_events', args: calendarUpdateQueryArgs() },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            attendeesToAdd: ['someone-else@example.com'],
+          },
+        },
+      ],
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready.',
+            toolName: 'update_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(calendarUpdateLookupResult()),
+      }),
+      toolSelectionGate: async ({ toolName, args }) => {
+        selectionGateCalls.push({ toolName, args: { ...args } });
+        return {
+          decision: 'allow',
+          metadata: { turnIndex: 0, ordinal: selectionGateCalls.length },
+        };
+      },
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'update_calendar_event',
+      toolArgs: { attendeesToAdd: ['patryk@example.com'] },
+    });
+    const updateGateCalls = selectionGateCalls.filter(
+      (call) => call.toolName === 'update_calendar_event'
+    );
+    expect(updateGateCalls).toHaveLength(1);
+    expect(updateGateCalls[0]?.args['attendeesToAdd']).toEqual(['patryk@example.com']);
+  });
+
   it.each([
     { label: 'an array snapshot', start: [] },
     { label: 'a snapshot without a date', start: {} },
@@ -8300,6 +8522,372 @@ describe('createIntexAgentRunner', () => {
       missingFields: ['event'],
       candidateIntents: ['update_calendar_event'],
       suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+    });
+  });
+
+  it.each([
+    {
+      label: 'completed',
+      runnerResult: ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Zaktualizowałem wydarzenie.',
+          toolName: 'query_calendar_events',
+          summary: 'Fałszywe podsumowanie lookup-only.',
+        })
+      ),
+    },
+    {
+      label: 'no_action',
+      runnerResult: ok(toolResult({ outcome: 'no_action', reply: 'Nic nie zmieniłem.' })),
+    },
+    {
+      label: 'unsupported',
+      runnerResult: ok(
+        toolResult({
+          outcome: 'unsupported',
+          reply: 'Nie mogę tego zrobić.',
+          blockerReason: 'unsupported_action',
+          suggestedNextStep: 'Spróbuj inaczej.',
+        })
+      ),
+    },
+    {
+      label: 'needs_clarification',
+      runnerResult: ok(
+        toolResult({
+          outcome: 'needs_clarification',
+          reply: 'Które wydarzenie masz na myśli?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['event'],
+          candidateIntents: ['update_calendar_event'],
+          suggestedNextStep: 'Wskaż wydarzenie.',
+        })
+      ),
+    },
+    {
+      label: 'invalid',
+      runnerResult: ok({
+        content: 'malformed runner output',
+        toolCallsMade: 1,
+        iterationCount: 2,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+      }),
+    },
+  ])(
+    'prepares a deterministic attendee-update confirmation after a complete unique lookup and $label runner output',
+    async ({ runnerResult }) => {
+      const queryResult = calendarUpdateLookupResult();
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: calendarUpdateQueryArgs(),
+        },
+        [runnerResult]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(queryResult),
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', {
+              text: 'Invite Anna (stale-anna@example.com) to an existing event.',
+            }),
+            event('confirmation_requested', { toolName: 'update_calendar_event' }),
+            event('confirmation_resolved', {
+              toolName: 'update_calendar_event',
+              accepted: false,
+            }),
+            event('assistant_message', { text: 'Okay, I will not run this action.' }),
+            event('user_message', {
+              text: 'Zaproś Martę Testową do istniejącego wydarzenia „Bagrowa”.',
+            }),
+            event('clarification_requested', {
+              message: 'Jaki jest adres e-mail uczestnika?',
+              blockerReason: 'missing_required_details',
+              missingFields: ['attendeeEmail'],
+              candidateIntents: ['update_calendar_event'],
+            }),
+            event('assistant_message', { text: 'Jaki jest adres e-mail uczestnika?' }),
+          ],
+          message: 'Jej adres e-mail to marta@example.com.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_confirmation',
+        reply: [
+          'Czy dodać uczestników do istniejącego wydarzenia w kalendarzu?',
+          '',
+          'Tytuł: Bagrowa',
+          'Początek: 25 czerwca 2026, 18:00',
+          'Koniec: 25 czerwca 2026, 20:30',
+          'Uczestnicy: marta@example.com',
+          'Pozostałe dane wydarzenia pozostaną bez zmian.',
+        ].join('\n'),
+        toolName: 'update_calendar_event',
+        toolArgs: {
+          eventId: 'event-bagrowa',
+          eventSummary: 'Bagrowa',
+          attendeesToAdd: ['marta@example.com'],
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
+          eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
+        },
+        supportingToolCompletions: [
+          {
+            toolName: 'query_calendar_events',
+            result: queryResult,
+          },
+        ],
+      });
+    }
+  );
+
+  it('uses one exact canonical attendee-email preference for a unique lookup-only update', async () => {
+    const queryResult = calendarUpdateLookupResult();
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'query_calendar_events', args: calendarUpdateQueryArgs() },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Nothing changed.' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+      userPreferences:
+        'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub.saved@example.com."',
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Invite Jakub to the Bagrowa event.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'update_calendar_event',
+      toolArgs: { attendeesToAdd: ['jakub.saved@example.com'] },
+    });
+  });
+
+  it('routes a synthesized attendee update through the selection gate', async () => {
+    const selectedTools: IntexAgentToolName[] = [];
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'query_calendar_events', args: calendarUpdateQueryArgs() },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Nothing changed.' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(calendarUpdateLookupResult()),
+      }),
+      toolSelectionGate: async ({ toolName }) => {
+        selectedTools.push(toolName);
+        return toolName === 'update_calendar_event'
+          ? {
+              decision: 'reject',
+              category: 'safety_stop',
+              code: 'SYNTHETIC_UPDATE_REJECTED',
+              metadata: { turnIndex: 0, ordinal: 2 },
+            }
+          : { decision: 'allow', metadata: { turnIndex: 0, ordinal: 1 } };
+      },
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Invite Patryk (patryk@example.com) to the Bagrowa event.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'tool_selection_rejected',
+      toolName: 'update_calendar_event',
+      code: 'SYNTHETIC_UPDATE_REJECTED',
+    });
+    expect(selectedTools).toEqual(['query_calendar_events', 'update_calendar_event']);
+  });
+
+  it('surfaces a synthesized attendee-update selection-gate failure', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'query_calendar_events', args: calendarUpdateQueryArgs() },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'The attendee was added successfully.',
+            toolName: 'update_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(calendarUpdateLookupResult()),
+      }),
+      toolSelectionGate: async ({ toolName }) => {
+        if (toolName === 'update_calendar_event') {
+          throw new Error('Synthetic selection gate failed');
+        }
+        return { decision: 'allow', metadata: { turnIndex: 0, ordinal: 1 } };
+      },
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Invite Patryk (patryk@example.com) to the Bagrowa event.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'tool_failed',
+      toolName: 'update_calendar_event',
+      error: 'Synthetic selection gate failed',
+    });
+    expect(result.reply).toBe(
+      'I could not execute this action: Synthetic selection gate failed. Please try again later.'
+    );
+    expect(result.reply).not.toContain('successfully');
+  });
+
+  it.each([
+    {
+      label: 'zero matches',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({ count: 0, events: [] }),
+    },
+    {
+      label: 'multiple matches',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({
+        count: 2,
+        events: [
+          calendarUpdateLookupEvent({ id: 'event-bagrowa-1' }),
+          calendarUpdateLookupEvent({ id: 'event-bagrowa-2' }),
+        ],
+      }),
+    },
+    {
+      label: 'a truncated result',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({ truncated: true }),
+    },
+    {
+      label: 'an incomplete snapshot',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({
+        events: [calendarUpdateLookupEvent({ etag: '' })],
+      }),
+    },
+    {
+      label: 'a syntactically malformed date-time snapshot',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({
+        events: [calendarUpdateLookupEvent({ start: { dateTime: 'not-a-date' } })],
+      }),
+    },
+    {
+      label: 'an invalid snapshot time zone',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({
+        events: [
+          calendarUpdateLookupEvent({
+            start: { dateTime: '2026-06-25T18:00:00+02:00', timeZone: 'Mars/Olympus' },
+          }),
+        ],
+      }),
+    },
+    {
+      label: 'a query absent from the active request',
+      queryArgs: { ...calendarUpdateQueryArgs(), query: 'Dentist' },
+      queryResult: calendarUpdateLookupResult({
+        events: [calendarUpdateLookupEvent({ summary: 'Dentist' })],
+      }),
+    },
+    {
+      label: 'a query different from the matched summary',
+      queryArgs: calendarUpdateQueryArgs(),
+      queryResult: calendarUpdateLookupResult({
+        events: [calendarUpdateLookupEvent({ summary: 'Dentist' })],
+      }),
+    },
+    {
+      label: 'a lookup without a query',
+      queryArgs: {
+        mode: 'list',
+        timeMin: '2026-06-25T00:00:00+02:00',
+        timeMax: '2026-06-26T00:00:00+02:00',
+      },
+      queryResult: calendarUpdateLookupResult(),
+    },
+    {
+      label: 'an event from a calendar different from the requested calendar',
+      queryArgs: { ...calendarUpdateQueryArgs(), calendarId: 'team@example.com' },
+      queryResult: calendarUpdateLookupResult(),
+    },
+    {
+      label: 'a non-primary calendar',
+      queryArgs: { ...calendarUpdateQueryArgs(), calendarId: 'team@example.com' },
+      queryResult: calendarUpdateLookupResult({
+        events: [calendarUpdateLookupEvent({ calendarId: 'team@example.com' })],
+      }),
+    },
+  ])('keeps a lookup-only calendar update closed for $label', async ({ queryArgs, queryResult }) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: queryArgs,
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Zaktualizowałem wydarzenie.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
     });
   });
 
@@ -10962,6 +11550,46 @@ describe('createIntexAgentRunner', () => {
     expect(repairClient.calls).toHaveLength(0);
   });
 });
+
+function calendarUpdateQueryArgs(): Record<string, unknown> {
+  return {
+    mode: 'list',
+    timeMin: '2026-06-25T00:00:00+02:00',
+    timeMax: '2026-06-26T00:00:00+02:00',
+    query: 'Bagrowa',
+  };
+}
+
+function calendarUpdateLookupEvent(
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  return {
+    id: 'event-bagrowa',
+    etag: '"event-bagrowa-v1"',
+    summary: 'Bagrowa',
+    calendarId: 'primary',
+    start: { dateTime: '2026-06-25T18:00:00+02:00' },
+    end: { dateTime: '2026-06-25T20:30:00+02:00' },
+    ...overrides,
+  };
+}
+
+function calendarUpdateLookupResult(
+  overrides: Partial<{
+    count: number;
+    truncated: boolean;
+    events: Record<string, unknown>[];
+  }> = {}
+): Record<string, unknown> {
+  return {
+    status: 'completed',
+    mode: 'list',
+    count: 1,
+    truncated: false,
+    events: [calendarUpdateLookupEvent()],
+    ...overrides,
+  };
+}
 
 function toolResult(content: Record<string, unknown>): ToolCallingResult {
   return {
