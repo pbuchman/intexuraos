@@ -108,6 +108,16 @@ interface ClassifierUnsupportedReplyMap {
   [key: string]: string | undefined;
 }
 
+interface CalendarQueryFallbackText {
+  calendarEvents: string;
+  empty: string;
+  matching: string;
+  requestedPeriod: string;
+  atLeast: string;
+  location: string;
+  locale: string;
+}
+
 const GENERIC_EXECUTION_FAILURE_PREFIX: LocalizedText = {
   en: 'I could not execute this action: ',
   pl: 'Nie udało się wykonać tej akcji: ',
@@ -117,6 +127,27 @@ const GENERIC_EXECUTION_FAILURE_SUFFIX: LocalizedText = {
   en: '. Please try again later.',
   pl: '. Spróbuj ponownie później.',
 };
+
+const CALENDAR_QUERY_FALLBACK_TEXT = {
+  en: {
+    calendarEvents: 'Calendar events',
+    empty: 'There are no calendar events in the requested period.',
+    matching: 'matching',
+    requestedPeriod: 'in the requested period',
+    atLeast: 'at least',
+    location: 'location',
+    locale: 'en-GB',
+  },
+  pl: {
+    calendarEvents: 'Wydarzenia w kalendarzu',
+    empty: 'Brak wydarzeń w kalendarzu w podanym okresie.',
+    matching: 'pasujące do',
+    requestedPeriod: 'w podanym okresie',
+    atLeast: 'co najmniej',
+    location: 'miejsce',
+    locale: 'pl-PL',
+  },
+} satisfies Record<IntexAgentReplyLanguage, CalendarQueryFallbackText>;
 
 const EXTERNAL_SAVE_NOT_CONFIGURED_REPLIES: LocalizedText = {
   en: 'No external system is configured for this message, so I cannot process it. Configure external save in Intex Agent preferences and send it again.',
@@ -1810,6 +1841,24 @@ async function parseRunnerContent(
   }
 
   if (parsed === null) {
+    if (toolExecution?.toolName === 'query_calendar_events') {
+      const fallbackReply = renderCalendarQueryFallbackReply(
+        toolExecution.result,
+        replyLanguage,
+        runtimeTimeZone
+      );
+      if (fallbackReply !== undefined) {
+        return buildCompletedToolExecutionResult(
+          toolExecution.toolName,
+          toolExecution.result,
+          fallbackReply,
+          undefined,
+          webAppUrl,
+          replyLanguage,
+          toolExecution.selectionMetadata
+        );
+      }
+    }
     return fallbackClarificationResult(
       replyLanguage,
       fallbackReasonForInvalidRunnerContent(input.content)
@@ -2615,6 +2664,114 @@ function findPreferenceText(userPreferences: string | null, itemId: string | und
   } catch {
     return quotedText;
   }
+}
+
+function renderCalendarQueryFallbackReply(
+  result: Record<string, unknown> | undefined,
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
+): string | undefined {
+  if (result?.['status'] !== 'completed') return undefined;
+  const count = result['count'];
+  if (!Number.isSafeInteger(count) || (count as number) < 0 || (count as number) > 2500) {
+    return undefined;
+  }
+
+  if (result['mode'] === 'count') {
+    return renderCalendarCountFallback(
+      count as number,
+      readString(result, 'query'),
+      result['truncated'] === true,
+      replyLanguage
+    );
+  }
+  if (result['mode'] !== 'list') return undefined;
+
+  const events = result['events'];
+  if (!Array.isArray(events) || events.length !== count) return undefined;
+  const text = CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage];
+  if (events.length === 0) return text.empty;
+
+  const renderedEvents = events.map((event) =>
+    renderCalendarEventFallback(event, replyLanguage, runtimeTimeZone)
+  );
+  if (renderedEvents.some((event) => event === undefined)) return undefined;
+  const header = `${text.calendarEvents} (${String(count)}):`;
+  return [header, ...(renderedEvents as string[])].join('\n');
+}
+
+function renderCalendarCountFallback(
+  count: number,
+  query: string | undefined,
+  truncated: boolean,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  const text = CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage];
+  const value = truncated ? `${text.atLeast} ${String(count)}` : String(count);
+  const queryPhrase = query === undefined ? '' : ` ${text.matching} “${query}”`;
+  return `${text.calendarEvents}${queryPhrase} ${text.requestedPeriod}: ${value}.`;
+}
+
+function renderCalendarEventFallback(
+  value: unknown,
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
+): string | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const event = value as Record<string, unknown>;
+  const summary = readString(event, 'summary');
+  const start = readRecord(event, 'start');
+  if (summary === undefined || start === undefined) return undefined;
+  const renderedStart = renderCalendarEventStart(start, replyLanguage, runtimeTimeZone);
+  if (renderedStart === undefined) return undefined;
+  const location = readString(event, 'location');
+  const renderedLocation =
+    location === undefined
+      ? ''
+      : ` (${CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage].location}: ${location})`;
+  return `- ${renderedStart} — ${summary}${renderedLocation}`;
+}
+
+function renderCalendarEventStart(
+  start: Record<string, unknown>,
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
+): string | undefined {
+  const dateTime = readString(start, 'dateTime');
+  if (dateTime !== undefined) {
+    if (Number.isNaN(new Date(dateTime).getTime())) return undefined;
+    return formatCalendarConfirmationDateTime(
+      dateTime,
+      readString(start, 'timeZone'),
+      runtimeTimeZone,
+      replyLanguage
+    );
+  }
+
+  const date = readString(start, 'date');
+  if (date === undefined || !isValidCalendarDate(date)) return undefined;
+  return new Intl.DateTimeFormat(CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage].locale, {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(`${date}T00:00:00.000Z`));
+}
+
+function readRecord(
+  record: Record<string, unknown>,
+  key: string
+): Record<string, unknown> | undefined {
+  const value = record[key];
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function isValidCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const instant = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(instant.getTime()) && instant.toISOString().slice(0, 10) === value;
 }
 
 function buildCompletedReply(
