@@ -26,8 +26,8 @@ The machine-readable classification is
 | File | Scope |
 | --- | --- |
 | `config/environments/common.json` | Shared dev and production values |
-| `config/environments/dev.json` | Dev-only overrides |
-| `config/environments/prod.json` | Production-only overrides |
+| `config/environments/dev.json` | Dev-only values, including the loopback Matrix adapter URL |
+| `config/environments/prod.json` | Production-only values, including the externally reachable Matrix adapter URL |
 | `config/environments/policy.json` | Exact names, scopes, and migration rollback policy |
 
 Render and validate without exposing any Secret Manager value:

@@ -19,7 +19,6 @@
   "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION": "home-dev-20260721-v1",
   "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION": "home-dev-20260721-v1",
   "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY": "{\"crv\":\"Ed25519\",\"kid\":\"home-dev-20260721-v1\",\"kty\":\"OKP\",\"x\":\"qsFYk-7e9lazdbAv069B3-tMyW8FQ7JtiBzpyf5pttE\"}",
-  "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL": "https://dev.intexuraos.cloud/api/matrix-outbound",
   "INTEXURAOS_REPOSITORY_URL": "https://github.com/pbuchman/intexuraos.git",
   "INTEXURAOS_SENTRY_DSN": "https://929d1ffdc984da036e1200d3e9fa0a54@errors.intexuraos.cloud/1",
   "INTEXURAOS_SENTRY_DSN_WEB": "https://9ee242c608788ec16f034edb1c810d29@errors.intexuraos.cloud/2"

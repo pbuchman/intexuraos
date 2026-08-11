@@ -130,7 +130,7 @@ For outbound Matrix delivery, also mount:
 4. Copy the displayed `sourceAccountId` into the Home Dev adapter configuration as `INTEXURAOS_SOURCE_ACCOUNT_ID`.
 5. Add the same `sourceAccountId` to `MATRIX_OUTBOUND_TARGETS_FILE` with an `intex_agent` room mapping that points at the WhatsApp/Intex Agent portal room.
 6. Generate and mount `MATRIX_OUTBOUND_AUTH_TOKEN_FILE` for the trusted backend caller that will use the outbound adapter endpoints.
-7. Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` in `config/environments/common.json`. The value must be a base URL that `whatsapp-service` on the Hetzner host can reach, such as an HTTPS endpoint on the Matrix host or an explicitly provisioned tunnel endpoint.
+7. Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` separately in `dev.json` and `prod.json`. Home-dev uses the loopback adapter on port 8099; production must use a base URL that `whatsapp-service` on the Hetzner host can reach, such as an HTTPS endpoint on the Matrix host or an explicitly provisioned tunnel endpoint.
 8. Store `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN` in Secret Manager with the same bearer token mounted in `MATRIX_OUTBOUND_AUTH_TOKEN_FILE`.
 9. Keep Matrix tokens, WhatsApp bridge state, `.env`, and Google credential JSON out of Git.
 
@@ -159,8 +159,8 @@ The adapter also exposes adapter-local outbound routes for scheduled delivery:
 
 Both require `Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>`.
 
-Hetzner production renders `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` from
-versioned configuration when `scripts/hetzner/load-secrets.sh` writes
+Hetzner production renders `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` from the
+production overlay in versioned configuration when `scripts/hetzner/load-secrets.sh` writes
 `/etc/intexuraos/.env.prod`; only the adjacent adapter auth token comes from
 Secret Manager. Do not point the URL at `localhost` unless an operator has
 explicitly provisioned a localhost tunnel on the Hetzner host that forwards to

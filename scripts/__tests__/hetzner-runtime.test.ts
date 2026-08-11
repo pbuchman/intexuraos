@@ -2246,8 +2246,8 @@ describe('Hetzner secret loader', () => {
   it('writes private Matrix outbound adapter config for Hetzner prod', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
-    const commonConfig = JSON.parse(
-      readRequired(resolve(repoRoot, 'config/environments/common.json'))
+    const prodConfig = JSON.parse(
+      readRequired(resolve(repoRoot, 'config/environments/prod.json'))
     ) as Record<string, string>;
     const cloudRunExcludedSecretsSection =
       terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
@@ -2256,7 +2256,7 @@ describe('Hetzner secret loader', () => {
     );
 
     expect(script).not.toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
-    expect(commonConfig['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toBeDefined();
+    expect(prodConfig['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toMatch(/^https:\/\//u);
     expect(script).not.toContain(
       'write_env_line "${output_path}" "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL" "http://localhost:8099"'
     );
@@ -2274,7 +2274,7 @@ describe('Hetzner secret loader', () => {
       '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",'
     );
     expect(setupDoc).toContain(
-      'Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` in `config/environments/common.json`'
+      'Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` separately in `dev.json` and `prod.json`'
     );
     expect(setupDoc).toContain('Do not point the URL at `localhost`');
   });

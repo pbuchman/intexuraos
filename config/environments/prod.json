@@ -1,1 +1,3 @@
-{}
+{
+  "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL": "https://dev.intexuraos.cloud/api/matrix-outbound"
+}

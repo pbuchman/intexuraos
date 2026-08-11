@@ -56,8 +56,13 @@ export function loadRuntimePolicy(options = {}) {
     'policy sensitive config allowlist'
   );
 
-  const configNames = [...scopes.common, ...scopes.dev, ...scopes.prod];
-  assertUnique(configNames, 'runtime config policy scopes');
+  const commonSet = new Set(scopes.common);
+  for (const name of [...scopes.dev, ...scopes.prod]) {
+    if (commonSet.has(name)) {
+      throw configError(`environment-specific config is also common: ${name}`);
+    }
+  }
+  const configNames = [...new Set([...scopes.common, ...scopes.dev, ...scopes.prod])];
 
   const configSet = new Set(configNames);
   const secretManagerSet = new Set(secretManagerNames);

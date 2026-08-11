@@ -38,18 +38,24 @@ const COMMON_CONFIG_NAMES = [
   'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
-  'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
   'INTEXURAOS_REPOSITORY_URL',
   'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_SENTRY_DSN_WEB',
 ] as const;
 
-const DEV_CONFIG_NAMES = ['INTEXURAOS_SENTRY_DSN_DEV'] as const;
+const DEV_CONFIG_NAMES = [
+  'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
+  'INTEXURAOS_SENTRY_DSN_DEV',
+] as const;
+const PROD_CONFIG_NAMES = ['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] as const;
 const DELETE_ONLY_NAMES = ['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'] as const;
 const MIGRATION_ROLLBACK_SECRET_NAMES = [
-  ...COMMON_CONFIG_NAMES,
-  ...DEV_CONFIG_NAMES,
-  ...DELETE_ONLY_NAMES,
+  ...new Set([
+    ...COMMON_CONFIG_NAMES,
+    ...DEV_CONFIG_NAMES,
+    ...PROD_CONFIG_NAMES,
+    ...DELETE_ONLY_NAMES,
+  ]),
 ].sort();
 
 afterEach(() => {
@@ -59,26 +65,32 @@ afterEach(() => {
 });
 
 describe('versioned runtime configuration', () => {
-  it('loads the exact 24 common values plus the dev-only Sentry DSN', () => {
-    const common = loadRuntimeConfig({ environment: 'prod', configRoot });
+  it('loads 23 common values plus environment-specific Matrix URLs and the dev Sentry DSN', () => {
+    const prod = loadRuntimeConfig({ environment: 'prod', configRoot });
     const dev = loadRuntimeConfig({ environment: 'dev', configRoot });
 
-    expect(Object.keys(common).sort()).toEqual([...COMMON_CONFIG_NAMES].sort());
+    expect(Object.keys(prod).sort()).toEqual([...COMMON_CONFIG_NAMES, ...PROD_CONFIG_NAMES].sort());
     expect(Object.keys(dev).sort()).toEqual([...COMMON_CONFIG_NAMES, ...DEV_CONFIG_NAMES].sort());
-    expect(Object.values(common).every((value) => typeof value === 'string' && value !== '')).toBe(
+    expect(Object.values(prod).every((value) => typeof value === 'string' && value !== '')).toBe(
       true
     );
     expect(Object.values(dev).every((value) => typeof value === 'string' && value !== '')).toBe(
       true
     );
-    expect(Object.hasOwn(common, 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI')).toBe(false);
+    expect(Object.hasOwn(prod, 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI')).toBe(false);
     expect(Object.hasOwn(dev, 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI')).toBe(false);
+    expect(dev['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toBe('http://127.0.0.1:8099');
+    expect(prod['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toBe(
+      'https://dev.intexuraos.cloud/api/matrix-outbound'
+    );
   });
 
   it('allows exactly one temporary config-vs-Secret-Manager overlap during PR1', () => {
     const policy = loadRuntimePolicy({ configRoot });
     const validation = validateRuntimeConfig({ environment: 'dev', configRoot });
-    const configNames = [...policy.scopes.common, ...policy.scopes.dev, ...policy.scopes.prod];
+    const configNames = [
+      ...new Set([...policy.scopes.common, ...policy.scopes.dev, ...policy.scopes.prod]),
+    ];
     const overlap = configNames.filter((name) => policy.secretManagerNames.includes(name)).sort();
 
     expect(validation.valid).toBe(true);
@@ -215,9 +227,23 @@ function makeFixture(): string {
   );
   writeFileSync(
     resolve(directory, 'dev.json'),
-    `${JSON.stringify({ INTEXURAOS_SENTRY_DSN_DEV: 'https://dev.example.invalid/1' }, null, 2)}\n`
+    `${JSON.stringify(
+      {
+        INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL: 'http://127.0.0.1:8099',
+        INTEXURAOS_SENTRY_DSN_DEV: 'https://dev.example.invalid/1',
+      },
+      null,
+      2
+    )}\n`
   );
-  writeFileSync(resolve(directory, 'prod.json'), '{}\n');
+  writeFileSync(
+    resolve(directory, 'prod.json'),
+    `${JSON.stringify(
+      { INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL: 'https://matrix.example.invalid' },
+      null,
+      2
+    )}\n`
+  );
   return directory;
 }
 
@@ -231,7 +257,6 @@ function makeSyntheticCommonConfig(): Record<string, unknown> {
   config['INTEXURAOS_FIREBASE_AUTH_DOMAIN'] = 'project.firebaseapp.com';
   config['INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL'] = 'https://grafana.example.invalid';
   config['INTEXURAOS_GRAFANA_CLOUD_LOKI_URL'] = 'https://loki.example.invalid/push';
-  config['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'https://matrix.example.invalid';
   config['INTEXURAOS_REPOSITORY_URL'] = 'https://github.com/example/repository.git';
   config['INTEXURAOS_SENTRY_DSN'] = 'https://public@example.invalid/1';
   config['INTEXURAOS_SENTRY_DSN_WEB'] = 'https://public@example.invalid/2';
