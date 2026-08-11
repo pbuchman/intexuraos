@@ -1929,7 +1929,7 @@ describe('Hetzner secret loader', () => {
     ).toEqual([]);
   });
 
-  it('cuts transcription over to versioned config while retaining the dev Sentry rollback secret', () => {
+  it('uses versioned dev Sentry config after removing the rollback secret', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
     const retainedGcpTerraform = readRequired(terraformHetznerRetainedGcpPath);
@@ -1937,14 +1937,6 @@ describe('Hetzner secret loader', () => {
       terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
     const cloudRunExcludedSecretsSection =
       terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
-    const devTranscriptionIamStart = terraform.indexOf(
-      'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {'
-    );
-    const devTranscriptionIamEnd = terraform.indexOf('\n}\n', devTranscriptionIamStart);
-    const devTranscriptionIamSection = terraform.slice(
-      devTranscriptionIamStart,
-      devTranscriptionIamEnd
-    );
     const transcriptionModuleStart = terraform.indexOf('module "function_transcription" {');
     const transcriptionModuleEnd = terraform.indexOf(
       '\n# Push subscription that delivers audio-stored events',
@@ -1955,26 +1947,18 @@ describe('Hetzner secret loader', () => {
       transcriptionModuleEnd
     );
 
-    expect(terraform).toMatch(
+    expect(terraform).not.toMatch(
       /"INTEXURAOS_SENTRY_DSN_DEV"\s*=\s*"Sentry Data Source Name for retained dev transcription error tracking"/u
     );
-    expect(cloudRunExcludedSecretsSection).toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
+    expect(cloudRunExcludedSecretsSection).not.toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
     expect(hetznerRuntimeSecretsSection).not.toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
     expect(script).not.toContain('INTEXURAOS_SENTRY_DSN_DEV');
-    expect(retainedGcpTerraform).toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
+    expect(retainedGcpTerraform).not.toContain('"INTEXURAOS_SENTRY_DSN_DEV",');
     expect(terraform).not.toContain(
       'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn" {'
     );
-    expect(devTranscriptionIamStart).toBeGreaterThanOrEqual(0);
-    expect(devTranscriptionIamEnd).toBeGreaterThan(devTranscriptionIamStart);
-    expect(devTranscriptionIamSection).toContain(
-      'secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'
-    );
-    expect(devTranscriptionIamSection).toContain(
-      'role      = "roles/secretmanager.secretAccessor"'
-    );
-    expect(devTranscriptionIamSection).toContain(
-      'member    = "serviceAccount:${google_service_account.transcription_function.email}"'
+    expect(terraform).not.toContain(
+      'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {'
     );
     expect(transcriptionModuleStart).toBeGreaterThanOrEqual(0);
     expect(transcriptionModuleEnd).toBeGreaterThan(transcriptionModuleStart);
@@ -1987,18 +1971,19 @@ describe('Hetzner secret loader', () => {
     expect(transcriptionModuleSection).not.toContain(
       'google_secret_manager_secret_iam_member.transcription_sentry_dsn,'
     );
-    expect(transcriptionModuleSection).toContain(
+    expect(transcriptionModuleSection).not.toContain(
       'google_secret_manager_secret_iam_member.transcription_sentry_dsn_dev,'
     );
     expect(
       terraform.match(/module\.secret_manager\.secret_ids\["INTEXURAOS_SENTRY_DSN_DEV"\]/gu)
-    ).toHaveLength(1);
+    ).toBeNull();
   });
 
   it('round-trips JSON secret material through the generated dotenv file', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-secret-loader-'));
     const outputPath = resolve(directory, '.env.prod');
     const gcloudPath = resolve(directory, 'gcloud');
+    const getentPath = resolve(directory, 'getent');
     const idPath = resolve(directory, 'id');
     const installPath = resolve(directory, 'install');
     const secretValue = JSON.stringify({
@@ -2014,6 +1999,16 @@ describe('Hetzner secret loader', () => {
       writeFileSync(gcloudPath, '#!/usr/bin/env bash\nprintf \'%s\' "${MOCK_SECRET_VALUE}"\n', {
         mode: 0o755,
       });
+      writeFileSync(
+        getentPath,
+        [
+          '#!/usr/bin/env bash',
+          'set -euo pipefail',
+          '[[ "${1:-}" == "group" && "${2:-}" == "${MOCK_NGINX_GROUP}" ]]',
+          '',
+        ].join('\n'),
+        { mode: 0o755 }
+      );
       writeFileSync(
         idPath,
         [
@@ -2057,6 +2052,7 @@ describe('Hetzner secret loader', () => {
             DEPLOY_USER: 'test-deploy',
             NGINX_TOKEN_GROUP: currentGroup,
             MOCK_SECRET_VALUE: secretValue,
+            MOCK_NGINX_GROUP: currentGroup,
             PROVISIONER_SA_KEY_FILE: resolve(directory, 'missing-provisioner-key.json'),
             RUNTIME_SA_KEY_FILE: resolve(directory, 'runtime-key.json'),
             INTERNAL_AUTH_TOKEN_FILE: resolve(directory, 'internal-auth-token'),
@@ -2090,6 +2086,10 @@ describe('Hetzner secret loader', () => {
     ) as Record<string, string>;
     const hetznerRuntimeSecretsSection =
       terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
+    const secretManagerSection =
+      terraform
+        .split('module "secret_manager" {')[1]
+        ?.split('\nresource "google_secret_manager_secret" "cloudflare_dns_api_token"')[0] ?? '';
     const productionMatrixCorpusSecrets = [
       'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
       'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
@@ -2111,16 +2111,16 @@ describe('Hetzner secret loader', () => {
       (name) => !versionedMatrixConfig.includes(name)
     );
 
-    for (const secretName of productionMatrixCorpusSecrets) {
-      expect(terraform, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
-      expect(hetznerRuntimeSecretsSection, secretName).toContain(`"${secretName}",`);
-    }
     for (const secretName of secretManagerMatrixNames) {
+      expect(secretManagerSection, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
+      expect(hetznerRuntimeSecretsSection, secretName).toContain(`"${secretName}",`);
       expect(script, secretName).toContain(secretName);
     }
     for (const configName of versionedMatrixConfig) {
       expect(commonConfig[configName], configName).toBeDefined();
       expect(script, configName).not.toContain(configName);
+      expect(secretManagerSection, configName).not.toContain(`"${configName}"`);
+      expect(hetznerRuntimeSecretsSection, configName).not.toContain(`"${configName}",`);
     }
   });
 
@@ -2131,17 +2131,18 @@ describe('Hetzner secret loader', () => {
       terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
     const cloudRunExcludedSecretsSection =
       terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
+    const secretManagerSection =
+      terraform
+        .split('module "secret_manager" {')[1]
+        ?.split('\nresource "google_secret_manager_secret" "cloudflare_dns_api_token"')[0] ?? '';
     const grafanaCloudSecrets = [
       'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN',
-      'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL',
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
     ];
-    const hetznerCollectorInputs = [
+    const versionedObservabilityConfig = [
+      'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL',
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
     ];
     const versionedCollectorConfig = [
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
@@ -2152,20 +2153,19 @@ describe('Hetzner secret loader', () => {
     ) as Record<string, string>;
 
     for (const secretName of grafanaCloudSecrets) {
-      expect(terraform, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
+      expect(secretManagerSection, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
+      expect(cloudRunExcludedSecretsSection, secretName).toContain(`"${secretName}",`);
     }
-
-    for (const inputName of hetznerCollectorInputs) {
-      expect(hetznerRuntimeSecretsSection, inputName).toContain(`"${inputName}",`);
-    }
+    expect(hetznerRuntimeSecretsSection).toContain('"INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",');
     expect(script).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN');
     for (const configName of versionedCollectorConfig) {
       expect(commonConfig[configName], configName).toBeDefined();
       expect(script, configName).not.toContain(configName);
     }
-
-    for (const secretName of grafanaCloudSecrets) {
-      expect(cloudRunExcludedSecretsSection, secretName).toContain(`"${secretName}",`);
+    for (const configName of versionedObservabilityConfig) {
+      expect(secretManagerSection, configName).not.toContain(`"${configName}"`);
+      expect(hetznerRuntimeSecretsSection, configName).not.toContain(`"${configName}",`);
+      expect(cloudRunExcludedSecretsSection, configName).not.toContain(`"${configName}",`);
     }
 
     expect(hetznerRuntimeSecretsSection).not.toContain('"INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",');
@@ -2183,6 +2183,9 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('Refusing to load secrets unless INTEXURAOS_ENVIRONMENT=prod');
     expect(script).toContain('gcloud secrets versions access');
     expect(script).toContain('HETZNER_RUNTIME_SECRETS=(');
+    expect(script).toContain('POLICY_SECRET_NAMES_FILE=');
+    expect(script).toContain('validate_default_secret_names');
+    expect(script).toContain('validate_requested_secrets');
     expect(script).toContain('INTEXURAOS_SENTRY_WEBHOOK_SECRET');
     expect(script).toContain('INTEXURAOS_SENTRY_AUTOMATION_USER_ID');
     expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
@@ -2193,6 +2196,7 @@ describe('Hetzner secret loader', () => {
     expect(script).toContain('trap cleanup_temp_file EXIT');
     expect(script).toContain('GOOGLE_APPLICATION_CREDENTIALS" "${RUNTIME_SA_KEY_FILE}"');
     expect(script).toContain('printf \'%s\\n\' "${HETZNER_RUNTIME_SECRETS[@]}"');
+    expect(script).not.toContain('printf \'%s\\n\' "${REQUESTED_SECRETS[@]}"');
     expect(script).toContain('install -m 600');
     expect(script).toContain('-o "${DEPLOY_USER}" -g "${DEPLOY_USER}"');
     expect(script).toContain('install -d -m 755 "$(dirname "${OUTPUT_FILE}")"');
@@ -2249,8 +2253,14 @@ describe('Hetzner secret loader', () => {
     const prodConfig = JSON.parse(
       readRequired(resolve(repoRoot, 'config/environments/prod.json'))
     ) as Record<string, string>;
+    const hetznerRuntimeSecretsSection =
+      terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
     const cloudRunExcludedSecretsSection =
       terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
+    const secretManagerSection =
+      terraform
+        .split('module "secret_manager" {')[1]
+        ?.split('\nresource "google_secret_manager_secret" "cloudflare_dns_api_token"')[0] ?? '';
     const setupDoc = readRequired(
       resolve(repoRoot, 'docs/setup/16-private-whatsapp-matrix-sync.md')
     );
@@ -2263,13 +2273,16 @@ describe('Hetzner secret loader', () => {
     expect(terraform).not.toContain(
       'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL  = "http://localhost:8099"'
     );
-    expect(terraform).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",');
-    expect(terraform).toContain(
-      '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"        = "Base URL for the external WhatsApp private Matrix outbound adapter"'
-    );
+    expect(secretManagerSection).not.toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"');
+    expect(hetznerRuntimeSecretsSection).not.toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",');
     expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
-    expect(terraform).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",');
-    expect(cloudRunExcludedSecretsSection).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",');
+    expect(secretManagerSection).toContain('"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN"');
+    expect(hetznerRuntimeSecretsSection).toContain(
+      '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",'
+    );
+    expect(cloudRunExcludedSecretsSection).not.toContain(
+      '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",'
+    );
     expect(cloudRunExcludedSecretsSection).toContain(
       '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",'
     );

@@ -28,7 +28,7 @@ The machine-readable classification is
 | `config/environments/common.json` | Shared dev and production values |
 | `config/environments/dev.json` | Dev-only values, including the loopback Matrix adapter URL |
 | `config/environments/prod.json` | Production-only values, including the externally reachable Matrix adapter URL |
-| `config/environments/policy.json` | Exact names, scopes, and migration rollback policy |
+| `config/environments/policy.json` | Exact names, scopes, and Secret Manager classification policy |
 
 Render and validate without exposing any Secret Manager value:
 
@@ -37,11 +37,15 @@ node scripts/render-runtime-config.mjs --environment dev --format shell-export >
 node scripts/render-runtime-config.mjs --environment prod --format dotenv >/dev/null
 ```
 
-The migration keeps 26 old Secret Manager containers temporarily for rollback:
-25 values now rendered from versioned configuration plus the removed
-`INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI`. Runtime loaders must not access any of
-those 26 containers. The redirect URI is derived by the application and is not
-written to generated environment files.
+The 26 obsolete Secret Manager containers have been permanently removed: 25
+values now rendered from versioned configuration plus the dead
+`INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI`. Versioned configuration names and
+Secret Manager names must remain fully disjoint. The rollback list remains
+empty. A permanent delete-only tombstone in `deleteOnlyNames` retains the
+redirect name. Both runtime loaders block the union of all versioned config
+scopes and this tombstone from Secret Manager reads. The redirect URI is derived
+by the application and must never be reintroduced into generated environment
+files or Secret Manager.
 
 ## Development Workflow
 
@@ -102,6 +106,12 @@ run the semantic health checks in the
 [Hetzner production runbook](./hetzner-prod-runbook.md). Do not edit
 `.env.prod` manually.
 
+The one-time destructive removal of obsolete Secret Manager resources must
+follow the dedicated
+[runtime Secret Manager cleanup runbook](./runtime-secret-manager-cleanup.md).
+It freezes the exact 396-resource allowlist, deployment order, audit gates, and
+rollback floor; it is not a general Terraform apply procedure.
+
 ## Safe Verification
 
 - Inspect names and classifications, never rendered values in logs.
@@ -110,6 +120,6 @@ run the semantic health checks in the
   `MISMATCH`.
 - Secret Manager audit checks may output timestamp, principal, and secret name,
   but never payload data.
-- Before removing rollback containers, verify zero `AccessSecretVersion`
-  events for all 26 migration names after dev sync, production deployment,
-  orchestrator restart, Alloy restart, and the transcription cold start.
+- Policy validation must keep rollback empty, retain the redirect tombstone,
+  and report zero overlap between active or retired configuration and Secret
+  Manager names.
