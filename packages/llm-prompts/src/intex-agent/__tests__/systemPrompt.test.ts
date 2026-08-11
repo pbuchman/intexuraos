@@ -10,7 +10,7 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('24.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('17.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('17.0.1');
   });
 
   it('builds the base prompt with the current date-time', () => {

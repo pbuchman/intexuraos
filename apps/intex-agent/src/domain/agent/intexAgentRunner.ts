@@ -52,7 +52,12 @@ import {
   type UpdateUserPreferenceToolArgs,
   type IntexAgentToolExecutor,
 } from './toolDefinitions.js';
-import { buildIntexAgentSystemPrompt, INTEX_AGENT_RUNNER_PROMPT_TYPE } from './systemPrompt.js';
+import {
+  buildIntexAgentLocalCalendarContext,
+  buildIntexAgentSystemPrompt,
+  INTEX_AGENT_RUNNER_PROMPT_TYPE,
+  type IntexAgentLocalDayBounds,
+} from './systemPrompt.js';
 import { classifyIntexAgentIntent, type IntexAgentIntentDecision } from './intentGate.js';
 import {
   buildGreetingReply,
@@ -119,12 +124,29 @@ interface ClassifierUnsupportedReplyMap {
 interface CalendarQueryFallbackText {
   calendarEvents: string;
   empty: string;
+  noEvents: string;
+  noEventsInPartialList: string;
+  incompleteList: string;
+  moreEventsOmitted: string;
+  displayLimited: string;
+  untitled: string;
+  today: string;
+  tomorrow: string;
   matching: string;
   requestedPeriod: string;
   atLeast: string;
   location: string;
   locale: string;
 }
+
+interface TodayAndTomorrowCalendarQueryScope {
+  today: IntexAgentLocalDayBounds;
+  tomorrow: IntexAgentLocalDayBounds;
+}
+
+const TODAY_AND_TOMORROW_CALENDAR_QUERY_MAX_RESULTS = 100;
+const TODAY_AND_TOMORROW_VISIBLE_EVENTS_PER_DAY = 10;
+const CALENDAR_EVENT_REPLY_LINE_MAX_LENGTH = 180;
 
 const GENERIC_EXECUTION_FAILURE_PREFIX: LocalizedText = {
   en: 'I could not execute this action: ',
@@ -140,6 +162,14 @@ const CALENDAR_QUERY_FALLBACK_TEXT = {
   en: {
     calendarEvents: 'Calendar events',
     empty: 'There are no calendar events in the requested period.',
+    noEvents: 'No events.',
+    noEventsInPartialList: 'No events in the returned portion of the list.',
+    incompleteList: 'Note: the calendar returned only some events; this list may be incomplete.',
+    moreEventsOmitted: '- … More events omitted.',
+    displayLimited: 'More events were omitted to keep the reply readable.',
+    untitled: '(untitled)',
+    today: 'Today',
+    tomorrow: 'Tomorrow',
     matching: 'matching',
     requestedPeriod: 'in the requested period',
     atLeast: 'at least',
@@ -149,6 +179,14 @@ const CALENDAR_QUERY_FALLBACK_TEXT = {
   pl: {
     calendarEvents: 'Wydarzenia w kalendarzu',
     empty: 'Brak wydarzeń w kalendarzu w podanym okresie.',
+    noEvents: 'Brak wydarzeń.',
+    noEventsInPartialList: 'Brak wydarzeń w zwróconej części listy.',
+    incompleteList: 'Uwaga: kalendarz zwrócił tylko część wydarzeń; ta lista może być niepełna.',
+    moreEventsOmitted: '- … Pominięto dalsze wydarzenia.',
+    displayLimited: 'Dalsze wydarzenia pominięto, aby zachować czytelność odpowiedzi.',
+    untitled: '(bez tytułu)',
+    today: 'Dzisiaj',
+    tomorrow: 'Jutro',
     matching: 'pasujące do',
     requestedPeriod: 'w podanym okresie',
     atLeast: 'co najmniej',
@@ -182,6 +220,11 @@ const CALENDAR_EVENT_VERSION_CONFLICT_REPLIES: LocalizedText = {
   pl: 'Wydarzenie w kalendarzu zmieniło się po potwierdzeniu. Wyślij prośbę ponownie, żebym użył jego najnowszej wersji.',
 };
 
+const CALENDAR_QUERY_INVALID_RESULT_REPLIES: LocalizedText = {
+  en: 'I could not reliably read the calendar results. Please try again.',
+  pl: 'Nie udało się wiarygodnie odczytać wyników kalendarza. Spróbuj ponownie.',
+};
+
 const RETAIN_ONLY_REPLIES: LocalizedText = {
   en: 'Noted for this session only. No note or other resource was created.',
   pl: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
@@ -199,6 +242,25 @@ const CALENDAR_DATE_CLARIFICATION_NEXT_STEPS: LocalizedText = {
 
 const CALENDAR_DIRECT_DATE_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|poniedział(?:ek|ku)|wtorek|wtorku|środ(?:a|ę|y)|czwart(?:ek|ku)|pią(?:tek|tku)|sobot(?:a|ę|y)|niedziel(?:a|ę|i)|today|tomorrow|tonight|day\s+after\s+tomorrow|dzisiaj|dziś|jutro|pojutrze|(?:in|za)\s+(?:\d+|one|two|three|jeden|jedną|dwa|dwie|trzy)\s+(?:days?|dni|dzień))(?=$|[^\p{L}\p{N}])/iu;
+
+const CALENDAR_TODAY_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])(?:today|dzisiaj|dziś|dzis)(?![\p{L}\p{N}])/iu;
+const CALENDAR_TOMORROW_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])(?:tomorrow|jutro)(?![\p{L}\p{N}])/iu;
+const CALENDAR_DAY_AFTER_TOMORROW_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])(?:day(?:\s+|-)after(?:\s+|-)tomorrow|pojutrze)(?![\p{L}\p{N}])/iu;
+const CALENDAR_SIMPLE_WHOLE_DAY_LIST_REQUEST_PATTERN =
+  /(?:\bwhat(?:['’]s|\s+is)\s+on\s+(?:(?:my|our|the)\s+)?calendar\b|\b(?:what|which)\s+(?:events?|meetings?|appointments?)\s+do\s+(?:i|we)\s+have\b|\bwhat\s+do\s+(?:i|we)\s+have[\s\S]{0,50}\b(?:on|in)\s+(?:(?:my|our|the)\s+)?calendar\b|\b(?:show|list)\b[\s\S]{0,50}\b(?:calendars?|events?|meetings?|appointments?)\b|(?<![\p{L}\p{N}])co\s+(?:mam|mamy)[\s\S]{0,50}(?<![\p{L}\p{N}])w\s+kalendarz\p{L}*(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])jakie\s+(?:(?:mam|mamy|masz|są|sa)\s+[\s\S]{0,40}(?:wydarzeni\p{L}*|spotkani\p{L}*|termin\p{L}*)|(?:wydarzeni\p{L}*|spotkani\p{L}*|termin\p{L}*)\s+(?:mam|mamy|masz|są|sa))(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(?:pokaż|pokaz|podaj|wymień|wymien)(?![\p{L}\p{N}])[\s\S]{0,50}(?<![\p{L}\p{N}])(?:kalendarz\p{L}*|wydarzeni\p{L}*|spotkani\p{L}*|termin\p{L}*)(?![\p{L}\p{N}]))/iu;
+const CALENDAR_NEGATED_RELATIVE_DAY_PATTERN =
+  /(?<![\p{L}\p{N}])(?:(?:not|except|without)\s+(?!only\b)(?:today|tomorrow)|(?:nie|bez)\s+(?!tylko\b)(?:dzisiaj|dziś|dzis|jutro))(?![\p{L}\p{N}])/iu;
+const CALENDAR_AVAILABILITY_REQUEST_PATTERN =
+  /(?<![\p{L}\p{N}])(?:free|available|availability|slots?|windows?|woln\p{L}*|dostępn\p{L}*|dostepn\p{L}*|okienk\p{L}*)(?![\p{L}\p{N}])/iu;
+const CALENDAR_COUNT_REQUEST_PATTERN =
+  /(?<![\p{L}\p{N}])(?:how\s+many|number\s+of|count|ile|policz|liczb\p{L}*)(?![\p{L}\p{N}])/iu;
+const CALENDAR_PARTIAL_DAY_REQUEST_PATTERN =
+  /(?<![\p{L}\p{N}])(?:morning|afternoon|evening|night|tonight|noon|midday|rano|poranek|południ\p{L}*|poludni\p{L}*|popołudni\p{L}*|popoludni\p{L}*|wiecz\p{L}*|noc\p{L}*)(?![\p{L}\p{N}])/iu;
+const CALENDAR_RELATIVE_TIME_RANGE_PATTERN =
+  /(?<![\p{L}\p{N}])(?:before|after|from|until|przed|po|od|do)\s+(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
 
 const CALENDAR_ORDINAL_DATE_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])on\s+(?:the\s+)?\d{1,2}(?:st|nd|rd|th)(?=\s*(?:$|[,.;!?]|(?:at|from|between|until|for)\b))/iu;
@@ -632,6 +694,16 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const calendarUpdateAttendeeEmails = isCalendarUpdateIntent(intent)
         ? resolveActiveCalendarAttendeeEmails(calendarUpdateContext)
         : undefined;
+      const todayAndTomorrowCalendarQueryScope =
+        intent.kind === 'tool' &&
+        intent.allowedToolNames.length === 1 &&
+        intent.allowedToolNames[0] === 'query_calendar_events'
+          ? resolveTodayAndTomorrowCalendarQueryScope(
+              input.message,
+              input.currentDateTime,
+              input.timeZone
+            )
+          : undefined;
       const toolExecutions: IntexAgentToolExecution[] = [];
       const allowedToolNames = resolveRunnerToolNames(intent);
       const trackingToolExecutor = createTrackingToolExecutor(
@@ -639,7 +711,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         toolExecutions,
         config.toolSelectionGate,
         resolveCurrentPreferenceVersion(config.userPreferences),
-        calendarUpdateAttendeeEmails
+        calendarUpdateAttendeeEmails,
+        todayAndTomorrowCalendarQueryScope
       );
       const tools = createIntexAgentToolDefinitions(
         trackingToolExecutor
@@ -650,7 +723,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         )
         .map((tool) =>
           isMutatingToolName(tool.name as IntexAgentToolName) ||
-          tool.name === 'get_user_preferences'
+          tool.name === 'get_user_preferences' ||
+          (tool.name === 'query_calendar_events' &&
+            todayAndTomorrowCalendarQueryScope !== undefined)
             ? { ...tool, stopAfterRun: true }
             : tool
         );
@@ -727,6 +802,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           intent,
           exposedToolNames,
           currentMessage: input.message,
+          ...(todayAndTomorrowCalendarQueryScope !== undefined
+            ? { todayAndTomorrowCalendarQueryScope }
+            : {}),
           ...(calendarUpdateAttendeeEmails !== undefined
             ? { calendarUpdateAttendeeEmails }
             : {}),
@@ -784,6 +862,33 @@ function applyRuntimeTimeZoneToCalendarIntent(
       : {}),
     ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
     ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
+  };
+}
+
+function resolveTodayAndTomorrowCalendarQueryScope(
+  message: string,
+  currentDateTime: string,
+  timeZone: string
+): TodayAndTomorrowCalendarQueryScope | undefined {
+  if (
+    CALENDAR_DAY_AFTER_TOMORROW_SIGNAL_PATTERN.test(message) ||
+    CALENDAR_NEGATED_RELATIVE_DAY_PATTERN.test(message) ||
+    CALENDAR_AVAILABILITY_REQUEST_PATTERN.test(message) ||
+    CALENDAR_COUNT_REQUEST_PATTERN.test(message) ||
+    CALENDAR_PARTIAL_DAY_REQUEST_PATTERN.test(message) ||
+    CALENDAR_RELATIVE_TIME_RANGE_PATTERN.test(message) ||
+    containsCalendarClockTimeSignal(message) ||
+    !CALENDAR_TODAY_SIGNAL_PATTERN.test(message) ||
+    !CALENDAR_TOMORROW_SIGNAL_PATTERN.test(message) ||
+    !CALENDAR_SIMPLE_WHOLE_DAY_LIST_REQUEST_PATTERN.test(message)
+  ) {
+    return undefined;
+  }
+
+  const calendarContext = buildIntexAgentLocalCalendarContext(currentDateTime, timeZone);
+  return {
+    today: calendarContext.today,
+    tomorrow: calendarContext.tomorrow,
   };
 }
 
@@ -2290,6 +2395,7 @@ interface RunnerOutputValidationInput {
   intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
   exposedToolNames: IntexAgentToolName[];
   currentMessage: string;
+  todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope;
   calendarUpdateAttendeeEmails?: string[];
   synthesizedCalendarUpdatePreview?: true;
   matrixCorpusLlm?: MatrixCorpusLlmRecorder;
@@ -2336,11 +2442,19 @@ async function parseRunnerContent(
       toolExecution.selectionMetadata
     );
   }
-  const parsed = await validateRunnerOutput(
-    toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)
-      ? { ...input, repairClient: undefined }
-      : input
-  );
+  const hasDeterministicTodayAndTomorrowCalendarReply =
+    toolExecution?.toolName === 'query_calendar_events' &&
+    toolExecution.error === undefined &&
+    toolExecution.result !== undefined &&
+    input.todayAndTomorrowCalendarQueryScope !== undefined &&
+    !isCalendarUpdateIntent(input.intent);
+  const parsed = hasDeterministicTodayAndTomorrowCalendarReply
+    ? null
+    : await validateRunnerOutput(
+        toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)
+          ? { ...input, repairClient: undefined }
+          : input
+      );
   if (toolExecution?.error !== undefined) {
     const failureMetadata = toolFailureMetadata(toolExecution.toolName, toolExecution.error);
     const deterministicFailureReply = `${GENERIC_EXECUTION_FAILURE_PREFIX[replyLanguage]}${toolExecution.error}${GENERIC_EXECUTION_FAILURE_SUFFIX[replyLanguage]}`;
@@ -2407,6 +2521,39 @@ async function parseRunnerContent(
     parsed?.outcome !== 'needs_clarification'
   ) {
     return calendarUpdateLookupResult(replyLanguage);
+  }
+
+  if (
+    hasDeterministicTodayAndTomorrowCalendarReply &&
+    toolExecution.toolName === 'query_calendar_events' &&
+    input.todayAndTomorrowCalendarQueryScope !== undefined
+  ) {
+    const deterministicReply = renderCalendarQueryFallbackReply(
+      toolExecution.result,
+      replyLanguage,
+      runtimeTimeZone,
+      input.todayAndTomorrowCalendarQueryScope
+    );
+    if (deterministicReply === undefined) {
+      return {
+        outcome: 'tool_failed',
+        reply: CALENDAR_QUERY_INVALID_RESULT_REPLIES[replyLanguage],
+        toolName: toolExecution.toolName,
+        error: 'Calendar query returned an invalid result',
+        errorCategory: 'validation',
+        isRetryable: true,
+        attemptedAction: 'query_calendar_events',
+      };
+    }
+    return buildCompletedToolExecutionResult(
+      toolExecution.toolName,
+      toolExecution.result,
+      deterministicReply,
+      undefined,
+      webAppUrl,
+      replyLanguage,
+      toolExecution.selectionMetadata
+    );
   }
 
   if (parsed === null) {
@@ -2981,7 +3128,8 @@ function createTrackingToolExecutor(
   toolExecutions: IntexAgentToolExecution[],
   toolSelectionGate?: IntexAgentRunnerConfig['toolSelectionGate'],
   currentPreferenceVersion?: number,
-  authoritativeCalendarAttendeeEmails?: string[]
+  authoritativeCalendarAttendeeEmails?: string[],
+  todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope
 ): IntexAgentToolExecutor {
   async function track(
     toolName: IntexAgentToolName,
@@ -3054,10 +3202,20 @@ function createTrackingToolExecutor(
       );
     },
     async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
+      const normalizedArgs =
+        todayAndTomorrowCalendarQueryScope === undefined
+          ? args
+          : {
+              ...args,
+              mode: 'list' as const,
+              timeMin: todayAndTomorrowCalendarQueryScope.today.timeMin,
+              timeMax: todayAndTomorrowCalendarQueryScope.tomorrow.timeMax,
+              maxResults: TODAY_AND_TOMORROW_CALENDAR_QUERY_MAX_RESULTS,
+            };
       return await track(
         'query_calendar_events',
-        toRecord(args),
-        async () => await executor.queryCalendarEvents(args)
+        toRecord(normalizedArgs),
+        async () => await executor.queryCalendarEvents(normalizedArgs)
       );
     },
     async createResearch(args: CreateResearchToolArgs): Promise<string> {
@@ -3617,7 +3775,8 @@ function findPreferenceText(userPreferences: string | null, itemId: string | und
 function renderCalendarQueryFallbackReply(
   result: Record<string, unknown> | undefined,
   replyLanguage: IntexAgentReplyLanguage,
-  runtimeTimeZone: string
+  runtimeTimeZone: string,
+  todayAndTomorrowScope?: TodayAndTomorrowCalendarQueryScope
 ): string | undefined {
   if (result?.['status'] !== 'completed') return undefined;
   const count = result['count'];
@@ -3625,6 +3784,7 @@ function renderCalendarQueryFallbackReply(
     return undefined;
   }
 
+  if (todayAndTomorrowScope !== undefined && result['mode'] !== 'list') return undefined;
   if (result['mode'] === 'count') {
     return renderCalendarCountFallback(
       count as number,
@@ -3637,6 +3797,15 @@ function renderCalendarQueryFallbackReply(
 
   const events = result['events'];
   if (!Array.isArray(events) || events.length !== count) return undefined;
+  if (todayAndTomorrowScope !== undefined) {
+    return renderTodayAndTomorrowCalendarList(
+      result,
+      events,
+      todayAndTomorrowScope,
+      replyLanguage,
+      runtimeTimeZone
+    );
+  }
   const text = CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage];
   if (events.length === 0) return text.empty;
 
@@ -3646,6 +3815,129 @@ function renderCalendarQueryFallbackReply(
   if (renderedEvents.some((event) => event === undefined)) return undefined;
   const header = `${text.calendarEvents} (${String(count)}):`;
   return [header, ...(renderedEvents as string[])].join('\n');
+}
+
+function renderTodayAndTomorrowCalendarList(
+  result: Record<string, unknown>,
+  events: unknown[],
+  scope: TodayAndTomorrowCalendarQueryScope,
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
+): string | undefined {
+  if (
+    readString(result, 'timeMin') !== scope.today.timeMin ||
+    readString(result, 'timeMax') !== scope.tomorrow.timeMax ||
+    typeof result['truncated'] !== 'boolean'
+  ) {
+    return undefined;
+  }
+
+  const todayEvents: string[] = [];
+  const tomorrowEvents: string[] = [];
+  for (const event of events) {
+    const renderedEvent = renderCalendarEventFallback(
+      event,
+      replyLanguage,
+      runtimeTimeZone,
+      { allowUntitled: true, displayTimeZone: runtimeTimeZone }
+    );
+    const coveredDays = calendarEventCoveredDays(event, scope);
+    if (renderedEvent === undefined || coveredDays === undefined || coveredDays.length === 0) {
+      return undefined;
+    }
+    const boundedEvent = limitCalendarEventReplyLine(renderedEvent);
+    if (coveredDays.includes('today')) {
+      todayEvents.push(boundedEvent);
+    }
+    if (coveredDays.includes('tomorrow')) {
+      tomorrowEvents.push(boundedEvent);
+    }
+  }
+
+  const text = CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage];
+  const truncated = result['truncated'];
+  const emptyDayText = truncated ? text.noEventsInPartialList : text.noEvents;
+  const displayWasLimited =
+    todayEvents.length > TODAY_AND_TOMORROW_VISIBLE_EVENTS_PER_DAY ||
+    tomorrowEvents.length > TODAY_AND_TOMORROW_VISIBLE_EVENTS_PER_DAY;
+  const renderDay = (label: string, dayEvents: string[]): string => {
+    if (dayEvents.length === 0) return `${label}:\n- ${emptyDayText}`;
+    const visibleEvents = dayEvents.slice(0, TODAY_AND_TOMORROW_VISIBLE_EVENTS_PER_DAY);
+    if (visibleEvents.length < dayEvents.length) {
+      visibleEvents.push(text.moreEventsOmitted);
+    }
+    return `${label}:\n${visibleEvents.join('\n')}`;
+  };
+  const renderedDays = [
+    renderDay(text.today, todayEvents),
+    renderDay(text.tomorrow, tomorrowEvents),
+  ].join('\n\n');
+  const notices = [
+    ...(truncated ? [text.incompleteList] : []),
+    ...(displayWasLimited ? [text.displayLimited] : []),
+  ];
+  return notices.length === 0 ? renderedDays : `${renderedDays}\n\n${notices.join('\n')}`;
+}
+
+function limitCalendarEventReplyLine(value: string): string {
+  if (value.length <= CALENDAR_EVENT_REPLY_LINE_MAX_LENGTH) return value;
+  return `${value.slice(0, CALENDAR_EVENT_REPLY_LINE_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+function calendarEventCoveredDays(
+  value: unknown,
+  scope: TodayAndTomorrowCalendarQueryScope
+): ('today' | 'tomorrow')[] | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const event = value as Record<string, unknown>;
+  const start = readRecord(event, 'start');
+  const end = readRecord(event, 'end');
+  if (start === undefined || end === undefined) return undefined;
+
+  const startDate = readString(start, 'date');
+  const endDate = readString(end, 'date');
+  if (startDate !== undefined || endDate !== undefined) {
+    if (
+      startDate === undefined ||
+      endDate === undefined ||
+      !isValidCalendarDate(startDate) ||
+      !isValidCalendarDate(endDate) ||
+      endDate <= startDate
+    ) {
+      return undefined;
+    }
+    const todayDate = scope.today.timeMin.slice(0, 10);
+    const tomorrowDate = scope.tomorrow.timeMin.slice(0, 10);
+    const dayAfterTomorrowDate = scope.tomorrow.timeMax.slice(0, 10);
+    return [
+      ...(startDate < tomorrowDate && endDate > todayDate ? (['today'] as const) : []),
+      ...(startDate < dayAfterTomorrowDate && endDate > tomorrowDate
+        ? (['tomorrow'] as const)
+        : []),
+    ];
+  }
+
+  const startDateTime = readString(start, 'dateTime');
+  const endDateTime = readString(end, 'dateTime');
+  if (startDateTime === undefined || endDateTime === undefined) return undefined;
+  const startInstant = Date.parse(startDateTime);
+  const endInstant = Date.parse(endDateTime);
+  const todayStart = Date.parse(scope.today.timeMin);
+  const tomorrowStart = Date.parse(scope.tomorrow.timeMin);
+  const dayAfterTomorrowStart = Date.parse(scope.tomorrow.timeMax);
+  if (
+    !Number.isFinite(startInstant) ||
+    !Number.isFinite(endInstant) ||
+    endInstant <= startInstant
+  ) {
+    return undefined;
+  }
+  return [
+    ...(startInstant < tomorrowStart && endInstant > todayStart ? (['today'] as const) : []),
+    ...(startInstant < dayAfterTomorrowStart && endInstant > tomorrowStart
+      ? (['tomorrow'] as const)
+      : []),
+  ];
 }
 
 function renderCalendarCountFallback(
@@ -3663,14 +3955,26 @@ function renderCalendarCountFallback(
 function renderCalendarEventFallback(
   value: unknown,
   replyLanguage: IntexAgentReplyLanguage,
-  runtimeTimeZone: string
+  runtimeTimeZone: string,
+  options?: Readonly<{ allowUntitled?: boolean; displayTimeZone?: string }>
 ): string | undefined {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const event = value as Record<string, unknown>;
-  const summary = readString(event, 'summary');
+  const rawSummary = event['summary'];
+  const summary =
+    typeof rawSummary === 'string' && rawSummary.trim() !== ''
+      ? rawSummary
+      : options?.allowUntitled === true && typeof rawSummary === 'string'
+        ? CALENDAR_QUERY_FALLBACK_TEXT[replyLanguage].untitled
+        : undefined;
   const start = readRecord(event, 'start');
   if (summary === undefined || start === undefined) return undefined;
-  const renderedStart = renderCalendarEventStart(start, replyLanguage, runtimeTimeZone);
+  const renderedStart = renderCalendarEventStart(
+    start,
+    replyLanguage,
+    runtimeTimeZone,
+    options?.displayTimeZone
+  );
   if (renderedStart === undefined) return undefined;
   const location = readString(event, 'location');
   const renderedLocation =
@@ -3683,14 +3987,15 @@ function renderCalendarEventFallback(
 function renderCalendarEventStart(
   start: Record<string, unknown>,
   replyLanguage: IntexAgentReplyLanguage,
-  runtimeTimeZone: string
+  runtimeTimeZone: string,
+  displayTimeZone?: string
 ): string | undefined {
   const dateTime = readString(start, 'dateTime');
   if (dateTime !== undefined) {
     if (Number.isNaN(new Date(dateTime).getTime())) return undefined;
     return formatCalendarConfirmationDateTime(
       dateTime,
-      readString(start, 'timeZone'),
+      displayTimeZone ?? readString(start, 'timeZone'),
       runtimeTimeZone,
       replyLanguage
     );
