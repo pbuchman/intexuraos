@@ -13,7 +13,7 @@ ACTIVATE_WEB="true"
 if [[ -n "${WEB_ROOT}" ]]; then
   ACTIVATE_WEB="false"
 fi
-WEB_SAFE_SECRETS=(
+WEB_BUILD_ENV_KEYS=(
   INTEXURAOS_AUTH0_DOMAIN
   INTEXURAOS_AUTH0_SPA_CLIENT_ID
   INTEXURAOS_AUTH_AUDIENCE
@@ -118,30 +118,12 @@ read_env_value() {
 
   value="$(node -e '
     const { readFileSync } = require("node:fs");
+    const { parse } = require("dotenv");
     const key = process.argv[1];
     const envFile = process.argv[2];
-    const lines = readFileSync(envFile, "utf8").split(/\r?\n/);
-
-    function unquote(value) {
-      if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
-        return value
-          .slice(1, -1)
-          .replace(/\\n/g, "\n")
-          .replace(/\\r/g, "\r")
-          .replace(/\\"/g, "\"")
-          .replace(/\\\\/g, "\\");
-      }
-      return value;
-    }
-
-    for (const line of lines) {
-      if (line === "" || line.startsWith("#")) continue;
-      const index = line.indexOf("=");
-      if (index === -1) continue;
-      if (line.slice(0, index) === key) {
-        process.stdout.write(unquote(line.slice(index + 1)));
-        process.exit(0);
-      }
+    const parsed = parse(readFileSync(envFile, "utf8"));
+    if (Object.hasOwn(parsed, key)) {
+      process.stdout.write(parsed[key]);
     }
   ' "${key}" "${ENV_FILE}")"
 
@@ -209,7 +191,7 @@ prepare_sanitized_web_env_file() {
   chmod 600 "${WEB_SANITIZED_ENV_FILE}"
   write_env_line "${WEB_SANITIZED_ENV_FILE}" "INTEXURAOS_ENVIRONMENT" "prod"
 
-  for key in "${WEB_SAFE_SECRETS[@]}"; do
+  for key in "${WEB_BUILD_ENV_KEYS[@]}"; do
     env_value="$(read_env_value "${key}")"
     [[ -n "${env_value}" ]] || fail "${key} is missing from ${ENV_FILE}"
     write_env_line "${WEB_SANITIZED_ENV_FILE}" "${key}" "${env_value}"

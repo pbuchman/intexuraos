@@ -114,11 +114,49 @@ validate_inputs() {
 }
 
 load_runtime_environment() {
-  set -a
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  set +a
-  PROJECT_ID="${INTEXURAOS_GCP_PROJECT_ID:-${PROJECT_ID}}"
+  local parsed_env_file=""
+  local env_name=""
+  local env_value=""
+
+  parsed_env_file="$(mktemp "${TMPDIR:-/tmp}/message-digest-runtime-env.XXXXXX")"
+  chmod 600 "${parsed_env_file}"
+  if ! node - "${ENV_FILE}" "${RELEASE_DIR}" > "${parsed_env_file}" <<'NODE'
+const { readFileSync } = require('node:fs');
+const { createRequire } = require('node:module');
+const { resolve } = require('node:path');
+
+try {
+  const [envPath, releaseDir] = process.argv.slice(2);
+  const requireFromRelease = createRequire(resolve(releaseDir, 'package.json'));
+  const { parse } = requireFromRelease('dotenv');
+  const environment = parse(readFileSync(envPath, 'utf8'));
+  for (const [name, value] of Object.entries(environment)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name) || value.includes('\0')) {
+      throw new Error('invalid runtime environment entry');
+    }
+    process.stdout.write(name);
+    process.stdout.write('\0');
+    process.stdout.write(value);
+    process.stdout.write('\0');
+  }
+} catch {
+  process.stderr.write('Unable to parse the production runtime environment\n');
+  process.exitCode = 1;
+}
+NODE
+  then
+    rm -f "${parsed_env_file}"
+    fail "Production env file is not valid dotenv"
+    return 1
+  fi
+
+  while IFS= read -r -d '' env_name && IFS= read -r -d '' env_value; do
+    printf -v "${env_name}" '%s' "${env_value}"
+    export "${env_name?}"
+  done < "${parsed_env_file}"
+  rm -f "${parsed_env_file}"
+
+  export PROJECT_ID="${INTEXURAOS_GCP_PROJECT_ID:-${PROJECT_ID}}"
   export NODE_ENV="production"
 }
 

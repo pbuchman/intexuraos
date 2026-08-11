@@ -136,6 +136,54 @@ describe('Message Digest release attestation', () => {
   });
 });
 
+describe('Message Digest runtime environment loading', () => {
+  it('parses dotenv without executing shell and preserves single-quoted JSON exactly', () => {
+    const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-runtime-env-'));
+    const envPath = resolve(directory, '.env.prod');
+    const shellExpansionSentinel = resolve(directory, 'shell-expansion-ran');
+    const privateKey = JSON.stringify({
+      crv: 'Ed25519',
+      d: 'private-material',
+      kid: '$HOME-is-literal',
+      kty: 'OKP',
+    });
+
+    try {
+      writeFileSync(
+        envPath,
+        [
+          "INTEXURAOS_GCP_PROJECT_ID='safe-project'",
+          `INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY='${privateKey}'`,
+          `INTEXURAOS_SHELL_PAYLOAD=$(touch "${shellExpansionSentinel}")`,
+          '',
+        ].join('\n'),
+        { encoding: 'utf8', mode: 0o600 }
+      );
+
+      const result = runShellLibrary(
+        cutoverPath,
+        `
+load_runtime_environment
+node -e 'process.stdout.write(JSON.stringify({ projectId: process.env.PROJECT_ID, nodeEnv: process.env.NODE_ENV, privateKey: process.env.INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY, shellPayload: process.env.INTEXURAOS_SHELL_PAYLOAD }))'
+`,
+        { ENV_FILE: envPath, RELEASE_DIR: repoRoot }
+      );
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual({
+        projectId: 'safe-project',
+        nodeEnv: 'production',
+        privateKey,
+        shellPayload: `$(touch "${shellExpansionSentinel}")`,
+      });
+      expect(existsSync(shellExpansionSentinel)).toBe(false);
+      expect(readFileSync(cutoverPath, 'utf8')).not.toContain('source "${ENV_FILE}"');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe('Message Digest mutation admission', () => {
   it('checks the approved provider template before acquiring or mutating durable cutover state', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'message-digest-template-preflight-'));

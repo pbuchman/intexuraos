@@ -711,7 +711,11 @@ describe('Hetzner web asset deployment', () => {
   });
 
   it('rejects HTTP-success health bodies whose service or dependency status is down', () => {
-    const verify = (body: unknown, expectedService?: string, requiredCheck?: string) =>
+    const verify = (
+      body: unknown,
+      expectedService?: string,
+      requiredCheck?: string
+    ): SpawnSyncReturns<string> =>
       spawnSync(
         'node',
         [
@@ -1255,7 +1259,7 @@ describe('Hetzner web asset deployment', () => {
     const webHosting = readRequired(webHostingPath);
 
     expect(script).toContain('INTEXURAOS_ENVIRONMENT=prod');
-    expect(script).toContain('WEB_SAFE_SECRETS=(');
+    expect(script).toContain('WEB_BUILD_ENV_KEYS=(');
     expect(script).toContain('clear_intexuraos_env');
     expect(script).toContain('unset "${key}"');
     expect(script).toContain('prepare_sanitized_web_env_file');
@@ -1557,6 +1561,18 @@ describe('Pub/Sub dead-letter reliability', () => {
     expect(dlqRunbook).toContain('Do not bulk replay');
     expect(dlqRunbook).toContain('ACK');
     expect(dlqRunbook).toContain('correlation');
+  });
+});
+
+describe('Merge-conflict reconciliation cadence', () => {
+  it('runs the retained scheduler every five minutes', () => {
+    const hetznerScheduler = readRequired(terraformHetznerSchedulerPath);
+    const mergeConflictReconcileScheduler =
+      hetznerScheduler
+        .split('merge_conflict_reconcile = {')[1]
+        ?.split('\n    merge_queue_tick = {')[0] ?? '';
+
+    expect(mergeConflictReconcileScheduler).toContain('schedule             = "*/5 * * * *"');
   });
 });
 
@@ -1913,7 +1929,7 @@ describe('Hetzner secret loader', () => {
     ).toEqual([]);
   });
 
-  it('isolates the retained dev transcription Sentry DSN from production runtimes', () => {
+  it('cuts transcription over to versioned config while retaining the dev Sentry rollback secret', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
     const retainedGcpTerraform = readRequired(terraformHetznerRetainedGcpPath);
@@ -1963,6 +1979,9 @@ describe('Hetzner secret loader', () => {
     expect(transcriptionModuleStart).toBeGreaterThanOrEqual(0);
     expect(transcriptionModuleEnd).toBeGreaterThan(transcriptionModuleStart);
     expect(transcriptionModuleSection).toContain(
+      'INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.dev["INTEXURAOS_SENTRY_DSN_DEV"]'
+    );
+    expect(transcriptionModuleSection).not.toContain(
       'INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'
     );
     expect(transcriptionModuleSection).not.toContain(
@@ -1973,7 +1992,7 @@ describe('Hetzner secret loader', () => {
     );
     expect(
       terraform.match(/module\.secret_manager\.secret_ids\["INTEXURAOS_SENTRY_DSN_DEV"\]/gu)
-    ).toHaveLength(2);
+    ).toHaveLength(1);
   });
 
   it('round-trips JSON secret material through the generated dotenv file', () => {
@@ -2047,15 +2066,28 @@ describe('Hetzner secret loader', () => {
 
       expect(result.status, result.stderr).toBe(0);
       const parsed = parseDotenv(readFileSync(outputPath, 'utf8'));
+      const commonConfig = JSON.parse(
+        readRequired(resolve(repoRoot, 'config/environments/common.json'))
+      ) as Record<string, string>;
       expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY']).toBe(secretValue);
+      expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY']).toBe(
+        commonConfig['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY']
+      );
+      expect(parsed['INTEXURAOS_FIREBASE_API_KEY']).toBe(
+        commonConfig['INTEXURAOS_FIREBASE_API_KEY']
+      );
+      expect(parsed['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI']).toBeUndefined();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
-  it('declares and loads the complete production Matrix corpus secret inventory', () => {
+  it('merges production Matrix corpus config with only the real corpus secrets', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
+    const commonConfig = JSON.parse(
+      readRequired(resolve(repoRoot, 'config/environments/common.json'))
+    ) as Record<string, string>;
     const hetznerRuntimeSecretsSection =
       terraform.split('hetzner_runtime_secret_names = toset([')[1]?.split('])')[0] ?? '';
     const productionMatrixCorpusSecrets = [
@@ -2070,11 +2102,25 @@ describe('Hetzner secret loader', () => {
       'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
       'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
     ];
+    const versionedMatrixConfig = [
+      'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+      'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+      'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+    ];
+    const secretManagerMatrixNames = productionMatrixCorpusSecrets.filter(
+      (name) => !versionedMatrixConfig.includes(name)
+    );
 
     for (const secretName of productionMatrixCorpusSecrets) {
       expect(terraform, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
       expect(hetznerRuntimeSecretsSection, secretName).toContain(`"${secretName}",`);
+    }
+    for (const secretName of secretManagerMatrixNames) {
       expect(script, secretName).toContain(secretName);
+    }
+    for (const configName of versionedMatrixConfig) {
+      expect(commonConfig[configName], configName).toBeDefined();
+      expect(script, configName).not.toContain(configName);
     }
   });
 
@@ -2092,19 +2138,30 @@ describe('Hetzner secret loader', () => {
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
     ];
-    const hetznerCollectorSecrets = [
+    const hetznerCollectorInputs = [
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
+      'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
+    ];
+    const versionedCollectorConfig = [
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
       'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
     ];
+    const commonConfig = JSON.parse(
+      readRequired(resolve(repoRoot, 'config/environments/common.json'))
+    ) as Record<string, string>;
 
     for (const secretName of grafanaCloudSecrets) {
       expect(terraform, secretName).toMatch(new RegExp(`"${secretName}"\\s*=`));
     }
 
-    for (const secretName of hetznerCollectorSecrets) {
-      expect(hetznerRuntimeSecretsSection, secretName).toContain(`"${secretName}",`);
-      expect(script, secretName).toContain(secretName);
+    for (const inputName of hetznerCollectorInputs) {
+      expect(hetznerRuntimeSecretsSection, inputName).toContain(`"${inputName}",`);
+    }
+    expect(script).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN');
+    for (const configName of versionedCollectorConfig) {
+      expect(commonConfig[configName], configName).toBeDefined();
+      expect(script, configName).not.toContain(configName);
     }
 
     for (const secretName of grafanaCloudSecrets) {
@@ -2189,13 +2246,17 @@ describe('Hetzner secret loader', () => {
   it('writes private Matrix outbound adapter config for Hetzner prod', () => {
     const script = readRequired(loadSecretsPath);
     const terraform = readRequired(terraformDevMainPath);
+    const prodConfig = JSON.parse(
+      readRequired(resolve(repoRoot, 'config/environments/prod.json'))
+    ) as Record<string, string>;
     const cloudRunExcludedSecretsSection =
       terraform.split('cloud_run_secret_manager_excluded_names = toset([')[1]?.split('])')[0] ?? '';
     const setupDoc = readRequired(
       resolve(repoRoot, 'docs/setup/16-private-whatsapp-matrix-sync.md')
     );
 
-    expect(script).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
+    expect(script).not.toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
+    expect(prodConfig['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toMatch(/^https:\/\//u);
     expect(script).not.toContain(
       'write_env_line "${output_path}" "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL" "http://localhost:8099"'
     );
@@ -2212,8 +2273,10 @@ describe('Hetzner secret loader', () => {
     expect(cloudRunExcludedSecretsSection).toContain(
       '"INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",'
     );
-    expect(setupDoc).toContain('Store `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` in Secret Manager');
-    expect(setupDoc).toContain('Do not point this value at `localhost`');
+    expect(setupDoc).toContain(
+      'Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` separately in `dev.json` and `prod.json`'
+    );
+    expect(setupDoc).toContain('Do not point the URL at `localhost`');
   });
 
   it('keeps certbot DNS credentials separate from the Cloudflare Browser Rendering API token', () => {

@@ -70,7 +70,8 @@ const INTEX_AGENT_TEST_RUNS_READ_ENABLED =
     ? 'true'
     : 'false';
 
-// Common auth secrets for all services (mirrors Terraform local.common_service_secrets)
+// Common auth runtime environment for all services. The loader has already merged
+// tracked configuration with Secret Manager values before PM2 reads process.env.
 const COMMON_SERVICE_ENV = {
   HOME: process.env.HOME ?? '/root',
   FIRESTORE_EMULATOR_HOST: '',

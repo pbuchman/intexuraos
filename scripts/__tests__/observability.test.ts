@@ -77,13 +77,13 @@ describe('Grafana Alloy PM2 log collection', () => {
     expect(installScript).toContain('setfacl');
     expect(installScript).toContain('u:alloy');
 
-    for (const secretName of [
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
-      'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
-    ]) {
-      expect(loadEnvScript, secretName).toContain(secretName);
-    }
+    expect(loadEnvScript).toContain('GRAFANA_CLOUD_COLLECTOR_SECRETS=(');
+    expect(loadEnvScript).toMatch(
+      /GRAFANA_CLOUD_COLLECTOR_SECRETS=\(\s*INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN\s*\)/u
+    );
+    expect(loadEnvScript).toContain('render-runtime-config.mjs');
+    expect(loadEnvScript).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_URL');
+    expect(loadEnvScript).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME');
 
     expect(loadEnvScript).not.toContain('INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN');
     expect(installScript).not.toContain('INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN');
@@ -95,8 +95,8 @@ describe('Grafana dashboard provisioning', () => {
     const dashboard = JSON.parse(readRequired(dashboardPath)) as {
       uid?: string;
       title?: string;
-      panels?: Array<{ title?: string; targets?: Array<{ expr?: string }> }>;
-      templating?: { list?: Array<{ name?: string; query?: string }> };
+      panels?: { title?: string; targets?: { expr?: string }[] }[];
+      templating?: { list?: { name?: string; query?: string }[] };
     };
 
     expect(dashboard.uid).toBe('intexuraos-pm2-logs');

@@ -13,13 +13,13 @@ describe('Cloud Build worker configuration', () => {
     const cloudBuildModule = readRepoFile('terraform/modules/cloud-build/main.tf');
     const deployWorkflow = readRepoFile('.github/workflows/deploy.yml');
 
-    expect(cloudBuildModule).toContain('"vm-lifecycle"');
     expect(cloudBuildModule).toContain('"transcription"');
+    expect(cloudBuildModule).not.toContain('"vm-lifecycle"');
     expect(cloudBuildModule).not.toContain('"log-cleanup"');
 
     expect(deployWorkflow).toContain('gcloud builds triggers run "$TARGET"');
     expect(deployWorkflow).toContain('firestore');
-    expect(deployWorkflow).toContain('vm-lifecycle');
+    expect(deployWorkflow).not.toContain('vm-lifecycle');
     expect(deployWorkflow).toContain('transcription');
     expect(deployWorkflow).toContain('code-worker');
     expect(deployWorkflow).not.toContain('deploy-monolith');
@@ -37,22 +37,21 @@ describe('Cloud Build worker configuration', () => {
     const deployAllWorkers = readRepoFile('cloudbuild/scripts/deploy-all-workers.sh');
     const deployFunction = readRepoFile('cloudbuild/scripts/deploy-function.sh');
 
-    expect(buildAllWorkers).toContain('WORKERS=(vm-lifecycle transcription)');
-    expect(deployAllWorkers).toContain('WORKERS=(vm-lifecycle transcription)');
+    expect(buildAllWorkers).toContain('WORKERS=(transcription)');
+    expect(deployAllWorkers).toContain('WORKERS=(transcription)');
     expect(deployFunction).toContain('transcription)');
     expect(deployFunction).toContain('FUNCTIONS=("intexuraos-transcription-${ENVIRONMENT}")');
   });
 
   it('provides a standalone Cloud Build config for the transcription worker trigger', () => {
     const transcriptionCloudBuild = readRepoFile('workers/transcription/cloudbuild.yaml');
-    const vmLifecycleCloudBuild = readRepoFile('workers/vm-lifecycle/cloudbuild.yaml');
 
     expect(transcriptionCloudBuild).toContain('pnpm --filter @intexuraos/transcription build');
     expect(transcriptionCloudBuild).toContain(
       "args: ['cloudbuild/scripts/deploy-function.sh', 'transcription']"
     );
     expect(transcriptionCloudBuild).toContain('corepack prepare pnpm@10 --activate');
-    expect(vmLifecycleCloudBuild).toContain('corepack prepare pnpm@10 --activate');
+    expect(fs.existsSync(path.join(REPO_ROOT, 'workers/vm-lifecycle/cloudbuild.yaml'))).toBe(false);
   });
 
   it('gives the code-worker multi-arch image rebuild enough Cloud Build time', () => {

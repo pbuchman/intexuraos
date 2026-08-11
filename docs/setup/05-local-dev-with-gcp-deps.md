@@ -2,7 +2,7 @@
 
 This is the canonical guide for running IntexuraOS locally from the current checkout.
 
-Local is a first-class runtime environment with the same data and async pattern as dev: services run on `localhost` with PM2 watch/Vite, use shared GCP/Auth0 resources for data and secrets, and use their own host-local Pub/Sub emulator.
+Local is a first-class runtime environment with the same data and async pattern as dev: services run on `localhost` with PM2 watch/Vite, use shared GCP/Auth0 resources for data and actual secrets, read non-secret configuration from the repository, and use their own host-local Pub/Sub emulator.
 
 The only practical difference from dev is where the process tree runs. Local runs from the current checkout on the developer host; dev runs from the deployed checkout on `home-dev`.
 
@@ -38,9 +38,11 @@ direnv allow
 
 Edit `.envrc.local` only for developer-local overrides such as personal identifiers. Do not commit `.envrc` or `.envrc.local`.
 
-## 3. Sync Secrets
+## 3. Render Configuration And Sync Secrets
 
-Pull retained dev/prod secrets from GCP Secret Manager into `.envrc`:
+Generate the merged dev environment. The script renders versioned values from
+`config/environments/` and pulls only values classified as actual secrets from
+GCP Secret Manager:
 
 ```bash
 ./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman
@@ -49,9 +51,16 @@ direnv allow
 
 Expected result:
 
-- Terraform-defined secrets are listed and fetched from `intexuraos-dev-pbuchman`.
-- Exportable values are written to `.envrc`.
-- `.envrc.local` remains the place for local overrides.
+- Repository-backed runtime configuration is rendered and validated first.
+- Only real secret material is fetched from `intexuraos-dev-pbuchman`.
+- `.envrc` is replaced atomically with mode `0600`.
+- `.envrc.local` is sourced last and remains the place for local overrides.
+
+Secret Manager is only for values that cannot be stored in repository-backed
+configuration: tokens, passwords, client secrets, private keys, HMAC material,
+and encryption keys. Identifiers, URLs, DSNs, and public keys must be changed
+in `config/environments/`, not added as Secret Manager versions. See the
+[runtime configuration policy](../operations/runtime-configuration.md).
 
 Common sync issues:
 
@@ -90,7 +99,8 @@ What starts locally:
 | Pub/Sub UI            | `http://localhost:8105`                |
 | Firestore             | Real retained GCP project              |
 | Cloud Storage         | Real retained GCP project              |
-| Secret Manager        | Synced from real retained GCP project  |
+| Runtime configuration | Versioned `config/environments/` files |
+| Secret Manager        | Actual secrets from retained GCP project |
 | Auth0                 | Shared Auth0 tenant                    |
 
 Local PM2 intentionally clears inherited `FIRESTORE_EMULATOR_HOST` and `STORAGE_EMULATOR_HOST`; localhost services must use real GCP Firestore/Storage. PM2 pins `PUBSUB_EMULATOR_HOST=localhost:8102`, matching the dev pattern of using a per-host Pub/Sub emulator.

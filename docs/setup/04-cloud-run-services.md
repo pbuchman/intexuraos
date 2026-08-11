@@ -35,13 +35,17 @@ All services are configured with:
 
 ## Environment Variables
 
-Services receive secrets from Secret Manager:
+Auth verification values are non-secret versioned runtime configuration:
 
-| Environment Variable | Secret Name                |
+| Environment Variable | Configuration Name         |
 | -------------------- | -------------------------- |
 | `AUTH_JWKS_URL`      | `INTEXURAOS_AUTH_JWKS_URL` |
 | `AUTH_ISSUER`        | `INTEXURAOS_AUTH_ISSUER`   |
 | `AUTH_AUDIENCE`      | `INTEXURAOS_AUTH_AUDIENCE` |
+
+Actual tokens, client secrets, private keys, HMAC material, and encryption
+keys continue to come from Secret Manager. See the
+[runtime configuration policy](../operations/runtime-configuration.md).
 
 ## View Service Status
 
@@ -195,13 +199,13 @@ gcloud run services logs read intexuraos-user-service \
   --limit=100
 ```
 
-### Secret access errors
+### Runtime configuration or secret access errors
 
-Ensure service account has `roles/secretmanager.secretAccessor` on all secrets.
+Validate versioned configuration first. Secret Manager IAM applies only to
+values classified as actual secrets.
 
 ```bash
-# Check IAM bindings
-gcloud secrets get-iam-policy INTEXURAOS_AUTH_JWKS_URL
+node scripts/render-runtime-config.mjs --environment dev --format dotenv >/dev/null
 ```
 
 ### Cold start issues

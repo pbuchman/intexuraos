@@ -127,6 +127,11 @@ data "google_project" "current" {
 locals {
   project_number = data.google_project.current.number
 
+  versioned_runtime_config = {
+    common = jsondecode(file("${path.module}/../../../config/environments/common.json"))
+    dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))
+  }
+
   services = {
     user_service = {
       name      = "intexuraos-user-service"
@@ -371,11 +376,66 @@ resource "google_project_service" "apis" {
     "calendar-json.googleapis.com",
     "cloudfunctions.googleapis.com",
     "eventarc.googleapis.com",
+    "apikeys.googleapis.com",
   ])
 
   project            = var.project_id
   service            = each.value
   disable_on_destroy = false
+}
+
+resource "google_project_iam_audit_config" "secret_manager_data_read" {
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+
+  audit_log_config {
+    log_type = "DATA_READ"
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+resource "google_apikeys_key" "firebase_browser" {
+  name         = "d8251549-1bde-49c0-82a7-b0525a2fe688"
+  project      = var.project_id
+  display_name = "Browser key (auto created by Firebase)"
+
+  restrictions {
+    browser_key_restrictions {
+      allowed_referrers = [
+        "https://intexuraos.cloud/*",
+        "https://dev.intexuraos.cloud/*",
+        "http://localhost:3000/*",
+      ]
+    }
+
+    api_targets {
+      service = "firestore.googleapis.com"
+    }
+
+    api_targets {
+      service = "identitytoolkit.googleapis.com"
+    }
+
+    api_targets {
+      service = "securetoken.googleapis.com"
+    }
+
+    api_targets {
+      service = "firebaseinstallations.googleapis.com"
+    }
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  depends_on = [google_project_service.apis]
+}
+
+import {
+  to = google_apikeys_key.firebase_browser
+  id = "projects/intexuraos-dev-pbuchman/locations/global/keys/d8251549-1bde-49c0-82a7-b0525a2fe688"
 }
 
 # -----------------------------------------------------------------------------
@@ -1239,190 +1299,6 @@ resource "google_storage_bucket_object" "function_placeholder" {
 }
 
 # -----------------------------------------------------------------------------
-# Cloud Functions - Service Account
-# -----------------------------------------------------------------------------
-
-resource "google_service_account" "cloud_functions" {
-  account_id   = "intexuraos-functions-${var.environment}"
-  display_name = "Cloud Functions Service Account"
-  description  = "Service account for Cloud Functions (vm-lifecycle)"
-
-  depends_on = [google_project_service.apis]
-}
-
-# Grant Cloud Functions SA permission to read Firestore
-resource "google_project_iam_member" "functions_firestore" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# Grant Cloud Functions SA permission to manage Compute Engine VMs
-resource "google_project_iam_member" "functions_compute" {
-  project = var.project_id
-  role    = "roles/compute.instanceAdmin.v1"
-  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# Grant Cloud Functions SA permission to receive Eventarc events
-resource "google_project_iam_member" "functions_eventarc" {
-  project = var.project_id
-  role    = "roles/eventarc.eventReceiver"
-  member  = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# Grant Cloud Functions SA permission to access secrets (for INTEXURAOS_INTERNAL_AUTH_TOKEN)
-resource "google_secret_manager_secret_iam_member" "functions_internal_auth_token" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.cloud_functions.email}"
-}
-
-# -----------------------------------------------------------------------------
-# Cloud Functions - VM Lifecycle (Start/Stop)
-# -----------------------------------------------------------------------------
-
-module "function_vm_start" {
-  source = "../../modules/cloud-function"
-
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  function_name = "intexuraos-vm-start-${var.environment}"
-  description   = "Start a GCE VM instance"
-  entry_point   = "startVm"
-  runtime       = "nodejs22"
-
-  source_bucket   = google_storage_bucket.cloud_functions_source.name
-  source_object   = "vm-lifecycle/function.zip"
-  service_account = google_service_account.cloud_functions.email
-
-  trigger_type     = "http"
-  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
-  timeout_seconds  = 120
-  available_memory = "256M"
-
-  env_vars = {
-    INTEXURAOS_ENVIRONMENT    = var.environment
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
-  }
-
-  secrets = {
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  }
-
-  labels = local.common_labels
-
-  depends_on = [
-    google_project_service.apis,
-    google_storage_bucket_object.function_placeholder,
-    google_service_account.cloud_functions,
-  ]
-}
-
-module "function_vm_stop" {
-  source = "../../modules/cloud-function"
-
-  project_id    = var.project_id
-  region        = var.region
-  environment   = var.environment
-  function_name = "intexuraos-vm-stop-${var.environment}"
-  description   = "Stop a GCE VM instance"
-  entry_point   = "stopVm"
-  runtime       = "nodejs22"
-
-  source_bucket   = google_storage_bucket.cloud_functions_source.name
-  source_object   = "vm-lifecycle/function.zip"
-  service_account = google_service_account.cloud_functions.email
-
-  trigger_type     = "http"
-  invoker_members  = ["serviceAccount:${google_service_account.cloud_scheduler.email}"]
-  timeout_seconds  = 120
-  available_memory = "256M"
-
-  env_vars = {
-    INTEXURAOS_ENVIRONMENT    = var.environment
-    INTEXURAOS_GCP_PROJECT_ID = var.project_id
-  }
-
-  secrets = {
-    INTEXURAOS_INTERNAL_AUTH_TOKEN = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-  }
-
-  labels = local.common_labels
-
-  depends_on = [
-    google_project_service.apis,
-    google_storage_bucket_object.function_placeholder,
-    google_service_account.cloud_functions,
-  ]
-}
-
-# Cloud Scheduler - Start VM at 7 AM Poland time (Mon-Fri)
-resource "google_cloud_scheduler_job" "vm_start" {
-  name        = "intexuraos-vm-start-${var.environment}"
-  description = "Start VM instances at 7 AM Poland time on weekdays"
-  schedule    = "0 7 * * 1-5"
-  time_zone   = "Europe/Warsaw"
-  region      = var.region
-
-  http_target {
-    uri         = module.function_vm_start.function_uri
-    http_method = "POST"
-    body        = base64encode(jsonencode({ trigger = "scheduled" }))
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.function_vm_start.function_uri
-    }
-  }
-
-  retry_config {
-    retry_count          = 3
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.function_vm_start,
-  ]
-}
-
-# Cloud Scheduler - Stop VM at 11 PM Poland time (daily)
-resource "google_cloud_scheduler_job" "vm_stop" {
-  name        = "intexuraos-vm-stop-${var.environment}"
-  description = "Stop VM instances at 11 PM Poland time daily"
-  schedule    = "0 23 * * *"
-  time_zone   = "Europe/Warsaw"
-  region      = var.region
-
-  http_target {
-    uri         = module.function_vm_stop.function_uri
-    http_method = "POST"
-    body        = base64encode(jsonencode({ trigger = "scheduled" }))
-
-    oidc_token {
-      service_account_email = google_service_account.cloud_scheduler.email
-      audience              = module.function_vm_stop.function_uri
-    }
-  }
-
-  retry_config {
-    retry_count          = 3
-    max_retry_duration   = "60s"
-    min_backoff_duration = "5s"
-    max_backoff_duration = "30s"
-  }
-
-  depends_on = [
-    google_project_service.apis,
-    module.function_vm_stop,
-  ]
-}
-
-# -----------------------------------------------------------------------------
 # Cloud Functions - Transcription Worker
 # -----------------------------------------------------------------------------
 # (Log-cleanup function and its Pub/Sub topic, DLQ, push subscription, and
@@ -1559,6 +1435,7 @@ module "function_transcription" {
     INTEXURAOS_GCP_PROJECT_ID                       = var.project_id
     INTEXURAOS_PUBSUB_TRANSCRIPTION_COMPLETED_TOPIC = google_pubsub_topic.transcription_completed.name
     INTEXURAOS_PUBSUB_TRANSCRIPTION_DLQ_TOPIC       = google_pubsub_topic.transcription_dlq.name
+    INTEXURAOS_SENTRY_DSN                           = local.versioned_runtime_config.dev["INTEXURAOS_SENTRY_DSN_DEV"]
     INTEXURAOS_USER_SERVICE_URL                     = "${local.public_origin}/api/user"
     INTEXURAOS_WHATSAPP_MEDIA_BUCKET                = module.whatsapp_media_bucket.bucket_name
   }
@@ -1566,7 +1443,6 @@ module "function_transcription" {
   secrets = {
     INTEXURAOS_SPEECHMATICS_APP_API_KEY = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
     INTEXURAOS_INTERNAL_AUTH_TOKEN      = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-    INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]
   }
 
   labels = local.common_labels
@@ -1730,16 +1606,6 @@ output "claude_code_dev_service_account" {
 output "cloud_functions_source_bucket" {
   description = "GCS bucket for Cloud Functions source code"
   value       = google_storage_bucket.cloud_functions_source.name
-}
-
-output "function_vm_start_uri" {
-  description = "VM Start Cloud Function HTTP endpoint"
-  value       = module.function_vm_start.function_uri
-}
-
-output "function_vm_stop_uri" {
-  description = "VM Stop Cloud Function HTTP endpoint"
-  value       = module.function_vm_stop.function_uri
 }
 
 output "function_transcription_name" {

@@ -109,7 +109,6 @@ resource "google_project_iam_member" "cloud_build_functions_developer" {
 
 locals {
   cloud_function_workers = [
-    "vm-lifecycle",
     "transcription",
   ]
 }
@@ -141,7 +140,7 @@ resource "google_cloudbuild_trigger" "firestore" {
 # -----------------------------------------------------------------------------
 # Cloud Function Worker Triggers
 # -----------------------------------------------------------------------------
-# Individual triggers for Cloud Function workers (vm-lifecycle, transcription).
+# Individual triggers for retained Cloud Function workers (transcription).
 # These deploy function source to GCS without triggering on git push.
 
 resource "google_cloudbuild_trigger" "worker" {

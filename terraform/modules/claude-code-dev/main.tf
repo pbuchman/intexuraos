@@ -35,6 +35,7 @@ locals {
     "roles/resourcemanager.projectIamAdmin",
     "roles/run.admin",
     "roles/secretmanager.admin",
+    "roles/serviceusage.apiKeysAdmin",
     "roles/serviceusage.serviceUsageAdmin",
     "roles/storage.objectAdmin",
   ]
