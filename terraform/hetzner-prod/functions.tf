@@ -19,31 +19,9 @@ locals {
       output_topic       = data.google_pubsub_topic.retained_gcp["transcription_completed"].name
       disposition        = "retained-gcp-cloud-function"
     }
-    vm_start = {
-      function_name = "intexuraos-vm-start-${var.source_environment}"
-      source_object = "vm-lifecycle/function.zip"
-      scheduler_job = "intexuraos-vm-start-${var.source_environment}"
-      disposition   = "retained-gcp-cloud-function"
-    }
-    vm_stop = {
-      function_name = "intexuraos-vm-stop-${var.source_environment}"
-      source_object = "vm-lifecycle/function.zip"
-      scheduler_job = "intexuraos-vm-stop-${var.source_environment}"
-      disposition   = "retained-gcp-cloud-function"
-    }
   }
 
   retained_gcp_scheduler_jobs = {
-    vm_start = {
-      job_name    = "intexuraos-vm-start-${var.source_environment}"
-      target_type = "cloud-function"
-      disposition = "keep-current-function-uri-and-audience"
-    }
-    vm_stop = {
-      job_name    = "intexuraos-vm-stop-${var.source_environment}"
-      target_type = "cloud-function"
-      disposition = "keep-current-function-uri-and-audience"
-    }
     code_worker_daily_rebuild = {
       job_name    = "code-worker-daily-rebuild-${var.source_environment}"
       target_type = "cloud-build-api"

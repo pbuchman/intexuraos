@@ -66,11 +66,11 @@ If a PR has failing checks, a merge conflict, or a non-eligible author, the merg
 
 ### Detect and Resolve Merge Conflicts Automatically
 
-When someone pushes to a base branch, the agent checks every bot-authored PR targeting that branch for merge conflicts. If a conflict appears, the system dispatches a resolution task to your worker - the same way it dispatches any other code task. A dedicated cron job reconciles PR state every minute, syncing open/closed status and refreshing conflict information from GitHub into Firestore. Closed PRs are skipped automatically, so the cron does not waste time on stale data.
+When someone pushes to a base branch, the agent checks every bot-authored PR targeting that branch for merge conflicts. If a conflict appears, the system dispatches a resolution task to your worker - the same way it dispatches any other code task. A dedicated cron job reconciles PR state every five minutes, syncing open/closed status and refreshing conflict information from GitHub into Firestore. Closed PRs are skipped automatically, so the cron does not waste time on stale data.
 
 The reconciliation runs as a separate Cloud Scheduler job, decoupled from the webhook pipeline. This means conflict detection does not block webhook processing, and the state stays consistent even if a webhook is missed.
 
-**Example:** Your co-founder merges a PR to `development` that renames a utility function. Two of your bot-authored PRs import that function. Within a minute, the cron detects the conflict, and the agent dispatches resolution tasks for both PRs. By the time you check the dashboard, the conflicts are resolved and the PRs are ready to merge.
+**Example:** Your co-founder merges a PR to `development` that renames a utility function. Two of your bot-authored PRs import that function. Within five minutes, the cron detects the conflict, and the agent dispatches resolution tasks for both PRs. By the time you check the dashboard, the conflicts are resolved and the PRs are ready to merge.
 
 ### Design First, Then Build - With Explicit Mode Selection
 

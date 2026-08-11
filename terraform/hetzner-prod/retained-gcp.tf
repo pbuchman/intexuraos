@@ -28,8 +28,6 @@ locals {
   }
 
   retained_gcp_cloud_function_names = {
-    vm_start      = "intexuraos-vm-start-${local.retained_gcp_environment}"
-    vm_stop       = "intexuraos-vm-stop-${local.retained_gcp_environment}"
     transcription = "intexuraos-transcription-${local.retained_gcp_environment}"
   }
 
@@ -44,7 +42,6 @@ locals {
     web           = "web"
     firestore     = "firestore"
     code_worker   = "code-worker"
-    vm_lifecycle  = "vm-lifecycle"
     transcription = "transcription"
   }
 

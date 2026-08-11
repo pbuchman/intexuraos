@@ -25,6 +25,7 @@ SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENVRC_FILE="${REPO_ROOT}/.envrc"
+RUNTIME_CONFIG_RENDERER="${REPO_ROOT}/scripts/render-runtime-config.mjs"
 
 DEFAULT_ENVIRONMENT="dev"
 ADD_NEW_MODE=0
@@ -38,8 +39,13 @@ NON_EXPORTABLE_SECRETS=(
 )
 
 declare -a TERRAFORM_SECRETS=()
+declare -a SECRET_MANAGER_SECRETS=()
 SECRET_MAP_FILE=""
 PARALLEL_TEMP_DIR=""
+RUNTIME_CONFIG_FILE=""
+BLOCKED_SECRET_NAMES_FILE=""
+ENVRC_TEMP_FILE=""
+ENVRC_UPDATED=0
 
 declare -a EXPORTED_SECRETS=()
 declare -a SKIPPED_NON_EXPORTABLE=()
@@ -89,6 +95,15 @@ cleanup() {
   fi
   if [[ -n "${PARALLEL_TEMP_DIR}" && -d "${PARALLEL_TEMP_DIR}" ]]; then
     rm -rf "${PARALLEL_TEMP_DIR}"
+  fi
+  if [[ -n "${RUNTIME_CONFIG_FILE}" && -f "${RUNTIME_CONFIG_FILE}" ]]; then
+    rm -f "${RUNTIME_CONFIG_FILE}"
+  fi
+  if [[ -n "${BLOCKED_SECRET_NAMES_FILE}" && -f "${BLOCKED_SECRET_NAMES_FILE}" ]]; then
+    rm -f "${BLOCKED_SECRET_NAMES_FILE}"
+  fi
+  if [[ -n "${ENVRC_TEMP_FILE}" && -f "${ENVRC_TEMP_FILE}" ]]; then
+    rm -f "${ENVRC_TEMP_FILE}"
   fi
 }
 
@@ -153,6 +168,47 @@ load_terraform_secret_map() {
   done < "${SECRET_MAP_FILE}"
 }
 
+load_runtime_config() {
+  RUNTIME_CONFIG_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-runtime-config.XXXXXX")"
+  BLOCKED_SECRET_NAMES_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-blocked-secret-names.XXXXXX")"
+
+  if ! node "${RUNTIME_CONFIG_RENDERER}" \
+    --environment "${ENVIRONMENT}" \
+    --format shell-export > "${RUNTIME_CONFIG_FILE}"
+  then
+    fail "Unable to render tracked runtime configuration for ${ENVIRONMENT}"
+  fi
+
+  if ! node --input-type=module - "${REPO_ROOT}/scripts/lib/runtime-config.mjs" \
+    > "${BLOCKED_SECRET_NAMES_FILE}" <<'NODE'
+import { pathToFileURL } from 'node:url';
+
+const runtimeConfigModule = await import(pathToFileURL(process.argv[2]).href);
+const policy = runtimeConfigModule.loadRuntimePolicy();
+process.stdout.write(`${policy.migrationRollbackSecretNames.join('\n')}\n`);
+NODE
+  then
+    fail "Unable to load the Secret Manager migration policy"
+  fi
+
+  [[ -s "${BLOCKED_SECRET_NAMES_FILE}" ]] \
+    || fail "Secret Manager migration policy is empty"
+}
+
+select_secret_manager_names() {
+  local name=""
+
+  SECRET_MANAGER_SECRETS=()
+  for name in "${TERRAFORM_SECRETS[@]}"; do
+    if grep -qFx "${name}" "${BLOCKED_SECRET_NAMES_FILE}"; then
+      continue
+    fi
+    SECRET_MANAGER_SECRETS+=("${name}")
+  done
+
+  TERRAFORM_SECRETS=("${SECRET_MANAGER_SECRETS[@]}")
+}
+
 get_secret_description() {
   local secret_name="$1"
   local description=""
@@ -184,8 +240,8 @@ try:
     import certifi
     ssl_ctx.load_verify_locations(certifi.where())
 except ImportError:
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
+    # Keep create_default_context() and the operating system trust store.
+    pass
 
 token = check_output(["gcloud", "auth", "print-access-token"], text=True).strip()
 base_url = f"https://secretmanager.googleapis.com/v1/projects/{project_id}/secrets"
@@ -245,8 +301,9 @@ add_secret_value() {
 }
 
 write_envrc_header() {
+  local output_path="$1"
   local registry_value="${REGISTRY:-${REGION_VALUE}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev}"
-  cat > "${ENVRC_FILE}" <<EOF
+  cat > "${output_path}" <<EOF
 export PROJECT_ID=${PROJECT_ID}
 export REGION=${REGION_VALUE}
 export REGISTRY=${registry_value}
@@ -254,7 +311,8 @@ EOF
 }
 
 append_envrc_footer() {
-  cat >> "${ENVRC_FILE}" <<'EOF'
+  local output_path="$1"
+  cat >> "${output_path}" <<'EOF'
 
 # === LOCAL OVERRIDES ===
 # Load .envrc.local if exists (for local dev overrides)
@@ -275,15 +333,27 @@ sync_and_classify() {
   PROMPTABLE_MISSING=()
   MANUAL_MISSING=()
 
-  write_envrc_header
+  mkdir -p "$(dirname "${ENVRC_FILE}")"
+  ENVRC_TEMP_FILE="$(mktemp "${ENVRC_FILE}.tmp.XXXXXX")"
+  chmod 600 "${ENVRC_TEMP_FILE}"
+
+  write_envrc_header "${ENVRC_TEMP_FILE}"
+  printf '\n# === TRACKED RUNTIME CONFIGURATION ===\n' >> "${ENVRC_TEMP_FILE}"
+  cat "${RUNTIME_CONFIG_FILE}" >> "${ENVRC_TEMP_FILE}"
 
   if [[ ${#TERRAFORM_SECRETS[@]} -eq 0 ]]; then
-    append_envrc_footer
+    append_envrc_footer "${ENVRC_TEMP_FILE}"
+    mv -f "${ENVRC_TEMP_FILE}" "${ENVRC_FILE}"
+    ENVRC_TEMP_FILE=""
+    ENVRC_UPDATED=1
     return
   fi
 
   echo "Syncing Terraform-defined secrets..."
 
+  if [[ -n "${PARALLEL_TEMP_DIR}" && -d "${PARALLEL_TEMP_DIR}" ]]; then
+    rm -rf "${PARALLEL_TEMP_DIR}"
+  fi
   PARALLEL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sync-secrets-fetch.XXXXXX")"
   local secrets_list_file="${PARALLEL_TEMP_DIR}/_secrets_list.txt"
   printf '%s\n' "${TERRAFORM_SECRETS[@]}" > "${secrets_list_file}"
@@ -314,7 +384,7 @@ sync_and_classify() {
           SKIPPED_NON_EXPORTABLE+=("${secret_name}")
         elif [[ -f "${value_file}" ]]; then
           secret_value="$(cat "${value_file}")"
-          printf 'export %s=%q\n' "${secret_name}" "${secret_value}" >> "${ENVRC_FILE}"
+          printf 'export %s=%q\n' "${secret_name}" "${secret_value}" >> "${ENVRC_TEMP_FILE}"
           EXPORTED_SECRETS+=("${secret_name}")
         else
           UNREADABLE_SECRETS+=("${secret_name}")
@@ -334,7 +404,20 @@ sync_and_classify() {
     esac
   done
 
-  append_envrc_footer
+  append_envrc_footer "${ENVRC_TEMP_FILE}"
+  chmod 600 "${ENVRC_TEMP_FILE}"
+
+  local unresolved=0
+  unresolved=$(( ${#MISSING_SECRETS[@]} + ${#MISSING_VERSIONS[@]} + ${#UNREADABLE_SECRETS[@]} ))
+  if [[ ${unresolved} -gt 0 ]]; then
+    rm -f "${ENVRC_TEMP_FILE}"
+    ENVRC_TEMP_FILE=""
+    return
+  fi
+
+  mv -f "${ENVRC_TEMP_FILE}" "${ENVRC_FILE}"
+  ENVRC_TEMP_FILE=""
+  ENVRC_UPDATED=1
 }
 
 print_secret_list() {
@@ -363,7 +446,7 @@ print_sync_summary() {
   echo "Mode:         $([[ ${ADD_NEW_MODE} -eq 1 ]] && echo "sync + add-new" || echo "sync-only")"
   echo "Output file:  ${ENVRC_FILE}"
   echo ""
-  echo "Terraform-defined secrets: ${#TERRAFORM_SECRETS[@]}"
+  echo "Secret Manager values:      ${#TERRAFORM_SECRETS[@]}"
   echo "Exported to .envrc:        ${#EXPORTED_SECRETS[@]}"
   echo "Skipped (non-exportable):  ${#SKIPPED_NON_EXPORTABLE[@]}"
   echo ""
@@ -456,7 +539,11 @@ print_missing_report() {
   fi
 
   echo ""
-  echo "Updated ${ENVRC_FILE}"
+  if [[ ${ENVRC_UPDATED} -eq 1 ]]; then
+    echo "Updated ${ENVRC_FILE}"
+  else
+    echo "Left ${ENVRC_FILE} unchanged because the generated environment was incomplete."
+  fi
 }
 
 resolve_project_id() {
@@ -527,15 +614,19 @@ parse_args() {
 
 main() {
   parse_args "$@"
+  umask 077
 
   command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is not installed or not in PATH"
   command -v python3 >/dev/null 2>&1 || fail "python3 is required for parallel secret fetching"
+  command -v node >/dev/null 2>&1 || fail "node is required for runtime configuration"
   resolve_project_id
 
   local tf_file="${REPO_ROOT}/terraform/environments/${ENVIRONMENT}/main.tf"
   [[ -f "${tf_file}" ]] || fail "Terraform file not found: ${tf_file}"
 
   load_terraform_secret_map "${tf_file}"
+  load_runtime_config
+  select_secret_manager_names
   sync_and_classify
   print_sync_summary
   print_missing_report

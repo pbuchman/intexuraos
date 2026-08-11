@@ -13,7 +13,6 @@ on:
         options:
           - hetzner-prod
           - firestore
-          - vm-lifecycle
           - transcription
           - code-worker
       deploy_nginx:
@@ -75,7 +74,7 @@ jobs:
           set -euo pipefail
 
           case "$TARGET" in
-            firestore|vm-lifecycle|transcription|code-worker) ;;
+            firestore|transcription|code-worker) ;;
             *)
               echo "Unsupported retained GCP target: $TARGET" >&2
               exit 1

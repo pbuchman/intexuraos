@@ -10,7 +10,7 @@
 
 **Single retained GCP project.** Local, dev, and prod use the SAME retained GCP project `intexuraos-dev-pbuchman` for Firestore, Cloud Storage, Secret Manager, and Auth0 configuration. The `-dev-pbuchman` suffix is legacy; there is no separate prod GCP project. The environment distinction is about runtime target and routing, not project ownership.
 
-**Local follows the same data/async pattern as dev.** Local and dev both use real retained GCP Firestore/Storage/Auth0/Secret Manager and both use a per-host Pub/Sub emulator on `localhost:8102`. The difference is process location: local runs the current checkout on the developer host; dev runs the deployed checkout on `home-dev`.
+**Local follows the same data/async pattern as dev.** Local and dev both use real retained GCP Firestore/Storage/Auth0, versioned runtime configuration, and actual secrets from Secret Manager. Both use a per-host Pub/Sub emulator on `localhost:8102`. The difference is process location: local runs the current checkout on the developer host; dev runs the deployed checkout on `home-dev`.
 
 **Firestore is SHARED across local, dev, and prod.** Same database, same collections. Treat local data writes as writes to the shared retained project.
 
@@ -43,19 +43,21 @@ compatibility. Project, release, and environment tags provide the retained filte
 | retained transcription | `intexuraos-backend`      | n/a                   | `dev`                    |
 | prod                   | `intexuraos-backend`      | `intexuraos-web`      | `prod`                   |
 
-Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports older values such as `development`. The home-dev orchestrator systemd env file at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev`, `INTEXURAOS_RUNTIME=dev`, and the private `.ts.net:8443` `INTEXURAOS_ERROR_HUB_HOST`. Production receives the SentryBox DSNs from Secret Manager via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the static bundle by `scripts/hetzner/deploy-web.sh`.
+Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports older values such as `development`. The home-dev orchestrator systemd env file at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev`, `INTEXURAOS_RUNTIME=dev`, and the private `.ts.net:8443` `INTEXURAOS_ERROR_HUB_HOST`. Production receives the SentryBox DSNs from versioned runtime configuration via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the static bundle by `scripts/hetzner/deploy-web.sh`.
 
-The retained transcription Cloud Function receives its runtime `INTEXURAOS_SENTRY_DSN` value from the dedicated Secret Manager secret `INTEXURAOS_SENTRY_DSN_DEV`. That secret is excluded from shared Cloud Run IAM and from the Hetzner provisioner/runtime secret inventories. Only the transcription service account keeps the secret-specific `roles/secretmanager.secretAccessor` binding for `_DEV`; no other workload runtime identity receives a secret-specific binding for `_DEV`. The administrative Cloud Build service account retains its project-wide access for function deployment.
+The retained transcription Cloud Function receives its runtime `INTEXURAOS_SENTRY_DSN` as a plain environment variable from `config/environments/dev.json`. The old `INTEXURAOS_SENTRY_DSN_DEV` container and accessor binding remain temporarily only for migration rollback and must not be read by any runtime.
 
-## Credentials And Secrets
+## Runtime Configuration And Secrets
 
-**Credentials source of truth:** GCP Secret Manager.
+**Classification source of truth:** `config/environments/policy.json` and [the runtime configuration policy](../../docs/operations/runtime-configuration.md).
 
-| Environment | Secret Loading                                                                                                                |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| local       | `./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman`, then `direnv allow`; local overrides live in `.envrc.local` |
-| dev         | synced secrets + overrides via `.envrc.local` on home-dev                                                                     |
-| prod        | secrets loaded from Secret Manager by Hetzner deploy/runtime scripts                                                          |
+Secret Manager is only for values whose disclosure grants access, impersonation, signing, decryption, or another privileged operation: passwords, bearer/API tokens, OAuth client secrets, private keys, HMAC material, and encryption keys. Public identifiers, URLs, OAuth client IDs, DSNs, project names, public verification keys, and feature flags belong in versioned `config/environments/` files. Do not create a Secret Manager version for repository-backed configuration.
+
+| Environment | Runtime loading                                                                                                                          |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| local       | `sync-secrets.sh` merges versioned dev config with actual secrets; `direnv allow`; host-only overrides live in `.envrc.local`            |
+| dev         | the same mode-`0600` merged `.envrc` on home-dev; the orchestrator receives only its generated strict allowlist                          |
+| prod        | `load-secrets.sh` merges versioned prod config with the explicit remaining-secret allowlist into mode-`0600` `/etc/intexuraos/.env.prod` |
 
 Local and dev PM2 services must not inherit `FIRESTORE_EMULATOR_HOST` or `STORAGE_EMULATOR_HOST`; they must use real retained GCP Firestore/Storage. Local and dev PM2 services must set `PUBSUB_EMULATOR_HOST=localhost:8102` against their own host-local Pub/Sub emulator.
 

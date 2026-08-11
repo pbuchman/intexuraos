@@ -196,7 +196,9 @@ const COMMON_ENV_KEYS = [
   'INTEXURAOS_SENTRY_DSN',
 ];
 
-const SERVICE_SECRET_KEYS = {
+// Source-agnostic runtime names: /etc/intexuraos/.env.prod already contains the
+// validated merge of tracked configuration and actual Secret Manager values.
+const SERVICE_RUNTIME_ENV_KEYS = {
   'app-settings-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'notion-service': ['INTEXURAOS_INTERNAL_AUTH_TOKEN'],
   'whatsapp-service': [
@@ -251,7 +253,6 @@ const SERVICE_SECRET_KEYS = {
     'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
     'INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID',
     'INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET',
-    'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
     'INTEXURAOS_OPENROUTER_APP_API_KEY',
@@ -414,7 +415,7 @@ function createServiceConfig(name) {
     interpreter: 'node',
     env: {
       ...COMMON_SERVICE_ENV,
-      ...pickEnv(SERVICE_SECRET_KEYS[name] ?? []),
+      ...pickEnv(SERVICE_RUNTIME_ENV_KEYS[name] ?? []),
       ...(SERVICE_ENV_MAPPINGS[name] ?? {}),
       ...(waitForService === undefined ? {} : { WAIT_FOR_SERVICE: waitForService }),
       PORT: String(SERVICE_PORTS[name]),

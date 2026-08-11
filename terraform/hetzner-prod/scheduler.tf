@@ -81,7 +81,7 @@ locals {
     merge_conflict_reconcile = {
       job_name             = "intexuraos-merge-conflict-reconcile-prod-hetzner"
       description          = "Check mergeability and dispatch conflict resolution tasks via Hetzner edge"
-      schedule             = "*/1 * * * *"
+      schedule             = "*/5 * * * *"
       time_zone            = "UTC"
       path                 = "/internal/merge-conflicts/reconcile"
       body                 = null

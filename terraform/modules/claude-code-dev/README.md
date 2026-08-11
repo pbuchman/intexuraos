@@ -114,6 +114,7 @@ gcloud iam service-accounts keys delete <key-id> \
 | `roles/resourcemanager.projectIamAdmin` | Project IAM policy management        |
 | `roles/run.admin`                       | Cloud Run service deployment         |
 | `roles/secretmanager.admin`             | Secret creation and access           |
+| `roles/serviceusage.apiKeysAdmin`       | API key restriction management       |
 | `roles/serviceusage.serviceUsageAdmin`  | API enablement                       |
 | `roles/storage.objectAdmin`             | GCS bucket and object management     |
 

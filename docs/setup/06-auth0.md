@@ -231,56 +231,33 @@ openssl rand -base64 32
 
 Save this key securely - you'll need it for Secret Manager.
 
-## 7. Populate Secret Manager (GCP)
+## 7. Configure Auth0 Runtime Values
 
-Terraform creates the secrets; you populate them with actual values using `gcloud secrets versions add`.
+Auth0 domain, client IDs, audience, issuer, and JWKS URL are identifiers and
+public endpoints. Store them in `config/environments/common.json`, with their
+classification enforced by `config/environments/policy.json`.
 
-> **Important**: Secrets are created by Terraform with names prefixed `INTEXURAOS_*`.
-> Use `versions add`, not `create`. The secrets already exist.
+Only encryption material belongs in Secret Manager. Terraform owns the secret
+container; add a version rather than creating a second container.
 
 ```bash
 # Set your GCP project
 export PROJECT_ID=your-gcp-project-id
 
-# Set your Auth0 configuration values
-export INTEXURAOS_AUTH0_DOMAIN="your-tenant.eu.auth0.com"
-export INTEXURAOS_AUTH0_CLIENT_ID="your-native-app-client-id"
-export AUTH0_AUDIENCE="urn:intexuraos:api"
+# After updating config/environments/common.json, validate without printing values
+node scripts/render-runtime-config.mjs --environment dev --format shell-export >/dev/null
+node scripts/render-runtime-config.mjs --environment prod --format dotenv >/dev/null
+
+# Generate the only secret in this section
 export TOKEN_ENCRYPTION_KEY="k7J9mL2nP4qR6sT8uV0wX1yZ3aB5cD7eF9gH1iJ3kL5="
-
-# Populate secret versions (Terraform created the secrets, we add values)
-
-# Auth0 domain (tenant) - required for user-service DAF endpoints
-echo -n "${INTEXURAOS_AUTH0_DOMAIN}" | \
-  gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
-
-# Auth0 client ID (from Native app) - required for user-service DAF endpoints
-echo -n "${INTEXURAOS_AUTH0_CLIENT_ID}" | \
-  gcloud secrets versions add INTEXURAOS_AUTH0_CLIENT_ID --data-file=- --project=$PROJECT_ID
-
-# Auth JWKS URL - required for JWT verification
-echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/.well-known/jwks.json" | \
-  gcloud secrets versions add INTEXURAOS_AUTH_JWKS_URL --data-file=- --project=$PROJECT_ID
-
-# Auth issuer - required for JWT verification
-echo -n "https://${INTEXURAOS_AUTH0_DOMAIN}/" | \
-  gcloud secrets versions add INTEXURAOS_AUTH_ISSUER --data-file=- --project=$PROJECT_ID
-
-# Auth audience - required for JWT verification
-echo -n "${AUTH0_AUDIENCE}" | \
-  gcloud secrets versions add INTEXURAOS_AUTH_AUDIENCE --data-file=- --project=$PROJECT_ID
 
 # Token encryption key - required for encrypting refresh tokens
 echo -n "${TOKEN_ENCRYPTION_KEY}" | \
   gcloud secrets versions add INTEXURAOS_TOKEN_ENCRYPTION_KEY --data-file=- --project=$PROJECT_ID
 ```
 
-To update an existing secret value:
-
-```bash
-echo -n "new-value" | \
-  gcloud secrets versions add INTEXURAOS_AUTH0_DOMAIN --data-file=- --project=$PROJECT_ID
-```
+Do not add Secret Manager versions for Auth0 identifiers or URLs. Commit their
+configuration changes and use the normal dev/production deployment flow.
 
 ## 8. Authentication Flow (with Refresh Tokens)
 

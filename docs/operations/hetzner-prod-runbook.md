@@ -22,7 +22,7 @@ with ad-hoc bulk commands.
 | Path | Purpose |
 | --- | --- |
 | `/opt/intexuraos` | Repo checkout run by PM2 |
-| `/etc/intexuraos/.env.prod` | `deploy:deploy` mode-600 environment material generated from GCP Secret Manager |
+| `/etc/intexuraos/.env.prod` | `deploy:deploy` mode-600 merge of versioned runtime configuration and actual GCP secrets |
 | `/etc/intexuraos/internal-auth-token` | `root:www-data` mode-640 internal auth token injected by nginx after Google OIDC verification |
 | `/var/www/intexuraos/web/releases/<commit-sha>` | Immutable complete Vite bundle for one release |
 | `/var/www/intexuraos/web/current` | Atomically replaced symlink to the Vite release served by nginx |
@@ -71,7 +71,8 @@ operation, not the default path.
 
 Merging to `development` deploys production to Hetzner through
 `.github/workflows/deploy.yml`. The workflow syncs the checked-out commit to
-`/opt/intexuraos`, refreshes GCP Secret Manager material on the VM, installs
+`/opt/intexuraos`, renders versioned configuration and refreshes actual GCP
+secret material on the VM, installs
 dependencies, reloads and health-checks the backward-compatible backend, then
 builds and publishes the web bundle, reloads nginx, and verifies the Hetzner
 origin with `curl --resolve`. This backend-first order keeps already-open old
@@ -104,8 +105,8 @@ Required GitHub configuration:
 | `HETZNER_PROD_HOST` | repository variable, optional | Hetzner host/IP; defaults to `162.55.210.48` |
 
 Manual dispatch target `hetzner-prod` runs the same Hetzner deploy. Manual
-dispatch targets `firestore`, `vm-lifecycle`, `transcription`, and
-`code-worker` still trigger only the retained GCP Cloud Build targets. Migrated
+dispatch targets `firestore`, `transcription`, and `code-worker` still trigger
+only the retained GCP Cloud Build targets. Migrated
 app/web services must not be redeployed through GCP Cloud Run or app Cloud
 Build triggers.
 
@@ -159,12 +160,14 @@ PM2 runtime.
 Terraform bootstrap copies the local keys from
 `provisioner_sa_key_path` and `runtime_sa_key_path` to these VM paths.
 
-## Secret Refresh
+## Runtime Configuration And Secret Refresh
 
 The VM needs readable keys at `/home/deploy/provisioner-sa-key.json` and
-`/home/deploy/runtime-sa-key.json`. `load-secrets.sh` uses the provisioner key
-to read Secret Manager and writes `GOOGLE_APPLICATION_CREDENTIALS` in
-`.env.prod` to the runtime key.
+`/home/deploy/runtime-sa-key.json`. `load-secrets.sh` renders production values
+from `config/environments/`, uses the provisioner key to read only the remaining
+actual secrets, and writes `GOOGLE_APPLICATION_CREDENTIALS` in `.env.prod` to
+the runtime key. The exact repository-versus-Secret-Manager boundary is defined
+in the [runtime configuration policy](./runtime-configuration.md).
 
 SentryBox code-task automation depends on Hetzner runtime secrets for inbound
 webhook verification. Workers read issue evidence through the private
@@ -178,9 +181,11 @@ cd /opt/intexuraos
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
 ```
 
-The script prints secret names only, never values. It writes
-`/etc/intexuraos/.env.prod` with mode `600` using an explicit Hetzner runtime
-secret allowlist and updates `/etc/intexuraos/internal-auth-token` for nginx.
+The script prints secret names only, never values. It writes the validated,
+merged `/etc/intexuraos/.env.prod` with mode `600` using an explicit Hetzner
+runtime secret allowlist and updates `/etc/intexuraos/internal-auth-token` for
+nginx. It rejects attempts to request any of the 26 migration/rollback names
+through `--secret`, including the removed Google OAuth redirect variable.
 
 ## Deploy Or Reload Runtime
 
