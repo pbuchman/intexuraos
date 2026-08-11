@@ -79,7 +79,7 @@ export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPro
   name: 'intex-agent-system-prompt',
   description:
     'Intex Agent system prompt with optional user preferences and DST-safe local calendar context',
-  version: '17.0.0',
+  version: '17.0.1',
   build(input: BuildIntexAgentSystemPromptInput): string {
     const lines: string[] = [INTEX_AGENT_SYSTEM_PROMPT.text];
     if (input.userPreferences !== null && input.userPreferences.trim() !== '') {
@@ -89,7 +89,10 @@ export const buildIntexAgentSystemPrompt: PromptBuilder<BuildIntexAgentSystemPro
         input.userPreferences.trim()
       );
     }
-    const calendarContext = buildLocalCalendarContext(input.currentDateTime, input.timeZone);
+    const calendarContext = buildIntexAgentLocalCalendarContext(
+      input.currentDateTime,
+      input.timeZone
+    );
     lines.push(
       '',
       `IANA time zone: ${input.timeZone}`,
@@ -114,19 +117,21 @@ interface ZonedDateTimeParts extends LocalDate {
   second: number;
 }
 
-interface LocalDayBounds {
+export interface IntexAgentLocalDayBounds {
   timeMin: string;
   timeMax: string;
 }
 
-function buildLocalCalendarContext(
+export interface IntexAgentLocalCalendarContext {
+  currentDateTime: string;
+  today: IntexAgentLocalDayBounds;
+  tomorrow: IntexAgentLocalDayBounds;
+}
+
+export function buildIntexAgentLocalCalendarContext(
   currentDateTime: string,
   timeZone: string
-): {
-  currentDateTime: string;
-  today: LocalDayBounds;
-  tomorrow: LocalDayBounds;
-} {
+): IntexAgentLocalCalendarContext {
   const currentInstant = new Date(currentDateTime);
   const currentParts = getZonedDateTimeParts(currentInstant, timeZone);
   const today = toLocalDate(currentParts);

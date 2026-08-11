@@ -2667,6 +2667,108 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
   });
 
+  it('widens a today-and-tomorrow calendar query before execution', async () => {
+    const receivedQueryArgs: Parameters<
+      IntexAgentToolExecutor['queryCalendarEvents']
+    >[0][] = [];
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-11T00:00:00.000+02:00',
+          timeMax: '2026-08-12T00:00:00.000+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Calendar checked.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async (args) => {
+          receivedQueryArgs.push(args);
+          return JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: 0,
+            truncated: false,
+            timeMin: args.timeMin,
+            timeMax: args.timeMax,
+            events: [],
+          });
+        },
+      }),
+    });
+
+    await runner.run({
+      session: session(),
+      events: [],
+      message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+      currentDateTime: '2026-08-11T09:06:09.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(receivedQueryArgs).toEqual([
+      {
+        mode: 'list',
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        maxResults: 100,
+      },
+    ]);
+    expect(client.calls[0]?.tools[0]?.stopAfterRun).toBe(true);
+  });
+
+  it.each([
+    'Co mam w kalendarzu dzisiaj i jutro?',
+    'Pokaż kalendarz na dziś i jutro.',
+    'Jakie mamy wydarzenia dzis i jutro?',
+    'Jakie wydarzenia są dziś i jutro?',
+    'Co mam dziś i jutro w kalendarzu?',
+    "What's on my calendar today and tomorrow?",
+    'Which events do we have today and tomorrow?',
+    'What do I have today and tomorrow on my calendar?',
+  ])('recognizes a natural today-and-tomorrow event-list request: %s', async (message) => {
+    const captured = await runCapturedTodayAndTomorrowCalendarQuery(message);
+
+    expect(captured.args).toMatchObject({
+      mode: 'list',
+      timeMin: '2026-08-11T00:00:00.000+02:00',
+      timeMax: '2026-08-13T00:00:00.000+02:00',
+      maxResults: 100,
+    });
+    expect(captured.stopAfterRun).toBe(true);
+  });
+
+  it.each([
+    'Jakie wydarzenia mam dzisiaj, ale nie jutro?',
+    'What events do I have today, but not tomorrow?',
+    'What events do I have today and day-after-tomorrow?',
+    'What free time is there between events today and tomorrow?',
+    'Ile wydarzeń mam dzisiaj i jutro?',
+    'What is the number of events today and tomorrow?',
+    'Jakie wydarzenia mam dzisiaj rano i jutro po 15:00?',
+    'What events do I have after 3 today and tomorrow?',
+  ])('does not force the two-day list path for a different calendar meaning: %s', async (message) => {
+    const captured = await runCapturedTodayAndTomorrowCalendarQuery(message);
+
+    expect(captured.args).toEqual({
+      mode: 'list',
+      timeMin: '2026-08-11T00:00:00.000+02:00',
+      timeMax: '2026-08-12T00:00:00.000+02:00',
+    });
+    expect(captured.stopAfterRun).toBeUndefined();
+  });
+
   it('normalizes calendar classifier outputs when optional metadata is absent', async () => {
     const queryClient = new ToolExecutingFakeToolCallingClient(
       {
@@ -4839,6 +4941,538 @@ describe('createIntexAgentRunner', () => {
       toolResult: toolResultValue,
     });
     expect(responseRepairClient.calls).toHaveLength(1);
+  });
+
+  it('does not send a future-tense clarification after a successful today-and-tomorrow query', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 0,
+      truncated: false,
+      timeMin: '2026-08-11T00:00:00.000+02:00',
+      timeMax: '2026-08-13T00:00:00.000+02:00',
+      events: [],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-11T00:00:00.000+02:00',
+          timeMax: '2026-08-12T00:00:00.000+02:00',
+        },
+      },
+      [
+        ok({
+          content: 'malformed runner output',
+          toolCallsMade: 1,
+          iterationCount: 2,
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUsd: 0 },
+        }),
+      ]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          reply:
+            'Chętnie sprawdzę. Potwierdź proszę, że chodzi o dzisiaj, a potem odpytam kalendarz.',
+          clarification: 'Czy chodzi o dzisiaj według daty tej sesji?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['date'],
+          candidateIntents: ['query_calendar_events'],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      responseRepairClient,
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+      currentDateTime: '2026-08-11T09:06:09.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toEqual({
+      outcome: 'completed',
+      reply: 'Dzisiaj:\n- Brak wydarzeń.\n\nJutro:\n- Brak wydarzeń.',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+    expect(result.reply).not.toMatch(/chętnie|sprawdzę|odpytam|potwierdź|\?/iu);
+    expect(responseRepairClient.calls).toHaveLength(0);
+  });
+
+  it('groups verified today-and-tomorrow events even when the model claims it will check later', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      truncated: false,
+      timeMin: '2026-08-11T00:00:00.000+02:00',
+      timeMax: '2026-08-13T00:00:00.000+02:00',
+      events: [
+        {
+          id: 'event-today',
+          summary: 'Daily stand-up',
+          start: { dateTime: '2026-08-11T08:00:00.000Z' },
+          end: { dateTime: '2026-08-11T08:30:00.000Z' },
+        },
+        {
+          id: 'event-tomorrow',
+          summary: 'Urlop',
+          start: { date: '2026-08-12' },
+          end: { date: '2026-08-13' },
+        },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-11T00:00:00.000+02:00',
+          timeMax: '2026-08-12T00:00:00.000+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Dopiero odpytam kalendarz i wrócę z odpowiedzią.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+        currentDateTime: '2026-08-11T09:06:09.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply:
+        'Dzisiaj:\n- 11 sierpnia 2026, 10:00 — Daily stand-up\n\nJutro:\n- 12 sierpnia 2026 — Urlop',
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+  });
+
+  it('lists overlapping and untitled events on every covered day', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      truncated: false,
+      timeMin: '2026-08-11T00:00:00.000+02:00',
+      timeMax: '2026-08-13T00:00:00.000+02:00',
+      events: [
+        {
+          id: 'event-overnight',
+          summary: 'Night shift',
+          start: { dateTime: '2026-08-11T21:30:00.000Z', timeZone: 'UTC' },
+          end: { dateTime: '2026-08-11T22:30:00.000Z', timeZone: 'UTC' },
+        },
+        {
+          id: 'event-all-day',
+          summary: '',
+          start: { date: '2026-08-11' },
+          end: { date: '2026-08-13' },
+        },
+      ],
+    };
+    const runner = createIntexAgentRunner({
+      client: new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-12T00:00:00.000+02:00',
+          },
+        },
+        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+      ),
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+        currentDateTime: '2026-08-11T09:06:09.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: [
+        'Dzisiaj:',
+        '- 11 sierpnia 2026, 23:30 — Night shift',
+        '- 11 sierpnia 2026 — (bez tytułu)',
+        '',
+        'Jutro:',
+        '- 11 sierpnia 2026, 23:30 — Night shift',
+        '- 11 sierpnia 2026 — (bez tytułu)',
+      ].join('\n'),
+      toolName: 'query_calendar_events',
+      toolResult: toolResultValue,
+    });
+  });
+
+  it('marks a truncated today-and-tomorrow list as incomplete without claiming an empty day', async () => {
+    const toolResultValue = {
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      truncated: true,
+      timeMin: '2026-08-11T00:00:00.000+02:00',
+      timeMax: '2026-08-13T00:00:00.000+02:00',
+      events: [
+        {
+          id: 'event-today',
+          summary: 'Daily stand-up',
+          start: { dateTime: '2026-08-11T08:00:00.000Z' },
+          end: { dateTime: '2026-08-11T08:30:00.000Z' },
+        },
+      ],
+    };
+    const runner = createIntexAgentRunner({
+      client: new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-12T00:00:00.000+02:00',
+          },
+        },
+        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+      ),
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+      currentDateTime: '2026-08-11T09:06:09.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'completed',
+      reply: [
+        'Dzisiaj:',
+        '- 11 sierpnia 2026, 10:00 — Daily stand-up',
+        '',
+        'Jutro:',
+        '- Brak wydarzeń w zwróconej części listy.',
+        '',
+        'Uwaga: kalendarz zwrócił tylko część wydarzeń; ta lista może być niepełna.',
+      ].join('\n'),
+      toolName: 'query_calendar_events',
+    });
+    expect(result.reply).not.toContain('Jutro:\n- Brak wydarzeń.');
+  });
+
+  it('keeps both day sections visible when the verified calendar list is long', async () => {
+    const events = Array.from({ length: 30 }, (_, index) => {
+      const date = index < 15 ? '2026-08-11' : '2026-08-12';
+      const endDate = index < 15 ? '2026-08-12' : '2026-08-13';
+      return {
+        id: `event-${String(index)}`,
+        summary: `Wydarzenie ${String(index)} ${'x'.repeat(500)}`,
+        start: { date },
+        end: { date: endDate },
+      };
+    });
+    const runner = createIntexAgentRunner({
+      client: new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-12T00:00:00.000+02:00',
+          },
+        },
+        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+      ),
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'list',
+            count: events.length,
+            truncated: false,
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-13T00:00:00.000+02:00',
+            events,
+          }),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+      currentDateTime: '2026-08-11T09:06:09.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result.outcome).toBe('completed');
+    expect(result.reply.length).toBeLessThanOrEqual(4096);
+    expect(result.reply).toContain('Dzisiaj:');
+    expect(result.reply).toContain('Jutro:');
+    expect(result.reply).toContain('Pominięto dalsze wydarzenia.');
+    expect(result.reply).toContain(
+      'Dalsze wydarzenia pominięto, aby zachować czytelność odpowiedzi.'
+    );
+  });
+
+  it('fails closed when a today-and-tomorrow list tool returns count-mode data', async () => {
+    const runner = createIntexAgentRunner({
+      client: new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-12T00:00:00.000+02:00',
+          },
+        },
+        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+      ),
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () =>
+          JSON.stringify({
+            status: 'completed',
+            mode: 'count',
+            count: 0,
+            truncated: false,
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-13T00:00:00.000+02:00',
+          }),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+        currentDateTime: '2026-08-11T09:06:09.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'tool_failed',
+      reply: 'Nie udało się wiarygodnie odczytać wyników kalendarza. Spróbuj ponownie.',
+      toolName: 'query_calendar_events',
+      errorCategory: 'validation',
+      isRetryable: true,
+    });
+  });
+
+  it.each([
+    {
+      label: 'a mismatched start bound',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 0,
+        truncated: false,
+        timeMin: '2026-08-10T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [],
+      },
+    },
+    {
+      label: 'a mismatched end bound',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 0,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-12T00:00:00.000+02:00',
+        events: [],
+      },
+    },
+    {
+      label: 'a missing truncation marker',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 0,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [],
+      },
+    },
+    {
+      label: 'a primitive event',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: ['invalid-event'],
+      },
+    },
+    {
+      label: 'an event without an end object',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [
+          {
+            summary: 'Missing end',
+            start: { dateTime: '2026-08-11T08:00:00.000Z' },
+          },
+        ],
+      },
+    },
+    {
+      label: 'an all-day event with mismatched endpoint kinds',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [
+          {
+            summary: 'Mismatched all-day end',
+            start: { date: '2026-08-11' },
+            end: { dateTime: '2026-08-12T00:00:00.000Z' },
+          },
+        ],
+      },
+    },
+    {
+      label: 'a timed event without an end date-time',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [
+          {
+            summary: 'Missing end date-time',
+            start: { dateTime: '2026-08-11T08:00:00.000Z' },
+            end: {},
+          },
+        ],
+      },
+    },
+    {
+      label: 'a timed event with an invalid interval',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [
+          {
+            summary: 'Backwards event',
+            start: { dateTime: '2026-08-11T08:30:00.000Z' },
+            end: { dateTime: '2026-08-11T08:00:00.000Z' },
+          },
+        ],
+      },
+    },
+    {
+      label: 'a timed event outside the verified range',
+      toolResultValue: {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-13T00:00:00.000+02:00',
+        events: [
+          {
+            summary: 'Out-of-range event',
+            start: { dateTime: '2026-08-13T01:00:00.000Z' },
+            end: { dateTime: '2026-08-13T02:00:00.000Z' },
+          },
+        ],
+      },
+    },
+  ])('fails closed when a today-and-tomorrow list contains $label', async ({ toolResultValue }) => {
+    const runner = createIntexAgentRunner({
+      client: new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-11T00:00:00.000+02:00',
+            timeMax: '2026-08-12T00:00:00.000+02:00',
+          },
+        },
+        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+      ),
+      intentClassifier: toolIntentClassifier(['query_calendar_events']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(toolResultValue),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Jakie mamy wydarzenia w kalendarzu dzisiaj, a jakie jutro?',
+        currentDateTime: '2026-08-11T09:06:09.000Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'tool_failed',
+      reply: 'Nie udało się wiarygodnie odczytać wyników kalendarza. Spróbuj ponownie.',
+      toolName: 'query_calendar_events',
+      errorCategory: 'validation',
+      isRetryable: true,
+    });
   });
 
   it('falls back to the verified calendar count when the final model envelope is malformed', async () => {
@@ -11589,6 +12223,64 @@ function calendarUpdateLookupResult(
     events: [calendarUpdateLookupEvent()],
     ...overrides,
   };
+}
+
+async function runCapturedTodayAndTomorrowCalendarQuery(message: string): Promise<{
+  args: Parameters<IntexAgentToolExecutor['queryCalendarEvents']>[0];
+  stopAfterRun: boolean | undefined;
+}> {
+  const receivedQueryArgs: Parameters<
+    IntexAgentToolExecutor['queryCalendarEvents']
+  >[0][] = [];
+  const client = new ToolExecutingFakeToolCallingClient(
+    {
+      toolName: 'query_calendar_events',
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-12T00:00:00.000+02:00',
+      },
+    },
+    [
+      ok(
+        toolResult({
+          outcome: 'completed',
+          reply: 'Calendar checked.',
+          toolName: 'query_calendar_events',
+        })
+      ),
+    ]
+  );
+  const runner = createIntexAgentRunner({
+    client,
+    intentClassifier: toolIntentClassifier(['query_calendar_events']),
+    toolExecutor: fakeToolExecutor({
+      queryCalendarEvents: async (args) => {
+        receivedQueryArgs.push(args);
+        return JSON.stringify({
+          status: 'completed',
+          mode: 'list',
+          count: 0,
+          truncated: false,
+          timeMin: args.timeMin,
+          timeMax: args.timeMax,
+          events: [],
+        });
+      },
+    }),
+  });
+
+  await runner.run({
+    session: session(),
+    events: [],
+    message,
+    currentDateTime: '2026-08-11T09:06:09.000Z',
+    timeZone: 'Europe/Warsaw',
+  });
+
+  const args = receivedQueryArgs[0];
+  if (args === undefined) throw new Error('Calendar query was not executed');
+  return { args, stopAfterRun: client.calls[0]?.tools[0]?.stopAfterRun };
 }
 
 function toolResult(content: Record<string, unknown>): ToolCallingResult {
