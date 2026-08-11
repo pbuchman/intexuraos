@@ -42,8 +42,26 @@ const MATRIX_CORPUS_ENV_NAMES = [
   'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
   'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
 ] as const;
+const MATRIX_CORPUS_RUNTIME_ONLY_NAMES = MATRIX_CORPUS_ENV_NAMES.slice(0, 3);
+const MATRIX_CORPUS_VERSIONED_CONFIG_NAMES = [
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+] as const;
+const MATRIX_CORPUS_SECRET_MANAGER_NAMES = [
+  'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
+] as const;
 const TEST_RUNS_READ_FLAG = 'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED' as const;
 const TERRAFORM_DEV_MAIN = readFileSync('terraform/environments/dev/main.tf', 'utf8');
+const COMMON_RUNTIME_CONFIG = JSON.parse(
+  readFileSync('config/environments/common.json', 'utf8')
+) as Record<string, string>;
 
 function loadDevConfig(extraEnv: Record<string, string> = {}): DevConfigSummary {
   const stdout = execFileSync(
@@ -236,7 +254,7 @@ describe('ecosystem.config.cjs', () => {
     }
   });
 
-  it('declares exactly the production Matrix corpus runtime secrets in Terraform', () => {
+  it('keeps public Matrix corpus metadata in repo config and private material in Secret Manager', () => {
     const matrixCorpusSection =
       TERRAFORM_DEV_MAIN.split('# Production Matrix corpus evaluator')[1]?.split(
         '# Firebase configuration for web app'
@@ -244,10 +262,16 @@ describe('ecosystem.config.cjs', () => {
 
     expect(matrixCorpusSection).not.toBe('');
     expect(matrixCorpusSection).not.toMatch(/synthetic-|home-dev|BEGIN PRIVATE|contact@/);
-    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(3)) {
+    for (const name of MATRIX_CORPUS_SECRET_MANAGER_NAMES) {
       expect(matrixCorpusSection.match(new RegExp(`"${name}"`, 'g'))?.length, name).toBe(1);
+      expect(COMMON_RUNTIME_CONFIG[name], name).toBeUndefined();
     }
-    for (const name of MATRIX_CORPUS_ENV_NAMES.slice(0, 3)) {
+    for (const name of MATRIX_CORPUS_VERSIONED_CONFIG_NAMES) {
+      expect(COMMON_RUNTIME_CONFIG[name], name).toBeDefined();
+      expect(matrixCorpusSection, name).not.toContain(`"${name}"`);
+    }
+    for (const name of MATRIX_CORPUS_RUNTIME_ONLY_NAMES) {
+      expect(COMMON_RUNTIME_CONFIG[name], name).toBeUndefined();
       expect(matrixCorpusSection, name).not.toContain(`"${name}"`);
     }
   });

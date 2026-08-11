@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const terraformPath = resolve(repoRoot, 'terraform', 'environments', 'dev', 'main.tf');
+const retainedGcpTerraformPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'retained-gcp.tf');
 const runtimePolicyPath = resolve(repoRoot, 'config', 'environments', 'policy.json');
 const claudeCodeDevTerraformPath = resolve(
   repoRoot,
@@ -21,11 +22,40 @@ const claudeCodeDevReadmePath = resolve(
 );
 
 const terraform = readFileSync(terraformPath, 'utf8');
+const retainedGcpTerraform = readFileSync(retainedGcpTerraformPath, 'utf8');
 
 interface RuntimeConfigPolicy {
-  migrationRollbackSecretNames: string[];
   secretManagerNames: string[];
 }
+
+const migratedSecretTombstones = [
+  'INTEXURAOS_AUTH0_CLIENT_ID',
+  'INTEXURAOS_AUTH0_DOMAIN',
+  'INTEXURAOS_AUTH0_SPA_CLIENT_ID',
+  'INTEXURAOS_AUTH_AUDIENCE',
+  'INTEXURAOS_AUTH_ISSUER',
+  'INTEXURAOS_AUTH_JWKS_URL',
+  'INTEXURAOS_CLOUDFLARE_ACCOUNT_ID',
+  'INTEXURAOS_FIREBASE_API_KEY',
+  'INTEXURAOS_FIREBASE_AUTH_DOMAIN',
+  'INTEXURAOS_FIREBASE_PROJECT_ID',
+  'INTEXURAOS_GITHUB_APP_ID',
+  'INTEXURAOS_GITHUB_INSTALLATION_ID',
+  'INTEXURAOS_GITHUB_OAUTH_CLIENT_ID',
+  'INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID',
+  'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI',
+  'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL',
+  'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
+  'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
+  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+  'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
+  'INTEXURAOS_REPOSITORY_URL',
+  'INTEXURAOS_SENTRY_DSN',
+  'INTEXURAOS_SENTRY_DSN_DEV',
+  'INTEXURAOS_SENTRY_DSN_WEB',
+] as const;
 
 function readRuntimePolicy(): RuntimeConfigPolicy {
   return JSON.parse(readFileSync(runtimePolicyPath, 'utf8')) as RuntimeConfigPolicy;
@@ -41,7 +71,7 @@ function sectionBetween(start: string, end: string): string {
 }
 
 describe('versioned runtime configuration Terraform cutover', () => {
-  it('keeps the Secret Manager module inventory exactly synchronized with policy', () => {
+  it('removes migrated containers while retaining the exact secret-only inventory', () => {
     const policy = readRuntimePolicy();
     const secretManagerSection = sectionBetween(
       'module "secret_manager" {',
@@ -51,17 +81,29 @@ describe('versioned runtime configuration Terraform cutover', () => {
       .map((match) => match[1])
       .sort();
 
+    expect(migratedSecretTombstones).toHaveLength(26);
+    expect(policy.secretManagerNames).toHaveLength(37);
     expect(moduleNames).toEqual([...policy.secretManagerNames].sort());
+    expect(moduleNames).toHaveLength(37);
     expect(moduleNames).not.toContain('INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN');
     expect(terraform).toContain('secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"');
   });
 
-  it('loads common and dev versioned configuration without removing rollback secrets', () => {
-    const policy = readRuntimePolicy();
+  it('loads versioned config after removing every rollback-only IaC reference', () => {
     const secretManagerSection = sectionBetween(
       'module "secret_manager" {',
       '\nresource "google_secret_manager_secret" "cloudflare_dns_api_token"'
     );
+    const hetznerRuntimeSecretsSection = sectionBetween(
+      'hetzner_runtime_secret_names = toset([',
+      '])'
+    );
+    const cloudRunExcludedSecretsSection = sectionBetween(
+      'cloud_run_secret_manager_excluded_names = toset([',
+      '])'
+    );
+    const retainedGcpSecretsSection =
+      retainedGcpTerraform.split('retained_gcp_secret_ids = toset([')[1]?.split('])')[0] ?? '';
 
     expect(terraform).toContain('versioned_runtime_config = {');
     expect(terraform).toContain(
@@ -71,10 +113,29 @@ describe('versioned runtime configuration Terraform cutover', () => {
       'dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))'
     );
 
-    expect(policy.migrationRollbackSecretNames).toHaveLength(26);
-    for (const secretName of policy.migrationRollbackSecretNames) {
-      expect(secretManagerSection, secretName).toContain(`"${secretName}"`);
+    expect(migratedSecretTombstones).toHaveLength(26);
+    for (const secretName of migratedSecretTombstones) {
+      expect(secretManagerSection, secretName).not.toContain(`"${secretName}"`);
+      expect(hetznerRuntimeSecretsSection, secretName).not.toContain(`"${secretName}"`);
+      expect(cloudRunExcludedSecretsSection, secretName).not.toContain(`"${secretName}"`);
+      expect(retainedGcpSecretsSection, secretName).not.toContain(`"${secretName}"`);
+      expect(terraform, secretName).not.toContain(
+        `module.secret_manager.secret_ids["${secretName}"]`
+      );
     }
+
+    expect(terraform).not.toContain(
+      'resource "google_secret_manager_secret_version" "firebase_api_key" {'
+    );
+    expect(terraform).not.toContain(
+      'resource "google_secret_manager_secret_version" "firebase_auth_domain" {'
+    );
+    expect(terraform).not.toContain(
+      'resource "google_secret_manager_secret_version" "firebase_project_id" {'
+    );
+    expect(terraform).not.toContain(
+      'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {'
+    );
   });
 
   it('enables API Keys and Secret Manager DATA_READ audit logging', () => {
@@ -146,7 +207,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
   });
 
-  it('passes the dev Sentry DSN to transcription as plain env while retaining rollback IAM', () => {
+  it('passes the dev Sentry DSN as plain env after removing rollback IAM', () => {
     const transcriptionModule = sectionBetween(
       'module "function_transcription" {',
       '\n# Push subscription that delivers audio-stored events'
@@ -158,13 +219,13 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(transcriptionModule).not.toContain(
       'INTEXURAOS_SENTRY_DSN               = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'
     );
-    expect(terraform).toContain(
+    expect(terraform).not.toContain(
       'resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {'
     );
-    expect(terraform).toContain(
+    expect(terraform).not.toContain(
       'secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]'
     );
-    expect(transcriptionModule).toContain(
+    expect(transcriptionModule).not.toContain(
       'google_secret_manager_secret_iam_member.transcription_sentry_dsn_dev,'
     );
   });

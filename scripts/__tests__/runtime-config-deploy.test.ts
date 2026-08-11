@@ -12,7 +12,7 @@ const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
 const loadGrafanaEnvPath = resolve(repoRoot, 'scripts/observability/load-grafana-cloud-env.sh');
 const generateOrchestratorEnvPath = resolve(repoRoot, 'scripts/generate-orchestrator-env.mjs');
 
-const MIGRATED_CONFIG_NAMES = [
+const VERSIONED_CONFIG_NAMES = [
   'INTEXURAOS_AUTH0_CLIENT_ID',
   'INTEXURAOS_AUTH0_DOMAIN',
   'INTEXURAOS_AUTH0_SPA_CLIENT_ID',
@@ -40,8 +40,8 @@ const MIGRATED_CONFIG_NAMES = [
   'INTEXURAOS_SENTRY_DSN_WEB',
 ] as const;
 
-const DELETE_ONLY_NAMES = ['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'] as const;
-const SECRET_MANAGER_BLOCKLIST = [...MIGRATED_CONFIG_NAMES, ...DELETE_ONLY_NAMES] as const;
+const RETIRED_RUNTIME_NAMES = ['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'] as const;
+const SECRET_MANAGER_BLOCKLIST = [...VERSIONED_CONFIG_NAMES, ...RETIRED_RUNTIME_NAMES] as const;
 
 function makeExecutable(path: string, contents: string): void {
   writeFileSync(path, contents, { mode: 0o700 });
@@ -87,6 +87,15 @@ function basePath(binDir: string): string {
   return `${binDir}:${process.env.PATH ?? ''}`;
 }
 
+function readHetznerRuntimeSecretNames(): string[] {
+  const script = readFileSync(loadSecretsPath, 'utf8');
+  return (
+    script
+      .match(/HETZNER_RUNTIME_SECRETS=\(([\s\S]*?)\)/u)?.[1]
+      ?.match(/INTEXURAOS_[A-Z0-9_]+/gu) ?? []
+  );
+}
+
 function validOrchestratorEnvironment(
   overrides: Record<string, string> = {}
 ): Record<string, string> {
@@ -124,7 +133,7 @@ describe('runtime configuration cutover', () => {
     expect(script).toContain('ssl.create_default_context()');
   });
 
-  it('syncs tracked dev config without reading migrated names from Secret Manager', () => {
+  it('syncs tracked dev config without reading versioned or retired names from Secret Manager', () => {
     const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-sync-'));
     const outputPath = join(tempRoot, '.envrc');
     const { binDir, fetchLog } = makeFakeSyncTools(tempRoot);
@@ -159,6 +168,18 @@ describe('runtime configuration cutover', () => {
     expect(envrc.trimEnd()).toMatch(
       /# Load \.envrc\.local if exists \(for local dev overrides\)\n\[\[ -f \.envrc\.local \]\] && source \.envrc\.local \|\| true$/u
     );
+  }, 30_000);
+
+  it('derives both loader blocklists from every config scope plus retired tombstones', () => {
+    for (const scriptPath of [syncSecretsPath, loadSecretsPath]) {
+      const script = readFileSync(scriptPath, 'utf8');
+
+      expect(script, scriptPath).toContain('...policy.scopes.common');
+      expect(script, scriptPath).toContain('...policy.scopes.dev');
+      expect(script, scriptPath).toContain('...policy.scopes.prod');
+      expect(script, scriptPath).toContain('...policy.deleteOnlyNames');
+      expect(script, scriptPath).not.toContain('policy.migrationRollbackSecretNames.join');
+    }
   });
 
   it('keeps the previous .envrc intact when a secret fetch fails', () => {
@@ -219,9 +240,10 @@ describe('runtime configuration cutover', () => {
 
   it('merges tracked prod config with only real Secret Manager values', () => {
     const script = readFileSync(loadSecretsPath, 'utf8');
-    const runtimeSecrets = script
-      .match(/HETZNER_RUNTIME_SECRETS=\(([\s\S]*?)\)/u)?.[1]
-      ?.match(/INTEXURAOS_[A-Z0-9_]+/gu);
+    const runtimeSecrets = readHetznerRuntimeSecretNames();
+    const policy = JSON.parse(
+      readFileSync(resolve(repoRoot, 'config/environments/policy.json'), 'utf8')
+    ) as { secretManagerNames: string[] };
     expect(script).toContain('render-runtime-config.mjs');
     expect(script).toContain('--environment');
     expect(script).toContain('--format');
@@ -231,13 +253,56 @@ describe('runtime configuration cutover', () => {
       /HETZNER_RUNTIME_SECRETS=\([\s\S]*?INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI[\s\S]*?\)/u
     );
     expect(runtimeSecrets).toHaveLength(28);
+    expect(runtimeSecrets.every((name) => policy.secretManagerNames.includes(name))).toBe(true);
     for (const name of SECRET_MANAGER_BLOCKLIST) {
       expect(runtimeSecrets, name).not.toContain(name);
     }
   });
 
-  it('does not permit --secret to bypass the tracked-config policy', () => {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-'));
+  it.each(SECRET_MANAGER_BLOCKLIST)(
+    'does not permit --secret to read the versioned or retired name %s',
+    (blockedName) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-'));
+      const binDir = join(tempRoot, 'bin');
+      const gcloudLog = join(tempRoot, 'gcloud.log');
+      mkdirSync(binDir);
+      makeExecutable(
+        join(binDir, 'gcloud'),
+        `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "\${GCLOUD_LOG:?}"
+printf 'must-not-be-read\\n'
+`
+      );
+
+      const result = spawnSync(
+        'bash',
+        [loadSecretsPath, '--output', join(tempRoot, '.env.prod'), '--secret', blockedName],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: basePath(binDir),
+            GCLOUD_LOG: gcloudLog,
+            INTEXURAOS_ENVIRONMENT: 'prod',
+            DEPLOY_USER: process.env.USER ?? 'p.buchman',
+            TMPDIR: tempRoot,
+          },
+        }
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('blocked by runtime configuration policy');
+      expect(() => readFileSync(gcloudLog, 'utf8')).toThrow();
+    }
+  );
+
+  it.each([
+    ['INTEXURAOS_DASHSCOPE_APP_API_KEY', 'is not in the production runtime secret allowlist'],
+    ['INTEXURAOS_UNCLASSIFIED_SECRET', 'is not classified as a Secret Manager secret'],
+  ])('rejects the --secret assertion %s before any gcloud read', (requestedName, message) => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-assertion-'));
     const binDir = join(tempRoot, 'bin');
     const gcloudLog = join(tempRoot, 'gcloud.log');
     mkdirSync(binDir);
@@ -245,20 +310,14 @@ describe('runtime configuration cutover', () => {
       join(binDir, 'gcloud'),
       `#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\\n' "$*" >> "\${GCLOUD_LOG:?}"
-printf 'must-not-be-read\\n'
+printf '%s\n' "$*" >> "\${GCLOUD_LOG:?}"
+printf 'must-not-be-read\n'
 `
     );
 
     const result = spawnSync(
       'bash',
-      [
-        loadSecretsPath,
-        '--output',
-        join(tempRoot, '.env.prod'),
-        '--secret',
-        'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI',
-      ],
+      [loadSecretsPath, '--output', join(tempRoot, '.env.prod'), '--secret', requestedName],
       {
         cwd: repoRoot,
         encoding: 'utf8',
@@ -274,8 +333,97 @@ printf 'must-not-be-read\\n'
     );
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('tracked runtime configuration');
+    expect(result.stderr).toContain(message);
     expect(() => readFileSync(gcloudLog, 'utf8')).toThrow();
+  });
+
+  it('treats --secret as an assertion and publishes the complete production environment', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-complete-'));
+    const binDir = join(tempRoot, 'bin');
+    const outputPath = join(tempRoot, '.env.prod');
+    const internalAuthTokenPath = join(tempRoot, 'internal-auth-token');
+    const fetchLog = join(tempRoot, 'secret-fetches.txt');
+    const runtimeSecrets = readHetznerRuntimeSecretNames();
+    mkdirSync(binDir);
+    makeExecutable(
+      join(binDir, 'gcloud'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+secret_name=""
+for argument in "$@"; do
+  case "\${argument}" in
+    --secret=*) secret_name="\${argument#*=}" ;;
+  esac
+done
+[[ -n "\${secret_name}" ]]
+printf '%s\n' "\${secret_name}" >> "\${FETCH_LOG:?}"
+printf 'secret-value-for-%s' "\${secret_name}"
+`
+    );
+    makeExecutable(
+      join(binDir, 'id'),
+      '#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == "-u" && "$2" == "test-deploy" ]]\n'
+    );
+    makeExecutable(
+      join(binDir, 'getent'),
+      '#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == "group" && "$2" == "test-nginx" ]]\n'
+    );
+    makeExecutable(
+      join(binDir, 'install'),
+      `#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "-d" ]]; then
+  mkdir -p "\${@: -1}"
+else
+  cp "\${@: -2:1}" "\${@: -1}"
+fi
+`
+    );
+
+    const result = spawnSync(
+      'bash',
+      [loadSecretsPath, '--output', outputPath, '--secret', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: basePath(binDir),
+          FETCH_LOG: fetchLog,
+          INTEXURAOS_ENVIRONMENT: 'prod',
+          DEPLOY_USER: 'test-deploy',
+          NGINX_TOKEN_GROUP: 'test-nginx',
+          PROVISIONER_SA_KEY_FILE: join(tempRoot, 'missing-provisioner-key.json'),
+          RUNTIME_SA_KEY_FILE: join(tempRoot, 'runtime-key.json'),
+          INTERNAL_AUTH_TOKEN_FILE: internalAuthTokenPath,
+          TMPDIR: tempRoot,
+        },
+      }
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    const published = parse(readFileSync(outputPath, 'utf8'));
+    const fetchedNames = readFileSync(fetchLog, 'utf8').trim().split(/\r?\n/u);
+    const trackedConfig = {
+      ...(JSON.parse(
+        readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
+      ) as Record<string, string>),
+      ...(JSON.parse(
+        readFileSync(resolve(repoRoot, 'config/environments/prod.json'), 'utf8')
+      ) as Record<string, string>),
+    };
+
+    expect(fetchedNames).toEqual([...runtimeSecrets].sort());
+    for (const [name, value] of Object.entries(trackedConfig)) {
+      expect(published[name], name).toBe(value);
+    }
+    for (const name of runtimeSecrets) {
+      expect(published[name], name).toBe(`secret-value-for-${name}`);
+    }
+    expect(readFileSync(internalAuthTokenPath, 'utf8')).toBe(
+      'secret-value-for-INTEXURAOS_INTERNAL_AUTH_TOKEN'
+    );
+    expect(result.stdout).toContain('with 28 secrets');
   });
 
   it('preserves both production runtime files when a later secret fetch fails', () => {
@@ -293,7 +441,7 @@ set -euo pipefail
 case "$*" in
   *--secret=INTEXURAOS_INTERNAL_AUTH_TOKEN*) printf 'new-internal-token' ;;
   *--secret=INTEXURAOS_WHATSAPP_ACCESS_TOKEN*) exit 42 ;;
-  *) exit 43 ;;
+  *) printf 'other-secret-value' ;;
 esac
 `
     );
@@ -619,14 +767,118 @@ describe('runtime configuration documentation', () => {
       resolve(repoRoot, 'workers/orchestrator/README.md'),
       'utf8'
     );
+    const cleanupRunbook = readFileSync(
+      resolve(repoRoot, 'docs/operations/runtime-secret-manager-cleanup.md'),
+      'utf8'
+    );
 
     expect(policyRunbook).toContain(
       'Secret Manager contains only values that are not allowed in repository-backed'
     );
     expect(policyRunbook).toContain('config/environments/policy.json');
-    expect(policyRunbook).toContain('26 old Secret Manager containers temporarily for rollback');
+    expect(policyRunbook).toContain(
+      '26 obsolete Secret Manager containers have been permanently removed'
+    );
+    expect(policyRunbook).toContain('permanent delete-only tombstone');
+    expect(policyRunbook).toContain('./runtime-secret-manager-cleanup.md');
     expect(localSetup).toContain('../operations/runtime-configuration.md');
     expect(orchestratorReadme).toContain('scripts/generate-orchestrator-env.mjs');
     expect(orchestratorReadme).not.toContain("grep -E '^export INTEXURAOS_' .envrc");
+
+    expect(cleanupRunbook).toContain('0 add / 0 change / 396 destroy');
+    expect(cleanupRunbook).toContain('| Secret Manager containers | 26 |');
+    expect(cleanupRunbook).toContain('| Application secret-access IAM bindings | 324 |');
+    expect(cleanupRunbook).toContain('| Hetzner secret-access IAM bindings | 42 |');
+    expect(cleanupRunbook).toContain('| Firebase secret versions | 3 |');
+    expect(cleanupRunbook).toContain('| Transcription Sentry rollback IAM binding | 1 |');
+    expect(cleanupRunbook).toContain(
+      '5c87082e4e1ae827fc067b77fd5a77425ace7e3d60c301fb2a9f03a3c737083c'
+    );
+    expect(cleanupRunbook).toContain('AccessSecretVersion');
+    expect(cleanupRunbook).toContain('DATA_READ');
+    expect(cleanupRunbook).toContain('T0');
+    expect(cleanupRunbook).toContain('f9e4d21910a553405ea0b278fb59bc696c8ebe65');
+    expect(cleanupRunbook).toContain('Older commits and old Terraform are prohibited');
+    expect(cleanupRunbook).toContain('Recreating empty Secret Manager containers is not rollback');
+    expect(cleanupRunbook).not.toContain('configScopes');
+    expect(cleanupRunbook).toContain(
+      '[.scopes.common[], .scopes.dev[], .scopes.prod[], .deleteOnlyNames[]] | unique[]'
+    );
+    expect(cleanupRunbook).toContain('Record `T0` immediately before Step 1 (merge)');
+    expect(cleanupRunbook).toContain(
+      'Every plan regeneration or deliberate read of a blocked secret invalidates and\nresets T0'
+    );
+    expect(cleanupRunbook).toContain('T0-pre-apply');
+    expect(cleanupRunbook).toContain('protoPayload.resourceName=~');
+    expect(cleanupRunbook).toContain('exhausts all result pages; do not add `--limit`');
+    expect(cleanupRunbook).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN');
+    expect(cleanupRunbook).toContain('INTEXURAOS_LINEAR_API_KEY');
+    expect(cleanupRunbook).toContain(
+      'ixos-hetzner-provisioner-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(cleanupRunbook).toContain(
+      'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(cleanupRunbook).toContain(
+      'ixos-transcription-fn-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+    );
+    expect(cleanupRunbook).toContain('audit_blocked_secret_names()');
+    expect(cleanupRunbook).toContain('audit_runtime_secret_set()');
+    expect(cleanupRunbook).toContain('audit_unknown_secret_names()');
+    expect(cleanupRunbook).toContain('prod-secret-names.txt');
+    expect(cleanupRunbook).toContain('transcription-secret-names.txt');
+    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'prod-before-apply'");
+    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'home-dev-after-apply'");
+    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'prod-after-apply'");
+    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'transcription-after-apply'");
+    expect(cleanupRunbook).toContain('Production reads exactly 28 allowlisted secrets');
+    expect(cleanupRunbook).toContain('Home-dev sync reads\nall 37 policy-classified secrets');
+    expect(cleanupRunbook).toContain('scripts/observability/load-grafana-cloud-env.sh');
+    expect(cleanupRunbook).toContain('scripts/observability/install-grafana-alloy.sh');
+    expect(cleanupRunbook).toContain('systemctl is-active --quiet alloy.service');
+    expect(cleanupRunbook).toContain('target=transcription');
+    expect(cleanupRunbook).toContain('gcloud functions describe');
+    expect(cleanupRunbook).toContain('.state == "ACTIVE"');
+    expect(cleanupRunbook).toContain('.serviceConfig.serviceAccountEmail == $principal');
+    expect(cleanupRunbook).toContain('gcloud auth print-identity-token');
+    expect(cleanupRunbook).toContain('__cold_start_probe__');
+    expect(cleanupRunbook).toContain('test "${cleanup_transcription_status}" = \'404\'');
+    expect(cleanupRunbook).toContain('resource.labels.revision_name');
+    expect(cleanupRunbook).toContain('httpRequest.status=404');
+    expect(cleanupRunbook).toContain('Manual `workflow_dispatch` has no SHA input');
+    expect(cleanupRunbook).toContain('--ref development');
+    expect(cleanupRunbook).toContain('headSha');
+    expect(cleanupRunbook).toContain('gcloud secrets list');
+    expect(cleanupRunbook).toContain('terraform -chdir=terraform/environments/dev state list');
+    expect(cleanupRunbook).toContain('post-apply-targeted-noop.tfplan');
+    expect(cleanupRunbook).toContain('approved=false');
+    expect(cleanupRunbook).toContain('four unrelated updates');
+    expect(cleanupRunbook).toContain('umask 077');
+    expect(cleanupRunbook).toContain('test "$(stat -f \'%Lp\' "${cleanup_dir}")" = \'700\'');
+
+    const gcloudCommands = cleanupRunbook
+      .split('\n')
+      .filter((line) => /^\s*(?:CLOUDSDK_[A-Z_]+=[^ ]+\s+)?gcloud\s/u.test(line));
+    expect(gcloudCommands.length).toBeGreaterThanOrEqual(4);
+    for (const command of gcloudCommands) {
+      expect(command.trim()).toMatch(
+        /^CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="\$\{cleanup_sa_key\}" gcloud\s/u
+      );
+    }
+
+    const orderedSteps = [
+      '1. Merge PR2',
+      '2. Deploy PR2 To Production',
+      '3. Apply The Saved Plan',
+      '4. Cold-Sync And Restart home-dev',
+      '5. Redeploy Production',
+      '6. Verify Health And Audit',
+    ];
+    const positions = orderedSteps.map((step) => cleanupRunbook.indexOf(step));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((left, right) => left - right));
+    expect(cleanupRunbook.indexOf('Record `T0` immediately before Step 1 (merge)')).toBeLessThan(
+      cleanupRunbook.indexOf('### 1. Merge PR2')
+    );
   });
 });

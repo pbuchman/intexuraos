@@ -184,8 +184,9 @@ sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
 The script prints secret names only, never values. It writes the validated,
 merged `/etc/intexuraos/.env.prod` with mode `600` using an explicit Hetzner
 runtime secret allowlist and updates `/etc/intexuraos/internal-auth-token` for
-nginx. It rejects attempts to request any of the 26 migration/rollback names
-through `--secret`, including the removed Google OAuth redirect variable.
+nginx. The `--secret` option rejects the policy-derived blocklist containing
+every versioned configuration name and the permanent Google OAuth redirect
+tombstone, so none can be read from Secret Manager.
 
 ## Deploy Or Reload Runtime
 

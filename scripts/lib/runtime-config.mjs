@@ -74,6 +74,11 @@ export function loadRuntimePolicy(options = {}) {
     if (configSet.has(name)) {
       throw configError(`delete-only name is also runtime config: ${name}`);
     }
+    if (secretManagerSet.has(name) && !rollbackSet.has(name)) {
+      throw configError(
+        `delete-only name is in Secret Manager without migration rollback: ${name}`
+      );
+    }
   }
 
   for (const name of migrationRollbackSecretNames) {
@@ -89,10 +94,10 @@ export function loadRuntimePolicy(options = {}) {
 
   const expectedRollbackNames = [
     ...configNames.filter((name) => secretManagerSet.has(name)),
-    ...deleteOnlyNames,
+    ...deleteOnlyNames.filter((name) => secretManagerSet.has(name)),
   ].sort();
   if (!sameNames(expectedRollbackNames, migrationRollbackSecretNames)) {
-    throw configError('migration rollback classification is not the only config-vs-secret overlap');
+    throw configError('migration rollback classification does not match config-vs-secret overlap');
   }
 
   for (const name of configNames) {

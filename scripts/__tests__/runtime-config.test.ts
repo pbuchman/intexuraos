@@ -48,15 +48,8 @@ const DEV_CONFIG_NAMES = [
   'INTEXURAOS_SENTRY_DSN_DEV',
 ] as const;
 const PROD_CONFIG_NAMES = ['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] as const;
-const DELETE_ONLY_NAMES = ['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'] as const;
-const MIGRATION_ROLLBACK_SECRET_NAMES = [
-  ...new Set([
-    ...COMMON_CONFIG_NAMES,
-    ...DEV_CONFIG_NAMES,
-    ...PROD_CONFIG_NAMES,
-    ...DELETE_ONLY_NAMES,
-  ]),
-].sort();
+const DEAD_REDIRECT_NAME = 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI';
+const DELETE_ONLY_NAMES = [DEAD_REDIRECT_NAME] as const;
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -85,7 +78,7 @@ describe('versioned runtime configuration', () => {
     );
   });
 
-  it('allows exactly one temporary config-vs-Secret-Manager overlap during PR1', () => {
+  it('keeps versioned configuration fully disjoint from Secret Manager', () => {
     const policy = loadRuntimePolicy({ configRoot });
     const validation = validateRuntimeConfig({ environment: 'dev', configRoot });
     const configNames = [
@@ -94,13 +87,69 @@ describe('versioned runtime configuration', () => {
     const overlap = configNames.filter((name) => policy.secretManagerNames.includes(name)).sort();
 
     expect(validation.valid).toBe(true);
-    expect(policy.migrationRollbackSecretNames).toEqual(MIGRATION_ROLLBACK_SECRET_NAMES);
+    expect(policy.migrationRollbackSecretNames).toEqual([]);
     expect(policy.deleteOnlyNames).toEqual([...DELETE_ONLY_NAMES]);
-    expect(overlap).toEqual([...COMMON_CONFIG_NAMES, ...DEV_CONFIG_NAMES].sort());
-    expect(policy.migrationRollbackSecretNames).toEqual(
-      [...overlap, ...policy.deleteOnlyNames].sort()
-    );
+    expect(overlap).toEqual([]);
     expect(policy.sensitiveConfigNameAllowlist).toEqual(['INTEXURAOS_FIREBASE_API_KEY']);
+  });
+
+  it('retains the dead Google OAuth redirect only as a permanent delete-only tombstone', () => {
+    const policy = loadRuntimePolicy({ configRoot });
+    const activeNames = [
+      ...policy.scopes.common,
+      ...policy.scopes.dev,
+      ...policy.scopes.prod,
+      ...policy.secretManagerNames,
+      ...policy.migrationRollbackSecretNames,
+    ];
+
+    expect(activeNames).not.toContain(DEAD_REDIRECT_NAME);
+    expect(policy.deleteOnlyNames).toEqual([...DELETE_ONLY_NAMES]);
+  });
+
+  it('requires explicit rollback when a delete-only tombstone still exists in Secret Manager', () => {
+    const fixture = makeFixture();
+    const policyPath = resolve(fixture, 'policy.json');
+    const policy = loadRuntimePolicy({ configRoot: fixture });
+    writeFileSync(
+      policyPath,
+      `${JSON.stringify(
+        {
+          ...policy,
+          deleteOnlyNames: [DEAD_REDIRECT_NAME],
+          secretManagerNames: [...policy.secretManagerNames, DEAD_REDIRECT_NAME].sort(),
+        },
+        null,
+        2
+      )}\n`
+    );
+
+    expect(() => loadRuntimePolicy({ configRoot: fixture })).toThrow(
+      /delete-only name is in Secret Manager without migration rollback/u
+    );
+  });
+
+  it('allows an explicitly declared rollback for a delete-only Secret Manager overlap', () => {
+    const fixture = makeFixture();
+    const policyPath = resolve(fixture, 'policy.json');
+    const policy = loadRuntimePolicy({ configRoot: fixture });
+    writeFileSync(
+      policyPath,
+      `${JSON.stringify(
+        {
+          ...policy,
+          deleteOnlyNames: [DEAD_REDIRECT_NAME],
+          migrationRollbackSecretNames: [DEAD_REDIRECT_NAME],
+          secretManagerNames: [...policy.secretManagerNames, DEAD_REDIRECT_NAME].sort(),
+        },
+        null,
+        2
+      )}\n`
+    );
+
+    expect(loadRuntimePolicy({ configRoot: fixture }).migrationRollbackSecretNames).toEqual([
+      DEAD_REDIRECT_NAME,
+    ]);
   });
 
   it('renders deterministic shell and dotenv without printing diagnostics', () => {

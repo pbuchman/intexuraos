@@ -185,14 +185,22 @@ import { pathToFileURL } from 'node:url';
 
 const runtimeConfigModule = await import(pathToFileURL(process.argv[2]).href);
 const policy = runtimeConfigModule.loadRuntimePolicy();
-process.stdout.write(`${policy.migrationRollbackSecretNames.join('\n')}\n`);
+const blockedNames = [
+  ...new Set([
+    ...policy.scopes.common,
+    ...policy.scopes.dev,
+    ...policy.scopes.prod,
+    ...policy.deleteOnlyNames,
+  ]),
+].sort();
+process.stdout.write(`${blockedNames.join('\n')}\n`);
 NODE
   then
-    fail "Unable to load the Secret Manager migration policy"
+    fail "Unable to load the runtime configuration policy"
   fi
 
   [[ -s "${BLOCKED_SECRET_NAMES_FILE}" ]] \
-    || fail "Secret Manager migration policy is empty"
+    || fail "Runtime configuration policy blocklist is empty"
 }
 
 select_secret_manager_names() {

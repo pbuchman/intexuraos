@@ -18,6 +18,7 @@ NGINX_TOKEN_GROUP="${NGINX_TOKEN_GROUP:-www-data}"
 TEMP_ENV_FILE=""
 RUNTIME_CONFIG_FILE=""
 BLOCKED_SECRET_NAMES_FILE=""
+POLICY_SECRET_NAMES_FILE=""
 STAGED_INTERNAL_AUTH_TOKEN_FILE=""
 
 declare -a REQUESTED_SECRETS=()
@@ -70,6 +71,9 @@ cleanup_temp_file() {
   fi
   if [[ -n "${BLOCKED_SECRET_NAMES_FILE:-}" ]]; then
     rm -f "${BLOCKED_SECRET_NAMES_FILE}"
+  fi
+  if [[ -n "${POLICY_SECRET_NAMES_FILE:-}" ]]; then
+    rm -f "${POLICY_SECRET_NAMES_FILE}"
   fi
   if [[ -n "${STAGED_INTERNAL_AUTH_TOKEN_FILE:-}" ]]; then
     rm -f "${STAGED_INTERNAL_AUTH_TOKEN_FILE}"
@@ -127,17 +131,14 @@ parse_args() {
 }
 
 load_secret_names() {
-  if [[ ${#REQUESTED_SECRETS[@]} -gt 0 ]]; then
-    printf '%s\n' "${REQUESTED_SECRETS[@]}" | sort -u
-    return
-  fi
-
+  # --secret is a backwards-compatible assertion and must never narrow the refresh.
   printf '%s\n' "${HETZNER_RUNTIME_SECRETS[@]}" | sort -u
 }
 
 load_runtime_config() {
   RUNTIME_CONFIG_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-prod-config.XXXXXX")"
   BLOCKED_SECRET_NAMES_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-blocked-secret-names.XXXXXX")"
+  POLICY_SECRET_NAMES_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-policy-secret-names.XXXXXX")"
 
   if ! node "${RUNTIME_CONFIG_RENDERER}" \
     --environment prod \
@@ -146,25 +147,78 @@ load_runtime_config() {
     fail "Unable to render tracked runtime configuration for prod"
   fi
 
-  if ! node --input-type=module - "${REPO_ROOT}/scripts/lib/runtime-config.mjs" \
+  if ! node --input-type=module - \
+    "${REPO_ROOT}/scripts/lib/runtime-config.mjs" \
+    "${POLICY_SECRET_NAMES_FILE}" \
     > "${BLOCKED_SECRET_NAMES_FILE}" <<'NODE'
+import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const runtimeConfigModule = await import(pathToFileURL(process.argv[2]).href);
 const policy = runtimeConfigModule.loadRuntimePolicy();
-process.stdout.write(`${policy.migrationRollbackSecretNames.join('\n')}\n`);
+const blockedNames = [
+  ...new Set([
+    ...policy.scopes.common,
+    ...policy.scopes.dev,
+    ...policy.scopes.prod,
+    ...policy.deleteOnlyNames,
+  ]),
+].sort();
+process.stdout.write(`${blockedNames.join('\n')}\n`);
+writeFileSync(process.argv[3], `${policy.secretManagerNames.join('\n')}\n`, { mode: 0o600 });
 NODE
   then
-    fail "Unable to load the Secret Manager migration policy"
+    fail "Unable to load the runtime configuration policy"
   fi
   [[ -s "${BLOCKED_SECRET_NAMES_FILE}" ]] \
-    || fail "Secret Manager migration policy is empty"
+    || fail "Runtime configuration policy blocklist is empty"
+  [[ -s "${POLICY_SECRET_NAMES_FILE}" ]] \
+    || fail "Runtime configuration Secret Manager allowlist is empty"
 }
 
-is_tracked_runtime_config() {
+is_blocked_secret_manager_name() {
   local name="$1"
 
   grep -qFx "${name}" "${BLOCKED_SECRET_NAMES_FILE}"
+}
+
+is_policy_secret_manager_name() {
+  local name="$1"
+
+  grep -qFx "${name}" "${POLICY_SECRET_NAMES_FILE}"
+}
+
+is_production_runtime_secret_name() {
+  local name="$1"
+  local allowed_name=""
+
+  for allowed_name in "${HETZNER_RUNTIME_SECRETS[@]}"; do
+    if [[ "${name}" == "${allowed_name}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+validate_default_secret_names() {
+  local name=""
+  local unique_count=""
+
+  [[ ${#HETZNER_RUNTIME_SECRETS[@]} -eq 28 ]] \
+    || fail "Production runtime secret allowlist must contain exactly 28 names"
+  unique_count="$(printf '%s\n' "${HETZNER_RUNTIME_SECRETS[@]}" | sort -u | wc -l | tr -d ' ')"
+  [[ "${unique_count}" == "${#HETZNER_RUNTIME_SECRETS[@]}" ]] \
+    || fail "Production runtime secret allowlist contains duplicate names"
+
+  for name in "${HETZNER_RUNTIME_SECRETS[@]}"; do
+    validate_secret_name "${name}"
+    if is_blocked_secret_manager_name "${name}"; then
+      fail "${name} is both production runtime secret and blocked runtime configuration"
+    fi
+    if ! is_policy_secret_manager_name "${name}"; then
+      fail "${name} is not classified as a Secret Manager secret"
+    fi
+  done
 }
 
 validate_requested_secrets() {
@@ -172,8 +226,14 @@ validate_requested_secrets() {
 
   for name in "${REQUESTED_SECRETS[@]}"; do
     validate_secret_name "${name}"
-    if is_tracked_runtime_config "${name}"; then
-      fail "${name} is tracked runtime configuration and must not be read from Secret Manager"
+    if is_blocked_secret_manager_name "${name}"; then
+      fail "${name} is blocked by runtime configuration policy and must not be read from Secret Manager"
+    fi
+    if ! is_policy_secret_manager_name "${name}"; then
+      fail "${name} is not classified as a Secret Manager secret"
+    fi
+    if ! is_production_runtime_secret_name "${name}"; then
+      fail "${name} is not in the production runtime secret allowlist"
     fi
   done
 }
@@ -295,6 +355,7 @@ main() {
   trap cleanup_temp_file EXIT
 
   load_runtime_config
+  validate_default_secret_names
   validate_requested_secrets
   mapfile -t secret_names < <(load_secret_names)
   [[ ${#secret_names[@]} -gt 0 ]] || fail "No secrets selected"

@@ -282,46 +282,25 @@ locals {
   }
 
   hetzner_runtime_secret_names = toset([
-    "INTEXURAOS_AUTH0_CLIENT_ID",
-    "INTEXURAOS_AUTH0_DOMAIN",
-    "INTEXURAOS_AUTH0_SPA_CLIENT_ID",
-    "INTEXURAOS_AUTH_AUDIENCE",
-    "INTEXURAOS_AUTH_ISSUER",
-    "INTEXURAOS_AUTH_JWKS_URL",
-    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID",
     "INTEXURAOS_CLOUDFLARE_API_TOKEN",
     "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_FIREBASE_API_KEY",
-    "INTEXURAOS_FIREBASE_AUTH_DOMAIN",
-    "INTEXURAOS_FIREBASE_PROJECT_ID",
     "INTEXURAOS_GEMINI_APP_API_KEY",
     "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID",
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID",
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI",
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
     "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
     "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION",
     "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
     "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION",
     "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY",
     "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
     "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
-    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
     "INTEXURAOS_OPENAI_APP_API_KEY",
     "INTEXURAOS_OPENROUTER_APP_API_KEY",
     "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_SENTRY_DSN",
-    "INTEXURAOS_SENTRY_DSN_WEB",
     "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
     "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
     "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
@@ -335,24 +314,16 @@ locals {
 
   cloud_run_secret_manager_excluded_names = toset([
     "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL",
     "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME",
     "INTEXURAOS_KIMI_APP_API_KEY",
     "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
     "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION",
     "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
     "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION",
     "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY",
     "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
     "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
-    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL",
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
-    "INTEXURAOS_SENTRY_DSN_DEV",
   ])
 }
 
@@ -557,13 +528,6 @@ module "secret_manager" {
   labels      = local.common_labels
 
   secrets = {
-    # Auth0 secrets
-    "INTEXURAOS_AUTH0_DOMAIN"        = "Auth0 tenant domain for Device Authorization Flow"
-    "INTEXURAOS_AUTH0_CLIENT_ID"     = "Auth0 Native app client ID for Device Authorization Flow"
-    "INTEXURAOS_AUTH0_SPA_CLIENT_ID" = "Auth0 SPA app client ID for web application"
-    "INTEXURAOS_AUTH_JWKS_URL"       = "Auth0 JWKS URL for JWT verification"
-    "INTEXURAOS_AUTH_ISSUER"         = "Auth0 issuer URL"
-    "INTEXURAOS_AUTH_AUDIENCE"       = "Auth0 audience identifier"
     # Token encryption key
     "INTEXURAOS_TOKEN_ENCRYPTION_KEY" = "AES-256 encryption key for refresh tokens (base64-encoded 32-byte key)"
     # LLM API keys encryption
@@ -579,41 +543,26 @@ module "secret_manager" {
     # Internal service-to-service auth token
     "INTEXURAOS_INTERNAL_AUTH_TOKEN" = "Internal auth token for service-to-service communication"
     # Private Matrix outbound adapter
-    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL"        = "Base URL for the external WhatsApp private Matrix outbound adapter"
     "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN" = "Auth token for WhatsApp private Matrix outbound adapter"
     # Production Matrix corpus evaluator
-    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID"              = "User ID whose production Intex Agent sessions are exercised by the Matrix corpus"
-    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING"            = "Expected Matrix room ID binding for production corpus envelopes"
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING"       = "Expected WhatsApp account binding for production corpus envelopes"
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING"        = "Expected WhatsApp sender binding for production corpus envelopes"
-    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY"               = "HMAC key for production Matrix corpus transport bindings"
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION"            = "Version identifier for production Matrix corpus signing keys"
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"            = "Private signing key for production Matrix corpus receipts"
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY"             = "Public verification key for production Matrix corpus receipts"
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION" = "Version identifier for production Matrix corpus context encryption"
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY"         = "Encryption key for production Matrix corpus execution context"
-    # Firebase configuration for web app
-    "INTEXURAOS_FIREBASE_PROJECT_ID"  = "Firebase project ID"
-    "INTEXURAOS_FIREBASE_API_KEY"     = "Firebase API key (public, but managed as secret)"
-    "INTEXURAOS_FIREBASE_AUTH_DOMAIN" = "Firebase Auth domain"
+    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID"        = "User ID whose production Intex Agent sessions are exercised by the Matrix corpus"
+    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING"      = "Expected Matrix room ID binding for production corpus envelopes"
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING" = "Expected WhatsApp account binding for production corpus envelopes"
+    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING"  = "Expected WhatsApp sender binding for production corpus envelopes"
+    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY"         = "HMAC key for production Matrix corpus transport bindings"
+    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY"      = "Private signing key for production Matrix corpus receipts"
+    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY"   = "Encryption key for production Matrix corpus execution context"
     # SSL certificate
     "INTEXURAOS_SSL_PRIVATE_KEY" = "SSL certificate private key for intexuraos.cloud"
     # Google OAuth secrets for calendar integration
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_ID"     = "Google OAuth client ID for calendar integration"
     "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET" = "Google OAuth client secret for calendar integration"
-    "INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI"  = "Google OAuth redirect URI (full callback URL)"
     # GitHub OAuth secrets for GitHub integration
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_ID"     = "GitHub OAuth App Client ID"
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET" = "GitHub OAuth App Client Secret"
     # Sentry error monitoring
-    "INTEXURAOS_SENTRY_DSN"                = "Sentry Data Source Name for error tracking (backend services)"
-    "INTEXURAOS_SENTRY_DSN_DEV"            = "Sentry Data Source Name for retained dev transcription error tracking"
-    "INTEXURAOS_SENTRY_DSN_WEB"            = "Sentry Data Source Name for error tracking (web app)"
     "INTEXURAOS_SENTRY_WEBHOOK_SECRET"     = "Sentry webhook secret for code-agent issue automation"
     "INTEXURAOS_SENTRY_AUTOMATION_USER_ID" = "Code-agent user ID that owns automatic Sentry code tasks"
     # Cloudflare Browser Rendering API
-    "INTEXURAOS_CLOUDFLARE_ACCOUNT_ID" = "Cloudflare account ID for Browser Rendering API"
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN"  = "Cloudflare API token with Browser Rendering Edit permission"
+    "INTEXURAOS_CLOUDFLARE_API_TOKEN" = "Cloudflare API token with Browser Rendering Edit permission"
     # LLM API keys
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for services using OpenAI APIs"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
@@ -629,17 +578,11 @@ module "secret_manager" {
     "INTEXURAOS_WEBHOOK_VERIFY_SECRET" = "HMAC signing secret for orchestrator webhook callbacks to code-agent"
     # GitHub App for code worker PRs (INT-156)
     "INTEXURAOS_GITHUB_APP_PRIVATE_KEY" = "GitHub App private key (PEM format) for code worker authentication"
-    "INTEXURAOS_GITHUB_APP_ID"          = "GitHub App ID for code worker"
-    "INTEXURAOS_GITHUB_INSTALLATION_ID" = "GitHub App installation ID for pbuchman/intexuraos"
     # Orchestrator repository management (INT-515)
-    "INTEXURAOS_REPOSITORY_URL"        = "GitHub repository URL for orchestrator self-managed clone"
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET" = "GitHub webhook secret for HMAC validation"
     # Grafana Cloud observability
     "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN" = "Grafana Cloud service account token for dashboard provisioning"
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL"   = "Grafana Cloud stack URL for hosted dashboards"
     "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN"    = "Grafana Cloud Logs write token for Alloy collectors"
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_URL"      = "Grafana Cloud Loki push endpoint for Alloy collectors"
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME" = "Grafana Cloud Logs instance ID used as Loki basic auth username"
   }
 
   depends_on = [google_project_service.apis]
@@ -1258,22 +1201,6 @@ data "google_firebase_web_app_config" "web" {
   web_app_id = google_firebase_web_app.web.app_id
 }
 
-# Auto-populate Firebase secrets from Terraform
-resource "google_secret_manager_secret_version" "firebase_api_key" {
-  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_API_KEY"]
-  secret_data = data.google_firebase_web_app_config.web.api_key
-}
-
-resource "google_secret_manager_secret_version" "firebase_auth_domain" {
-  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_AUTH_DOMAIN"]
-  secret_data = data.google_firebase_web_app_config.web.auth_domain
-}
-
-resource "google_secret_manager_secret_version" "firebase_project_id" {
-  secret      = module.secret_manager.secret_names["INTEXURAOS_FIREBASE_PROJECT_ID"]
-  secret_data = var.project_id
-}
-
 # -----------------------------------------------------------------------------
 # Cloud Functions - Source Bucket
 # -----------------------------------------------------------------------------
@@ -1347,13 +1274,6 @@ resource "google_project_iam_member" "transcription_eventarc" {
   project = var.project_id
   role    = "roles/eventarc.eventReceiver"
   member  = "serviceAccount:${google_service_account.transcription_function.email}"
-}
-
-# Grant transcription SA permission to access the dedicated dev Sentry DSN secret.
-resource "google_secret_manager_secret_iam_member" "transcription_sentry_dsn_dev" {
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SENTRY_DSN_DEV"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.transcription_function.email}"
 }
 
 # Topic for transcription completed events retained for the transcription worker.
@@ -1456,7 +1376,6 @@ module "function_transcription" {
     google_pubsub_topic.transcription_completed,
     google_secret_manager_secret_iam_member.transcription_speechmatics,
     google_secret_manager_secret_iam_member.transcription_internal_auth,
-    google_secret_manager_secret_iam_member.transcription_sentry_dsn_dev,
     google_storage_bucket_iam_member.transcription_media_reader,
     google_project_iam_member.transcription_eventarc,
   ]

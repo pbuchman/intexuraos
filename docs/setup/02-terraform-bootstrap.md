@@ -93,10 +93,10 @@ This will take several minutes. The longest steps are usually:
 
 ## 5. Populate Secrets
 
-Terraform creates containers for actual secret material and temporarily retains
-the migration rollback containers. Populate only names classified as secrets
-in `config/environments/policy.json`. Identifiers, public URLs, DSNs, and public
-keys belong in `config/environments/`; see the
+Terraform creates containers only for actual secret material. Populate only
+names classified as secrets in `config/environments/policy.json`. This inventory
+must remain fully disjoint from repository-backed configuration. Identifiers,
+public URLs, DSNs, and public keys belong in `config/environments/`; see the
 [runtime configuration policy](../operations/runtime-configuration.md).
 
 ### Option A: Interactive Script (Recommended)
@@ -126,7 +126,7 @@ The script will:
 
 Auth0 domains, client IDs, audience, issuer, and JWKS URL are versioned runtime
 configuration, not Secret Manager values. Follow [06-auth0.md](./06-auth0.md)
-and do not populate their retained rollback containers.
+and never create Secret Manager containers or versions for them.
 
 ### WhatsApp Business Cloud API Secrets
 
