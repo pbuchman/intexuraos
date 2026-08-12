@@ -358,6 +358,44 @@ describe('sequential Matrix corpus state machine', () => {
     });
   });
 
+  it('accepts zero agent calls for deterministic clarification-default acceptance', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const ports = passingPorts([]);
+    vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
+      const valid = observation(input.scenario, input.turnIndex);
+      if (input.scenario.id !== 'intex-eval-003' || input.turnIndex !== 1) {
+        return { ok: true, observation: valid };
+      }
+      return {
+        ok: true,
+        observation: {
+          ...valid,
+          agentUsage: {
+            logicalCalls: 0,
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            costNanoUsd: 0,
+            providerCostReconciled: true,
+          },
+        },
+      };
+    });
+
+    const result = await runMatrixCorpus(
+      { runId: 'run_calendar_default_acceptance_zero_agent_calls', catalog },
+      ports
+    );
+
+    expect(result.exitCode).toBe(0);
+    expect(result.failureCodes).not.toContain('TURN_AGENT_CALL_COUNT_MISMATCH');
+    expect(result.scenarios[2]).toMatchObject({
+      scenarioId: 'intex-eval-003',
+      status: 'passed',
+      completedTurns: 3,
+    });
+  });
+
   it('rejects zero agent calls for a mixed calculation and retention turn', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const mixedEntry = catalog.scenarios[19];

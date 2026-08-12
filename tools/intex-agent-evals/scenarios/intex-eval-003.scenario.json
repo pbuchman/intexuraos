@@ -1,19 +1,19 @@
 {
   "schemaVersion": "1",
   "id": "intex-eval-003",
-  "title": "Clarify a missing calendar date",
-  "description": "Requests a missing date, incorporates the answer, then confirms and creates the synthetic event.",
+  "title": "Accept a proposed calendar duration before final confirmation",
+  "description": "Proposes a safe one-hour duration for a missing end, accepts that assumption in text, then separately confirms and creates the synthetic event.",
   "currentDateTime": "2026-07-16T10:00:00+02:00",
   "timeZone": "Europe/Warsaw",
   "turns": [
     {
       "kind": "message",
-      "text": "Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 at noon.",
+      "text": "Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 on 2026-07-21 at noon.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "Next Tuesday at noon for one hour for INTEX-EVAL-003.",
+      "text": "Yes",
       "sourceType": "whatsapp_text"
     },
     {
@@ -91,8 +91,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Asks which day or date lunch with Marta at noon should use because the date is missing.",
-              "Does not claim that a calendar event was created before the missing date is supplied."
+              "States the grounded event title, date, and noon start; says the optional location can be omitted; and proposes a 60-minute duration ending at 13:00.",
+              "Asks whether that duration assumption is acceptable without showing final creation-confirmation buttons or claiming that an event was created."
             ]
           }
         ]
@@ -162,7 +162,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Correctly identifies a complete calendar-event request, presents a reviewable sanitized preview using observable redacted structured labels for Title, Start, and End, and asks for explicit confirmation in an appropriate, concise tone.",
+              "Treats the plain-text yes only as acceptance of the proposed duration, then presents a separate reviewable sanitized preview using observable redacted structured labels for Title, Start, and End and asks whether to create it.",
               "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, and `End: [redacted]`.",
               "The redacted values are complete expected evidence for the judge and are not missing information.",
               "Does not request the date again or expose raw argument content in the sanitized reply."

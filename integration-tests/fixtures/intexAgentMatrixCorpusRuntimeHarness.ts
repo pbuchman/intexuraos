@@ -794,6 +794,15 @@ function createCatalogIntentClassifier(catalog: CanonicalMatrixCorpus): IntexAge
   return {
     async classify(input) {
       const located = locateMessage(catalog, input.message);
+      if (located.entry.scenario.id === 'intex-eval-003' && located.turnIndex === 0) {
+        return {
+          kind: 'needs_clarification' as const,
+          question: 'What end time and location should I use?',
+          blockerReason: 'missing_required_details' as const,
+          missingFields: ['end', 'location'],
+          candidateIntents: ['create_calendar_event' as const],
+        };
+      }
       const expected = expectedToolsForNormalTurn(located.entry, located.turnIndex);
       return expected.length === 0
         ? { kind: 'no_action' as const, reason: 'conversation' as const }
@@ -819,6 +828,14 @@ function expectedToolsForNormalTurn(
     })) ?? [];
   const nextTurn = entry.scenario.turns[turnIndex + 1];
   const next = entry.scenario.expected.turns[turnIndex + 1]?.requiredToolCalls[0];
+  if (entry.scenario.id === 'intex-eval-003' && turnIndex === 0) {
+    const futureCalendarCall = entry.expectedToolSchedule.find(
+      (call) => call.turnIndex > turnIndex && call.toolName === 'create_calendar_event'
+    );
+    if (futureCalendarCall !== undefined) {
+      return [{ toolName: futureCalendarCall.toolName, confirmationPreview: true }];
+    }
+  }
   return nextTurn?.kind === 'confirmation_button' && next !== undefined
     ? [...current, { toolName: next.toolName, confirmationPreview: true }]
     : current;
@@ -871,7 +888,9 @@ function toolArgs(
         start: calendarStart(entry.scenario.id),
         end: calendarEnd(entry.scenario.id),
         timeZone: 'Europe/Warsaw',
-        location: 'Synthetic location',
+        ...(entry.scenario.id === 'intex-eval-002'
+          ? { location: 'Smile Clinic INTEX-EVAL-002-F02' }
+          : {}),
       };
     case 'update_calendar_event':
       return {

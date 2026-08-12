@@ -755,6 +755,10 @@ function resultEvent(
           : { suggestedNextStep: result.suggestedNextStep }),
         ...(result.fallbackReason === undefined ? {} : { fallbackReason: result.fallbackReason }),
         ...(result.clarification === undefined ? {} : { clarification: result.clarification }),
+        ...(result.toolSelection === undefined ? {} : { toolSelection: result.toolSelection }),
+        ...(result.calendarEventDraft === undefined
+          ? {}
+          : { calendarEventDraft: structuredClone(result.calendarEventDraft) }),
       },
     };
   if (result.outcome === 'unsupported')

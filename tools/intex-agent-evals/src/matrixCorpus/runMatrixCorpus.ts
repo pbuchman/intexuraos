@@ -767,7 +767,9 @@ function reconcileTurnEvidence(input: {
     (expected.sessionAfterTurn.startReason === 'user_requested_new_session' &&
       expected.timeline.forbiddenEventTypes.includes('user_message'));
   const allowsZeroAgentCalls =
-    turn.kind === 'message' && isExplicitSessionOnlyRetentionTurn(turn.text);
+    turn.kind === 'message' &&
+    (isExplicitSessionOnlyRetentionTurn(turn.text) ||
+      isDeterministicClarificationAcceptanceTurn(scenario, turnIndex));
   if (
     expectsZeroAgentCalls
       ? observation.agentUsage.logicalCalls !== 0
@@ -834,6 +836,23 @@ function reconcileTurnEvidence(input: {
       observation.observedReplyCount === expected.replies.length &&
       toolsPassed,
   };
+}
+
+function isDeterministicClarificationAcceptanceTurn(
+  scenario: IntexEvalScenario,
+  turnIndex: number
+): boolean {
+  const turn = scenario.turns[turnIndex];
+  const currentExpected = scenario.expected.turns[turnIndex];
+  const previousExpected = scenario.expected.turns[turnIndex - 1];
+  return (
+    turn?.kind === 'message' &&
+    /^(?:tak|yes|yep|ok(?:ay)?|pasuje|zgoda|może\s+być|moze\s+byc|przyjmij|accept|works(?:\s+for\s+me)?|sounds\s+good)[.!]?$/iu.test(
+      turn.text.normalize('NFKC').trim()
+    ) &&
+    previousExpected?.timeline.requiredEventTypes.includes('clarification_requested') === true &&
+    currentExpected?.timeline.requiredEventTypes.includes('confirmation_requested') === true
+  );
 }
 
 function isExplicitSessionOnlyRetentionTurn(text: string): boolean {

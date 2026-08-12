@@ -52,7 +52,9 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(calendarTool?.description).toContain('calendar');
     expect(calendarTool?.description).toContain('appointment');
     expect(calendarTool?.description).toContain('meeting');
-    expect(calendarTool?.description).toContain('Ask a clarification before calling this tool');
+    expect(calendarTool?.description).toContain('this call is draft-only');
+    expect(calendarTool?.description).toContain('60-minute duration');
+    expect(calendarTool?.description).toContain('Never put analysis or uncertainty into summary');
     expect(calendarTool?.description).toContain('date');
     expect(calendarTool?.description).toContain('time');
     expect(calendarTool?.parameters['required']).toEqual(['summary', 'start', 'end']);

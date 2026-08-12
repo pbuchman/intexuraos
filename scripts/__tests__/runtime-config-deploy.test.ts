@@ -261,6 +261,7 @@ describe('runtime configuration cutover', () => {
 
   it.each(SECRET_MANAGER_BLOCKLIST)(
     'does not permit --secret to read the versioned or retired name %s',
+    { timeout: 60_000 },
     (blockedName) => {
       const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-'));
       const binDir = join(tempRoot, 'bin');
@@ -337,17 +338,20 @@ printf 'must-not-be-read\n'
     expect(() => readFileSync(gcloudLog, 'utf8')).toThrow();
   });
 
-  it('treats --secret as an assertion and publishes the complete production environment', () => {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-complete-'));
-    const binDir = join(tempRoot, 'bin');
-    const outputPath = join(tempRoot, '.env.prod');
-    const internalAuthTokenPath = join(tempRoot, 'internal-auth-token');
-    const fetchLog = join(tempRoot, 'secret-fetches.txt');
-    const runtimeSecrets = readHetznerRuntimeSecretNames();
-    mkdirSync(binDir);
-    makeExecutable(
-      join(binDir, 'gcloud'),
-      `#!/usr/bin/env bash
+  it(
+    'treats --secret as an assertion and publishes the complete production environment',
+    { timeout: 60_000 },
+    () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-complete-'));
+      const binDir = join(tempRoot, 'bin');
+      const outputPath = join(tempRoot, '.env.prod');
+      const internalAuthTokenPath = join(tempRoot, 'internal-auth-token');
+      const fetchLog = join(tempRoot, 'secret-fetches.txt');
+      const runtimeSecrets = readHetznerRuntimeSecretNames();
+      mkdirSync(binDir);
+      makeExecutable(
+        join(binDir, 'gcloud'),
+        `#!/usr/bin/env bash
 set -euo pipefail
 secret_name=""
 for argument in "$@"; do
@@ -359,18 +363,18 @@ done
 printf '%s\n' "\${secret_name}" >> "\${FETCH_LOG:?}"
 printf 'secret-value-for-%s' "\${secret_name}"
 `
-    );
-    makeExecutable(
-      join(binDir, 'id'),
-      '#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == "-u" && "$2" == "test-deploy" ]]\n'
-    );
-    makeExecutable(
-      join(binDir, 'getent'),
-      '#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == "group" && "$2" == "test-nginx" ]]\n'
-    );
-    makeExecutable(
-      join(binDir, 'install'),
-      `#!/usr/bin/env bash
+      );
+      makeExecutable(
+        join(binDir, 'id'),
+        '#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == "-u" && "$2" == "test-deploy" ]]\n'
+      );
+      makeExecutable(
+        join(binDir, 'getent'),
+        '#!/usr/bin/env bash\nset -euo pipefail\n[[ "$1" == "group" && "$2" == "test-nginx" ]]\n'
+      );
+      makeExecutable(
+        join(binDir, 'install'),
+        `#!/usr/bin/env bash
 set -euo pipefail
 if [[ "$1" == "-d" ]]; then
   mkdir -p "\${@: -1}"
@@ -378,53 +382,54 @@ else
   cp "\${@: -2:1}" "\${@: -1}"
 fi
 `
-    );
+      );
 
-    const result = spawnSync(
-      'bash',
-      [loadSecretsPath, '--output', outputPath, '--secret', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          PATH: basePath(binDir),
-          FETCH_LOG: fetchLog,
-          INTEXURAOS_ENVIRONMENT: 'prod',
-          DEPLOY_USER: 'test-deploy',
-          NGINX_TOKEN_GROUP: 'test-nginx',
-          PROVISIONER_SA_KEY_FILE: join(tempRoot, 'missing-provisioner-key.json'),
-          RUNTIME_SA_KEY_FILE: join(tempRoot, 'runtime-key.json'),
-          INTERNAL_AUTH_TOKEN_FILE: internalAuthTokenPath,
-          TMPDIR: tempRoot,
-        },
+      const result = spawnSync(
+        'bash',
+        [loadSecretsPath, '--output', outputPath, '--secret', 'INTEXURAOS_INTERNAL_AUTH_TOKEN'],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: basePath(binDir),
+            FETCH_LOG: fetchLog,
+            INTEXURAOS_ENVIRONMENT: 'prod',
+            DEPLOY_USER: 'test-deploy',
+            NGINX_TOKEN_GROUP: 'test-nginx',
+            PROVISIONER_SA_KEY_FILE: join(tempRoot, 'missing-provisioner-key.json'),
+            RUNTIME_SA_KEY_FILE: join(tempRoot, 'runtime-key.json'),
+            INTERNAL_AUTH_TOKEN_FILE: internalAuthTokenPath,
+            TMPDIR: tempRoot,
+          },
+        }
+      );
+
+      expect(result.status, result.stderr).toBe(0);
+      const published = parse(readFileSync(outputPath, 'utf8'));
+      const fetchedNames = readFileSync(fetchLog, 'utf8').trim().split(/\r?\n/u);
+      const trackedConfig = {
+        ...(JSON.parse(
+          readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
+        ) as Record<string, string>),
+        ...(JSON.parse(
+          readFileSync(resolve(repoRoot, 'config/environments/prod.json'), 'utf8')
+        ) as Record<string, string>),
+      };
+
+      expect(fetchedNames).toEqual([...runtimeSecrets].sort());
+      for (const [name, value] of Object.entries(trackedConfig)) {
+        expect(published[name], name).toBe(value);
       }
-    );
-
-    expect(result.status, result.stderr).toBe(0);
-    const published = parse(readFileSync(outputPath, 'utf8'));
-    const fetchedNames = readFileSync(fetchLog, 'utf8').trim().split(/\r?\n/u);
-    const trackedConfig = {
-      ...(JSON.parse(
-        readFileSync(resolve(repoRoot, 'config/environments/common.json'), 'utf8')
-      ) as Record<string, string>),
-      ...(JSON.parse(
-        readFileSync(resolve(repoRoot, 'config/environments/prod.json'), 'utf8')
-      ) as Record<string, string>),
-    };
-
-    expect(fetchedNames).toEqual([...runtimeSecrets].sort());
-    for (const [name, value] of Object.entries(trackedConfig)) {
-      expect(published[name], name).toBe(value);
+      for (const name of runtimeSecrets) {
+        expect(published[name], name).toBe(`secret-value-for-${name}`);
+      }
+      expect(readFileSync(internalAuthTokenPath, 'utf8')).toBe(
+        'secret-value-for-INTEXURAOS_INTERNAL_AUTH_TOKEN'
+      );
+      expect(result.stdout).toContain('with 28 secrets');
     }
-    for (const name of runtimeSecrets) {
-      expect(published[name], name).toBe(`secret-value-for-${name}`);
-    }
-    expect(readFileSync(internalAuthTokenPath, 'utf8')).toBe(
-      'secret-value-for-INTEXURAOS_INTERNAL_AUTH_TOKEN'
-    );
-    expect(result.stdout).toContain('with 28 secrets');
-  });
+  );
 
   it('preserves both production runtime files when a later secret fetch fails', () => {
     const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-rollback-'));

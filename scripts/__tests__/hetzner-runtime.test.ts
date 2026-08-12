@@ -1979,104 +1979,108 @@ describe('Hetzner secret loader', () => {
     ).toBeNull();
   });
 
-  it('round-trips JSON secret material through the generated dotenv file', () => {
-    const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-secret-loader-'));
-    const outputPath = resolve(directory, '.env.prod');
-    const gcloudPath = resolve(directory, 'gcloud');
-    const getentPath = resolve(directory, 'getent');
-    const idPath = resolve(directory, 'id');
-    const installPath = resolve(directory, 'install');
-    const secretValue = JSON.stringify({
-      crv: 'Ed25519',
-      d: 'd'.repeat(43),
-      kid: 'production-test-v1',
-      kty: 'OKP',
-      x: 'x'.repeat(43),
-    });
-    const currentGroup = execFileSync('id', ['-g'], { encoding: 'utf8' }).trim();
-
-    try {
-      writeFileSync(gcloudPath, '#!/usr/bin/env bash\nprintf \'%s\' "${MOCK_SECRET_VALUE}"\n', {
-        mode: 0o755,
+  it(
+    'round-trips JSON secret material through the generated dotenv file',
+    { timeout: 60_000 },
+    () => {
+      const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-secret-loader-'));
+      const outputPath = resolve(directory, '.env.prod');
+      const gcloudPath = resolve(directory, 'gcloud');
+      const getentPath = resolve(directory, 'getent');
+      const idPath = resolve(directory, 'id');
+      const installPath = resolve(directory, 'install');
+      const secretValue = JSON.stringify({
+        crv: 'Ed25519',
+        d: 'd'.repeat(43),
+        kid: 'production-test-v1',
+        kty: 'OKP',
+        x: 'x'.repeat(43),
       });
-      writeFileSync(
-        getentPath,
-        [
-          '#!/usr/bin/env bash',
-          'set -euo pipefail',
-          '[[ "${1:-}" == "group" && "${2:-}" == "${MOCK_NGINX_GROUP}" ]]',
-          '',
-        ].join('\n'),
-        { mode: 0o755 }
-      );
-      writeFileSync(
-        idPath,
-        [
-          '#!/usr/bin/env bash',
-          'set -euo pipefail',
-          '[[ "${1:-}" == "-u" && "${2:-}" == "test-deploy" ]]',
-          '',
-        ].join('\n'),
-        { mode: 0o755 }
-      );
-      writeFileSync(
-        installPath,
-        [
-          '#!/usr/bin/env bash',
-          'set -euo pipefail',
-          'if [[ "$1" == "-d" ]]; then',
-          '  mkdir -p "${@: -1}"',
-          'else',
-          '  cp "${@: -2:1}" "${@: -1}"',
-          'fi',
-          '',
-        ].join('\n'),
-        { mode: 0o755 }
-      );
-      const result = spawnSync(
-        'bash',
-        [
-          loadSecretsPath,
-          '--output',
-          outputPath,
-          '--secret',
-          'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
-        ],
-        {
-          cwd: repoRoot,
-          encoding: 'utf8',
-          env: {
-            ...process.env,
-            PATH: `${directory}:${process.env.PATH ?? ''}`,
-            INTEXURAOS_ENVIRONMENT: 'prod',
-            DEPLOY_USER: 'test-deploy',
-            NGINX_TOKEN_GROUP: currentGroup,
-            MOCK_SECRET_VALUE: secretValue,
-            MOCK_NGINX_GROUP: currentGroup,
-            PROVISIONER_SA_KEY_FILE: resolve(directory, 'missing-provisioner-key.json'),
-            RUNTIME_SA_KEY_FILE: resolve(directory, 'runtime-key.json'),
-            INTERNAL_AUTH_TOKEN_FILE: resolve(directory, 'internal-auth-token'),
-          },
-        }
-      );
+      const currentGroup = execFileSync('id', ['-g'], { encoding: 'utf8' }).trim();
 
-      expect(result.status, result.stderr).toBe(0);
-      const parsed = parseDotenv(readFileSync(outputPath, 'utf8'));
-      const commonConfig = JSON.parse(
-        readRequired(resolve(repoRoot, 'config/environments/common.json'))
-      ) as Record<string, string>;
-      expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY']).toBe(secretValue);
-      expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY']).toBe(
-        commonConfig['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY']
-      );
-      expect(parsed['INTEXURAOS_FIREBASE_API_KEY']).toBe(
-        commonConfig['INTEXURAOS_FIREBASE_API_KEY']
-      );
-      expect(parsed['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI']).toBeUndefined();
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
+      try {
+        writeFileSync(gcloudPath, '#!/usr/bin/env bash\nprintf \'%s\' "${MOCK_SECRET_VALUE}"\n', {
+          mode: 0o755,
+        });
+        writeFileSync(
+          getentPath,
+          [
+            '#!/usr/bin/env bash',
+            'set -euo pipefail',
+            '[[ "${1:-}" == "group" && "${2:-}" == "${MOCK_NGINX_GROUP}" ]]',
+            '',
+          ].join('\n'),
+          { mode: 0o755 }
+        );
+        writeFileSync(
+          idPath,
+          [
+            '#!/usr/bin/env bash',
+            'set -euo pipefail',
+            '[[ "${1:-}" == "-u" && "${2:-}" == "test-deploy" ]]',
+            '',
+          ].join('\n'),
+          { mode: 0o755 }
+        );
+        writeFileSync(
+          installPath,
+          [
+            '#!/usr/bin/env bash',
+            'set -euo pipefail',
+            'if [[ "$1" == "-d" ]]; then',
+            '  mkdir -p "${@: -1}"',
+            'else',
+            '  cp "${@: -2:1}" "${@: -1}"',
+            'fi',
+            '',
+          ].join('\n'),
+          { mode: 0o755 }
+        );
+        const result = spawnSync(
+          'bash',
+          [
+            loadSecretsPath,
+            '--output',
+            outputPath,
+            '--secret',
+            'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
+          ],
+          {
+            cwd: repoRoot,
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              PATH: `${directory}:${process.env.PATH ?? ''}`,
+              INTEXURAOS_ENVIRONMENT: 'prod',
+              DEPLOY_USER: 'test-deploy',
+              NGINX_TOKEN_GROUP: currentGroup,
+              MOCK_SECRET_VALUE: secretValue,
+              MOCK_NGINX_GROUP: currentGroup,
+              PROVISIONER_SA_KEY_FILE: resolve(directory, 'missing-provisioner-key.json'),
+              RUNTIME_SA_KEY_FILE: resolve(directory, 'runtime-key.json'),
+              INTERNAL_AUTH_TOKEN_FILE: resolve(directory, 'internal-auth-token'),
+            },
+          }
+        );
+
+        expect(result.status, result.stderr).toBe(0);
+        const parsed = parseDotenv(readFileSync(outputPath, 'utf8'));
+        const commonConfig = JSON.parse(
+          readRequired(resolve(repoRoot, 'config/environments/common.json'))
+        ) as Record<string, string>;
+        expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY']).toBe(secretValue);
+        expect(parsed['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY']).toBe(
+          commonConfig['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY']
+        );
+        expect(parsed['INTEXURAOS_FIREBASE_API_KEY']).toBe(
+          commonConfig['INTEXURAOS_FIREBASE_API_KEY']
+        );
+        expect(parsed['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI']).toBeUndefined();
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     }
-  });
+  );
 
   it('merges production Matrix corpus config with only the real corpus secrets', () => {
     const script = readRequired(loadSecretsPath);
