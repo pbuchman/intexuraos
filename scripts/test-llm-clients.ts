@@ -13,14 +13,12 @@
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { createGeminiClientV2 } from '@intexuraos/infra-gemini';
 import { createGptClientV2 } from '@intexuraos/infra-gpt';
 import { createClaudeClientV2 } from '@intexuraos/infra-claude';
 import { createPerplexityClientV2 } from '@intexuraos/infra-perplexity';
 import type { LLMClient, ModelPricing, NormalizedUsage } from '@intexuraos/llm-contract';
 
 const MODELS = {
-  google: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-haiku-20241022',
   perplexity: 'sonar',
@@ -28,16 +26,6 @@ const MODELS = {
 
 // Default pricing for testing - these should match production values
 const DEFAULT_PRICING: Record<string, ModelPricing> = {
-  google: {
-    inputPricePerMillion: 0.075,
-    outputPricePerMillion: 0.3,
-    groundingCostPerRequest: 0.035,
-    imagePricing: {
-      '1024x1024': 0.02,
-      '1536x1024': 0.04,
-      '1024x1536': 0.04,
-    },
-  },
   openai: {
     inputPricePerMillion: 0.15,
     outputPricePerMillion: 0.6,
@@ -69,7 +57,6 @@ const GENERATE_PROMPT = `Wygeneruj listę 5 najpopularniejszych języków progra
 const IMAGE_PROMPT = `Ultra-detailed photorealistic scene: a cute guinea pig riding a majestic unicorn at full gallop toward a delicate, slender adult blonde woman in the distance; dynamic motion blur on background only, crisp fur and mane micro-detail, cinematic golden-hour lighting, shallow depth of field, 8K, sharp focus, whimsical fairytale realism, no text, no watermark, no NSFW`;
 
 interface ApiKeys {
-  google: string | null;
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
@@ -136,8 +123,6 @@ function createClientV2(
   pricing: ModelPricing
 ): LLMClient {
   switch (provider) {
-    case 'google':
-      return createGeminiClientV2({ apiKey, model, userId, pricing });
     case 'openai':
       return createGptClientV2({ apiKey, model, userId, pricing });
     case 'anthropic':
@@ -175,16 +160,11 @@ async function main(): Promise<void> {
   const keys = await fetchUserApiKeys(userId);
 
   console.log(`\nUser: ${userId}`);
-  console.log(`Google key:     ${maskKey(keys.google)}`);
   console.log(`OpenAI key:     ${maskKey(keys.openai)}`);
   console.log(`Anthropic key:  ${maskKey(keys.anthropic)}`);
   console.log(`Perplexity key: ${maskKey(keys.perplexity)}`);
 
-  const hasAnyKey =
-    keys.google !== null ||
-    keys.openai !== null ||
-    keys.anthropic !== null ||
-    keys.perplexity !== null;
+  const hasAnyKey = keys.openai !== null || keys.anthropic !== null || keys.perplexity !== null;
   if (!hasAnyKey) {
     console.error('\n❌ Error: No API keys configured for this user. Nothing to test.');
     process.exit(1);
@@ -241,8 +221,8 @@ async function main(): Promise<void> {
       saveResult(`${provider}_generate`, { error: String(error) });
     }
 
-    // Test generateImage() - only for Google and OpenAI
-    if (client.generateImage !== undefined && (provider === 'google' || provider === 'openai')) {
+    // Test generateImage() through the supported direct OpenAI client.
+    if (client.generateImage !== undefined && provider === 'openai') {
       console.log(`\n🖼️  Testing ${provider}.generateImage()...`);
       try {
         const imageResult = await client.generateImage(IMAGE_PROMPT);

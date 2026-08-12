@@ -50,15 +50,12 @@ Based on code analysis, git history, and domain patterns:
 | ------------------------------------------------------ | ------------------------------ | ------------------------------------------------------------- |
 | `src/infra/linearApiClient.ts`                  | Module-level client cache      | Global state, harder to test in isolation                     |
 | `src/domain/useCases/triggerCodeTaskFromAssignment.ts` | Fire-and-forget async pattern  | Errors logged but not propagated to caller                    |
-| `src/services.ts`                                      | Conditional pruning classifier | Null-key fallback creates a stub classifier that always fails |
 
 **Details (client cache):** The Linear API client uses module-level `Map` instances for client caching and request deduplication. While this enables performance optimizations, it makes the code harder to test without coverage exemption pragmas. The caching and dedup logic has been extracted into a dedicated `requestCache.ts` module (INT-904), improving isolation.
 
 **Mitigation:** The caching behavior is well-isolated with exported functions (`clearClientCache`, `getClientCacheSize`) for test cleanup. The INT-904 split further improved testability.
 
 **Details (fire-and-forget):** `triggerCodeTaskFromAssignment` uses `void` to discard the promise, meaning code-agent failures are only logged, not surfaced to the webhook caller. This is by design (webhook responses should not be blocked), but means trigger failures require log monitoring to detect.
-
-**Details (conditional classifier):** When `INTEXURAOS_GEMINI_APP_API_KEY` is not set, `services.ts` creates a stub `IssuePruningClassifier` that always returns an error. This is functional but slightly misleading — the pruning endpoint will report an error rather than skipping gracefully.
 
 ---
 
@@ -120,7 +117,7 @@ None. The service uses current versions of:
 - `@intexuraos/llm-utils` — Zod error formatting
 - `@intexuraos/common-core` — Result types, label detection helpers
 - `@intexuraos/internal-clients` — UserServiceClient
-- `@intexuraos/infra-gemini` — Gemini client for pruning classifier
+- `@intexuraos/llm-factory` — Provider-neutral LLM client interface
 
 ---
 
@@ -215,10 +212,10 @@ None. The service uses current versions of:
 24. **Comments in Agent Prompts**: Both ASSIGNMENT_PROMPT and EXECUTION_PROMPT instruct the code agent to read all issue comments newest-first
 25. **Module Decomposition**: INT-901 through INT-907 decomposed six large modules into focused, testable units
 26. **Context Proxy**: Context endpoint enables cross-service issue data access without user credentials (INT-1040)
-27. **Two-Phase Pruning**: Candidates classified by Gemini are stored for user review before deletion — no silent mass deletions
+27. **Two-Phase Pruning**: LLM-classified candidates are stored for user review before deletion — no silent mass deletions
 28. **Write-Through Label Cache**: Metadata endpoint updates Firestore immediately after Linear API call, preventing stale labels
 29. **Group Summary Recomputes**: Label changes via internal API trigger code-agent group summary recalculation
-30. **Zod-Validated LLM Output**: Pruning classifier validates Gemini responses with strict Zod schemas
+30. **Zod-Validated LLM Output**: Pruning classifier validates model responses with strict Zod schemas
 
 ### Areas for Improvement
 
@@ -229,7 +226,6 @@ None. The service uses current versions of:
 5. **Comment Full Sync**: No bulk comment reconciliation for initial setup
 6. **Fire-and-Forget Auto-Trigger**: `triggerCodeTaskFromAssignment` errors only logged, not surfaced
 7. **Hardcoded Prune Threshold**: 200-issue activation threshold is not user-configurable
-8. **Stub Classifier on Missing Key**: When `INTEXURAOS_GEMINI_APP_API_KEY` is absent, pruning always fails rather than skipping gracefully
 
 ---
 

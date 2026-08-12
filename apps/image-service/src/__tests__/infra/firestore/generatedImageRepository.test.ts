@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createFakeFirestore, resetFirestore, setFirestore } from '@intexuraos/infra-firestore';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmModels } from '@intexuraos/llm-contract';
 import { createGeneratedImageRepository } from '../../../infra/firestore/index.js';
 import type { GeneratedImageRepository } from '../../../domain/ports/generatedImageRepository.js';
 import type { GeneratedImage } from '../../../domain/index.js';
@@ -50,7 +50,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       const image = createTestImage({
         id: 'img-456',
         prompt: 'A futuristic city at night',
-        model: LlmModels.Gemini25FlashImage,
+        model: LegacyGoogleModels.Gemini25FlashImage,
       });
 
       const result = await repository.save(image);
@@ -59,7 +59,7 @@ describe('GeneratedImageFirestoreRepository', () => {
       if (result.ok) {
         expect(result.value.id).toBe('img-456');
         expect(result.value.prompt).toBe('A futuristic city at night');
-        expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
+        expect(result.value.model).toBe(LegacyGoogleModels.Gemini25FlashImage);
       }
     });
 

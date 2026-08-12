@@ -40,7 +40,11 @@ import {
 export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
 export type { ImageServiceClient, GeneratedImageData, PromptModel, ImageModel } from './infra/image/index.js';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type { ResearchModel, FastModel } from '@intexuraos/llm-contract';
+import type {
+  LLMModel,
+  OpenRouterToolCallingModel,
+  ResearchModel,
+} from '@intexuraos/llm-contract';
 import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
@@ -107,21 +111,21 @@ export interface ServiceContainer {
     researchId?: string
   ) => LlmSynthesisProvider;
   createTitleGenerator: (
-    model: FastModel,
+    model: ResearchModel,
     apiKey: string,
     userId: string,
     logger: Logger,
     researchId?: string
   ) => TitleGenerator;
   createContextInferrer: (
-    model: FastModel,
+    model: LLMModel | OpenRouterToolCallingModel,
     apiKey: string,
     userId: string,
     logger: Logger,
     researchId?: string
   ) => ContextInferenceProvider;
   createInputValidator: (
-    model: FastModel,
+    model: LLMModel | OpenRouterToolCallingModel,
     apiKey: string,
     userId: string,
     logger: Logger,
@@ -233,7 +237,7 @@ export function initializeServices(): void {
     internalAuthToken,
     logger: createAppLogger({ name: 'user-service-client' }),
     usageSink: buildUsageSink('user-service-client'),
-    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
+    platformOpenRouterApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
   });
 
   const notificationSender = createNotificationSender();
@@ -323,15 +327,15 @@ export function initializeServices(): void {
         researchId
       ),
     createTitleGenerator: (
-    model: FastModel,
-    apiKey: string,
-    userId: string,
-    logger: Logger,
-    researchId?: string
-  ): TitleGenerator =>
+      model: ResearchModel,
+      apiKey: string,
+      userId: string,
+      logger: Logger,
+      researchId?: string
+    ): TitleGenerator =>
       createTitleGenerator(model, apiKey, userId, logger, buildUsageSink('title-generator'), researchId),
     createContextInferrer: (
-      model: FastModel,
+      model: LLMModel | OpenRouterToolCallingModel,
       apiKey: string,
       userId: string,
       logger: Logger,
@@ -346,20 +350,20 @@ export function initializeServices(): void {
         researchId
       ),
     createInputValidator: (
-    model: FastModel,
-    apiKey: string,
-    userId: string,
-    logger: Logger,
-    researchId?: string
-  ): InputValidationProvider =>
-    createInputValidator(
-      model,
-      apiKey,
-      userId,
-      logger,
+      model: LLMModel | OpenRouterToolCallingModel,
+      apiKey: string,
+      userId: string,
+      logger: Logger,
+      researchId?: string
+    ): InputValidationProvider =>
+      createInputValidator(
+        model,
+        apiKey,
+        userId,
+        logger,
         buildUsageSink('input-validator'),
         researchId
-    ),
+      ),
     notionExporter: exportResearchToNotion,
   };
 }

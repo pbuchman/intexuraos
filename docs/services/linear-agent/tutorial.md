@@ -488,7 +488,7 @@ Both prompts instruct the code agent to read the full issue and all its comments
 
 ## Part 7: Review and Delete Prune Candidates (5 minutes)
 
-When your board grows past 200 active issues, the Linear Agent classifies deletion candidates using Gemini.
+When your board grows past 200 active issues, the Linear Agent classifies deletion candidates using a user-service-resolved LLM client with a platform OpenRouter fallback.
 
 ### Step 7.1: Trigger Pruning Manually (Testing)
 

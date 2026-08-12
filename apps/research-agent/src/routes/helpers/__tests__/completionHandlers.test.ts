@@ -7,7 +7,7 @@ import { handleAllCompleted } from '../../../routes/helpers/completionHandlers.j
 import type { AllCompletedHandlerParams } from '../../../routes/helpers/completionHandlers.js';
 import type { Research } from '../../../domain/research/models/Research.js';
 import { ok, err } from '@intexuraos/common-core';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 
 const mockLogger = {
   info: vi.fn(),
@@ -23,7 +23,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test question?',
     status: 'processing',
-    selectedModels: [LlmModels.ClaudeSonnet46, LlmModels.Gemini25Pro],
+    selectedModels: [LlmModels.ClaudeSonnet46, IntexAgentModels.Gemini3FlashPreview],
     llmResults: [
       {
         provider: LlmProviders.Anthropic,
@@ -35,8 +35,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
         costUsd: 0.01,
       },
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini25Pro,
+        provider: LlmProviders.OpenRouter,
+        model: IntexAgentModels.Gemini3FlashPreview,
         status: 'completed',
         result: 'Test result from Gemini',
         inputTokens: 80,
@@ -74,7 +74,7 @@ describe('handleAllCompleted', () => {
       apiKeys: {
         anthropic: 'test-key',
         openai: 'test-key-2',
-        google: 'test-key-3',
+        openrouter: 'test-key-3',
       },
       services: {
         createSynthesizer: () => ({

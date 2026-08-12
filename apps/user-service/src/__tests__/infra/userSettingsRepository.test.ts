@@ -74,7 +74,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns settings with llmApiKeys when present', async () => {
       const settings = createTestSettings({
         llmApiKeys: {
-          google: createEncryptedValue('google-key'),
+          openrouter: createEncryptedValue('openrouter-key'),
         },
       });
       await repo.saveSettings(settings);
@@ -84,7 +84,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.llmApiKeys).toBeDefined();
-        expect(result.value.llmApiKeys?.google).toBeDefined();
+        expect(result.value.llmApiKeys?.openrouter).toBeDefined();
       }
     });
 
@@ -95,7 +95,7 @@ describe('FirestoreUserSettingsRepository', () => {
         testedAt: new Date().toISOString(),
       };
       const settings = createTestSettings({
-        llmTestResults: { google: testResult },
+        llmTestResults: { openrouter: testResult },
       });
 
       const saveResult = await repo.saveSettings(settings);
@@ -106,7 +106,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
         expect(result.value.llmTestResults).toBeDefined();
-        expect(result.value.llmTestResults?.google?.message).toBe('Hello!');
+        expect(result.value.llmTestResults?.openrouter?.message).toBe('Hello!');
       }
     });
 
@@ -209,7 +209,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('saves settings with llmApiKeys', async () => {
       const settings = createTestSettings({
         llmApiKeys: {
-          google: createEncryptedValue('google-key'),
+          openrouter: createEncryptedValue('openrouter-key'),
           openai: createEncryptedValue('openai-key'),
         },
       });
@@ -221,7 +221,7 @@ describe('FirestoreUserSettingsRepository', () => {
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmApiKeys?.google).toBeDefined();
+        expect(stored.value.llmApiKeys?.openrouter).toBeDefined();
         expect(stored.value.llmApiKeys?.openai).toBeDefined();
       }
     });
@@ -269,9 +269,9 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('updateLlmApiKey', () => {
     it('creates new settings document if user does not exist', async () => {
-      const encryptedKey = createEncryptedValue('google-key');
+      const encryptedKey = createEncryptedValue('openrouter-key');
 
-      const result = await repo.updateLlmApiKey('new-user', LlmProviders.Google, encryptedKey);
+      const result = await repo.updateLlmApiKey('new-user', LlmProviders.OpenRouter, encryptedKey);
 
       expect(result.ok).toBe(true);
 
@@ -279,7 +279,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmApiKeys?.google).toBeDefined();
+        expect(stored.value.llmApiKeys?.openrouter).toBeDefined();
       }
     });
 
@@ -303,7 +303,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
       const result = await repo.updateLlmApiKey(
         'user-123',
-        LlmProviders.Google,
+        LlmProviders.OpenRouter,
         createEncryptedValue('key')
       );
 
@@ -316,16 +316,14 @@ describe('FirestoreUserSettingsRepository', () => {
   });
 
   describe('deleteLlmApiKey', () => {
-    it('deletes existing API key', async () => {
-      await repo.updateLlmApiKey(
-        'user-123',
-        LlmProviders.Google,
-        createEncryptedValue('google-key')
-      );
-      await repo.updateLlmApiKey(
-        'user-123',
-        LlmProviders.OpenAI,
-        createEncryptedValue('openai-key')
+    it('deletes a stored legacy Google API key', async () => {
+      await repo.saveSettings(
+        createTestSettings({
+          llmApiKeys: {
+            google: createEncryptedValue('google-key'),
+            openai: createEncryptedValue('openai-key'),
+          },
+        })
       );
 
       const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
@@ -341,29 +339,29 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('deletes associated test result when deleting key', async () => {
-      await repo.updateLlmApiKey('user-123', LlmProviders.Google, createEncryptedValue('key'));
-      await repo.updateLlmTestResult('user-123', LlmProviders.Google, {
+      await repo.updateLlmApiKey('user-123', LlmProviders.OpenRouter, createEncryptedValue('key'));
+      await repo.updateLlmTestResult('user-123', LlmProviders.OpenRouter, {
         status: 'success',
         message:'Test passed',
         testedAt: new Date().toISOString(),
       });
 
-      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
+      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.OpenRouter);
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmApiKeys?.google).toBeUndefined();
-        expect(stored.value.llmTestResults?.google).toBeUndefined();
+        expect(stored.value.llmApiKeys?.openrouter).toBeUndefined();
+        expect(stored.value.llmTestResults?.openrouter).toBeUndefined();
       }
     });
 
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Delete failed') });
 
-      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.Google);
+      const result = await repo.deleteLlmApiKey('user-123', LlmProviders.OpenRouter);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -381,7 +379,7 @@ describe('FirestoreUserSettingsRepository', () => {
         message:'Test response',
       };
 
-      const result = await repo.updateLlmTestResult('new-user', LlmProviders.Google, testResult);
+      const result = await repo.updateLlmTestResult('new-user', LlmProviders.OpenRouter, testResult);
 
       expect(result.ok).toBe(true);
 
@@ -389,7 +387,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmTestResults?.google?.message).toBe('Test response');
+        expect(stored.value.llmTestResults?.openrouter?.message).toBe('Test response');
       }
     });
 
@@ -416,7 +414,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmTestResult('user-123', LlmProviders.Google, {
+      const result = await repo.updateLlmTestResult('user-123', LlmProviders.OpenRouter, {
         status: 'success',
         message:'Test response',
         testedAt: new Date().toISOString(),
@@ -432,7 +430,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('updateLlmLastUsed', () => {
     it('creates new settings document if user does not exist', async () => {
-      const result = await repo.updateLlmLastUsed('new-user', LlmProviders.Google);
+      const result = await repo.updateLlmLastUsed('new-user', LlmProviders.OpenRouter);
 
       expect(result.ok).toBe(true);
 
@@ -440,9 +438,9 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmTestResults?.google?.testedAt).toBeDefined();
-        expect(stored.value.llmTestResults?.google?.status).toBe('success');
-        expect(stored.value.llmTestResults?.google?.message).toBe('');
+        expect(stored.value.llmTestResults?.openrouter?.testedAt).toBeDefined();
+        expect(stored.value.llmTestResults?.openrouter?.status).toBe('success');
+        expect(stored.value.llmTestResults?.openrouter?.message).toBe('');
       }
     });
 
@@ -491,7 +489,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmLastUsed('user-123', LlmProviders.Google);
+      const result = await repo.updateLlmLastUsed('user-123', LlmProviders.OpenRouter);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -503,7 +501,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('updateLlmPreferences', () => {
     it('creates new settings document if user does not exist', async () => {
-      const result = await repo.updateLlmPreferences('new-user', LlmModels.Gemini25Flash);
+      const result = await repo.updateLlmPreferences('new-user', LlmModels.GPT4oMini);
 
       expect(result.ok).toBe(true);
 
@@ -511,7 +509,7 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
       }
     });
 
@@ -532,7 +530,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Update failed') });
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash);
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini);
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
@@ -542,20 +540,20 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('creates new settings with fallbackModel when user does not exist', async () => {
-      const result = await repo.updateLlmPreferences('new-user-fb', LlmModels.Gemini25Flash, 'or:google/gemma-4-31b-it:free');
+      const result = await repo.updateLlmPreferences('new-user-fb', LlmModels.GPT4oMini, 'or:google/gemma-4-31b-it:free');
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('new-user-fb');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
         expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
       }
     });
 
     it('does not set fallbackModel when creating new settings without it', async () => {
-      const result = await repo.updateLlmPreferences('new-user-nofb', LlmModels.Gemini25Flash);
+      const result = await repo.updateLlmPreferences('new-user-nofb', LlmModels.GPT4oMini);
 
       expect(result.ok).toBe(true);
 
@@ -569,7 +567,7 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates fallbackModel on existing document', async () => {
       await repo.saveSettings(createTestSettings());
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash, 'or:google/gemma-4-31b-it:free');
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini, 'or:google/gemma-4-31b-it:free');
 
       expect(result.ok).toBe(true);
 
@@ -582,10 +580,10 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('clears fallbackModel when null is passed on existing document', async () => {
       await repo.saveSettings(createTestSettings({
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: 'or:google/gemma-4-31b-it:free' },
+        llmPreferences: { defaultModel: LlmModels.GPT4oMini, fallbackModel: 'or:google/gemma-4-31b-it:free' },
       }));
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash, null);
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini, null);
 
       expect(result.ok).toBe(true);
 
@@ -601,14 +599,14 @@ describe('FirestoreUserSettingsRepository', () => {
         llmPreferences: { defaultModel: LlmModels.GPT4oMini, fallbackModel: 'or:google/gemma-4-31b-it:free' },
       }));
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.Gemini25Flash, undefined);
+      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini, undefined);
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
         expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
       }
     });
@@ -1198,22 +1196,22 @@ describe('FirestoreUserSettingsRepository', () => {
         },
         {
           invoke: (): Promise<unknown> =>
-            repo.updateLlmTestResult('writers-user', LlmProviders.Google, {
+            repo.updateLlmTestResult('writers-user', LlmProviders.OpenRouter, {
               status: 'success',
               message: 'ok',
               testedAt: 'then',
             }),
           assertStored: (stored: Record<string, unknown>): void => {
             expect(stored).toMatchObject({
-              llmTestResults: { google: { status: 'success', message: 'ok', testedAt: 'then' } },
+              llmTestResults: { openrouter: { status: 'success', message: 'ok', testedAt: 'then' } },
             });
           },
         },
         {
-          invoke: (): Promise<unknown> => repo.updateLlmLastUsed('writers-user', LlmProviders.Google),
+          invoke: (): Promise<unknown> => repo.updateLlmLastUsed('writers-user', LlmProviders.Anthropic),
           assertStored: (stored: Record<string, unknown>): void => {
             expect(stored).toMatchObject({
-              llmTestResults: { google: expect.objectContaining({ status: 'success', message: '' }) },
+              llmTestResults: { anthropic: expect.objectContaining({ status: 'success', message: '' }) },
             });
           },
         },
@@ -1264,18 +1262,19 @@ describe('FirestoreUserSettingsRepository', () => {
         }
       }
 
-      for (const googleFirst of [true, false]) {
+      for (const anthropicFirst of [true, false]) {
         fakeFirestore.clear();
-        const google = (): Promise<unknown> => repo.updateLlmLastUsed('last-used-user', LlmProviders.Google);
+        const anthropic = (): Promise<unknown> =>
+          repo.updateLlmLastUsed('last-used-user', LlmProviders.Anthropic);
         const openAi = (): Promise<unknown> => repo.updateLlmLastUsed('last-used-user', LlmProviders.OpenAI);
-        const first = googleFirst ? google() : openAi();
-        const second = googleFirst ? openAi() : google();
+        const first = anthropicFirst ? anthropic() : openAi();
+        const second = anthropicFirst ? openAi() : anthropic();
 
         await Promise.all([first, second]);
 
         expect(fakeFirestore.getAllData().get('user_settings')?.get('last-used-user')).toMatchObject({
           llmTestResults: {
-            google: expect.objectContaining({ status: 'success', message: '' }),
+            anthropic: expect.objectContaining({ status: 'success', message: '' }),
             openai: expect.objectContaining({ status: 'success', message: '' }),
           },
         });

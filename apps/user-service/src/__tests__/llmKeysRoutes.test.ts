@@ -4,7 +4,13 @@
  * - PATCH /users/:uid/settings/llm-keys
  * - DELETE /users/:uid/settings/llm-keys/:provider
  */
-import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LegacyGoogleModels,
+  LlmModels,
+  LlmProviders,
+} from '@intexuraos/llm-contract';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
@@ -350,20 +356,20 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { google: string | null; openai: string | null; anthropic: string | null; defaultModel: string | null };
+        data: { openai: string | null; anthropic: string | null; defaultModel: string | null };
       };
       expect(body.success).toBe(true);
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.defaultModel).toBeNull();
     });
 
-    it('returns defaultModel when user has preference', { timeout: 20000 }, async () => {
+    it('normalizes a stored legacy Google defaultModel to the platform model', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-with-pref';
       fakeSettingsRepo.setSettings({
         userId,
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -386,7 +392,7 @@ describe('LLM Keys Routes', () => {
         data: { defaultModel: string | null };
       };
       expect(body.success).toBe(true);
-      expect(body.data.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('returns fallbackModel in GET response when set', { timeout: 20000 }, async () => {
@@ -394,7 +400,7 @@ describe('LLM Keys Routes', () => {
       const orFallback = 'or:google/gemma-4-31b-it:free';
       fakeSettingsRepo.setSettings({
         userId,
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: orFallback },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash, fallbackModel: orFallback },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -417,7 +423,7 @@ describe('LLM Keys Routes', () => {
         data: { defaultModel: string | null; fallbackModel: string | null };
       };
       expect(body.success).toBe(true);
-      expect(body.data.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
       expect(body.data.fallbackModel).toBe(orFallback);
     });
 
@@ -425,7 +431,7 @@ describe('LLM Keys Routes', () => {
       const userId = 'auth0|user-no-fallback';
       fakeSettingsRepo.setSettings({
         userId,
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -486,11 +492,10 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { google: string | null; openai: string | null; anthropic: string | null };
+        data: { openai: string | null; anthropic: string | null };
       };
       expect(body.success).toBe(true);
-      // Now returns masked keys like "AIza...ghij" instead of 'configured'
-      expect(body.data.google).toBe('AIza...ghij');
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBe('sk-a...abcd');
     });
@@ -548,12 +553,12 @@ describe('LLM Keys Routes', () => {
 
     it('returns null when decryption fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-decrypt-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -577,11 +582,11 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { google: string | null; openai: string | null; anthropic: string | null };
+        data: { openai: string | null; anthropic: string | null };
       };
       expect(body.success).toBe(true);
-      // Returns null when decryption fails
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
+      expect(body.data.openai).toBeNull();
     });
   });
 
@@ -593,7 +598,7 @@ describe('LLM Keys Routes', () => {
         method: 'PATCH',
         url: '/users/user-123/settings/llm-keys',
         payload: {
-          provider: LlmProviders.Google,
+          provider: LlmProviders.OpenAI,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -621,7 +626,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.Google,
+          provider: LlmProviders.OpenAI,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -635,7 +640,7 @@ describe('LLM Keys Routes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
-    it('stores encrypted key and returns masked value', { timeout: 20000 }, async () => {
+    it('stores an executable provider key and returns its masked value', { timeout: 20000 }, async () => {
       app = await buildServer();
 
       const userId = 'auth0|user-set-key';
@@ -648,8 +653,8 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.Google,
-          apiKey: 'AIzaSyB1234567890abcdef',
+          provider: LlmProviders.OpenRouter,
+          apiKey: 'sk-or-1234567890abcdef',
         },
       });
 
@@ -659,12 +664,12 @@ describe('LLM Keys Routes', () => {
         data: { provider: string; masked: string };
       };
       expect(body.success).toBe(true);
-      expect(body.data.provider).toBe(LlmProviders.Google);
-      expect(body.data.masked).toBe('AIza...cdef');
+      expect(body.data.provider).toBe(LlmProviders.OpenRouter);
+      expect(body.data.masked).toBe('sk-o...cdef');
 
       // Verify key was stored
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmApiKeys?.google).toBeDefined();
+      expect(stored?.llmApiKeys?.openrouter).toBeDefined();
     });
 
     it('returns 503 when encryption not configured', { timeout: 20000 }, async () => {
@@ -691,7 +696,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.Google,
+          provider: LlmProviders.OpenAI,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -809,12 +814,32 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.Google,
+          provider: LlmProviders.OpenAI,
           apiKey: 'short',
         },
       });
 
       expect(response.statusCode).toBe(400);
+    });
+
+    it('returns 400 when attempting to store a legacy Google key', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-google-key-rejected';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          provider: LlmProviders.Google,
+          apiKey: 'AIzaSyB1234567890abcdef',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(fakeSettingsRepo.getStoredSettings(userId)?.llmApiKeys?.google).toBeUndefined();
     });
 
     it('returns 400 when provider is invalid', { timeout: 20000 }, async () => {
@@ -926,7 +951,7 @@ describe('LLM Keys Routes', () => {
         llmApiKeys: {
           google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
         },
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -963,7 +988,7 @@ describe('LLM Keys Routes', () => {
           google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
           openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(orKey).toString('base64') },
         },
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: orFallback },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash, fallbackModel: orFallback },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -986,7 +1011,7 @@ describe('LLM Keys Routes', () => {
 
       // Verify fallback was cleared but defaultModel preserved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(stored?.llmPreferences?.defaultModel).toBe(LegacyGoogleModels.Gemini25Flash);
       expect(stored?.llmPreferences?.fallbackModel).toBeUndefined();
     });
 
@@ -1001,7 +1026,7 @@ describe('LLM Keys Routes', () => {
           google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
           openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(orKey).toString('base64') },
         },
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash, fallbackModel: orFallback },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash, fallbackModel: orFallback },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -1071,7 +1096,7 @@ describe('LLM Keys Routes', () => {
           openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(orKey).toString('base64') },
         },
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
           fallbackModel: 'or:google/gemma-4-31b-it:free',
         },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1092,7 +1117,7 @@ describe('LLM Keys Routes', () => {
 
       // Both default and fallback should be preserved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(stored?.llmPreferences?.defaultModel).toBe(LegacyGoogleModels.Gemini25Flash);
       expect(stored?.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
     });
 
@@ -1104,7 +1129,7 @@ describe('LLM Keys Routes', () => {
         llmApiKeys: {
           google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
         },
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -1139,7 +1164,7 @@ describe('LLM Keys Routes', () => {
         llmApiKeys: {
           google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
         },
-        llmPreferences: { defaultModel: LlmModels.Gemini25Flash },
+        llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
@@ -1197,7 +1222,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/users/user-123/settings/llm-keys/google/test',
+        url: '/users/user-123/settings/llm-keys/openai/test',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1218,7 +1243,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/users/auth0|other-user/settings/llm-keys/google/test',
+        url: '/users/auth0|other-user/settings/llm-keys/openai/test',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1233,6 +1258,22 @@ describe('LLM Keys Routes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
+    it('returns 400 for the legacy Google provider', { timeout: 20000 }, async () => {
+      app = await buildServer();
+
+      const userId = 'auth0|user-google-test-rejected';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(fakeSettingsRepo.getStoredSettings(userId)?.llmTestResults?.google).toBeUndefined();
+    });
+
     it('returns 404 when API key not configured', { timeout: 20000 }, async () => {
       app = await buildServer();
 
@@ -1241,7 +1282,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1258,12 +1299,12 @@ describe('LLM Keys Routes', () => {
 
     it('returns 503 when encryption not configured', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-no-encrypt';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1286,7 +1327,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1303,12 +1344,12 @@ describe('LLM Keys Routes', () => {
 
     it('returns 503 when LLM validator not configured', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-no-validator';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1331,7 +1372,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1349,12 +1390,12 @@ describe('LLM Keys Routes', () => {
 
     it('returns 500 when decryption fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-decrypt-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1368,7 +1409,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1385,18 +1426,18 @@ describe('LLM Keys Routes', () => {
 
     it('returns test response on success', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-success';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      fakeLlmValidator.setTestResponse('Hello! I am Gemini Pro.');
+      fakeLlmValidator.setTestResponse('Hello! I am GPT.');
 
       app = await buildServer();
 
@@ -1404,7 +1445,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1417,24 +1458,24 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('success');
-      expect(body.data.message).toBe('Hello! I am Gemini Pro.');
+      expect(body.data.message).toBe('Hello! I am GPT.');
       expect(body.data.testedAt).toBeDefined();
 
       // Verify test result was saved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmTestResults?.google).toBeDefined();
-      expect(stored?.llmTestResults?.google?.status).toBe('success');
-      expect(stored?.llmTestResults?.google?.message).toBe('Hello! I am Gemini Pro.');
+      expect(stored?.llmTestResults?.openai).toBeDefined();
+      expect(stored?.llmTestResults?.openai?.status).toBe('success');
+      expect(stored?.llmTestResults?.openai?.message).toBe('Hello! I am GPT.');
     });
 
     it('returns 200 with failure status and stores error when test request fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1448,7 +1489,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1466,9 +1507,9 @@ describe('LLM Keys Routes', () => {
 
       // Verify error was stored for persistence across page refresh
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmTestResults?.google).toBeDefined();
-      expect(stored?.llmTestResults?.google?.status).toBe('failure');
-      expect(stored?.llmTestResults?.google?.message).toBe('Test request failed');
+      expect(stored?.llmTestResults?.openai).toBeDefined();
+      expect(stored?.llmTestResults?.openai?.status).toBe('failure');
+      expect(stored?.llmTestResults?.openai?.message).toBe('Test request failed');
     });
 
     it('returns test response for anthropic provider', { timeout: 20000 }, async () => {
@@ -1522,7 +1563,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },

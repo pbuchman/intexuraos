@@ -5,7 +5,7 @@ Unified factory for creating LLM clients across different providers, mapping mod
 ## Contract
 
 - **Layer:** llm
-- **Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-gemini`, `@intexuraos/infra-openrouter`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
+- **Dependencies:** `@intexuraos/common-core`, `@intexuraos/infra-claude`, `@intexuraos/infra-gpt`, `@intexuraos/infra-openrouter`, `@intexuraos/infra-perplexity`, `@intexuraos/llm-contract`, `@intexuraos/llm-pricing`
 - **Exports:** `./src/index.ts` (source-exports — no `dist/` emission)
 
 ## Usage

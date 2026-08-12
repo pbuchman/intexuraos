@@ -34,9 +34,9 @@ When you are ready, request a draft and the agent synthesizes all your thoughts,
 
 ### Per-User Model Configuration
 
-Each user's LLM calls use their own configured model and API key, resolved at request time via the user-service. This allows individual users to bring their own Gemini API key or fall back to the platform's shared key.
+Each user's LLM calls use a supported model resolved at request time via user-service. Supported personal provider keys remain available, while absent or retired direct-Google preferences are routed to the platform OpenRouter default.
 
-**Example:** A user with a personal Gemini API key gets billed directly to their account. A user without one falls back to the platform key — no configuration required on their part.
+**Example:** A user with a supported personal provider key can use that provider directly. A user without one uses the platform OpenRouter route, so operators retain one place to inspect fallback traffic and spend.
 
 ### Buffer Workspace View
 

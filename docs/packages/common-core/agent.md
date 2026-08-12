@@ -181,7 +181,7 @@ common-core (leaf)
   <- http-server
   <- infra-pubsub
   <- infra-firestore
-  <- infra-claude, infra-gemini, infra-gpt
+  <- infra-claude, infra-gpt, infra-openrouter
   <- infra-notion, infra-perplexity, infra-sentry, infra-whatsapp
   <- llm-utils, llm-prompts, llm-pricing, llm-factory, llm-contract
   <- internal-clients

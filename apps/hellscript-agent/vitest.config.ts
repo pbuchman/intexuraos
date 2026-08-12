@@ -23,7 +23,6 @@ export default mergeConfig(
         '@intexuraos/http-server': resolve(__dirname, '../../packages/http-server/src'),
         '@intexuraos/infra-firestore': resolve(__dirname, '../../packages/infra-firestore/src'),
         '@intexuraos/infra-sentry': resolve(__dirname, '../../packages/infra-sentry/src'),
-        '@intexuraos/infra-gemini': resolve(__dirname, '../../packages/infra-gemini/src'),
         '@intexuraos/llm-contract': resolve(__dirname, '../../packages/llm-contract/src'),
         '@intexuraos/llm-prompts': resolve(__dirname, '../../packages/llm-prompts/src'),
       },

@@ -373,7 +373,7 @@ describe('ecosystem.config.prod.cjs', () => {
     const config = loadProdConfig({
       ...PROD_ENV,
       INTEXURAOS_AUTH0_CLIENT_ID: 'auth0-client',
-      INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-key',
+      INTEXURAOS_GEMINI_APP_API_KEY: 'retired-key-must-not-leak',
       INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET: 'github-oauth-secret',
       INTEXURAOS_GUEST_SESSION_SECRET: 'guest-session-secret',
       INTEXURAOS_INTERNAL_AUTH_TOKEN: 'internal-token',
@@ -433,6 +433,7 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('message-digest-service')?.env.INTEXURAOS_INTERNAL_AUTH_TOKEN).toBe(
       'internal-token'
     );
+    expect(byName.get('web-agent')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('openrouter-key');
     expect(
       byName.get('mobile-notifications-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY
     ).toBeUndefined();
@@ -440,6 +441,9 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
     );
+    for (const app of config.apps) {
+      expect(app.env.INTEXURAOS_GEMINI_APP_API_KEY, app.name).toBeUndefined();
+    }
     for (const removed of REMOVED_AGENT_NAMES) {
       expect(byName.has(removed)).toBe(false);
     }

@@ -913,18 +913,6 @@
       "description": "Technical debt notes for infra-firestore"
     },
     {
-      "path": "packages/infra-gemini/README.md",
-      "title": "@intexuraos/infra-gemini",
-      "category": "packages",
-      "description": "Package documentation: infra-gemini"
-    },
-    {
-      "path": "packages/infra-gemini/technical-debt.md",
-      "title": "Technical Debt: @intexuraos/infra-gemini",
-      "category": "packages",
-      "description": "Technical debt notes for infra-gemini"
-    },
-    {
       "path": "packages/infra-glm/README.md",
       "title": "@intexuraos/infra-glm",
       "category": "packages",

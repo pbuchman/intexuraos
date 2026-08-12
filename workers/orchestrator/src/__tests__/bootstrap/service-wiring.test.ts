@@ -52,7 +52,6 @@ function makeParsedEnv(errorHubHost = 'home-dev.example.ts.net:8443'): Bootstrap
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
     INTEXURAOS_KIMI_APP_API_KEY: 'kimi-key',
     INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
-    INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-key',
   });
 }
 

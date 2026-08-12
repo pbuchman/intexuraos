@@ -18,7 +18,7 @@ export type FakeUsageSinkRecord = UsageLogParams;
  * @example
  * ```ts
  * const sink = new FakeUsageSink();
- * const client = createGeminiClient({ ..., usageSink: sink });
+ * const client = createOpenRouterClient({ ..., usageSink: sink });
  * await client.generate('hello');
  * expect(sink.records).toHaveLength(1);
  * expect(sink.records[0].callType).toBe('generate');

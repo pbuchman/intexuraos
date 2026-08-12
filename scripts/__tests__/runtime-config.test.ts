@@ -48,8 +48,9 @@ const DEV_CONFIG_NAMES = [
   'INTEXURAOS_SENTRY_DSN_DEV',
 ] as const;
 const PROD_CONFIG_NAMES = ['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] as const;
+const DEAD_GEMINI_KEY_NAME = 'INTEXURAOS_GEMINI_APP_API_KEY';
 const DEAD_REDIRECT_NAME = 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI';
-const DELETE_ONLY_NAMES = [DEAD_REDIRECT_NAME] as const;
+const DELETE_ONLY_NAMES = [DEAD_GEMINI_KEY_NAME, DEAD_REDIRECT_NAME] as const;
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -93,7 +94,7 @@ describe('versioned runtime configuration', () => {
     expect(policy.sensitiveConfigNameAllowlist).toEqual(['INTEXURAOS_FIREBASE_API_KEY']);
   });
 
-  it('retains the dead Google OAuth redirect only as a permanent delete-only tombstone', () => {
+  it('retains removed Google AI credentials and OAuth redirect as permanent tombstones', () => {
     const policy = loadRuntimePolicy({ configRoot });
     const activeNames = [
       ...policy.scopes.common,
@@ -103,6 +104,7 @@ describe('versioned runtime configuration', () => {
       ...policy.migrationRollbackSecretNames,
     ];
 
+    expect(activeNames).not.toContain(DEAD_GEMINI_KEY_NAME);
     expect(activeNames).not.toContain(DEAD_REDIRECT_NAME);
     expect(policy.deleteOnlyNames).toEqual([...DELETE_ONLY_NAMES]);
   });

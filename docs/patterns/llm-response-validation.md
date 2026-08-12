@@ -156,14 +156,13 @@ Research and synthesis outputs are free-form markdown prose. Validation would re
 
 ### Current Usage
 
-| Service        | File                   | Methods                          |
-| -------------- | ---------------------- | -------------------------------- |
-| research-agent | `GeminiAdapter.ts`     | `research()`, `synthesize()`     |
-| research-agent | `GptAdapter.ts`        | `research()`, `synthesize()`     |
-| research-agent | `ClaudeAdapter.ts`     | `research()`                     |
-| research-agent | `GlmAdapter.ts`        | `research()`, `synthesize()`     |
-| research-agent | `PerplexityAdapter.ts` | `research()`, `synthesize()`     |
-| user-service   | `LlmValidatorImpl.ts`  | `validateKey()`, `testRequest()` |
+| Service        | File                    | Methods                          |
+| -------------- | ----------------------- | -------------------------------- |
+| research-agent | `OpenRouterAdapter.ts` | `research()`, `synthesize()`     |
+| research-agent | `GptAdapter.ts`         | `research()`, `synthesize()`     |
+| research-agent | `ClaudeAdapter.ts`      | `research()`                     |
+| research-agent | `PerplexityAdapter.ts`  | `research()`, `synthesize()`     |
+| user-service   | `LlmValidatorImpl.ts`   | `validateKey()`, `testRequest()` |
 
 ---
 

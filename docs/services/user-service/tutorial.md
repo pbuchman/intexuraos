@@ -11,7 +11,7 @@
 A working integration that:
 
 - Authenticates via the device code flow
-- Stores and validates LLM API keys (5 providers including OpenRouter)
+- Stores and validates LLM API keys for OpenAI, Anthropic, Perplexity, and OpenRouter
 - Tests keys with real provider calls
 - Sets a default LLM model and an optional fallback model for all agents
 - Configures transcription preferences
@@ -28,7 +28,7 @@ Before starting, ensure you have:
 - [ ] IntexuraOS development environment running
 - [ ] Auth0 tenant configured
 - [ ] Encryption key generated (32 bytes hex)
-- [ ] At least one LLM API key (Google, OpenAI, Anthropic, Perplexity, or OpenRouter)
+- [ ] At least one LLM API key (OpenAI, Anthropic, Perplexity, or OpenRouter); the platform OpenRouter key can satisfy OpenRouter-backed defaults
 
 ---
 
@@ -322,14 +322,14 @@ Configure which models all agents use by default and as a fallback.
 
 ### Step 6.1: Set a default model
 
-The service validates that the model passes `isDefaultEligibleModel()` AND that you have an API key configured for the model's provider.
+The service validates that the model passes `isDefaultEligibleModel()` and is resolvable. Direct providers require a configured user key; OpenRouter-backed models can use the platform OpenRouter key.
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "defaultModel": "claude-haiku-3-5"
+    "defaultModel": "claude-3-5-haiku-20241022"
   }'
 ```
 
@@ -339,7 +339,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 {
   "success": true,
   "data": {
-    "defaultModel": "claude-haiku-3-5",
+    "defaultModel": "claude-3-5-haiku-20241022",
     "fallbackModel": null
   }
 }
@@ -347,14 +347,14 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 
 ### Step 6.2: Set a fallback model
 
-The fallback must differ from the default and must have an API key configured for its provider.
+The fallback must differ from the default and be resolvable through a supported user key or the platform OpenRouter route.
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "defaultModel": "claude-haiku-3-5",
+    "defaultModel": "claude-3-5-haiku-20241022",
     "fallbackModel": "gpt-4o-mini"
   }'
 ```
@@ -365,7 +365,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 {
   "success": true,
   "data": {
-    "defaultModel": "claude-haiku-3-5",
+    "defaultModel": "claude-3-5-haiku-20241022",
     "fallbackModel": "gpt-4o-mini"
   }
 }
@@ -380,7 +380,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "defaultModel": "claude-haiku-3-5",
+    "defaultModel": "claude-3-5-haiku-20241022",
     "fallbackModel": null
   }'
 ```
@@ -392,7 +392,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "Cannot set default model to claude-haiku-3-5: no API key configured for provider 'anthropic'"
+    "message": "Cannot set default model to claude-3-5-haiku-20241022: no API key configured for provider 'anthropic'"
   }
 }
 ```
@@ -411,7 +411,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 
 ### Checkpoint
 
-All agents now use "claude-haiku-3-5" by default and fall back to "gpt-4o-mini" when Anthropic is unavailable.
+All agents now use `claude-3-5-haiku-20241022` by default and fall back to `gpt-4o-mini` when Anthropic is unavailable.
 
 ---
 
@@ -622,7 +622,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
 {
   "success": true,
   "data": {
-    "google": "AIzaSyD1XXXXXXXXXXXXXXXXXXXXXXXXXX",
+    "google": null,
     "openai": "sk-proj-XXXXXXXXXXXXXXXXXXXXXXXXXXXX",
     "anthropic": null,
     "perplexity": null,
@@ -630,6 +630,8 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/llm-keys \
   }
 }
 ```
+
+The `google` field is retained as `null` for response compatibility. Direct Google LLM credentials are never returned for execution; Google-family models use OpenRouter. The OAuth token endpoint below is separate and remains required for Calendar access.
 
 ### Step 11.2: Get Google OAuth token (for calendar-agent)
 
@@ -704,7 +706,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
   "success": true,
   "data": {
     "llmPreferences": {
-      "defaultModel": "claude-haiku-3-5",
+      "defaultModel": "claude-3-5-haiku-20241022",
       "fallbackModel": "gpt-4o-mini"
     },
     "transcriptionPreferences": {
@@ -754,7 +756,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "Cannot set default model to claude-haiku-3-5: no API key configured for provider 'anthropic'"
+    "message": "Cannot set default model to claude-3-5-haiku-20241022: no API key configured for provider 'anthropic'"
   }
 }
 ```
@@ -773,7 +775,7 @@ curl https://user-service.intexuraos.com/internal/users/YOUR_USER_ID/settings \
 }
 ```
 
-**Solution:** Choose a fallback model from a different provider or a different model than the default.
+**Solution:** Choose a fallback model with a different model ID than the default.
 
 ### Error: Rate limit
 
@@ -931,7 +933,7 @@ curl -X POST https://user-service.intexuraos.com/users/$UID/settings/llm-keys/op
 curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"defaultModel": "claude-haiku-3-5", "fallbackModel": "gpt-4o-mini"}'
+  -d '{"defaultModel": "claude-3-5-haiku-20241022", "fallbackModel": "gpt-4o-mini"}'
 
 # Verify via internal endpoint
 curl https://user-service.intexuraos.com/internal/users/$UID/settings \
@@ -1005,7 +1007,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings/llm-keys \
 curl -X PATCH https://user-service.intexuraos.com/users/$UID/settings \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"defaultModel": "claude-haiku-3-5", "fallbackModel": "gpt-4o-mini"}'
+  -d '{"defaultModel": "claude-3-5-haiku-20241022", "fallbackModel": "gpt-4o-mini"}'
 
 # Delete OpenAI key — fallback should be cleared, default preserved
 curl -X DELETE https://user-service.intexuraos.com/users/$UID/settings/llm-keys/openai \

@@ -133,10 +133,10 @@ Install the orchestrator on any Unix machine with Docker, set up a Cloudflare tu
 - **Docker required** — The host machine must have Docker installed and running; containers are the isolation boundary, and there is no fallback
 - **Cloudflare tunnel required** — Connectivity to the platform depends on a Cloudflare tunnel for the outbound-only connection
 - **Five-hour attempt ceiling** — Each individual attempt has a maximum runtime of five hours; long-running tasks need to be broken into smaller issues
-- **Validation model dependency** — The Agent Compliance Validator uses the configured validation model chain. The default chain starts with OpenRouter, so `INTEXURAOS_OPENROUTER_APP_API_KEY` is required unless `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` is overridden to Gemini-only models.
+- **Validation model dependency** — The Agent Compliance Validator uses an OpenRouter-only model chain, so `INTEXURAOS_OPENROUTER_APP_API_KEY` is required.
 - **Log volume cap** — Log output is capped at eight megabytes per task; extremely verbose builds may see truncated output
 - **Linux metrics only** — Per-task CPU and memory metrics rely on Linux control groups; macOS hosts report zero values for resource consumption
-- **OpenRouter dependency for compliance** — The default Agent Compliance Validator model chain requires an OpenRouter API key; override `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` to Gemini-only models if OpenRouter is unavailable.
+- **OpenRouter dependency for compliance** — The Agent Compliance Validator has no direct-provider fallback. OpenRouter availability is required.
 
 ---
 

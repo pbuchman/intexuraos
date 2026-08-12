@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  DEFAULT_PLATFORM_LLM_MODEL,
   LlmModels,
   LlmProviders,
   getOpenRouterRawId,
@@ -26,7 +27,7 @@ import {
   type SaveDraftRequest,
 } from '@/services/researchAgentApi.types';
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.GPT54];
 
 export const RESEARCH_AGENT_CONSTANTS = {
   MAX_INPUT_CONTEXTS: 5,
@@ -43,7 +44,7 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
   const navigate = useNavigate();
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
-  const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
+  const isOpenRouterConfigured = keys !== null;
   const {
     models: openRouterModels,
     loading: openRouterLoading,
@@ -96,7 +97,7 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
       ? []
       : [
           ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
-          ...(keys.openrouter !== null ? [LlmProviders.OpenRouter] : []),
+          LlmProviders.OpenRouter,
         ];
 
   const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
@@ -370,32 +371,29 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     }
     setError(null);
     setValidationWarning(null);
-    const hasGoogleKey = keys?.google !== null && keys?.google !== undefined;
-    if (hasGoogleKey) {
-      setValidating(true);
-      setShowValidationModal(true);
-      setValidationWarning(null);
-      try {
-        const token = await getAccessToken();
-        const validation = await validateInput(token, { prompt, includeImprovement: true });
-        if (validation.quality === 0) {
-          setValidationWarning(validation.reason);
-          setValidating(false);
-          return;
-        }
-        if (validation.quality === 1 && validation.improvedPrompt !== null) {
-          setShowValidationModal(false);
-          setPendingImprovedPrompt(validation.improvedPrompt);
-          setShowImprovementModal(true);
-          setValidating(false);
-          return;
-        }
-        setShowValidationModal(false);
-      } catch {
-        setShowValidationModal(false);
-      } finally {
+    setValidating(true);
+    setShowValidationModal(true);
+    setValidationWarning(null);
+    try {
+      const token = await getAccessToken();
+      const validation = await validateInput(token, { prompt, includeImprovement: true });
+      if (validation.quality === 0) {
+        setValidationWarning(validation.reason);
         setValidating(false);
+        return;
       }
+      if (validation.quality === 1 && validation.improvedPrompt !== null) {
+        setShowValidationModal(false);
+        setPendingImprovedPrompt(validation.improvedPrompt);
+        setShowImprovementModal(true);
+        setValidating(false);
+        return;
+      }
+      setShowValidationModal(false);
+    } catch {
+      setShowValidationModal(false);
+    } finally {
+      setValidating(false);
     }
     if (isSingleModelNoContext && !isEditMode) {
       setShowSingleProviderConfirm(true);
@@ -497,11 +495,9 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     if (canSubmit) return undefined;
     if (prompt.length < 10) return 'Enter a research prompt (at least 10 characters)';
     if (!hasModelOrContext) return 'Select at least one model or provide input context';
-    if (!hasSynthesisModel) return 'Select Gemini Pro or GPT-5.4 for synthesis';
+    if (!hasSynthesisModel) return 'Select the platform OpenRouter model or GPT-5.4 for synthesis';
     return undefined;
   };
-
-  const hasGoogleKey = keys?.google !== null && keys?.google !== undefined;
 
   const addInputContext = (): void => {
     if (inputContexts.length < RESEARCH_AGENT_CONSTANTS.MAX_INPUT_CONTEXTS) {
@@ -522,7 +518,6 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     error,
     keysLoading,
     hasAnyProvider,
-    hasGoogleKey,
     canSubmit,
     getDisabledReason,
     // form state

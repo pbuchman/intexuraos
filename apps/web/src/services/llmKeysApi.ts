@@ -11,7 +11,7 @@ import type {
   IntexAgentModelPatchResponse,
   IntexAgentModelSelectorV1,
   LlmKeysResponse,
-  LlmProvider,
+  ConfigurableLlmProvider,
   LlmTestResult,
   SetLlmKeyRequest,
   SetLlmKeyResponse,
@@ -169,7 +169,7 @@ export async function setLlmKey(
 export async function deleteLlmKey(
   accessToken: string,
   userId: string,
-  provider: LlmProvider
+  provider: ConfigurableLlmProvider
 ): Promise<void> {
   await apiRequest<{ deleted: boolean }>(
     config.authServiceUrl,
@@ -205,7 +205,7 @@ export async function updateLlmPreferences(
 export async function testLlmKey(
   accessToken: string,
   userId: string,
-  provider: LlmProvider
+  provider: ConfigurableLlmProvider
 ): Promise<LlmTestResult> {
   return await apiRequest<LlmTestResult>(
     config.authServiceUrl,
@@ -219,7 +219,7 @@ export type {
   IntexAgentModelPatchRequest,
   IntexAgentModelPatchResponse,
   IntexAgentModelSelectorV1,
-  LlmProvider,
+  ConfigurableLlmProvider,
   LlmKeysResponse,
   LlmTestResult,
   SetLlmKeyRequest,

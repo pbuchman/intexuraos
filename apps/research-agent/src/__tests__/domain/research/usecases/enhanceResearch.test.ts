@@ -64,12 +64,12 @@ function createCompletedResearch(overrides: Partial<Research> = {}): Research {
     title: 'Original Research',
     prompt: 'Test research prompt',
     status: 'completed',
-    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini20Flash,
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT54,
         status: 'completed',
         result: 'Google result',
       },
@@ -298,7 +298,7 @@ describe('enhanceResearch', () => {
       sourceResearchId: 'source-research-id',
       userId: 'user-1',
       additionalModels: [LlmModels.ClaudeOpus46],
-      synthesisModel: LlmModels.Gemini25Flash,
+      synthesisModel: LlmModels.O4MiniDeepResearch,
     };
 
     const result = await enhanceResearch(params, deps);
@@ -320,8 +320,8 @@ describe('enhanceResearch', () => {
     const source = createCompletedResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google result',
           inputTokens: 1000,

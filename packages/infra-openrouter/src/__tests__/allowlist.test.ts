@@ -7,7 +7,7 @@ import {
   buildModelInfo,
   type CatalogEntry,
 } from '../allowlist.js';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 
 const LEGACY_MIMO_MODEL_ID = 'xiaomi/mimo-' + 'v2-pro';
 
@@ -89,7 +89,7 @@ describe('allowlist', () => {
 
     it('returns false for unknown model IDs', () => {
       expect(isAllowedModel('unknown/model')).toBe(false);
-      expect(isAllowedModel(LlmModels.Gemini25Pro)).toBe(false);
+      expect(isAllowedModel(LegacyGoogleModels.Gemini25Pro)).toBe(false);
       expect(isAllowedModel('')).toBe(false);
       expect(isAllowedModel(LEGACY_MIMO_MODEL_ID)).toBe(false);
     });

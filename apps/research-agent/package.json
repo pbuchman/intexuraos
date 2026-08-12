@@ -25,7 +25,6 @@
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-claude": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
-    "@intexuraos/infra-gemini": "workspace:*",
     "@intexuraos/infra-gpt": "workspace:*",
     "@intexuraos/infra-notion": "workspace:*",
     "@intexuraos/infra-perplexity": "workspace:*",

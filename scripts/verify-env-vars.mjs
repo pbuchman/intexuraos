@@ -62,8 +62,6 @@ const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_AUTH_AUDIENCE',
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
-  // Platform-wide Gemini API key (primary fallback for services using user-service client)
-  'INTEXURAOS_GEMINI_APP_API_KEY',
   // Queue config (optional — have sensible defaults: maxSize=50, ttlMinutes=1440)
   'INTEXURAOS_QUEUE_MAX_SIZE',
   'INTEXURAOS_QUEUE_TTL_MINUTES',
@@ -337,8 +335,8 @@ function isCommonServiceVar(varName) {
     'INTEXURAOS_AUTH0_DOMAIN',
     'INTEXURAOS_AUTH0_CLIENT_ID',
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-    'INTEXURAOS_GEMINI_APP_API_KEY',
     'INTEXURAOS_ENVIRONMENT',
+    'INTEXURAOS_SENTRY_DSN',
     // Global infrastructure vars (set once, used by all services)
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_APP_URL',

@@ -227,7 +227,7 @@ type ImageSize = '1024x1024' | '1536x1024' | '1024x1536';
 
 ## Used By
 
-**Packages (8):** `llm-factory`, `llm-pricing`, `llm-prompts`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-perplexity`, `internal-clients`
+**Packages (11):** `http-contracts`, `infra-claude`, `infra-gpt`, `infra-openrouter`, `infra-pdf-export`, `infra-perplexity`, `internal-clients`, `llm-factory`, `llm-pricing`, `llm-prompts`, `llm-utils`
 
 **Apps:** `app-settings-service`, `bookmarks-agent`, `calendar-agent`, `image-service`, `intex-agent`, `linear-agent`, `research-agent`, `user-service`, `web`, `web-agent`
 

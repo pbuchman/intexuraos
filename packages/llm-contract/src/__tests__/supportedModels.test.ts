@@ -7,6 +7,9 @@ import {
   getProviderForModel,
   isFastModel,
   isValidModel,
+  isLegacyGoogleModel,
+  LEGACY_GOOGLE_MODELS,
+  LegacyGoogleModels,
   LlmModels,
   LlmProviders,
   isOpenRouterModel,
@@ -16,6 +19,7 @@ import {
   OpenRouterToolCallingModels,
   ALL_TOOL_CALLING_MODELS,
   DEFAULT_OPENROUTER_MODELS,
+  DEFAULT_ELIGIBLE_STATIC_MODELS,
   isDefaultEligibleModel,
   DEFAULT_MODEL_DISPLAY_NAMES,
   ConversationAssistantModels,
@@ -26,6 +30,7 @@ import {
   getConversationAssistantModelDisplayName,
   IntexAgentModels,
   DEFAULT_INTEX_AGENT_MODEL,
+  DEFAULT_PLATFORM_LLM_MODEL,
   INTEX_AGENT_MODEL_OPTIONS,
   isIntexAgentModel,
   type LLMModel,
@@ -37,6 +42,7 @@ import {
   type DefaultOpenRouterModel,
   type ConversationAssistantModelOption,
   type IntexAgentModel,
+  type LegacyGoogleModel,
 } from '../supportedModels.js';
 
 describe('OpenRouter model helpers', () => {
@@ -70,8 +76,8 @@ describe('OpenRouter model helpers', () => {
 });
 
 describe('Tool calling model helpers', () => {
-  it('accepts the static Gemini tool calling model', () => {
-    expect(isToolCallingModel('gemini-2.5-flash')).toBe(true);
+  it('rejects the retired raw Gemini tool calling model', () => {
+    expect(isToolCallingModel('gemini-2.5-flash')).toBe(false);
   });
 
   it('accepts OpenRouter model IDs for tool calling', () => {
@@ -117,6 +123,11 @@ describe('IntexAgentModel', () => {
 
   it('defaults to DeepSeek V4 Flash', () => {
     expect(DEFAULT_INTEX_AGENT_MODEL).toBe(IntexAgentModels.DeepSeekV4Flash);
+  });
+
+  it('uses the stable OpenRouter platform default', () => {
+    expect(DEFAULT_PLATFORM_LLM_MODEL).toBe(IntexAgentModels.MiniMaxM3);
+    expect(getProviderForModel(DEFAULT_PLATFORM_LLM_MODEL)).toBe(LlmProviders.OpenRouter);
   });
 
   it('accepts exactly the three canonical model IDs', () => {
@@ -177,25 +188,31 @@ describe('getProviderForModel', () => {
     expect(getProviderForModel(orModel)).toBe('openrouter');
   });
 
-  it('returns correct provider for static models (unchanged)', () => {
-    expect(getProviderForModel(LlmModels.Gemini25Pro)).toBe('google');
+  it('returns Google for explicit legacy-read model IDs', () => {
+    expect(getProviderForModel(LegacyGoogleModels.Gemini25Pro)).toBe('google');
+  });
+
+  it('returns correct provider for executable static models', () => {
     expect(getProviderForModel(LlmModels.GPT54)).toBe('openai');
     expect(getProviderForModel(LlmModels.ClaudeOpus46)).toBe('anthropic');
     expect(getProviderForModel(LlmModels.Sonar)).toBe('perplexity');
+  });
+
+  it('rejects unknown model identifiers', () => {
+    expect(() => getProviderForModel('unknown/model')).toThrow('Unknown LLM model: unknown/model');
   });
 });
 
 describe('supportedModels', () => {
   describe('ALL_LLM_MODELS', () => {
-    it('contains all 15 expected models', () => {
-      expect(ALL_LLM_MODELS).toHaveLength(15);
+    it('contains all 11 executable static models', () => {
+      expect(ALL_LLM_MODELS).toHaveLength(11);
     });
 
-    it('contains all Google models', () => {
-      expect(ALL_LLM_MODELS).toContain('gemini-2.5-pro');
-      expect(ALL_LLM_MODELS).toContain('gemini-2.5-flash');
-      expect(ALL_LLM_MODELS).toContain('gemini-2.0-flash');
-      expect(ALL_LLM_MODELS).toContain('gemini-2.5-flash-image');
+    it('does not contain retired direct-Google models', () => {
+      for (const model of LEGACY_GOOGLE_MODELS) {
+        expect(ALL_LLM_MODELS).not.toContain(model);
+      }
     });
 
     it('contains all OpenAI models', () => {
@@ -222,17 +239,14 @@ describe('supportedModels', () => {
   describe('MODEL_PROVIDER_MAP', () => {
     it('maps every model to a provider', () => {
       for (const model of ALL_LLM_MODELS) {
-        expect(['google', 'openai', 'anthropic', 'perplexity']).toContain(
-          MODEL_PROVIDER_MAP[model]
-        );
+        expect(['openai', 'anthropic', 'perplexity']).toContain(MODEL_PROVIDER_MAP[model]);
       }
     });
 
-    it('maps Google models correctly', () => {
-      expect(MODEL_PROVIDER_MAP['gemini-2.5-pro']).toBe('google');
-      expect(MODEL_PROVIDER_MAP['gemini-2.5-flash']).toBe('google');
-      expect(MODEL_PROVIDER_MAP['gemini-2.0-flash']).toBe('google');
-      expect(MODEL_PROVIDER_MAP['gemini-2.5-flash-image']).toBe('google');
+    it('does not expose legacy Google IDs in the executable provider map', () => {
+      for (const model of LEGACY_GOOGLE_MODELS) {
+        expect(MODEL_PROVIDER_MAP).not.toHaveProperty(model);
+      }
     });
 
     it('maps OpenAI models correctly', () => {
@@ -257,25 +271,48 @@ describe('supportedModels', () => {
   });
 
   describe('LlmModels constants', () => {
-    it('contains all models', () => {
-      expect(LlmModels.Gemini25Pro).toBe('gemini-2.5-pro');
-      expect(LlmModels.Gemini25Flash).toBe('gemini-2.5-flash');
+    it('contains executable models only', () => {
       expect(LlmModels.GPT54).toBe('gpt-5.4');
       expect(LlmModels.ClaudeOpus46).toBe('claude-opus-4-6');
       expect(LlmModels.SonarPro).toBe('sonar-pro');
+      expect(LlmModels).not.toHaveProperty('Gemini25Pro');
+    });
+  });
+
+  describe('legacy Google model contract', () => {
+    it('recognizes exactly the retired raw Gemini identifiers', () => {
+      expect(LEGACY_GOOGLE_MODELS).toEqual([
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-2.5-flash-image',
+      ]);
+      for (const model of LEGACY_GOOGLE_MODELS) {
+        expect(isLegacyGoogleModel(model)).toBe(true);
+        expect(isValidModel(model)).toBe(false);
+      }
+    });
+
+    it('narrows legacy values without making them executable', () => {
+      const value = 'gemini-2.5-pro';
+      if (isLegacyGoogleModel(value)) {
+        const legacy: LegacyGoogleModel = value;
+        expect(legacy).toBe(LegacyGoogleModels.Gemini25Pro);
+      }
     });
   });
 
   describe('isValidModel', () => {
     it('returns true for valid models', () => {
-      expect(isValidModel('gemini-2.5-pro')).toBe(true);
       expect(isValidModel('claude-opus-4-6')).toBe(true);
       expect(isValidModel('o4-mini-deep-research')).toBe(true);
       expect(isValidModel('sonar-pro')).toBe(true);
       expect(isValidModel('gpt-image-1')).toBe(true);
     });
 
-    it('returns false for invalid models (including GLM-4.7)', () => {
+    it('returns false for invalid and legacy models (including GLM-4.7)', () => {
+      expect(isValidModel('gemini-2.5-pro')).toBe(false);
+      expect(isValidModel('gemini-2.5-flash')).toBe(false);
       expect(isValidModel('invalid-model')).toBe(false);
       expect(isValidModel('')).toBe(false);
       expect(isValidModel('gpt-4')).toBe(false);
@@ -285,13 +322,11 @@ describe('supportedModels', () => {
   });
 
   describe('ALL_FAST_MODELS', () => {
-    it('contains all 4 fast models (no GLM-4.7)', () => {
-      expect(ALL_FAST_MODELS).toHaveLength(4);
+    it('contains the 2 executable fast models', () => {
+      expect(ALL_FAST_MODELS).toHaveLength(2);
     });
 
     it('contains expected models', () => {
-      expect(ALL_FAST_MODELS).toContain('gemini-2.5-flash');
-      expect(ALL_FAST_MODELS).toContain('gemini-2.0-flash');
       expect(ALL_FAST_MODELS).toContain('claude-3-5-haiku-20241022');
       expect(ALL_FAST_MODELS).toContain('gpt-4o-mini');
     });
@@ -310,7 +345,6 @@ describe('supportedModels', () => {
     });
 
     it('returns expected display names', () => {
-      expect(FAST_MODEL_DISPLAY_NAMES[LlmModels.Gemini25Flash]).toBe('Gemini 2.5 Flash');
       expect(FAST_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBe('Claude 3.5 Haiku');
       expect(FAST_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBe('GPT-4o Mini');
     });
@@ -318,13 +352,13 @@ describe('supportedModels', () => {
 
   describe('isFastModel', () => {
     it('returns true for fast models', () => {
-      expect(isFastModel('gemini-2.5-flash')).toBe(true);
-      expect(isFastModel('gemini-2.0-flash')).toBe(true);
       expect(isFastModel('claude-3-5-haiku-20241022')).toBe(true);
       expect(isFastModel('gpt-4o-mini')).toBe(true);
     });
 
     it('returns false for non-fast models (including GLM-4.7-flash)', () => {
+      expect(isFastModel('gemini-2.5-flash')).toBe(false);
+      expect(isFastModel('gemini-2.0-flash')).toBe(false);
       expect(isFastModel('gemini-2.5-pro')).toBe(false);
       expect(isFastModel('gpt-5.4')).toBe(false);
       expect(isFastModel('claude-opus-4-6')).toBe(false);
@@ -337,9 +371,9 @@ describe('supportedModels', () => {
 
   describe('type compatibility', () => {
     it('allows ResearchModel where LLMModel is expected', () => {
-      const researchModel: ResearchModel = 'gemini-2.5-pro';
+      const researchModel: ResearchModel = 'claude-opus-4-6';
       const llmModel: LLMModel = researchModel;
-      expect(llmModel).toBe('gemini-2.5-pro');
+      expect(llmModel).toBe('claude-opus-4-6');
     });
 
     it('allows ImageModel where LLMModel is expected', () => {
@@ -355,9 +389,9 @@ describe('supportedModels', () => {
     });
 
     it('allows FastModel where LLMModel is expected', () => {
-      const fastModel: FastModel = 'gemini-2.5-flash';
+      const fastModel: FastModel = 'gpt-4o-mini';
       const llmModel: LLMModel = fastModel;
-      expect(llmModel).toBe('gemini-2.5-flash');
+      expect(llmModel).toBe('gpt-4o-mini');
     });
 
     it('allows ClaudeHaiku35 as FastModel', () => {
@@ -433,11 +467,14 @@ describe('DefaultEligibleModel', () => {
   });
 
   describe('isDefaultEligibleModel', () => {
-    it('accepts all fast models', () => {
-      expect(isDefaultEligibleModel('gemini-2.5-flash')).toBe(true);
-      expect(isDefaultEligibleModel('gemini-2.0-flash')).toBe(true);
+    it('accepts non-Google fast models', () => {
       expect(isDefaultEligibleModel('claude-3-5-haiku-20241022')).toBe(true);
       expect(isDefaultEligibleModel('gpt-4o-mini')).toBe(true);
+    });
+
+    it('rejects raw Gemini defaults so Google models can only run through OpenRouter', () => {
+      expect(isDefaultEligibleModel('gemini-2.5-flash')).toBe(false);
+      expect(isDefaultEligibleModel('gemini-2.0-flash')).toBe(false);
     });
 
     it('accepts OpenRouter default models with or: prefix', () => {
@@ -463,17 +500,17 @@ describe('DefaultEligibleModel', () => {
     });
 
     it('type guard narrows to DefaultEligibleModel', () => {
-      const model = 'gemini-2.5-flash';
+      const model = 'gpt-4o-mini';
       if (isDefaultEligibleModel(model)) {
         const _typed: DefaultEligibleModel = model;
-        expect(_typed).toBe('gemini-2.5-flash');
+        expect(_typed).toBe('gpt-4o-mini');
       }
     });
   });
 
   describe('DEFAULT_MODEL_DISPLAY_NAMES', () => {
-    it('has entries for all fast models', () => {
-      for (const model of ALL_FAST_MODELS) {
+    it('has entries for all eligible static models', () => {
+      for (const model of DEFAULT_ELIGIBLE_STATIC_MODELS) {
         expect(DEFAULT_MODEL_DISPLAY_NAMES[model]).toBeDefined();
         expect(typeof DEFAULT_MODEL_DISPLAY_NAMES[model]).toBe('string');
       }
@@ -487,9 +524,7 @@ describe('DefaultEligibleModel', () => {
       }
     });
 
-    it('has correct display names for fast models', () => {
-      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.Gemini25Flash]).toBe('Gemini 2.5 Flash');
-      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.Gemini20Flash]).toBe('Gemini 2.0 Flash');
+    it('has correct display names for eligible static models', () => {
       expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBe('Claude 3.5 Haiku');
       expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBe('GPT-4o Mini');
     });
@@ -509,8 +544,8 @@ describe('DefaultEligibleModel', () => {
       );
     });
 
-    it('has exactly 10 entries (4 fast + 6 OpenRouter)', () => {
-      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(10);
+    it('has exactly 8 entries (2 eligible static + 6 OpenRouter)', () => {
+      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(8);
     });
   });
 });

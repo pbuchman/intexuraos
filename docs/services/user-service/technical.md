@@ -19,7 +19,7 @@ graph TB
 
     subgraph "LLM Key Management"
         WebUI[Web UI] -->|API Key| US
-        US -->|Validate| LLM[LLM Providers<br/>5 providers]
+        US -->|Validate| LLM[LLM Providers<br/>4 configurable providers]
         US -->|Encrypt| KMS[AES-256-GCM]
         KMS -->|Store| FS
     end
@@ -154,6 +154,8 @@ sequenceDiagram
 | POST   | `/users/:uid/settings/llm-keys/:provider/test`  | Test LLM API key                         | Bearer token |
 | DELETE | `/users/:uid/settings/llm-keys/:provider`       | Delete LLM API key                       | Bearer token |
 
+PATCH and test accept OpenAI, Anthropic, Perplexity, and OpenRouter. DELETE also accepts `google` only to remove a retired stored key. Google OAuth routes below are unchanged and are used for Calendar access, not LLM execution.
+
 ### OAuth Connection Endpoints (Google)
 
 | Method | Path                                 | Description               | Auth         |
@@ -203,7 +205,7 @@ sequenceDiagram
 
 | Field        | Type           | Description                     |
 | ------------ | -------------- | ------------------------------- |
-| `google`     | EncryptedValue | Gemini API key (encrypted)      |
+| `google`     | EncryptedValue | Retired key retained only for deletion/cleanup |
 | `openai`     | EncryptedValue | OpenAI API key (encrypted)      |
 | `anthropic`  | EncryptedValue | Anthropic API key (encrypted)   |
 | `perplexity` | EncryptedValue | Perplexity API key (encrypted)  |
@@ -222,7 +224,7 @@ sequenceDiagram
 | Field           | Type   | Description                                               |
 | --------------- | ------ | --------------------------------------------------------- |
 | `defaultModel`  | string | User's preferred default LLM model                        |
-| `fallbackModel` | string | Optional fallback model (different provider from default) |
+| `fallbackModel` | string | Optional fallback model (different model from default)    |
 
 ### TranscriptionPreferences
 
@@ -268,7 +270,7 @@ The `formatLlmError()` function parses provider-specific error responses and ret
 ### Error Parsing Order
 
 ```
-1. Gemini (Google) JSON format
+1. Compatibility parser for legacy Google error payloads
 2. OpenAI error patterns
 3. Anthropic JSON format
 4. Generic fallback (with rate limit precedence)
@@ -290,7 +292,7 @@ The generic error parser checks for rate limits BEFORE API key errors. This prev
 
 ### Provider-Specific Parsing
 
-**Gemini (Google):**
+**Legacy Google compatibility (not an executable provider):**
 
 - `API_KEY_INVALID` -> "The API key is invalid or has expired"
 - `API_KEY_NOT_FOUND` -> "The API key does not exist"
@@ -311,11 +313,10 @@ The generic error parser checks for rate limits BEFORE API key errors. This prev
 
 ## LLM Key Validation
 
-Keys are validated before storage. Most providers use cheap, fast model calls. OpenRouter uses a dedicated key-check endpoint at zero token cost.
+Keys are validated before storage. OpenAI, Anthropic, and Perplexity use cheap, fast model calls. OpenRouter uses a dedicated key-check endpoint at zero token cost. Direct Google LLM keys cannot be added or tested; Google-family models are addressed as `or:google/...` and sent through OpenRouter.
 
 | Provider   | Validation Method                       | Validation Model          |
 | ---------- | --------------------------------------- | ------------------------- |
-| Google     | Model call (generate)                   | gemini-2.0-flash          |
 | OpenAI     | Model call (generate)                   | gpt-4o-mini               |
 | Anthropic  | Model call (generate)                   | claude-3.5-haiku          |
 | Perplexity | Model call (generate)                   | sonar                     |
@@ -336,7 +337,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | Auth0         | Identity management, authentication |
 | Google OAuth  | OAuth token management              |
 | GitHub OAuth  | OAuth token management              |
-| LLM APIs      | Key validation (5 providers)        |
+| LLM APIs      | Key validation (4 configurable providers) |
 
 ### Internal Services
 
@@ -402,7 +403,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isDefaultEligibleModel()` from `@intexuraos/llm-contract` AND verifies the user has an API key configured for that model's provider. Unsupported model names return 400 `INVALID_REQUEST`.
 
-**Fallback model validation**: `fallbackModel` must pass the same `isDefaultEligibleModel()` check, must differ from `defaultModel`, and must have an API key configured for its provider. Pass `null` to clear the fallback.
+**Fallback model validation**: `fallbackModel` must pass the same `isDefaultEligibleModel()` check, differ from `defaultModel`, and be resolvable through a personal provider key or the platform OpenRouter route. Pass `null` to clear the fallback.
 
 **Model cascade on key deletion**: Deleting an LLM API key automatically clears `defaultModel` (and `fallbackModel`) if they use the deleted provider. If only the fallback uses the deleted provider, only the fallback is cleared while the default is preserved.
 
@@ -489,7 +490,7 @@ apps/user-service/src/
     github/
       gitHubOAuthClient.ts     # GitHub OAuth client
     llm/
-      LlmValidatorImpl.ts      # Key validation (5 providers incl. OpenRouter)
+      LlmValidatorImpl.ts      # Key validation (4 configurable providers)
   routes/
     deviceRoutes.ts            # Device code flow
     tokenRoutes.ts             # Token refresh
@@ -499,7 +500,7 @@ apps/user-service/src/
     gitHubOAuthConnectionRoutes.ts # GitHub OAuth connection management
     configRoutes.ts            # Auth0 config
     settingsRoutes.ts          # User settings + default/fallback model + transcription + timezone
-    llmKeysRoutes.ts           # LLM key management (CRUD + test, 5 providers)
+    llmKeysRoutes.ts           # LLM key management (4 providers + legacy Google deletion)
     frontendRoutes.ts          # Login/logout/me pages
     internalRoutes.ts          # Service-to-service (6 endpoints)
     schemas.ts                 # Zod request schemas

@@ -37,22 +37,27 @@ beforeEach(() => {
 });
 
 describe('parseValidationModels', () => {
-  it('parses comma-separated model list with or: prefix and plain models', () => {
-    const result = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
+  it('rejects direct Gemini validation models', () => {
+    expect(() => parseValidationModels('gemini-2.5-flash')).toThrow(
+      'must use an or: OpenRouter model ID'
+    );
+  });
+
+  it('parses comma-separated OpenRouter model list', () => {
+    const result = parseValidationModels(
+      'or:google/gemma-4-31b-it:free,or:deepseek/deepseek-v4-flash'
+    );
     expect(result).toEqual([
       {
         provider: 'openrouter',
         modelId: 'or:google/gemma-4-31b-it:free',
         rawId: 'google/gemma-4-31b-it:free',
       },
-      { provider: 'gemini', modelId: 'gemini-2.5-flash', rawId: 'gemini-2.5-flash' },
-    ]);
-  });
-
-  it('parses single model', () => {
-    const result = parseValidationModels('gemini-2.5-flash');
-    expect(result).toEqual([
-      { provider: 'gemini', modelId: 'gemini-2.5-flash', rawId: 'gemini-2.5-flash' },
+      {
+        provider: 'openrouter',
+        modelId: 'or:deepseek/deepseek-v4-flash',
+        rawId: 'deepseek/deepseek-v4-flash',
+      },
     ]);
   });
 
@@ -76,16 +81,20 @@ describe('parseValidationModels', () => {
   });
 
   it('throws on entry that is just whitespace after trimming', () => {
-    expect(() => parseValidationModels('gemini-2.5-flash, ')).toThrow(
+    expect(() => parseValidationModels('or:deepseek/deepseek-v4-flash, ')).toThrow(
       'INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS contains empty entry at position 2'
     );
   });
 
   it('trims whitespace around model entries', () => {
-    const result = parseValidationModels(' or:model/a , gemini-2.5-flash ');
+    const result = parseValidationModels(' or:model/a , or:deepseek/deepseek-v4-flash ');
     expect(result).toEqual([
       { provider: 'openrouter', modelId: 'or:model/a', rawId: 'model/a' },
-      { provider: 'gemini', modelId: 'gemini-2.5-flash', rawId: 'gemini-2.5-flash' },
+      {
+        provider: 'openrouter',
+        modelId: 'or:deepseek/deepseek-v4-flash',
+        rawId: 'deepseek/deepseek-v4-flash',
+      },
     ]);
   });
 });
@@ -96,11 +105,12 @@ describe('buildValidationClients', () => {
     const fakeClient2 = { generate: vi.fn() };
     createLlmClientMock.mockReturnValueOnce(fakeClient1).mockReturnValueOnce(fakeClient2);
 
-    const models = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
+    const models = parseValidationModels(
+      'or:google/gemma-4-31b-it:free,or:deepseek/deepseek-v4-flash'
+    );
     const clients = buildValidationClients({
       models,
       openRouterApiKey: 'or-key',
-      geminiApiKey: 'gem-key',
       usageWebhookUrl: 'http://usage',
       orchestratorSecret: 'secret',
       internalAuthToken: 'token',
@@ -112,7 +122,7 @@ describe('buildValidationClients', () => {
     expect(clients[0]?.client).toBe(fakeClient1);
     expect(clients[0]?.modelName).toBe('or:google/gemma-4-31b-it:free');
     expect(clients[1]?.client).toBe(fakeClient2);
-    expect(clients[1]?.modelName).toBe('gemini-2.5-flash');
+    expect(clients[1]?.modelName).toBe('or:deepseek/deepseek-v4-flash');
     expect(createLlmClientMock).toHaveBeenCalledTimes(2);
 
     // First call: OpenRouter model
@@ -121,10 +131,10 @@ describe('buildValidationClients', () => {
     expect(firstCallConfig['model']).toBe('or:google/gemma-4-31b-it:free');
     expect(firstCallConfig['pricing']).toBeUndefined();
 
-    // Second call: Gemini model
+    // Second call: OpenRouter fallback model
     const secondCallConfig = createLlmClientMock.mock.calls[1]?.[0] as Record<string, unknown>;
-    expect(secondCallConfig['apiKey']).toBe('gem-key');
-    expect(secondCallConfig['model']).toBe('gemini-2.5-flash');
+    expect(secondCallConfig['apiKey']).toBe('or-key');
+    expect(secondCallConfig['model']).toBe('or:deepseek/deepseek-v4-flash');
     expect(secondCallConfig['pricing']).toBeUndefined();
   });
 
@@ -134,7 +144,6 @@ describe('buildValidationClients', () => {
       buildValidationClients({
         models,
         openRouterApiKey: '',
-        geminiApiKey: 'gem-key',
         usageWebhookUrl: 'http://usage',
         orchestratorSecret: 'secret',
         internalAuthToken: 'token',
@@ -144,31 +153,16 @@ describe('buildValidationClients', () => {
     ).toThrow('INTEXURAOS_OPENROUTER_APP_API_KEY is required for OpenRouter validation model');
   });
 
-  it('throws when geminiApiKey is empty and a Gemini model is present', () => {
-    const models = parseValidationModels('gemini-2.5-flash');
-    expect(() =>
-      buildValidationClients({
-        models,
-        openRouterApiKey: 'or-key',
-        geminiApiKey: '',
-        usageWebhookUrl: 'http://usage',
-        orchestratorSecret: 'secret',
-        internalAuthToken: 'token',
-        logger: fakeLogger,
-        getCorrelationTaskId: () => null,
-      })
-    ).toThrow('INTEXURAOS_GEMINI_APP_API_KEY is required for Gemini validation model');
-  });
-
   it('threads getCorrelationTaskId into the HttpWebhookUsageSink for each client', () => {
     createLlmClientMock.mockReturnValue({ generate: vi.fn() });
 
     const getCorrelationTaskId = vi.fn().mockReturnValue('task-123');
-    const models = parseValidationModels('or:google/gemma-4-31b-it:free,gemini-2.5-flash');
+    const models = parseValidationModels(
+      'or:google/gemma-4-31b-it:free,or:deepseek/deepseek-v4-flash'
+    );
     buildValidationClients({
       models,
       openRouterApiKey: 'or-key',
-      geminiApiKey: 'gem-key',
       usageWebhookUrl: 'http://usage',
       orchestratorSecret: 'secret',
       internalAuthToken: 'token',

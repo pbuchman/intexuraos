@@ -40,7 +40,6 @@ export interface ShareConfig {
 }
 
 export interface ImageApiKeys {
-  google?: string;
   openai?: string;
 }
 
@@ -460,21 +459,14 @@ interface ProviderPipeline {
 
 /**
  * Returns an ordered list of available provider pipelines (preferred first).
- * When synthesis uses OpenAI (gpt-*), prefer OpenAI pipeline for consistency.
- * Otherwise, prefer Google (gemini) as default.
+ * Direct Gemini image generation is disabled; the remaining pipeline uses the
+ * user's OpenAI key.
  */
 function getAvailableProviderPipelines(
   imageApiKeys: ImageApiKeys | undefined,
-  synthesisModel?: string
+  _synthesisModel?: string
 ): ProviderPipeline[] {
-  const hasGoogleKey = imageApiKeys?.google !== undefined;
   const hasOpenAiKey = imageApiKeys?.openai !== undefined;
-
-  const googlePipeline: ProviderPipeline = {
-    name: 'Google',
-    promptModel: LlmModels.Gemini25Pro,
-    imageModel: LlmModels.Gemini25FlashImage,
-  };
 
   const openAiPipeline: ProviderPipeline = {
     name: 'OpenAI',
@@ -482,18 +474,7 @@ function getAvailableProviderPipelines(
     imageModel: LlmModels.GPTImage1,
   };
 
-  const preferOpenAi = synthesisModel?.startsWith('gpt-') === true;
-  const pipelines: ProviderPipeline[] = [];
-
-  if (preferOpenAi) {
-    if (hasOpenAiKey) pipelines.push(openAiPipeline);
-    if (hasGoogleKey) pipelines.push(googlePipeline);
-  } else {
-    if (hasGoogleKey) pipelines.push(googlePipeline);
-    if (hasOpenAiKey) pipelines.push(openAiPipeline);
-  }
-
-  return pipelines;
+  return hasOpenAiKey ? [openAiPipeline] : [];
 }
 
 async function generateCoverImage(

@@ -131,7 +131,7 @@ export function initServices(config: ServiceConfig): void {
       component: 'user-service-client',
       logger,
     }),
-    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
+    platformOpenRouterApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
   });
 
   const calendarActionExtractionService = createCalendarActionExtractionService(userServiceClient, logger);

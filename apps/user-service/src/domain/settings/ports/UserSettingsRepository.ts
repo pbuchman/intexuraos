@@ -4,7 +4,7 @@
  */
 
 import type { Result } from '@intexuraos/common-core';
-import type { IntexAgentModel } from '@intexuraos/llm-contract';
+import type { ExecutableLlmProvider, IntexAgentModel } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from './Encryptor.js';
 import type { LlmProvider, LlmTestResult, TranscriptionProvider, UserSettings } from '../models/UserSettings.js';
 import type { SettingsError } from '../models/SettingsError.js';
@@ -47,7 +47,7 @@ export interface UserSettingsRepository {
    */
   updateLlmApiKey(
     userId: string,
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     encryptedKey: EncryptedValue
   ): Promise<Result<void, SettingsError>>;
 
@@ -61,7 +61,7 @@ export interface UserSettingsRepository {
    */
   updateLlmTestResult(
     userId: string,
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     testResult: LlmTestResult
   ): Promise<Result<void, SettingsError>>;
 

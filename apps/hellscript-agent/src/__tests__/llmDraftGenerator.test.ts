@@ -1,26 +1,29 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GeminiDraftGenerator } from '../infra/llm/geminiDraftGenerator.js';
+import { LlmDraftGenerator } from '../infra/llm/llmDraftGenerator.js';
 import { emptyState } from '../domain/models/materializedBufferState.js';
-import type { GeminiClient } from '@intexuraos/infra-gemini';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import pino from 'pino';
 
 const logger = pino({ level: 'silent' });
 
-function createMockClient(response: { ok: boolean; value?: { content: string }; error?: unknown }): GeminiClient {
+function createMockClient(response: {
+  ok: boolean;
+  value?: { content: string };
+  error?: unknown;
+}): LlmGenerateClient {
   return {
     generate: vi.fn().mockResolvedValue(response),
-    research: vi.fn().mockResolvedValue({ ok: false, error: { code: 'UNSUPPORTED', message: 'Not implemented' } }),
-  };
+  } as unknown as LlmGenerateClient;
 }
 
-describe('GeminiDraftGenerator', () => {
+describe('LlmDraftGenerator', () => {
   describe('generate', () => {
     it('returns ok result with generated content on success', async () => {
       const client = createMockClient({
         ok: true,
         value: { content: '# Great Blog Post\n\nHere is content.' },
       });
-      const generator = new GeminiDraftGenerator(client);
+      const generator = new LlmDraftGenerator(client);
 
       const result = await generator.generate(
         emptyState(), null, 'Write a blog', null, [], 'general', logger
@@ -37,7 +40,7 @@ describe('GeminiDraftGenerator', () => {
         ok: false,
         error: { code: 'API_ERROR', message: 'Failed' },
       });
-      const generator = new GeminiDraftGenerator(client);
+      const generator = new LlmDraftGenerator(client);
 
       const result = await generator.generate(
         emptyState(), '# Prior Draft', 'Improve it', null, [], 'general', logger
@@ -51,7 +54,7 @@ describe('GeminiDraftGenerator', () => {
         ok: false,
         error: { code: 'API_ERROR', message: 'Failed' },
       });
-      const generator = new GeminiDraftGenerator(client);
+      const generator = new LlmDraftGenerator(client);
 
       const result = await generator.generate(
         emptyState(), null, 'Write it', null, [], 'general', logger
@@ -65,7 +68,7 @@ describe('GeminiDraftGenerator', () => {
         ok: true,
         value: { content: '# LinkedIn Post' },
       });
-      const generator = new GeminiDraftGenerator(client);
+      const generator = new LlmDraftGenerator(client);
 
       const result = await generator.generate(
         emptyState(), null, 'Write', 'Be professional', ['Sample text'], 'linkedin', logger

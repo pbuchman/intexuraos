@@ -15,7 +15,6 @@ apps/*
   ├── @intexuraos/http-server              (Health checks, validation handler)
   ├── @intexuraos/infra-claude             (Anthropic Claude API client)
   ├── @intexuraos/infra-firestore          (Firestore singleton & fake)
-  ├── @intexuraos/infra-gemini             (Google Gemini API client)
   ├── @intexuraos/infra-gpt                (OpenAI GPT API client)
   ├── @intexuraos/infra-notion             (Notion client & connection repository)
   ├── @intexuraos/infra-openrouter         (OpenAI-compatible client for the OpenRouter aggregator)
@@ -55,11 +54,10 @@ apps/*
 | ----------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
 | [`infra-claude`](../docs/packages/infra-claude/README.md)         | Anthropic Claude API client                            | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
 | [`infra-firestore`](../docs/packages/infra-firestore/README.md)   | Firestore singleton & fake                             | `common-core`                                                            |
-| [`infra-gemini`](../docs/packages/infra-gemini/README.md)         | Google Gemini API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
 | [`infra-gpt`](../docs/packages/infra-gpt/README.md)               | OpenAI GPT API client                                  | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
 | [`infra-notion`](../docs/packages/infra-notion/README.md)         | Notion client & connection repository                  | `common-core`                                                            |
 | [`infra-openrouter`](../docs/packages/infra-openrouter/README.md) | OpenAI-compatible client for the OpenRouter aggregator | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
-| [`infra-pdf-export`](../docs/packages/infra-pdf-export/README.md) | PDF conversation export renderer                       | `common-core`                                                            |
+| [`infra-pdf-export`](../docs/packages/infra-pdf-export/README.md) | PDF conversation export renderer                       | `common-core`, `llm-contract`                                            |
 | [`infra-perplexity`](../docs/packages/infra-perplexity/README.md) | Perplexity AI API client                               | `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils` |
 | [`infra-pubsub`](../docs/packages/infra-pubsub/README.md)         | Cloud Pub/Sub publishers                               | `common-core`                                                            |
 | [`infra-sentry`](../docs/packages/infra-sentry/README.md)         | Sentry error tracking & logger factory                 | `common-core`                                                            |
@@ -67,13 +65,13 @@ apps/*
 
 ### LLM
 
-| Package                                                   | Description                                  | Dependencies                                                                                                                      |
-| --------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [`llm-contract`](../docs/packages/llm-contract/README.md) | Shared LLM types, model names, interfaces    | `common-core`                                                                                                                     |
-| [`llm-factory`](../docs/packages/llm-factory/README.md)   | Unified LLM client factory                   | `common-core`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `llm-contract`, `llm-pricing` |
-| [`llm-pricing`](../docs/packages/llm-pricing/README.md)   | LLM pricing fetch, cost tracking             | `common-core`, `llm-contract`                                                                                                     |
-| [`llm-prompts`](../docs/packages/llm-prompts/README.md)   | Centralized LLM prompt builders              | `common-core`, `llm-contract`, `llm-utils`                                                                                        |
-| [`llm-utils`](../docs/packages/llm-utils/README.md)       | Redaction utilities, LLM parse error helpers | `common-core`, `llm-contract`                                                                                                     |
+| Package                                                   | Description                                  | Dependencies                                                                                                      |
+| --------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| [`llm-contract`](../docs/packages/llm-contract/README.md) | Shared LLM types, model names, interfaces    | `common-core`                                                                                                     |
+| [`llm-factory`](../docs/packages/llm-factory/README.md)   | Unified LLM client factory                   | `common-core`, `infra-claude`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `llm-contract`, `llm-pricing` |
+| [`llm-pricing`](../docs/packages/llm-pricing/README.md)   | LLM pricing fetch, cost tracking             | `common-core`, `llm-contract`                                                                                     |
+| [`llm-prompts`](../docs/packages/llm-prompts/README.md)   | Centralized LLM prompt builders              | `common-core`, `llm-contract`, `llm-utils`                                                                        |
+| [`llm-utils`](../docs/packages/llm-utils/README.md)       | Redaction utilities, LLM parse error helpers | `common-core`, `llm-contract`                                                                                     |
 
 ### Integration
 
@@ -133,11 +131,10 @@ Enforced by `pnpm run verify:boundaries`:
 - `http-server` → imports from `common-core`, `common-http`, `http-contracts`, `infra-sentry`, `llm-pricing`
 - `infra-claude` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-firestore` → imports from `common-core`
-- `infra-gemini` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-gpt` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-notion` → imports from `common-core`
 - `infra-openrouter` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
-- `infra-pdf-export` → imports from `common-core`
+- `infra-pdf-export` → imports from `common-core`, `llm-contract`
 - `infra-perplexity` → imports from `common-core`, `llm-contract`, `llm-pricing`, `llm-prompts`, `llm-utils`
 - `infra-pubsub` → imports from `common-core`
 - `infra-sentry` → imports from `common-core`
@@ -145,7 +142,7 @@ Enforced by `pnpm run verify:boundaries`:
 - `internal-clients` → imports from `common-core`, `common-http`, `http-contracts`, `infra-openrouter`, `llm-contract`, `llm-factory`, `llm-pricing`
 - `linear-domain` → imports nothing
 - `llm-contract` → imports from `common-core`
-- `llm-factory` → imports from `common-core`, `infra-claude`, `infra-gemini`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `llm-contract`, `llm-pricing`
+- `llm-factory` → imports from `common-core`, `infra-claude`, `infra-gpt`, `infra-openrouter`, `infra-perplexity`, `llm-contract`, `llm-pricing`
 - `llm-pricing` → imports from `common-core`, `llm-contract`
 - `llm-prompts` → imports from `common-core`, `llm-contract`, `llm-utils`
 - `llm-utils` → imports from `common-core`, `llm-contract`

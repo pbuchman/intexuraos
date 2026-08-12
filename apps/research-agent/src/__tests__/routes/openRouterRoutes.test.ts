@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import Fastify from 'fastify';
 import nock from 'nock';
 import * as jose from 'jose';
+import { ok } from '@intexuraos/common-core';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { buildServer } from '../../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../../services.js';
@@ -117,8 +118,26 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     vi.useRealTimers();
   });
 
-  it('returns NOT_FOUND when OpenRouter API key is not configured', async () => {
-    // FakeUserServiceClient returns empty keys by default (no openrouter key)
+  it('uses the platform OpenRouter key when the user has no BYOK key', async () => {
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: unknown[] };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.models).toHaveLength(OPENROUTER_ALLOWED_MODELS.length);
+  });
+
+  it('returns NOT_FOUND when no OpenRouter key is available', async () => {
+    vi.spyOn(fakeUserServiceClient, 'getApiKeys').mockResolvedValueOnce(ok({}));
+
     const token = await generateJwt(TEST_USER_ID);
     const response = await app.inject({
       method: 'GET',
@@ -127,9 +146,13 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    const body = JSON.parse(response.body) as { success: boolean; error?: { code: string } };
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      error: { code: string; message: string };
+    };
     expect(body.success).toBe(false);
-    expect(body.error?.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.message).toBe('OpenRouter API key not configured');
   });
 
   it('returns all allowlisted models with live pricing when catalog fetch succeeds', async () => {

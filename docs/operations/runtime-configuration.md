@@ -37,15 +37,18 @@ node scripts/render-runtime-config.mjs --environment dev --format shell-export >
 node scripts/render-runtime-config.mjs --environment prod --format dotenv >/dev/null
 ```
 
-The 26 obsolete Secret Manager containers have been permanently removed: 25
+The 27 obsolete Secret Manager containers have been permanently removed: 25
 values now rendered from versioned configuration plus the dead
-`INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI`. Versioned configuration names and
+`INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` and retired
+`INTEXURAOS_GEMINI_APP_API_KEY`. Versioned configuration names and
 Secret Manager names must remain fully disjoint. The rollback list remains
-empty. A permanent delete-only tombstone in `deleteOnlyNames` retains the
-redirect name. Both runtime loaders block the union of all versioned config
-scopes and this tombstone from Secret Manager reads. The redirect URI is derived
-by the application and must never be reintroduced into generated environment
-files or Secret Manager.
+empty. Permanent delete-only tombstones in `deleteOnlyNames` retain both names.
+Both runtime loaders block the union of all versioned config scopes and these
+tombstones from Secret Manager reads. The redirect URI is derived by the
+application and must never be reintroduced. Direct Gemini platform access was
+retired on 2026-08-12; application LLM traffic is routed through OpenRouter for
+centralized usage and cost visibility. Do not recreate either container or
+reintroduce either environment variable.
 
 ## Development Workflow
 

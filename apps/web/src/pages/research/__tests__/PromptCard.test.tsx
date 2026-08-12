@@ -27,7 +27,6 @@ function renderPromptCard(overrides: Partial<React.ComponentProps<typeof PromptC
       improving={false}
       submitting={false}
       savingDraft={false}
-      hasGoogleKey={true}
       {...overrides}
     />,
   );
@@ -40,10 +39,10 @@ describe('PromptCard', () => {
     expect(screen.getByText('11/20000 characters')).toBeTruthy();
   });
 
-  it('disables Auto Improve when google key is missing', () => {
-    renderPromptCard({ prompt: 'a real prompt with content', hasGoogleKey: false });
+  it('enables Auto Improve for a non-empty prompt through the platform model', () => {
+    renderPromptCard({ prompt: 'a real prompt with content' });
     const button = screen.getByRole('button', { name: /Auto Improve/i });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect((button as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('invokes onAutoImprove when prompt is non-empty and key available', () => {

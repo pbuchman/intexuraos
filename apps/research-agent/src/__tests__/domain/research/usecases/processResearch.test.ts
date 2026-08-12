@@ -6,7 +6,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 import type { ResearchContext } from '@intexuraos/llm-prompts';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL, LlmModels,
+  LlmProviders,
+} from '@intexuraos/llm-contract';
 import {
   processResearch,
   type ProcessResearchDeps,
@@ -83,10 +86,10 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'pending',
-    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
-      { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'pending' },
+      { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
       { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
@@ -148,7 +151,7 @@ describe('processResearch', () => {
 
     expect(deps.mockTitleGenerator.generateTitle).toHaveBeenCalledWith('Test research prompt');
     expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', { title: 'Generated Title' });
-    expect(deps.mockReportSuccess).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
+    expect(deps.mockReportSuccess).toHaveBeenCalledWith(DEFAULT_PLATFORM_LLM_MODEL);
   });
 
   it('uses synthesizer for title generation when titleGenerator not provided', async () => {
@@ -196,9 +199,9 @@ describe('processResearch', () => {
 
   it('publishes LLM call for each pending provider', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
+      selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
       llmResults: [
-        { provider: LlmProviders.Google, model: LlmModels.Gemini20Flash, status: 'pending' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
         { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
         { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet46, status: 'pending' },
       ],
@@ -212,7 +215,7 @@ describe('processResearch', () => {
       type: 'llm.call',
       researchId: 'research-1',
       userId: 'user-1',
-      model: LlmModels.Gemini20Flash,
+      model: LlmModels.GPT54,
       prompt: 'Test research prompt',
     });
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith({
@@ -233,10 +236,10 @@ describe('processResearch', () => {
 
   it('publishes in order of llmResults', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.ClaudeSonnet46, LlmModels.Gemini25Flash],
+      selectedModels: [LlmModels.ClaudeSonnet46, LlmModels.O4MiniDeepResearch],
       llmResults: [
         { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeSonnet46, status: 'pending' },
-        { provider: LlmProviders.Google, model: LlmModels.Gemini25Flash, status: 'pending' },
+        { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
       ],
     });
     deps.mockRepo.findById.mockResolvedValue(ok(research));
@@ -245,16 +248,16 @@ describe('processResearch', () => {
 
     const calls = deps.mockPublisher.publishLlmCall.mock.calls;
     expect(calls[0]?.[0].model).toBe(LlmModels.ClaudeSonnet46);
-    expect(calls[1]?.[0].model).toBe(LlmModels.Gemini25Flash);
+    expect(calls[1]?.[0].model).toBe(LlmModels.O4MiniDeepResearch);
   });
 
   it('skips already completed llmResults', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
+      selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Existing',
         },
@@ -268,7 +271,7 @@ describe('processResearch', () => {
 
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledTimes(2);
     expect(deps.mockPublisher.publishLlmCall).not.toHaveBeenCalledWith(
-      expect.objectContaining({ model: LlmModels.Gemini20Flash })
+      expect.objectContaining({ model: LlmModels.GPT54 })
     );
     expect(deps.mockPublisher.publishLlmCall).toHaveBeenCalledWith(
       expect.objectContaining({ model: LlmModels.O4MiniDeepResearch })
@@ -280,11 +283,11 @@ describe('processResearch', () => {
 
   it('triggers synthesis when all results already completed', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
+      selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini20Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google result',
         },
@@ -435,7 +438,7 @@ describe('processResearch', () => {
       expect(deps.mockRepo.update).toHaveBeenCalledWith('research-1', {
         researchContext: mockResearchContext,
       });
-      expect(localReportSuccess).toHaveBeenCalledWith(LlmModels.Gemini25Flash);
+      expect(localReportSuccess).toHaveBeenCalledWith(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('logs warning when context inference fails', async () => {
@@ -488,7 +491,7 @@ describe('processResearch', () => {
 
       await processResearch('research-1', depsWithInferrer);
 
-      expect(localMockReportSuccess).not.toHaveBeenCalledWith(LlmModels.Gemini25Flash);
+      expect(localMockReportSuccess).not.toHaveBeenCalledWith(LlmModels.O4MiniDeepResearch);
     });
 
     it('skips reportLlmSuccess when callback not provided', async () => {

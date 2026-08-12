@@ -1,8 +1,11 @@
-import type { IntexAgentModel, LlmProvider } from '@intexuraos/llm-contract';
+import type {
+  ExecutableLlmProvider,
+  IntexAgentModel,
+} from '@intexuraos/llm-contract';
 /**
  * LLM Provider types for API key management.
  */
-export type { LlmProvider };
+export type ConfigurableLlmProvider = ExecutableLlmProvider;
 
 export type IntexAgentModelSelectorOption =
   | { id: 'or:deepseek/deepseek-v4-flash'; label: 'DeepSeek V4 Flash' }
@@ -52,13 +55,11 @@ export interface LlmTestResult {
 export interface LlmKeysResponse {
   defaultModel: string | null;
   fallbackModel: string | null;
-  google: string | null;
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
   openrouter: string | null;
   testResults: {
-    google: LlmTestResult | null;
     openai: LlmTestResult | null;
     anthropic: LlmTestResult | null;
     perplexity: LlmTestResult | null;
@@ -71,7 +72,7 @@ export interface LlmKeysResponse {
  * Request body for PATCH /users/:uid/settings/llm-keys
  */
 export interface SetLlmKeyRequest {
-  provider: LlmProvider;
+  provider: ConfigurableLlmProvider;
   apiKey: string;
 }
 
@@ -79,6 +80,6 @@ export interface SetLlmKeyRequest {
  * Response from PATCH /users/:uid/settings/llm-keys
  */
 export interface SetLlmKeyResponse {
-  provider: LlmProvider;
+  provider: ConfigurableLlmProvider;
   masked: string;
 }

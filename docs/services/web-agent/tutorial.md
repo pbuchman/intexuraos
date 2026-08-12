@@ -1,7 +1,7 @@
 # Web Agent — Tutorial
 
 > **Time:** 20–30 minutes
-> **Prerequisites:** Internal auth token, user with configured LLM API key
+> **Prerequisites:** Internal auth token and a user ID
 > **You'll learn:** How to fetch link previews and generate AI summaries
 
 ---
@@ -22,7 +22,7 @@ Before starting, ensure you have:
 
 - [ ] Access to the IntexuraOS project
 - [ ] Internal auth token (`INTEXURAOS_INTERNAL_AUTH_TOKEN`)
-- [ ] A user ID with configured LLM API key (for summarization)
+- [ ] A user ID; a supported personal key is optional because the platform OpenRouter fallback is available
 
 ---
 
@@ -244,7 +244,7 @@ curl -X POST http://localhost:8127/internal/page-summaries \
 
 ## Part 4: Handle Errors (5 minutes)
 
-### Error: No API Key Configured (Platform Fallback Exhausted)
+### Error: Platform OpenRouter Unavailable
 
 ```json
 {
@@ -253,15 +253,13 @@ curl -X POST http://localhost:8127/internal/page-summaries \
     "status": "failed",
     "error": {
       "code": "API_ERROR",
-      "message": "No API key configured for Google. Please add your Google API key in settings."
+      "message": "Platform OpenRouter route is unavailable."
     }
   }
 }
 ```
 
-**Note:** This error only occurs if the user has no API key AND the platform fallback key (`INTEXURAOS_GEMINI_APP_API_KEY`) is not configured on the platform. In normal operation, the platform Gemini 2.5 Flash fallback handles users without API keys automatically.
-
-**Solution:** Either configure platform fallback keys in the service environment, or have the user add their LLM API key via user-service settings.
+**Solution:** Verify `INTEXURAOS_OPENROUTER_APP_API_KEY` and OpenRouter connectivity.
 
 ### Error: Invalid URL
 

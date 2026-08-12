@@ -1,4 +1,8 @@
-import { getOpenRouterRawId, isOpenRouterModel, isValidModel } from '@intexuraos/llm-contract';
+import {
+  getOpenRouterRawId,
+  isOpenRouterModel,
+  isValidModel,
+} from '@intexuraos/llm-contract';
 import { isAllowedModel } from '@intexuraos/infra-openrouter';
 
 export function isRetryableStoredResearchModel(model: string): boolean {

@@ -197,7 +197,7 @@ interface WritingSample {
 **Requires:**
 
 - Valid Bearer token (JWT) for all endpoints
-- User must have a configured LLM client (own Gemini API key or platform fallback key)
+- User-service must resolve an LLM client; unsupported or absent preferences use the platform OpenRouter fallback
 - A resolved category (from request body or LLM inference) for draft generation
 
 ## Usage Patterns
@@ -258,5 +258,5 @@ None. Hellscript Agent does not publish Pub/Sub events.
 | user-service      | Resolve per-user LLM client               | Returns 500 — impose cannot proceed            |
 | llm-usage-service | LLM usage tracking                        | Non-blocking — tracking failure logged only    |
 | Firestore         | Buffer, event, draft, config storage      | Request fails with 500                         |
-| Gemini            | Intent interpretation                     | Falls back to `fallback_append`                |
-| Gemini            | Draft generation                          | Returns `DraftGenerationError`; no draft saved |
+| Resolved LLM      | Intent interpretation                     | Falls back to `fallback_append`                |
+| Resolved LLM      | Draft generation                          | Returns `DraftGenerationError`; no draft saved |

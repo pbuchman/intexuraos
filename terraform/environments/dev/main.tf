@@ -284,7 +284,6 @@ locals {
   hetzner_runtime_secret_names = toset([
     "INTEXURAOS_CLOUDFLARE_API_TOKEN",
     "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_GEMINI_APP_API_KEY",
     "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
     "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
     "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
@@ -567,7 +566,6 @@ module "secret_manager" {
     "INTEXURAOS_OPENAI_APP_API_KEY"     = "OpenAI API key for services using OpenAI APIs"
     "INTEXURAOS_MINIMAX_APP_API_KEY"    = "MiniMax API key for orchestrator worker containers"
     "INTEXURAOS_MIMO_APP_API_KEY"       = "MiMo Pro 2.5 API key for orchestrator worker containers"
-    "INTEXURAOS_GEMINI_APP_API_KEY"     = "Gemini API key for orchestrator completion verifier"
     "INTEXURAOS_DASHSCOPE_APP_API_KEY"  = "Dashscope API key for orchestrator glm and qwen worker containers"
     "INTEXURAOS_KIMI_APP_API_KEY"       = "Kimi Code API key for orchestrator kimi worker containers"
     "INTEXURAOS_OPENROUTER_APP_API_KEY" = "OpenRouter API key for agent compliance validator"

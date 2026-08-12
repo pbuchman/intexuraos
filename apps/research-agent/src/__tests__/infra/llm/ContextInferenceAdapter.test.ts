@@ -5,17 +5,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import type { ResearchContext, SynthesisContext } from '@intexuraos/llm-prompts';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { DEFAULT_PLATFORM_LLM_MODEL } from '@intexuraos/llm-contract';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 
 const mockGenerate = vi.fn();
 
-const mockCreateGeminiClient = vi.fn().mockReturnValue({
+const mockCreateLlmClient = vi.fn().mockReturnValue({
   generate: mockGenerate,
 });
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: mockCreateGeminiClient,
+vi.mock('@intexuraos/llm-factory', () => ({
+  createLlmClient: mockCreateLlmClient,
 }));
 
 const { ContextInferenceAdapter } = await import('../../../infra/llm/ContextInferenceAdapter.js');
@@ -91,7 +91,7 @@ describe('ContextInferenceAdapter', () => {
     fakeUsageSink = new FakeUsageSink();
     adapter = new ContextInferenceAdapter(
       'test-key',
-      LlmModels.Gemini20Flash,
+      DEFAULT_PLATFORM_LLM_MODEL,
       'test-user',
       mockLogger,
       fakeUsageSink
@@ -100,19 +100,19 @@ describe('ContextInferenceAdapter', () => {
 
   describe('constructor', () => {
     it('passes apiKey, model, and userId to client', () => {
-      mockCreateGeminiClient.mockClear();
+      mockCreateLlmClient.mockClear();
       const testLogger = createMockLogger();
       new ContextInferenceAdapter(
         'test-key',
-        LlmModels.Gemini20Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'test-user',
         testLogger,
         fakeUsageSink
       );
 
-      expect(mockCreateGeminiClient).toHaveBeenCalledWith({
+      expect(mockCreateLlmClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: LlmModels.Gemini20Flash,
+        model: DEFAULT_PLATFORM_LLM_MODEL,
         userId: 'test-user',
         logger: testLogger,
         usageSink: fakeUsageSink,
@@ -127,7 +127,7 @@ describe('ContextInferenceAdapter', () => {
 
       const adapterWithResearchId = new ContextInferenceAdapter(
         'test-key',
-        LlmModels.Gemini20Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'test-user',
         mockLogger,
         fakeUsageSink,
@@ -152,7 +152,7 @@ describe('ContextInferenceAdapter', () => {
 
       const adapterWithResearchId = new ContextInferenceAdapter(
         'test-key',
-        LlmModels.Gemini20Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'test-user',
         mockLogger,
         fakeUsageSink,

@@ -34,7 +34,7 @@ describe('NoopNotificationSender', () => {
     const result = await sender.sendLlmFailure(
       'user-123',
       'research-456',
-      LlmProviders.Google,
+      LlmProviders.OpenAI,
       'API Error'
     );
 

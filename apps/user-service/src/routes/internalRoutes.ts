@@ -12,9 +12,14 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest, type InternalAuthResult } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
-import { DEFAULT_INTEX_AGENT_MODEL, INTEX_AGENT_MODEL_OPTIONS } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_INTEX_AGENT_MODEL,
+  DEFAULT_PLATFORM_LLM_MODEL,
+  INTEX_AGENT_MODEL_OPTIONS,
+  isLegacyGoogleModel,
+} from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
-import type { LlmProvider } from '../domain/settings/index.js';
+import type { LlmPreferences, LlmProvider } from '../domain/settings/index.js';
 import { getValidAccessToken, OAuthProviders } from '../domain/oauth/index.js';
 
 function internalAuthFailureLogContext(reason: InternalAuthResult['reason']): Record<string, unknown> {
@@ -25,6 +30,27 @@ function internalAuthFailureLogContext(reason: InternalAuthResult['reason']): Re
 }
 
 const INTEG_AGENT_MODEL_IDS = INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => id);
+
+function normalizeLegacyLlmPreferences(
+  preferences: LlmPreferences | undefined
+): LlmPreferences | undefined {
+  if (preferences === undefined) return undefined;
+
+  const normalized = { ...preferences };
+  if (
+    normalized.defaultModel !== undefined &&
+    isLegacyGoogleModel(normalized.defaultModel)
+  ) {
+    normalized.defaultModel = DEFAULT_PLATFORM_LLM_MODEL;
+  }
+  if (
+    normalized.fallbackModel !== undefined &&
+    isLegacyGoogleModel(normalized.fallbackModel)
+  ) {
+    normalized.fallbackModel = DEFAULT_PLATFORM_LLM_MODEL;
+  }
+  return normalized;
+}
 
 function intexAgentProjectionConsistencySchema(): Readonly<Record<string, unknown>> {
   return {
@@ -220,7 +246,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               data: {
                 type: 'object',
                 properties: {
-                  google: { type: 'string', nullable: true },
                   openai: { type: 'string', nullable: true },
                   anthropic: { type: 'string', nullable: true },
                   perplexity: { type: 'string', nullable: true },
@@ -268,7 +293,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!result.ok) {
         return await reply.ok({
-          google: null,
           openai: null,
           anthropic: null,
           perplexity: null,
@@ -290,7 +314,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       };
 
       return await reply.ok({
-        google: getDecryptedKey('google'),
         openai: getDecryptedKey('openai'),
         anthropic: getDecryptedKey('anthropic'),
         perplexity: getDecryptedKey('perplexity'),
@@ -315,7 +338,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: ['google', 'openai', 'anthropic', 'perplexity'],
+              enum: ['openai', 'anthropic', 'perplexity', 'openrouter'],
               description: 'LLM provider',
             },
           },
@@ -567,7 +590,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const settings = result.value;
       return await reply.ok({
-        llmPreferences: settings?.llmPreferences,
+        llmPreferences: normalizeLegacyLlmPreferences(settings?.llmPreferences),
         transcriptionPreferences: settings?.transcriptionPreferences,
         timezone: settings?.timezone,
       });

@@ -177,14 +177,37 @@ describe('ApiKeysSettingsPage', () => {
     cleanup();
   });
 
+  it('does not offer a direct Google API key or raw Gemini default model', () => {
+    mockUseLlmKeys.mockReturnValue(
+      createPageHookResult({
+        keys: createKeysResponse({
+          google: 'AIza...legacy',
+          testResults: {
+            google: createTestResult(),
+            openai: null,
+            anthropic: null,
+            perplexity: null,
+            openrouter: null,
+          },
+        }),
+      })
+    );
+
+    render(<ApiKeysSettingsPage />);
+
+    expect(screen.queryByText('Google (Gemini)')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Gemini 2.5 Flash' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Gemini 2.0 Flash' })).not.toBeInTheDocument();
+  });
+
   it('uses provider-specific API key field semantics and auto-tests after save', async () => {
     mockUseLlmKeys.mockReturnValue(createPageHookResult());
 
     render(<ApiKeysSettingsPage />);
 
-    // Index 4 = OpenRouter (order: Google, OpenAI, Anthropic, Perplexity, OpenRouter)
+    // Index 3 = OpenRouter (order: OpenAI, Anthropic, Perplexity, OpenRouter)
     const configureButtons = screen.getAllByRole('button', { name: 'Configure' });
-    fireEvent.click(configureButtons[4] as HTMLButtonElement);
+    fireEvent.click(configureButtons[3] as HTMLButtonElement);
 
     const input = screen.getByLabelText('API Key');
     expect(input).toHaveAttribute('autocomplete', 'new-password');
@@ -209,9 +232,9 @@ describe('ApiKeysSettingsPage', () => {
 
     render(<ApiKeysSettingsPage />);
 
-    // Index 4 = OpenRouter (order: Google, OpenAI, Anthropic, Perplexity, OpenRouter)
+    // Index 3 = OpenRouter (order: OpenAI, Anthropic, Perplexity, OpenRouter)
     const configureButtons = screen.getAllByRole('button', { name: 'Configure' });
-    fireEvent.click(configureButtons[4] as HTMLButtonElement);
+    fireEvent.click(configureButtons[3] as HTMLButtonElement);
 
     fireEvent.change(screen.getByLabelText('API Key'), {
       target: { value: 'sk-or-12345678901234567890' },
@@ -295,7 +318,7 @@ describe('ApiKeysSettingsPage', () => {
     expect(screen.queryByRole('button', { name: /Use default Intex Agent model/i })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Default Model' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Fallback Model' })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Configure' })).toHaveLength(5);
+    expect(screen.getAllByRole('button', { name: 'Configure' })).toHaveLength(4);
   });
 
   it('keeps Intex saving state independent from the general default model state', () => {

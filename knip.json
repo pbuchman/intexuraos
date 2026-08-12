@@ -21,7 +21,6 @@
     "pino-pretty",
     "openai",
     "fastify-server",
-    "@google/genai",
     "@sentry/node",
     "react",
     "react-dom",

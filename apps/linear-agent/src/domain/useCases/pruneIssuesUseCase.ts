@@ -1,7 +1,7 @@
 /**
  * Prune redundant Linear issues to stay under subscription limits.
  *
- * Orchestrates: threshold check -> Gemini classification -> store candidates in Firestore for user review.
+ * Orchestrates: threshold check -> LLM classification -> store candidates in Firestore for user review.
  * All actions logged via structured logging (Cloud Logging).
  */
 

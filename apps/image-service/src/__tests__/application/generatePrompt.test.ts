@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import type { Google, OpenAI } from '@intexuraos/llm-contract';
+import type { OpenAI } from '@intexuraos/llm-contract';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { ImagePromptModelConfig, PromptGenerator } from '../../domain/index.js';
 import { createGeneratePromptUseCase } from '../../application/generatePrompt.js';
@@ -13,14 +13,14 @@ describe('createGeneratePromptUseCase', () => {
   let fakeUserClient: FakeUserServiceClient;
   let fakeGenerator: FakePromptGenerator;
   let createPromptGeneratorSpy: ReturnType<
-    typeof vi.fn<(provider: Google | OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator>
+    typeof vi.fn<(provider: OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator>
   >;
 
   beforeEach(() => {
     fakeUserClient = new FakeUserServiceClient();
     fakeGenerator = new FakePromptGenerator();
     createPromptGeneratorSpy = vi.fn<
-      (provider: Google | OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator
+      (provider: OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator
     >(() => fakeGenerator);
     vi.clearAllMocks();
   });
@@ -95,7 +95,7 @@ describe('createGeneratePromptUseCase', () => {
   });
 
   it('returns MISSING_API_KEY when provider key is absent', async () => {
-    fakeUserClient.setApiKeys({ google: 'google-key' });
+    fakeUserClient.setApiKeys({ anthropic: 'anthropic-key' });
     const useCase = buildUseCase();
 
     const result = await useCase({ text: 'Some text', model: 'gpt-4.1', userId: 'user-1' });

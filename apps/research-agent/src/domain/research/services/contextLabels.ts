@@ -3,9 +3,11 @@
  * Automatically generates labels for contexts that don't have them.
  */
 
-import { LlmModels } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  type ResearchModel,
+} from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
-import type { Gemini25Flash } from '@intexuraos/llm-contract';
 import type { TitleGenerator } from '../ports/llmProvider.js';
 
 export interface ContextWithLabel {
@@ -15,10 +17,10 @@ export interface ContextWithLabel {
 
 export async function generateContextLabels(
   contexts: ContextWithLabel[],
-  googleApiKey: string | undefined,
+  openRouterApiKey: string | undefined,
   userId: string,
   createTitleGenerator: (
-    model: Gemini25Flash,
+    model: ResearchModel,
     apiKey: string,
     userId: string,
     logger: Logger,
@@ -27,13 +29,13 @@ export async function generateContextLabels(
   logger: Logger,
   researchId?: string
 ): Promise<ContextWithLabel[]> {
-  if (googleApiKey === undefined) {
+  if (openRouterApiKey === undefined) {
     return contexts;
   }
 
   const generator = createTitleGenerator(
-    LlmModels.Gemini25Flash,
-    googleApiKey,
+    DEFAULT_PLATFORM_LLM_MODEL,
+    openRouterApiKey,
     userId,
     logger,
     researchId

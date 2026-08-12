@@ -167,8 +167,17 @@ No deprecated APIs or dependencies in use.
 
 **Resolution:**
 - ZAI pricing fetch removed from `services.ts` (`REQUIRED_MODELS` reduced from 5 to 4 entries)
-- Platform fallback is now exclusively Gemini via `INTEXURAOS_GEMINI_APP_API_KEY`
+- At that time, platform fallback moved from ZAI to Gemini; it was later retired in favor of OpenRouter
 - No functional change to image generation flows — ZAI was never an image generation provider
+
+### 2026-08-12: Direct Gemini Removal
+
+**Issue:** A shared direct Gemini API key bypassed centralized OpenRouter visibility.
+
+**Resolution:**
+- Prompt and image generation were restricted to OpenAI
+- Direct Gemini image models were removed from image-service
+- The shared Gemini environment variable and Secret Manager container were retired
 
 ### 2026-02-27: INT-605 Thumbnail Output Contract Alignment
 
@@ -195,7 +204,7 @@ No deprecated APIs or dependencies in use.
 
 **Resolution:**
 - `platformGeminiApiKey` added to `createUserServiceClient()` in `internal-clients`
-- `INTEXURAOS_GEMINI_APP_API_KEY` is the platform fallback (ZAI removed in v3.3.0)
+- At that time, the platform fallback moved to Gemini; it was later retired in favor of OpenRouter
 - Gemini 2.5 Flash is now the default platform model for faster responses
 
 ### 2026-02-15: API Key Naming Standardization

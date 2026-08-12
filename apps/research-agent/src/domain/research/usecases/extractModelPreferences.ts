@@ -6,7 +6,14 @@
  */
 
 import type { Logger } from '@intexuraos/common-core';
-import { getProviderForModel, type LlmProvider, type ResearchModel, LlmModels } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  getProviderForModel,
+  type ExecutableLlmProvider,
+  type ResearchModel,
+  IntexAgentModels,
+  LlmModels,
+} from '@intexuraos/llm-contract';
 import {
   modelExtractionPrompt,
   parseModelExtractionResponse,
@@ -39,8 +46,8 @@ export interface ExtractModelPreferencesDeps {
  * Research models available for selection (excludes image and non-research models).
  */
 const RESEARCH_MODELS: ResearchModel[] = [
-  LlmModels.Gemini25Pro,
-  LlmModels.Gemini25Flash,
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels.Gemini3FlashPreview,
   LlmModels.ClaudeOpus46,
   LlmModels.ClaudeSonnet46,
   LlmModels.ClaudeSonnet47,
@@ -54,9 +61,9 @@ const RESEARCH_MODELS: ResearchModel[] = [
 /**
  * Display names for models.
  */
-const MODEL_DISPLAY_NAMES: Record<ResearchModel, string> = {
-  [LlmModels.Gemini25Pro]: 'Gemini 2.5 Pro',
-  [LlmModels.Gemini25Flash]: 'Gemini 2.5 Flash',
+const MODEL_DISPLAY_NAMES: Partial<Record<ResearchModel, string>> = {
+  [DEFAULT_PLATFORM_LLM_MODEL]: 'MiniMax M3 (OpenRouter)',
+  [IntexAgentModels.Gemini3FlashPreview]: 'Gemini 3 Flash Preview (OpenRouter)',
   [LlmModels.ClaudeOpus46]: 'Claude Opus 4.6',
   [LlmModels.ClaudeSonnet46]: 'Claude Sonnet 4.6',
   [LlmModels.ClaudeSonnet47]: 'Claude Sonnet 4.7',
@@ -101,15 +108,14 @@ export function getModelKeywords(model: ResearchModel): string[] {
  * Get API key field name for a provider.
  * Provider is always one of the known values from getProviderForModel.
  */
-const PROVIDER_KEY_MAP: Record<LlmProvider, keyof ApiKeyStore> = {
-  google: 'google',
+const PROVIDER_KEY_MAP: Record<ExecutableLlmProvider, keyof ApiKeyStore> = {
   openai: 'openai',
   anthropic: 'anthropic',
   perplexity: 'perplexity',
   openrouter: 'openrouter',
 };
 
-function providerToKeyField(provider: LlmProvider): keyof ApiKeyStore {
+function providerToKeyField(provider: ExecutableLlmProvider): keyof ApiKeyStore {
   return PROVIDER_KEY_MAP[provider];
 }
 

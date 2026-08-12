@@ -22,11 +22,14 @@ import {
   type TextGenerationClient,
 } from '../domain/research/index.js';
 import { formatLlmError } from '../domain/research/formatLlmError.js';
-import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels } from '@intexuraos/llm-contract';
-import { isAllowedModel } from '@intexuraos/infra-openrouter';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  getProviderForModel,
+} from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
+import { isRetryableStoredResearchModel } from './helpers/storedResearchModels.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 
@@ -238,7 +241,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title: body.title,
         prompt: body.prompt,
         selectedModels,
-        synthesisModel: synthesisModel ?? LlmModels.Gemini25Pro,
+        synthesisModel: synthesisModel ?? DEFAULT_PLATFORM_LLM_MODEL,
       };
       if (body.sourceActionId !== undefined) {
         createParams.sourceActionId = body.sourceActionId;
@@ -448,10 +451,10 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           },
         };
 
-        if (apiKeys.google !== undefined) {
+        if (apiKeys.openrouter !== undefined) {
           deps.titleGenerator = services.createTitleGenerator(
-            LlmModels.Gemini25Flash,
-            apiKeys.google,
+            DEFAULT_PLATFORM_LLM_MODEL,
+            apiKeys.openrouter,
             research.userId,
             request.log,
             event.researchId
@@ -767,6 +770,19 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.ok({});
       }
 
+      if (
+        typeof event.researchId !== 'string' ||
+        typeof event.userId !== 'string' ||
+        typeof event.model !== 'string' ||
+        typeof event.prompt !== 'string'
+      ) {
+        request.log.warn(
+          { messageId: body.message.messageId },
+          'Invalid LLM call event payload'
+        );
+        return await reply.ok({});
+      }
+
       request.log.info(
         {
           researchId: event.researchId,
@@ -780,7 +796,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const services = getServices();
       const { researchRepo, userServiceClient, notificationSender, shareStorage, shareConfig, webAppUrl } =
         services;
-      const modelProvider = getProviderForModel(event.model);
 
       try {
         request.log.info(
@@ -806,6 +821,32 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           );
           return await reply.ok({});
         }
+
+        if (!isRetryableStoredResearchModel(event.model)) {
+          const error = `Direct or unsupported LLM model '${event.model}' is disabled`;
+          request.log.warn(
+            { researchId: event.researchId, model: event.model },
+            '[3.1.3] Refusing non-executable LLM model'
+          );
+          await researchRepo.updateLlmResult(event.researchId, event.model, {
+            status: 'failed',
+            error,
+            completedAt: new Date().toISOString(),
+          });
+          void notificationSender.sendLlmFailure(
+            event.userId,
+            event.researchId,
+            event.model,
+            error
+          );
+          await checkLlmCompletion(event.researchId, {
+            researchRepo,
+            logger: request.log as unknown as Logger,
+          });
+          return await reply.ok({});
+        }
+
+        const modelProvider = getProviderForModel(event.model);
 
         request.log.info(
           { researchId: event.researchId, model: event.model, provider: modelProvider },
@@ -865,17 +906,6 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           { researchId: event.researchId, model: event.model },
           '[3.3] Starting LLM research call'
         );
-
-        // Reject non-allowlisted OpenRouter models to enforce curated model policy
-        if (isOpenRouterModel(event.model) && !isAllowedModel(getOpenRouterRawId(event.model))) {
-          request.log.warn({ researchId: event.researchId, model: event.model }, '[3.3] OpenRouter model not in allowlist');
-          void researchRepo.updateLlmResult(event.researchId, event.model, {
-            status: 'failed',
-            error: `Model '${event.model}' is not in the curated allowlist`,
-            completedAt: new Date().toISOString(),
-          });
-          return await reply.fail('INVALID_REQUEST', 'Model not in curated allowlist');
-        }
 
         const llmProvider = services.createResearchProvider(
           event.model,

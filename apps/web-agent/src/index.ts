@@ -11,6 +11,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_CLOUDFLARE_API_TOKEN',
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
+  'INTEXURAOS_OPENROUTER_APP_API_KEY',
 ];
 
 validateRequiredEnv(REQUIRED_ENV);
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
     userServiceUrl: USER_SERVICE_URL,
     internalAuthToken: INTERNAL_AUTH_TOKEN,
     llmUsageServiceUrl: LLM_USAGE_SERVICE_URL,
+    openRouterAppApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '',
   });
 
   const app = await buildServer();

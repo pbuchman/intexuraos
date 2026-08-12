@@ -26,17 +26,13 @@ Every generated image is accompanied by a thumbnail — a 256-pixel JPEG optimiz
 
 When you unshare a piece of research, the associated cover image is deleted from storage and from the database. No orphaned files accumulate. The system stays clean without manual intervention.
 
-### Works Without Your Own API Keys
+### Provider-Owned Generation
 
-If you have configured your own provider API keys, the service uses them — keeping costs under your control. If you have not, the platform provides a Gemini fallback key automatically, so image generation works from day one with no setup required.
+Prompt and image generation use the supported OpenAI provider credential. The service has no shared direct-Gemini fallback.
 
 ### Human-Readable File Paths
 
 When a title is provided, the generated image receives a readable file name derived from the content rather than a meaningless identifier. This keeps storage organized and debuggable.
-
-### Resilient Multi-Provider Generation
-
-The calling service (research-agent) can fail over between OpenAI and Google providers when generating cover images. If one provider rejects the request or is unavailable, generation retries with the alternate provider automatically — increasing the success rate for cover image creation without user intervention.
 
 ## Key Benefits
 
@@ -44,14 +40,13 @@ The calling service (research-agent) can fail over between OpenAI and Google pro
 - **Invisible prompt engineering** — The two-step pipeline handles the hard part so you do not have to
 - **Thumbnail included** — Every image ships with a 256px preview, ready for cards and social sharing
 - **Automatic cleanup** — Unsharing removes both storage and database records, preventing orphans
-- **Zero-configuration start** — Platform Gemini fallback key means image generation works before users add their own API keys
+- **Single supported provider** — Prompt and image generation use OpenAI
 - **User-controlled costs** — When users bring their own keys, their keys are used
-- **Multi-provider resilience** — Callers can fail over between OpenAI and Google when one provider is unavailable
 
 ## Limitations
 
 - **Works behind the scenes** — End users never interact with this service directly; it runs in the background, called by other agents like research-agent
-- **Fallback model limits** — Platform-provided Gemini key works for all users, but personal keys may support more models or higher rate limits
+- **OpenAI credential required** — Prompt and image generation require the user's OpenAI API key; there is no direct Gemini platform fallback
 - **No image editing** — Generates new images only; cannot crop, filter, or modify an existing image
 - **No style selection** — You cannot choose artistic styles, color palettes, or visual themes; the service decides what fits the content
 - **Generation takes a few seconds** — The two-step pipeline (prompt creation then image generation) adds processing time

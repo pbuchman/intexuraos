@@ -5,7 +5,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import type { Logger } from '@intexuraos/common-core';
-import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
+import {
+  LegacyGoogleModels,
+  LlmModels,
+  LlmProviders,
+  type ResearchModel,
+} from '@intexuraos/llm-contract';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -14,27 +19,6 @@ const mockLogger: Logger = {
   debug: vi.fn(),
 };
 const fakeUsageSink = new FakeUsageSink();
-
-vi.mock('../../../infra/llm/GeminiAdapter.js', () => ({
-  GeminiAdapter: class MockGeminiAdapter {
-    apiKey: string;
-    model: string;
-    userId: string;
-    logger: Logger;
-    constructor(
-      apiKey: string,
-      model: string,
-      userId: string,
-      _logger: Logger,
-      _usageSink: unknown
-    ) {
-      this.apiKey = apiKey;
-      this.model = model;
-      this.userId = userId;
-      this.logger = _logger;
-    }
-  },
-}));
 
 vi.mock('../../../infra/llm/ClaudeAdapter.js', () => ({
   ClaudeAdapter: class MockClaudeAdapter {
@@ -125,17 +109,16 @@ const { createSynthesizer, createTitleGenerator, createResearchProvider } =
 
 describe('LlmAdapterFactory', () => {
   describe('createResearchProvider', () => {
-    it('creates GeminiAdapter for gemini model', () => {
-      const provider = createResearchProvider(
-        LlmModels.Gemini25Pro,
-        'google-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((provider as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((provider as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
+    it('rejects direct Gemini research models', () => {
+      expect(() =>
+        createResearchProvider(
+          LegacyGoogleModels.Gemini25Pro as unknown as ResearchModel,
+          'google-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Direct Google LLM models are disabled');
     });
 
     it('creates ClaudeAdapter for claude model', () => {
@@ -193,17 +176,16 @@ describe('LlmAdapterFactory', () => {
   });
 
   describe('createSynthesizer', () => {
-    it('creates GeminiAdapter for gemini model', () => {
-      const synthesizer = createSynthesizer(
-        LlmModels.Gemini25Pro,
-        'google-key',
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect((synthesizer as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((synthesizer as unknown as { model: string }).model).toBe(LlmModels.Gemini25Pro);
+    it('rejects direct Gemini synthesis models', () => {
+      expect(() =>
+        createSynthesizer(
+          LegacyGoogleModels.Gemini25Pro as unknown as ResearchModel,
+          'google-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Direct Google LLM models are disabled');
     });
 
     it('throws error for claude model (synthesis not supported)', () => {
@@ -261,17 +243,56 @@ describe('LlmAdapterFactory', () => {
   });
 
   describe('createTitleGenerator', () => {
-    it('creates GeminiAdapter for title generation', () => {
+    it('rejects direct Gemini title generation', () => {
+      expect(() =>
+        createTitleGenerator(
+          LegacyGoogleModels.Gemini25Flash as unknown as ResearchModel,
+          'google-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('Direct Google LLM models are disabled');
+    });
+
+    it('rejects title generators that cannot generate context labels', () => {
+      expect(() =>
+        createTitleGenerator(
+          LlmModels.GPT54,
+          'openai-key',
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow('OpenAI does not support context-label title generation');
+    });
+
+    it.each([
+      [LlmModels.ClaudeOpus46, LlmProviders.Anthropic],
+      [LlmModels.SonarPro, LlmProviders.Perplexity],
+    ] as const)('rejects %s for title generation', (model, provider) => {
+      expect(() =>
+        createTitleGenerator(
+          model,
+          `${provider}-key`,
+          'test-user-id',
+          mockLogger,
+          fakeUsageSink
+        )
+      ).toThrow(`${provider} does not support title generation`);
+    });
+
+    it('creates OpenRouterAdapter for title and context-label generation', () => {
+      const model = 'or:minimax/minimax-m3' as ResearchModel;
       const generator = createTitleGenerator(
-        LlmModels.Gemini20Flash,
-        'google-key',
+        model,
+        'openrouter-key',
         'test-user-id',
         mockLogger,
         fakeUsageSink
       );
 
-      expect((generator as unknown as { apiKey: string }).apiKey).toBe('google-key');
-      expect((generator as unknown as { model: string }).model).toBe(LlmModels.Gemini20Flash);
+      expect((generator as unknown as { model: string }).model).toBe(model);
     });
   });
 });

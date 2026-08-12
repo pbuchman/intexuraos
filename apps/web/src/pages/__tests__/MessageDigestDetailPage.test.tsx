@@ -4,7 +4,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -1323,7 +1323,7 @@ function run(id: string): MessageDigestRun {
     },
     effectiveMessageCount: 17,
     promptVersion: 'message-digest-v1',
-    model: LlmModels.Gemini25Flash,
+    model: LegacyGoogleModels.Gemini25Flash,
     usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
     delivery: {
       type: 'whatsapp_primary',

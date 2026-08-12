@@ -6,7 +6,7 @@ import {
   resetFirestore,
   setFirestore,
 } from '@intexuraos/infra-firestore';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConversationAssistantTurnRequestRepository,
@@ -71,7 +71,7 @@ function session(overrides: Record<string, unknown> = {}): Record<string, unknow
     chatId: 'chat-1',
     chatDisplayName: 'Test chat',
     status: 'active',
-    model: LlmModels.Gemini25Flash,
+    model: LegacyGoogleModels.Gemini25Flash,
     generationId: GENERATION_ID,
     sourceAccountId: 'source-1',
     sourceAccountGeneration: 'source-generation-1',
@@ -1368,7 +1368,7 @@ describe('conversationAssistantTurnRequestRepository', () => {
     expect(loaded.snapshot).toMatchObject({
       userId: USER_ID,
       sessionId: SESSION_ID,
-      model: LlmModels.Gemini25Flash,
+      model: LegacyGoogleModels.Gemini25Flash,
       transcriptText: INITIAL_TRANSCRIPT,
       chatDisplayName: 'Test chat',
       currentQuestion: 'How did the attitude change?',

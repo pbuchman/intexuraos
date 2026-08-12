@@ -3,7 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { exportToNotion } from '../researchAgentApi';
 import type { Research } from '../researchAgentApi.types';
 
@@ -24,12 +24,12 @@ describe('exportToNotion', () => {
     title: 'Test Research',
     prompt: 'Test prompt',
     status: 'completed',
-    selectedModels: [LlmModels.Gemini25Pro],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LegacyGoogleModels.Gemini25Pro],
+    synthesisModel: LegacyGoogleModels.Gemini25Pro,
     llmResults: [
       {
         provider: 'Google',
-        model: LlmModels.Gemini25Pro,
+        model: LegacyGoogleModels.Gemini25Pro,
         status: 'completed',
         result: 'Test result',
       },

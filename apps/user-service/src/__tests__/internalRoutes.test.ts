@@ -9,7 +9,12 @@ import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
-import { IntexAgentModels, LlmModels } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LegacyGoogleModels,
+  LlmModels,
+} from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices } from '../services.js';
 import {
@@ -143,13 +148,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
         };
       };
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.perplexity).toBeNull();
@@ -188,13 +192,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
         };
       };
-      expect(body.data.google).toBe(googleKey);
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBe(anthropicKey);
       expect(body.data.perplexity).toBeNull();
@@ -217,13 +220,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
           perplexity: string | null;
         };
       };
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
       expect(body.data.openai).toBeNull();
       expect(body.data.anthropic).toBeNull();
       expect(body.data.perplexity).toBeNull();
@@ -245,20 +247,19 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(401);
     });
 
-    it('returns undefined for keys when decryption fails', async () => {
+    it('returns null for an executable provider key when decryption fails', async () => {
       const userId = 'user-decrypt-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      // Make the first decryption fail (for google)
       fakeEncryptor.setFailNextDecrypt(true);
 
       app = await buildServer();
@@ -275,13 +276,12 @@ describe('Internal Routes', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: {
-          google: string | null;
           openai: string | null;
           anthropic: string | null;
         };
       };
-      // Google key should be null due to decryption failure
-      expect(body.data.google).toBeNull();
+      expect(body.data).not.toHaveProperty('google');
+      expect(body.data.openai).toBeNull();
     });
   });
 
@@ -291,7 +291,7 @@ describe('Internal Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/internal/users/user-123/llm-keys/google/last-used',
+        url: '/internal/users/user-123/llm-keys/openai/last-used',
       });
 
       expect(response.statusCode).toBe(401);
@@ -685,12 +685,12 @@ describe('Internal Routes', () => {
       );
     });
 
-    it('returns user llmPreferences when valid auth header', async () => {
+    it('normalizes a stored legacy Google preference for internal consumers', async () => {
       const userId = 'user-with-settings';
       fakeSettingsRepo.setSettings({
         userId,
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -713,7 +713,7 @@ describe('Internal Routes', () => {
           llmPreferences?: { defaultModel: string };
         };
       };
-      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.llmPreferences?.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('returns fallbackModel in internal settings when present', async () => {
@@ -722,7 +722,7 @@ describe('Internal Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
           fallbackModel: orFallback,
         },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -746,8 +746,41 @@ describe('Internal Routes', () => {
           llmPreferences?: { defaultModel: string; fallbackModel?: string };
         };
       };
-      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.Gemini25Flash);
+      expect(body.data.llmPreferences?.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
       expect(body.data.llmPreferences?.fallbackModel).toBe(orFallback);
+    });
+
+    it('normalizes a legacy Google fallback while preserving a supported default', async () => {
+      const userId = 'user-with-legacy-fallback-model';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          defaultModel: LlmModels.GPT4oMini,
+          fallbackModel: LegacyGoogleModels.Gemini25Flash,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: {
+          llmPreferences?: { defaultModel: string; fallbackModel?: string };
+        };
+      };
+      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+      expect(body.data.llmPreferences?.fallbackModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('returns undefined llmPreferences when user has no settings', async () => {

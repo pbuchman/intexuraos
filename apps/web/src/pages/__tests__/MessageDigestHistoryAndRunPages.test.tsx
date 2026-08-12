@@ -4,7 +4,7 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -338,7 +338,7 @@ describe('WhatsAppMessageDigestRunPage', () => {
     expect(screen.getByTestId('delivery-status')).toHaveTextContent('Sent');
     expect(screen.getByText('17 messages')).toBeInTheDocument();
     expect(screen.getByText(definition().instructions.text)).toBeInTheDocument();
-    expect(screen.getByText(LlmModels.Gemini25Flash)).toBeInTheDocument();
+    expect(screen.getByText(LegacyGoogleModels.Gemini25Flash)).toBeInTheDocument();
     expect(screen.getByText('message-digest-v1')).toBeInTheDocument();
     expect(screen.getByText('Definition revision').parentElement).toHaveTextContent('3');
     expect(screen.getByText('Definition revision').parentElement).not.toHaveTextContent('7');
@@ -800,7 +800,7 @@ function run(
       : null,
     effectiveMessageCount: processing ? null : skipped ? 0 : 17,
     promptVersion: completed ? 'message-digest-v1' : null,
-    model: completed ? LlmModels.Gemini25Flash : null,
+    model: completed ? LegacyGoogleModels.Gemini25Flash : null,
     usage: completed ? { inputTokens: 100, outputTokens: 20, totalTokens: 120 } : null,
     delivery: {
       type: 'whatsapp_primary',

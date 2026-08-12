@@ -17,14 +17,13 @@ export interface UserServiceConfig {
    * `service` / `component`. Tests may pass a FakeUsageSink.
    */
   usageSink: UsageSink;
-  platformGeminiApiKey?: string | undefined;
+  platformOpenRouterApiKey?: string | undefined;
 }
 
 /**
  * Decrypted API keys returned from user-service.
  */
 export interface DecryptedApiKeys {
-  google?: string;
   openai?: string;
   anthropic?: string;
   perplexity?: string;

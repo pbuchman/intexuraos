@@ -8,7 +8,6 @@ import type { Result } from '@intexuraos/common-core';
  * API keys available to a user, keyed by provider.
  */
 export interface ApiKeyStore {
-  google?: string;
   openai?: string;
   anthropic?: string;
   perplexity?: string;

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
 import {
@@ -256,8 +256,8 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(400);
     });
 
-    it('generates prompt with gemini model', async () => {
-      fakeUserClient.setApiKeys({ google: 'test-key' });
+    it('rejects the removed direct Gemini prompt model', async () => {
+      fakeUserClient.setApiKeys({ openrouter: 'test-key' });
 
       const response = await app.inject({
         method: 'POST',
@@ -265,12 +265,12 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           text: 'This is a test article about machine learning.',
-          model: LlmModels.Gemini25Pro,
+          model: LegacyGoogleModels.Gemini25Pro,
           userId: TEST_USER_ID,
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
     });
   });
 
@@ -474,8 +474,8 @@ describe('Internal Routes', () => {
       expect(savedImage?.userId).toBe(TEST_USER_ID);
     });
 
-    it('generates image successfully with google model', async () => {
-      fakeUserClient.setApiKeys({ google: 'test-google-key' });
+    it('rejects the removed direct Gemini image model', async () => {
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
 
       const response = await app.inject({
         method: 'POST',
@@ -483,12 +483,12 @@ describe('Internal Routes', () => {
         headers: { 'x-internal-auth': TEST_INTERNAL_TOKEN },
         payload: {
           prompt: 'A beautiful sunset over mountains',
-          model: LlmModels.Gemini25FlashImage,
+          model: LegacyGoogleModels.Gemini25FlashImage,
           userId: TEST_USER_ID,
         },
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(400);
     });
 
     it('generates image with slug when title is provided', async () => {

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Web Agent extracts web content and generates AI summaries. It uses Cloudflare Browser Rendering for headless browser content extraction (returning Markdown), Cheerio for OpenGraph parsing, and the user's configured LLM (with a platform Gemini 2.5 Flash fallback) for summarization with automatic response repair.
+Web Agent extracts web content and generates AI summaries. It uses Cloudflare Browser Rendering for headless browser content extraction (returning Markdown), Cheerio for OpenGraph parsing, and an LLM resolved through user-service with a platform OpenRouter fallback.
 
 Runs on Cloud Run with auto-scaling (0–1 instances). Port 8127 on dev (PM2).
 
@@ -27,13 +27,13 @@ graph TB
     subgraph "External"
         CF[Cloudflare Browser Rendering]
         UserLLM[User's LLM Provider]
-        PlatformLLM[Platform Gemini]
+        PlatformLLM[Platform OpenRouter]
         Target[Target URLs]
     end
 
     subgraph "Internal Services"
         US[user-service]
-        AS[app-settings-service]
+        Usage[llm-usage-service]
     end
 
     RA -->|POST /internal/page-summaries| Routes
@@ -56,7 +56,7 @@ graph TB
     OGF -->|parse| Cheerio[Cheerio]
 
     US -.->|getLlmClient per request| Routes
-    AS -.->|pricing at startup| Routes
+    Routes -.->|usage events| Usage
 
     classDef service fill:#e1f5ff
     classDef external fill:#f0f0f0
@@ -64,7 +64,7 @@ graph TB
 
     class Routes,PCF,LLM,OGF,Parser,Repair service
     class CF,UserLLM,PlatformLLM,Target external
-    class US,AS internal
+    class US,Usage internal
 ```
 
 ## Data Flow — Page Summarization
@@ -82,7 +82,7 @@ sequenceDiagram
     WebAgent->>Cloudflare: POST /markdown {url, rejectResourceTypes}
     Cloudflare-->>WebAgent: markdown content
     WebAgent->>UserService: getLlmClient(userId)
-    UserService-->>WebAgent: LLM client (user key or Gemini fallback)
+    UserService-->>WebAgent: LLM client (user choice or OpenRouter fallback)
     WebAgent->>LLM: Generate summary (with content focus + language preservation)
     LLM-->>WebAgent: prose text or invalid format
     WebAgent->>WebAgent: parseSummaryResponse()
@@ -236,7 +236,7 @@ Generates prose summaries with automatic repair on parse failures.
 **Flow:**
 
 1. Build prompt with language preservation, content focus, and main content selection instructions
-2. Send to user's LLM via `llm-factory` (or platform Gemini 2.5 Flash fallback)
+2. Send to the client resolved by user-service (platform OpenRouter fallback)
 3. Parse response with `parseSummaryResponse()`
 4. If JSON or invalid format detected, send repair prompt and retry once
 5. Return `PageSummary` or error
@@ -301,17 +301,17 @@ Fetches and parses OpenGraph metadata via direct HTTP with browser-like headers.
 
 ### Internal Services
 
-| Service              | Endpoint               | Purpose                                        |
-| -------------------- | ---------------------- | ---------------------------------------------- |
-| user-service         | `getLlmClient(userId)` | Get LLM client (user key or platform fallback) |
-| app-settings-service | `fetchAllPricing()`    | LLM pricing context at startup                 |
+| Service           | Endpoint               | Purpose                                        |
+| ----------------- | ---------------------- | ---------------------------------------------- |
+| user-service      | `getLlmClient(userId)` | Get LLM client (user key or platform fallback) |
+| llm-usage-service | usage sink             | Attribute model, token, and cost usage         |
 
 **Integration Note:** web-agent uses `@intexuraos/internal-clients` for type-safe communication with user-service. This package provides:
 
 - `createUserServiceClient()` — Factory for configured client
 - `UserServiceClient` interface with `getLlmClient()` method
 - Automatic error handling and result types
-- Platform Gemini 2.5 Flash fallback when user has no API key
+- Platform OpenRouter fallback when a user choice cannot be resolved
 
 ## Configuration
 
@@ -323,15 +323,15 @@ Fetches and parses OpenGraph metadata via direct HTTP with browser-like headers.
 | `INTEXURAOS_USER_SERVICE_URL`         | User service base URL                         | Yes      |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Pricing lookup                                | Yes      |
 | `INTEXURAOS_SENTRY_DSN`               | Error tracking                                | Yes      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | Platform Gemini 2.5 Flash fallback            | Optional |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`   | Platform OpenRouter fallback                  | Required |
 
-All required vars are validated at startup via `validateRequiredEnv()`. `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. Optional keys are passed to `createUserServiceClient()` and are no-ops when unset.
+All required vars are validated at startup via `validateRequiredEnv()`. `INTEXURAOS_SENTRY_DSN` is validated separately with a direct check. The platform OpenRouter key is passed to `createUserServiceClient()` for fallback resolution.
 
 ## Gotchas
 
 **Fetch vs Summary separation** — PageContentFetcher only fetches content via Cloudflare; LlmSummarizer handles AI. This allows using the user's LLM keys rather than shared infrastructure.
 
-**Platform fallback chain** — When a user has no API key for their chosen provider, `getLlmClient()` falls back to Gemini 2.5 Flash (platform key). `API_ERROR` with "No API key" only surfaces if the platform key is also unset.
+**Platform fallback chain** — When a user choice cannot be resolved, `getLlmClient()` uses the platform OpenRouter default. Direct Google model preferences are normalized to that fallback.
 
 **Repair mechanism** — If the LLM returns JSON, the parser detects it and triggers a repair prompt automatically. Only retries once.
 

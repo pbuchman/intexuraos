@@ -52,17 +52,17 @@ describe('createImageServiceClient', () => {
       }
     });
 
-    it('supports gemini model', async () => {
+    it('supports the OpenAI prompt model', async () => {
       nock(baseUrl)
         .post('/internal/images/prompts/generate', {
-          text: 'gemini text',
-          model: LlmModels.Gemini25Pro,
+          text: 'openai text',
+          model: 'gpt-4.1',
           userId: 'user-2',
         })
         .reply(200, { success: true, data: mockPrompt });
 
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
-      const result = await client.generatePrompt('gemini text', LlmModels.Gemini25Pro, 'user-2');
+      const result = await client.generatePrompt('openai text', 'gpt-4.1', 'user-2');
 
       expect(result.ok).toBe(true);
     });
@@ -150,7 +150,7 @@ describe('createImageServiceClient', () => {
       nock(baseUrl)
         .post('/internal/images/generate', {
           prompt: 'Mountain landscape',
-          model: LlmModels.Gemini25FlashImage,
+          model: LlmModels.GPTImage1,
           userId: 'user-1',
           title: 'My Mountain Photo',
         })
@@ -159,7 +159,7 @@ describe('createImageServiceClient', () => {
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
       const result = await client.generateImage(
         'Mountain landscape',
-        LlmModels.Gemini25FlashImage,
+        LlmModels.GPTImage1,
         'user-1',
         {
           title: 'My Mountain Photo',
@@ -173,7 +173,7 @@ describe('createImageServiceClient', () => {
       nock(baseUrl)
         .post('/internal/images/generate', {
           prompt: 'Correlated mountain landscape',
-          model: LlmModels.Gemini25FlashImage,
+          model: LlmModels.GPTImage1,
           userId: 'user-1',
           title: 'My Mountain Photo',
           promptType: 'image-generation',
@@ -184,7 +184,7 @@ describe('createImageServiceClient', () => {
       const client = createImageServiceClient({ baseUrl, internalAuthToken });
       const result = await client.generateImage(
         'Correlated mountain landscape',
-        LlmModels.Gemini25FlashImage,
+        LlmModels.GPTImage1,
         'user-1',
         {
           title: 'My Mountain Photo',

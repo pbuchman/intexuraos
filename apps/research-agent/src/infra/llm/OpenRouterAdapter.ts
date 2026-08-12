@@ -11,13 +11,14 @@ import { createOpenRouterClient, type OpenRouterClient } from '@intexuraos/infra
 import type { Logger, Result } from '@intexuraos/common-core';
 import { isOpenRouterModel, getOpenRouterRawId } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
-import { researchPrompt, synthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
+import { labelPrompt, researchPrompt, synthesisPrompt, titlePrompt, type ResearchContext, type SynthesisContext } from '@intexuraos/llm-prompts';
 import type {
   LlmError,
   LlmResearchProvider,
   LlmResearchResult,
   LlmSynthesisProvider,
   LlmSynthesisResult,
+  LabelGenerateResult,
   ResearchProviderCallOptions,
   TitleGenerateResult,
 } from '../../domain/research/index.js';
@@ -27,10 +28,9 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
   private readonly model: string;
   private readonly logger: Logger;
   /**
-   * Optional research correlation token baked at construction time. See
-   * GeminiAdapter for the rationale: synthesis/title-generation must carry
-   * `correlation.researchId` so usage events are attributable to the
-   * originating research.
+   * Optional research correlation token baked at construction time.
+   * Synthesis and title generation must carry `correlation.researchId` so
+   * usage events are attributable to the originating research.
    */
   private readonly researchId?: string;
 
@@ -75,8 +75,7 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
   ): Promise<Result<LlmResearchResult, LlmError>> {
     const builtPrompt = researchPrompt.build({ userPrompt: prompt, ctx });
     this.logger.info({ model: this.model, promptLength: builtPrompt.length }, 'OpenRouter research started');
-    // Per-call researchId wins over the constructor-baked one (see
-    // GeminiAdapter for rationale).
+    // A per-call researchId takes precedence over the constructor value.
     const callResearchId = options?.researchId ?? this.researchId;
     const researchOptions = {
       promptType: options?.promptType ?? 'research-web-search',
@@ -170,6 +169,21 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
           outputTokens: usage.outputTokens,
           costUsd: usage.costUsd,
         },
+      },
+    };
+  }
+
+  async generateContextLabel(content: string): Promise<Result<LabelGenerateResult, LlmError>> {
+    const result = await this.client.generate(
+      labelPrompt.build({ content }),
+      this.generateOptions('research-context-label-generation')
+    );
+    if (!result.ok) return { ok: false, error: mapToLlmError(result.error) };
+    return {
+      ok: true,
+      value: {
+        label: result.value.content.trim(),
+        usage: result.value.usage,
       },
     };
   }

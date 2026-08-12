@@ -3,15 +3,17 @@
  * Uses generate() method with cheap models for fast key validation and testing.
  */
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
-import { createGeminiClient } from '@intexuraos/infra-gemini';
 import { createGptClient } from '@intexuraos/infra-gpt';
 import { createClaudeClient } from '@intexuraos/infra-claude';
 import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import { createOpenRouterClient, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  LlmModels,
+  LlmProviders,
+  type ExecutableLlmProvider,
+} from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
-  LlmProvider,
   LlmTestResponse,
   LlmValidationError,
   LlmValidator,
@@ -20,7 +22,6 @@ import type {
 const VALIDATION_PROMPT = 'Say "API key validated" in exactly 3 words.';
 
 const VALIDATION_MODELS = {
-  [LlmProviders.Google]: LlmModels.Gemini20Flash,
   [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
   [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
   [LlmProviders.Perplexity]: LlmModels.Sonar,
@@ -41,31 +42,11 @@ export class LlmValidatorImpl implements LlmValidator {
   }
 
   async validateKey(
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     apiKey: string,
     userId: string
   ): Promise<Result<void, LlmValidationError>> {
     switch (provider) {
-      case LlmProviders.Google: {
-        const client = createGeminiClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Google],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
-            message:
-              result.error.code === 'INVALID_KEY'
-                ? 'Invalid Google API key'
-                : `Google API error: ${result.error.message}`,
-          });
-        }
-        return ok(undefined);
-      }
       case LlmProviders.OpenAI: {
         const client = createGptClient({
           apiKey,
@@ -151,29 +132,12 @@ export class LlmValidatorImpl implements LlmValidator {
   }
 
   async testRequest(
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     apiKey: string,
     prompt: string,
     userId: string
   ): Promise<Result<LlmTestResponse, LlmValidationError>> {
     switch (provider) {
-      case LlmProviders.Google: {
-        const client = createGeminiClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Google],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: 'API_ERROR',
-            message: result.error.message,
-          });
-        }
-        return ok({ content: result.value.content });
-      }
       case LlmProviders.OpenAI: {
         const client = createGptClient({
           apiKey,

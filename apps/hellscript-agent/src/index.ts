@@ -16,6 +16,7 @@ const REQUIRED_ENV = [
   'INTEXURAOS_USER_SERVICE_URL',
   'INTEXURAOS_LLM_USAGE_SERVICE_URL',
   'INTEXURAOS_SENTRY_DSN',
+  'INTEXURAOS_OPENROUTER_APP_API_KEY',
 ];
 
 /* v8 ignore start -- module-init: entry point bootstrapping not unit-testable @preserve */
@@ -47,12 +48,8 @@ async function main(): Promise<void> {
       component: 'user-service-client',
       logger,
     }),
-    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
+    platformOpenRouterApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
   });
-
-  if (process.env['INTEXURAOS_GEMINI_APP_API_KEY'] === undefined || process.env['INTEXURAOS_GEMINI_APP_API_KEY'].length === 0) {
-    logger.warn('INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured');
-  }
 
   initServices({
     userServiceClient,

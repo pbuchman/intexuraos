@@ -5,7 +5,11 @@
  */
 import type { Result } from '@intexuraos/common-core';
 import { err, ok } from '@intexuraos/common-core';
-import { isIntexAgentModel, type IntexAgentModel } from '@intexuraos/llm-contract';
+import {
+  isIntexAgentModel,
+  type ExecutableLlmProvider,
+  type IntexAgentModel,
+} from '@intexuraos/llm-contract';
 import type { EncryptedValue, Encryptor } from '../infra/encryption.js';
 import type {
   Auth0Client,
@@ -455,7 +459,7 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
 
   updateLlmApiKey(
     userId: string,
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     encryptedKey: EncryptedValue
   ): Promise<Result<void, SettingsError>> {
     if (this.shouldFailUpdateLlmKey) {
@@ -512,7 +516,7 @@ export class FakeUserSettingsRepository implements UserSettingsRepository {
 
   updateLlmTestResult(
     userId: string,
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     testResult: LlmTestResult
   ): Promise<Result<void, SettingsError>> {
     let existing = this.settings.get(userId);
@@ -797,7 +801,10 @@ export class FakeLlmValidator implements LlmValidator {
     this.testResponse = response;
   }
 
-  validateKey(_provider: LlmProvider, _apiKey: string): Promise<Result<void, LlmValidationError>> {
+  validateKey(
+    _provider: ExecutableLlmProvider,
+    _apiKey: string
+  ): Promise<Result<void, LlmValidationError>> {
     if (this.shouldFailValidation) {
       this.shouldFailValidation = false;
       return Promise.resolve(
@@ -808,7 +815,7 @@ export class FakeLlmValidator implements LlmValidator {
   }
 
   testRequest(
-    _provider: LlmProvider,
+    _provider: ExecutableLlmProvider,
     _apiKey: string,
     _prompt: string
   ): Promise<Result<LlmTestResponse, LlmValidationError>> {

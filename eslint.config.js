@@ -65,7 +65,6 @@ export default tseslint.config(
         { type: 'infra-notion', pattern: ['packages/infra-notion/src/**'], mode: 'folder' },
         { type: 'infra-whatsapp', pattern: ['packages/infra-whatsapp/src/**'], mode: 'folder' },
         { type: 'infra-pubsub', pattern: ['packages/infra-pubsub/src/**'], mode: 'folder' },
-        { type: 'infra-gemini', pattern: ['packages/infra-gemini/src/**'], mode: 'folder' },
         { type: 'infra-claude', pattern: ['packages/infra-claude/src/**'], mode: 'folder' },
         { type: 'infra-gpt', pattern: ['packages/infra-gpt/src/**'], mode: 'folder' },
         { type: 'llm-contract', pattern: ['packages/llm-contract/src/**'], mode: 'folder' },
@@ -102,11 +101,6 @@ export default tseslint.config(
             { from: 'llm-contract', allow: ['llm-contract', 'common-core'] },
             // llm-pricing can import from llm-contract (no common-core needed)
             { from: 'llm-pricing', allow: ['llm-pricing', 'llm-contract'] },
-            // infra-gemini can import from common-core, llm-contract, and llm-pricing
-            {
-              from: 'infra-gemini',
-              allow: ['infra-gemini', 'common-core', 'llm-contract', 'llm-pricing'],
-            },
             // infra-claude can import from common-core, llm-contract, and llm-pricing
             {
               from: 'infra-claude',
@@ -138,7 +132,6 @@ export default tseslint.config(
                 'infra-notion',
                 'infra-whatsapp',
                 'infra-pubsub',
-                'infra-gemini',
                 'infra-claude',
                 'infra-gpt',
                 'llm-contract',
@@ -256,7 +249,8 @@ export default tseslint.config(
             },
             {
               name: '@google/genai',
-              message: 'Use @intexuraos/infra-gemini instead of importing Google GenAI directly.',
+              message:
+                'Direct Google GenAI calls are disabled. Route Google models through OpenRouter.',
             },
             {
               name: 'openai',
@@ -382,11 +376,6 @@ export default tseslint.config(
                 'Use @intexuraos/infra-firestore singleton (getFirestore()) instead of importing Firestore directly.',
             },
             {
-              name: '@intexuraos/infra-gemini',
-              message:
-                'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
-            },
-            {
               name: '@intexuraos/infra-gpt',
               message:
                 'Routes must not import infra packages directly. Use getServices() to access LLM clients via dependency injection.',
@@ -499,7 +488,8 @@ export default tseslint.config(
             },
             {
               name: '@google/genai',
-              message: 'Use @intexuraos/infra-gemini instead of importing Google GenAI directly.',
+              message:
+                'Direct Google GenAI calls are disabled. Route Google models through OpenRouter.',
             },
             {
               name: 'openai',

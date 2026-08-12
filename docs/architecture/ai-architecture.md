@@ -1,612 +1,201 @@
 # AI Architecture
 
-> How IntexuraOS orchestrates multiple AI providers as a council of experts.
+> How IntexuraOS routes model traffic, runs multi-model research, and attributes usage.
 
-**Version 2.0.0** — January 24, 2026
+**Version 3.0.0** — August 12, 2026
 
----
+## Routing Invariants
 
-## v2.0.0 Changes
+1. **Platform traffic uses OpenRouter.** Defaults, fallbacks, classification, routing, and other platform-owned calls use `INTEXURAOS_OPENROUTER_APP_API_KEY`.
+2. **Google-family models are OpenRouter models.** Every executable Google model ID has the form `or:google/...`; IntexuraOS does not execute direct Google/Gemini LLM requests.
+3. **Supported personal keys remain explicit.** Anthropic, OpenAI, Perplexity, and OpenRouter keys can be stored and selected where the feature supports them.
+4. **Images are OpenAI-only.** Prompt generation uses `gpt-4.1`; image generation uses `gpt-image-1`.
+5. **Historical data stays readable.** Stored research records can contain retired model identifiers, but retry and new-execution schemas accept only current executable models.
+6. **Google OAuth is separate.** Google OAuth tokens authorize Calendar operations and are not LLM credentials.
 
-- **Natural Language Model Selection** — Users can specify models in WhatsApp messages ("research with Claude")
-- **Zod Schema Validation** — ResearchContext and SynthesisContext use Zod for field-level error reporting
-- **Parser + Repair Pattern** — Automatic LLM response repair when validation fails
-- **LLM Package Restructuring** — `llm-common` split into `llm-factory`, `llm-prompts`, `llm-utils`
-- **GLM-5** — Latest Alibaba Cloud model for code tasks
-
----
-
-## Overview
-
-IntexuraOS treats AI models not as tools to be called, but as **team members with specialized expertise**. The architecture reflects this philosophy:
-
-1. **No single point of AI failure**: Multiple providers ensure availability
-2. **Consensus through synthesis**: Parallel queries with attributed aggregation
-3. **Cost-aware routing**: Model selection based on task requirements and pricing
-4. **Provider abstraction**: Unified interface across all LLM providers
-
----
-
-## The Council of AI
-
-Rather than relying on a single AI model (with its inherent biases and knowledge gaps), IntexuraOS queries **multiple LLMs in parallel** and synthesizes their responses:
-
-1. **Parallel Querying**: Send the same research question to multiple models simultaneously
-2. **Independent Verification**: Each model performs its own reasoning and web search
-3. **Confidence Aggregation**: Synthesize responses with confidence scores
-4. **Source Attribution**: Every claim is attributed to a specific model/source
-
-This approach reduces hallucination risk and provides more comprehensive answers than any single model.
-
-### Provider Integration
+## Execution Architecture
 
 ```mermaid
 graph TB
-    subgraph "IntexuraOS"
-        LF[LLM Factory]
-        LC[LLM Contract]
-        LP[LLM Pricing]
+    subgraph "Callers"
+        Agents[Specialist Agents]
+        Research[Research Agent]
+        Images[Image Service]
     end
 
-    subgraph "Provider Packages"
-        IG[infra-gemini]
-        IO[infra-gpt]
-        IC[infra-claude]
-        IP[infra-perplexity]
-        IZ[infra-glm]
+    subgraph "Resolution"
+        UserService[user-service]
+        Factory[llm-factory]
+        Contract[llm-contract]
     end
 
-    subgraph "External APIs"
-        G[Google AI API]
-        O[OpenAI API]
-        A[Anthropic API]
-        P[Perplexity API]
-        Z[Zai API]
+    subgraph "Executable Routes"
+        OpenRouter[OpenRouter]
+        Anthropic[Anthropic user key]
+        OpenAI[OpenAI user key]
+        Perplexity[Perplexity user key]
+        OpenAIImage[OpenAI image API]
     end
 
-    LF --> LC
-    LF --> LP
-    LF --> IG
-    LF --> IO
-    LF --> IC
-    LF --> IP
-    LF --> IZ
-
-    IG --> G
-    IO --> O
-    IC --> A
-    IP --> P
-    IZ --> Z
+    Agents --> UserService
+    Research --> UserService
+    UserService --> Factory
+    Factory --> Contract
+    Factory --> OpenRouter
+    Factory --> Anthropic
+    Factory --> OpenAI
+    Factory --> Perplexity
+    Images --> OpenAIImage
 ```
 
----
+`@intexuraos/llm-factory` is the executable boundary. It routes `or:` identifiers to OpenRouter, supports the remaining non-Google direct providers, and rejects raw Google model identifiers.
 
-## Supported Models
+## Model Selection
 
-### Model Selection Strategy
+### Platform Defaults
 
-| Task Type            | Primary Model         | Fallback Model      | Rationale                       |
-| -------------------- | --------------------- | ------------------- | ------------------------------- |
-| Research Synthesis   | Claude Opus 4.6       | GPT-5.4             | Nuanced reasoning, long context |
-| Quick Classification | Gemini 2.5 Flash      | GLM-5               | Fast, cost-effective            |
-| Deep Research        | O4 Mini Deep Research | Sonar Deep Research | Agentic web search              |
-| Fact Verification    | Perplexity Sonar      | Sonar Pro           | Real-time web grounding         |
-| Image Generation     | GPT Image 1           | Gemini Flash Image  | High quality, diverse styles    |
+The canonical platform fallback is `DEFAULT_PLATFORM_LLM_MODEL`, currently MiniMax M3 through OpenRouter. Feature-specific selectors may expose other curated OpenRouter models, including Google-family models such as `or:google/gemini-3-flash-preview`.
 
-### Research Models (11)
+### Default and Fallback Preferences
 
-Models capable of complex reasoning, web search, and multi-step analysis.
+User-service stores a default model and an optional fallback. Resolution follows this order:
 
-| Model                 | Provider      | Strengths                                        |
-| --------------------- | ------------- | ------------------------------------------------ |
-| Gemini 2.5 Pro        | Google        | Long context (1M tokens), grounded search        |
-| Gemini 2.5 Flash      | Google        | Fast, cost-effective, good reasoning             |
-| GPT-5.4               | OpenAI        | Latest OpenAI flagship, strong reasoning         |
-| O4 Mini Deep Research | OpenAI        | Agentic research with tool use                   |
-| Claude Opus 4.6       | Anthropic     | Best reasoning, nuanced analysis                 |
-| Claude Sonnet 4.6     | Anthropic     | Balanced performance/cost                        |
-| Sonar                 | Perplexity    | Real-time web search                             |
-| Sonar Pro             | Perplexity    | Enhanced web search with more sources            |
-| Sonar Deep Research   | Perplexity    | Multi-step agentic research                      |
-| GLM-5                 | Alibaba Cloud | Code tasks, multilingual                         |
+1. Normalize a retired direct-Google preference to the platform OpenRouter default.
+2. Resolve the selected model with a supported personal key when available.
+3. Use the platform OpenRouter key for OpenRouter-backed defaults and fallbacks.
+4. Return a typed error if neither the selected route nor the platform fallback can be resolved.
 
-### Fast Models (4)
+OpenRouter-backed defaults do not require every user to maintain a separate key. Users can still add their own OpenRouter key.
 
-Optimized for quick, low-cost operations like classification and extraction.
+### Research Models
 
-| Model            | Provider | Use Cases                                 |
-| ---------------- | -------- | ----------------------------------------- |
-| Gemini 2.5 Flash | Google   | Intent classification, title generation   |
-| Gemini 2.0 Flash | Google   | API key validation, quick inference       |
+Research accepts:
 
-### Image Models (2)
+- curated `or:<vendor>/<model>` entries from the OpenRouter allowlist;
+- supported Anthropic research models with an Anthropic user key;
+- supported OpenAI research models with an OpenAI user key;
+- supported Perplexity research models with a Perplexity user key.
 
-Text-to-image generation for cover images.
+Executable schemas exclude raw Google models. Read schemas remain intentionally broader so historical reports can be displayed and guarded without silently dropping old identifiers.
 
-| Model                  | Provider | Capabilities                            |
-| ---------------------- | -------- | --------------------------------------- |
-| GPT Image 1            | OpenAI   | Photorealistic, artistic styles         |
-| Gemini 2.5 Flash Image | Google   | Fast image generation, consistent style |
+### Image Models
 
-### Validation Models (6)
+| Stage             | Provider | Model         |
+| ----------------- | -------- | ------------- |
+| Prompt generation | OpenAI   | `gpt-4.1`     |
+| Image generation  | OpenAI   | `gpt-image-1` |
 
-Cheap, fast models for API key validation and simple tasks.
+There is no Google image adapter or Gemini image fallback.
 
-| Model            | Provider   | Token Cost     |
-| ---------------- | ---------- | -------------- |
-| Claude Haiku 3.5 | Anthropic  | $0.80/M input  |
-| Gemini 2.0 Flash | Google     | $0.075/M input |
-| GPT-4o Mini      | OpenAI     | $0.15/M input  |
-| Sonar            | Perplexity | $1.00/M input  |
+## Research Council
 
----
-
-## Research Synthesis Protocol
-
-The flagship AI capability: querying multiple models in parallel and synthesizing results.
-
-### Execution Flow
+Research Agent can query several independently selected models and synthesize their results with attribution.
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant RA as research-agent
-    participant V as Input Validator
-    participant CI as Context Inferrer
-    participant G as Gemini
-    participant C as Claude
-    participant GPT as GPT-5.4
-    participant S as Sonar
-    participant Z as GLM
-    participant SY as Synthesizer
-    participant N as Notification
+    participant User
+    participant Research as research-agent
+    participant Resolve as user-service / model resolution
+    participant OR as OpenRouter
+    participant Direct as Supported user-key provider
+    participant Synth as Synthesizer
 
-    U->>RA: Research query
-    RA->>V: Validate input quality
-    V-->>RA: Quality score + suggestions
-
-    alt Low quality
-        RA->>U: Request clarification
-    else Acceptable
-        RA->>CI: Infer context
-        CI-->>RA: Enhanced query
-
-        par Parallel LLM Queries
-            RA->>G: Query Gemini
-            RA->>C: Query Claude
-            RA->>GPT: Query GPT
-            RA->>S: Query Sonar
-            RA->>Z: Query GLM
-        end
-
-        G-->>RA: Response + confidence
-        C-->>RA: Response + confidence
-        GPT-->>RA: Response + confidence
-        S-->>RA: Response + sources
-        Z-->>RA: Response + confidence
-
-        RA->>SY: Synthesize all responses
-        SY-->>RA: Attributed summary
-
-        RA->>N: Notify completion
-        N->>U: WhatsApp message
+    User->>Research: Research prompt + model choices
+    Research->>Resolve: Resolve keys and executable models
+    par OpenRouter models
+        Research->>OR: Parallel research calls
+        OR-->>Research: Results, sources, usage
+    and Supported personal-key models
+        Research->>Direct: Parallel research calls
+        Direct-->>Research: Results, sources, usage
     end
+    Research->>Synth: Successful attributed results
+    Synth-->>Research: Synthesized report
+    Research-->>User: Report + model attribution + partial failures
 ```
 
-### Research Adapters
+The pipeline continues when a subset of models fails. Failed model IDs are retained in the result so the user can inspect the partial outcome. Retrying a historical research record is blocked when its stored identifiers are no longer executable.
 
-Each LLM provider has a dedicated adapter implementing `LlmResearchProvider`:
+## Agent Usage
 
-```typescript
-interface LlmResearchProvider {
-  research(params: {
-    query: string;
-    context?: InputContext[];
-    logger: Logger;
-  }): Promise<Result<ResearchResult, LLMError>>;
-}
-```
+| Component          | LLM role                                      | Resolution rule                                      |
+| ------------------ | --------------------------------------------- | ---------------------------------------------------- |
+| Intex Agent        | Tool selection and conversational responses   | Curated OpenRouter models                            |
+| Calendar Agent     | Natural-language event parsing                | User-service client; OpenRouter platform fallback    |
+| Linear Agent       | Issue extraction, titles, pruning             | User-service client; OpenRouter platform fallback    |
+| Hellscript Agent   | Intent interpretation and draft generation    | User-service client; OpenRouter platform fallback    |
+| Web Agent          | Page summarization                            | User-service client; OpenRouter platform fallback    |
+| Research Agent     | Parallel research and synthesis               | Curated OpenRouter plus supported personal-key routes|
+| Image Service      | Prompt and image generation                   | OpenAI user key only                                 |
 
-**Adapters**:
-
-- `GeminiAdapter` - Google AI integration
-- `GptAdapter` - OpenAI integration
-- `ClaudeAdapter` - Anthropic integration
-- `PerplexityAdapter` - Perplexity integration (web search enabled)
-- `GlmAdapter` - Zai integration
-
-### Synthesis Algorithm
-
-1. **Collect responses**: Wait for all models (with timeout)
-2. **Parse attributions**: Extract claims with source model
-3. **Aggregate themes**: Group similar claims across models
-4. **Calculate confidence**: Weight by model agreement
-5. **Generate summary**: Create attributed final report
-
----
-
-## AI Pipeline Architecture
-
-```mermaid
-graph TB
-    subgraph "Input Layer"
-        WA[WhatsApp Text]
-        WEB[Web Interface]
-        API[Direct API]
-    end
-
-    subgraph "Conversation Layer"
-        INTEX[Intex Agent]
-        OR3[OpenRouter Gemini 3 Flash Preview]
-    end
-
-    subgraph "AI Agents"
-        RA[Research Agent]
-        CA[Calendar Agent]
-        LA[Linear Agent]
-        IS[Image Service]
-    end
-
-    subgraph "Research Council"
-        CLAUDE[Claude Opus 4.6]
-        GPT[GPT-5.4]
-        GEM2[Gemini 2.5 Pro]
-        SONAR[Perplexity Sonar]
-        O4[O4 Mini Deep Research]
-    end
-
-    subgraph "Research Synthesis"
-        SYN[Synthesizer]
-    end
-
-    WA --> INTEX
-    WEB --> INTEX
-    API --> INTEX
-
-    INTEX --> OR3
-
-    INTEX --> RA
-    INTEX --> CA
-    INTEX --> LA
-    INTEX --> IS
-
-    RA --> CLAUDE
-    RA --> GPT
-    RA --> GEM2
-    RA --> SONAR
-    RA --> O4
-
-    CLAUDE --> SYN
-    GPT --> SYN
-    GEM2 --> SYN
-    SONAR --> SYN
-    O4 --> SYN
-```
-
----
-
-## Agent AI Capabilities
-
-### Intex Agent
-
-**Purpose**: Handle WhatsApp text conversations and call supported direct tools
-
-**AI Models**: OpenRouter Gemini 3 Flash Preview
-
-**Process**:
-
-1. Receive WhatsApp text, web, or trusted API input
-2. Decide whether the request fits the supported tools
-3. Call exactly one direct tool for notes, calendar events, research drafts, bookmarks, or code tasks
-4. Return unsupported for requests outside the current boundary
-
-### Research Agent
-
-**Purpose**: Deep research with multi-model synthesis
-
-**AI Models**: All 10 research models
-
-**Process**:
-
-1. **Validation**: Check if query is a valid research question
-2. **Context Inference**: Detect implicit context and constraints
-3. **Parallel Research**: Query 3-5 models simultaneously
-4. **Synthesis**: Aggregate findings with confidence scores
-5. **Title Generation**: Create descriptive title
-6. **Cover Image**: Generate visual representation
-
-### Calendar Agent
-
-**Purpose**: Parse calendar events from voice descriptions
-
-**AI Models**: Gemini 2.5 Flash
-
-**Extraction Capabilities**:
-
-- Event title
-- Start/end times from natural expressions
-- Location
-- Attendees
-- Recurrence patterns
-
-### Linear Agent
-
-**Purpose**: Create Linear issues from natural language
-
-**AI Models**: Gemini 2.5 Flash
-
-**Extraction Capabilities**:
-
-- Issue title
-- Priority (0-4 scale)
-- Functional requirements section
-- Technical details section
-
-### Image Service
-
-**Purpose**: Generate images from text prompts
-
-**AI Models**: GPT Image 1, Gemini Flash Image
-
-**Capabilities**:
-
-- Cover images for research reports
-- Custom thumbnails
-- Artistic style variations
-- Photorealistic rendering
-
----
-
-## LLM Infrastructure
-
-### Unified Client Factory
-
-All LLM interactions go through `@intexuraos/llm-factory`:
+## Factory Contract
 
 ```typescript
 import { createLlmClient } from '@intexuraos/llm-factory';
+import { createOpenRouterModelId } from '@intexuraos/llm-contract';
 
 const client = createLlmClient({
-  provider: 'anthropic',
-  model: 'claude-opus-4-6',
-  apiKey: userApiKey,
+  apiKey: openRouterApiKey,
+  model: createOpenRouterModelId('google/gemini-3-flash-preview'),
+  userId,
+  logger,
+  usageSink,
 });
 
-const result = await client.generate({
-  prompt: 'Analyze the following...',
-  maxTokens: 4000,
-});
-```
-
-### Provider Packages
-
-| Package                        | Provider   | Capabilities                      |
-| ------------------------------ | ---------- | --------------------------------- |
-| `@intexuraos/infra-claude`     | Anthropic  | Chat, streaming, tool use         |
-| `@intexuraos/infra-gemini`     | Google     | Chat, grounding, image generation |
-| `@intexuraos/infra-gpt`        | OpenAI     | Chat, DALL-E, embeddings          |
-| `@intexuraos/infra-perplexity` | Perplexity | Web search, deep research         |
-| `@intexuraos/infra-glm`        | Zai        | Chat, structured output           |
-
-### Usage Tracking
-
-LLM usage (token counts, cost) is tracked through the `llm-pricing` package which forwards events to `llm-usage-service` via HTTP (`HttpInternalAuthUsageSink` / `HttpWebhookUsageSink`).
-
----
-
-## Prompt Engineering
-
-### Structured Output
-
-All extraction tasks use JSON mode or structured schemas:
-
-```typescript
-const extractionSchema = {
-  type: 'object',
-  properties: {
-    title: { type: 'string', maxLength: 100 },
-    priority: { type: 'integer', minimum: 0, maximum: 4 },
-    valid: { type: 'boolean' },
-    reasoning: { type: 'string' },
-  },
-  required: ['title', 'priority', 'valid', 'reasoning'],
-};
-```
-
-### Few-Shot Examples
-
-Classification prompts include examples for each action type:
-
-```
-User: "What's the best approach to microservice architecture?"
-Classification: { type: "research", confidence: 0.95 }
-
-User: "Remind me to call mom tomorrow"
-Classification: { type: "todo", confidence: 0.98 }
-```
-
-### Chain-of-Thought
-
-Research synthesis uses explicit reasoning steps:
-
-1. Summarize each model's response
-2. Identify areas of agreement
-3. Note contradictions with sources
-4. Calculate confidence per claim
-5. Generate final synthesized answer
-
----
-
-## Cost Management
-
-### Pricing Context
-
-Every LLM call is tracked through `@intexuraos/llm-pricing`:
-
-```typescript
-interface ModelPricing {
-  inputPricePerMillion: number;
-  outputPricePerMillion: number;
-  imagePricePerGeneration?: number;
-}
-
-const cost = pricingContext.calculateCost({
-  model: 'gemini-2.5-pro',
-  inputTokens: 1500,
-  outputTokens: 800,
+const result = await client.generate(prompt, {
+  promptType: 'research-synthesis',
 });
 ```
 
-### Model Tiering
+The `or:` prefix is part of the routing contract: it selects the OpenRouter adapter and strips the prefix only when constructing the upstream OpenRouter request.
 
-| Tier     | Use Case                   | Cost/1M Tokens | Example Models            |
-| -------- | -------------------------- | -------------- | ------------------------- |
-| Premium  | Deep research, synthesis   | $15-75         | Claude Opus, GPT-5.4      |
-| Standard | General queries            | $3-10          | Claude Sonnet, Gemini Pro |
-| Economy  | Classification, extraction | $0.08-1        | Gemini Flash, Haiku       |
+## Usage and Cost Attribution
 
-### Usage Logging
+Every executable call receives a semantic `promptType` and reports usage through an explicit `UsageSink` to `llm-usage-service`. Records include:
 
-All LLM calls publish to `llm-call` Pub/Sub topic:
+- service and component;
+- user or system ownership;
+- model and provider route;
+- input and output tokens;
+- calculated and provider-reported cost when available;
+- correlation identifiers for research, sessions, tasks, and requests.
 
-```typescript
-interface LlmCallEvent {
-  userId: string;
-  model: LLMModel;
-  inputTokens: number;
-  outputTokens: number;
-  cost: number;
-  timestamp: string;
-  serviceId: string;
-}
-```
+For OpenRouter traffic, provider-reported cost is preferred. Curated allowlists contain fallback pricing for cases where live catalog or per-call cost data is unavailable. An `or:google/...` request is billed and audited as OpenRouter traffic; direct Google API pricing is not used for that route.
 
-### Caching Strategy
+## Credentials and Security
 
-- **Prompt Caching**: Reuse system prompts across requests
-- **Result Caching**: Cache deterministic outputs (title generation)
-- **Context Caching**: Preserve conversation context for follow-ups
+User LLM keys are encrypted with AES-256-GCM in user-service and decrypted only for request-time client construction. The platform OpenRouter key lives in Secret Manager and is injected only into services that need the shared route.
 
----
+Direct Google LLM keys cannot be added or tested. The compatibility response field for a retired Google key is `null`, while deletion remains accepted so dormant encrypted values can be removed safely.
 
-## Error Handling
-
-### Graceful Degradation
-
-Research synthesis handles partial failures:
-
-```mermaid
-graph TB
-    Q[Query 5 Models]
-    Q --> G[Gemini: Success]
-    Q --> C[Claude: Success]
-    Q --> GPT[GPT: Timeout]
-    Q --> S[Sonar: Success]
-    Q --> Z[GLM: Rate Limited]
-
-    G --> SY[Synthesizer]
-    C --> SY
-    S --> SY
-
-    SY --> R[Result: 3/5 models]
-    SY --> W[Warning: 2 models unavailable]
-```
-
-### Error Categories
-
-| Error Type         | Handling                          |
-| ------------------ | --------------------------------- |
-| `NO_API_KEY`       | Prompt user to configure API key  |
-| `RATE_LIMITED`     | Retry with exponential backoff    |
-| `TIMEOUT`          | Continue with available responses |
-| `INVALID_RESPONSE` | Attempt repair prompt             |
-| `PARSE_ERROR`      | Retry with repair prompt          |
-
-### Response Validation
-
-LLM responses are validated using three approaches depending on the response type:
-
-| Approach               | Use Case                        | Features                                        |
-| ---------------------- | ------------------------------- | ----------------------------------------------- |
-| **Zod Schemas**        | Structured JSON (context, etc.) | Field-level errors, type inference, auto-repair |
-| **Manual Type Guards** | Simple JSON extraction          | Custom validation, defensive coercion           |
-| **No Validation**      | Unstructured text (research)    | Raw content pass-through                        |
-
-**Zod validation** (used in `ContextInferenceAdapter`) provides detailed error messages with field paths:
-
-```
-Before: "Response does not match expected schema"
-After:  "mode: expected 'compact' | 'standard' | 'audit', received 'deep'"
-```
-
-See [LLM Response Validation Pattern](../patterns/llm-response-validation.md) for complete implementation details and inventory.
-
----
-
-## Security
-
-### API Key Management
-
-User API keys are encrypted at rest:
-
-```
-User Input → AES-256-GCM Encryption → Firestore Storage
-                    ↓
-            Runtime Decryption → LLM API Call
-                    ↓
-            Immediate Memory Clear
-```
-
-### Key Validation
-
-Before storing, keys are validated against their provider:
-
-```typescript
-const validationResult = await llmValidator.validateKey({
-  provider: 'google',
-  apiKey: userProvidedKey,
-});
-```
-
-### Rate Limiting
-
-- Per-user rate limits for LLM calls
-- Provider-level quotas respected
-- Graceful degradation when limits hit
-
-### Content Filtering
-
-- Input validation before LLM calls
-- Output sanitization for user display
-- PII detection in research outputs
-
----
+Google Calendar OAuth follows a separate token lifecycle: OAuth access and refresh tokens remain encrypted, are refreshed by user-service, and are returned only through the Calendar-specific internal endpoint.
 
 ## Packages
 
-| Package                        | Purpose                              |
-| ------------------------------ | ------------------------------------ |
-| `@intexuraos/llm-contract`     | Shared types, models, and interfaces |
-| `@intexuraos/llm-factory`      | Client creation factory              |
-| `@intexuraos/llm-pricing`      | Cost calculation                     |
-| `@intexuraos/llm-prompts`      | Prompt builders, schemas, parsers    |
-| `@intexuraos/llm-utils`        | Redaction and parse error utilities  |
-| `@intexuraos/infra-gemini`     | Google AI adapter                    |
-| `@intexuraos/infra-gpt`        | OpenAI adapter                       |
-| `@intexuraos/infra-claude`     | Anthropic adapter                    |
-| `@intexuraos/infra-perplexity` | Perplexity adapter                   |
-| `@intexuraos/infra-glm`        | Zai adapter                          |
+| Package                        | Purpose                                                        |
+| ------------------------------ | -------------------------------------------------------------- |
+| `@intexuraos/llm-contract`     | Model IDs, provider mapping, executable type guards            |
+| `@intexuraos/llm-factory`      | Executable routing and unified generation clients              |
+| `@intexuraos/infra-openrouter` | OpenRouter client, allowlists, live/fallback cost calculation   |
+| `@intexuraos/infra-claude`     | Supported direct Anthropic user-key client                     |
+| `@intexuraos/infra-gpt`        | Supported direct OpenAI user-key client                        |
+| `@intexuraos/infra-perplexity` | Supported direct Perplexity user-key client                    |
+| `@intexuraos/llm-pricing`      | Usage sinks and cost attribution contracts                     |
+| `@intexuraos/llm-prompts`      | Versioned prompts, schemas, and parsers                         |
+| `@intexuraos/llm-utils`        | Response parsing and redaction helpers                         |
+
+## Change Checklist
+
+When adding or changing an LLM route:
+
+1. Keep platform-owned traffic on OpenRouter.
+2. Use `or:google/...` for every Google-family model.
+3. Update the relevant allowlist, selector, executable schema, and tests together.
+4. Keep stored-response schemas broad enough for historical records.
+5. Add or update usage attribution and fallback pricing.
+6. For images, keep both prompt and generation paths OpenAI-only.
+7. Do not change Google OAuth Calendar behavior while changing LLM routing.
 
 ---
 
-## Future Directions
-
-1. **Streaming responses**: Real-time synthesis as models respond
-2. **Model ranking**: Learn which models perform best for specific topics
-3. **Custom fine-tuning**: User-specific model preferences
-4. **Local models**: Support for self-hosted LLMs
-5. **Multimodal input**: Image and document analysis
-
----
-
-**Last updated:** 2026-01-24 (v2.0.0)
+**Last updated:** 2026-08-12 (v3.0.0)

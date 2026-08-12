@@ -62,10 +62,10 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'processing',
-    selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
-      { provider: LlmProviders.Google, model: LlmModels.Gemini25Pro, status: 'pending' },
+      { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
       { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
     ],
     startedAt: '2024-01-01T00:00:00Z',
@@ -108,8 +108,8 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Result',
         },
@@ -128,8 +128,8 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Result',
         },
@@ -152,8 +152,8 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -177,8 +177,8 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'failed',
           error: 'API Error',
         },
@@ -206,8 +206,8 @@ describe('checkLlmCompletion', () => {
     const research = createTestResearch({
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -246,8 +246,8 @@ describe('checkLlmCompletion', () => {
       },
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -279,11 +279,11 @@ describe('checkLlmCompletion', () => {
 
   it('handles multiple failed providers', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
+      selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },
@@ -313,11 +313,11 @@ describe('checkLlmCompletion', () => {
 
   it('ignores stale llmResults for providers not in selectedModels', async () => {
     const research = createTestResearch({
-      selectedModels: [LlmModels.Gemini25Pro],
+      selectedModels: [LlmModels.GPT54],
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Pro,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.GPT54,
           status: 'completed',
           result: 'Google Result',
         },

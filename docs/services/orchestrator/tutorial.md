@@ -112,8 +112,8 @@ INFO: Repository path exists, validating...
 INFO: Repository validation passed
 INFO: Code worker auth active { expiresInMinutes: 210, subscriptionType: 'max' }
 INFO: Codex worker auth active { authMode: 'chatgpt', expiresInMinutes: 190 }
-INFO: Completion verification configuration (deterministic parser + resume-summary LLM) { completionMaxAttempts: 3, validationModels: [ 'or:google/gemma-4-31b-it', 'gemini-2.5-flash' ] }
-INFO: Agent compliance validator configuration { validationModels: [ 'or:google/gemma-4-31b-it', 'gemini-2.5-flash' ], hasOpenRouterApiKey: true }
+INFO: Completion verification configuration (deterministic parser + resume-summary LLM) { completionMaxAttempts: 3, validationModels: [ 'or:google/gemma-4-31b-it', 'or:deepseek/deepseek-v4-flash' ] }
+INFO: Agent compliance validator configuration { validationModels: [ 'or:google/gemma-4-31b-it', 'or:deepseek/deepseek-v4-flash' ], hasOpenRouterApiKey: true }
 INFO: Orchestrator HTTP server started { port: 8199 }
 INFO: No interrupted tasks to recover
 INFO: Starting heartbeat manager { intervalMs: 600000 }
@@ -491,7 +491,7 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | Tests skipped (E2E)                               | Docker network or test image missing  | See Part 3 prerequisites                                                                                                                          |
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
-| `INTEXURAOS_GEMINI_APP_API_KEY not set`           | Missing required env var              | Add to `.envrc.local` and run `direnv allow`                                                                                                      |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY not set`       | Missing required env var              | Populate the Secret Manager version and rerun secret sync                                                                                         |
 | `INTEXURAOS_KIMI_APP_API_KEY not set`             | Missing required Kimi Code key        | Populate the Secret Manager version, run `./scripts/sync-secrets.sh --add-new`, then `direnv allow`                                               |
 | `TASK_RUNTIME_HARD_ERROR`                         | Worker/runtime failure or verifier hard error | Inspect the terminal logs and retry only after the runtime error is understood                                                              |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |

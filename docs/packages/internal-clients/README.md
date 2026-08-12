@@ -42,7 +42,7 @@ interface UserServiceConfig {
   internalAuthToken: string;
   pricingContext: IPricingContext;
   logger: Logger;
-  platformGeminiApiKey?: string | undefined; // platform-level fallback: Gemini 2.5 Flash
+  platformOpenRouterApiKey?: string | undefined; // platform-level OpenRouter fallback
 }
 ```
 
@@ -88,7 +88,7 @@ Build a fully configured LLM client for a user in a single call. Performs three 
 2. Fetch the user's API keys for the required provider (`GET /internal/users/:userId/llm-keys`)
 3. Create an `LlmGenerateClient` via `@intexuraos/llm-factory`
 
-Falls back to `Gemini25Flash` when the user has no model preference. If the user has no API key for the required provider and `platformGeminiApiKey` is configured, silently falls back to Gemini 2.5 Flash using the platform key.
+Falls back to the platform OpenRouter default when the user has no supported preference or provider key. Legacy direct Google preferences are normalized to that OpenRouter model.
 
 Returns `Result<LlmGenerateClient, UserServiceError>` with error codes:
 

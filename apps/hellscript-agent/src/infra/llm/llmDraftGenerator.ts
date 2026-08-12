@@ -5,7 +5,7 @@ import type { MaterializedBufferState } from '../../domain/models/materializedBu
 import type { WritingCategory } from '../../domain/models/writingCategory.js';
 import { generateDraftPrompt } from '../../prompts/generate-draft-prompt.js';
 
-export class GeminiDraftGenerator implements DraftGenerator {
+export class LlmDraftGenerator implements DraftGenerator {
   private readonly client: LlmGenerateClient;
 
   constructor(client: LlmGenerateClient) {

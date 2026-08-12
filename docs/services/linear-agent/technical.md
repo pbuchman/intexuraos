@@ -63,8 +63,8 @@ graph TB
         FS[(Firestore)]
     end
 
-    subgraph "AI Providers"
-        GEM[Gemini 2.5 Flash / Pro]
+    subgraph "LLM Resolution"
+        LLM[LlmGenerateClient<br/>OpenRouter platform fallback]
     end
 
     WA --> AA
@@ -110,11 +110,11 @@ graph TB
     UC11 --> PCR
     UC12 --> LAC
     UC12 --> PCR
-    IPC --> GEM
+    IPC --> LLM
     LAC --> LM
     LAC --> RC
     LAC --> Linear
-    LES --> GEM
+    LES --> LLM
     CR --> FS
     FIR --> FS
     PAR --> FS
@@ -141,7 +141,7 @@ sequenceDiagram
         LA-->>AA: Return existing result
     else New Action
         LA->>LES: Extract issue data from text
-        LES->>LES: Gemini inference
+        LES->>LES: LLM inference
         LES-->>LA: ExtractedIssueData
         alt Valid Extraction
             LA->>FS: Get user connection
@@ -211,7 +211,7 @@ sequenceDiagram
     participant Scheduler as Cloud Scheduler
     participant LA as Linear Agent
     participant FS as Firestore
-    participant GEM as Gemini
+    participant LLM as Resolved LLM
     participant Linear as Linear API
     participant User as User (Web App)
 
@@ -220,8 +220,8 @@ sequenceDiagram
     alt Below Threshold (200)
         LA-->>Scheduler: Skipped (below threshold)
     else Above Threshold
-        LA->>GEM: Classify issues for deletion
-        GEM-->>LA: Scored candidates
+        LA->>LLM: Classify issues for deletion
+        LLM-->>LA: Scored candidates
         LA->>FS: Store candidates for review
         LA-->>Scheduler: Stats (stored count)
     end
@@ -254,7 +254,7 @@ LLM pricing logic has been removed from linear-agent. Pricing is now handled cen
 
 ### Per-Request User LLM Client for Pruning (INT-1369)
 
-Issue pruning no longer uses a fixed Gemini client initialized at startup. Instead, the pruning route resolves an LLM client from the first available connected user at request time via `userServiceClient.getLlmClient()`. This aligns pruning with the standard per-user model resolution pattern and removes the dependency on `INTEXURAOS_GEMINI_APP_API_KEY` for pruning. The `createClassifier` factory in the service container now accepts an `LlmGenerateClient` parameter. If no connected user can provide an LLM client, pruning skips gracefully.
+Issue pruning resolves an LLM client from the first available connected user at request time via `userServiceClient.getLlmClient()`. Direct Google models are normalized to the platform OpenRouter default, so pruning never needs a direct Gemini credential. The `createClassifier` factory in the service container accepts an `LlmGenerateClient` parameter. If no connected user can provide an LLM client, pruning skips gracefully.
 
 ### Pruning Guard for Pending Candidates (INT-1349)
 
@@ -566,7 +566,7 @@ Top-level orchestrator for all webhook events. Validates the HMAC-SHA256 signatu
 
 ### pruneIssues
 
-Orchestrates the issue pruning workflow: collects all issues across connected users, checks against the activation threshold (200 issues), classifies candidates via Gemini, and stores them in Firestore for user review. Does not delete issues directly — deletion requires user confirmation via `confirmPruneDeletion`.
+Orchestrates the issue pruning workflow: collects all issues across connected users, checks against the activation threshold (200 issues), classifies candidates with the resolved LLM client, and stores them in Firestore for user review. Does not delete issues directly — deletion requires user confirmation via `confirmPruneDeletion`.
 
 ### confirmPruneDeletion
 
@@ -611,7 +611,7 @@ Triggered by webhook events when an issue is assigned for the first time. Uses `
 
 ### LLM Extraction Service
 
-Uses the user's configured LLM provider (typically Gemini 2.5 Flash) to parse natural language into structured issue data. Provider selection is abstracted via `userServiceClient.getLlmClient()` — the service does not reference specific providers directly. Parsing and validation logic lives in domain `extractionParser.ts`, separated from the LLM call infrastructure.
+Uses the LLM client resolved by `userServiceClient.getLlmClient()` to parse natural language into structured issue data. Supported personal provider keys remain available; platform fallback traffic is routed through OpenRouter. Parsing and validation logic lives in domain `extractionParser.ts`, separated from the LLM call infrastructure.
 
 **Prompt Strategy:**
 
@@ -627,7 +627,7 @@ Uses the user's configured LLM provider (resolved per-request from the first ava
 
 1. Builds a structured prompt with issue metadata (identifier, title, state, labels, description preview, parent relationships)
 2. Requests the LLM to return a JSON array of scored candidates
-3. Validates the response with a Zod schema (`GeminiCandidateArraySchema`) requiring valid identifiers, 0-100 scores, non-empty reasons, and valid categories
+3. Validates the response with a Zod schema (`LlmCandidateArraySchema`) requiring valid identifiers, 0-100 scores, non-empty reasons, and valid categories
 4. Skips gracefully if no connected user can resolve an LLM client
 5. Skips if candidates from a previous run are still pending user review
 
@@ -707,7 +707,7 @@ The client is split into three focused modules:
 | `INTEXURAOS_AUTH_ISSUER`              | Yes      | Auth0 issuer                                           |
 | `INTEXURAOS_AUTH_AUDIENCE`            | Yes      | Auth0 audience                                         |
 | `INTEXURAOS_SENTRY_DSN`               | Yes      | Sentry error tracking                                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key (user-service client fallback) |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`   | Yes      | Platform OpenRouter API key                            |
 | `INTEXURAOS_ENVIRONMENT`              | No       | Sentry environment tag                                 |
 
 ## Dependencies
@@ -729,7 +729,7 @@ The client is split into three focused modules:
 | --------------- | ----------------------------------- | ----------------------- |
 | Linear API      | Issue CRUD, team/state queries      | Return error to client  |
 | Linear Webhooks | Real-time issue change events       | Retry by Linear         |
-| Gemini API      | Issue extraction / titles / pruning | Return extraction error |
+| OpenRouter API  | Issue extraction / titles / pruning | Return extraction error |
 
 ## Error Handling
 
@@ -775,7 +775,7 @@ The client is split into three focused modules:
 - The context endpoint caps comments at 100 and filters empty/whitespace bodies to match the old Linear GraphQL `first:100` behavior
 - The metadata endpoint performs a write-through label cache update after successful Linear API call, preventing stale labels until the next webhook
 - The metadata endpoint fires a best-effort `notifyGroupSummaryRecompute` call to code-agent; failures are logged but do not fail the request
-- Issue pruning uses the platform Gemini API key (`INTEXURAOS_GEMINI_APP_API_KEY`), not the user's personal LLM key
+- Issue pruning uses the resolved user client; absent or legacy direct-provider choices are routed through the platform OpenRouter key
 - `confirmPruneDeletion` uses any connected user's API key for deletion — all users share one Linear workspace
 - The `PATCH /internal/linear/issues/:issueId/metadata` endpoint accepts both Linear UUIDs and human-readable identifiers (e.g., "INT-123") as the `:issueId` parameter
 
@@ -809,7 +809,7 @@ apps/linear-agent/
 │   │       ├── syncCommentFromWebhook.ts        # Comment webhook processing
 │   │       ├── triggerCodeTaskFromAssignment.ts  # Auto-trigger on assignment
 │   │       ├── fullSyncUseCase.ts               # Full issue reconciliation
-│   │       ├── pruneIssuesUseCase.ts            # Gemini-based issue classification
+│   │       ├── pruneIssuesUseCase.ts            # LLM-based issue classification
 │   │       ├── confirmPruneDeletionUseCase.ts   # User-confirmed deletion
 │   │       ├── checkIdempotency.ts              # Dedup check for process-action
 │   │       ├── buildIssueTree.ts                # Issue tree BFS traversal
@@ -834,7 +834,7 @@ apps/linear-agent/
 │   │   ├── linearWebhookValidation.ts     # HMAC-SHA256 validation
 │   │   └── llm/
 │   │       ├── linearActionExtractionService.ts
-│   │       └── issuePruningClassifier.ts  # Gemini-based prune scoring
+│   │       └── issuePruningClassifier.ts  # LLM-based prune scoring
 │   ├── routes/
 │   │   ├── linearRoutes.ts          # Public API (16 endpoints)
 │   │   ├── internalRoutes.ts        # Internal: process-action, validate, title, sync, prune

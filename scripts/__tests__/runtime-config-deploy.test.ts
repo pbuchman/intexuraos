@@ -11,6 +11,7 @@ const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
 const loadGrafanaEnvPath = resolve(repoRoot, 'scripts/observability/load-grafana-cloud-env.sh');
 const generateOrchestratorEnvPath = resolve(repoRoot, 'scripts/generate-orchestrator-env.mjs');
+const localEnvExamplePath = resolve(repoRoot, '.envrc.local.example');
 
 const VERSIONED_CONFIG_NAMES = [
   'INTEXURAOS_AUTH0_CLIENT_ID',
@@ -40,7 +41,10 @@ const VERSIONED_CONFIG_NAMES = [
   'INTEXURAOS_SENTRY_DSN_WEB',
 ] as const;
 
-const RETIRED_RUNTIME_NAMES = ['INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'] as const;
+const RETIRED_RUNTIME_NAMES = [
+  'INTEXURAOS_GEMINI_APP_API_KEY',
+  'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI',
+] as const;
 const SECRET_MANAGER_BLOCKLIST = [...VERSIONED_CONFIG_NAMES, ...RETIRED_RUNTIME_NAMES] as const;
 
 function makeExecutable(path: string, contents: string): void {
@@ -117,7 +121,6 @@ function validOrchestratorEnvironment(
     INTEXURAOS_MIMO_APP_API_KEY: 'mimo-token',
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-token',
     INTEXURAOS_KIMI_APP_API_KEY: 'kimi-token',
-    INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-token',
     INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-token',
     INTEXURAOS_SENTRY_DSN: 'https://public@example.invalid/1',
     ...overrides,
@@ -252,7 +255,7 @@ describe('runtime configuration cutover', () => {
     expect(script).not.toMatch(
       /HETZNER_RUNTIME_SECRETS=\([\s\S]*?INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI[\s\S]*?\)/u
     );
-    expect(runtimeSecrets).toHaveLength(28);
+    expect(runtimeSecrets).toHaveLength(27);
     expect(runtimeSecrets.every((name) => policy.secretManagerNames.includes(name))).toBe(true);
     for (const name of SECRET_MANAGER_BLOCKLIST) {
       expect(runtimeSecrets, name).not.toContain(name);
@@ -427,7 +430,7 @@ fi
       expect(readFileSync(internalAuthTokenPath, 'utf8')).toBe(
         'secret-value-for-INTEXURAOS_INTERNAL_AUTH_TOKEN'
       );
-      expect(result.stdout).toContain('with 28 secrets');
+      expect(result.stdout).toContain('with 27 secrets');
     }
   );
 
@@ -652,6 +655,22 @@ fi
     expect(prod).toContain('SERVICE_RUNTIME_ENV_KEYS');
     expect(prod).not.toContain('SERVICE_SECRET_KEYS');
     expect(prod).not.toContain('INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI');
+    expect(dev).not.toContain('INTEXURAOS_GEMINI_APP_API_KEY');
+    expect(prod).not.toContain('INTEXURAOS_GEMINI_APP_API_KEY');
+    expect(readFileSync(localEnvExamplePath, 'utf8')).not.toContain(
+      'INTEXURAOS_GEMINI_APP_API_KEY'
+    );
+    expect(dev).toContain('or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash');
+    for (const serviceName of [
+      'calendar-agent',
+      'hellscript-agent',
+      'linear-agent',
+      'research-agent',
+      'web-agent',
+    ]) {
+      const serviceSection = dev.split(`'${serviceName}': {`)[1]?.split('\n  },')[0] ?? '';
+      expect(serviceSection, serviceName).toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
+    }
     expect(readFileSync(loadSecretsPath, 'utf8')).not.toContain(
       'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI'
     );
@@ -680,6 +699,7 @@ describe('orchestrator environment generator', () => {
           ...validOrchestratorEnvironment(),
           INTEXURAOS_WHATSAPP_ACCESS_TOKEN: 'must-not-leak',
           INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET: 'must-not-leak-either',
+          INTEXURAOS_GEMINI_APP_API_KEY: 'retired-key-must-not-leak',
         },
         stdio: 'pipe',
       }
@@ -701,6 +721,7 @@ describe('orchestrator environment generator', () => {
     expect(generated['INTEXURAOS_WORKER_CAPACITY']).toBe('3');
     expect(generated['INTEXURAOS_WHATSAPP_ACCESS_TOKEN']).toBeUndefined();
     expect(generated['INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET']).toBeUndefined();
+    expect(generated['INTEXURAOS_GEMINI_APP_API_KEY']).toBeUndefined();
     expect(statSync(outputPath).mode & 0o777).toBe(0o600);
   });
 
@@ -756,6 +777,28 @@ describe('orchestrator environment generator', () => {
     expect(readFileSync(outputPath, 'utf8')).toBe('PREVIOUS=complete\n');
     expect(basename(outputPath)).toBe('env');
   });
+
+  it('requires the platform OpenRouter key before replacing the orchestrator env file', () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), 'orchestrator-env-openrouter-'));
+    const outputPath = join(tempRoot, 'env');
+    writeFileSync(outputPath, 'PREVIOUS=complete\n', { mode: 0o600 });
+    const environment = validOrchestratorEnvironment();
+    delete environment['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+
+    const result = spawnSync(
+      process.execPath,
+      [generateOrchestratorEnvPath, '--output', outputPath, '--user-home', tempRoot],
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: environment,
+      }
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
+    expect(readFileSync(outputPath, 'utf8')).toBe('PREVIOUS=complete\n');
+  });
 });
 
 describe('runtime configuration documentation', () => {
@@ -782,9 +825,11 @@ describe('runtime configuration documentation', () => {
     );
     expect(policyRunbook).toContain('config/environments/policy.json');
     expect(policyRunbook).toContain(
-      '26 obsolete Secret Manager containers have been permanently removed'
+      '27 obsolete Secret Manager containers have been permanently removed'
     );
-    expect(policyRunbook).toContain('permanent delete-only tombstone');
+    expect(policyRunbook).toContain('INTEXURAOS_GEMINI_APP_API_KEY');
+    expect(policyRunbook).toContain('OpenRouter');
+    expect(policyRunbook).toContain('delete-only tombstone');
     expect(policyRunbook).toContain('./runtime-secret-manager-cleanup.md');
     expect(localSetup).toContain('../operations/runtime-configuration.md');
     expect(orchestratorReadme).toContain('scripts/generate-orchestrator-env.mjs');

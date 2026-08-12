@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmProviders } from '@intexuraos/llm-contract';
 import { FakeUsageSink, createFakeUsageSink } from '../testFixtures.js';
 import type { UsageLogParams } from '../usageLogger.js';
 
 const sampleParams: UsageLogParams = {
   userId: 'user-1',
   provider: LlmProviders.Google,
-  model: LlmModels.Gemini25Flash,
+  model: LegacyGoogleModels.Gemini25Flash,
   callType: 'generate',
   usage: {
     inputTokens: 10,

@@ -1,4 +1,4 @@
-import type { Google, OpenAI } from '@intexuraos/llm-contract';
+import type { OpenAI } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type {
   GeneratedImageRepository,
@@ -14,7 +14,7 @@ export interface ServiceContainer {
   imageStorage: ImageStorage;
   userServiceClient: UserServiceClient;
   createPromptGenerator: (
-    provider: Google | OpenAI,
+    provider: OpenAI,
     model: string,
     apiKey: string,
     userId: string,
