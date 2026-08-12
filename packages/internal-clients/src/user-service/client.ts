@@ -7,13 +7,16 @@ import type { Result } from '@intexuraos/common-core';
 import { err, ERROR_HTTP_STATUS, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
   getProviderForModel,
+  DEFAULT_PLATFORM_LLM_MODEL,
   IntexAgentModels,
   isDefaultEligibleModel,
   isIntexAgentModel,
-  LlmModels,
+  isLegacyGoogleModel,
+  isOpenRouterModel,
   LlmProviders,
   type LlmProvider,
-  type LLMModel,
+  type ExecutableLlmProvider,
+  type DefaultEligibleModel,
 } from '@intexuraos/llm-contract';
 import {
   createLlmClient,
@@ -50,8 +53,7 @@ export type {
   IntexAgentRuntimeSettingsV1,
 } from './types.js';
 
-const PROVIDER_KEYS: Record<LlmProvider, string> = {
-  google: 'google',
+const PROVIDER_KEYS: Record<ExecutableLlmProvider, string> = {
   openai: 'openai',
   anthropic: 'anthropic',
   perplexity: 'perplexity',
@@ -271,8 +273,16 @@ function runtimeSettingsError(
   }
 }
 
-export function providerToKeyField(provider: LlmProvider): string {
+export function providerToKeyField(provider: ExecutableLlmProvider): string {
   return PROVIDER_KEYS[provider];
+}
+
+function normalizeLegacyModelPreference(model: string): string {
+  if (isLegacyGoogleModel(model)) {
+    return DEFAULT_PLATFORM_LLM_MODEL;
+  }
+
+  return model;
 }
 
 /**
@@ -348,7 +358,6 @@ export function createUserServiceClient(
         const body = (await response.json()) as {
           success: boolean;
           data: {
-            google?: string | null;
             openai?: string | null;
             anthropic?: string | null;
             perplexity?: string | null;
@@ -360,9 +369,6 @@ export function createUserServiceClient(
 
         // Convert null values to undefined (null is used by JSON to distinguish from missing)
         const result: DecryptedApiKeys = {};
-        if (data.google !== null && data.google !== undefined) {
-          result.google = data.google;
-        }
         if (data.openai !== null && data.openai !== undefined) {
           result.openai = data.openai;
         }
@@ -374,6 +380,8 @@ export function createUserServiceClient(
         }
         if (data.openrouter !== null && data.openrouter !== undefined) {
           result.openrouter = data.openrouter;
+        } else if (config.platformOpenRouterApiKey !== undefined) {
+          result.openrouter = config.platformOpenRouterApiKey;
         }
 
         return ok(result);
@@ -422,19 +430,24 @@ export function createUserServiceClient(
         };
 
         // Step 2: Determine model (use user's preference or default)
-        const rawModel = settingsBody.data.llmPreferences?.defaultModel ?? LlmModels.Gemini25Flash;
+        const rawModel =
+          settingsBody.data.llmPreferences?.defaultModel ?? DEFAULT_PLATFORM_LLM_MODEL;
         const fallbackModelRaw = settingsBody.data.llmPreferences?.fallbackModel;
 
+        const defaultModel = normalizeLegacyModelPreference(rawModel);
+        const fallbackModel =
+          fallbackModelRaw === undefined
+            ? undefined
+            : normalizeLegacyModelPreference(fallbackModelRaw);
+
         // Validate that the model is supported (including OpenRouter models)
-        if (!isDefaultEligibleModel(rawModel)) {
+        if (!isDefaultEligibleModel(defaultModel)) {
           logger.warn({ userId, invalidModel: rawModel }, 'User has invalid model preference');
           return err({
             code: 'INVALID_MODEL',
             message: `Invalid model: ${rawModel}. Please select a valid model.`,
           });
         }
-
-        const defaultModel = rawModel;
 
         // Step 3: Get API key for that model
         const provider = getProviderForModel(defaultModel);
@@ -462,17 +475,20 @@ export function createUserServiceClient(
           data: Record<string, string | null | undefined>;
         };
 
-        const apiKey = keysBody.data[keyField];
+        const configuredApiKey = keysBody.data[keyField];
+        const apiKey =
+          configuredApiKey ??
+          (isOpenRouterModel(defaultModel) ? config.platformOpenRouterApiKey : undefined);
 
-        if (apiKey === null || apiKey === undefined) {
-          if (config.platformGeminiApiKey !== undefined) {
+        if (apiKey === undefined) {
+          if (config.platformOpenRouterApiKey !== undefined) {
             logger.warn(
               { userId, provider, requestedModel: defaultModel },
-              'No API key for provider, falling back to platform Gemini25Flash'
+              'No API key for provider, falling back to platform OpenRouter default'
             );
-            const fallbackModel = LlmModels.Gemini25Flash;
+            const fallbackModel = DEFAULT_PLATFORM_LLM_MODEL;
             const fallbackClient = createLlmClient({
-              apiKey: config.platformGeminiApiKey,
+              apiKey: config.platformOpenRouterApiKey,
               model: fallbackModel,
               userId,
               logger: config.logger,
@@ -481,7 +497,7 @@ export function createUserServiceClient(
             });
 
             logger.info(
-              { userId, model: fallbackModel, provider: LlmProviders.Google },
+              { userId, model: fallbackModel, provider: LlmProviders.OpenRouter },
               'LLM client created successfully'
             );
 
@@ -497,17 +513,19 @@ export function createUserServiceClient(
 
         // Helper: build a client for a given model using the fetched API keys
         function buildClientForModel(
-          model: string,
+          model: DefaultEligibleModel,
           apiKeys: Record<string, string | null | undefined>
         ): LlmGenerateClient | null {
           const modelProvider = getProviderForModel(model);
           const modelKeyField = providerToKeyField(modelProvider);
-          const modelApiKey = apiKeys[modelKeyField];
-          if (modelApiKey === null || modelApiKey === undefined) return null;
+          const modelApiKey =
+            apiKeys[modelKeyField] ??
+            (isOpenRouterModel(model) ? config.platformOpenRouterApiKey : undefined);
+          if (modelApiKey === undefined) return null;
 
           return createLlmClient({
             apiKey: modelApiKey,
-            model: model as LLMModel,
+            model,
             userId,
             logger: config.logger,
             usageSink: config.usageSink,
@@ -518,7 +536,7 @@ export function createUserServiceClient(
         // Step 4: Create and return the LLM client
         const clientConfig: LlmClientConfig = {
           apiKey,
-          model: defaultModel as LLMModel,
+          model: defaultModel,
           userId,
           logger: config.logger,
           usageSink: config.usageSink,
@@ -530,7 +548,11 @@ export function createUserServiceClient(
         logger.info({ userId, model: defaultModel, provider }, 'LLM client created successfully');
 
         // Step 6: Wrap with fallback retry if fallback model is configured
-        if (fallbackModelRaw !== undefined && isDefaultEligibleModel(fallbackModelRaw)) {
+        if (
+          fallbackModel !== undefined &&
+          fallbackModel !== defaultModel &&
+          isDefaultEligibleModel(fallbackModel)
+        ) {
           const primaryClient = client;
           const wrappedClient: LlmGenerateClient = {
             async generate(prompt: string, options: GenerateOptions) {
@@ -541,26 +563,23 @@ export function createUserServiceClient(
                 {
                   userId,
                   primaryModel: defaultModel,
-                  fallbackModel: fallbackModelRaw,
+                  fallbackModel,
                   error: primaryResult.error,
                   _skipSentry: true,
                 },
                 'Primary model failed, attempting fallback'
               );
 
-              const fallbackClient = buildClientForModel(fallbackModelRaw, keysBody.data);
+              const fallbackClient = buildClientForModel(fallbackModel, keysBody.data);
               if (fallbackClient === null) {
-                logger.warn(
-                  { userId, fallbackModel: fallbackModelRaw },
-                  'No API key for fallback model'
-                );
+                logger.warn({ userId, fallbackModel }, 'No API key for fallback model');
                 return primaryResult;
               }
 
               const fallbackResult = await fallbackClient.generate(prompt, options);
               if (fallbackResult.ok) {
                 logger.info(
-                  { userId, primaryModel: defaultModel, fallbackModel: fallbackModelRaw },
+                  { userId, primaryModel: defaultModel, fallbackModel },
                   'Fallback model succeeded after primary failure'
                 );
               }

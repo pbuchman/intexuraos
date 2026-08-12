@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import {
   getUnsupportedHistoricalModels,
   getUnsupportedRetryMessage,
@@ -12,19 +12,19 @@ describe('storedResearchModels', () => {
     expect(isRetryableStoredResearchModel('or:openai/gpt-5.4')).toBe(true);
   });
 
-  it('treats a current non-OpenRouter model as retryable', () => {
-    expect(isRetryableStoredResearchModel(LlmModels.Gemini25Pro)).toBe(true);
+  it('rejects historical direct Google models', () => {
+    expect(isRetryableStoredResearchModel(LegacyGoogleModels.Gemini25Pro)).toBe(false);
   });
 
   it('filters only unsupported historical models from mixed current and OpenRouter values', () => {
     expect(
       getUnsupportedHistoricalModels([
-        LlmModels.Gemini25Pro,
+        LegacyGoogleModels.Gemini25Pro,
         'or:openai/gpt-5.4',
         'glm-4.7',
         'or:unknown/model',
       ])
-    ).toEqual(['glm-4.7', 'or:unknown/model']);
+    ).toEqual([LegacyGoogleModels.Gemini25Pro, 'glm-4.7', 'or:unknown/model']);
   });
 
   it('formats the retry block message listing all unsupported models', () => {

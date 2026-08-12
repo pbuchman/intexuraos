@@ -17,7 +17,6 @@ const ROOT = process.cwd();
 
 const ALLOWED_CLIENT_FILES = [
   // LLM client implementations
-  'packages/infra-gemini/src/client.ts',
   'packages/infra-gpt/src/client.ts',
   'packages/infra-claude/src/client.ts',
   'packages/infra-perplexity/src/client.ts',

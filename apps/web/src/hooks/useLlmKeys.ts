@@ -3,7 +3,7 @@ import { getErrorMessage } from '@intexuraos/common-core/errors';
 import { useAuth } from '@/context';
 import { ApiError } from '@/services/apiClient.js';
 import { deleteLlmKey, getLlmKeys, setLlmKey, testLlmKey, updateIntexAgentModel, updateLlmPreferences } from '@/services/llmKeysApi';
-import type { LlmKeysResponse, LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
+import type { ConfigurableLlmProvider, LlmKeysResponse, LlmTestResult } from '@/services/llmKeysApi.types';
 import { useIntexAgentModel, type UseIntexAgentModelResult } from './useIntexAgentModel.js';
 
 interface UseLlmKeysResult {
@@ -15,9 +15,9 @@ interface UseLlmKeysResult {
   error: string | null;
   savingDefaultModel: boolean;
   intexAgentModel: UseIntexAgentModelResult;
-  setKey: (provider: LlmProvider, apiKey: string) => Promise<void>;
-  deleteKey: (provider: LlmProvider) => Promise<void>;
-  testKey: (provider: LlmProvider) => Promise<LlmTestResult>;
+  setKey: (provider: ConfigurableLlmProvider, apiKey: string) => Promise<void>;
+  deleteKey: (provider: ConfigurableLlmProvider) => Promise<void>;
+  testKey: (provider: ConfigurableLlmProvider) => Promise<LlmTestResult>;
   setDefaultModel: (model: string) => Promise<void>;
   setFallbackModel: (model: string | null) => Promise<void>;
   refresh: (showLoading?: boolean) => Promise<void>;
@@ -116,7 +116,7 @@ export function useLlmKeys(): UseLlmKeysResult {
   }, [refresh]);
 
   const setKey = useCallback(
-    async (provider: LlmProvider, apiKey: string): Promise<void> => {
+    async (provider: ConfigurableLlmProvider, apiKey: string): Promise<void> => {
       const userId = user?.sub;
       if (userId === undefined) return;
       const subjectEpoch = subjectEpochRef.current;
@@ -138,7 +138,7 @@ export function useLlmKeys(): UseLlmKeysResult {
   );
 
   const deleteKey = useCallback(
-    async (provider: LlmProvider): Promise<void> => {
+    async (provider: ConfigurableLlmProvider): Promise<void> => {
       const userId = user?.sub;
       if (userId === undefined) return;
       const subjectEpoch = subjectEpochRef.current;
@@ -160,7 +160,7 @@ export function useLlmKeys(): UseLlmKeysResult {
   );
 
   const testKey = useCallback(
-    async (provider: LlmProvider): Promise<LlmTestResult> => {
+    async (provider: ConfigurableLlmProvider): Promise<LlmTestResult> => {
       const userId = user?.sub;
       if (userId === undefined) {
         throw new Error('User not authenticated');

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { ModelPricing } from '@intexuraos/llm-contract';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmModels } from '@intexuraos/llm-contract';
 import { ingestUsageEvents } from '../../../domain/usecases/ingestUsageEvents.js';
 import { FakeUsageEventRepository } from '../../fakeUsageEventRepository.js';
 import { FakeUsageAggregateRepository } from '../../fakeUsageAggregateRepository.js';
@@ -398,7 +398,7 @@ describe('ingestUsageEvents', () => {
     });
 
     it('calculates image generation cost from imagePricing when imageCount is one', async () => {
-      pricingCache.setPricing(LlmProviders.Google, LlmModels.Gemini25FlashImage, {
+      pricingCache.setPricing(LlmProviders.Google, LegacyGoogleModels.Gemini25FlashImage, {
         inputPricePerMillion: 0,
         outputPricePerMillion: 0,
         imagePricing: { '1024x1024': 0.03 },
@@ -408,7 +408,7 @@ describe('ingestUsageEvents', () => {
         eventId: 'evt_google_image_generation',
         request: {
           provider: LlmProviders.Google,
-          model: LlmModels.Gemini25FlashImage,
+          model: LegacyGoogleModels.Gemini25FlashImage,
           operation: 'image_generation',
           success: true,
           durationMs: 1500,

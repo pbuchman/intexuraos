@@ -17,8 +17,8 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
       });
 
       expect(research.favourite).toBe(false);
@@ -29,7 +29,7 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet46],
+        selectedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeSonnet46],
         synthesisModel: LlmModels.ClaudeSonnet46,
       });
 
@@ -37,7 +37,7 @@ describe('Research factory functions', () => {
       expect(research.userId).toBe('user-123');
       expect(research.prompt).toBe('Test prompt');
       expect(research.status).toBe('pending');
-      expect(research.selectedModels).toEqual([LlmModels.Gemini25Flash, LlmModels.ClaudeSonnet46]);
+      expect(research.selectedModels).toEqual([LlmModels.O4MiniDeepResearch, LlmModels.ClaudeSonnet46]);
       expect(research.synthesisModel).toBe(LlmModels.ClaudeSonnet46);
       expect(research.llmResults).toHaveLength(2);
     });
@@ -48,8 +48,8 @@ describe('Research factory functions', () => {
         userId: 'user-123',
         prompt: 'Improved prompt with more context',
         originalPrompt: 'Original poor prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
       });
 
       expect(research.prompt).toBe('Improved prompt with more context');
@@ -61,8 +61,8 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
       });
 
       expect(research.originalPrompt).toBeUndefined();
@@ -73,8 +73,8 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
         userName: 'Piotr Buchman',
         userEmail: 'pbuchman@example.com',
       });
@@ -88,8 +88,8 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
         userName: 'Test User',
       });
 
@@ -102,8 +102,8 @@ describe('Research factory functions', () => {
         id: 'test-id',
         userId: 'user-123',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
       });
 
       expect(research.userName).toBeUndefined();
@@ -118,8 +118,8 @@ describe('Research factory functions', () => {
         userId: 'user-123',
         title: 'Draft Title',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
       });
 
       expect(research.favourite).toBe(false);
@@ -131,8 +131,8 @@ describe('Research factory functions', () => {
         userId: 'user-123',
         title: 'Draft Title',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
       });
 
       expect(research.status).toBe('draft');
@@ -145,8 +145,8 @@ describe('Research factory functions', () => {
         userId: 'user-123',
         title: 'Draft Title',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.Gemini25Flash],
-        synthesisModel: LlmModels.Gemini25Flash,
+        selectedModels: [LlmModels.O4MiniDeepResearch],
+        synthesisModel: LlmModels.O4MiniDeepResearch,
         userName: 'Draft User',
         userEmail: 'draft@example.com',
       });
@@ -162,13 +162,13 @@ describe('Research factory functions', () => {
       userId: 'user-123',
       title: 'Source Title',
       prompt: 'Original prompt',
-      selectedModels: [LlmModels.Gemini25Flash],
-      synthesisModel: LlmModels.Gemini25Flash,
+      selectedModels: [LlmModels.O4MiniDeepResearch],
+      synthesisModel: LlmModels.O4MiniDeepResearch,
       status: 'completed',
       llmResults: [
         {
-          provider: LlmProviders.Google,
-          model: LlmModels.Gemini25Flash,
+          provider: LlmProviders.OpenAI,
+          model: LlmModels.O4MiniDeepResearch,
           status: 'completed',
           result: 'Test result',
           costUsd: 0.05,

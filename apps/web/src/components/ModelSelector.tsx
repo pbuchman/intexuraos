@@ -21,14 +21,6 @@ interface ProviderConfig {
 
 const PROVIDER_MODELS: ProviderConfig[] = [
   {
-    id: LlmProviders.Google,
-    displayName: 'Google',
-    models: [
-      { id: LlmModels.Gemini25Flash, name: 'Gemini Flash' },
-      { id: LlmModels.Gemini25Pro, name: 'Gemini Pro' },
-    ],
-  },
-  {
     id: LlmProviders.Anthropic,
     displayName: 'Anthropic',
     models: [

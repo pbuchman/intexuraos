@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { err, ok } from '@intexuraos/common-core';
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(),
-}));
-
 import { buildServer } from '../../server.js';
 import { setServices, resetServices } from '../../services.js';
 import type { FastifyInstance } from 'fastify';

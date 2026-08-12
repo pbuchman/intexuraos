@@ -3,6 +3,7 @@ import {
   IntexAgentModels,
   OpenRouterToolCallingModels,
   LlmProviders,
+  LegacyGoogleModels,
   LlmModels,
 } from '@intexuraos/llm-contract';
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
@@ -16,12 +17,6 @@ const mockLogger: Logger = {
 };
 
 const mockUsageSink = new FakeUsageSink();
-
-const mockGeminiGenerate = vi.fn();
-
-class MockGeminiClient {
-  generate = mockGeminiGenerate;
-}
 
 const mockOrGenerate = vi.fn();
 const mockOrGenerateChat = vi.fn();
@@ -48,11 +43,6 @@ const mockPerplexityGenerate = vi.fn();
 class MockPerplexityGenerateClient {
   generate = mockPerplexityGenerate;
 }
-
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(() => new MockGeminiClient()),
-  createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
-}));
 
 vi.mock('@intexuraos/infra-openrouter', () => ({
   createOpenRouterToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
@@ -83,42 +73,22 @@ describe('llmClientFactory', () => {
   });
 
   describe('createLlmClient', () => {
-    it('creates Gemini client for Google models', () => {
-      const client = createLlmClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-
-      expect(client.generate).toBeDefined();
-      expect(client.generateChat).toBeDefined();
-    });
-
-    it('creates Gemini 2.5 Pro client', () => {
-      const client = createLlmClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Pro,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-
-      expect(client.generate).toBeDefined();
-      expect(client.generateChat).toBeDefined();
-    });
-
-    it('creates client for valid Gemini models', () => {
-      const client = createLlmClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-      expect(client.generate).toBeDefined();
-      expect(client.generateChat).toBeDefined();
+    it.each([
+      LegacyGoogleModels.Gemini25Pro,
+      LegacyGoogleModels.Gemini25Flash,
+      LegacyGoogleModels.Gemini20Flash,
+      LegacyGoogleModels.Gemini25FlashImage,
+    ])('rejects direct Google model %s', (model) => {
+      expect(() =>
+        createLlmClient({
+          apiKey: 'test-key',
+          // @ts-expect-error -- verifies the runtime boundary rejects legacy stored IDs
+          model,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+        })
+      ).toThrow('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
     });
 
     it('throws for unsupported provider models', () => {
@@ -196,7 +166,6 @@ describe('llmClientFactory', () => {
         usageSink: mockUsageSink,
       };
 
-      const gemini = createLlmClient({ ...baseConfig, model: LlmModels.Gemini25Flash });
       const claude = createLlmClient({ ...baseConfig, model: LlmModels.ClaudeHaiku35 });
       const gpt = createLlmClient({ ...baseConfig, model: LlmModels.GPT4oMini });
       const perplexity = createLlmClient({ ...baseConfig, model: LlmModels.SonarPro });
@@ -206,8 +175,6 @@ describe('llmClientFactory', () => {
         model: 'or:google/gemma-4-31b-it:free' as any,
       });
 
-      expect(gemini).toBeDefined();
-      expect(gemini.generate).toBeDefined();
       expect(claude).toBeDefined();
       expect(claude.generate).toBeDefined();
       expect(gpt).toBeDefined();
@@ -221,7 +188,7 @@ describe('llmClientFactory', () => {
     it('adds a throwing generateChat method for non-OpenRouter factory clients', async () => {
       const client = createLlmClient({
         apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
+        model: LlmModels.ClaudeHaiku35,
         userId: 'user-123',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -247,7 +214,7 @@ describe('llmClientFactory', () => {
     it('adds a throwing generateChatStream method for non-OpenRouter factory clients', async () => {
       const client = createLlmClient({
         apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
+        model: LlmModels.ClaudeHaiku35,
         userId: 'user-123',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -375,17 +342,18 @@ describe('llmClientFactory', () => {
   });
 
   describe('createToolCallingClient', () => {
-    it('creates tool calling client for Gemini model', () => {
-      const client = createToolCallingClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
-        userId: 'test-user',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-        ownerType: 'user',
-      });
-
-      expect(client.run).toBeDefined();
+    it('rejects direct Gemini tool calling', () => {
+      expect(() =>
+        createToolCallingClient({
+          apiKey: 'test-key',
+          // @ts-expect-error -- verifies the runtime boundary rejects legacy stored IDs
+          model: LegacyGoogleModels.Gemini25Flash,
+          userId: 'test-user',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          ownerType: 'user',
+        })
+      ).toThrow('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
     });
 
     it('creates OpenRouter tool calling client for or: prefixed models', async () => {
@@ -486,12 +454,12 @@ describe('llmClientFactory', () => {
         createToolCallingClient({
           apiKey: 'test-key',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          model: LlmModels.Gemini25Pro as any,
+          model: LegacyGoogleModels.Gemini25Pro as any,
           userId: 'test-user',
           logger: mockLogger,
           usageSink: mockUsageSink,
         })
-      ).toThrow('Unsupported LLM model');
+      ).toThrow('Direct Google LLM models are disabled');
     });
 
     it('throws for valid non-Google model (provider not supported)', () => {
@@ -527,39 +495,18 @@ describe('llmClientFactory', () => {
       );
     });
 
-    it('forwards ownerType to createGeminiClient when passed', async () => {
-      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
-
-      createLlmClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-        ownerType: 'user',
-      });
-
-      expect(vi.mocked(createGeminiClient)).toHaveBeenCalledWith(
-        expect.objectContaining({ ownerType: 'user' })
-      );
-    });
-
-    it('omits ownerType from config when not provided', async () => {
-      const { createGeminiClient } = await import('@intexuraos/infra-gemini');
-
-      createLlmClient({
-        apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
-        userId: 'user-123',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-
-      const callArg = vi.mocked(createGeminiClient).mock.calls[0]?.[0] as unknown as Record<
-        string,
-        unknown
-      >;
-      expect(callArg?.['ownerType']).toBeUndefined();
+    it('blocks direct Gemini even when ownerType is provided', () => {
+      expect(() =>
+        createLlmClient({
+          apiKey: 'test-key',
+          // @ts-expect-error -- verifies the runtime boundary rejects legacy stored IDs
+          model: LegacyGoogleModels.Gemini25Flash,
+          userId: 'user-123',
+          logger: mockLogger,
+          usageSink: mockUsageSink,
+          ownerType: 'user',
+        })
+      ).toThrow('Direct Google LLM models are disabled');
     });
   });
 
@@ -567,14 +514,14 @@ describe('llmClientFactory', () => {
     it('should accept promptType in generate options', async () => {
       const client = createLlmClient({
         apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash,
+        model: LlmModels.ClaudeHaiku35,
         userId: 'user-123',
         logger: mockLogger,
         usageSink: mockUsageSink,
       });
 
       // Mock the generate to return success
-      mockGeminiGenerate.mockResolvedValueOnce({
+      mockClaudeGenerate.mockResolvedValueOnce({
         ok: true,
         value: {
           content: 'test response',
@@ -594,8 +541,8 @@ describe('llmClientFactory', () => {
   });
 
   describe('isSupportedProvider', () => {
-    it('returns true for Google provider', () => {
-      expect(isSupportedProvider(LlmProviders.Google)).toBe(true);
+    it('returns false for Google provider', () => {
+      expect(isSupportedProvider(LlmProviders.Google)).toBe(false);
     });
 
     it('returns true for OpenRouter provider', () => {
@@ -624,11 +571,10 @@ describe('llmClientFactory', () => {
     });
 
     it('type narrows correctly for supported providers', () => {
-      const provider = LlmProviders.Google as string;
+      const provider = LlmProviders.OpenRouter as string;
       if (isSupportedProvider(provider)) {
         expect(
-          provider === LlmProviders.Google ||
-            provider === LlmProviders.Anthropic ||
+          provider === LlmProviders.Anthropic ||
             provider === LlmProviders.OpenAI ||
             provider === LlmProviders.Perplexity ||
             provider === LlmProviders.OpenRouter

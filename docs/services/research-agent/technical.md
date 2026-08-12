@@ -2,7 +2,7 @@
 
 ## Overview
 
-Research-agent orchestrates parallel AI research across multiple LLM providers (Claude, GPT, Gemini, Perplexity, and OpenRouter). It infers structured research context from user prompts, fans out research via Pub/Sub so each model call runs in its own Cloud Run instance, flags low-quality responses, tracks token usage and cost per call via centralized LLM usage reporting, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Runs on Cloud Run with auto-scaling.
+Research-agent orchestrates parallel AI research across a curated OpenRouter model catalog. It infers structured research context from user prompts, fans out research via Pub/Sub so each model call runs in its own Cloud Run instance, flags low-quality responses, tracks token usage and cost per call via centralized LLM usage reporting, synthesizes results with source attribution, and auto-publishes shareable HTML to GCS. Google/Gemini execution is OpenRouter-only: executable IDs use `or:google/...`, raw `gemini-*` IDs are rejected, and no Google LLM API key is loaded. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -70,7 +70,7 @@ sequenceDiagram
     participant ResearchAgent as research-agent
     participant Firestore
     participant PubSub
-    participant LlmProvider as LLM Provider\n(per model)
+    participant OpenRouter as OpenRouter\n(per model)
     participant GCS
 
     Client->>+ResearchAgent: POST /
@@ -87,8 +87,8 @@ sequenceDiagram
     loop Per model (parallel)
         PubSub->>+ResearchAgent: POST /internal/llm/pubsub/process-llm-call
         ResearchAgent->>ResearchAgent: buildResearchPrompt(prompt, researchContext)
-        ResearchAgent->>LlmProvider: research(builtPrompt)
-        LlmProvider-->>ResearchAgent: content + usage
+        ResearchAgent->>OpenRouter: research(builtPrompt)
+        OpenRouter-->>ResearchAgent: content + usage
         ResearchAgent->>ResearchAgent: Flag low_quality if < 800 chars
         ResearchAgent->>Firestore: updateLlmResult (completed + qualityFlag)
         ResearchAgent->>ResearchAgent: checkLlmCompletion
@@ -102,6 +102,8 @@ sequenceDiagram
 ```
 
 ## Recent Changes
+
+The entries below are historical release records. They describe the behavior introduced at each release, not the current runtime contract; the current contract is OpenRouter-only as documented above.
 
 ### v3.6.0 Changes (since v3.5.0)
 
@@ -202,7 +204,7 @@ sequenceDiagram
 | -------------------- | ----------------------- | -------------------------------------------------------------- |
 | `id`                 | `string`                | Unique identifier                                              |
 | `userId`             | `string`                | Owning user                                                    |
-| `title`              | `string`                | Auto-generated title (via Gemini 2.5 Flash)                    |
+| `title`              | `string`                | Auto-generated title (platform OpenRouter model)               |
 | `prompt`             | `string`                | Research question submitted by user                            |
 | `originalPrompt`     | `string?`               | User's raw prompt before improvement (if accepted)             |
 | `selectedModels`     | `ResearchModel[]`       | Models dispatched for research                                 |
@@ -242,7 +244,7 @@ sequenceDiagram
 
 | Field              | Type              | Description                                                     |
 | ------------------ | ----------------- | --------------------------------------------------------------- |
-| `provider`         | `LlmProvider`     | Provider (google, openai, anthropic, perplexity, openrouter)    |
+| `provider`         | `LlmProvider`     | Execution provider; `or:*` calls use `openrouter`               |
 | `model`            | `string`          | Model name from llm-contract                                    |
 | `status`           | `LlmResultStatus` | `pending`, `processing`, `completed`, `failed`                  |
 | `result`           | `string?`         | Raw markdown from the model                                     |
@@ -347,20 +349,16 @@ sequenceDiagram
 | `INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC`    | Pub/Sub topic for WhatsApp notifications            | Yes      |
 | `INTEXURAOS_PUBSUB_RESEARCH_PROCESS_TOPIC` | Pub/Sub topic for research process events           | Yes      |
 | `INTEXURAOS_PUBSUB_LLM_CALL_TOPIC`         | Pub/Sub topic for individual LLM call events        | Yes      |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | Platform OpenRouter credential and fallback         | Yes      |
 | `INTEXURAOS_SENTRY_DSN`                    | Sentry DSN (optional, monitoring)                   | No       |
 | `INTEXURAOS_ENVIRONMENT`                   | Environment name for Sentry tagging                 | No       |
 
 ## LLM Models
 
-Research Agent reports usage to `llm-usage-service` for all models it invokes. Models are split by role:
+Research Agent reports usage to `llm-usage-service` for every model it invokes. The current routed catalog is the 16-model OpenRouter allowlist:
 
-**Research models** (dispatched per user selection):
-- `Gemini25Pro`, `Gemini25Flash`
-- `ClaudeOpus46`, `ClaudeSonnet46`
-- `O4MiniDeepResearch`, `GPT54`
-- `Sonar`, `SonarPro`, `SonarDeepResearch`
-
-**OpenRouter models** (15 curated models via allowlist):
+**Research and synthesis models** (`or:` prefix required in API payloads):
+- DeepSeek V4 Flash (DeepSeek)
 - Qwen 3.5 Plus, Qwen 3.5 Flash (Qwen)
 - MiniMax M3 (MiniMax)
 - Grok 4.20 Beta, Grok 4.1 Fast (xAI)
@@ -372,11 +370,12 @@ Research Agent reports usage to `llm-usage-service` for all models it invokes. M
 - GLM 5 Turbo (Z.ai)
 
 **Fast model** (title generation, context inference, input validation):
-- `Gemini25Flash`
+- `or:minimax/minimax-m3` (platform OpenRouter default)
 
-**Image models** (cover image generation with provider failover):
-- `Gemini25FlashImage` (Google key) — default
-- `GPTImage1` (OpenAI key) — preferred when synthesis uses a GPT model
+**Image model** (optional cover image generation):
+- `GPTImage1` (OpenAI key); there is no Google image fallback
+
+Raw Google model constants remain readable only for historical data compatibility. New execution rejects every raw `gemini-*` identifier and never requests a Google LLM credential.
 
 ## Gotchas
 
@@ -391,12 +390,13 @@ Research Agent reports usage to `llm-usage-service` for all models it invokes. M
 - **Low-quality threshold:** LLM results under 800 characters are flagged `low_quality`. The threshold was chosen empirically — useful research responses are typically 1000+ characters; shorter outputs usually indicate refusals, error messages, or extremely shallow answers.
 - **Research context propagation:** The inferred `ResearchContext` is saved to Firestore during `process-research` and passed to each LLM adapter's `research()` call via `buildResearchPrompt()`. This means the context is inferred once and reused for all models in the research.
 - **OpenRouter `or:` prefix:** OpenRouter model IDs are prefixed with `or:` in the llm-contract registry (e.g., `or:qwen/qwen3.5-plus-02-15`). The `OpenRouterAdapter` strips this prefix before calling the OpenRouter API using `getOpenRouterRawId()`.
+- **No direct Google route:** Raw `gemini-*` IDs are not executable. Google model families must use an allowlisted `or:google/...` identifier and the OpenRouter credential.
 - **OpenRouter allowlist enforcement:** At execution time (not just at selection), the `process-llm-call` handler validates that OpenRouter models are on the curated allowlist. Unauthorized model IDs are rejected.
 - **OpenRouter model cache:** The `GET /openrouter/models` endpoint caches responses in-memory for 5 minutes. The cache is per-process, not shared across Cloud Run instances.
-- **Cover image provider failover:** The `generateCoverImage` function iterates through available provider pipelines (Google and/or OpenAI) in preference order. If prompt generation or image generation fails for one provider, it continues to the next. Only logs an error when all providers are exhausted.
+- **OpenAI-only cover images:** `generateCoverImage` uses the OpenAI prompt and image pipeline only. If the key is unavailable or either step fails, sharing continues without a cover image.
 - **ResearchSummary projection:** The `GET /` list endpoint uses `findSummariesByUserId` which returns `ResearchSummary` objects (no `synthesizedResult`, no `llmResults[].result`, no `inputContexts[].content`). The `toResearchSummary` mapper strips these fields server-side.
 - **Important WhatsApp notifications:** Both research completion and LLM failure notifications are published with `important: true`, bypassing quiet-hours suppression in the WhatsApp notification pipeline.
-- **Usage reporting via HttpInternalAuthUsageSink:** Each LLM adapter receives a `UsageSink` scoped to its component name (e.g., `research:gemini-2.5-pro`, `synthesis:claude-opus-4-6`, `title-generator`). Usage is reported asynchronously to `llm-usage-service` after each call completes.
+- **Usage reporting via HttpInternalAuthUsageSink:** Each LLM adapter receives a `UsageSink` scoped to its component name (e.g., `research:or:google/gemini-3-flash-preview`, `synthesis:or:anthropic/claude-sonnet-4.6`, `title-generator`). Usage is reported asynchronously to `llm-usage-service` after each call completes.
 
 ## File Structure
 
@@ -417,8 +417,8 @@ apps/research-agent/src/
 │   ├── firestore/           # researchExportSettingsRepository
 │   ├── gcs/                 # shareStorageAdapter (GCS HTML upload)
 │   ├── image/               # imageServiceClient
-│   ├── llm/                 # ClaudeAdapter, GeminiAdapter, GptAdapter,
-│   │                        # PerplexityAdapter, OpenRouterAdapter,
+│   ├── llm/                 # ClaudeAdapter, GptAdapter, PerplexityAdapter,
+│   │                        # OpenRouterAdapter,
 │   │                        # ContextInferenceAdapter, InputValidationAdapter,
 │   │                        # LlmAdapterFactory
 │   ├── notification/        # WhatsAppNotificationSender, NoopNotificationSender

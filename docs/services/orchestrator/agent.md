@@ -567,15 +567,14 @@ On startup, the orchestrator:
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
 | `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
 | `INTEXURAOS_ERROR_HUB_HOST`                 | Yes      | -                                  |
-| `INTEXURAOS_GEMINI_APP_API_KEY`             | Yes      | -                                  |
 | `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
 | `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
 | `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
-| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,gemini-2.5-flash` |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | No       | Required unless validation models are Gemini-only |
+| `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash` |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY`         | Yes      | -                                  |
 | `INTEXURAOS_REPOSITORY_PATH`                | No       | `~/.code-orchestrator/repo`        |
 | `INTEXURAOS_WORKER_CAPACITY`                | No       | `2`                                |
 | `INTEXURAOS_COMPLETION_MAX_ATTEMPTS`        | No       | `3`                                |

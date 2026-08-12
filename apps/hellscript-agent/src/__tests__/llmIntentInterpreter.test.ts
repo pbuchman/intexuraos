@@ -1,19 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
-import { GeminiIntentInterpreter } from '../infra/llm/geminiIntentInterpreter.js';
+import { LlmIntentInterpreter } from '../infra/llm/llmIntentInterpreter.js';
 import { emptyState } from '../domain/models/materializedBufferState.js';
-import type { GeminiClient } from '@intexuraos/infra-gemini';
+import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import pino from 'pino';
 
 const logger = pino({ level: 'silent' });
 
-function createMockClient(response: { ok: boolean; value?: { content: string }; error?: unknown }): GeminiClient {
+function createMockClient(response: {
+  ok: boolean;
+  value?: { content: string };
+  error?: unknown;
+}): LlmGenerateClient {
   return {
     generate: vi.fn().mockResolvedValue(response),
-    research: vi.fn().mockResolvedValue({ ok: false, error: { code: 'UNSUPPORTED', message: 'Not implemented' } }),
-  };
+  } as unknown as LlmGenerateClient;
 }
 
-describe('GeminiIntentInterpreter', () => {
+describe('LlmIntentInterpreter', () => {
   describe('interpret', () => {
     it('parses valid append_thought response', async () => {
       const client = createMockClient({
@@ -25,7 +28,7 @@ describe('GeminiIntentInterpreter', () => {
           }),
         },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('A new idea', emptyState(), logger);
 
@@ -40,7 +43,7 @@ describe('GeminiIntentInterpreter', () => {
           content: 'Here is the result:\n```json\n{"kind":"update_draft","payload":{"text":"write it","category":"general"}}\n```',
         },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('write it', emptyState(), logger);
 
@@ -54,7 +57,7 @@ describe('GeminiIntentInterpreter', () => {
         ok: false,
         error: { code: 'API_ERROR', message: 'Service unavailable' },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('test utterance', emptyState(), logger);
 
@@ -68,7 +71,7 @@ describe('GeminiIntentInterpreter', () => {
         ok: true,
         value: { content: 'This is not JSON at all' },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('test', emptyState(), logger);
 
@@ -86,7 +89,7 @@ describe('GeminiIntentInterpreter', () => {
           }),
         },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('test', emptyState(), logger);
 
@@ -103,7 +106,7 @@ describe('GeminiIntentInterpreter', () => {
           }),
         },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('test', emptyState(), logger);
 
@@ -121,7 +124,7 @@ describe('GeminiIntentInterpreter', () => {
           }),
         },
       });
-      const interpreter = new GeminiIntentInterpreter(client);
+      const interpreter = new LlmIntentInterpreter(client);
 
       const result = await interpreter.interpret('unclear', emptyState(), logger);
 

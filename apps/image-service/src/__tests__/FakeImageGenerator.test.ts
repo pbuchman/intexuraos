@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmModels } from '@intexuraos/llm-contract';
 import { createFakeImageGenerator } from './fakes/FakeImageGenerator.js';
 
 describe('FakeImageGenerator', () => {
@@ -30,7 +30,7 @@ describe('FakeImageGenerator', () => {
   it('uses crypto.randomUUID by default for id generation', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'test-bucket',
-      model: LlmModels.Gemini25FlashImage,
+      model: LegacyGoogleModels.Gemini25FlashImage,
     });
 
     const result = await generator.generate('A sunset');
@@ -46,7 +46,7 @@ describe('FakeImageGenerator', () => {
   it('preserves prompt and model in generated image', async () => {
     const generator = createFakeImageGenerator({
       bucketName: 'my-bucket',
-      model: LlmModels.Gemini25FlashImage,
+      model: LegacyGoogleModels.Gemini25FlashImage,
     });
 
     const result = await generator.generate('Mountain landscape with snow');
@@ -54,7 +54,7 @@ describe('FakeImageGenerator', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.prompt).toBe('Mountain landscape with snow');
-      expect(result.value.model).toBe(LlmModels.Gemini25FlashImage);
+      expect(result.value.model).toBe(LegacyGoogleModels.Gemini25FlashImage);
     }
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import {
   getProviderForStoredModel,
   isSelectableModel,
@@ -14,6 +14,6 @@ describe('researchAgentApi stored model helpers', () => {
   it('treats retired historical models as non-selectable', () => {
     expect(getProviderForStoredModel('glm-4.7')).toBeNull();
     expect(isSelectableModel('glm-4.7')).toBe(false);
-    expect(isSelectableModel(LlmModels.Gemini25Pro)).toBe(true);
+    expect(isSelectableModel(LegacyGoogleModels.Gemini25Pro)).toBe(false);
   });
 });

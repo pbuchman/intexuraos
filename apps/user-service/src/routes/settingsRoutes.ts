@@ -12,6 +12,7 @@ import {
   INTEX_AGENT_MODEL_OPTIONS,
   isDefaultEligibleModel,
   isIntexAgentModel,
+  LlmProviders,
 } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { getUserSettings, isTranscriptionProvider, isValidTimezone, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
@@ -451,7 +452,8 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const settings = settingsResult.value;
       const llmApiKeys = settings?.llmApiKeys;
-      const hasKey = llmApiKeys?.[provider] !== undefined;
+      const hasKey =
+        provider === LlmProviders.OpenRouter || llmApiKeys?.[provider] !== undefined;
       if (!hasKey) {
         return await reply.fail(
           'INVALID_REQUEST',
@@ -468,7 +470,9 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.fail('INVALID_REQUEST', 'Fallback model must be different from the default model.');
         }
         const fallbackProvider = getProviderForModel(generalBody.fallbackModel);
-        const hasFallbackKey = llmApiKeys[fallbackProvider] !== undefined;
+        const hasFallbackKey =
+          fallbackProvider === LlmProviders.OpenRouter ||
+          llmApiKeys?.[fallbackProvider] !== undefined;
         if (!hasFallbackKey) {
           return await reply.fail(
             'INVALID_REQUEST',

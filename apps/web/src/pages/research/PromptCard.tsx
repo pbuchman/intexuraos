@@ -9,7 +9,6 @@ interface PromptCardProps {
   improving: boolean;
   submitting: boolean;
   savingDraft: boolean;
-  hasGoogleKey: boolean;
 }
 
 export function PromptCard({
@@ -20,15 +19,10 @@ export function PromptCard({
   improving,
   submitting,
   savingDraft,
-  hasGoogleKey,
 }: PromptCardProps): React.JSX.Element {
   const isPromptEmpty = prompt.trim().length === 0;
-  const improveDisabled = isPromptEmpty || improving || submitting || savingDraft || !hasGoogleKey;
-  const improveTitle = !hasGoogleKey
-    ? 'Google API key required'
-    : isPromptEmpty
-      ? 'Enter a prompt first'
-      : undefined;
+  const improveDisabled = isPromptEmpty || improving || submitting || savingDraft;
+  const improveTitle = isPromptEmpty ? 'Enter a prompt first' : undefined;
 
   return (
     <Card title="Research Prompt">

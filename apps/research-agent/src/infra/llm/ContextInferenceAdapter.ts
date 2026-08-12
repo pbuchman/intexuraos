@@ -1,9 +1,10 @@
 /**
- * Context inference adapter using Gemini Flash for fast context extraction.
- * Usage logging is handled by the client (packages/infra-gemini).
+ * Context inference adapter using the unified LLM factory.
+ * Platform calls use the canonical OpenRouter model.
  */
 
-import { createGeminiClient, type GeminiClient } from '@intexuraos/infra-gemini';
+import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
+import type { LLMModel, OpenRouterToolCallingModel } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   inferResearchContextPrompt,
@@ -66,7 +67,7 @@ const SYNTHESIS_CONTEXT_SCHEMA = `{
 }`;
 
 export class ContextInferenceAdapter implements ContextInferenceProvider {
-  private readonly client: GeminiClient;
+  private readonly client: LlmGenerateClient;
   private readonly logger: Logger;
   /**
    * Optional research correlation token baked at construction time. When the
@@ -78,13 +79,13 @@ export class ContextInferenceAdapter implements ContextInferenceProvider {
 
   constructor(
     apiKey: string,
-    model: string,
+    model: LLMModel | OpenRouterToolCallingModel,
     userId: string,
     logger: Logger,
     usageSink: UsageSink,
     researchId?: string
   ) {
-    this.client = createGeminiClient({
+    this.client = createLlmClient({
       apiKey,
       model,
       userId,

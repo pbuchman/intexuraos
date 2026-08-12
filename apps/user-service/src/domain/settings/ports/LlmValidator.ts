@@ -3,7 +3,7 @@
  * Implementations handle the actual API calls to different providers.
  */
 import type { Result } from '@intexuraos/common-core';
-import type { LlmProvider } from '../models/UserSettings.js';
+import type { ExecutableLlmProvider } from '@intexuraos/llm-contract';
 
 /**
  * Error types for LLM validation operations.
@@ -29,7 +29,7 @@ export interface LlmValidator {
    * Returns success if the key is valid, error otherwise.
    */
   validateKey(
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     apiKey: string,
     userId: string
   ): Promise<Result<void, LlmValidationError>>;
@@ -39,7 +39,7 @@ export interface LlmValidator {
    * Returns the model's response content.
    */
   testRequest(
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     apiKey: string,
     prompt: string,
     userId: string

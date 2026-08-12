@@ -23,7 +23,7 @@ Before starting, ensure you have:
 
 - [ ] Access to the IntexuraOS development environment
 - [ ] The `INTEXURAOS_INTERNAL_AUTH_TOKEN` value for your environment
-- [ ] A valid `userId` with at least one API key configured (OpenAI or Google), or the platform `INTEXURAOS_GEMINI_APP_API_KEY` set
+- [ ] A valid `userId` with an OpenAI API key configured
 - [ ] Basic understanding of TypeScript/Node.js
 
 ---
@@ -67,7 +67,7 @@ The first step of the two-stage pipeline turns raw text into an optimized image 
 
 You need:
 - A text body with at least 10 characters
-- A prompt generation model: `"gpt-4.1"` (OpenAI) or `"gemini-2.5-pro"` (Google)
+- The supported prompt generation model: `"gpt-4.1"` (OpenAI)
 - The `userId` whose API keys will be used for the LLM call
 
 ### Step 2.2: Send the Prompt Generation Request
@@ -78,7 +78,7 @@ curl -X POST https://intexuraos-image-service-cj44trunra-lm.a.run.app/internal/i
   -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
     "text": "Renewable energy policy in Southeast Asia is shifting rapidly. Wind and solar adoption is accelerating, but grid infrastructure lags behind ambition.",
-    "model": "gemini-2.5-pro",
+    "model": "gpt-4.1",
     "userId": "user-abc-123"
   }'
 ```
@@ -122,7 +122,7 @@ curl -X POST https://intexuraos-image-service-cj44trunra-lm.a.run.app/internal/i
   -H "X-Internal-Auth: $INTEXURAOS_INTERNAL_AUTH_TOKEN" \
   -d '{
     "prompt": "Wide-angle panoramic scene of wind turbines rising from lush green rice fields...",
-    "model": "gemini-2.5-flash-image",
+    "model": "gpt-image-1",
     "userId": "user-abc-123",
     "title": "Southeast Asia Energy Transition"
   }'
@@ -162,12 +162,12 @@ curl -X POST https://intexuraos-image-service-cj44trunra-lm.a.run.app/internal/i
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "No google API key configured for this user"
+    "message": "No openai API key configured for this user"
   }
 }
 ```
 
-**Solution:** Either configure a Google API key for the user via user-service, or ensure the platform fallback key `INTEXURAOS_GEMINI_APP_API_KEY` is set in the environment. Alternatively, switch to `model: "gpt-image-1"` if the user has an OpenAI key.
+**Solution:** Configure an OpenAI credential for the user. Direct Gemini image generation and the shared Gemini fallback are not supported.
 
 ### Common Error: Rate Limited
 
@@ -246,7 +246,7 @@ async function generateCoverImage(
   const promptRes = await fetch(`${IMAGE_SERVICE_URL}/internal/images/prompts/generate`, {
     method: 'POST',
     headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, model: 'gemini-2.5-pro', userId }),
+    body: JSON.stringify({ text, model: 'gpt-4.1', userId }),
   });
   const promptBody = await promptRes.json();
 
@@ -261,7 +261,7 @@ async function generateCoverImage(
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       prompt: promptBody.data.prompt,
-      model: 'gemini-2.5-flash-image',
+      model: 'gpt-image-1',
       userId,
       title,
     }),
@@ -308,7 +308,7 @@ Now that you understand the basics:
 
 Test your understanding:
 
-1. **Easy:** Call the prompt generation endpoint with `model: "gpt-4.1"` and compare the output structure to the Gemini result
+1. **Easy:** Call the prompt generation endpoint with `model: "gpt-4.1"` and inspect the structured result
 2. **Medium:** Send a title with special characters and unicode — observe how `slugify()` normalizes the filename in the returned GCS URL
 3. **Hard:** Implement a retry wrapper that handles `RATE_LIMITED` from prompt generation and `DOWNSTREAM_ERROR` from image generation with different backoff strategies for each
 
@@ -328,7 +328,7 @@ curl -X POST .../internal/images/prompts/generate \
   }'
 ```
 
-The response structure is identical — same `ThumbnailPrompt` shape regardless of which model was used.
+The response uses the `ThumbnailPrompt` shape shown above.
 
 ### Exercise 2: Slug Normalization
 

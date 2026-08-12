@@ -69,7 +69,7 @@ export function initServices(config: ServiceConfig): void {
     internalAuthToken: config.internalAuthToken,
     logger: logger,
     usageSink: buildUsageSink('user-service-client'),
-    platformGeminiApiKey: process.env['INTEXURAOS_GEMINI_APP_API_KEY'],
+    platformOpenRouterApiKey: process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'],
   });
 
   const extractionService = createLinearActionExtractionService(userServiceClient, logger);

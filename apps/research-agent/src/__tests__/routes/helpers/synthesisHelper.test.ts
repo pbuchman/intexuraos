@@ -7,7 +7,11 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelper.js';
 import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  LlmModels,
+  LlmProviders,
+} from '@intexuraos/llm-contract';
 import type { ResearchModel } from '../../../domain/research/index.js';
 
 const mockLogger = {
@@ -43,7 +47,6 @@ describe('createSynthesisProviders', () => {
   it('forwards args to synthesis providers (researchId omitted at this call site)', () => {
     const apiKeys: DecryptedApiKeys = {
       openrouter: 'test-or-key',
-      google: 'test-google-key',
     };
 
     createSynthesisProviders(
@@ -64,8 +67,8 @@ describe('createSynthesisProviders', () => {
       undefined
     );
     expect(mockCreateContextInferrer).toHaveBeenCalledWith(
-      LlmModels.Gemini25Flash,
-      'test-google-key',
+      DEFAULT_PLATFORM_LLM_MODEL,
+      'test-or-key',
       'user-123',
       mockLogger,
       undefined
@@ -75,7 +78,6 @@ describe('createSynthesisProviders', () => {
   it('threads researchId into synthesizer + contextInferrer factories', () => {
     const apiKeys: DecryptedApiKeys = {
       openrouter: 'test-or-key',
-      google: 'test-google-key',
     };
 
     createSynthesisProviders(
@@ -95,18 +97,18 @@ describe('createSynthesisProviders', () => {
       'research-abc'
     );
     expect(mockCreateContextInferrer).toHaveBeenCalledWith(
-      LlmModels.Gemini25Flash,
-      'test-google-key',
+      DEFAULT_PLATFORM_LLM_MODEL,
+      'test-or-key',
       'user-123',
       mockLogger,
       'research-abc'
     );
   });
 
-  it('creates synthesizer and contextInferrer when Google API key is provided', () => {
+  it('creates synthesizer and contextInferrer when OpenRouter API key is provided', () => {
     const apiKeys: DecryptedApiKeys = {
       anthropic: 'test-anthropic-key',
-      google: 'test-google-key',
+      openrouter: 'test-or-key',
     };
 
     const result = createSynthesisProviders(
@@ -153,10 +155,10 @@ describe('createSynthesisProviders', () => {
     ).toThrow(`No API key configured for provider '${LlmProviders.Anthropic}'`);
   });
 
-  it('creates only synthesizer when Google API key is undefined', () => {
+  it('creates only synthesizer when OpenRouter API key is undefined', () => {
     const apiKeys: DecryptedApiKeys = {
       anthropic: 'test-anthropic-key',
-      // No google key
+      // No OpenRouter key
     };
 
     const result = createSynthesisProviders(

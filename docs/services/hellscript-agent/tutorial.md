@@ -311,7 +311,7 @@ curl -X POST https://intexuraos-hellscript-agent-cj44trunra-lm.a.run.app/impose 
 }
 ```
 
-**Solution:** This occurs when the user-service cannot resolve an LLM client for the user. Ensure the user has a valid Gemini API key configured, or that the platform fallback key (`INTEXURAOS_GEMINI_APP_API_KEY`) is set.
+**Solution:** This occurs when user-service cannot resolve an LLM client. Verify that the platform OpenRouter key is configured and reachable.
 
 ---
 

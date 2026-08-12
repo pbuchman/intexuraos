@@ -12,7 +12,7 @@ import { createUnifiedEvaluator, type UnifiedEvaluatorDeps } from '../../../doma
 import type { GitHubEventLogEntryRepository } from '../../../domain/repositories/gitHubEventLogEntryRepository.js';
 import type { CodeTaskRepository } from '../../../domain/repositories/codeTaskRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 
 function createFakeLogger(): Logger {
   return {
@@ -1821,7 +1821,7 @@ describe('LLM retry for pull_request events', () => {
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
           triage: { action: 'request_review', reviewTypes: ['code_quality'] },
-          usage: { costUsd: 0.001, toolCalls: [], model: LlmModels.Gemini25Flash },
+          usage: { costUsd: 0.001, toolCalls: [], model: LegacyGoogleModels.Gemini25Flash },
           reasoning: 'PR was updated.',
         })),
         codeTaskRepo: codeTaskRepo as CodeTaskRepository,
@@ -1836,7 +1836,7 @@ describe('LLM retry for pull_request events', () => {
         expect.objectContaining({
           decision: 'skip',
           reason: expect.stringContaining('remediation_no_rereview'),
-          llmModel: LlmModels.Gemini25Flash,
+          llmModel: LegacyGoogleModels.Gemini25Flash,
         }),
       );
     });

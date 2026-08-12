@@ -62,7 +62,6 @@ export function ResearchAgentPage(): React.JSX.Element {
           improving={agent.improving}
           submitting={agent.submitting}
           savingDraft={agent.savingDraft}
-          hasGoogleKey={agent.hasGoogleKey}
         />
 
         <ResearchModelsCard

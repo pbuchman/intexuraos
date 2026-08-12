@@ -7,8 +7,8 @@ import { FakeHellscriptRepository } from './fakeHellscriptRepository.js';
 import { FakeWritingConfigRepository } from './fakeWritingConfigRepository.js';
 import { FakeUserServiceClient, FakeLlmGenerateClient } from './fakeUserServiceClient.js';
 import { resetServices, setServices, type LlmAdapters } from '../services.js';
-import { GeminiIntentInterpreter } from '../infra/llm/geminiIntentInterpreter.js';
-import { GeminiDraftGenerator } from '../infra/llm/geminiDraftGenerator.js';
+import { LlmIntentInterpreter } from '../infra/llm/llmIntentInterpreter.js';
+import { LlmDraftGenerator } from '../infra/llm/llmDraftGenerator.js';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
 import pino from 'pino'; // @allow-pino-import -- test infrastructure only
 
@@ -107,8 +107,8 @@ export function setupTestContext(): TestContext {
       writingConfigRepository: context.writingConfigRepository,
       userServiceClient: context.userServiceClient,
       createLlmAdapters: (llmClient: LlmGenerateClient): LlmAdapters => ({
-        interpreter: new GeminiIntentInterpreter(llmClient),
-        draftGenerator: new GeminiDraftGenerator(llmClient),
+        interpreter: new LlmIntentInterpreter(llmClient),
+        draftGenerator: new LlmDraftGenerator(llmClient),
       }),
       logger,
     });

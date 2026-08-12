@@ -4,7 +4,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from 'pino';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import type { CreateEventDecisionInput } from '../../../domain/models/eventDecision.js';
 
 // Mock getFirestore BEFORE importing the repository
@@ -99,7 +99,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         decidedBy: 'github_agent',
         decision: 'request_review',
         reason: 'PR needs code review',
-        llmModel: LlmModels.Gemini25Flash,
+        llmModel: LegacyGoogleModels.Gemini25Flash,
         llmCostUsd: 0.0012,
         llmToolCalls: [
           { tool: 'request_review', args: { review_type: 'code_quality' } },
@@ -119,7 +119,7 @@ describe('createFirestoreEventDecisionRepository', () => {
       if (result.ok) {
         expect(result.value.decidedBy).toBe('github_agent');
         expect(result.value.decision).toBe('request_review');
-        expect(result.value.llmModel).toBe(LlmModels.Gemini25Flash);
+        expect(result.value.llmModel).toBe(LegacyGoogleModels.Gemini25Flash);
         expect(result.value.llmCostUsd).toBe(0.0012);
         expect(result.value.llmToolCalls).toHaveLength(2);
         expect(result.value.llmReasoning).toBe('This PR modifies auth logic across multiple services.');

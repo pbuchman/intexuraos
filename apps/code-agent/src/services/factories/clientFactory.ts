@@ -68,6 +68,7 @@ export function createClientServices(deps: ClientFactoryDeps): ClientServices {
     internalAuthToken: config.internalAuthToken,
     logger,
     usageSink: buildUsageSink('user-service-client'),
+    platformOpenRouterApiKey: config.openRouterAppApiKey,
   });
 
   const usageServiceClient = config.llmUsageServiceUrl !== ''

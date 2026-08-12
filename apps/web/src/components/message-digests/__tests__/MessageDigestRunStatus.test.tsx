@@ -3,7 +3,7 @@
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { MessageDigestRun, MessageDigestProcessingStage } from '@/types/messageDigests';
 import { MessageDigestRunStatus } from '../MessageDigestRunStatus.js';
@@ -120,7 +120,7 @@ function runForStage(processingStage: MessageDigestProcessingStage): MessageDige
         : null,
     effectiveMessageCount: terminal ? 17 : null,
     promptVersion: terminal ? 'message-digest-v1' : null,
-    model: terminal ? LlmModels.Gemini25Flash : null,
+    model: terminal ? LegacyGoogleModels.Gemini25Flash : null,
     usage: null,
     delivery: {
       type: 'whatsapp_primary',

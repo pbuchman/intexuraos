@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { IntexAgentModels, LlmModels } from '@intexuraos/llm-contract';
 import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 import type { LlmClientConfig } from '@intexuraos/llm-factory';
 import type { LlmGenerateClient, GenerateResult } from '@intexuraos/llm-factory';
@@ -41,7 +41,7 @@ const config = {
   usageSink: createFakeUsageSink(),
 };
 
-const PRIMARY_MODEL = LlmModels.Gemini25Flash;
+const PRIMARY_MODEL = IntexAgentModels.MiniMaxM3;
 // An OpenRouter model eligible as fallback
 const FALLBACK_MODEL = 'or:google/gemma-4-31b-it:free';
 
@@ -80,6 +80,24 @@ function setupNocks(defaultModel: string, fallbackModel?: string): void {
         google: 'google-key',
         openrouter: 'openrouter-key',
       },
+    });
+}
+
+function setupNocksWithoutUserOpenRouterKey(defaultModel: string, fallbackModel: string): void {
+  nock('http://localhost:3000')
+    .get('/internal/users/user123/settings')
+    .matchHeader('X-Internal-Auth', 'test-token')
+    .reply(200, {
+      success: true,
+      data: { llmPreferences: { defaultModel, fallbackModel } },
+    });
+
+  nock('http://localhost:3000')
+    .get('/internal/users/user123/llm-keys')
+    .matchHeader('X-Internal-Auth', 'test-token')
+    .reply(200, {
+      success: true,
+      data: { anthropic: 'anthropic-key' },
     });
 }
 
@@ -210,6 +228,37 @@ describe('getLlmClient fallback behavior', () => {
     expect(fallbackGenerate).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the platform OpenRouter key for an OpenRouter fallback', async () => {
+    setupNocksWithoutUserOpenRouterKey(LlmModels.ClaudeHaiku35, FALLBACK_MODEL);
+
+    const primaryGenerate = vi.fn().mockResolvedValue(makeErrorResult());
+    const primaryClient: LlmGenerateClient = { generate: primaryGenerate };
+    const fallbackGenerate = vi.fn().mockResolvedValue(makeSuccessResult('platform fallback'));
+    const fallbackClient: LlmGenerateClient = { generate: fallbackGenerate };
+    mockCreateLlmClient.mockReturnValueOnce(primaryClient).mockReturnValueOnce(fallbackClient);
+
+    const serviceClient = createUserServiceClient({
+      ...config,
+      platformOpenRouterApiKey: 'platform-openrouter-key',
+    });
+    const result = await serviceClient.getLlmClient('user123');
+
+    if (!result.ok) expect.fail(`Expected ok, got ${JSON.stringify(result.error)}`);
+
+    const generateResult = await result.value.generate('test prompt', {
+      promptType: 'test-prompt',
+    });
+
+    expect(generateResult.ok).toBe(true);
+    expect(mockCreateLlmClient).toHaveBeenCalledTimes(2);
+    const fallbackConfig = mockCreateLlmClient.mock.calls[1]?.[0] as LlmClientConfig;
+    expect(fallbackConfig).toMatchObject({
+      apiKey: 'platform-openrouter-key',
+      model: FALLBACK_MODEL,
+      ownerType: 'user',
+    });
+  });
+
   it('skips fallback wrapping when fallback model is not default-eligible', async () => {
     // An OpenRouter model NOT in the curated allowlist fails isDefaultEligibleModel
     const UNLISTED_OR_MODEL = 'or:some/unlisted-model';
@@ -262,7 +311,7 @@ describe('getLlmClient fallback behavior', () => {
   });
 
   it('returns primary error when fallback model has no API key', async () => {
-    // User has google key but the fallback is an anthropic model — no anthropic key
+    // User has OpenRouter key but the fallback is an anthropic model — no anthropic key
     // ClaudeHaiku35 is a FastModel → passes isDefaultEligibleModel
     const ANTHROPIC_FALLBACK = LlmModels.ClaudeHaiku35;
 
@@ -285,7 +334,7 @@ describe('getLlmClient fallback behavior', () => {
       .reply(200, {
         success: true,
         data: {
-          google: 'google-key',
+          openrouter: 'openrouter-key',
           // No anthropic key
         },
       });
@@ -371,12 +420,11 @@ describe('getLlmClient ownerType tagging', () => {
     expect(fallbackConfig).toMatchObject({ ownerType: 'user' });
   });
 
-  it('passes ownerType: "user" to createLlmClient for the platform Gemini fallback (call site 1)', async () => {
-    // Platform Gemini path: user has no key for their preferred model
-    // and the service has a platform Gemini key configured
+  it('passes ownerType: "user" to createLlmClient for the platform OpenRouter fallback (call site 1)', async () => {
+    // Platform OpenRouter path: user has no key for their preferred model.
     const configWithPlatformKey = {
       ...config,
-      platformGeminiApiKey: 'platform-gemini-key',
+      platformOpenRouterApiKey: 'platform-openrouter-key',
     };
 
     // User wants ClaudeHaiku35 but has no anthropic key
@@ -399,7 +447,7 @@ describe('getLlmClient ownerType tagging', () => {
       });
 
     const fakeClient: LlmGenerateClient = {
-      generate: vi.fn().mockResolvedValue(makeSuccessResult('gemini ok')),
+      generate: vi.fn().mockResolvedValue(makeSuccessResult('openrouter ok')),
     };
     mockCreateLlmClient.mockReturnValue(fakeClient);
 
@@ -408,7 +456,7 @@ describe('getLlmClient ownerType tagging', () => {
 
     if (!result.ok) expect.fail(`Expected ok, got ${JSON.stringify(result.error)}`);
 
-    // Platform Gemini fallback: one call via call site 1
+    // Platform OpenRouter fallback: one call via call site 1
     expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
     const capturedConfig = mockCreateLlmClient.mock.calls[0]?.[0] as LlmClientConfig;
     expect(capturedConfig).toMatchObject({ ownerType: 'user' });

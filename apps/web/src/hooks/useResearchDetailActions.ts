@@ -93,7 +93,7 @@ export function useResearchDetailActions(
       ? []
       : [
           ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
-          ...(keys.openrouter !== null ? [LlmProviders.OpenRouter] : []),
+          LlmProviders.OpenRouter,
         ];
 
   const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {

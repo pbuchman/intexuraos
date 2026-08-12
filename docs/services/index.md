@@ -309,7 +309,6 @@ Shared libraries used across apps and workers.
 | Package                                                    | Provider                   | Capabilities                                    |
 | ---------------------------------------------------------- | -------------------------- | ----------------------------------------------- |
 | [infra-claude](../packages/infra-claude/README.md)         | Anthropic                  | Text generation, web search, prompt caching     |
-| [infra-gemini](../packages/infra-gemini/README.md)         | Google                     | Text generation, web search, image gen          |
 | [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI                     | Text generation, web search, DALL-E             |
 | [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity                 | SSE-streamed research with citations            |
 | [infra-openrouter](../packages/infra-openrouter/README.md) | OpenRouter                 | OpenRouter API client for dynamic model routing |

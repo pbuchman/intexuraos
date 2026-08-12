@@ -46,14 +46,14 @@ function createCompletedResearch(overrides?: Partial<Research>): Research {
     userId: 'user-1',
     title: 'Test Research',
     prompt: 'Test prompt',
-    selectedModels: [LlmModels.Gemini25Pro],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54],
+    synthesisModel: LlmModels.GPT54,
     status: 'completed',
     synthesizedResult: 'Synthesized content here',
     llmResults: [
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini25Pro,
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT54,
         status: 'completed',
       },
     ],
@@ -114,7 +114,7 @@ describe('exportResearchToNotion use case', () => {
         mainPageId: 'notion-page-id',
         mainPageUrl: 'https://notion.so/notion-page-id',
         llmReportPages: [
-          { model: LlmModels.Gemini25Pro, pageId: 'report-page-id', pageUrl: 'https://notion.so/report-page-id' },
+          { model: LlmModels.GPT54, pageId: 'report-page-id', pageUrl: 'https://notion.so/report-page-id' },
         ],
       })
     );

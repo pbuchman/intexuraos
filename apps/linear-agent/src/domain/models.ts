@@ -266,7 +266,7 @@ export interface PruneCandidate {
 
 /** A prune candidate stored in Firestore for user review */
 export interface StoredPruneCandidate extends PruneCandidate {
-  /** When the candidate was classified by Gemini */
+  /** When the candidate was classified by an LLM */
   classifiedAt: string;
 }
 

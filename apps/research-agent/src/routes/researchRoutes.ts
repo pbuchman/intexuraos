@@ -38,7 +38,10 @@ import {
   generateContextLabels,
   type GeneratedByUserInfo,
 } from '../domain/research/index.js';
-import { getProviderForModel, LlmModels } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  getProviderForModel,
+} from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import {
@@ -198,7 +201,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       /* v8 ignore start -- ts-type: ?? fallback chain for synthesis model selection @preserve */
-      const synthesisModel = body.synthesisModel ?? body.selectedModels[0] ?? LlmModels.Gemini25Pro;
+      const synthesisModel =
+        body.synthesisModel ?? body.selectedModels[0] ?? DEFAULT_PLATFORM_LLM_MODEL;
       /* v8 ignore stop @preserve */
       if (body.skipSynthesis !== true) {
         const synthesisProvider = getProviderForModel(synthesisModel);
@@ -223,7 +227,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
-          apiKeys.google,
+          apiKeys.openrouter,
           user.userId,
           createTitleGenerator,
           request.log,
@@ -300,12 +304,12 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       const apiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
-      // Generate title using Gemini if Google API key is available
+      // Generate title through the platform OpenRouter route when available.
       let title: string;
-      if (apiKeys.google !== undefined) {
+      if (apiKeys.openrouter !== undefined) {
         const titleGenerator = createTitleGenerator(
-          LlmModels.Gemini25Flash,
-          apiKeys.google,
+          DEFAULT_PLATFORM_LLM_MODEL,
+          apiKeys.openrouter,
           user.userId,
           request.log,
           draftId
@@ -325,12 +329,13 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title,
         prompt: body.prompt,
         selectedModels,
-        synthesisModel: body.synthesisModel ?? selectedModels[0] ?? LlmModels.Gemini25Pro,
+        synthesisModel:
+          body.synthesisModel ?? selectedModels[0] ?? DEFAULT_PLATFORM_LLM_MODEL,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
-          apiKeys.google,
+          apiKeys.openrouter,
           user.userId,
           createTitleGenerator,
           request.log,
@@ -436,10 +441,10 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       // Regenerate title if prompt changed
       let title = existing.title;
       if (body.prompt !== existing.prompt) {
-        if (apiKeys.google !== undefined) {
+        if (apiKeys.openrouter !== undefined) {
           const titleGenerator = createTitleGenerator(
-            LlmModels.Gemini25Flash,
-            apiKeys.google,
+            DEFAULT_PLATFORM_LLM_MODEL,
+            apiKeys.openrouter,
             user.userId,
             request.log,
             id
@@ -464,7 +469,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.inputContexts,
-          apiKeys.google,
+          apiKeys.openrouter,
           user.userId,
           createTitleGenerator,
           request.log,
@@ -535,22 +540,22 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const requestId = generateId();
       const startTime = Date.now();
 
-      // Get Google API key
+      // Use the platform OpenRouter key exposed by the internal user client.
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
         request.log.error({ requestId }, 'Failed to fetch API keys');
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
-      const googleKey = apiKeysResult.value.google;
-      if (googleKey === undefined) {
-        request.log.error({ requestId }, 'Google API key not configured');
-        return await reply.fail('MISCONFIGURED', 'Google API key required for validation');
+      const openRouterKey = apiKeysResult.value.openrouter;
+      if (openRouterKey === undefined) {
+        request.log.error({ requestId }, 'OpenRouter API key not configured');
+        return await reply.fail('MISCONFIGURED', 'OpenRouter API key required for validation');
       }
 
       const validator = createInputValidator(
-        LlmModels.Gemini25Flash,
-        googleKey,
+        DEFAULT_PLATFORM_LLM_MODEL,
+        openRouterKey,
         user.userId,
         request.log
       );
@@ -632,15 +637,15 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
       }
 
-      const googleKey = apiKeysResult.value.google;
-      if (googleKey === undefined) {
-        request.log.error({ requestId }, 'Google API key not configured');
-        return await reply.fail('MISCONFIGURED', 'Google API key required for improvement');
+      const openRouterKey = apiKeysResult.value.openrouter;
+      if (openRouterKey === undefined) {
+        request.log.error({ requestId }, 'OpenRouter API key not configured');
+        return await reply.fail('MISCONFIGURED', 'OpenRouter API key required for improvement');
       }
 
       const validator = createInputValidator(
-        LlmModels.Gemini25Flash,
-        googleKey,
+        DEFAULT_PLATFORM_LLM_MODEL,
+        openRouterKey,
         user.userId,
         request.log
       );
@@ -1334,7 +1339,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       if (body.additionalContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
           body.additionalContexts,
-          apiKeys.google,
+          apiKeys.openrouter,
           user.userId,
           createTitleGenerator,
           request.log,

@@ -29,11 +29,6 @@ vi.mock('@intexuraos/llm-contract', async (importOriginal) => {
   };
 });
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(() => ({ generate: vi.fn() })),
-  createGeminiToolCallingClient: vi.fn(() => ({ run: vi.fn() })),
-}));
-
 const { createLlmClient } = await import('../llmClientFactory.js');
 
 describe('createLlmClient — default-arm coverage', () => {
@@ -42,7 +37,7 @@ describe('createLlmClient — default-arm coverage', () => {
     try {
       createLlmClient({
         apiKey: 'test-key',
-        model: LlmModels.Gemini25Flash, // valid static model — but mocked provider returns OpenRouter
+        model: LlmModels.GPT4oMini, // valid static model — but mocked provider returns OpenRouter
         userId: 'user-123',
         logger: mockLogger,
         usageSink: new FakeUsageSink(),

@@ -16,10 +16,6 @@ const mockLogger: Logger = {
 };
 
 // Mock the infra packages
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(),
-}));
-
 vi.mock('@intexuraos/infra-gpt', () => ({
   createGptClient: vi.fn(),
 }));
@@ -38,7 +34,6 @@ vi.mock('@intexuraos/infra-openrouter', () => ({
 }));
 
 // Import mocked modules after vi.mock
-const { createGeminiClient } = await import('@intexuraos/infra-gemini');
 const { createGptClient } = await import('@intexuraos/infra-gpt');
 const { createClaudeClient } = await import('@intexuraos/infra-claude');
 const { createPerplexityClient } = await import('@intexuraos/infra-perplexity');
@@ -57,59 +52,6 @@ describe('LlmValidatorImpl', () => {
   });
 
   describe('validateKey', () => {
-    describe('google provider', () => {
-      it('returns ok when validation succeeds', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(ok({ content: 'validated', usage: mockUsage })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('google', 'test-api-key', testUserId);
-
-        expect(result.ok).toBe(true);
-        expect(createGeminiClient).toHaveBeenCalledWith({
-          apiKey: 'test-api-key',
-          model: LlmModels.Gemini20Flash,
-          userId: testUserId,
-          logger: mockLogger,
-          usageSink: fakeUsageSink,
-        });
-        expect(mockClient.generate).toHaveBeenCalled();
-      });
-
-      it('returns INVALID_KEY error when key is invalid', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'INVALID_KEY', message: 'Invalid' })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('google', 'bad-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('INVALID_KEY');
-          expect(result.error.message).toBe('Invalid Google API key');
-        }
-      });
-
-      it('returns API_ERROR when other errors occur', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(err({ code: 'NETWORK_ERROR', message: 'Connection failed' })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.validateKey('google', 'test-key', testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toContain('Google API error');
-        }
-      });
-    });
-
     describe('openai provider', () => {
       it('returns ok when validation succeeds', async () => {
         const mockClient = {
@@ -316,43 +258,6 @@ describe('LlmValidatorImpl', () => {
 
   describe('testRequest', () => {
     const testPrompt = 'Say hello';
-
-    describe('google provider', () => {
-      it('returns content when test succeeds', async () => {
-        const mockClient = {
-          generate: vi
-            .fn()
-            .mockResolvedValue(ok({ content: 'Hello from Gemini!', usage: mockUsage })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('google', 'test-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(true);
-        if (result.ok) {
-          expect(result.value.content).toBe('Hello from Gemini!');
-        }
-        expect(mockClient.generate).toHaveBeenCalledWith(
-          testPrompt,
-          expect.objectContaining({ promptType: 'user-service-validation' })
-        );
-      });
-
-      it('returns API_ERROR when test fails', async () => {
-        const mockClient = {
-          generate: vi.fn().mockResolvedValue(err({ code: 'ERROR', message: 'Failed to respond' })),
-        };
-        vi.mocked(createGeminiClient).mockReturnValue(mockClient as never);
-
-        const result = await validator.testRequest('google', 'test-key', testPrompt, testUserId);
-
-        expect(result.ok).toBe(false);
-        if (!result.ok) {
-          expect(result.error.code).toBe('API_ERROR');
-          expect(result.error.message).toBe('Failed to respond');
-        }
-      });
-    });
 
     describe('openai provider', () => {
       it('returns content when test succeeds', async () => {

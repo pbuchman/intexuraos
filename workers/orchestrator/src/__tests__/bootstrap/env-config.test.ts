@@ -33,7 +33,7 @@ function makeValidEnv(overrides: Partial<Record<string, string>> = {}): EnvReade
     INTEXURAOS_MIMO_APP_API_KEY: 'mimo-key',
     INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-key',
     INTEXURAOS_KIMI_APP_API_KEY: 'ABCDEFG',
-    INTEXURAOS_GEMINI_APP_API_KEY: 'gemini-key',
+    INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-key',
     ...overrides,
   };
 }
@@ -81,6 +81,20 @@ describe('getOptionalEnv', () => {
 });
 
 describe('loadEnvConfig', () => {
+  it('starts without a Gemini API key', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_GEMINI_APP_API_KEY'];
+
+    expect(loadEnvConfig(env).openRouterApiKey).toBe('openrouter-key');
+  });
+
+  it('requires the OpenRouter platform key used by validation models', () => {
+    const env = makeValidEnv();
+    delete env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+
+    expect(() => loadEnvConfig(env)).toThrow(/INTEXURAOS_OPENROUTER_APP_API_KEY/);
+  });
+
   it('starts without the removed Legacy Sentry worker auth token', () => {
     const env = makeValidEnv();
     delete env['INTEXURAOS_SENTRY_AUTH_TOKEN'];
@@ -115,7 +129,7 @@ describe('loadEnvConfig', () => {
     expect(config.validationModels).toBe(DEFAULT_VALIDATION_MODELS);
     expect(config.workerImage).toBe(DEFAULT_WORKER_IMAGE);
     expect(config.logLevel).toBe('info');
-    expect(config.openRouterApiKey).toBe('');
+    expect(config.openRouterApiKey).toBe('openrouter-key');
     expect(config.errorHubHost).toBe('home-dev.example.ts.net:8443');
     expect(config.keepContainersAlive).toBe(false);
     expect(config.workerForensicsMode).toBe(false);

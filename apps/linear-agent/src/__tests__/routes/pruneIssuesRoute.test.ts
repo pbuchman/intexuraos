@@ -249,7 +249,7 @@ describe('POST /internal/linear/prune-issues', () => {
     services.issueRepository.listByUserId = vi.fn().mockResolvedValue(ok(issues));
     services.createClassifier = vi.fn().mockReturnValue({
       classifyCandidates: vi.fn().mockResolvedValue(
-        err({ code: 'INTERNAL_ERROR', message: 'Gemini unavailable' })
+        err({ code: 'INTERNAL_ERROR', message: 'LLM unavailable' })
       ),
     });
 

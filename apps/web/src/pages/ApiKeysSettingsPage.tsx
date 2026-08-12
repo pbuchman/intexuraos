@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MoreVertical, FlaskConical, Pencil, Trash2 } from 'lucide-react';
 import {
-  ALL_FAST_MODELS,
+  DEFAULT_ELIGIBLE_STATIC_MODELS,
   FAST_MODEL_DISPLAY_NAMES,
   LlmProviders,
   MODEL_PROVIDER_MAP,
@@ -11,15 +11,14 @@ import {
 import { Button, Card, IntexAgentModelCard, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
-import type { LlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
+import type { ConfigurableLlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
 
 interface ProviderConfig {
-  id: LlmProvider;
+  id: ConfigurableLlmProvider;
   name: string;
 }
 
 const PROVIDERS: ProviderConfig[] = [
-  { id: 'google', name: 'Google (Gemini)' },
   { id: 'openai', name: 'OpenAI (GPT)' },
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'perplexity', name: 'Perplexity (Sonar)' },
@@ -27,7 +26,6 @@ const PROVIDERS: ProviderConfig[] = [
 ];
 
 const PROVIDER_GROUP_LABELS: Record<string, string> = {
-  google: 'Google',
   openai: 'OpenAI',
   anthropic: 'Anthropic',
   openrouter: 'OpenRouter',
@@ -37,20 +35,12 @@ const PROVIDER_GROUP_LABELS: Record<string, string> = {
  * Validate API key format for each provider.
  * Returns error message if invalid, null if valid.
  */
-function validateApiKeyFormat(provider: LlmProvider, key: string): string | null {
+function validateApiKeyFormat(provider: ConfigurableLlmProvider, key: string): string | null {
   if (key.length < 10) {
     return 'API key is too short';
   }
 
   switch (provider) {
-    case 'google':
-      if (!key.startsWith('AIza')) {
-        return 'Google API key should start with "AIza"';
-      }
-      if (key.length !== 39) {
-        return 'Google API key should be 39 characters';
-      }
-      break;
     case 'openai':
       if (!key.startsWith('sk-')) {
         return 'OpenAI API key should start with "sk-"';
@@ -79,7 +69,6 @@ function validateApiKeyFormat(provider: LlmProvider, key: string): string | null
 }
 
 interface TestResults {
-  google: LlmTestResult | null;
   openai: LlmTestResult | null;
   anthropic: LlmTestResult | null;
   perplexity: LlmTestResult | null;
@@ -110,7 +99,7 @@ function groupDefaultEligibleModels(
   const groups = new Map<string, ModelOption[]>();
 
   // Add fast models
-  for (const model of ALL_FAST_MODELS) {
+  for (const model of DEFAULT_ELIGIBLE_STATIC_MODELS) {
     const provider = MODEL_PROVIDER_MAP[model] as string;
     const isConfigured = configuredProviders.has(provider);
     const testResult = testResults?.[provider as keyof TestResults];
@@ -160,7 +149,6 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
   }
 
   const configuredProviders = new Set<string>();
-  if (keys?.google !== null && keys?.google !== undefined) configuredProviders.add(LlmProviders.Google);
   if (keys?.openai !== null && keys?.openai !== undefined) configuredProviders.add(LlmProviders.OpenAI);
   if (keys?.anthropic !== null && keys?.anthropic !== undefined) configuredProviders.add(LlmProviders.Anthropic);
   if (keys?.perplexity !== null && keys?.perplexity !== undefined) configuredProviders.add(LlmProviders.Perplexity);

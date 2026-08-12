@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { DEFAULT_PLATFORM_LLM_MODEL } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { InputValidationAdapter } from '../../../infra/llm/InputValidationAdapter.js';
@@ -13,8 +13,8 @@ const mockLogger: Logger = {
 
 const mockGenerate = vi.fn();
 
-vi.mock('@intexuraos/infra-gemini', () => ({
-  createGeminiClient: vi.fn(() => ({
+vi.mock('@intexuraos/llm-factory', () => ({
+  createLlmClient: vi.fn(() => ({
     generate: mockGenerate,
   })),
 }));
@@ -27,7 +27,7 @@ describe('InputValidationAdapter', () => {
   const createAdapter = (): InputValidationAdapter =>
     new InputValidationAdapter(
       'test-api-key',
-      LlmModels.Gemini25Flash,
+      DEFAULT_PLATFORM_LLM_MODEL,
       'user-123',
       mockLogger,
       new FakeUsageSink()
@@ -36,7 +36,7 @@ describe('InputValidationAdapter', () => {
   const createAdapterForResearch = (researchId: string): InputValidationAdapter =>
     new InputValidationAdapter(
       'test-api-key',
-      LlmModels.Gemini25Flash,
+      DEFAULT_PLATFORM_LLM_MODEL,
       'user-123',
       mockLogger,
       new FakeUsageSink(),
@@ -231,7 +231,7 @@ describe('InputValidationAdapter', () => {
 
       const adapter = new InputValidationAdapter(
         'test-api-key',
-        LlmModels.Gemini25Flash,
+        DEFAULT_PLATFORM_LLM_MODEL,
         'user-123',
         mockLogger as unknown as import('@intexuraos/common-core').Logger,
         new FakeUsageSink()

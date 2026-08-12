@@ -4,7 +4,7 @@ The identity and credential vault for IntexuraOS — encrypts your secrets, vali
 
 ## The Problem
 
-An AI platform that connects to six different providers needs six different API keys. Each key is a credential with real spending authority — an OpenAI key with a $500 monthly limit, an Anthropic key tied to a corporate account, a Google key with access to production models, an OpenRouter key that routes to frontier models across providers. Storing them correctly is table stakes. The harder problem is everything that surrounds storage: validating that a key actually works before you trust it, distributing it to a dozen services that need it without writing it to disk, catching an expired key before it causes a confusing failure three layers deep, and translating a cryptic provider error into something a human can act on.
+An AI platform that connects to multiple providers needs to protect every credential with spending authority — OpenAI, Anthropic, Perplexity, and OpenRouter keys all unlock paid APIs. Storing them correctly is table stakes. The harder problem is everything that surrounds storage: validating that a key actually works before you trust it, distributing it to services that need it without writing it to disk, catching an expired key before it causes a confusing failure three layers deep, and translating a cryptic provider error into something a human can act on.
 
 Then there is authentication itself. A platform that works across a web dashboard, a command-line tool, and a mobile app needs login flows that work in all three contexts — including the awkward case where there is no browser available.
 
@@ -30,7 +30,9 @@ Nine settings, configured once. From this point on, you never think about creden
 
 ### One Vault for Every Provider
 
-Store API keys for Google (Gemini), OpenAI (GPT), Anthropic (Claude), Perplexity, and OpenRouter in a single encrypted vault. Keys are encrypted with AES-256-GCM the moment they arrive and never exist in plaintext at rest. When another service — the research-agent querying multiple models in parallel, or the image-service generating a cover — needs your key, it requests it through a secure internal channel. The key is decrypted in memory, used, and never written to disk by the requesting service.
+Store API keys for OpenAI (GPT and image generation), Anthropic (Claude), Perplexity, and OpenRouter in a single encrypted vault. Keys are encrypted with AES-256-GCM the moment they arrive and never exist in plaintext at rest. When another service — the research-agent querying multiple models in parallel, or the image-service generating an OpenAI cover — needs your key, it requests it through a secure internal channel. The key is decrypted in memory, used, and never written to disk by the requesting service.
+
+Direct Google LLM keys are retired. Google-family language models remain available only through OpenRouter identifiers such as `or:google/...`. This is separate from Google OAuth, which remains available for Calendar access.
 
 What you see in the dashboard is a masked preview: the first four and last four characters, enough to recognize which key is which, never enough to reconstruct it.
 
@@ -40,7 +42,7 @@ OpenRouter acts as a unified gateway to frontier models from multiple providers 
 
 ### Validation Before Trust
 
-Every key is tested against its provider's actual API before it is accepted. The service picks the cheapest model for each provider — Gemini 2.0 Flash for Google, GPT-4o Mini for OpenAI, Haiku 3.5 for Anthropic, Sonar for Perplexity — and makes a real call. OpenRouter uses a dedicated key validation endpoint that incurs no token cost. If the key is invalid, expired, or out of credits, you find out immediately, not three hours later when a research query silently fails.
+Every configurable key is tested against its provider's actual API before it is accepted. The service uses GPT-4o Mini for OpenAI, Haiku 3.5 for Anthropic, and Sonar for Perplexity. OpenRouter uses a dedicated key validation endpoint that incurs no token cost. If the key is invalid, expired, or out of credits, you find out immediately, not three hours later when a research query silently fails.
 
 You can also re-test stored keys at any time. Test results — pass or fail, with a specific message and timestamp — are stored alongside each key so you always know the last verified state.
 
@@ -52,7 +54,7 @@ When a provider returns an error, the raw response is often opaque — a cryptic
 
 Choose your default model — the model every agent uses for generation tasks. The service validates that you have a working API key for the model's provider before accepting your choice, preventing configuration errors that would only surface at runtime.
 
-Set an optional fallback model from a different provider. When the primary model is unavailable — rate-limited, returning errors, or temporarily down — the platform automatically retries with the fallback. The service enforces that the fallback differs from the primary and that you have an API key configured for the fallback provider. If you delete an API key, any primary or fallback model that depends on that provider is automatically cleared.
+Set an optional fallback model. When the primary model is unavailable — rate-limited, returning errors, or temporarily down — the platform automatically retries with the fallback. The service enforces that the fallback differs from the primary and that each model is resolvable through a supported personal key or the platform OpenRouter route. If you delete a personal API key, any primary or fallback model that depends exclusively on that provider is automatically cleared.
 
 ### Authentication Everywhere
 
@@ -73,9 +75,9 @@ Set your timezone so all time-aware features display and process dates correctly
 ## Key Benefits
 
 - **Encrypted at rest, decrypted only in memory** — Keys never exist in plaintext outside of a single request lifecycle
-- **Six providers, one vault** — Google, OpenAI, Anthropic, Perplexity, and OpenRouter keys plus OAuth tokens in one place
+- **Four LLM providers, one vault** — OpenAI, Anthropic, Perplexity, and OpenRouter keys plus OAuth tokens in one place
 - **Validated before stored** — Real API calls (or zero-cost key checks for OpenRouter) catch problems at configuration time, not at runtime
-- **Provider-aware error translation** — Cryptic responses become actionable messages across all five providers
+- **Provider-aware error translation** — Cryptic responses become actionable messages across all configurable providers
 - **Primary + fallback model resilience** — Automatic retry with a secondary model when the primary is unavailable
 - **Cascading cleanup** — Deleting an API key automatically clears any dependent primary or fallback model preferences
 - **Automatic token refresh** — Google OAuth tokens refresh before expiry with no user interaction

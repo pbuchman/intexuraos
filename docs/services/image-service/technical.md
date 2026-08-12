@@ -2,7 +2,7 @@
 
 ## Overview
 
-Image-service generates AI images using OpenAI GPT Image 1 and Google Gemini 2.5 Flash Image, with LLM-powered prompt enhancement via GPT-4.1 and Gemini 2.5 Pro. Images are stored in GCS with automatic thumbnail generation (256px max edge, JPEG at 80% quality). Image metadata is persisted in Firestore. Runs on Cloud Run with auto-scaling.
+Image-service generates AI images using OpenAI GPT Image 1, with LLM-powered prompt enhancement via GPT-4.1. Images are stored in GCS with automatic thumbnail generation (256px max edge, JPEG at 80% quality). Image metadata is persisted in Firestore. Runs on Cloud Run with auto-scaling.
 
 ## Architecture
 
@@ -68,7 +68,7 @@ sequenceDiagram
     Caller->>+Routes: POST /internal/images/generate
     Routes->>UC: createGenerateImageUseCase(deps, modelConfig)
     UC->>UserSvc: getApiKeys(userId)
-    UserSvc-->>UC: {openai, google} keys
+    UserSvc-->>UC: {openai} key
 
     UC->>ImgGen: generate(prompt, {slug})
     ImgGen-->>UC: base64 image data
@@ -97,7 +97,7 @@ sequenceDiagram
     Caller->>+Routes: POST /internal/images/prompts/generate
     Routes->>UC: createGeneratePromptUseCase(deps, modelConfig)
     UC->>UserSvc: getApiKeys(userId)
-    UserSvc-->>UC: {openai, google} keys
+    UserSvc-->>UC: {openai} key
 
     UC->>LLM: generateThumbnailPrompt(text)
     LLM-->>UC: structured prompt JSON
@@ -247,17 +247,15 @@ Best-effort deletion — looks up the image record for its slug, deletes from GC
 
 ### Image Generation Models
 
-| Model                    | Provider | Description                           |
-| ------------------------ | -------- | ------------------------------------- |
-| `gpt-image-1`            | OpenAI   | GPT Image 1 (image generation model)  |
-| `gemini-2.5-flash-image` | Google   | Gemini Flash Image (image generation) |
+| Model         | Provider | Description                          |
+| ------------- | -------- | ------------------------------------ |
+| `gpt-image-1` | OpenAI   | GPT Image 1 (image generation model) |
 
 ### Prompt Generation Models
 
-| Model            | Provider | Purpose            |
-| ---------------- | -------- | ------------------ |
-| `gpt-4.1`        | OpenAI   | Prompt enhancement |
-| `gemini-2.5-pro` | Google   | Prompt enhancement |
+| Model     | Provider | Purpose            |
+| --------- | -------- | ------------------ |
+| `gpt-4.1` | OpenAI   | Prompt enhancement |
 
 ## Pub/Sub
 
@@ -273,10 +271,9 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 ### External Services
 
-| Service           | Purpose                            | Failure Mode     |
-| ----------------- | ---------------------------------- | ---------------- |
-| OpenAI API        | GPT Image 1, GPT-4.1               | DOWNSTREAM_ERROR |
-| Google Gemini API | Gemini Flash Image, Gemini 2.5 Pro | DOWNSTREAM_ERROR |
+| Service    | Purpose              | Failure Mode     |
+| ---------- | -------------------- | ---------------- |
+| OpenAI API | GPT Image 1, GPT-4.1 | DOWNSTREAM_ERROR |
 
 ### Infrastructure
 
@@ -299,7 +296,6 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 | `INTEXURAOS_IMAGE_PUBLIC_BASE_URL`    | Yes      | Public base URL for GCS objects               |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL`    | Yes      | LLM usage service URL for usage reporting     |
 | `INTEXURAOS_SENTRY_DSN`               | No       | Sentry error tracking DSN                     |
-| `INTEXURAOS_GEMINI_APP_API_KEY`       | No       | Platform Gemini API key for user fallback     |
 
 ## Gotchas
 
@@ -313,7 +309,7 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **Deletion cascade**: When deleting an image, both GCS objects and Firestore record are removed independently. If either operation fails, the error is logged but the endpoint still returns `{ deleted: true }` — best-effort cleanup with no rollback.
 
-**API key validation**: The service validates that the user has the required provider API key before generation. If the user lacks a personal key and no platform fallback key is configured, a 400 error with the specific provider name is returned.
+**API key validation**: The service validates that the user has an OpenAI API key before generation. If the user lacks one, a 400 error naming the provider is returned; there is no shared direct-Gemini fallback.
 
 **Image format**: Full-size images are PNG; thumbnails are JPEG. No format selection available.
 
@@ -329,9 +325,9 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **Prompt parameters trimmed (INT-605)**: The `ThumbnailPromptParameters` type only contains `framing`, `realism`, and `people`. Previously documented fields `aspectRatio`, `textOnImage`, and `logosTrademarks` were removed from the consumed contract. The LLM prompt may still produce them, but the parser discards any fields not in the validated schema.
 
-**ZAI provider removed (v3.3.0)**: The ZAI provider and GLM-4.7 models were removed from the LLM contract in v3.3.0. The single line removed from `services.ts` was the ZAI pricing fetch. Platform fallback now uses Gemini exclusively via `INTEXURAOS_GEMINI_APP_API_KEY`.
+**Direct Gemini removed**: Prompt and image generation use OpenAI. Direct Gemini image-generation models are no longer exposed by image-service.
 
-**Provider failover is caller-side (INT-1310)**: research-agent implements provider failover when calling image-service. If one provider fails, research-agent retries with the alternate provider. Image-service itself has no failover logic — it processes each request against a single model as specified by the caller.
+**No direct-provider failover**: image-service exposes only the OpenAI prompt and image models. A request failure is returned to the caller; there is no Gemini retry path.
 
 ## File Structure
 
@@ -344,8 +340,8 @@ apps/image-service/src/
     slugify.ts                     # URL-safe slug from title (max 50 chars, NFD normalization)
   domain/
     models/
-      ImageGenerationModel.ts      # GPT Image 1, Gemini Flash Image configs
-      ImagePromptModel.ts          # GPT-4.1, Gemini 2.5 Pro configs
+      ImageGenerationModel.ts      # GPT Image 1 config
+      ImagePromptModel.ts          # GPT-4.1 config
       GeneratedImage.ts            # GeneratedImage entity
       ThumbnailPrompt.ts           # Prompt response structure + RealismStyle
     ports/
@@ -358,11 +354,9 @@ apps/image-service/src/
       GeneratedImageFirestoreRepository.ts  # Firestore CRUD for generated_images
     image/
       OpenAIImageGenerator.ts      # GPT Image 1 integration
-      GoogleImageGenerator.ts      # Gemini Flash Image integration
       FakeImageGenerator.ts        # Testing fake (no API calls)
     llm/
       GptPromptAdapter.ts          # GPT-4.1 prompt generation
-      GeminiPromptAdapter.ts       # Gemini 2.5 Pro prompt generation
       parseResponse.ts             # LLM JSON response parser + validation
     storage/
       GcsImageStorage.ts           # GCS upload/delete with Sharp thumbnailing
@@ -405,7 +399,7 @@ apps/image-service/src/
 ### v3.3.0: ZAI Provider Removal (2026-03-12)
 
 - ZAI pricing entry removed from `services.ts` (`REQUIRED_MODELS` now has 4 models)
-- Platform fallback is now exclusively Gemini via `INTEXURAOS_GEMINI_APP_API_KEY`
+- Platform Gemini fallback was removed
 - No functional change to image generation flows
 
 ### INT-605: Thumbnail Output Contract Alignment (2026-02-27)
@@ -431,10 +425,9 @@ apps/image-service/src/
 
 ### API Key Naming Standardization (2026-02-15)
 
-- `INTEXURAOS_GEMINI_APP_API_KEY` is the platform fallback key (ZAI key removed in v3.3.0)
-- Gemini 2.5 Flash is the default platform model
+- No shared platform LLM key is injected into image-service
 
 ### Platform Key Fallback (2026-02-09)
 
-- Users without personal API keys fall back to platform-owned Gemini key
-- `UserServiceClient.getApiKeys()` returns platform keys if user has none configured
+- Historical: users without personal API keys fell back to a platform-owned Gemini key
+- The fallback was retired on 2026-08-12; image-service now requires the user's OpenAI key

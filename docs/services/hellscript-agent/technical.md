@@ -23,7 +23,7 @@ graph TB
     subgraph "Dependencies"
         Firestore[(Firestore)]
         UserSvc[user-service]
-        Gemini[Gemini via UserServiceClient]
+        ResolvedLLM[Resolved LLM client<br/>OpenRouter platform fallback]
         UsageSvc[llm-usage-service]
     end
 
@@ -33,9 +33,9 @@ graph TB
     UC --> LLM
     UC --> Repo
     API --> UserSvc
-    UserSvc --> Gemini
+    UserSvc --> ResolvedLLM
     Repo --> Firestore
-    LLM --> Gemini
+    LLM --> ResolvedLLM
 
     classDef service fill:#e1f5ff
     classDef storage fill:#fff4e6
@@ -43,7 +43,7 @@ graph TB
 
     class API,UC,DS,LLM,Repo service
     class Firestore storage
-    class WebUI,Gemini,UserSvc,UsageSvc external
+    class WebUI,ResolvedLLM,UserSvc,UsageSvc external
 ```
 
 ## Data Flow
@@ -260,10 +260,10 @@ The materialized state is stored as an embedded field (`materializedState`) with
 
 ### External Services
 
-| Service   | Purpose               | Failure Mode                                      |
-| --------- | --------------------- | ------------------------------------------------- |
-| Gemini    | Intent interpretation | Falls back to `fallback_append` intent            |
-| Gemini    | Draft generation      | Returns `DraftGenerationError`; no draft saved    |
+| Service      | Purpose               | Failure Mode                                      |
+| ------------ | --------------------- | ------------------------------------------------- |
+| Resolved LLM | Intent interpretation | Falls back to `fallback_append` intent            |
+| Resolved LLM | Draft generation      | Returns `DraftGenerationError`; no draft saved    |
 
 ### Packages
 
@@ -292,7 +292,7 @@ The materialized state is stored as an embedded field (`materializedState`) with
 | `INTEXURAOS_USER_SERVICE_URL`      | user-service base URL for LLM client resolution | Yes      |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL` | LLM usage tracking service URL                  | Yes      |
 | `INTEXURAOS_SENTRY_DSN`            | Sentry error tracking DSN                       | Yes      |
-| `INTEXURAOS_GEMINI_APP_API_KEY`    | Platform Gemini fallback key (optional)         | No       |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY` | Platform OpenRouter key                         | Yes      |
 | `PORT`                             | HTTP port (default: 8131)                       | No       |
 
 ## Prompts
@@ -308,7 +308,7 @@ Both prompts wrap untrusted user input in XML-style tags with injection defense 
 
 ## Gotchas
 
-- **Per-user LLM resolution:** LLM adapters (interpreter, draft generator) are created per-request using the authenticated user's model configuration via `UserServiceClient.getLlmClient()`. The service no longer holds a single shared Gemini client at startup.
+- **Per-user LLM resolution:** LLM adapters (interpreter, draft generator) are created per-request using the authenticated user's model configuration via `UserServiceClient.getLlmClient()`. Platform-owned fallback traffic uses OpenRouter.
 - The materialized state is stored as an embedded field on the buffer document, not as a separate Firestore document. A single read retrieves both buffer metadata and state.
 - Buffer titles are auto-derived from the first thought's text (truncated at 80 characters). There is no endpoint to set the title directly.
 - Event count and latest draft version info are cached on the buffer document to avoid reading all subcollection documents. These are updated during impose operations.
@@ -318,7 +318,7 @@ Both prompts wrap untrusted user input in XML-style tags with injection defense 
 - Maximum 5 writing samples per category per user. Attempting to exceed this returns a `CONFLICT` error.
 - Style instructions are stored per-category on a single user document using Firestore merge writes. Clearing a category sets its field to `null` rather than deleting the document.
 - XML tag escaping (`escapeXmlTags`) is applied to user content in the draft generation prompt to prevent prompt injection.
-- `INTEXURAOS_GEMINI_APP_API_KEY` is no longer in `REQUIRED_ENV` — it is optional. If unset, users without their own Gemini key cannot use the service. A warning is logged at startup when the key is missing.
+- Direct Google credentials are not accepted as a platform fallback. User LLM resolution falls back to the platform OpenRouter key.
 
 ## File Structure
 
@@ -360,8 +360,8 @@ apps/hellscript-agent/src/
 │   │   ├── firestoreHellscriptRepository.ts
 │   │   └── firestoreWritingConfigRepository.ts
 │   └── llm/
-│       ├── geminiDraftGenerator.ts
-│       └── geminiIntentInterpreter.ts
+│       ├── llmDraftGenerator.ts
+│       └── llmIntentInterpreter.ts
 ├── prompts/
 │   ├── generate-draft-prompt.ts
 │   └── interpret-impose-prompt.ts
@@ -378,8 +378,8 @@ apps/hellscript-agent/src/
 │   ├── fakeWritingConfigRepository.ts
 │   ├── firestoreHellscriptRepository.test.ts
 │   ├── firestoreWritingConfigRepository.test.ts
-│   ├── geminiDraftGenerator.test.ts
-│   ├── geminiIntentInterpreter.test.ts
+│   ├── llmDraftGenerator.test.ts
+│   ├── llmIntentInterpreter.test.ts
 │   ├── hellscriptRoutes.test.ts
 │   ├── imposeOnBuffer.test.ts
 │   ├── prompts.test.ts

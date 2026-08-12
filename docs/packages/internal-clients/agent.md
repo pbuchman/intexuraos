@@ -35,9 +35,9 @@ function fetchWithAuth<T>(
 interface UserServiceConfig {
   baseUrl: string;
   internalAuthToken: string;
-  pricingContext: IPricingContext;
   logger: Logger;
-  platformGeminiApiKey?: string | undefined; // fallback: Gemini 2.5 Flash when user has no key
+  usageSink: UsageSink;
+  platformOpenRouterApiKey?: string | undefined; // fallback for OpenRouter-routed models
 }
 
 interface UserServiceClient {
@@ -54,10 +54,11 @@ interface UserServiceClient {
 }
 
 interface DecryptedApiKeys {
-  google?: string;
+  google?: string; // legacy type compatibility; current client never materializes this key
   openai?: string;
   anthropic?: string;
   perplexity?: string;
+  openrouter?: string;
 }
 
 interface OAuthTokenResult {
@@ -131,7 +132,7 @@ All endpoints require `X-Internal-Auth` header.
   +-- @intexuraos/common-core    (Result, Logger, ok, err, getErrorMessage)
   +-- @intexuraos/llm-contract   (LlmProvider, LlmModels, LlmProviders, isValidModel, getProviderForModel)
   +-- @intexuraos/llm-factory    (createLlmClient, LlmClientConfig, LlmGenerateClient)
-  +-- @intexuraos/llm-pricing    (IPricingContext)
+  +-- @intexuraos/llm-pricing    (UsageSink)
 ```
 
 ---

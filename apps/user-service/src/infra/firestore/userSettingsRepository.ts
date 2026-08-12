@@ -4,7 +4,11 @@
  */
 
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
-import { isIntexAgentModel, type IntexAgentModel } from '@intexuraos/llm-contract';
+import {
+  isIntexAgentModel,
+  type ExecutableLlmProvider,
+  type IntexAgentModel,
+} from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../encryption.js';
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import {
@@ -238,7 +242,7 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
   async updateLlmApiKey(
     userId: string,
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     encryptedKey: EncryptedValue
   ): Promise<Result<void, SettingsError>> {
     try {
@@ -296,7 +300,7 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
 
   async updateLlmTestResult(
     userId: string,
-    provider: LlmProvider,
+    provider: ExecutableLlmProvider,
     testResult: LlmTestResult
   ): Promise<Result<void, SettingsError>> {
     try {

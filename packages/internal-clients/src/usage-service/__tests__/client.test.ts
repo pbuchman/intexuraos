@@ -1,6 +1,6 @@
 import nock from 'nock';
 import { describe, it, expect, afterEach } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { createUsageServiceClient } from '../client.js';
 import type {
   UsageServiceConfig,
@@ -33,7 +33,7 @@ const sampleIngestRequest: UsageIngestRequest = {
       source: { service: 'research', component: 'agent', client: 'web', environment: 'dev' },
       request: {
         provider: LlmProviders.Google,
-        model: LlmModels.Gemini25Flash,
+        model: LegacyGoogleModels.Gemini25Flash,
         operation: 'research',
         success: true,
         durationMs: 1200,
@@ -308,7 +308,7 @@ describe('createUsageServiceClient', () => {
       [LlmProviders.Google]: {
         provider: LlmProviders.Google,
         models: {
-          [LlmModels.Gemini25Flash]: {
+          [LegacyGoogleModels.Gemini25Flash]: {
             inputPricePerMillion: 0.15,
             outputPricePerMillion: 0.6,
           },

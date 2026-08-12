@@ -10,7 +10,7 @@
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Name** | user-service                                                                                                                                               |
 | **Role** | User Authentication and Settings Service                                                                                                                   |
-| **Goal** | Manage authentication, OAuth connections (Google + GitHub), LLM API keys (5 providers), user preferences (default + fallback models), and error formatting |
+| **Goal** | Manage authentication, Google + GitHub OAuth connections, LLM API keys for 4 configurable providers, user preferences, and error formatting |
 
 ---
 
@@ -47,11 +47,11 @@ interface UserServiceTools {
   updateLlmApiKey(
     userId: string,
     params: {
-      provider: LlmProvider;
+      provider: ConfigurableLlmProvider;
       apiKey: string;
     }
   ): Promise<LlmKeyUpdateResult>;
-  testLlmApiKey(userId: string, provider: LlmProvider): Promise<LlmTestResult>;
+  testLlmApiKey(userId: string, provider: ConfigurableLlmProvider): Promise<LlmTestResult>;
   deleteLlmApiKey(userId: string, provider: LlmProvider): Promise<void>;
 
   // OAuth Connections (Google)
@@ -66,7 +66,7 @@ interface UserServiceTools {
 
   // Internal (service-to-service) -- all wrapped in response contract
   getDecryptedLlmKeys(userId: string): Promise<ApiResponse<DecryptedLlmKeys>>;
-  updateLlmLastUsed(userId: string, provider: LlmProvider): Promise<void>;
+  updateLlmLastUsed(userId: string, provider: ConfigurableLlmProvider): Promise<void>;
   getGoogleOAuthToken(userId: string): Promise<ApiResponse<{ accessToken: string; email: string }>>;
   getGitHubOAuthToken(userId: string): Promise<ApiResponse<{ accessToken: string; username: string }>>;
   getUserByGitHubUsername(username: string): Promise<ApiResponse<{ userId: string; username: string }>>;
@@ -82,6 +82,7 @@ interface UserServiceTools {
 
 ```typescript
 type LlmProvider = 'google' | 'openai' | 'anthropic' | 'perplexity' | 'openrouter';
+type ConfigurableLlmProvider = Exclude<LlmProvider, 'google'>;
 type OAuthProvider = 'google' | 'github';
 type TranscriptionProvider = 'speechmatics';
 
@@ -132,8 +133,8 @@ interface UserSettings {
 }
 
 interface LlmPreferences {
-  defaultModel: string; // Must pass isDefaultEligibleModel() AND have API key for provider
-  fallbackModel?: string; // Optional, must differ from defaultModel, must have API key for its provider
+  defaultModel: string; // Eligible model; OpenRouter can use the platform key
+  fallbackModel?: string; // Optional, must differ from defaultModel and be resolvable
 }
 
 interface TranscriptionPreferences {
@@ -143,12 +144,12 @@ interface TranscriptionPreferences {
 interface LlmKeysStatus {
   defaultModel: string | null; // User's preferred default LLM model
   fallbackModel: string | null; // User's fallback LLM model (auto-retry when primary unavailable)
-  google: string | null; // Masked key preview (e.g., "AIza...XXXX")
+  google: null; // Compatibility field; direct Google LLM keys are retired
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
   openrouter: string | null;
-  testResults: Record<LlmProvider, LlmTestResult | null>;
+  testResults: Record<ConfigurableLlmProvider, LlmTestResult | null> & { google: null };
 }
 
 interface LlmTestResult {
@@ -158,12 +159,12 @@ interface LlmTestResult {
 }
 
 interface LlmKeyUpdateResult {
-  provider: LlmProvider;
+  provider: ConfigurableLlmProvider;
   masked: string;
 }
 
 interface DecryptedLlmKeys {
-  google: string | null;
+  google: null; // Compatibility field; never returned as an executable key
   openai: string | null;
   anthropic: string | null;
   perplexity: string | null;
@@ -196,11 +197,12 @@ interface GitHubOAuthConnectionStatus {
 | **Self-Access Only**           | Users can only access their own settings                                       |
 | **Encrypted Storage**          | API keys encrypted at rest with AES-256-GCM                                    |
 | **Key Validation**             | API keys validated with provider before storing                                |
-| **5 Providers**                | Supports Google, OpenAI, Anthropic, Perplexity, OpenRouter                     |
+| **4 Configurable Providers**   | Supports OpenAI, Anthropic, Perplexity, and OpenRouter LLM keys                |
+| **No Direct Google LLM**       | Google model calls use `or:google/...` through OpenRouter; OAuth is unaffected |
 | **Rate Limit Precedence**      | Error parser checks rate limits before API key errors                          |
 | **Internal Auth**              | Service-to-service calls require X-Internal-Auth header                        |
-| **Model Validation**           | `defaultModel` must pass `isDefaultEligibleModel()` AND have API key           |
-| **Fallback Validation**        | `fallbackModel` must differ from default, pass eligibility, and have API key   |
+| **Model Validation**           | `defaultModel` must pass `isDefaultEligibleModel()` and be resolvable          |
+| **Fallback Validation**        | `fallbackModel` must differ from default, pass eligibility, and be resolvable  |
 | **Model Cascade on Delete**    | Deleting API key clears default/fallback if they use the deleted provider      |
 | **OAuth2 Raw Responses**       | `/auth/oauth/*` routes use flat OAuth2-spec responses                          |
 | **GitHub Tokens Never Expire** | GitHub access tokens stored with far-future expiry (9999-12-31)                |
@@ -215,7 +217,7 @@ interface GitHubOAuthConnectionStatus {
 The service formats provider-specific errors into user-friendly messages. Error detection follows precedence:
 
 ```
-1. Provider-specific JSON parsing (Gemini, OpenAI, Anthropic)
+1. Provider-specific JSON parsing (OpenAI, Anthropic)
 2. Generic pattern matching with precedence:
    a. Rate limit (429, rate_limit, quota exceeded) -> "Rate limit exceeded..."
    b. API key (api_key, invalid key) -> "The API key is invalid..."
@@ -228,8 +230,6 @@ The service formats provider-specific errors into user-friendly messages. Error 
 | Provider  | Error Type      | Formatted Message                                                               |
 | --------- | --------------- | ------------------------------------------------------------------------------- |
 | Any       | Rate limit      | "Rate limit exceeded. Please try again later."                                  |
-| Google    | Invalid key     | "The API key is invalid or has expired"                                         |
-| Google    | Quota exhausted | "Quota: X tokens/min"                                                           |
 | OpenAI    | Rate limit      | "tokens: X/Y used, need Z more"                                                 |
 | OpenAI    | Quota exceeded  | "OpenAI API quota exceeded. Check billing."                                     |
 | Anthropic | Credit balance  | "Insufficient Anthropic API credits. Please add funds at console.anthropic.com" |
@@ -283,17 +283,17 @@ const testResult = await testLlmApiKey(userId, 'openai');
 ### Set Default and Fallback Models
 
 ```typescript
-// Set preferred default model + fallback -- must have API keys for both providers
+// Set preferred default model + fallback -- each route must be resolvable
 const result = await updateUserSettings(userId, {
-  defaultModel: 'claude-haiku-3-5',
+  defaultModel: 'claude-3-5-haiku-20241022',
   fallbackModel: 'gpt-4o-mini',
 });
-// Fails with INVALID_REQUEST if no API key configured for either provider
+// Fails with INVALID_REQUEST if a non-OpenRouter provider has no configured user key
 // Fails with INVALID_REQUEST if fallbackModel === defaultModel
 
 // Clear fallback by passing null
 const cleared = await updateUserSettings(userId, {
-  defaultModel: 'claude-haiku-3-5',
+  defaultModel: 'claude-3-5-haiku-20241022',
   fallbackModel: null,
 });
 
@@ -390,11 +390,10 @@ const prefs = await getUserPreferences(userId);
 
 ## Validation Models
 
-Keys are validated using cheap, fast models to minimize cost. OpenRouter uses a dedicated key-check endpoint at zero token cost.
+Configurable keys are validated using cheap, fast models to minimize cost. OpenRouter uses a dedicated key-check endpoint at zero token cost. Direct Google LLM keys cannot be added or tested; Google-family models use `or:google/...` identifiers through OpenRouter.
 
 | Provider   | Validation Method     | Model            |
 | ---------- | --------------------- | ---------------- |
-| Google     | Model call (generate) | gemini-2.0-flash |
 | OpenAI     | Model call (generate) | gpt-4o-mini      |
 | Anthropic  | Model call (generate) | claude-3.5-haiku |
 | Perplexity | Model call (generate) | sonar            |
@@ -412,7 +411,7 @@ Keys are validated using cheap, fast models to minimize cost. OpenRouter uses a 
 | llm-usage-service  | LLM usage reporting          | Usage not tracked (non-fatal)           |
 | Firebase Admin SDK | Custom token generation      | Firebase token endpoint returns 500     |
 | Firestore          | All persistent state         | Endpoints return 500                    |
-| LLM APIs (5)       | Key validation and testing   | Validation/test returns formatted error |
+| LLM APIs (4)       | Key validation and testing   | Validation/test returns formatted error |
 
 ---
 

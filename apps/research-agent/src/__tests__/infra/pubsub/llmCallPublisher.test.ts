@@ -37,7 +37,7 @@ describe('LlmCallPublisher', () => {
     type: 'llm.call',
     researchId: 'research-123',
     userId: 'user-456',
-    model: LlmModels.Gemini25Pro,
+    model: LlmModels.GPT54,
     prompt: 'Test prompt',
   };
 
@@ -72,7 +72,7 @@ describe('LlmCallPublisher', () => {
     });
 
     const models = [
-      LlmModels.Gemini25Pro,
+      LlmModels.GPT54,
       LlmModels.O4MiniDeepResearch,
       LlmModels.ClaudeOpus46,
     ] as const;

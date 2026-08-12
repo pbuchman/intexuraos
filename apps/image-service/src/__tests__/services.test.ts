@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import {
   getServices,
@@ -75,16 +75,6 @@ describe('services', () => {
       expect(services.generateId).toBeDefined();
     });
 
-    it('createPromptGenerator returns google adapter for google provider', () => {
-      initializeServices();
-
-      const services = getServices();
-      const generator = services.createPromptGenerator(LlmProviders.Google, LlmModels.Gemini25Pro, 'test-key', 'test-user-id', mockLogger);
-
-      expect(generator).toBeDefined();
-      expect(generator.generateThumbnailPrompt).toBeDefined();
-    });
-
     it('createPromptGenerator returns openai adapter for openai provider', () => {
       initializeServices();
 
@@ -101,21 +91,6 @@ describe('services', () => {
       const services = getServices();
       const generator = services.createImageGenerator(
         LlmModels.GPTImage1,
-        'test-key',
-        'test-user-id',
-        mockLogger
-      );
-
-      expect(generator).toBeDefined();
-      expect(generator.generate).toBeDefined();
-    });
-
-    it('createImageGenerator returns Google generator for gemini-2.5-flash-image', () => {
-      initializeServices();
-
-      const services = getServices();
-      const generator = services.createImageGenerator(
-        LlmModels.Gemini25FlashImage,
         'test-key',
         'test-user-id',
         mockLogger

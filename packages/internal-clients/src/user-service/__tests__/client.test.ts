@@ -2,15 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { createUserServiceClient, providerToKeyField } from '../client.js';
 import { apiFail, apiOk } from '@intexuraos/common-http';
-import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LegacyGoogleModels,
+  LlmModels,
+  LlmProviders,
+} from '@intexuraos/llm-contract';
 import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../types.js';
 
 describe('providerToKeyField', () => {
-  it('returns google for Google provider', () => {
-    expect(providerToKeyField(LlmProviders.Google)).toBe(LlmProviders.Google);
-  });
-
   it('returns openai for OpenAI provider', () => {
     expect(providerToKeyField(LlmProviders.OpenAI)).toBe(LlmProviders.OpenAI);
   });
@@ -65,7 +67,10 @@ describe('createUserServiceClient', () => {
       const result = await client.getApiKeys('user123');
 
       if (result.ok) {
-        expect(result.value).toEqual(mockKeys);
+        expect(result.value).toEqual({
+          openai: 'openai-key',
+          anthropic: 'anthropic-key',
+        });
       } else {
         expect.fail('Expected successful result');
       }
@@ -137,7 +142,7 @@ describe('createUserServiceClient', () => {
       const result = await client.getApiKeys('user123');
 
       if (result.ok) {
-        expect(result.value.google).toBe('google-key');
+        expect(result.value).not.toHaveProperty('google');
         expect(result.value.openai).toBeUndefined();
         expect(result.value.anthropic).toBeUndefined();
       } else {
@@ -145,7 +150,26 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('omits google key when it is null', async () => {
+    it('uses the platform OpenRouter key when the user has no OpenRouter key', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { openrouter: null } });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
+      const result = await client.getApiKeys('user123');
+
+      if (result.ok) {
+        expect(result.value).toEqual({ openrouter: 'platform-openrouter-key' });
+      } else {
+        expect.fail('Expected successful result');
+      }
+    });
+
+    it('ignores the retired google response field', async () => {
       const mockKeys = {
         google: null,
         openai: 'openai-key',
@@ -160,7 +184,7 @@ describe('createUserServiceClient', () => {
       const result = await client.getApiKeys('user123');
 
       if (result.ok) {
-        expect(result.value.google).toBeUndefined();
+        expect(result.value).not.toHaveProperty('google');
         expect(result.value.openai).toBe('openai-key');
       } else {
         expect.fail('Expected successful result');
@@ -185,7 +209,7 @@ describe('createUserServiceClient', () => {
       const result = await client.getApiKeys('user123');
 
       if (result.ok) {
-        expect(result.value.google).toBe('google-key');
+        expect(result.value).not.toHaveProperty('google');
         expect(result.value.openai).toBe('openai-key');
         expect(result.value.anthropic).toBe('anthropic-key');
         expect(result.value.perplexity).toBe('perplexity-key');
@@ -196,7 +220,7 @@ describe('createUserServiceClient', () => {
     });
 
     it('URL encodes userId with spaces', async () => {
-      const mockKeys = { google: 'google-key' };
+      const mockKeys = { openai: 'openai-key' };
       const userId = 'user 123';
 
       nock('http://localhost:3000')
@@ -215,7 +239,7 @@ describe('createUserServiceClient', () => {
     });
 
     it('URL encodes userId with plus', async () => {
-      const mockKeys = { google: 'google-key' };
+      const mockKeys = { openai: 'openai-key' };
       const userId = 'user+123';
 
       nock('http://localhost:3000')
@@ -234,7 +258,7 @@ describe('createUserServiceClient', () => {
     });
 
     it('URL encodes userId with pipe (Auth0 format)', async () => {
-      const mockKeys = { google: 'google-key' };
+      const mockKeys = { openai: 'openai-key' };
       const userId = 'auth0|1234567890';
 
       nock('http://localhost:3000')
@@ -254,15 +278,105 @@ describe('createUserServiceClient', () => {
   });
 
   describe('getLlmClient', () => {
+    it('uses the platform OpenRouter default when the user has no preference or key', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
+      const result = await client.getLlmClient('user123');
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          userId: 'user123',
+          model: IntexAgentModels.MiniMaxM3,
+          provider: LlmProviders.OpenRouter,
+        },
+        'LLM client created successfully'
+      );
+    });
+
+    it('maps an explicit legacy Gemini preference to the platform OpenRouter model', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: { llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash } },
+        });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { google: 'legacy-google-key' } });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
+      const result = await client.getLlmClient('user123');
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          userId: 'user123',
+          model: DEFAULT_PLATFORM_LLM_MODEL,
+          provider: LlmProviders.OpenRouter,
+        },
+        'LLM client created successfully'
+      );
+    });
+
+    it('falls back to platform OpenRouter when an explicit Gemini preference has no user key', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: { llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash } },
+        });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
+      const result = await client.getLlmClient('user123');
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          userId: 'user123',
+          model: IntexAgentModels.MiniMaxM3,
+          provider: LlmProviders.OpenRouter,
+        },
+        'LLM client created successfully'
+      );
+    });
+
     it('fetches settings and keys, returns configured client', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: IntexAgentModels.MiniMaxM3,
         },
       };
 
       const mockKeys = {
-        google: 'google-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')
@@ -281,7 +395,11 @@ describe('createUserServiceClient', () => {
       if (result.ok) {
         expect(result.value).toBeDefined();
         expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', model: LlmModels.Gemini25Flash, provider: LlmProviders.Google },
+          {
+            userId: 'user123',
+            model: IntexAgentModels.MiniMaxM3,
+            provider: LlmProviders.OpenRouter,
+          },
           'LLM client created successfully'
         );
       } else {
@@ -295,7 +413,7 @@ describe('createUserServiceClient', () => {
       };
 
       const mockKeys = {
-        google: 'google-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')
@@ -314,7 +432,7 @@ describe('createUserServiceClient', () => {
       if (result.ok) {
         expect(result.value).toBeDefined();
         expect(mockLogger.info).toHaveBeenCalledWith(
-          expect.objectContaining({ model: LlmModels.Gemini25Flash }),
+          expect.objectContaining({ model: IntexAgentModels.MiniMaxM3 }),
           'LLM client created successfully'
         );
       } else {
@@ -325,7 +443,7 @@ describe('createUserServiceClient', () => {
     it('returns NO_API_KEY when provider key missing', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
         },
       };
 
@@ -348,9 +466,9 @@ describe('createUserServiceClient', () => {
 
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toContain('google');
+        expect(result.error.message).toContain('openrouter');
         expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', provider: LlmProviders.Google },
+          { userId: 'user123', provider: LlmProviders.OpenRouter },
           'No API key configured for provider'
         );
       } else {
@@ -409,7 +527,7 @@ describe('createUserServiceClient', () => {
     it('handles keys fetch failure', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
         },
       };
 
@@ -461,10 +579,10 @@ describe('createUserServiceClient', () => {
     it('URL encodes userId with ampersand in settings request', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: IntexAgentModels.MiniMaxM3,
         },
       };
-      const mockKeys = { google: 'google-key' };
+      const mockKeys = { openrouter: 'openrouter-key' };
       const userId = 'user&test';
 
       nock('http://localhost:3000')
@@ -490,10 +608,10 @@ describe('createUserServiceClient', () => {
     it('URL encodes userId with pipe (Auth0 format) in keys request', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: IntexAgentModels.MiniMaxM3,
         },
       };
-      const mockKeys = { google: 'google-key' };
+      const mockKeys = { openrouter: 'openrouter-key' };
       const userId = 'auth0|123';
 
       nock('http://localhost:3000')
@@ -636,10 +754,10 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('falls back to platform Gemini25Flash when user has no API key and platformGeminiApiKey is configured', async () => {
-      const configWithGeminiKey = {
+    it('falls back to the platform OpenRouter default when the selected provider key is missing', async () => {
+      const configWithOpenRouterKey = {
         ...config,
-        platformGeminiApiKey: 'platform-gemini-key',
+        platformOpenRouterApiKey: 'platform-openrouter-key',
       };
 
       // Use ClaudeHaiku35 which IS default-eligible but no anthropic key is configured
@@ -663,7 +781,7 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockKeys });
 
-      const client = createUserServiceClient(configWithGeminiKey);
+      const client = createUserServiceClient(configWithOpenRouterKey);
       const result = await client.getLlmClient('user123');
 
       if (result.ok) {
@@ -674,10 +792,14 @@ describe('createUserServiceClient', () => {
             provider: LlmProviders.Anthropic,
             requestedModel: LlmModels.ClaudeHaiku35,
           },
-          'No API key for provider, falling back to platform Gemini25Flash'
+          'No API key for provider, falling back to platform OpenRouter default'
         );
         expect(mockLogger.info).toHaveBeenCalledWith(
-          { userId: 'user123', model: LlmModels.Gemini25Flash, provider: LlmProviders.Google },
+          {
+            userId: 'user123',
+            model: IntexAgentModels.MiniMaxM3,
+            provider: LlmProviders.OpenRouter,
+          },
           'LLM client created successfully'
         );
       } else {
@@ -688,7 +810,7 @@ describe('createUserServiceClient', () => {
     it('returns NO_API_KEY when user has no key and no platform keys configured', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: LegacyGoogleModels.Gemini25Flash,
         },
       };
 
@@ -711,7 +833,7 @@ describe('createUserServiceClient', () => {
 
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toContain('google');
+        expect(result.error.message).toContain('openrouter');
       } else {
         expect.fail('Expected error result');
       }
@@ -720,12 +842,12 @@ describe('createUserServiceClient', () => {
     it('returns client with zero pricing when pricingContext is omitted', async () => {
       const mockSettings = {
         llmPreferences: {
-          defaultModel: LlmModels.Gemini25Flash,
+          defaultModel: IntexAgentModels.MiniMaxM3,
         },
       };
 
       const mockKeys = {
-        google: 'google-key',
+        openrouter: 'openrouter-key',
       };
 
       nock('http://localhost:3000')

@@ -25,7 +25,6 @@ declare -a REQUESTED_SECRETS=()
 HETZNER_RUNTIME_SECRETS=(
   INTEXURAOS_CLOUDFLARE_API_TOKEN
   INTEXURAOS_ENCRYPTION_KEY
-  INTEXURAOS_GEMINI_APP_API_KEY
   INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN
   INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET
   INTEXURAOS_GITHUB_WEBHOOK_SECRET
@@ -204,8 +203,8 @@ validate_default_secret_names() {
   local name=""
   local unique_count=""
 
-  [[ ${#HETZNER_RUNTIME_SECRETS[@]} -eq 28 ]] \
-    || fail "Production runtime secret allowlist must contain exactly 28 names"
+  [[ ${#HETZNER_RUNTIME_SECRETS[@]} -eq 27 ]] \
+    || fail "Production runtime secret allowlist must contain exactly 27 names"
   unique_count="$(printf '%s\n' "${HETZNER_RUNTIME_SECRETS[@]}" | sort -u | wc -l | tr -d ' ')"
   [[ "${unique_count}" == "${#HETZNER_RUNTIME_SECRETS[@]}" ]] \
     || fail "Production runtime secret allowlist contains duplicate names"

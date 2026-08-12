@@ -60,19 +60,40 @@ const result = await repo.findById(id);
 if (!result.ok) return result;
 console.log(result.value); // TypeScript knows it's Success<T>
 
-// ❌ Using enum from unresolved import
+// ❌ Using an unresolved model import or a raw Google model ID
 import { ModelId } from '@intexuraos/llm-factory';
-const model = ModelId.Gemini25Flash; // no-unsafe-member-access
+const model = ModelId.Gemini25Flash; // unresolved and direct Google is disabled
 
-// ✅ Ensure package is built, or use string literal
-const model = 'gemini-2.5-flash' as const;
+// ✅ Build the package and use the exported OpenRouter-backed constant
+import { IntexAgentModels } from '@intexuraos/llm-contract';
+const model = IntexAgentModels.Gemini3FlashPreview; // or:google/...
 ```
 
 **Root cause:** If `no-unsafe-*` errors appear, the type isn't resolving — check imports, run `pnpm build`, or add explicit type annotations.
 
 ---
 
-## 6. Mock Logger — Include ALL required methods
+## 6. Google LLM Routing — Never call Gemini directly
+
+Every executable Google-family model must use an `or:google/...` identifier and the OpenRouter client. Platform-owned LLM traffic also uses OpenRouter.
+
+```typescript
+// ❌ Raw Google model and direct Google credential
+const model = 'gemini-2.5-flash';
+const apiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
+
+// ✅ Google-family model routed through OpenRouter
+const model = createOpenRouterModelId('google/gemini-3-flash-preview');
+const apiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+```
+
+- Do not add `INTEXURAOS_GEMINI_APP_API_KEY`, a Google LLM key setting, `GeminiAdapter`, or a new `@intexuraos/infra-gemini` runtime dependency.
+- Raw `gemini-*` values may exist in historical persisted data or compatibility types. Normalize them before execution; never revive them as a valid runtime route.
+- Google OAuth tokens for Calendar are unrelated and remain supported. Do not remove or route OAuth through OpenRouter.
+
+---
+
+## 7. Mock Logger — Include ALL required methods
 
 The `Logger` interface requires `info`, `warn`, `error`, AND `debug`. Missing any causes TS2345.
 
@@ -99,7 +120,7 @@ const logger = new FakeLogger();
 
 ---
 
-## 7. Empty Functions in Mocks — Use arrow functions
+## 8. Empty Functions in Mocks — Use arrow functions
 
 ESLint's `no-empty-function` forbids `() => {}`. Use explicit return or vi.fn().
 
@@ -114,7 +135,7 @@ const mock = { process: vi.fn() };
 
 ---
 
-## 8. Async Template Expressions — Await or wrap in `String()`
+## 9. Async Template Expressions — Await or wrap in `String()`
 
 ```typescript
 // ❌ `Result: ${asyncFunction()}` // Promise<string> in template
@@ -124,7 +145,7 @@ const mock = { process: vi.fn() };
 
 ---
 
-## 9. Fastify Type Parameters — Specify generics for route handlers
+## 10. Fastify Type Parameters — Specify generics for route handlers
 
 FastifyReply/FastifyRequest need generic type parameters to infer response/request types.
 
@@ -159,7 +180,7 @@ app.get<{ Params: { id: string } }>('/route/:id', async (request, reply) => {
 
 ---
 
-## 10. Strict Boolean Expressions — Use explicit comparisons
+## 11. Strict Boolean Expressions — Use explicit comparisons
 
 `strictBooleanExpressions` requires explicit boolean checks, no truthy/falsy shortcuts.
 

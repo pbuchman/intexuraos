@@ -24,6 +24,7 @@ export interface ServiceDependencies {
   userServiceUrl: string;
   internalAuthToken: string;
   llmUsageServiceUrl: string;
+  openRouterAppApiKey: string;
 }
 
 let container: ServiceContainer | undefined;
@@ -54,6 +55,7 @@ export function initServices(dependencies: ServiceDependencies): void {
         component: 'user-service-client',
         logger: createAppLogger({ name: 'web-agent-usage-sink' }),
       }),
+      platformOpenRouterApiKey: dependencies.openRouterAppApiKey,
     }),
   };
 }

@@ -39,6 +39,7 @@ const migratedSecretTombstones = [
   'INTEXURAOS_FIREBASE_API_KEY',
   'INTEXURAOS_FIREBASE_AUTH_DOMAIN',
   'INTEXURAOS_FIREBASE_PROJECT_ID',
+  'INTEXURAOS_GEMINI_APP_API_KEY',
   'INTEXURAOS_GITHUB_APP_ID',
   'INTEXURAOS_GITHUB_INSTALLATION_ID',
   'INTEXURAOS_GITHUB_OAUTH_CLIENT_ID',
@@ -81,10 +82,10 @@ describe('versioned runtime configuration Terraform cutover', () => {
       .map((match) => match[1])
       .sort();
 
-    expect(migratedSecretTombstones).toHaveLength(26);
-    expect(policy.secretManagerNames).toHaveLength(37);
+    expect(migratedSecretTombstones).toHaveLength(27);
+    expect(policy.secretManagerNames).toHaveLength(36);
     expect(moduleNames).toEqual([...policy.secretManagerNames].sort());
-    expect(moduleNames).toHaveLength(37);
+    expect(moduleNames).toHaveLength(36);
     expect(moduleNames).not.toContain('INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN');
     expect(terraform).toContain('secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"');
   });
@@ -113,7 +114,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
       'dev    = jsondecode(file("${path.module}/../../../config/environments/dev.json"))'
     );
 
-    expect(migratedSecretTombstones).toHaveLength(26);
+    expect(migratedSecretTombstones).toHaveLength(27);
     for (const secretName of migratedSecretTombstones) {
       expect(secretManagerSection, secretName).not.toContain(`"${secretName}"`);
       expect(hetznerRuntimeSecretsSection, secretName).not.toContain(`"${secretName}"`);

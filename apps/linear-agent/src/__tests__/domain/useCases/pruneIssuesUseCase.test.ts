@@ -168,14 +168,14 @@ describe('pruneIssues', () => {
     );
     (deps.issueRepo.listByUserId as ReturnType<typeof vi.fn>).mockResolvedValue(ok(issues));
     (deps.classifier.classifyCandidates as ReturnType<typeof vi.fn>).mockResolvedValue(
-      err({ code: 'INTERNAL_ERROR', message: 'Gemini failed' })
+      err({ code: 'INTERNAL_ERROR', message: 'LLM failed' })
     );
 
     const result = await pruneIssues(deps);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.error.message).toContain('Gemini failed');
+    expect(result.error.message).toContain('LLM failed');
   });
 
   it('skips pruning when no connected users', async () => {

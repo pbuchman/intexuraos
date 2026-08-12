@@ -885,7 +885,7 @@ export const linearRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       schema: {
         operationId: 'listPruneCandidates',
         summary: 'List issues scheduled for deletion',
-        description: 'Returns all prune candidates classified by Gemini for user review',
+        description: 'Returns all prune candidates classified by an LLM for user review',
         tags: ['linear'],
         response: {
           200: {

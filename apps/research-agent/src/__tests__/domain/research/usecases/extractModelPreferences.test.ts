@@ -5,7 +5,11 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
-import { LlmModels } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LlmModels,
+} from '@intexuraos/llm-contract';
 import {
   extractModelPreferences,
   getModelDisplayName,
@@ -82,7 +86,7 @@ describe('extractModelPreferences', () => {
 
   describe('when API keys are configured', () => {
     const availableKeys: ApiKeyStore = {
-      google: 'google-key',
+      openrouter: 'openrouter-key',
       openai: 'openai-key',
       anthropic: 'anthropic-key',
       perplexity: 'perplexity-key',
@@ -90,7 +94,7 @@ describe('extractModelPreferences', () => {
 
     it('extracts selected models from valid JSON response', async () => {
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeSonnet46],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview, LlmModels.ClaudeSonnet46],
         synthesisModel: LlmModels.GPT54,
       });
 
@@ -102,7 +106,7 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('research AI using gemini and claude, synthesize with gpt', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
       expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet46);
       expect(result.synthesisModel).toBe(LlmModels.GPT54);
     });
@@ -153,9 +157,9 @@ describe('extractModelPreferences', () => {
     });
 
     it('validates one model per provider constraint', async () => {
-      // LLM returns two Google models, should only keep the first
+      // LLM returns two OpenRouter models, should only keep the first
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.Gemini25Flash],
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: null,
       });
 
@@ -168,18 +172,18 @@ describe('extractModelPreferences', () => {
       const result = await extractModelPreferences('use all gemini models', deps);
 
       expect(result.selectedModels).toHaveLength(1);
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
-      expect(result.selectedModels).not.toContain(LlmModels.Gemini25Flash);
+      expect(result.selectedModels).toContain(DEFAULT_PLATFORM_LLM_MODEL);
+      expect(result.selectedModels).not.toContain(IntexAgentModels.Gemini3FlashPreview);
     });
 
     it('filters out models user does not have API keys for', async () => {
       const limitedKeys: ApiKeyStore = {
-        google: 'google-key',
+        openrouter: 'openrouter-key',
         // No anthropic key
       };
 
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro, LlmModels.ClaudeSonnet46],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview, LlmModels.ClaudeSonnet46],
         synthesisModel: null,
       });
 
@@ -191,13 +195,13 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini and claude', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
       expect(result.selectedModels).not.toContain(LlmModels.ClaudeSonnet46);
     });
 
     it('returns undefined synthesis model when null in response', async () => {
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: null,
       });
 
@@ -232,12 +236,12 @@ describe('extractModelPreferences', () => {
 
     it('returns undefined synthesis model when user lacks API key for it', async () => {
       const limitedKeys: ApiKeyStore = {
-        google: 'google-key',
+        openrouter: 'openrouter-key',
         // No openai key for GPT synthesis
       };
 
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: LlmModels.GPT54,
       });
 
@@ -254,8 +258,8 @@ describe('extractModelPreferences', () => {
 
     it('logs extraction result with requested and validated models', async () => {
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro],
-        synthesisModel: LlmModels.Gemini25Pro,
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL],
+        synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
       });
 
       const deps: ExtractModelPreferencesDeps = {
@@ -268,10 +272,10 @@ describe('extractModelPreferences', () => {
 
       expect(logger.info).toHaveBeenCalledWith(
         {
-          requestedModels: [LlmModels.Gemini25Pro],
-          validatedModels: [LlmModels.Gemini25Pro],
-          requestedSynthesis: LlmModels.Gemini25Pro,
-          validatedSynthesis: LlmModels.Gemini25Pro,
+          requestedModels: [DEFAULT_PLATFORM_LLM_MODEL],
+          validatedModels: [DEFAULT_PLATFORM_LLM_MODEL],
+          requestedSynthesis: DEFAULT_PLATFORM_LLM_MODEL,
+          validatedSynthesis: DEFAULT_PLATFORM_LLM_MODEL,
         },
         'Model preferences extracted'
       );
@@ -279,7 +283,7 @@ describe('extractModelPreferences', () => {
 
     it('handles empty string API keys as not configured', async () => {
       const emptyKeys: ApiKeyStore = {
-        google: '',
+        openrouter: '',
         openai: '',
       };
 
@@ -297,10 +301,10 @@ describe('extractModelPreferences', () => {
   });
 
   describe('provider-specific API key mapping', () => {
-    it('uses google key for Gemini models', async () => {
-      const keys: ApiKeyStore = { google: 'google-key' };
+    it('uses openrouter key for OpenRouter Gemini models', async () => {
+      const keys: ApiKeyStore = { openrouter: 'openrouter-key' };
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: null,
       });
 
@@ -312,7 +316,7 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
     });
 
     it('uses openai key for GPT models', async () => {
@@ -374,35 +378,35 @@ describe('extractModelPreferences', () => {
   describe('edge cases', () => {
     it('handles response with invalid model IDs', async () => {
       const response = JSON.stringify({
-        selectedModels: ['invalid-model', LlmModels.Gemini25Pro],
+        selectedModels: ['invalid-model', IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: 'also-invalid',
       });
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
-        availableKeys: { google: 'key' },
+        availableKeys: { openrouter: 'key' },
         logger,
       };
 
       const result = await extractModelPreferences('use invalid model', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
       expect(result.selectedModels).not.toContain('invalid-model');
       expect(result.synthesisModel).toBeUndefined();
     });
 
     it('handles JSON embedded in surrounding text', async () => {
-      const response = `Here is my analysis: {"selectedModels": ["${LlmModels.Gemini25Pro}"], "synthesisModel": null} That's all.`;
+      const response = `Here is my analysis: {"selectedModels": ["${IntexAgentModels.Gemini3FlashPreview}"], "synthesisModel": null} That's all.`;
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
-        availableKeys: { google: 'key' },
+        availableKeys: { openrouter: 'key' },
         logger,
       };
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
     });
 
     it('returns empty when response is array instead of object', async () => {
@@ -410,7 +414,7 @@ describe('extractModelPreferences', () => {
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
-        availableKeys: { google: 'key' },
+        availableKeys: { openrouter: 'key' },
         logger,
       };
 
@@ -427,7 +431,7 @@ describe('extractModelPreferences', () => {
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
-        availableKeys: { google: 'key' },
+        availableKeys: { openrouter: 'key' },
         logger,
       };
 
@@ -438,33 +442,33 @@ describe('extractModelPreferences', () => {
 
     it('handles synthesisModel that is not a string', async () => {
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: 123,
       });
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
-        availableKeys: { google: 'key' },
+        availableKeys: { openrouter: 'key' },
         logger,
       };
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.Gemini25Pro);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
       expect(result.synthesisModel).toBeUndefined();
     });
 
     it('correctly marks provider defaults', async () => {
       // This test verifies that provider defaults are properly passed to the prompt
       const response = JSON.stringify({
-        selectedModels: [LlmModels.Gemini25Pro],
+        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
         synthesisModel: null,
       });
 
       const llmClient = createFakeLlmClient(response);
       const deps: ExtractModelPreferencesDeps = {
         llmClient,
-        availableKeys: { google: 'key' },
+        availableKeys: { openrouter: 'key' },
         logger,
       };
 
@@ -477,7 +481,9 @@ describe('extractModelPreferences', () => {
 
   describe('getModelDisplayName', () => {
     it('returns static display name for known models', () => {
-      expect(getModelDisplayName(LlmModels.Gemini25Pro)).toBe('Gemini 2.5 Pro');
+      expect(getModelDisplayName(IntexAgentModels.Gemini3FlashPreview)).toBe(
+        'Gemini 3 Flash Preview (OpenRouter)'
+      );
       expect(getModelDisplayName(LlmModels.ClaudeSonnet46)).toBe('Claude Sonnet 4.6');
     });
 
@@ -496,7 +502,7 @@ describe('extractModelPreferences', () => {
 
   describe('getModelKeywords', () => {
     it('returns static keywords for known models', () => {
-      const keywords = getModelKeywords(LlmModels.Gemini25Pro);
+      const keywords = getModelKeywords(IntexAgentModels.Gemini3FlashPreview);
       expect(Array.isArray(keywords)).toBe(true);
       expect(keywords.length).toBeGreaterThan(0);
     });

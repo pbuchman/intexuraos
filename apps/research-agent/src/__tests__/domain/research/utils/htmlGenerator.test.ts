@@ -85,8 +85,8 @@ describe('generateShareableHtml', () => {
         ...baseInput,
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Google result content',
           },
@@ -101,7 +101,7 @@ describe('generateShareableHtml', () => {
 
       expect(html).toContain('Individual Provider Reports');
       expect(html).toContain('<details>');
-      expect(html).toContain(LlmModels.Gemini20Flash);
+      expect(html).toContain(LlmModels.GPT54);
       expect(html).toContain('provider-google');
       expect(html).toContain('Google result content');
       expect(html).toContain('o4-mini');
@@ -114,8 +114,8 @@ describe('generateShareableHtml', () => {
         ...baseInput,
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: 'Google result',
           },
@@ -127,7 +127,7 @@ describe('generateShareableHtml', () => {
         ],
       });
 
-      expect(html).toContain(LlmModels.Gemini20Flash);
+      expect(html).toContain(LlmModels.GPT54);
       expect(html).not.toContain('o4-mini');
     });
 
@@ -136,8 +136,8 @@ describe('generateShareableHtml', () => {
         ...baseInput,
         llmResults: [
           {
-            provider: LlmProviders.Google,
-            model: LlmModels.Gemini20Flash,
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
             status: 'completed',
             result: '',
           },

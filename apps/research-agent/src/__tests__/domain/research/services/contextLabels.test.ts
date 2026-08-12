@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { generateContextLabels } from '../../../../domain/research/services/contextLabels.js';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { DEFAULT_PLATFORM_LLM_MODEL } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 
@@ -18,7 +18,7 @@ describe('generateContextLabels', () => {
     debug: vi.fn(),
   } as unknown as Logger;
 
-  it('returns contexts unchanged when no Google API key provided', async () => {
+  it('returns contexts unchanged when no OpenRouter API key provided', async () => {
     const contexts = [
       { content: 'Test content 1' },
       { content: 'Test content 2', label: 'Existing label' },
@@ -59,7 +59,7 @@ describe('generateContextLabels', () => {
 
     const result = await generateContextLabels(
       contexts,
-      'google-api-key',
+      'openrouter-api-key',
       'user-123',
       () => mockGenerator,
       mockLogger
@@ -83,7 +83,7 @@ describe('generateContextLabels', () => {
 
     const result = await generateContextLabels(
       contexts,
-      'google-api-key',
+      'openrouter-api-key',
       'user-123',
       () => mockGenerator,
       mockLogger
@@ -107,7 +107,7 @@ describe('generateContextLabels', () => {
 
     const result = await generateContextLabels(
       contexts,
-      'google-api-key',
+      'openrouter-api-key',
       'user-123',
       () => mockGenerator,
       mockLogger
@@ -148,7 +148,7 @@ describe('generateContextLabels', () => {
       'research-1'
     );
 
-    expect(capturedModel).toBe(LlmModels.Gemini25Flash);
+    expect(capturedModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     expect(capturedApiKey).toBe('test-api-key');
     expect(capturedUserId).toBe('test-user-id');
     expect(capturedLogger).toBe(mockLogger);

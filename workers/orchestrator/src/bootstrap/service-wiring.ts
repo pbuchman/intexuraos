@@ -301,7 +301,6 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   const sharedValidationConfig = {
     models: validationModels,
     openRouterApiKey: env.openRouterApiKey,
-    geminiApiKey: env.geminiApiKey,
     usageWebhookUrl: env.usageWebhookUrl,
     orchestratorSecret: config.orchestratorSecret,
     internalAuthToken: config.internalAuthToken,

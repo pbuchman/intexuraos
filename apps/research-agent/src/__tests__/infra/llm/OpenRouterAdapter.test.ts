@@ -651,4 +651,39 @@ describe('OpenRouterAdapter', () => {
       );
     });
   });
+
+  describe('generateContextLabel', () => {
+    it('generates a trimmed label through OpenRouter', async () => {
+      const usage = { inputTokens: 12, outputTokens: 3, totalTokens: 15, costUsd: 0.0002 };
+      mockGenerate.mockResolvedValue({
+        ok: true,
+        value: { content: '  Platform routing  ', usage },
+      });
+
+      const result = await adapter.generateContextLabel('Long context');
+
+      expect(result).toEqual({
+        ok: true,
+        value: { label: 'Platform routing', usage },
+      });
+      expect(mockGenerate).toHaveBeenCalledWith(
+        expect.any(String),
+        { promptType: 'research-context-label-generation' }
+      );
+    });
+
+    it('maps OpenRouter errors when context-label generation fails', async () => {
+      mockGenerate.mockResolvedValue({
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      });
+
+      const result = await adapter.generateContextLabel('Long context');
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' },
+      });
+    });
+  });
 });

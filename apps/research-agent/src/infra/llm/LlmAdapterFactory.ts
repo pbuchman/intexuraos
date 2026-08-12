@@ -6,8 +6,10 @@
 import type { Logger } from '@intexuraos/common-core';
 import {
   getProviderForModel,
+  isLegacyGoogleModel,
+  type LLMModel,
+  type OpenRouterToolCallingModel,
   type ResearchModel,
-  type FastModel,
 } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
@@ -16,7 +18,6 @@ import type {
   TitleGenerator,
 } from '../../domain/research/index.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
-import { GeminiAdapter } from './GeminiAdapter.js';
 import { ClaudeAdapter } from './ClaudeAdapter.js';
 import { GptAdapter } from './GptAdapter.js';
 import { PerplexityAdapter } from './PerplexityAdapter.js';
@@ -34,11 +35,12 @@ export function createResearchProvider(
   logger: Logger,
   usageSink: UsageSink
 ): LlmResearchProvider {
+  if (isLegacyGoogleModel(model as string)) {
+    throw new Error('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
+  }
   const provider = getProviderForModel(model);
 
   switch (provider) {
-    case 'google':
-      return new GeminiAdapter(apiKey, model, userId, logger, usageSink);
     case 'anthropic':
       return new ClaudeAdapter(apiKey, model, userId, logger, usageSink);
     case 'openai':
@@ -58,11 +60,12 @@ export function createSynthesizer(
   usageSink: UsageSink,
   researchId?: string
 ): LlmSynthesisProvider {
+  if (isLegacyGoogleModel(model as string)) {
+    throw new Error('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
+  }
   const provider = getProviderForModel(model);
 
   switch (provider) {
-    case 'google':
-      return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
     case 'anthropic':
       throw new Error('Anthropic does not support synthesis');
     case 'openai':
@@ -75,18 +78,31 @@ export function createSynthesizer(
 }
 
 export function createTitleGenerator(
-  model: FastModel,
+  model: ResearchModel,
   apiKey: string,
   userId: string,
   logger: Logger,
   usageSink: UsageSink,
   researchId?: string
 ): TitleGenerator {
-  return new GeminiAdapter(apiKey, model, userId, logger, usageSink, researchId);
+  if (isLegacyGoogleModel(model as string)) {
+    throw new Error('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
+  }
+  const provider = getProviderForModel(model);
+
+  switch (provider) {
+    case 'openai':
+      throw new Error('OpenAI does not support context-label title generation');
+    case 'openrouter':
+      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
+    case 'anthropic':
+    case 'perplexity':
+      throw new Error(`${provider} does not support title generation`);
+  }
 }
 
 export function createContextInferrer(
-  model: FastModel,
+  model: LLMModel | OpenRouterToolCallingModel,
   apiKey: string,
   userId: string,
   logger: Logger,
@@ -97,7 +113,7 @@ export function createContextInferrer(
 }
 
 export function createInputValidator(
-  model: FastModel,
+  model: LLMModel | OpenRouterToolCallingModel,
   apiKey: string,
   userId: string,
   logger: Logger,

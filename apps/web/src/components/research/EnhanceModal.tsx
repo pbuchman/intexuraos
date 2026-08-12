@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, XCircle } from 'lucide-react';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { DEFAULT_PLATFORM_LLM_MODEL, LlmModels } from '@intexuraos/llm-contract';
 import {
   Button,
   ErrorBanner,
@@ -16,7 +16,7 @@ import {
 } from '@/services/researchAgentApi.types';
 import { getModelDisplayName } from './shared.js';
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
+const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.GPT54];
 
 interface EnhanceModalProps {
   research: Research;

@@ -53,7 +53,6 @@ export interface BootstrapEnvConfig {
   dashscopeApiKey: string;
   kimiApiKey: string;
   openRouterApiKey: string;
-  geminiApiKey: string;
   gitUserNameOverride?: string;
   gitUserEmailOverride?: string;
   logLevel: string;
@@ -218,8 +217,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const mimoApiKey = getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY', env);
   const dashscopeApiKey = getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY', env);
   const kimiApiKey = getRequiredEnv('INTEXURAOS_KIMI_APP_API_KEY', env);
-  const geminiApiKey = getRequiredEnv('INTEXURAOS_GEMINI_APP_API_KEY', env);
-  const openRouterApiKey = env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
+  const openRouterApiKey = getRequiredEnv('INTEXURAOS_OPENROUTER_APP_API_KEY', env);
 
   const logLevel = getOptionalEnv('LOG_LEVEL', 'info', env);
   // Environment name for the unified worker bootstrap (INT-1565 §S5). The
@@ -272,7 +270,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     dashscopeApiKey,
     kimiApiKey,
     openRouterApiKey,
-    geminiApiKey,
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
     ...(gitUserEmailOverride !== undefined ? { gitUserEmailOverride } : {}),
     logLevel,

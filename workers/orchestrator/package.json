@@ -21,7 +21,6 @@
     "@anthropic-ai/sdk": "^0.52.0",
     "@fastify/cors": "^10.1.0",
     "@google-cloud/firestore": "catalog:",
-    "@google/genai": "^1.0.0",
     "@sentry/node": "^8.42.0",
     "@intexuraos/code-task-domain": "workspace:*",
     "@intexuraos/common-core": "workspace:*",

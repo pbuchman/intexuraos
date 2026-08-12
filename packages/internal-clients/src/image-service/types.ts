@@ -1,9 +1,4 @@
-import type {
-  Gemini25FlashImage,
-  Gemini25Pro,
-  GPTImage1,
-  LLMCorrelationOptions,
-} from '@intexuraos/llm-contract';
+import type { GPTImage1, LLMCorrelationOptions } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 import type {
   ImageGeneratedImageData as SharedGeneratedImageData,
@@ -24,8 +19,8 @@ export type ThumbnailPrompt = SharedThumbnailPrompt;
 
 export type GeneratedImageData = SharedGeneratedImageData;
 
-export type PromptModel = 'gpt-4.1' | Gemini25Pro;
-export type ImageModel = GPTImage1 | Gemini25FlashImage;
+export type PromptModel = 'gpt-4.1';
+export type ImageModel = GPTImage1;
 
 export interface GenerateImageOptions {
   title?: string;

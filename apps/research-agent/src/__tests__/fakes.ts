@@ -276,7 +276,7 @@ export class FakeUserServiceClient implements UserServiceClient {
       return err({ code: 'API_ERROR', message: 'Test getApiKeys failure' });
     }
     const keys = this.apiKeys.get(userId) ?? {};
-    return ok(keys);
+    return ok({ openrouter: 'test-platform-openrouter-key', ...keys });
   }
 
   async reportLlmSuccess(_userId: string, _provider: LlmProvider): Promise<void> {

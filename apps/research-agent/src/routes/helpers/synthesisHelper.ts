@@ -2,7 +2,12 @@
  * Synthesis helper functions for creating synthesis providers.
  */
 
-import { getProviderForModel, isOpenRouterModel, getOpenRouterRawId, LlmModels } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  getProviderForModel,
+  isOpenRouterModel,
+  getOpenRouterRawId,
+} from '@intexuraos/llm-contract';
 import { isAllowedModel } from '@intexuraos/infra-openrouter';
 import type { ResearchModel } from '../../domain/research/index.js';
 import type { ServiceContainer, DecryptedApiKeys } from '../../services.js';
@@ -51,10 +56,10 @@ export function createSynthesisProviders(
 
   const result: SynthesisProviders = { synthesizer };
 
-  if (apiKeys.google !== undefined) {
+  if (apiKeys.openrouter !== undefined) {
     result.contextInferrer = createContextInferrer(
-      LlmModels.Gemini25Flash,
-      apiKeys.google,
+      DEFAULT_PLATFORM_LLM_MODEL,
+      apiKeys.openrouter,
       userId,
       logger,
       researchId

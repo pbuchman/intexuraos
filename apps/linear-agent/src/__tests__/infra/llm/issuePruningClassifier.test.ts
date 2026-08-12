@@ -46,7 +46,7 @@ describe('IssuePruningClassifier', () => {
     vi.restoreAllMocks();
   });
 
-  it('returns scored candidates from Gemini response', async () => {
+  it('returns scored candidates from LLM response', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', title: 'Cancelled task', stateType: 'cancelled', state: 'Canceled' }),
       createTestIssue({ id: '2', identifier: 'INT-200', title: 'Active task', stateType: 'started', state: 'In Progress' }),
@@ -75,7 +75,7 @@ describe('IssuePruningClassifier', () => {
     expect(result.value[1]?.identifier).toBe('INT-300');
   });
 
-  it('filters out non-closed issues before sending to Gemini', async () => {
+  it('filters out non-closed issues before sending to LLM', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'started' }),
       createTestIssue({ id: '2', identifier: 'INT-200', stateType: 'backlog' }),
@@ -107,14 +107,14 @@ describe('IssuePruningClassifier', () => {
     expect(promptArg).toContain('INT-300');
   });
 
-  it('returns error when Gemini call fails', async () => {
+  it('returns error when LLM call fails', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
     ];
 
     fakeGenerate.mockResolvedValueOnce({
       ok: false,
-      error: { code: 'API_ERROR', message: 'Gemini unavailable' },
+      error: { code: 'API_ERROR', message: 'LLM unavailable' },
     });
 
     const result = await classifier.classifyCandidates(issues, 5, logger);
@@ -123,7 +123,7 @@ describe('IssuePruningClassifier', () => {
     expect(result.error.code).toBe('INTERNAL_ERROR');
   });
 
-  it('handles malformed Gemini JSON response gracefully', async () => {
+  it('handles malformed LLM JSON response gracefully', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
     ];
@@ -228,7 +228,7 @@ describe('IssuePruningClassifier', () => {
     expect(result.value[0]?.identifier).toBe('INT-100');
   });
 
-  it('returns validation error when Gemini returns invalid score type', async () => {
+  it('returns validation error when LLM returns invalid score type', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
     ];
@@ -250,7 +250,7 @@ describe('IssuePruningClassifier', () => {
     expect(result.error.message).toContain('schema validation');
   });
 
-  it('returns validation error when Gemini returns invalid category', async () => {
+  it('returns validation error when LLM returns invalid category', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
     ];
@@ -272,7 +272,7 @@ describe('IssuePruningClassifier', () => {
     expect(result.error.message).toContain('schema validation');
   });
 
-  it('returns validation error when Gemini returns missing required fields', async () => {
+  it('returns validation error when LLM returns missing required fields', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
     ];
@@ -294,7 +294,7 @@ describe('IssuePruningClassifier', () => {
     expect(result.error.message).toContain('schema validation');
   });
 
-  it('returns validation error when Gemini returns score out of range', async () => {
+  it('returns validation error when LLM returns score out of range', async () => {
     const issues = [
       createTestIssue({ id: '1', identifier: 'INT-100', stateType: 'cancelled', state: 'Canceled' }),
     ];

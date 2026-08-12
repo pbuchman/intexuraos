@@ -13,7 +13,7 @@ const VALID_KINDS = new Set<string>([
   'fallback_append',
 ]);
 
-export class GeminiIntentInterpreter implements IntentInterpreter {
+export class LlmIntentInterpreter implements IntentInterpreter {
   private readonly client: LlmGenerateClient;
 
   constructor(client: LlmGenerateClient) {

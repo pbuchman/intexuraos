@@ -652,6 +652,7 @@ export async function initServices(config: ServiceConfig): Promise<void> {
     internalAuthToken: config.internalAuthToken,
     logger: createAppLogger({ name: 'intex-agent-user-service-client' }),
     usageSink,
+    platformOpenRouterApiKey: config.openRouterAppApiKey,
   });
   const sendPublisher = createWhatsAppSendPublisher({
     projectId: config.gcpProjectId,

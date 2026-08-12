@@ -134,14 +134,14 @@ describe('WhatsAppNotificationSender', () => {
       const result = await sender.sendLlmFailure(
         'user-123',
         'research-456',
-        LlmModels.Gemini25Pro,
+        LlmModels.GPT54,
         'API Error'
       );
 
       expect(result.ok).toBe(true);
       expect(mockPublishSendMessage).toHaveBeenCalledWith({
         userId: 'user-123',
-        message: expect.stringContaining(LlmModels.Gemini25Pro),
+        message: expect.stringContaining(LlmModels.GPT54),
         correlationId: 'research-failure-research-456',
         important: true,
       });
@@ -190,7 +190,7 @@ describe('WhatsAppNotificationSender', () => {
       await sender.sendLlmFailure(
         'user-123',
         'research-456',
-        LlmModels.Gemini25Flash,
+        LlmModels.O4MiniDeepResearch,
         'Rate limit exceeded'
       );
 

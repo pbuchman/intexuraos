@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels, LlmProviders } from '@intexuraos/llm-contract';
 import { getResearchCostSummary } from '../../../domain/usecases/getResearchCostSummary.js';
 import { FakeUsageEventRepository } from '../../fakeUsageEventRepository.js';
 import { createTestEvent } from '../../helpers.js';
@@ -18,7 +18,7 @@ describe('getResearchCostSummary', () => {
       occurredAt: '2026-05-05T07:52:00.000Z',
       request: {
         provider: LlmProviders.Google,
-        model: LlmModels.Gemini25FlashImage,
+        model: LegacyGoogleModels.Gemini25FlashImage,
         operation: 'image_generation',
         success: true,
         durationMs: 1200,

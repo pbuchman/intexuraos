@@ -6,7 +6,12 @@
  */
 
 import type { Logger } from 'pino';
-import { LlmModels, type ResearchModel } from '@intexuraos/llm-contract';
+import {
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LlmModels,
+  type ResearchModel,
+} from '@intexuraos/llm-contract';
 import type { PromptBuilder } from '../shared/types.js';
 
 /**
@@ -50,7 +55,7 @@ export interface ModelExtractionResponse {
 export const modelExtractionPrompt: PromptBuilder<ModelExtractionPromptDeps> = {
   name: 'research-model-extraction',
   description: 'Extracts research/synthesis model preferences from a user message',
-  version: '1.1.0',
+  version: '2.0.0',
 
   build(deps: ModelExtractionPromptDeps): string {
     const { userMessage, availableModels, synthesisModels, defaultSynthesisModel } = deps;
@@ -93,7 +98,7 @@ These are the models available to this user (they have API keys for these):
 ${modelsDescription}
 
 ## Constraints
-1. **One model per provider**: You cannot select multiple models from the same provider (e.g., cannot select both gemini-2.5-pro AND gemini-2.5-flash)
+1. **One model per provider**: You cannot select multiple models from the same provider (for example, two different OpenRouter models in one request)
 2. **Synthesis models**: Only these models can be used for synthesis: ${synthesisModels.join(', ')}
 3. **Invalid synthesis**: If user requests a model for synthesis that doesn't support it, use ${defaultSynthesisModel} instead
 
@@ -222,9 +227,8 @@ export function parseModelExtractionResponseWithLogging(
  * Model keywords for common ways users refer to models.
  * Maps to provider default or specific models.
  */
-export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
-  [LlmModels.Gemini25Pro]: ['gemini pro', 'gemini-pro', 'pro'],
-  [LlmModels.Gemini25Flash]: ['gemini flash', 'gemini-flash', 'gemini', 'google'],
+export const MODEL_KEYWORDS: Partial<Record<ResearchModel, string[]>> = {
+  [IntexAgentModels.Gemini3FlashPreview]: ['gemini flash', 'gemini', 'google'],
   [LlmModels.ClaudeOpus46]: ['claude opus', 'opus'],
   [LlmModels.ClaudeSonnet46]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
   [LlmModels.ClaudeSonnet47]: ['claude sonnet 4.7', 'sonnet 4.7', 'claude-sonnet-4-7'],
@@ -233,6 +237,7 @@ export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
   [LlmModels.Sonar]: ['sonar basic'],
   [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],
   [LlmModels.SonarDeepResearch]: ['sonar deep', 'perplexity deep', 'deep sonar'],
+  [DEFAULT_PLATFORM_LLM_MODEL]: ['openrouter', 'platform default', 'minimax'],
 };
 
 /**
@@ -240,18 +245,19 @@ export const MODEL_KEYWORDS: Record<ResearchModel, string[]> = {
  * Used when user says "use google" without specifying a model.
  */
 export const PROVIDER_DEFAULT_MODELS: Record<string, ResearchModel> = {
-  google: LlmModels.Gemini25Pro,
+  google: IntexAgentModels.Gemini3FlashPreview,
   anthropic: LlmModels.ClaudeSonnet46,
   openai: LlmModels.GPT54,
   perplexity: LlmModels.SonarPro,
+  openrouter: DEFAULT_PLATFORM_LLM_MODEL,
 };
 
 /**
  * Models that support synthesis.
  */
-export const SYNTHESIS_MODELS: ResearchModel[] = [LlmModels.Gemini25Pro, LlmModels.GPT54];
+export const SYNTHESIS_MODELS: ResearchModel[] = [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.GPT54];
 
 /**
  * Default synthesis model when not specified or invalid.
  */
-export const DEFAULT_SYNTHESIS_MODEL: ResearchModel = LlmModels.Gemini25Pro;
+export const DEFAULT_SYNTHESIS_MODEL: ResearchModel = DEFAULT_PLATFORM_LLM_MODEL;

@@ -1,5 +1,5 @@
 import { ok, err, type Result, type Logger } from '@intexuraos/common-core';
-import type { Google, LLMCorrelationOptions, OpenAI } from '@intexuraos/llm-contract';
+import type { LLMCorrelationOptions, OpenAI } from '@intexuraos/llm-contract';
 import type { ThumbnailPrompt, PromptGenerator, ImagePromptModelConfig } from '../domain/index.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 
@@ -24,7 +24,7 @@ export type GeneratePromptUseCase = (
 export interface GeneratePromptDeps {
   userServiceClient: UserServiceClient;
   createPromptGenerator: (
-    provider: Google | OpenAI,
+    provider: OpenAI,
     model: string,
     apiKey: string,
     userId: string,

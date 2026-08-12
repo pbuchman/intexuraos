@@ -1,5 +1,5 @@
 import { err, ok } from '@intexuraos/common-core';
-import { LlmModels } from '@intexuraos/llm-contract';
+import { LegacyGoogleModels } from '@intexuraos/llm-contract';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   ConversationAssistantTurnRequest,
@@ -118,7 +118,7 @@ function createHarness(input?: {
         snapshot: {
           userId: 'user-1',
           sessionId: 'session-1',
-          model: LlmModels.Gemini25Flash,
+          model: LegacyGoogleModels.Gemini25Flash,
           transcriptText: 'Initial immutable transcript',
           range: { from: '2026-07-14T00:00:00.000Z', to: '2026-07-18T00:00:00.000Z' },
           effectiveRange: {

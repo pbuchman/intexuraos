@@ -56,12 +56,12 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'completed',
-    selectedModels: [LlmModels.Gemini25Pro],
-    synthesisModel: LlmModels.Gemini25Pro,
+    selectedModels: [LlmModels.GPT54],
+    synthesisModel: LlmModels.GPT54,
     llmResults: [
       {
-        provider: LlmProviders.Google,
-        model: LlmModels.Gemini25Pro,
+        provider: LlmProviders.OpenAI,
+        model: LlmModels.GPT54,
         status: 'completed',
         result: 'Test result',
       },
@@ -254,7 +254,7 @@ describe('exportResearchToNotion', () => {
           mainPageId: 'notion-page-123',
           mainPageUrl: 'https://notion.so/page-123',
           llmReportPages: [
-            { model: LlmModels.Gemini25Pro, pageId: 'llm-page-1', pageUrl: 'https://notion.so/llm-1' },
+            { model: LlmModels.GPT54, pageId: 'llm-page-1', pageUrl: 'https://notion.so/llm-1' },
             { model: LlmModels.GPT4oMini, pageId: 'llm-page-2', pageUrl: 'https://notion.so/llm-2' },
           ],
         })
@@ -268,7 +268,7 @@ describe('exportResearchToNotion', () => {
           mainPageId: 'notion-page-123',
           mainPageUrl: 'https://notion.so/page-123',
           llmReportPageIds: [
-            { model: LlmModels.Gemini25Pro, pageId: 'llm-page-1' },
+            { model: LlmModels.GPT54, pageId: 'llm-page-1' },
             { model: LlmModels.GPT4oMini, pageId: 'llm-page-2' },
           ],
           exportedAt: expect.any(String),

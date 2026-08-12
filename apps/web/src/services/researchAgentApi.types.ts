@@ -2,17 +2,15 @@
  * Research Agent types for research management.
  */
 
-import type { LlmProvider as ContractLlmProvider, ResearchModel } from '@intexuraos/llm-contract';
+import type { ExecutableLlmProvider, ResearchModel } from '@intexuraos/llm-contract';
 import { LlmModels, LlmProviders, isOpenRouterModel } from '@intexuraos/llm-contract';
 
-export type LlmProvider = ContractLlmProvider;
+export type LlmProvider = ExecutableLlmProvider;
 
 export type SupportedModel = ResearchModel;
 export type StoredResearchModel = string;
 
 const MODEL_TO_PROVIDER = {
-  [LlmModels.Gemini25Pro]: LlmProviders.Google,
-  [LlmModels.Gemini25Flash]: LlmProviders.Google,
   [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
   [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
   [LlmModels.ClaudeSonnet47]: LlmProviders.Anthropic,
