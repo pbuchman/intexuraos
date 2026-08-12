@@ -24,6 +24,7 @@ import {
   type IntexAgentLanguageMessage,
   type IntexAgentReplyLanguage,
 } from '../agent/capabilities.js';
+import type { CalendarEventDraftV1 } from '../agent/calendarEventReadiness.js';
 import { isWhatsAppImageWithSourceUrl } from '../agent/intexAgentRunner.js';
 
 const CONFIRMATION_BUTTON_LABELS: Record<
@@ -36,6 +37,10 @@ const CONFIRMATION_BUTTON_LABELS: Record<
 const COMPLETED_FOLLOW_UP_PROMPTS: Record<IntexAgentReplyLanguage, string> = {
   en: 'What can I help with next?',
   pl: 'Co mogę teraz dla Ciebie zrobić?',
+};
+const CALENDAR_PROPOSAL_BYPASS_REPLIES: Record<IntexAgentReplyLanguage, string> = {
+  en: 'I could not safely prepare the calendar event for confirmation. Please restate the event details, and I will verify them before asking whether to add it.',
+  pl: 'Nie udało mi się bezpiecznie przygotować wydarzenia do potwierdzenia. Podaj ponownie szczegóły, a zweryfikuję je przed pytaniem, czy dodać wydarzenie.',
 };
 
 export type IntexAgentFallbackReason =
@@ -122,6 +127,8 @@ export type IntexAgentRunnerResult =
       candidateIntents?: string[];
       suggestedNextStep?: string;
       clarification?: string;
+      calendarEventDraft?: CalendarEventDraftV1;
+      toolSelection?: IntexAgentToolSelectionMetadata;
       fallbackReason?: IntexAgentFallbackReason;
       fallbackSourceOutcome?: string;
     }
@@ -339,7 +346,7 @@ export async function handleIncomingMessage(
     ...(runtimeSettings !== undefined ? { runtimeSettings } : {}),
     messageId: input.messageId,
   });
-  await applyRunnerResult(input, deps, session, runnerResult, events);
+  await applyRunnerResult(input, deps, session, runnerResult, events, 'proposal');
 
   return { sessionId: session.id };
 }
@@ -507,7 +514,7 @@ async function handleConfirmationButton(
     };
   }
 
-  await applyRunnerResult(input, deps, currentSession, executionResult, events);
+  await applyRunnerResult(input, deps, currentSession, executionResult, events, 'confirmed');
   return { sessionId: currentSession.id };
 }
 
@@ -563,8 +570,36 @@ async function applyRunnerResult(
   deps: HandleIncomingMessageDeps,
   session: IntexAgentSession,
   runnerResult: IntexAgentRunnerResult,
-  languageEvents: readonly IntexAgentSessionEvent[] = []
+  languageEvents: readonly IntexAgentSessionEvent[] = [],
+  phase: 'proposal' | 'confirmed' = 'proposal'
 ): Promise<void> {
+  if (
+    phase === 'proposal' &&
+    runnerResult.outcome === 'completed' &&
+    runnerResult.toolName === 'create_calendar_event'
+  ) {
+    const language = selectReplyLanguage(input, languageEvents);
+    await applyRunnerResult(
+      input,
+      deps,
+      session,
+      {
+        outcome: 'needs_clarification',
+        reply: CALENDAR_PROPOSAL_BYPASS_REPLIES[language],
+        blockerReason: 'not_enough_context',
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep:
+          language === 'pl'
+            ? 'Podaj ponownie tytuł, datę, początek i koniec wydarzenia.'
+            : 'Restate the event title, date, start, and end.',
+        fallbackReason: 'tool_result_mismatch',
+        fallbackSourceOutcome: 'completed',
+      },
+      languageEvents,
+      phase
+    );
+    return;
+  }
   if (runnerResult.outcome === 'no_action') {
     const reply = stripDuplicateSessionPrefix(runnerResult.reply);
     const assistantAt = await appendAssistantMessage(session, deps, reply);
@@ -820,6 +855,13 @@ function runnerMetadataPayload(
     ...(runnerResult.outcome === 'needs_clarification' &&
     runnerResult.clarification !== undefined
       ? { clarification: runnerResult.clarification }
+      : {}),
+    ...(runnerResult.outcome === 'needs_clarification' &&
+    runnerResult.calendarEventDraft !== undefined
+      ? { calendarEventDraft: runnerResult.calendarEventDraft }
+      : {}),
+    ...(runnerResult.outcome === 'needs_clarification' && runnerResult.toolSelection !== undefined
+      ? { toolSelection: runnerResult.toolSelection }
       : {}),
   };
 }

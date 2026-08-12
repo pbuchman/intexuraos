@@ -64,6 +64,12 @@ import {
   selectIntexAgentReplyLanguage,
   type IntexAgentReplyLanguage,
 } from './capabilities.js';
+import {
+  assessCalendarEventReadiness,
+  isCalendarDraftAcceptance,
+  parseAcceptedCalendarEventDraft,
+  type CalendarEventDraftV1,
+} from './calendarEventReadiness.js';
 import type {
   IntexAgentIntentClassification,
   IntexAgentIntentClassifier,
@@ -569,6 +575,27 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
+      const acceptedCalendarDraft = isCalendarDraftAcceptance(input.message)
+        ? findLatestAcceptedCalendarDraft(input.events)
+        : null;
+      if (acceptedCalendarDraft !== null) {
+        return {
+          outcome: 'needs_confirmation',
+          reply: buildConfirmationReply(
+            'create_calendar_event',
+            acceptedCalendarDraft.draft.toolArgs,
+            config.userPreferences ?? null,
+            detectedReplyLanguage,
+            input.timeZone
+          ),
+          toolName: 'create_calendar_event',
+          toolArgs: acceptedCalendarDraft.draft.toolArgs,
+          ...(acceptedCalendarDraft.toolSelection === undefined
+            ? {}
+            : { toolSelection: acceptedCalendarDraft.toolSelection }),
+        };
+      }
+
       const classifiedIntent =
         config.intentClassifier === undefined
           ? classifyIntexAgentIntent(input.message)
@@ -617,7 +644,15 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         replyContext: input.replyContext,
         replyLanguage: replyLanguageForIntent(queryNormalizedIntent, detectedReplyLanguage),
       });
-      const intent = applyMissingCalendarAttendeeEmailClarification(dateNormalizedIntent, {
+      const durationProposalIntent = applyCalendarEndDefaultProposalIntent(
+        dateNormalizedIntent,
+        {
+          message: input.message,
+          events: input.events,
+          replyContext: input.replyContext,
+        }
+      );
+      const intent = applyMissingCalendarAttendeeEmailClarification(durationProposalIntent, {
         message: input.message,
         events: input.events,
         replyContext: input.replyContext,
@@ -802,6 +837,27 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           intent,
           exposedToolNames,
           currentMessage: input.message,
+          ...(intent.kind === 'tool' && intent.allowedToolNames.includes('create_calendar_event')
+            ? {
+                calendarCreateReadiness: {
+                  evidenceTexts: calendarCreateEvidenceTexts(
+                    input.message,
+                    input.events,
+                    input.replyContext
+                  ),
+                  hasExplicitStart: hasCalendarStartSignal(
+                    input.message,
+                    input.events,
+                    input.replyContext
+                  ),
+                  hasExplicitEnd: hasCalendarEndSignal(
+                    input.message,
+                    input.events,
+                    input.replyContext
+                  ),
+                },
+              }
+            : {}),
           ...(todayAndTomorrowCalendarQueryScope !== undefined
             ? { todayAndTomorrowCalendarQueryScope }
             : {}),
@@ -987,6 +1043,33 @@ function applyCompleteCalendarClarificationContext(
   return clarificationToToolIntent(intent, 'create_calendar_event');
 }
 
+function applyCalendarEndDefaultProposalIntent(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'create_calendar_event' ||
+    intent.missingFields === undefined ||
+    !intent.missingFields.some(isCalendarEndField) ||
+    !intent.missingFields.every(
+      (field) => isCalendarEndField(field) || isOmittableCalendarCreateField(field)
+    ) ||
+    !hasCalendarDateSignal(context.message, context.events, context.replyContext) ||
+    !hasCalendarStartSignal(context.message, context.events, context.replyContext)
+  ) {
+    return intent;
+  }
+
+  return clarificationToToolIntent(intent, 'create_calendar_event');
+}
+
 function isSatisfiedCalendarClarificationField(
   field: string,
   context: Readonly<{
@@ -1148,6 +1231,137 @@ function clarificationToToolIntent(
     ...(intent.languageOverride !== undefined ? { languageOverride: intent.languageOverride } : {}),
     ...(intent.decisionEvidence !== undefined ? { decisionEvidence: intent.decisionEvidence } : {}),
   };
+}
+
+function findLatestAcceptedCalendarDraft(
+  events: readonly IntexAgentSessionEvent[]
+): Readonly<{
+  draft: CalendarEventDraftV1;
+  toolSelection?: IntexAgentToolSelectionMetadata;
+}> | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    /* v8 ignore start -- ts-type: bounded index still includes undefined with noUncheckedIndexedAccess @preserve */
+    if (event === undefined) continue;
+    /* v8 ignore stop @preserve */
+    if (event.type === 'assistant_message' || event.type === 'llm_call_usage') continue;
+    if (event.type === 'clarification_requested') {
+      const draft = parseAcceptedCalendarEventDraft(event.payload['calendarEventDraft']);
+      if (draft === null) return null;
+      const toolSelection = parseToolSelectionMetadata(event.payload['toolSelection']);
+      return {
+        draft,
+        ...(toolSelection === undefined ? {} : { toolSelection }),
+      };
+    }
+    if (
+      event.type === 'user_message' ||
+      event.type === 'confirmation_requested' ||
+      event.type === 'confirmation_resolved' ||
+      event.type === 'tool_call_completed' ||
+      event.type === 'tool_call_failed'
+    ) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function parseToolSelectionMetadata(value: unknown): IntexAgentToolSelectionMetadata | undefined {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value) ||
+    !Number.isInteger((value as Record<string, unknown>)['turnIndex']) ||
+    Number((value as Record<string, unknown>)['turnIndex']) < 0 ||
+    !Number.isInteger((value as Record<string, unknown>)['ordinal']) ||
+    Number((value as Record<string, unknown>)['ordinal']) < 1
+  ) {
+    return undefined;
+  }
+  return {
+    turnIndex: Number((value as Record<string, unknown>)['turnIndex']),
+    ordinal: Number((value as Record<string, unknown>)['ordinal']),
+  };
+}
+
+function hasCalendarStartSignal(
+  message: string,
+  events: readonly IntexAgentSessionEvent[],
+  replyContext: IntexIncomingMessageReplyContext | undefined
+): boolean {
+  return hasActiveCalendarSignal(message, events, replyContext, containsCalendarClockTimeSignal);
+}
+
+function hasCalendarEndSignal(
+  message: string,
+  events: readonly IntexAgentSessionEvent[],
+  replyContext: IntexIncomingMessageReplyContext | undefined
+): boolean {
+  return hasActiveCalendarSignal(message, events, replyContext, containsCalendarEndTimeSignal);
+}
+
+function hasActiveCalendarSignal(
+  message: string,
+  events: readonly IntexAgentSessionEvent[],
+  replyContext: IntexIncomingMessageReplyContext | undefined,
+  containsSignal: (message: string) => boolean
+): boolean {
+  if (containsCalendarTimeWithdrawalSignal(message)) return false;
+  if (containsSignal(message)) return true;
+  if (replyContext?.source === 'inbound_user_message') {
+    if (containsCalendarTimeWithdrawalSignal(replyContext.text)) return false;
+    if (containsSignal(replyContext.text)) return true;
+  }
+  const activeClarification = findActiveClarificationEvent(events);
+  return (
+    activeClarification !== undefined &&
+    isCalendarClarification(activeClarification.event) &&
+    activeCalendarClarificationChainContainsSignal(
+      events,
+      activeClarification.index,
+      containsSignal
+    )
+  );
+}
+
+function calendarCreateEvidenceTexts(
+  message: string,
+  events: readonly IntexAgentSessionEvent[],
+  replyContext: IntexIncomingMessageReplyContext | undefined
+): string[] {
+  const texts = [message];
+  if (replyContext?.source === 'inbound_user_message') texts.push(replyContext.text);
+  const activeClarification = findActiveClarificationEvent(events);
+  if (
+    activeClarification === undefined ||
+    !isCalendarClarification(activeClarification.event)
+  ) {
+    return texts;
+  }
+
+  let expectsUserMessage = true;
+  for (let index = activeClarification.index - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    /* v8 ignore start -- ts-type: bounded index still includes undefined with noUncheckedIndexedAccess @preserve */
+    if (event === undefined) continue;
+    /* v8 ignore stop @preserve */
+    if (expectsUserMessage) {
+      if (event.type === 'clarification_requested') break;
+      if (event.type !== 'user_message') continue;
+      const priorMessage = event.payload['text'];
+      if (typeof priorMessage === 'string') texts.push(priorMessage);
+      const priorReplyContext = parseIncomingReplyContext(event.payload['replyContext']);
+      if (priorReplyContext?.source === 'inbound_user_message') texts.push(priorReplyContext.text);
+      expectsUserMessage = false;
+      continue;
+    }
+    if (event.type === 'user_message') break;
+    if (event.type !== 'clarification_requested') continue;
+    if (!isCalendarClarification(event)) break;
+    expectsUserMessage = true;
+  }
+  return texts;
 }
 
 function findActiveClarificationEvent(
@@ -1735,6 +1949,16 @@ function isCalendarSummaryField(field: string): boolean {
   return canonical === 'summary' || canonical === 'title' || canonical === 'eventtitle';
 }
 
+function isCalendarEndField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return canonical === 'end' || canonical === 'endtime' || canonical === 'enddatetime' || canonical === 'duration';
+}
+
+function isOmittableCalendarCreateField(field: string): boolean {
+  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  return canonical === 'location' || canonical === 'description';
+}
+
 function isOptionalCodeTaskField(field: string): boolean {
   const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
   return canonical === 'title' || canonical === 'name' || canonical === 'tasktitle';
@@ -1803,6 +2027,17 @@ function containsCalendarClockTimeSignal(message: string): boolean {
     return true;
   }
 
+  const compactRange =
+    /(?<![\p{L}\p{N}-])(\d{1,2})(?::(\d{2}))?\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(am|pm)?(?![\p{L}\p{N}-])/iu.exec(
+      normalized
+    );
+  if (
+    compactRange !== null &&
+    isValidCalendarClock(Number(compactRange[1]), Number(compactRange[2] ?? 0), compactRange[3])
+  ) {
+    return true;
+  }
+
   const colonClock = CALENDAR_COLON_CLOCK_PATTERN.exec(normalized);
   if (colonClock !== null) {
     return isValidCalendarClock(
@@ -1844,11 +2079,23 @@ function containsCalendarEndTimeSignal(message: string): boolean {
   }
 
   const range = CALENDAR_CLOCK_RANGE_PATTERN.exec(normalized);
-  return (
+  if (
     range?.[1] !== undefined &&
     range[2] !== undefined &&
     containsCalendarClockTimeSignal(range[1]) &&
     containsCalendarClockTimeSignal(range[2])
+  ) {
+    return true;
+  }
+
+  const compactRange =
+    /(?<![\p{L}\p{N}-])(\d{1,2})(?::(\d{2}))?\s*[-–—]\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?(?![\p{L}\p{N}-])/iu.exec(
+      normalized
+    );
+  return (
+    compactRange !== null &&
+    isValidCalendarClock(Number(compactRange[1]), Number(compactRange[2] ?? 0), compactRange[5]) &&
+    isValidCalendarClock(Number(compactRange[3]), Number(compactRange[4] ?? 0), compactRange[5])
   );
 }
 
@@ -2395,6 +2642,11 @@ interface RunnerOutputValidationInput {
   intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
   exposedToolNames: IntexAgentToolName[];
   currentMessage: string;
+  calendarCreateReadiness?: Readonly<{
+    evidenceTexts: readonly string[];
+    hasExplicitStart: boolean;
+    hasExplicitEnd: boolean;
+  }>;
   todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope;
   calendarUpdateAttendeeEmails?: string[];
   synthesizedCalendarUpdatePreview?: true;
@@ -2484,10 +2736,63 @@ async function parseRunnerContent(
   if (toolExecution?.toolName === 'update_calendar_event' && calendarUpdateArgs === undefined) {
     return calendarUpdateLookupResult(replyLanguage);
   }
+  let calendarCreateArgs: Record<string, unknown> | undefined;
+  if (
+    toolExecution?.toolName === 'create_calendar_event' &&
+    input.calendarCreateReadiness !== undefined
+  ) {
+    const readiness = assessCalendarEventReadiness({
+      toolArgs: toolExecution.args,
+      evidenceTexts: input.calendarCreateReadiness.evidenceTexts,
+      hasExplicitStart: input.calendarCreateReadiness.hasExplicitStart,
+      hasExplicitEnd: input.calendarCreateReadiness.hasExplicitEnd,
+      runtimeTimeZone,
+      replyLanguage,
+    });
+    if (readiness.status === 'needs_clarification') {
+      return {
+        outcome: 'needs_clarification',
+        reply: readiness.reply,
+        clarification: readiness.reply,
+        blockerReason: 'missing_required_details',
+        missingFields: readiness.missingFields,
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep:
+          replyLanguage === 'pl'
+            ? 'Potwierdź zaproponowane wartości albo podaj poprawione szczegóły wydarzenia.'
+            : 'Accept the proposed values or provide corrected event details.',
+        /* v8 ignore start -- upstream: validated create_calendar_event start always matches the readiness date-time parser, so a missing end always returns a persisted draft @preserve */
+        ...(readiness.draft === undefined ? {} : { calendarEventDraft: readiness.draft }),
+        /* v8 ignore stop @preserve */
+        ...(toolExecution.selectionMetadata === undefined
+          ? {}
+          : { toolSelection: toolExecution.selectionMetadata }),
+      };
+    }
+    calendarCreateArgs = readiness.toolArgs;
+  }
+  if (
+    toolExecution !== undefined &&
+    isMutatingToolName(toolExecution.toolName) &&
+    parsed?.outcome === 'needs_clarification' &&
+    input.synthesizedCalendarUpdatePreview !== true
+  ) {
+    return {
+      outcome: 'needs_clarification',
+      reply: parsed.reply,
+      ...(parsed.blockerReason !== undefined ? { blockerReason: parsed.blockerReason } : {}),
+      ...(parsed.missingFields !== undefined ? { missingFields: parsed.missingFields } : {}),
+      candidateIntents: input.exposedToolNames,
+      ...(parsed.suggestedNextStep !== undefined
+        ? { suggestedNextStep: parsed.suggestedNextStep }
+        : {}),
+      ...(parsed.clarification !== undefined ? { clarification: parsed.clarification } : {}),
+    };
+  }
   if (toolExecution !== undefined && isMutatingToolName(toolExecution.toolName)) {
     const confirmationArgs = preserveCurrentTurnOpaqueReferences(
       toolExecution.toolName,
-      calendarUpdateArgs ?? toolExecution.args,
+      calendarUpdateArgs ?? calendarCreateArgs ?? toolExecution.args,
       input.currentMessage
     );
     const supportingToolCompletions = collectSupportingToolCompletions(

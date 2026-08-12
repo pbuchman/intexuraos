@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('24.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('25.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('17.0.1');
+    expect(buildIntexAgentSystemPrompt.version).toBe('18.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -116,8 +116,12 @@ describe('buildIntexAgentSystemPrompt', () => {
     expect(prompt).toContain('create, save, or update resources');
     expect(prompt).toContain('matching read tools');
     expect(prompt).toContain(
-      'For create_calendar_event, ask a clarification before using the tool if title, date, time, start, or end is missing or ambiguous.'
+      'the user-visible outcome must be a targeted clarification, never a final creation confirmation'
     );
+    expect(prompt).toContain('non-executing draft for deterministic validation');
+    expect(prompt).toContain('propose a 60-minute duration as an assumption');
+    expect(prompt).toContain('acceptance of that assumption is not permission to create the event');
+    expect(prompt).toContain('Only after all assumptions are accepted');
     expect(prompt).toContain(
       'For an update_calendar_event lookup, omit maxResults or set it to at least 2. Never use maxResults: 1.'
     );
@@ -125,9 +129,7 @@ describe('buildIntexAgentSystemPrompt', () => {
       'If the lookup returns truncated: true, narrow the title or time range and query again before updating; if it cannot be narrowed to exactly one complete result, ask a targeted clarification.'
     );
     expect(prompt).not.toContain('Supported tools create or save resources only.');
-    expect(prompt).not.toContain(
-      'For calendar events, ask a clarification before using the tool if title, date, time, start, or end is missing or ambiguous.'
-    );
+    expect(prompt).not.toContain('Do not call create_calendar_event yet.');
   });
 
   it('requires explicit semantic Linear association and preserves exact identifiers across clarification', () => {

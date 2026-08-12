@@ -1398,6 +1398,7 @@ describe('handleIncomingMessage', () => {
           displayText: 'Open note',
           url: 'https://intexuraos.cloud/#/notes/note-1',
         },
+        toolSelection: { turnIndex: 0, ordinal: 1 },
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1414,9 +1415,12 @@ describe('handleIncomingMessage', () => {
         url: 'https://intexuraos.cloud/#/notes/note-1',
       },
     });
+    expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
+      toolSelection: { turnIndex: 0, ordinal: 1 },
+    });
   });
 
-  it('creates a calendar event in one message when the request has complete date and time details', async () => {
+  it('fails closed when a proposal-phase runner claims it already created a calendar event', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
       {
@@ -1435,10 +1439,39 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[0]?.status).toBe('waiting_for_user');
     expect(repo.sessions[0]?.activeTool).toBeUndefined();
     expect(repo.sessions[0]?.summary).toBeUndefined();
-    expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
-      toolName: 'create_calendar_event',
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(eventPayloads(repo, 'clarification_requested')[0]).toMatchObject({
+      blockerReason: 'not_enough_context',
+      candidateIntents: ['create_calendar_event'],
+      fallbackReason: 'tool_result_mismatch',
     });
-    expect(replies.messages[0]?.message).toBe('Created the calendar event.');
+    expect(replies.messages[0]?.message).toContain(
+      'I could not safely prepare the calendar event for confirmation.'
+    );
+  });
+
+  it('localizes a proposal-phase calendar execution bypass in Polish', async () => {
+    const repo = new FakeSessionRepository();
+    const runner = new FakeRunner([
+      {
+        outcome: 'completed',
+        reply: 'Utworzyłem wydarzenie.',
+        toolName: 'create_calendar_event',
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ text: 'Dodaj wizytę u dentysty jutro od 9:00 do 10:00.' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'clarification_requested')[0]).toMatchObject({
+      suggestedNextStep: 'Podaj ponownie tytuł, datę, początek i koniec wydarzenia.',
+    });
+    expect(replies.messages[0]?.message).toContain(
+      'Nie udało mi się bezpiecznie przygotować wydarzenia do potwierdzenia.'
+    );
   });
 
   it('asks what to do next after completing a preference delete', async () => {
@@ -1543,6 +1576,96 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe('Which day should I schedule it for?');
   });
 
+  it('persists a calendar draft without buttons before publishing a separate exact confirmation', async () => {
+    const repo = new FakeSessionRepository();
+    const draft = {
+      version: 1 as const,
+      toolArgs: {
+        summary: 'Turniej OPEN B++',
+        start: '2026-08-14T18:00:00+02:00',
+        end: '2026-08-14T19:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+      fields: {
+        summary: {
+          value: 'Turniej OPEN B++',
+          status: 'user_confirmed' as const,
+          source: 'user_message' as const,
+        },
+        start: {
+          value: '2026-08-14T18:00:00+02:00',
+          status: 'user_confirmed' as const,
+          source: 'user_message' as const,
+        },
+        end: {
+          value: '2026-08-14T19:00:00+02:00',
+          status: 'proposed_default' as const,
+          source: 'safe_default' as const,
+        },
+        timeZone: {
+          value: 'Europe/Warsaw',
+          status: 'runtime_default' as const,
+          source: 'runtime' as const,
+        },
+      },
+      omittedFields: ['location', 'description', 'attendees'],
+    };
+    const clarification =
+      'Widzę: „Turniej OPEN B++”, 14.08.2026, start 18:00. Lokalizację mogę pominąć. Nie znam czasu zakończenia — mogę przyjąć 60 minut, czyli do 19:00. Pasuje?';
+    const confirmation =
+      'Czy dodać wydarzenie w kalendarzu?\n\nTytuł: Turniej OPEN B++\nPoczątek: 14 sierpnia 2026, 18:00\nKoniec: 14 sierpnia 2026, 19:00';
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_clarification',
+        reply: clarification,
+        clarification,
+        blockerReason: 'missing_required_details',
+        missingFields: ['end'],
+        candidateIntents: ['create_calendar_event'],
+        suggestedNextStep: 'Potwierdź domyślny czas albo podaj inną godzinę końca.',
+        calendarEventDraft: draft,
+        toolSelection: { turnIndex: 0, ordinal: 1 },
+      },
+      {
+        outcome: 'needs_confirmation',
+        reply: confirmation,
+        toolName: 'create_calendar_event',
+        toolArgs: draft.toolArgs,
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-calendar-draft',
+        text: 'Dodaj Turniej OPEN B++ 14 sierpnia 2026 o 18:00 do mojego kalendarza.',
+      }),
+      deps(repo, runner, replies)
+    );
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-calendar-default-accepted',
+        text: 'Tak',
+        timestamp: '2026-06-24T10:01:00.000Z',
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'clarification_requested')[0]).toMatchObject({
+      message: clarification,
+      missingFields: ['end'],
+      calendarEventDraft: draft,
+      toolSelection: { turnIndex: 0, ordinal: 1 },
+    });
+    expect(eventPayloads(repo, 'confirmation_requested')[0]).toMatchObject({
+      toolName: 'create_calendar_event',
+      toolArgs: draft.toolArgs,
+    });
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(replies.messages[0]).not.toHaveProperty('buttons');
+    expect(replies.messages[1]?.buttons).toHaveLength(2);
+  });
+
   it('records clarification requests without optional metadata when the runner omits it', async () => {
     const repo = new FakeSessionRepository();
     const runner = new FakeRunner([
@@ -1602,17 +1725,14 @@ describe('handleIncomingMessage', () => {
     expect(repo.sessions[0]?.status).toBe('waiting_for_user');
     expect(repo.createdSessions).toHaveLength(0);
     expect(runner.calls[0]?.session.id).toBe('session-existing');
-    expect(eventPayloads(repo, 'tool_call_completed')[0]).toMatchObject({
-      toolSelection: { turnIndex: 0, ordinal: 1 },
+    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(eventPayloads(repo, 'clarification_requested').at(-1)).toMatchObject({
+      blockerReason: 'not_enough_context',
+      candidateIntents: ['create_calendar_event'],
     });
-    expect(replies.messages).toEqual([
-      {
-        userId: 'user-1',
-        message: 'Scheduled it for tomorrow.',
-        replyToMessageId: 'wamid-2',
-        correlationId: 'session-existing',
-      },
-    ]);
+    expect(replies.messages[0]?.message).toContain(
+      'I could not safely prepare the calendar event for confirmation.'
+    );
   });
 
   it('replies unsupported and keeps the session available for follow-up context', async () => {

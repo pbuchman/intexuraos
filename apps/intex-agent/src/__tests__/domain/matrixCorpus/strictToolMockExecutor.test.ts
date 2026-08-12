@@ -171,6 +171,64 @@ describe('strict Matrix corpus tool-mock executor', () => {
     expect(recordToolCallStarted).not.toHaveBeenCalled();
   });
 
+  it('authorizes a mutating preview before a clarification acceptance turn', async () => {
+    const result = resultFor('create_calendar_event');
+    const profile = baseProfile({
+      calls: [
+        {
+          ...successCall('create_calendar_event', 1, result),
+          turnIndex: 2,
+        },
+      ],
+      forbiddenSelections: [{ turnIndex: 0, toolName: 'create_calendar_event' }],
+    });
+    const recordToolCallStarted = vi.fn(async () => undefined);
+    const boundary = createStrictToolMockBoundary({
+      profile: decode(profile),
+      turnIndex: 0,
+      ingestReceiptId: 'receipt_pre_clarification_preview',
+      recordToolCallStarted,
+      expectedByCatalog: ({ turnIndex, toolName, ordinal }) =>
+        turnIndex === 2 && toolName === 'create_calendar_event' && ordinal === 1,
+    });
+
+    await expect(
+      boundary.selectionGate({
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Synthetic',
+          start: '2026-07-20T10:00:00Z',
+          end: '2026-07-20T11:00:00Z',
+        },
+      })
+    ).resolves.toEqual({ decision: 'allow', metadata: { turnIndex: 2, ordinal: 1 } });
+    expect(recordToolCallStarted).not.toHaveBeenCalled();
+  });
+
+  it('keeps distant previews closed for mutations without a readiness workflow', async () => {
+    const result = resultFor('create_note');
+    const profile = baseProfile({
+      calls: [{ ...successCall('create_note', 1, result), turnIndex: 2 }],
+      forbiddenSelections: [{ turnIndex: 0, toolName: 'create_note' }],
+    });
+    const boundary = createStrictToolMockBoundary({
+      profile: decode(profile),
+      turnIndex: 0,
+      ingestReceiptId: 'receipt_distant_note_preview',
+      recordToolCallStarted: vi.fn(async () => undefined),
+      expectedByCatalog: () => true,
+    });
+
+    await expect(
+      boundary.selectionGate({ toolName: 'create_note', args: { content: 'private' } })
+    ).resolves.toMatchObject({
+      decision: 'reject',
+      category: 'safety_stop',
+      code: 'MISSING_EXPECTED_MOCK_CONFIGURATION',
+      metadata: { turnIndex: 0, ordinal: 1 },
+    });
+  });
+
   it('rejects a mutating preview when the catalog does not authorize its next-turn call', async () => {
     const result = resultFor('create_note');
     const profile = baseProfile({

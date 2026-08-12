@@ -1578,6 +1578,38 @@ describe('Matrix corpus execution service', () => {
         suggestedNextStep: 'Provide the date.',
         fallbackReason: 'llm_call_failed' as const,
         clarification: 'Which date?',
+        toolSelection: { turnIndex: 2, ordinal: 1 },
+        calendarEventDraft: {
+          version: 1 as const,
+          toolArgs: {
+            summary: 'Synthetic event',
+            start: '2026-07-21T12:00:00+02:00',
+            end: '2026-07-21T13:00:00+02:00',
+          },
+          fields: {
+            summary: {
+              value: 'Synthetic event',
+              status: 'user_confirmed' as const,
+              source: 'user_message' as const,
+            },
+            start: {
+              value: '2026-07-21T12:00:00+02:00',
+              status: 'user_confirmed' as const,
+              source: 'user_message' as const,
+            },
+            end: {
+              value: '2026-07-21T13:00:00+02:00',
+              status: 'proposed_default' as const,
+              source: 'safe_default' as const,
+            },
+            timeZone: {
+              value: 'Europe/Warsaw',
+              status: 'runtime_default' as const,
+              source: 'runtime' as const,
+            },
+          },
+          omittedFields: ['location'],
+        },
       })),
       executeConfirmed: vi.fn(),
     } as unknown as IntexAgentRunner;
@@ -1601,6 +1633,11 @@ describe('Matrix corpus execution service', () => {
       suggestedNextStep: 'Provide the date.',
       fallbackReason: 'llm_call_failed',
       clarification: 'Which date?',
+      toolSelection: { turnIndex: 2, ordinal: 1 },
+      calendarEventDraft: expect.objectContaining({
+        version: 1,
+        toolArgs: expect.objectContaining({ end: '2026-07-21T13:00:00+02:00' }),
+      }),
     });
   });
 

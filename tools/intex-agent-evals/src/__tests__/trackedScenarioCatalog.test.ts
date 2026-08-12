@@ -889,9 +889,13 @@ describe('tracked scenario catalog', () => {
     );
 
     const scenario003 = findScenario(scenarios, 'intex-eval-003');
+    expect(scenario003.turns[0]).toMatchObject({
+      kind: 'message',
+      text: expect.stringMatching(/2026-07-21 at noon/iu),
+    });
     expect(scenario003.turns[1]).toMatchObject({
       kind: 'message',
-      text: expect.stringMatching(/next Tuesday at noon for one hour/iu),
+      text: 'Yes',
     });
     expect(findRequiredToolCall(scenario003, 'create_calendar_event').argumentAssertions).toEqual(
       expect.arrayContaining([
@@ -1165,7 +1169,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '0744686819add640420489d3ce82d173f40580cae8be8b6a76be08a91eed1ad3'
+      'bdc844fe1e14355c23179f434bd6ea1f06fdad75102b664f573de2d49e6e9948'
     );
   });
 });

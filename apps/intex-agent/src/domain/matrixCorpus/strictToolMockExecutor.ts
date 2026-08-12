@@ -354,9 +354,14 @@ function confirmationPreviewCall(
   toolName: IntexAgentToolNameV1
 ): NonNullable<ReturnType<DecodedStrictToolMockProfile['findCall']>> | undefined {
   if (!CONFIRMATION_MUTATION_TOOL_NAMES.has(toolName)) return undefined;
-  const candidates = input.profile.profile.calls.filter(
-    (call) => call.toolName === toolName && call.turnIndex === input.turnIndex + 1
+  const futureCandidates = input.profile.profile.calls.filter(
+    (call) =>
+      call.toolName === toolName &&
+      call.turnIndex > input.turnIndex &&
+      (toolName === 'create_calendar_event' || call.turnIndex === input.turnIndex + 1)
   );
+  const nearestTurn = Math.min(...futureCandidates.map(({ turnIndex }) => turnIndex));
+  const candidates = futureCandidates.filter((call) => call.turnIndex === nearestTurn);
   if (candidates.length !== 1) return undefined;
   const candidate = candidates[0];
   /* v8 ignore start -- ts-type: length check above guarantees index zero is defined; this guard exists only for noUncheckedIndexedAccess narrowing @preserve */
