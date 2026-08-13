@@ -488,6 +488,7 @@ resource "google_project_service" "apis" {
     "cloudfunctions.googleapis.com",
     "eventarc.googleapis.com",
     "apikeys.googleapis.com",
+    "firebaseappcheck.googleapis.com",
   ])
 
   project            = var.project_id
@@ -1547,6 +1548,23 @@ data "google_firebase_web_app_config" "web" {
   provider   = google-beta
   project    = var.project_id
   web_app_id = google_firebase_web_app.web.app_id
+}
+
+# Collect App Check request metrics before any enforcement gate. ENFORCED is a
+# separate rollout decision after the web SDK/provider is deployed and both
+# origins show healthy verified traffic.
+resource "google_firebase_app_check_service_config" "monitoring" {
+  provider = google-beta
+  for_each = toset([
+    "firestore.googleapis.com",
+    "identitytoolkit.googleapis.com",
+  ])
+
+  project          = var.project_id
+  service_id       = each.value
+  enforcement_mode = "UNENFORCED"
+
+  depends_on = [google_project_service.apis]
 }
 
 # -----------------------------------------------------------------------------

@@ -174,10 +174,45 @@ describe('secret package runtime integrations', () => {
     }
     expect(goal).toContain('Version reconciliation');
     expect(goal).toContain('34-name legacy audit set');
-    expect(goal).toContain('old Firebase key request count is `0` for 24 continuous hours');
-    expect(goal).toContain('seven-day disabled soak');
+    expect(goal).toContain('old-credential-UID request count `0`');
+    expect(goal).toContain('seven-day disabled window');
     expect(goal).toContain('60-minute conditional binding');
     expect(goal).toContain('four-hour recovery time objective');
+  });
+
+  it('documents executable and bounded rollout soak queries', () => {
+    const operations = read('docs/operations/secret-packages.md');
+
+    expect(operations).toContain('serviceruntime.googleapis.com/api/request_count');
+    expect(operations).toContain('resource.labels.credential_id="apikey:');
+    expect(operations).toContain('pageSize=100000');
+    expect(operations).toContain('nextPageToken');
+    expect(operations).toContain('30 minutes');
+    expect(operations).toContain('iam.googleapis.com/service_account/key/authn_events_count');
+    expect(operations).toContain('metric.labels.key_id');
+    expect(operations).toContain('three hours');
+    expect(operations).toContain('disabled keys');
+    expect(operations).toContain(
+      'google.cloud.secretmanager.v1.SecretManagerService.AccessSecretVersion'
+    );
+    expect(operations).toContain('timestamp>="${audit_t0}"');
+    expect(operations).toContain('timestamp<="${audit_t1}"');
+    expect(operations).toContain('/versions/[^/]+$');
+    expect(operations).toContain('Do not pass `--limit`');
+    expect(operations).not.toMatch(/--header "Authorization: Bearer \$\{/u);
+    expect(operations).not.toContain('gcloud secrets versions access "${control_version}"');
+  });
+
+  it('documents Terraform adoption and least-privilege cleanup for the Cloud Build connection', () => {
+    const operations = read('docs/operations/secret-packages.md');
+
+    expect(operations).toContain('service-544224260556@gcp-sa-cloudbuild.iam.gserviceaccount.com');
+    expect(operations).toContain('pbuchman-github-github-oauthtoken-8b04fa');
+    expect(operations).toContain('roles/secretmanager.secretAccessor');
+    expect(operations).toContain('roles/secretmanager.admin');
+    expect(operations).toContain('fetchGitRefs');
+    expect(operations).toContain('import');
+    expect(operations).toContain('exactly two deletes');
   });
 
   it('records the fresh no-change plan and live zero-binding home identity evidence', () => {

@@ -672,18 +672,27 @@ Firebase Auth, API-key restrictions, quotas, and App Check protect the backend.
    remove the old imported/resource definition and correct/remove the legacy
    `firebase_api_key` output before deleting the old key. Close
    the repository alert as revoked; record only its alert identifier.
-9. Enable App Check in monitoring mode and review legitimate-client telemetry.
-   Enforcement is a separate controlled change after compatibility is proven.
+9. Manage `firebaseappcheck.googleapis.com` and the Firestore/Auth service
+   configurations through Terraform. Start both services as `UNENFORCED`, which
+   enables service-level monitoring without rejecting requests.
+10. Integrate a supported web attestation provider before interpreting
+    verified-client telemetry. reCAPTCHA Essentials is free for up to 10,000
+    assessments per month and returns errors beyond that allowance when billing
+    is disabled. Enabling billing/Premium can create cost; never create the
+    provider/key, enable billing, or select a paid tier implicitly.
+11. Enforcement is a separate controlled change after the deployed web client,
+    both origins, and telemetry prove compatibility.
 
 Firebase cutover PASS is quantitative:
 
 - On each approved DEV and PROD origin, one supported test client must complete
   sign-in, forced token refresh, one Rules-allowed Firestore read, and one
   disposable write/delete cycle with zero failed steps.
-- Credential-filtered API metrics must show replacement-key traffic on both
-  deployed origins and old-key request count exactly zero for 24 continuous
-  hours after the later deployment. Any request attributed to the old key
-  resets the 24-hour window.
+- Credential-filtered API metrics must show global replacement-key traffic and
+  old-key request count exactly zero for 24 continuous hours after the later
+  deployment. The metric has no HTTP-referrer/origin dimension, so the two
+  explicit origin smoke tests above—not the metric—prove DEV and PROD origin
+  coverage. Any request attributed to the old key resets the 24-hour window.
 - Browser telemetry during the same window must contain zero new failures
   attributable to API-key restrictions, Auth token refresh, Firestore Rules, or
   App Check. App Check enforcement remains a separate change; monitoring must
@@ -691,6 +700,150 @@ Firebase cutover PASS is quantitative:
 - Evidence records the old and replacement resource IDs, metric interval/counts,
   origin/test matrix, alert identifier, revoked state, and UTC closure time. It
   never records either key value.
+
+#### Executable Firebase key traffic gate
+
+Use the API Keys metadata endpoint and Cloud Monitoring REST API; do not use
+`getKeyString`, `lookupKey`, Terraform output, or a package fetch to identify a
+key. The API Keys `get` response exposes `name`, `uid`, display name, and
+restrictions without the key string. The `consumed_api` monitored resource uses
+`credential_id` in the form `apikey:<UID>`, and
+`serviceruntime.googleapis.com/api/request_count` can be delayed by 30 minutes.
+These details are defined by the [API Keys resource
+schema](https://cloud.google.com/api-keys/docs/reference/rest/v2/projects.locations.keys),
+[Consumed API resource
+schema](https://cloud.google.com/monitoring/api/resources#tag_consumed_api), and
+[Service Runtime metric
+catalog](https://cloud.google.com/monitoring/api/metrics_gcp_p_z#serviceruntime).
+
+Run with a read-only operator that has API Keys metadata and Monitoring viewer
+access. Turn off shell tracing first. The two resource IDs below are public
+metadata and are deliberately fixed; the response files remain private and are
+deleted on exit.
+
+```bash
+set +x
+project_id='intexuraos-dev-pbuchman'
+old_key_id='d8251549-1bde-49c0-82a7-b0525a2fe688'
+replacement_key_id='intexuraos-firebase-browser-2026'
+firebase_t0='<RFC3339 UTC: later of the completed DEV/PROD deployments>'
+firebase_t1='<RFC3339 UTC: observation end, at least 24h after firebase_t0>'
+
+firebase_gate_dir="$(mktemp -d "${TMPDIR:-/tmp}/firebase-key-gate.XXXXXX")"
+chmod 700 "${firebase_gate_dir}"
+trap 'rm -rf -- "${firebase_gate_dir}"' EXIT
+
+for key_id in "${old_key_id}" "${replacement_key_id}"; do
+  gcloud services api-keys describe "${key_id}" \
+    --project="${project_id}" \
+    --location=global \
+    --format='json(name,uid,displayName,restrictions)' \
+    >"${firebase_gate_dir}/${key_id}.json"
+  chmod 600 "${firebase_gate_dir}/${key_id}.json"
+  jq -e \
+    --arg suffix "/locations/global/keys/${key_id}" \
+    '(.name | endswith($suffix)) and
+     (.uid | type == "string" and length > 0) and
+     (.displayName | type == "string" and length > 0) and
+     (.restrictions | type == "object") and
+     (has("keyString") | not)' \
+    "${firebase_gate_dir}/${key_id}.json" >/dev/null
+done
+
+old_key_uid="$(jq -er '.uid' "${firebase_gate_dir}/${old_key_id}.json")"
+replacement_key_uid="$(jq -er '.uid' "${firebase_gate_dir}/${replacement_key_id}.json")"
+[[ "${old_key_uid}" != "${replacement_key_uid}" ]]
+
+node - "${firebase_t0}" "${firebase_t1}" <<'NODE'
+const [startText, endText] = process.argv.slice(2);
+const start = Date.parse(startText);
+const end = Date.parse(endText);
+if (!Number.isFinite(start) || !Number.isFinite(end)) process.exit(1);
+if (end - start < 24 * 60 * 60 * 1000) process.exit(2);
+if (Date.now() - end < 30 * 60 * 1000) process.exit(3);
+NODE
+```
+
+Query one UID at a time and follow every `nextPageToken`. The literal
+credential filter is `resource.labels.credential_id="apikey:<UID>"`. The
+`pageSize=100000` value is the documented maximum for a full-view
+`projects.timeSeries.list` request; a token still requires another request.
+The helper emits only aggregate request and page counts, never time-series
+bodies or credentials. See the [Monitoring `timeSeries.list` REST
+contract](https://cloud.google.com/monitoring/api/ref_v3/rest/v3/projects.timeSeries/list).
+
+```bash
+api_key_request_count() {
+  local key_uid="$1"
+  local page_token=''
+  local response_file="${firebase_gate_dir}/monitoring-page.json"
+  local filter="metric.type=\"serviceruntime.googleapis.com/api/request_count\" AND resource.type=\"consumed_api\" AND resource.labels.project_id=\"${project_id}\" AND resource.labels.credential_id=\"apikey:${key_uid}\""
+  local total=0
+  local pages=0
+  local page_total=0
+  local curl_args=()
+
+  while :; do
+    curl_args=(
+      --fail --silent --show-error --get
+      --header "@${firebase_gate_dir}/monitoring-auth-header"
+      --data-urlencode "filter=${filter}"
+      --data-urlencode "interval.startTime=${firebase_t0}"
+      --data-urlencode "interval.endTime=${firebase_t1}"
+      --data-urlencode 'view=FULL'
+      --data-urlencode 'pageSize=100000'
+    )
+    if [[ -n "${page_token}" ]]; then
+      curl_args+=(--data-urlencode "pageToken=${page_token}")
+    fi
+
+    curl "${curl_args[@]}" \
+      "https://monitoring.googleapis.com/v3/projects/${project_id}/timeSeries" \
+      >"${response_file}"
+    chmod 600 "${response_file}"
+    page_total="$(jq -er \
+      '[.timeSeries[]?.points[]?.value.int64Value // "0" | tonumber] | add // 0' \
+      "${response_file}")"
+    total=$((total + page_total))
+    pages=$((pages + 1))
+    page_token="$(jq -er '.nextPageToken // ""' "${response_file}")"
+    [[ -n "${page_token}" ]] || break
+  done
+  printf '%s %s\n' "${total}" "${pages}"
+}
+
+firebase_access_token="$(gcloud auth print-access-token)"
+printf 'Authorization: Bearer %s\n' "${firebase_access_token}" \
+  >"${firebase_gate_dir}/monitoring-auth-header"
+chmod 600 "${firebase_gate_dir}/monitoring-auth-header"
+unset firebase_access_token
+
+read -r old_request_count old_page_count < <(api_key_request_count "${old_key_uid}")
+read -r replacement_request_count replacement_page_count \
+  < <(api_key_request_count "${replacement_key_uid}")
+
+[[ "${old_request_count}" -eq 0 ]]
+[[ "${replacement_request_count}" -gt 0 ]]
+printf 'old_requests=%s old_pages=%s replacement_requests=%s replacement_pages=%s\n' \
+  "${old_request_count}" "${old_page_count}" \
+  "${replacement_request_count}" "${replacement_page_count}"
+```
+
+This metric is global and has no HTTP-referrer/origin label. Therefore, during
+the same interval, run two separate supported-browser smokes and retain their
+redacted results:
+
+1. On `https://dev.intexuraos.cloud`, sign in, force an ID-token refresh, make
+   one Rules-allowed Firestore read, then create and delete one disposable test
+   document. Record four PASS/FAIL fields and browser-console error counts.
+2. Repeat the identical four operations independently on
+   `https://intexuraos.cloud`; do not infer PROD coverage from the DEV smoke or
+   from the global metric.
+
+PASS requires both origin smokes to have zero failed steps, replacement traffic
+greater than zero globally, old traffic exactly zero, an interval of at least
+24 hours, and a query end at least 30 minutes in the past. Any old-key point or
+failed origin smoke resets `firebase_t0` to the later corrective deployment.
 
 Console/Computer View path for the private handoff:
 
@@ -740,9 +893,12 @@ Hetzner runtime key is a bounded compatibility exception.
    requires zero new credential-related authentication/authorization failures
    and zero use of the previous key ID throughout that interval.
 7. Disable the previous key, but do not delete it. Keep a seven-day disabled
-   soak and require zero attempted use of that key ID plus zero failures
-   attributable to the replacement. Any failure stops deletion and starts the
-   incident/rollback decision; a compromised old key is never re-enabled.
+   soak. Google excludes disabled keys from its key-authentication metric, so
+   this interval cannot claim to observe rejected attempts with that key.
+   Instead require that the old key remains disabled, replacement-key
+   authentication continues, and runtime telemetry contains zero credential
+   failures. Any failure stops deletion and starts the incident/rollback
+   decision; a compromised old key is never re-enabled.
 8. Delete the disabled key only after the seven-day gate passes. Destroy all
    temporary local copies. Record only account, old/new key IDs, canary result,
    observation boundaries/counts, disable/delete timestamps, and result.
@@ -768,6 +924,168 @@ human operator handles the downloaded file outside the visible session.
 
 Never delete the old key before the new package has passed canary checks. Never
 put the provisioner credential in DEV or PROD.
+
+#### Executable runtime key metric and soak gate
+
+The key-authentication metric is
+`iam.googleapis.com/service_account/key/authn_events_count`; filter it by the
+runtime service account's numeric `uniqueId` and `metric.labels.key_id`. It is
+sampled every ten minutes and may remain unavailable for three hours. Google
+also states that service-account key metrics exclude disabled keys. See the
+[IAM metric catalog](https://cloud.google.com/monitoring/api/metrics_gcp_i_o#iam)
+and [service-account monitoring
+guide](https://cloud.google.com/iam/docs/service-account-monitoring).
+
+Start the 24-hour pre-disable window only after every PROD process has reloaded
+the replacement. Supply key IDs as metadata; never derive them by opening a JSON
+key. The command validates both IDs against IAM without printing key material.
+
+```bash
+set +x
+project_id='intexuraos-dev-pbuchman'
+runtime_sa='ixos-hetzner-runtime-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+old_runtime_key_id='<old 40-character key ID>'
+replacement_runtime_key_id='<replacement 40-character key ID>'
+runtime_t0='<RFC3339 UTC: full-fleet replacement reload completed>'
+runtime_t1='<RFC3339 UTC: observation end, at least 24h after runtime_t0>'
+
+[[ "${old_runtime_key_id}" =~ ^[0-9a-f]{40}$ ]]
+[[ "${replacement_runtime_key_id}" =~ ^[0-9a-f]{40}$ ]]
+[[ "${old_runtime_key_id}" != "${replacement_runtime_key_id}" ]]
+
+runtime_gate_dir="$(mktemp -d "${TMPDIR:-/tmp}/runtime-key-gate.XXXXXX")"
+chmod 700 "${runtime_gate_dir}"
+trap 'rm -rf -- "${runtime_gate_dir}"' EXIT
+
+runtime_sa_unique_id="$(gcloud iam service-accounts describe "${runtime_sa}" \
+  --project="${project_id}" --format='value(uniqueId)')"
+[[ "${runtime_sa_unique_id}" =~ ^[0-9]+$ ]]
+
+for key_id in "${old_runtime_key_id}" "${replacement_runtime_key_id}"; do
+  gcloud iam service-accounts keys describe "${key_id}" \
+    --iam-account="${runtime_sa}" \
+    --project="${project_id}" \
+    --format='json(name,keyType,disabled,validAfterTime,validBeforeTime)' \
+    >"${runtime_gate_dir}/${key_id}.json"
+  chmod 600 "${runtime_gate_dir}/${key_id}.json"
+  jq -e --arg suffix "/keys/${key_id}" \
+    '(.name | endswith($suffix)) and .keyType == "USER_MANAGED"' \
+    "${runtime_gate_dir}/${key_id}.json" >/dev/null
+done
+
+node - "${runtime_t0}" "${runtime_t1}" <<'NODE'
+const [startText, endText] = process.argv.slice(2);
+const start = Date.parse(startText);
+const end = Date.parse(endText);
+if (!Number.isFinite(start) || !Number.isFinite(end)) process.exit(1);
+if (end - start < 24 * 60 * 60 * 1000) process.exit(2);
+if (Date.now() - end < 3 * 60 * 60 * 1000) process.exit(3);
+NODE
+```
+
+Query each key through all Monitoring pages. Only aggregate counts leave the
+private directory.
+
+```bash
+runtime_key_authn_count() {
+  local key_id="$1"
+  local page_token=''
+  local response_file="${runtime_gate_dir}/monitoring-page.json"
+  local filter="metric.type=\"iam.googleapis.com/service_account/key/authn_events_count\" AND resource.type=\"iam_service_account\" AND resource.labels.project_id=\"${project_id}\" AND resource.labels.unique_id=\"${runtime_sa_unique_id}\" AND metric.labels.key_id=\"${key_id}\""
+  local total=0
+  local pages=0
+  local page_total=0
+  local curl_args=()
+
+  while :; do
+    curl_args=(
+      --fail --silent --show-error --get
+      --header "@${runtime_gate_dir}/monitoring-auth-header"
+      --data-urlencode "filter=${filter}"
+      --data-urlencode "interval.startTime=${runtime_t0}"
+      --data-urlencode "interval.endTime=${runtime_t1}"
+      --data-urlencode 'view=FULL'
+      --data-urlencode 'pageSize=100000'
+    )
+    if [[ -n "${page_token}" ]]; then
+      curl_args+=(--data-urlencode "pageToken=${page_token}")
+    fi
+    curl "${curl_args[@]}" \
+      "https://monitoring.googleapis.com/v3/projects/${project_id}/timeSeries" \
+      >"${response_file}"
+    chmod 600 "${response_file}"
+    page_total="$(jq -er \
+      '[.timeSeries[]?.points[]?.value.int64Value // "0" | tonumber] | add // 0' \
+      "${response_file}")"
+    total=$((total + page_total))
+    pages=$((pages + 1))
+    page_token="$(jq -er '.nextPageToken // ""' "${response_file}")"
+    [[ -n "${page_token}" ]] || break
+  done
+  printf '%s %s\n' "${total}" "${pages}"
+}
+
+runtime_access_token="$(gcloud auth print-access-token)"
+printf 'Authorization: Bearer %s\n' "${runtime_access_token}" \
+  >"${runtime_gate_dir}/monitoring-auth-header"
+chmod 600 "${runtime_gate_dir}/monitoring-auth-header"
+unset runtime_access_token
+
+read -r old_authn_count old_authn_pages \
+  < <(runtime_key_authn_count "${old_runtime_key_id}")
+read -r replacement_authn_count replacement_authn_pages \
+  < <(runtime_key_authn_count "${replacement_runtime_key_id}")
+[[ "${old_authn_count}" -eq 0 ]]
+[[ "${replacement_authn_count}" -gt 0 ]]
+printf 'old_authn=%s old_pages=%s replacement_authn=%s replacement_pages=%s\n' \
+  "${old_authn_count}" "${old_authn_pages}" \
+  "${replacement_authn_count}" "${replacement_authn_pages}"
+```
+
+The 24-hour gate also requires three successful production health samples, the
+non-printing candidate credential canary, and zero new credential-related
+`401`/`403` or token-issuance failures. Wait three hours after `runtime_t1`
+before the final metric query. Any old-key event resets `runtime_t0`.
+
+After disabling the old key, do not use the absent old-key series as evidence:
+disabled keys are excluded. The measurable seven-day gate is instead:
+
+- eight snapshots from the disable boundary through a final snapshot at least
+  168 hours later, each showing the old key's metadata field `disabled=true`;
+- seven non-overlapping 24-hour replacement-key metric intervals, each queried
+  only after its three-hour lag and each with replacement count greater than
+  zero;
+- one successful non-printing credential canary and complete PROD health sample
+  in every interval;
+- zero unexpected credential/authentication failures and zero
+  `EnableServiceAccountKey` Admin Activity entries for the old key during the
+  bounded interval.
+
+Use the following bounded Audit Log query only as supplementary evidence;
+Google documents that many, but not all, services populate
+`serviceAccountKeyName`. It cannot replace the key metric before disable or the
+measurable soak after disable. Wait 15 minutes after the query end, and never
+pass `--limit` so `gcloud logging read` exhausts its default unlimited result
+set. The selected output fields contain metadata only. See [Google's
+service-account audit-log
+example](https://cloud.google.com/iam/docs/audit-logging/examples-service-accounts#auth-with-key)
+and [`gcloud logging read`
+reference](https://cloud.google.com/sdk/gcloud/reference/logging/read).
+
+```bash
+runtime_audit_t0='<RFC3339 UTC: full-fleet replacement reload completed>'
+runtime_audit_t1='<RFC3339 UTC: bounded query end; wait 15m before reading>'
+old_runtime_key_name="//iam.googleapis.com/projects/${project_id}/serviceAccounts/${runtime_sa}/keys/${old_runtime_key_id}"
+runtime_audit_filter="protoPayload.authenticationInfo.serviceAccountKeyName=\"${old_runtime_key_name}\" AND timestamp>=\"${runtime_audit_t0}\" AND timestamp<=\"${runtime_audit_t1}\""
+
+gcloud logging read "${runtime_audit_filter}" \
+  --project="${project_id}" \
+  --order=asc \
+  --format='json(timestamp,insertId,protoPayload.serviceName,protoPayload.methodName,protoPayload.status.code)' \
+  >"${runtime_gate_dir}/old-key-audit.json"
+chmod 600 "${runtime_gate_dir}/old-key-audit.json"
+jq 'length' "${runtime_gate_dir}/old-key-audit.json"
+```
 
 Where organization policy supports it, enforce
 `constraints/iam.serviceAccountKeyExposureResponse=DISABLE_KEY` so Google can
@@ -806,6 +1124,221 @@ provisioner identity on the VM fetches the exact PROD package.
 - Log subject, repository/ref claims, commit, package ID, numeric version, and
   result; never log OIDC or Google access tokens.
 
+### Cloud Build GitHub connection IAM cleanup
+
+The retained `pbuchman-github` connection is allowed to read only its managed
+OAuth-token secret. Google states that the Cloud Build service agent uses this
+secret, that `roles/secretmanager.secretAccessor` can be granted on the single
+secret, and that the setup-time `roles/secretmanager.admin` grant can be
+revoked after the connection reaches `COMPLETE`. See [Cloud Build's console
+connection flow](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github?generation=2nd-gen)
+and [programmatic connection IAM
+example](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github#connect_to_a_github_host_programmatically).
+
+This procedure removes exactly the unconditional and expired conditional
+project grants for
+`service-544224260556@gcp-sa-cloudbuild.iam.gserviceaccount.com`. Persistent IAM
+changes are Terraform-only. Use a verified administrative principal, clear all
+emulator variables, save every plan, and never fetch or display the OAuth token.
+
+1. Record a metadata-only baseline in a mode-`0700` directory. The connection
+   must be `COMPLETE`, not disabled, and not reconciling; the repository URI
+   must be exact.
+
+   ```bash
+   set +x
+   project_id='intexuraos-dev-pbuchman'
+   region='europe-central2'
+   connection='pbuchman-github'
+   repository='pbuchman-intexuraos'
+   oauth_secret='pbuchman-github-github-oauthtoken-8b04fa'
+   p4sa='service-544224260556@gcp-sa-cloudbuild.iam.gserviceaccount.com'
+   p4sa_member="serviceAccount:${p4sa}"
+
+   cloud_build_gate_dir="$(mktemp -d \
+     "${TMPDIR:-/tmp}/cloud-build-iam-gate.XXXXXX")"
+   chmod 700 "${cloud_build_gate_dir}"
+   trap 'rm -rf -- "${cloud_build_gate_dir}"' EXIT
+
+   gcloud builds connections describe "${connection}" \
+     --project="${project_id}" --region="${region}" \
+     --format='json(name,installationState.stage,disabled,reconciling)' \
+     >"${cloud_build_gate_dir}/connection.json"
+   gcloud builds repositories describe "${repository}" \
+     --connection="${connection}" \
+     --project="${project_id}" --region="${region}" \
+     --format='json(name,remoteUri)' \
+     >"${cloud_build_gate_dir}/repository.json"
+   chmod 600 "${cloud_build_gate_dir}/connection.json" \
+     "${cloud_build_gate_dir}/repository.json"
+   jq -e \
+     '.installationState.stage == "COMPLETE" and
+      (.disabled // false) == false and (.reconciling // false) == false' \
+     "${cloud_build_gate_dir}/connection.json" >/dev/null
+   jq -e \
+     '.remoteUri == "https://github.com/pbuchman/intexuraos.git"' \
+     "${cloud_build_gate_dir}/repository.json" >/dev/null
+   ```
+
+2. Add a non-authoritative
+   `google_secret_manager_secret_iam_member` in
+   `terraform/environments/dev/main.tf` for exactly the OAuth secret, role
+   `roles/secretmanager.secretAccessor`, and `${p4sa_member}`. Do not manage the
+   token version or payload. Query the live secret policy into a private file.
+   If the exact member already exists, import it using the [provider's
+   secret-IAM import
+   format](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/secret_manager_secret_iam);
+   otherwise review and apply a saved plan containing exactly that one add.
+
+   ```bash
+   gcloud secrets get-iam-policy "${oauth_secret}" \
+     --project="${project_id}" --format=json \
+     >"${cloud_build_gate_dir}/oauth-policy.json"
+   chmod 600 "${cloud_build_gate_dir}/oauth-policy.json"
+   oauth_accessor_count="$(jq --arg member "${p4sa_member}" \
+     '[.bindings[]? | select(.role == "roles/secretmanager.secretAccessor") |
+       .members[]? | select(. == $member)] | length' \
+     "${cloud_build_gate_dir}/oauth-policy.json")"
+   [[ "${oauth_accessor_count}" -eq 0 || "${oauth_accessor_count}" -eq 1 ]]
+
+   # Existing-member branch only; use the actual reviewed Terraform address.
+   if [[ "${oauth_accessor_count}" -eq 1 ]]; then
+     STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+       terraform -chdir=terraform/environments/dev import \
+       google_secret_manager_secret_iam_member.cloud_build_connection_oauth_accessor \
+       "projects/${project_id}/secrets/${oauth_secret} roles/secretmanager.secretAccessor ${p4sa_member}"
+   fi
+   ```
+
+   If the policy cannot be read, stop and use an appropriately authorized
+   metadata/IAM operator; inability to prove this one-secret accessor blocks
+   cleanup. Finish either branch with a full un-targeted plan that reports no
+   changes and a live recount of exactly one accessor.
+
+3. Add two temporary non-authoritative `google_project_iam_member` resources
+   matching the live grants byte-for-byte: one unconditional; one with title
+   `cloudbuild-connection-setup` and expression
+   `request.time < timestamp("2026-01-21T01:30:54.054Z")`. Import both to
+   Terraform state. A conditional member import appends the condition title;
+   see the [Google provider project-IAM import
+   contract](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam#google_project_iam_member).
+
+   ```bash
+   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+     terraform -chdir=terraform/environments/dev import \
+     google_project_iam_member.cloud_build_service_agent_secret_admin_unconditional \
+     "${project_id} roles/secretmanager.admin ${p4sa_member}"
+
+   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+     terraform -chdir=terraform/environments/dev import \
+     google_project_iam_member.cloud_build_service_agent_secret_admin_expired \
+     "${project_id} roles/secretmanager.admin ${p4sa_member} cloudbuild-connection-setup"
+
+   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+     terraform -chdir=terraform/environments/dev plan \
+     -detailed-exitcode -out="${cloud_build_gate_dir}/adoption-plan.tfplan"
+   ```
+
+   Adoption PASS requires exit `0` and `No changes`: import → plan0. Any change
+   means the configuration does not exactly describe live IAM; correct it
+   before continuing. Keep the reviewed configuration/import history in Git
+   until the cleanup evidence is accepted.
+
+4. Run the non-mutating baseline canary below. It calls only
+   [`fetchGitRefs`](https://cloud.google.com/build/docs/api/reference/rest/v2/projects.locations.connections.repositories/fetchGitRefs),
+   follows every page, emits counts rather than ref names, and requires the
+   development branch. The OAuth access token is held in a private header file,
+   never in curl arguments or output.
+
+   ```bash
+   fetch_git_refs_canary() {
+     local label="$1"
+     local page_token=''
+     local page_count=0
+     local ref_count=0
+     local development_count=0
+     local response_file="${cloud_build_gate_dir}/refs-${label}.json"
+     local curl_args=()
+
+     while :; do
+       curl_args=(
+         --fail --silent --show-error --get
+         --header "@${cloud_build_gate_dir}/cloud-build-auth-header"
+         --data-urlencode 'refType=BRANCH'
+         --data-urlencode 'pageSize=100'
+       )
+       if [[ -n "${page_token}" ]]; then
+         curl_args+=(--data-urlencode "pageToken=${page_token}")
+       fi
+       curl "${curl_args[@]}" \
+         "https://cloudbuild.googleapis.com/v2/projects/${project_id}/locations/${region}/connections/${connection}/repositories/${repository}:fetchGitRefs" \
+         >"${response_file}"
+       chmod 600 "${response_file}"
+       ref_count=$((ref_count + $(jq '.refNames // [] | length' \
+         "${response_file}")))
+       development_count=$((development_count + $(jq \
+         '[.refNames[]? | select(. == "refs/heads/development" or . == "development")] | length' \
+         "${response_file}")))
+       page_count=$((page_count + 1))
+       page_token="$(jq -er '.nextPageToken // ""' "${response_file}")"
+       [[ -n "${page_token}" ]] || break
+     done
+     [[ "${ref_count}" -gt 0 && "${development_count}" -eq 1 ]]
+     printf '%s refs=%s pages=%s development=%s\n' \
+       "${label}" "${ref_count}" "${page_count}" "${development_count}"
+   }
+
+   cloud_build_access_token="$(gcloud auth print-access-token)"
+   printf 'Authorization: Bearer %s\n' "${cloud_build_access_token}" \
+     >"${cloud_build_gate_dir}/cloud-build-auth-header"
+   chmod 600 "${cloud_build_gate_dir}/cloud-build-auth-header"
+   unset cloud_build_access_token
+   fetch_git_refs_canary before
+   ```
+
+5. Remove only the two temporary project-admin resource blocks from desired
+   configuration. Keep the OAuth secret accessor. Save a full un-targeted plan.
+   Its JSON proof must show exactly two deletes and no other non-noop action;
+   then apply that exact saved plan.
+
+   ```bash
+   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+     terraform -chdir=terraform/environments/dev plan \
+     -out="${cloud_build_gate_dir}/cleanup.tfplan"
+   terraform -chdir=terraform/environments/dev show -json \
+     "${cloud_build_gate_dir}/cleanup.tfplan" \
+     >"${cloud_build_gate_dir}/cleanup-plan.json"
+   chmod 600 "${cloud_build_gate_dir}/cleanup-plan.json"
+   jq -e '
+     [.resource_changes[] |
+       select(.change.actions != ["no-op"]) |
+       {address,actions:.change.actions}] | sort_by(.address) == [
+       {address:"google_project_iam_member.cloud_build_service_agent_secret_admin_expired",actions:["delete"]},
+       {address:"google_project_iam_member.cloud_build_service_agent_secret_admin_unconditional",actions:["delete"]}
+     ]' "${cloud_build_gate_dir}/cleanup-plan.json" >/dev/null
+
+   STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
+     terraform -chdir=terraform/environments/dev apply \
+     "${cloud_build_gate_dir}/cleanup.tfplan"
+   ```
+
+6. Re-read project IAM and the OAuth secret IAM. Require zero project
+   `roles/secretmanager.admin` grants for the P4SA and exactly one secret-level
+   accessor. Run `fetch_git_refs_canary after`, recheck connection state, and
+   finish with a full un-targeted `terraform plan -detailed-exitcode` exit `0`.
+   This is the cleanup PASS gate.
+
+Rollback is narrow and Terraform-only. If the accessor is absent, restore only
+the one-secret accessor from its reviewed resource and rerun the canary. If the
+accessor is present and the connection remains `COMPLETE`, do not reflexively
+restore project admin; preserve responses, stop deployment triggers, and
+investigate connection state. Only when evidence proves the admin removal is
+causal and service restoration is urgent may a saved, reviewed plan temporarily
+re-add the unconditional admin member; never re-add the expired conditional
+grant. Rerun `fetchGitRefs`, repair the secret-level dependency, then remove the
+temporary admin through another exact saved plan. Direct `gcloud ... add-iam`
+or `remove-iam` mutations are forbidden.
+
 ## Audit And Evidence
 
 Enable Secret Manager Data Access audit logs explicitly. Review
@@ -839,6 +1372,266 @@ legacy count `0`, expected package/native counts by approved principal, and
 positive-control result. Any legacy event or missing positive control resets
 `T0`. Only then remove legacy IAM, disable old versions for the reversible
 window, and later destroy versions/containers through Terraform.
+
+### Executable 34-name legacy-read gate
+
+Secret Manager records a successful secret payload read under the exact method
+`google.cloud.secretmanager.v1.SecretManagerService.AccessSecretVersion`. Data
+Access logging must remain enabled, and the reader needs Private Logs Viewer.
+The method classification and required role are documented in the [Secret
+Manager audit-log
+reference](https://cloud.google.com/secret-manager/docs/audit-logging#accesssecretversion)
+and [Data Access configuration
+guide](https://cloud.google.com/logging/docs/audit/configure-data-access).
+
+First freeze the inventory from the fully reviewed 40-character commit, never
+from an uncommitted worktree. Review the resulting names line by line in the
+change approval. This parser accepts only the quoted entries in the exact
+`local.legacy_secret_container_names` block, sorts them, and fails unless there
+are exactly 34 unique names.
+
+```bash
+set +x
+project_id='intexuraos-dev-pbuchman'
+project_number='544224260556'
+reviewed_sha='<40-character lowercase reviewed Git commit SHA>'
+[[ "${reviewed_sha}" =~ ^[0-9a-f]{40}$ ]]
+git cat-file -e "${reviewed_sha}^{commit}"
+
+legacy_gate_dir="$(mktemp -d "${TMPDIR:-/tmp}/legacy-read-gate.XXXXXX")"
+chmod 700 "${legacy_gate_dir}"
+trap 'rm -rf -- "${legacy_gate_dir}"' EXIT
+
+git show "${reviewed_sha}:terraform/environments/dev/main.tf" \
+  >"${legacy_gate_dir}/reviewed-main.tf"
+chmod 600 "${legacy_gate_dir}/reviewed-main.tf"
+
+node - "${legacy_gate_dir}/reviewed-main.tf" \
+  "${legacy_gate_dir}/legacy-names.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [inputPath, outputPath] = process.argv.slice(2);
+const source = readFileSync(inputPath, 'utf8');
+const block = source.match(
+  /legacy_secret_container_names\s*=\s*toset\(\[([\s\S]*?)\]\)/u,
+);
+if (!block) process.exit(1);
+const names = [...block[1].matchAll(/"(INTEXURAOS_[A-Z0-9_]+)"/gu)]
+  .map((match) => match[1])
+  .sort();
+if (names.length !== 34 || new Set(names).size !== 34) process.exit(2);
+writeFileSync(outputPath, `${JSON.stringify(names, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+
+jq -e 'length == 34 and . == (sort | unique)' \
+  "${legacy_gate_dir}/legacy-names.json" >/dev/null
+```
+
+At each boundary, fetch one approved package at an exact positive numeric
+version through its least-privilege renderer. The payload is written to a
+mode-`0600` temporary file, checked only for non-empty bytes, and immediately
+removed. It is never printed, parsed, checksummed into evidence, or retained.
+Run `run_package_control t0` immediately after the final package-based consumer
+restart. At least 72 continuous hours later, run `run_package_control t1` and
+make no further direct legacy accesses.
+
+```bash
+control_secret='INTEXURAOS_SECRET_PACKAGE_DEV'
+control_version='<positive numeric DEV package version>'
+control_principal='ixos-home-secret-renderer-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+[[ "${control_version}" =~ ^[1-9][0-9]*$ ]]
+
+run_package_control() {
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/control-${boundary}.json"
+  local payload_file=''
+  local before=''
+  local after=''
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' ]]
+  [[ ! -e "${output_file}" ]]
+
+  payload_file="${legacy_gate_dir}/control-payload-${boundary}.json"
+  [[ ! -e "${payload_file}" ]]
+  before="$(node -e 'process.stdout.write(new Date().toISOString())')"
+  CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT="${control_principal}" \
+    node scripts/secret-package.mjs fetch \
+      --environment dev \
+      --version "${control_version}" \
+      --project-id "${project_id}" \
+      --output "${payload_file}" >/dev/null
+  [[ -s "${payload_file}" ]]
+  rm -f -- "${payload_file}"
+  after="$(node -e 'process.stdout.write(new Date().toISOString())')"
+
+  jq -n \
+    --arg boundary "${boundary}" \
+    --arg before "${before}" \
+    --arg after "${after}" \
+    --arg secret "${control_secret}" \
+    --arg version "${control_version}" \
+    --arg principal "${control_principal}" \
+    '{boundary:$boundary,before:$before,after:$after,
+      secret:$secret,version:$version,principal:$principal}' \
+    >"${output_file}"
+  chmod 600 "${output_file}"
+}
+
+# Boundary T0: run now, immediately after the last consumer restart.
+run_package_control t0
+audit_t0="$(jq -er '.before' "${legacy_gate_dir}/control-t0.json")"
+
+# Boundary T1: run only after at least 72 continuous hours, in the same
+# protected evidence workspace.
+run_package_control t1
+audit_t1="$(jq -er '.after' "${legacy_gate_dir}/control-t1.json")"
+
+node - "${audit_t0}" "${audit_t1}" <<'NODE'
+const [startText, endText] = process.argv.slice(2);
+const start = Date.parse(startText);
+const end = Date.parse(endText);
+if (!Number.isFinite(start) || !Number.isFinite(end)) process.exit(1);
+if (end - start < 72 * 60 * 60 * 1000) process.exit(2);
+if (Date.now() - end < 15 * 60 * 1000) process.exit(3);
+NODE
+```
+
+Wait at least 15 minutes after `audit_t1` for log ingestion. The exact bounds
+are `timestamp>="${audit_t0}"` and `timestamp<="${audit_t1}"`. Build one filter
+that admits only the frozen 34 legacy resources plus the exact package control.
+Then call Logging `entries.list` until `nextPageToken` is absent—even if an
+intermediate page has no entries. The Logging API explicitly requires this
+behavior; see the [`entries.list` REST
+contract](https://cloud.google.com/logging/docs/reference/v2/rest/v2/entries/list).
+Do not pass `--limit` to a `gcloud logging read` fallback; its default is
+unlimited, while a numeric limit would make the zero-read claim incomplete.
+
+```bash
+legacy_resource_regex="$(node - \
+  "${legacy_gate_dir}/legacy-names.json" \
+  "${project_id}" "${project_number}" <<'NODE'
+const { readFileSync } = require('node:fs');
+const [path, projectId, projectNumber] = process.argv.slice(2);
+const names = JSON.parse(readFileSync(path, 'utf8'));
+const escapeRe2 = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const alternatives = names.map(escapeRe2).join('|');
+process.stdout.write(
+  `^projects/(${escapeRe2(projectId)}|${escapeRe2(projectNumber)})/` +
+    `secrets/(${alternatives})/versions/[^/]+$`,
+);
+NODE
+)"
+
+control_resource_regex="^projects/(${project_id}|${project_number})/secrets/${control_secret}/versions/${control_version}$"
+legacy_filter="protoPayload.serviceName=\"secretmanager.googleapis.com\" AND protoPayload.methodName=\"google.cloud.secretmanager.v1.SecretManagerService.AccessSecretVersion\" AND timestamp>=\"${audit_t0}\" AND timestamp<=\"${audit_t1}\" AND (protoPayload.resourceName=~\"${legacy_resource_regex}\" OR protoPayload.resourceName=~\"${control_resource_regex}\")"
+printf '%s' "${legacy_filter}" >"${legacy_gate_dir}/filter.txt"
+chmod 600 "${legacy_gate_dir}/filter.txt"
+
+page_token=''
+page_count=0
+record_count=0
+: >"${legacy_gate_dir}/entries.ndjson"
+chmod 600 "${legacy_gate_dir}/entries.ndjson"
+legacy_access_token="$(gcloud auth print-access-token)"
+printf 'Authorization: Bearer %s\n' "${legacy_access_token}" \
+  >"${legacy_gate_dir}/logging-auth-header"
+chmod 600 "${legacy_gate_dir}/logging-auth-header"
+unset legacy_access_token
+
+while :; do
+  jq -n \
+    --arg project "projects/${project_id}" \
+    --arg filter "${legacy_filter}" \
+    --arg token "${page_token}" \
+    '{resourceNames:[$project],filter:$filter,orderBy:"timestamp asc",pageSize:1000}
+      + if $token == "" then {} else {pageToken:$token} end' \
+    >"${legacy_gate_dir}/request.json"
+  chmod 600 "${legacy_gate_dir}/request.json"
+
+  curl --fail --silent --show-error \
+    --request POST \
+    --header "@${legacy_gate_dir}/logging-auth-header" \
+    --header 'Content-Type: application/json' \
+    --data-binary "@${legacy_gate_dir}/request.json" \
+    'https://logging.googleapis.com/v2/entries:list' \
+    >"${legacy_gate_dir}/response.json"
+  chmod 600 "${legacy_gate_dir}/response.json"
+
+  jq -c '.entries[]? | {
+    timestamp,insertId,
+    resourceName:.protoPayload.resourceName,
+    principalEmail:.protoPayload.authenticationInfo.principalEmail
+  }' "${legacy_gate_dir}/response.json" \
+    >>"${legacy_gate_dir}/entries.ndjson"
+  page_count=$((page_count + 1))
+  record_count=$((record_count + $(jq '.entries // [] | length' \
+    "${legacy_gate_dir}/response.json")))
+  page_token="$(jq -er '.nextPageToken // ""' \
+    "${legacy_gate_dir}/response.json")"
+  [[ -n "${page_token}" ]] || break
+done
+```
+
+Classify locally against the frozen list and validate both exact-version
+positive controls within their recorded boundary windows. The only emitted
+evidence is counts and PASS/FAIL.
+
+```bash
+node - \
+  "${legacy_gate_dir}/legacy-names.json" \
+  "${legacy_gate_dir}/entries.ndjson" \
+  "${legacy_gate_dir}/control-t0.json" \
+  "${legacy_gate_dir}/control-t1.json" \
+  "${project_id}" "${project_number}" \
+  "${page_count}" "${record_count}" <<'NODE'
+const { readFileSync } = require('node:fs');
+const [namesPath, entriesPath, t0Path, t1Path, projectId, projectNumber,
+  pagesText, recordsText] = process.argv.slice(2);
+const names = new Set(JSON.parse(readFileSync(namesPath, 'utf8')));
+const lines = readFileSync(entriesPath, 'utf8').split('\n').filter(Boolean);
+const entries = lines.map((line) => JSON.parse(line));
+const controls = [t0Path, t1Path].map((path) => JSON.parse(readFileSync(path, 'utf8')));
+const resourcePattern = new RegExp(
+  `^projects/(?:${projectId}|${projectNumber})/secrets/([^/]+)/versions/([^/]+)$`,
+  'u',
+);
+let legacyCount = 0;
+for (const entry of entries) {
+  const match = resourcePattern.exec(entry.resourceName ?? '');
+  if (match && names.has(match[1])) legacyCount += 1;
+}
+const controlResults = controls.map((control) => {
+  const earliest = Date.parse(control.before) - 60_000;
+  const latest = Date.parse(control.after) + 60_000;
+  const matches = entries.filter((entry) => {
+    const resource = resourcePattern.exec(entry.resourceName ?? '');
+    const timestamp = Date.parse(entry.timestamp ?? '');
+    return resource?.[1] === control.secret &&
+      resource?.[2] === control.version &&
+      entry.principalEmail === control.principal &&
+      timestamp >= earliest && timestamp <= latest;
+  }).length;
+  return { boundary: control.boundary, matches };
+});
+const pass = legacyCount === 0 && controlResults.every((result) => result.matches > 0);
+process.stdout.write(`${JSON.stringify({
+  pages: Number(pagesText),
+  records: Number(recordsText),
+  legacyCount,
+  controls: controlResults,
+  result: pass ? 'PASS' : 'FAIL',
+})}\n`);
+if (!pass) process.exit(1);
+NODE
+```
+
+PASS is exactly: 34 reviewed names, at least 72 hours, final query after the
+15-minute lag, exhaustive pagination, `legacyCount=0`, and both boundary
+controls present under the approved principal. Any mismatch, legacy read,
+missing page, or missing control resets `T0`; retain legacy IAM and versions.
 
 ## Rollback
 
@@ -1018,4 +1811,9 @@ circular, and each consumer receives only the declared projection.
 - [WIF best practices](https://cloud.google.com/iam/docs/best-practices-for-using-workload-identity-federation)
 - [GitHub Actions OpenID Connect](https://docs.github.com/actions/concepts/security/openid-connect)
 - [Firebase API key guidance](https://firebase.google.com/docs/projects/api-keys)
+- [Firebase App Check with reCAPTCHA Enterprise for web](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider)
+- [reCAPTCHA billing and Essentials limit](https://cloud.google.com/recaptcha/docs/billing-information)
+- [Cloud Monitoring API request metrics](https://cloud.google.com/monitoring/api/metrics_gcp_p_z#serviceruntime)
+- [Service-account key usage monitoring](https://cloud.google.com/iam/docs/service-account-monitoring)
+- [Cloud Build second-generation GitHub connection IAM](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github?generation=2nd-gen)
 - [Removing sensitive data from GitHub](https://docs.github.com/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository)

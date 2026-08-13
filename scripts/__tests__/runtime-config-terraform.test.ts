@@ -848,6 +848,28 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
   });
 
+  it('enables Firebase App Check monitoring for Firestore and Authentication without enforcement', () => {
+    expect(terraform).toContain('"firebaseappcheck.googleapis.com",');
+
+    const appCheckMonitoring = sectionBetween(
+      'resource "google_firebase_app_check_service_config" "monitoring" {',
+      '\n}\n'
+    );
+
+    expect(appCheckMonitoring).toContain('provider = google-beta');
+    expect(appCheckMonitoring).toMatch(/project\s*=\s*var\.project_id/u);
+    expect(appCheckMonitoring).toContain('enforcement_mode = "UNENFORCED"');
+    expect(appCheckMonitoring).not.toMatch(/enforcement_mode\s*=\s*"ENFORCED"/u);
+    expect(appCheckMonitoring).toContain('depends_on = [google_project_service.apis]');
+
+    const monitoredServices = appCheckMonitoring.match(
+      /for_each\s*=\s*toset\(\[([^\]]+)\]\)/su
+    )?.[1];
+    expect([...(monitoredServices ?? '').matchAll(/"([^"]+)"/gu)].map((match) => match[1])).toEqual(
+      ['firestore.googleapis.com', 'identitytoolkit.googleapis.com']
+    );
+  });
+
   it('grants the Terraform operator durable API Keys update permission', () => {
     const operatorTerraform = readFileSync(claudeCodeDevTerraformPath, 'utf8');
     const operatorReadme = readFileSync(claudeCodeDevReadmePath, 'utf8');
