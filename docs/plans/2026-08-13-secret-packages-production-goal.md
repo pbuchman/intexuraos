@@ -8,8 +8,8 @@
 | Started | 2026-08-13, Europe/Warsaw |
 | Baseline | `origin/development` at `9faf87a17c06359bc29254c73d8b94f1315fa70d` |
 | Implementation branch | `codex/secret-packages-production` |
-| Pushed implementation commits | `02018515f75eb02c03a8990861cd938142b96b18`, `c804f759193569b6f78ef4699a2607004f17938d`, `32e22ed5f3553fe556f5aed53e152a5362ead07a` |
-| Current working state | Draft PR `#2454` is open against `development`; the latest pushed CI exposed two Linux-only trace-harness failures that are fixed locally; complete local `ci:tracked` run `#5` passes all phases with `8009` tests and retained-GCP Terraform is converged, while credential-gated DEV/PROD rollout gates remain PENDING |
+| Pushed code/evidence baseline | `02018515f75eb02c03a8990861cd938142b96b18`, `c804f759193569b6f78ef4699a2607004f17938d`, `32e22ed5f3553fe556f5aed53e152a5362ead07a`, `27c0912ec89a7f1319180606d80886b2928cb738`; this row is updated by the current documentation-only revision |
+| Current working state | Draft PR `#2454` is open and merge-clean against `development`; all 15 applicable GitHub checks pass on the implementation tree, complete local `ci:tracked` run `#5` passes all phases with `8009` tests, and retained-GCP Terraform is converged, while credential-gated DEV/PROD rollout gates remain PENDING |
 | Linear issue | None by explicit user decision |
 | GCP project | `intexuraos-dev-pbuchman` |
 | Environments | local, dev/home-dev, prod/Hetzner, retained GCP transcription |
@@ -17,7 +17,8 @@
 
 ## Current execution state
 
-- All three implementation commits are pushed to `origin/codex/secret-packages-production`; draft PR
+- All implementation commits and evidence checkpoints, including this document, are pushed to
+  `origin/codex/secret-packages-production`; draft PR
   `#2454` targets `development`. Nothing has been merged and no production deployment has run.
 - DEV package versions `v1` and `v2` were published and proven byte-identical with valid CRC32C and
   package-level HMAC comparison. Subsequent live provider probes proved that the embedded MiMo,
@@ -30,7 +31,7 @@
   required providers healthy is active there.
 - The PROD package has no published version. Production staging, canary, activation, rollback,
   merge, and deployment are all pending.
-- The current uncommitted hardening adds durable publication recovery, crash-atomic DEV projection,
+- The pushed hardening adds durable publication recovery, crash-atomic DEV projection,
   host-serialized and structurally validated PROD projection, complete runtime-credential canaries,
   exact three-pin reconciliation, and an executable per-member DR source inventory. Test-first crash
   recovery now also covers incomplete DEV lock publication, durable PROD candidate publication, and
@@ -446,7 +447,7 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 | 2026-08-13 Europe/Warsaw | Provider-health hardening | `/health` now reports additive `providerApiKeys[*].status` values `missing`, `unknown`, `valid`, `invalid`, or `degraded`; startup validation updates the existing health object asynchronously, and code-agent dispatch fails closed unless a configured provider is `valid`. Legacy health payloads without status remain parseable. Targeted orchestrator `126/126` and code-agent `49/49` tests PASS and are included in current-tree CI run `#5`. |
 | 2026-08-13 Europe/Warsaw | Secret-log and forensic hardening | Changes remove request-body logging, credential/header/signature fragments, nginx query strings, raw hook commands, token suffixes, embedded repository credentials, and credential-bearing worker forensic copies; forensic directories/files are explicitly private. Test-first regressions, consolidated `910/910`, and an independent residual sweep found `0` active P0/HIGH paths; current-tree CI run `#5` passes. |
 | 2026-08-13 Europe/Warsaw | External console gates | MiMo is blocked on user login/terms; DashScope has no active Coding Plan and requires an explicit USD 50/month Pro purchase decision or removal of GLM/Qwen; Kimi key creation and the single-zone Cloudflare `DNS: Edit` token both await action-time confirmation. No replacement credential, key, or token was created and no purchase/payment was made. |
-| 2026-08-13 18:41 Europe/Warsaw | Git delivery state | Commits `02018515f75eb02c03a8990861cd938142b96b18` and `c804f759193569b6f78ef4699a2607004f17938d` are pushed on `codex/secret-packages-production`; draft PR `#2454` targets `development`. No merge, PROD package publication, or production deployment exists. |
+| 2026-08-13 22:24 Europe/Warsaw | Git delivery state | Commits through `27c0912ec89a7f1319180606d80886b2928cb738` are pushed on `codex/secret-packages-production`; draft PR `#2454` is merge-clean against `development`. All 15 applicable checks on the implementation tree pass; path-filtered duplicate jobs on the final documentation-only commit are explicitly skipped. No merge, PROD package publication, or production deployment exists. |
 | 2026-08-13 17:55 Europe/Warsaw | Goal artifact verification | File-scoped Prettier write/check and `git diff --check -- docs/plans/2026-08-13-secret-packages-production-goal.md` exited `0`; no repository-wide verification was claimed. |
 | 2026-08-13 18:29 Europe/Warsaw | Historical hardening verification | Complete `pnpm run ci:tracked` run `#4` PASS: Type/Lint, Static Validation, `7960/7960` tests, coverage validation, web build, format, and post-build checks. A preceding coverage-only failure identified three untested defensive branches in Docker inspect redaction; direct tests were added for null, non-string, and separator-free environment entries before this green run. This run predates the receipt, DEV/PROD transaction, canary, and DR hardening and is not the final CI gate. |
 | 2026-08-13 20:55 Europe/Warsaw | Current transaction/recovery verification | The complete focused current-tree matrix passed `333/333`: durable schema-v2 publication receipt/reconcile; post-cleanup and lost-container builds; shared DEV writer lock and staged projection consistency; sealed first-cutover legacy rollback; strict PROD membership/ownership/path/timeout checks; full runtime credential canary; exact pin reconciliation; Terraform contracts; and fresh-host bootstrap. Subsequent test-first cases cover incomplete lock-owner inode recovery, live preparation serialization, durable PROD release publication, committed stable-link cleanup, and wrapper recovery after an ambiguous activation attempt. |
