@@ -8,7 +8,7 @@
 | Started | 2026-08-13, Europe/Warsaw |
 | Baseline | `origin/development` at `9faf87a17c06359bc29254c73d8b94f1315fa70d` |
 | Implementation branch | `codex/secret-packages-production` |
-| Pushed implementation commits | `02018515f75eb02c03a8990861cd938142b96b18`, `c804f759193569b6f78ef4699a2607004f17938d` |
+| Pushed implementation commits | `02018515f75eb02c03a8990861cd938142b96b18`, `c804f759193569b6f78ef4699a2607004f17938d`, `32e22ed5f3553fe556f5aed53e152a5362ead07a` |
 | Current working state | Draft PR `#2454` is open against `development`; the latest pushed CI exposed two Linux-only trace-harness failures that are fixed locally; complete local `ci:tracked` run `#5` passes all phases with `8009` tests and retained-GCP Terraform is converged, while credential-gated DEV/PROD rollout gates remain PENDING |
 | Linear issue | None by explicit user decision |
 | GCP project | `intexuraos-dev-pbuchman` |
@@ -17,7 +17,7 @@
 
 ## Current execution state
 
-- Both implementation commits are pushed to `origin/codex/secret-packages-production`; draft PR
+- All three implementation commits are pushed to `origin/codex/secret-packages-production`; draft PR
   `#2454` targets `development`. Nothing has been merged and no production deployment has run.
 - DEV package versions `v1` and `v2` were published and proven byte-identical with valid CRC32C and
   package-level HMAC comparison. Subsequent live provider probes proved that the embedded MiMo,
