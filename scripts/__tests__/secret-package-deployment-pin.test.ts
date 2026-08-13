@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -62,6 +62,7 @@ describe('PROD secret package deployment pin', () => {
 
   it('stages and preflights the candidate before activation and compensates any post-activation failure', () => {
     const script = read(deployPath);
+    const runbook = read(runbookPath).replace(/\s+/gu, ' ');
     const runtimeDependencies = script.slice(
       script.indexOf('prepare_runtime_dependencies() {'),
       script.indexOf('\n}\n\ndeploy_runtime()')
@@ -100,6 +101,7 @@ describe('PROD secret package deployment pin', () => {
     expect(compensation).toContain('verify_backend_readiness');
     expect(compensation).toContain('verify_runtime_readiness');
     expect(cleanup).toContain('compensate_secret_projection');
+    expect(runbook).toContain('compensation always invokes the offline `--rollback` path');
     expect(main.indexOf('prepare_runtime_dependencies')).toBeLessThan(
       main.indexOf('activate_secret_projection')
     );
@@ -161,6 +163,13 @@ describe('PROD secret package deployment pin', () => {
   });
 
   it('compensates the complete projection and restarted runtime after post-activation health failure', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'deployment-compensation-'));
+    const statePath = join(directory, 'current');
+    const tracePath = join(directory, 'trace');
+    const candidate = 'prod-v8-feedface-' + 'c'.repeat(40);
+    const previous = 'prod-v7-deadbeef-' + 'a'.repeat(40);
+    writeFileSync(statePath, candidate);
+    writeFileSync(tracePath, '');
     const result = spawnSync(
       'bash',
       [
@@ -170,11 +179,13 @@ describe('PROD secret package deployment pin', () => {
           'set +e',
           'SECRET_PROJECTION_ACTIVATED=true',
           'DEPLOYMENT_COMPLETED=false',
-          'PREVIOUS_SECRET_PROJECTION="prod-v7-deadbeef-' + 'a'.repeat(40) + '"',
+          `STAGED_SECRET_PROJECTION="${candidate}"`,
+          `PREVIOUS_SECRET_PROJECTION="${previous}"`,
           'PREVIOUS_RELEASE_DIR="/opt/intexuraos/releases/' + 'b'.repeat(40) + '"',
           'PREVIOUS_RELEASE_SHA="' + 'b'.repeat(40) + '"',
-          'TRACE_FILE="$2"',
-          'run_remote() { printf "remote:%s\\n" "$1" >> "$TRACE_FILE"; }',
+          'STATE_FILE="$2"',
+          'TRACE_FILE="$3"',
+          'run_remote() { case "$1" in *"--current-release"*) cat "$STATE_FILE" ;; *"--rollback"*) printf "%s" "$PREVIOUS_SECRET_PROJECTION" > "$STATE_FILE"; printf "remote:%s\\n" "$1" >> "$TRACE_FILE" ;; *) printf "remote:%s\\n" "$1" >> "$TRACE_FILE" ;; esac; }',
           'reload_alloy_for_previous_projection() { printf "reload-previous-alloy\\n" >> "$TRACE_FILE"; }',
           'reload_previous_runtime() { printf "reload-previous\\n" >> "$TRACE_FILE"; }',
           'verify_backend_readiness() { printf "backend-health\\n" >> "$TRACE_FILE"; }',
@@ -186,17 +197,123 @@ describe('PROD secret package deployment pin', () => {
         ].join('; '),
         'deployment-compensation-test',
         deployPath,
-        '/dev/stdout',
+        statePath,
+        tracePath,
       ],
       { cwd: repoRoot, encoding: 'utf8' }
     );
 
-    expect(result.status).toBe(23);
-    expect(result.stdout).toContain('--rollback');
-    expect(result.stdout).toContain('reload-previous-alloy');
-    expect(result.stdout).toContain('reload-previous');
-    expect(result.stdout).toContain('backend-health');
-    expect(result.stdout).toContain('runtime-health');
+    try {
+      const trace = readFileSync(tracePath, 'utf8');
+      expect(result.status).toBe(23);
+      expect(trace).toContain('--rollback');
+      expect(trace).toContain('reload-previous-alloy');
+      expect(trace).toContain('reload-previous');
+      expect(trace).toContain('backend-health');
+      expect(trace).toContain('runtime-health');
+      expect(readFileSync(statePath, 'utf8')).toBe(previous);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('reconciles an SSH disconnect after remote projection activation and rolls back the exact candidate', () => {
+    const candidate = 'prod-v8-feedface-' + 'a'.repeat(40);
+    const previous = 'prod-v7-deadbeef-' + 'b'.repeat(40);
+    const directory = mkdtempSync(join(tmpdir(), 'secret-projection-activation-after-'));
+    const statePath = join(directory, 'current');
+    const tracePath = join(directory, 'trace');
+    writeFileSync(statePath, previous);
+    writeFileSync(tracePath, '');
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        [
+          'source "$1"',
+          `STAGED_SECRET_PROJECTION="${candidate}"`,
+          `PREVIOUS_SECRET_PROJECTION="${previous}"`,
+          'STATE_FILE="$2"',
+          'TRACE_FILE="$3"',
+          'run_remote() { case "$1" in *"--activate"*) printf "%s" "$STAGED_SECRET_PROJECTION" > "$STATE_FILE"; printf "activate-disconnected\\n" >> "$TRACE_FILE"; return 255 ;; *"--current-release"*) printf "reconcile-current\\n" >> "$TRACE_FILE"; cat "$STATE_FILE" ;; *"--rollback"*) printf "%s" "$PREVIOUS_SECRET_PROJECTION" > "$STATE_FILE"; printf "rollback-previous\\n" >> "$TRACE_FILE" ;; *) printf "remote:%s\\n" "$1" >> "$TRACE_FILE" ;; esac; }',
+          'reload_alloy_for_previous_projection() { printf "reload-previous-alloy\\n" >> "$TRACE_FILE"; }',
+          'reload_previous_runtime() { printf "reload-previous\\n" >> "$TRACE_FILE"; }',
+          'verify_backend_readiness() { printf "backend-health\\n" >> "$TRACE_FILE"; }',
+          'verify_runtime_readiness() { printf "runtime-health\\n" >> "$TRACE_FILE"; }',
+          'trap cleanup EXIT',
+          'activate_secret_projection',
+        ].join('; '),
+        'deployment-ambiguous-activation-test',
+        deployPath,
+        statePath,
+        tracePath,
+      ],
+      { cwd: repoRoot, encoding: 'utf8' }
+    );
+
+    try {
+      const trace = readFileSync(tracePath, 'utf8');
+      expect(result.status, result.stderr).toBe(255);
+      expect(trace).toContain('activate-disconnected');
+      expect(trace).toContain('reconcile-current');
+      expect(trace).toContain('rollback-previous');
+      expect(trace).toContain('reload-previous-alloy');
+      expect(readFileSync(statePath, 'utf8')).toBe(previous);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('runs offline rollback recovery after activation interruption while current still names the previous release', () => {
+    const candidate = 'prod-v8-feedface-' + 'a'.repeat(40);
+    const previous = 'prod-v7-deadbeef-' + 'b'.repeat(40);
+    const directory = mkdtempSync(join(tmpdir(), 'secret-projection-activation-before-'));
+    const statePath = join(directory, 'current');
+    const tracePath = join(directory, 'trace');
+    const markerPath = join(directory, 'stable-link-transaction');
+    writeFileSync(statePath, previous);
+    writeFileSync(tracePath, '');
+    writeFileSync(markerPath, 'committed-marker-with-managed-backups');
+    const result = spawnSync(
+      'bash',
+      [
+        '-c',
+        [
+          'source "$1"',
+          `STAGED_SECRET_PROJECTION="${candidate}"`,
+          `PREVIOUS_SECRET_PROJECTION="${previous}"`,
+          'STATE_FILE="$2"',
+          'TRACE_FILE="$3"',
+          'MARKER_FILE="$4"',
+          'run_remote() { case "$1" in *"--activate"*) printf "activate-disconnected\\n" >> "$TRACE_FILE"; return 255 ;; *"--current-release"*) printf "reconcile-current\\n" >> "$TRACE_FILE"; cat "$STATE_FILE" ;; *"--rollback"*) rm -f -- "$MARKER_FILE"; printf "rollback-recovered-transaction\\n" >> "$TRACE_FILE" ;; *) printf "unexpected-remote:%s\\n" "$1" >> "$TRACE_FILE" ;; esac; }',
+          'reload_alloy_for_previous_projection() { printf "unexpected-alloy-reload\\n" >> "$TRACE_FILE"; }',
+          'reload_previous_runtime() { printf "unexpected-runtime-reload\\n" >> "$TRACE_FILE"; }',
+          'verify_backend_readiness() { printf "unexpected-backend-health\\n" >> "$TRACE_FILE"; }',
+          'verify_runtime_readiness() { printf "unexpected-runtime-health\\n" >> "$TRACE_FILE"; }',
+          'trap cleanup EXIT',
+          'activate_secret_projection',
+        ].join('; '),
+        'deployment-ambiguous-activation-test',
+        deployPath,
+        statePath,
+        tracePath,
+        markerPath,
+      ],
+      { cwd: repoRoot, encoding: 'utf8' }
+    );
+
+    try {
+      const trace = readFileSync(tracePath, 'utf8');
+      expect(result.status, result.stderr).toBe(255);
+      expect(trace).toContain('activate-disconnected');
+      expect(trace).toContain('reconcile-current');
+      expect(trace).toContain('rollback-recovered-transaction');
+      expect(trace).not.toContain('unexpected-');
+      expect(readFileSync(statePath, 'utf8')).toBe(previous);
+      expect(existsSync(markerPath)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('does not reload Alloy from a previous release when projection rollback fails', () => {
@@ -208,8 +325,9 @@ describe('PROD secret package deployment pin', () => {
           'source "$1"',
           'set +e',
           'SECRET_PROJECTION_ACTIVATED=true',
+          'STAGED_SECRET_PROJECTION="prod-v8-feedface-' + 'b'.repeat(40) + '"',
           'PREVIOUS_SECRET_PROJECTION="prod-v7-deadbeef-' + 'a'.repeat(40) + '"',
-          'run_remote() { printf "rollback-attempt\\n"; return 31; }',
+          'run_remote() { case "$1" in *"--current-release"*) printf "%s" "$STAGED_SECRET_PROJECTION" ;; *) printf "rollback-attempt\\n"; return 31 ;; esac; }',
           'reload_alloy_for_previous_projection() { printf "unexpected-alloy-reload\\n"; }',
           'reload_previous_runtime() { return 0; }',
           'verify_backend_readiness() { return 0; }',
@@ -274,6 +392,13 @@ describe('PROD secret package deployment pin', () => {
 
   it('restores the prior web release and nginx config during ordinary compensation', () => {
     const previousSha = 'b'.repeat(40);
+    const directory = mkdtempSync(join(tmpdir(), 'deployment-web-compensation-'));
+    const statePath = join(directory, 'current');
+    const tracePath = join(directory, 'trace');
+    const candidate = 'prod-v8-feedface-' + 'c'.repeat(40);
+    const previous = 'prod-v7-deadbeef-' + 'a'.repeat(40);
+    writeFileSync(statePath, candidate);
+    writeFileSync(tracePath, '');
     const result = spawnSync(
       'bash',
       [
@@ -284,14 +409,16 @@ describe('PROD secret package deployment pin', () => {
           'SECRET_PROJECTION_ACTIVATED=true',
           'DEPLOYMENT_COMPLETED=false',
           'ACTIVATION_MODE=ordinary',
-          'PREVIOUS_SECRET_PROJECTION="prod-v7-deadbeef-' + 'a'.repeat(40) + '"',
+          `STAGED_SECRET_PROJECTION="${candidate}"`,
+          `PREVIOUS_SECRET_PROJECTION="${previous}"`,
           `PREVIOUS_RELEASE_DIR="/opt/intexuraos/releases/${previousSha}"`,
           `PREVIOUS_RELEASE_SHA="${previousSha}"`,
           `PREVIOUS_WEB_RELEASE="/var/www/intexuraos/web/releases/${previousSha}"`,
           'WEB_AND_EDGE_MUTATION_STARTED=true',
           'DEPLOY_NGINX=true',
-          'TRACE_FILE="$2"',
-          'run_remote() { printf "remote:%s\\n" "$1" >> "$TRACE_FILE"; }',
+          'STATE_FILE="$2"',
+          'TRACE_FILE="$3"',
+          'run_remote() { case "$1" in *"--current-release"*) cat "$STATE_FILE" ;; *"--rollback"*) printf "%s" "$PREVIOUS_SECRET_PROJECTION" > "$STATE_FILE"; printf "remote:%s\\n" "$1" >> "$TRACE_FILE" ;; *) printf "remote:%s\\n" "$1" >> "$TRACE_FILE" ;; esac; }',
           'run_remote_at() { printf "remote-at:%s:%s\\n" "$1" "$2" >> "$TRACE_FILE"; }',
           'verify_backend_readiness() { printf "backend-health\\n" >> "$TRACE_FILE"; }',
           'verify_runtime_readiness() { printf "runtime-health\\n" >> "$TRACE_FILE"; }',
@@ -302,17 +429,24 @@ describe('PROD secret package deployment pin', () => {
         ].join('; '),
         'deployment-web-compensation-test',
         deployPath,
-        '/dev/stdout',
+        statePath,
+        tracePath,
       ],
       { cwd: repoRoot, encoding: 'utf8' }
     );
 
-    expect(result.status).toBe(23);
-    expect(result.stdout).toContain(`ln -sfn /opt/intexuraos/releases/${previousSha}`);
-    expect(result.stdout).toContain('/opt/intexuraos/current');
-    expect(result.stdout).toContain(`/var/www/intexuraos/web/releases/${previousSha}`);
-    expect(result.stdout).toContain('/var/www/intexuraos/web/current');
-    expect(result.stdout).toContain('deploy-nginx.sh --message-digests-public');
+    try {
+      const trace = readFileSync(tracePath, 'utf8');
+      expect(result.status).toBe(23);
+      expect(trace).toContain(`ln -sfn /opt/intexuraos/releases/${previousSha}`);
+      expect(trace).toContain('/opt/intexuraos/current');
+      expect(trace).toContain(`/var/www/intexuraos/web/releases/${previousSha}`);
+      expect(trace).toContain('/var/www/intexuraos/web/current');
+      expect(trace).toContain('deploy-nginx.sh --message-digests-public');
+      expect(readFileSync(statePath, 'utf8')).toBe(previous);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('requires cutover-complete retries to match active projection metadata', () => {

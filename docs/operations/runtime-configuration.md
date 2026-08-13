@@ -107,10 +107,36 @@ pnpm run services:restart
 ```
 
 The loader validates CRC32C, schema, environment, exact membership, and file
-shape before atomically switching the immutable release at
-`${HOME}/.config/intexuraos/secret-packages/dev/current` and creating `.envrc`
-as mode `0600`. `.envrc.local` is sourced last for host-only non-secret
-overrides and must not contain shared secrets. Both files are ignored by Git.
+shape, then stages one immutable projection containing the package files,
+metadata, `.envrc`, and the GitHub App PEM. Every file is mode `0600`; the
+release and projection root are mode `0700`. The projection root is reserved
+for this four-file contract and must never be reused as the `--output-dir` of
+generic `secret-package render`, whose separate private scratch root has a
+three-file release contract. The projection promoter installs a durable root
+marker. Projection sync and generic render share the same root-local writer
+lock; a generic renderer that waits behind sync observes the marker and rejects
+the projection before creating or switching any release. An empty lock directory
+may also exist in a generic scratch root and does not classify that root. The stable `.envrc` and GitHub PEM
+paths are symlinks through
+`${HOME}/.config/intexuraos/secret-packages/dev/current`, so one atomic rename
+of `current` activates the complete projection for every consumer.
+
+The first run migrates existing regular `.envrc` and PEM outputs through a
+content-identical compatibility projection before installing those stable
+symlinks. An interruption before the final pointer switch therefore leaves the
+complete previous projection visible; an interruption after it leaves the
+complete candidate visible. A first installation stays fail-closed until the
+pointer exists. Concurrent projection and generic-render writers use ordered,
+unique claim directories under `.sync-lock`; claim identity includes hostname,
+boot marker, PID, process start, and the owning writer entrypoint. After an
+ungraceful interruption, the next writer
+removes only the stopped owner's unrepeatable claim and matching work directory.
+A reused PID or a live non-sync process cannot retain or impersonate that claim,
+and no stale-owner recovery deletes a shared lock path. Recovery does not depend
+on an `EXIT` trap; successful cleanup leaves the private lock directory empty.
+
+`.envrc.local` is sourced last for host-only non-secret overrides and must not
+contain shared secrets. Both files are ignored by Git.
 Set `GOOGLE_APPLICATION_CREDENTIALS` in `.envrc.local` to
 `${HOME}/.config/intexuraos/home-runtime-sa-key.json`. The dedicated
 `ixos-home-runtime-dev` identity has only the local data-plane union and no

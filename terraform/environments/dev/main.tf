@@ -817,6 +817,18 @@ resource "google_secret_manager_secret_iam_member" "secret_package_prod_publishe
   member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "secret_package_dev_publisher_target_metadata_viewer" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_DEV"]
+  role      = "roles/secretmanager.viewer"
+  member    = "serviceAccount:${google_service_account.secret_package_dev_publisher.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "secret_package_prod_publisher_target_metadata_viewer" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]
+  role      = "roles/secretmanager.viewer"
+  member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "secret_package_dev_publisher_source_accessor" {
   for_each = local.secret_package_dev_active_source_names
 
@@ -1091,6 +1103,18 @@ resource "google_pubsub_topic_iam_member" "message_digest_publishes_runs" {
   topic   = google_pubsub_topic.message_digest_runs.name
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${google_service_account.message_digest_service.email}"
+}
+
+# Deliberately has no subscription: one redacted message proves that a staged
+# runtime credential can publish without invoking a production consumer.
+module "pubsub_runtime_credential_canary" {
+  source = "../../modules/pubsub-topic"
+
+  project_id = var.project_id
+  topic_name = "intexuraos-runtime-credential-canary-${var.environment}"
+  labels     = local.common_labels
+
+  depends_on = [google_project_service.apis]
 }
 
 # Topic for media cleanup events (whatsapp message deletion)

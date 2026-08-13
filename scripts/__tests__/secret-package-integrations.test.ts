@@ -104,6 +104,29 @@ describe('secret package runtime integrations', () => {
     expect(productionRunbook).toContain('runtime projection `current`');
   });
 
+  it.each(['scripts/README.md', 'docs/operations/secret-packages.md'])(
+    'documents durable publish recovery in %s',
+    (relativePath) => {
+      const document = read(relativePath);
+
+      expect(document).toContain('--receipt-file <private-receipt>');
+      expect(document).toContain('publish-resume');
+      expect(document).toContain('pending-verification');
+      expect(document).toContain('state `publishing`');
+      expect(document).toContain('publish-unlock');
+      expect(document).toContain('publish-resume');
+      expect(document).toContain('publish-reconcile');
+      expect(document).toContain('--version <exact-recovery-version>');
+      expect(document).toContain('prePublishMaxVersion');
+      expect(document).toContain('operationId');
+      expect(document).toContain('startedAt');
+      expect(document).toContain('exactly one');
+      expect(document).toContain('canonical private journal parent');
+      expect(document).toContain('no supported `publish-abort`');
+      expect(document).toContain('must not run `publish` again');
+    }
+  );
+
   it('keeps the production canary and endpoint declaration aligned with the implementation', () => {
     const goal = read('docs/plans/2026-08-13-secret-packages-production-goal.md');
     const phaseSix = goal.slice(goal.indexOf('### Phase 6'), goal.indexOf('### Phase 7'));
@@ -116,6 +139,16 @@ describe('secret package runtime integrations', () => {
     expect(endpointChanges).toContain('Modified: `GET /deployment.json`');
     expect(endpointChanges).toContain('`secretPackageVersion`');
     expect(endpointChanges).not.toContain('Modified: none');
+  });
+
+  it('documents an ordered three-pin recovery after production compensation', () => {
+    const operations = read('docs/operations/secret-packages.md').replace(/\s+/gu, ' ');
+
+    expect(operations).toContain('Ordered compensated-deployment pin recovery');
+    expect(operations).toContain('freeze automatic production deployment dispatches');
+    expect(operations).toContain('set `PROD_SECRET_PACKAGE_VERSION` to the recorded prior version');
+    expect(operations).toContain('Revert both tracked pins in one reviewed commit');
+    expect(operations).toContain('Resume deployment dispatches only after');
   });
 
   it('defines measurable reconciliation, rollback, audit, rotation, break-glass, and DR gates', () => {

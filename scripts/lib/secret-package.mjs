@@ -3,8 +3,11 @@ import { createHmac, createPrivateKey, randomUUID, timingSafeEqual } from 'node:
 import {
   chmodSync,
   closeSync,
+  constants,
   existsSync,
+  fstatSync,
   fsyncSync,
+  linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -17,7 +20,9 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { hostname as readHostname } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { acquireDevSecretWriterLock, releaseDevSecretWriterLock } from './dev-secret-sync-lock.mjs';
 
 const MODULE_DIRECTORY = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_MANIFEST_PATH = resolve(
@@ -33,6 +38,33 @@ const ENVIRONMENT_SET = new Set(ENVIRONMENTS);
 const MANIFEST_KEYS = ['nativeSecretNames', 'packages', 'schemaVersion'];
 const PACKAGE_KEYS = ['envNames', 'files', 'secretId', 'stableVersion'];
 const PAYLOAD_KEYS = ['env', 'environment', 'files', 'schemaVersion'];
+const PUBLISH_RECEIPT_KEYS = [
+  'environment',
+  'operation',
+  'operationId',
+  'prePublishMaxVersion',
+  'projectId',
+  'schemaVersion',
+  'secretId',
+  'startedAt',
+  'state',
+  'version',
+];
+const PUBLISH_RECEIPT_OPERATION = 'secret-package-publish';
+const PUBLISH_RECEIPT_STATES = new Set(['publishing', 'pending-verification', 'verified']);
+const PUBLISH_LOCK_KEYS = [
+  'environment',
+  'hostname',
+  'operation',
+  'pid',
+  'projectId',
+  'schemaVersion',
+  'secretId',
+];
+const PUBLISH_LOCK_OPERATION = 'secret-package-publish-lock';
+const SECRET_VERSION_STATES = new Set(['DISABLED', 'DESTROYED', 'ENABLED']);
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const DEV_PROJECTION_ROOT_MARKER = '.intexuraos-dev-secret-projection';
 const ENV_NAME_PATTERN = /^INTEXURAOS_[A-Z0-9_]+$/u;
 const PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u;
 const NUMERIC_VERSION_PATTERN = /^[1-9]\d*$/u;
@@ -320,11 +352,13 @@ export async function fetchSecretPackage(options) {
  * Publish a validated payload through an injected Secret Manager adapter.
  *
  * @param {{
- *   adapter: { accessVersion: Function, addVersion: Function },
+ *   adapter: { accessVersion: Function, addVersion: Function, listVersions: Function },
  *   environment: 'dev' | 'prod',
  *   manifest?: ReturnType<typeof validateSecretPackageManifest>,
  *   payload: unknown,
  *   projectId: string,
+ *   receiptPath: string,
+ *   failpoint?: (name: string) => void,
  * }} options
  */
 export async function publishSecretPackage(options) {
@@ -335,9 +369,120 @@ export async function publishSecretPackage(options) {
   const projectId = readProjectId(options?.projectId);
   if (
     typeof options?.adapter?.addVersion !== 'function' ||
-    typeof options?.adapter?.accessVersion !== 'function'
+    typeof options?.adapter?.accessVersion !== 'function' ||
+    typeof options?.adapter?.listVersions !== 'function'
   ) {
     throw packageError('Secret Manager publish adapter is unavailable');
+  }
+
+  const definition = manifest.packages[environment];
+  const receiptPath = prepareNewPublishReceiptPath(options?.receiptPath);
+  const metadata = validateSecretPackagePayload({
+    environment,
+    manifest,
+    payload: options?.payload,
+  });
+  const data = serializeSecretPackagePayload(options.payload, definition);
+  const dataCrc32c = crc32cBase64(data);
+  const releaseLock = acquirePublishReceiptLock(receiptPath, {
+    environment,
+    failpoint: options?.failpoint,
+    projectId,
+    secretId: definition.secretId,
+  });
+
+  try {
+    const versionsBeforePublish = await listSecretPackageVersions({
+      adapter: options.adapter,
+      projectId,
+      secretId: definition.secretId,
+    });
+    const operationId = randomUUID();
+    const startedAt = new Date().toISOString();
+    const prePublishMaxVersion = maximumSecretVersion(versionsBeforePublish);
+    const publishingReceipt = createPublishReceipt({
+      environment,
+      operationId,
+      prePublishMaxVersion,
+      projectId,
+      secretId: definition.secretId,
+      startedAt,
+      state: 'publishing',
+      version: null,
+    });
+    reservePublishReceipt(receiptPath, publishingReceipt, options?.failpoint);
+
+    let response;
+    try {
+      response = await options.adapter.addVersion({
+        projectId,
+        secretId: definition.secretId,
+        data,
+        dataCrc32c,
+      });
+    } catch {
+      throw packageError('Secret Manager version publish failed');
+    }
+    assertPlainObject(response, 'Secret Manager publish response');
+    const version = readNumericVersion(response.version);
+    if (Number(version) <= Number(prePublishMaxVersion)) {
+      throw packageError('published version does not advance the pre-publish watermark');
+    }
+    runPublishFailpoint(options?.failpoint, 'after-add-version-response');
+    const pendingReceipt = createPublishReceipt({
+      environment,
+      operationId,
+      prePublishMaxVersion,
+      projectId,
+      secretId: definition.secretId,
+      startedAt,
+      state: 'pending-verification',
+      version,
+    });
+    writePublishReceipt(receiptPath, pendingReceipt);
+    runPublishFailpoint(options?.failpoint, 'after-pending-receipt');
+
+    await verifyPublishedSecretPackage({
+      adapter: options.adapter,
+      data,
+      projectId,
+      secretId: definition.secretId,
+      version,
+    });
+    writePublishReceipt(receiptPath, { ...pendingReceipt, state: 'verified' });
+
+    return {
+      environment,
+      secretId: definition.secretId,
+      version,
+      byteLength: metadata.byteLength,
+      crc32c: dataCrc32c,
+    };
+  } finally {
+    releaseLock();
+  }
+}
+
+/**
+ * Resume verification from a durable publish receipt without adding another version.
+ *
+ * @param {{
+ *   adapter: { accessVersion: Function },
+ *   environment: 'dev' | 'prod',
+ *   manifest?: ReturnType<typeof validateSecretPackageManifest>,
+ *   payload: unknown,
+ *   projectId: string,
+ *   receiptPath: string,
+ * }} options
+ */
+export async function resumeSecretPackagePublish(options) {
+  const environment = readEnvironment(options?.environment);
+  const manifest = options?.manifest
+    ? validateSecretPackageManifest(options.manifest)
+    : loadSecretPackageManifest();
+  const projectId = readProjectId(options?.projectId);
+  if (typeof options?.adapter?.accessVersion !== 'function') {
+    throw packageError('Secret Manager publish verification adapter is unavailable');
   }
 
   const definition = manifest.packages[environment];
@@ -347,28 +492,253 @@ export async function publishSecretPackage(options) {
     payload: options?.payload,
   });
   const data = serializeSecretPackagePayload(options.payload, definition);
-  const dataCrc32c = crc32cBase64(data);
-
-  let response;
+  const receiptPath = readPublishReceiptPath(options?.receiptPath);
+  preparePrivateReceiptParent(receiptPath);
+  const releaseLock = acquirePublishReceiptLock(receiptPath, {
+    environment,
+    projectId,
+    secretId: definition.secretId,
+  });
   try {
-    response = await options.adapter.addVersion({
+    let receipt = readPublishReceipt(receiptPath);
+    if (
+      receipt.environment !== environment ||
+      receipt.projectId !== projectId ||
+      receipt.secretId !== definition.secretId
+    ) {
+      throw packageError('publish receipt does not match the requested package');
+    }
+
+    if (receipt.state === 'publishing' || receipt.version === null) {
+      throw packageError('ambiguous publish receipt requires publish-reconcile');
+    }
+
+    await verifyPublishedSecretPackage({
+      adapter: options.adapter,
+      data,
       projectId,
       secretId: definition.secretId,
+      version: receipt.version,
+    });
+    receipt = createPublishReceipt({
+      ...receipt,
+      state: 'verified',
+    });
+    writePublishReceipt(receiptPath, receipt);
+
+    return {
+      environment,
+      secretId: definition.secretId,
+      version: receipt.version,
+      byteLength: metadata.byteLength,
+      crc32c: crc32cBase64(data),
+    };
+  } finally {
+    releaseLock();
+  }
+}
+
+/**
+ * Reconcile one ambiguous publication using metadata newer than its durable watermark.
+ *
+ * @param {{
+ *   adapter: { accessVersion: Function, listVersions: Function },
+ *   environment: 'dev' | 'prod',
+ *   manifest?: ReturnType<typeof validateSecretPackageManifest>,
+ *   payload: unknown,
+ *   projectId: string,
+ *   receiptPath: string,
+ *   version: number | string,
+ * }} options
+ */
+export async function reconcileSecretPackagePublish(options) {
+  const environment = readEnvironment(options?.environment);
+  const manifest = options?.manifest
+    ? validateSecretPackageManifest(options.manifest)
+    : loadSecretPackageManifest();
+  const projectId = readProjectId(options?.projectId);
+  if (
+    typeof options?.adapter?.accessVersion !== 'function' ||
+    typeof options?.adapter?.listVersions !== 'function'
+  ) {
+    throw packageError('Secret Manager publish reconciliation adapter is unavailable');
+  }
+
+  const definition = manifest.packages[environment];
+  const metadata = validateSecretPackagePayload({
+    environment,
+    manifest,
+    payload: options?.payload,
+  });
+  const data = serializeSecretPackagePayload(options.payload, definition);
+  const recoveryVersion = readNumericVersion(options?.version);
+  const receiptPath = readPublishReceiptPath(options?.receiptPath);
+  preparePrivateReceiptParent(receiptPath);
+  const releaseLock = acquirePublishReceiptLock(receiptPath, {
+    environment,
+    projectId,
+    secretId: definition.secretId,
+  });
+  try {
+    const receipt = readPublishReceipt(receiptPath);
+    if (
+      receipt.environment !== environment ||
+      receipt.projectId !== projectId ||
+      receipt.secretId !== definition.secretId
+    ) {
+      throw packageError('publish receipt does not match the requested package');
+    }
+    if (receipt.state !== 'publishing' || receipt.version !== null) {
+      throw packageError('publish-reconcile requires an ambiguous publishing receipt');
+    }
+    if (Number(recoveryVersion) <= Number(receipt.prePublishMaxVersion)) {
+      throw packageError('recovery version is not newer than the pre-publish watermark');
+    }
+
+    const observedVersions = await listSecretPackageVersions({
+      adapter: options.adapter,
+      projectId,
+      secretId: definition.secretId,
+    });
+    const postWatermarkVersions = observedVersions.filter(
+      (candidate) => Number(candidate.version) > Number(receipt.prePublishMaxVersion)
+    );
+    if (postWatermarkVersions.length !== 1) {
+      throw packageError('post-watermark publication metadata is ambiguous');
+    }
+    const [candidate] = postWatermarkVersions;
+    if (candidate.version !== recoveryVersion) {
+      throw packageError('recovery version does not match post-watermark publication metadata');
+    }
+    if (Date.parse(candidate.createTime) < Date.parse(receipt.startedAt)) {
+      throw packageError('recovery version predates the publication receipt');
+    }
+
+    await verifyPublishedSecretPackage({
+      adapter: options.adapter,
       data,
-      dataCrc32c,
+      projectId,
+      secretId: definition.secretId,
+      version: recoveryVersion,
+    });
+    const verifiedReceipt = createPublishReceipt({
+      ...receipt,
+      state: 'verified',
+      version: recoveryVersion,
+    });
+    writePublishReceipt(receiptPath, verifiedReceipt);
+
+    return {
+      environment,
+      secretId: definition.secretId,
+      version: recoveryVersion,
+      byteLength: metadata.byteLength,
+      crc32c: crc32cBase64(data),
+    };
+  } finally {
+    releaseLock();
+  }
+}
+
+/** Remove a crashed same-host publisher's lock after proving its PID is absent. */
+export function unlockSecretPackagePublish(options) {
+  const environment = readEnvironment(options?.environment);
+  const manifest = options?.manifest
+    ? validateSecretPackageManifest(options.manifest)
+    : loadSecretPackageManifest();
+  const projectId = readProjectId(options?.projectId);
+  const receiptPath = readPublishReceiptPath(options?.receiptPath);
+  preparePrivateReceiptParent(receiptPath);
+  const lockPath = publishReceiptLockPath(receiptPath, {
+    projectId,
+    secretId: manifest.packages[environment].secretId,
+  });
+  const lock = readPublishLock(lockPath);
+  const expectedHostname = options?.hostname ?? readHostname();
+  if (
+    lock.hostname !== expectedHostname ||
+    lock.environment !== environment ||
+    lock.projectId !== projectId ||
+    lock.secretId !== manifest.packages[environment].secretId
+  ) {
+    throw packageError('publish lock belongs to a different host');
+  }
+  const receiptStatus = readOptionalStatus(receiptPath, 'publish receipt');
+  const receipt = receiptStatus === undefined ? undefined : readPublishReceipt(receiptPath);
+  if (
+    receipt !== undefined &&
+    (receipt.environment !== environment ||
+      receipt.projectId !== projectId ||
+      receipt.secretId !== manifest.packages[environment].secretId)
+  ) {
+    throw packageError('publish receipt does not match the requested package');
+  }
+  try {
+    process.kill(lock.pid, 0);
+    throw packageError('publish lock owner is still running');
+  } catch (error) {
+    if (error instanceof SecretPackageError) throw error;
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ESRCH') {
+      throw packageError('publish lock owner status is unavailable');
+    }
+  }
+  rmSync(lockPath);
+  syncDirectory(dirname(lockPath));
+  return {
+    environment,
+    secretId: manifest.packages[environment].secretId,
+    state: receipt?.state ?? 'unreserved',
+    unlocked: true,
+  };
+}
+
+async function listSecretPackageVersions(options) {
+  let response;
+  try {
+    response = await options.adapter.listVersions({
+      projectId: options.projectId,
+      secretId: options.secretId,
     });
   } catch {
-    throw packageError('Secret Manager version publish failed');
+    throw packageError('Secret Manager version metadata listing failed');
   }
-  assertPlainObject(response, 'Secret Manager publish response');
-  const version = readNumericVersion(response.version);
+  if (!Array.isArray(response)) {
+    throw packageError('Secret Manager version metadata must be an array');
+  }
+  const observed = response.map((candidate) => validateSecretVersionMetadata(candidate));
+  if (new Set(observed.map(({ version }) => version)).size !== observed.length) {
+    throw packageError('Secret Manager version metadata contains duplicate versions');
+  }
+  return observed;
+}
 
+function validateSecretVersionMetadata(candidate) {
+  assertPlainObject(candidate, 'Secret Manager version metadata');
+  assertExactKeys(candidate, ['createTime', 'state', 'version'], 'Secret Manager version metadata');
+  const version = readNumericVersion(candidate.version);
+  if (!SECRET_VERSION_STATES.has(candidate.state)) {
+    throw packageError('Secret Manager version metadata state is invalid');
+  }
+  const createTime = normalizeUtcTimestamp(
+    candidate.createTime,
+    'Secret Manager version metadata createTime'
+  );
+  return { createTime, state: candidate.state, version };
+}
+
+function maximumSecretVersion(versions) {
+  return String(
+    versions.reduce((maximum, candidate) => Math.max(maximum, Number(candidate.version)), 0)
+  );
+}
+
+async function verifyPublishedSecretPackage(options) {
   let observedResponse;
   try {
     observedResponse = await options.adapter.accessVersion({
-      projectId,
-      secretId: definition.secretId,
-      version,
+      projectId: options.projectId,
+      secretId: options.secretId,
+      version: options.version,
     });
   } catch {
     throw packageError('published Secret Manager version verification failed');
@@ -376,17 +746,12 @@ export async function publishSecretPackage(options) {
   assertPlainObject(observedResponse, 'published Secret Manager access response');
   const observedData = toBuffer(observedResponse.data, 'published Secret Manager payload');
   validateChecksum(observedResponse.dataCrc32c, observedData, 'published Secret Manager payload');
-  if (observedData.byteLength !== data.byteLength || !timingSafeEqual(observedData, data)) {
+  if (
+    observedData.byteLength !== options.data.byteLength ||
+    !timingSafeEqual(observedData, options.data)
+  ) {
     throw packageError('published Secret Manager payload bytes verification failed');
   }
-
-  return {
-    environment,
-    secretId: definition.secretId,
-    version,
-    byteLength: metadata.byteLength,
-    crc32c: dataCrc32c,
-  };
 }
 
 /**
@@ -419,61 +784,81 @@ export function renderSecretPackage(options) {
   const releaseName = `${environment}-v${version}-${checksumHex}`;
   const releasePath = join(outputDir, releaseName);
   const currentPath = join(outputDir, 'current');
-
-  mkdirSync(outputDir, { recursive: true, mode: 0o700 });
-  chmodSync(outputDir, 0o700);
-  let stagingPath = mkdtempSync(join(outputDir, '.staging-'));
-  chmodSync(stagingPath, 0o700);
-  let temporaryLink;
+  const writerLock =
+    environment === 'dev'
+      ? acquireDevSecretWriterLock({
+          packageRoot: outputDir,
+          writerEntryPoint: process.execPath,
+        })
+      : undefined;
 
   try {
-    writePrivateFile(
-      join(stagingPath, 'environment.env'),
-      renderDotenv(options.payload.env, definition.envNames)
-    );
-    for (const name of definition.files) {
+    if (environment === 'dev') holdDevSecretRenderLockForTest();
+    mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+    chmodSync(outputDir, 0o700);
+    if (
+      readOptionalStatus(join(outputDir, DEV_PROJECTION_ROOT_MARKER), 'DEV projection marker') !==
+      undefined
+    ) {
+      throw packageError('generic render output is a DEV projection-managed root');
+    }
+    let stagingPath = mkdtempSync(join(outputDir, '.staging-'));
+    chmodSync(stagingPath, 0o700);
+    let temporaryLink;
+
+    try {
       writePrivateFile(
-        join(stagingPath, RENDERED_FILE_NAMES[name]),
-        decodeStrictBase64(options.payload.files[name])
+        join(stagingPath, 'environment.env'),
+        renderDotenv(options.payload.env, definition.envNames)
       );
-    }
+      for (const name of definition.files) {
+        writePrivateFile(
+          join(stagingPath, RENDERED_FILE_NAMES[name]),
+          decodeStrictBase64(options.payload.files[name])
+        );
+      }
 
-    const releaseMetadata = {
-      schemaVersion: 1,
-      environment,
-      secretId: definition.secretId,
-      version,
-      byteLength: metadata.byteLength,
-      crc32c: metadata.crc32c,
-      envNames: [...definition.envNames],
-      files: metadata.files,
-      ...(metadata.serviceAccount === undefined ? {} : { serviceAccount: metadata.serviceAccount }),
-    };
-    writePrivateFile(join(stagingPath, 'metadata.json'), `${JSON.stringify(releaseMetadata)}\n`);
-    syncDirectory(stagingPath);
+      const releaseMetadata = {
+        schemaVersion: 1,
+        environment,
+        secretId: definition.secretId,
+        version,
+        byteLength: metadata.byteLength,
+        crc32c: metadata.crc32c,
+        envNames: [...definition.envNames],
+        files: metadata.files,
+        ...(metadata.serviceAccount === undefined
+          ? {}
+          : { serviceAccount: metadata.serviceAccount }),
+      };
+      writePrivateFile(join(stagingPath, 'metadata.json'), `${JSON.stringify(releaseMetadata)}\n`);
+      syncDirectory(stagingPath);
 
-    if (existsSync(releasePath)) {
-      assertExistingRelease(releasePath, stagingPath, releaseMetadata);
-      rmSync(stagingPath, { recursive: true, force: true });
-      stagingPath = undefined;
-    } else {
-      renameSync(stagingPath, releasePath);
-      stagingPath = undefined;
+      if (existsSync(releasePath)) {
+        assertExistingRelease(releasePath, stagingPath, releaseMetadata);
+        rmSync(stagingPath, { recursive: true, force: true });
+        stagingPath = undefined;
+      } else {
+        renameSync(stagingPath, releasePath);
+        stagingPath = undefined;
+        syncDirectory(outputDir);
+      }
+
+      temporaryLink = join(outputDir, `.current-${process.pid}-${randomUUID()}`);
+      symlinkSync(releaseName, temporaryLink, 'dir');
+      renameSync(temporaryLink, currentPath);
+      temporaryLink = undefined;
       syncDirectory(outputDir);
+
+      return { environment, version, releaseName, metadata: releaseMetadata };
+    } catch (error) {
+      if (temporaryLink !== undefined) rmSync(temporaryLink, { force: true });
+      if (stagingPath !== undefined) rmSync(stagingPath, { recursive: true, force: true });
+      if (error instanceof SecretPackageError) throw error;
+      throw packageError('atomic package render failed');
     }
-
-    temporaryLink = join(outputDir, `.current-${process.pid}-${randomUUID()}`);
-    symlinkSync(releaseName, temporaryLink, 'dir');
-    renameSync(temporaryLink, currentPath);
-    temporaryLink = undefined;
-    syncDirectory(outputDir);
-
-    return { environment, version, releaseName, metadata: releaseMetadata };
-  } catch (error) {
-    if (temporaryLink !== undefined) rmSync(temporaryLink, { force: true });
-    if (stagingPath !== undefined) rmSync(stagingPath, { recursive: true, force: true });
-    if (error instanceof SecretPackageError) throw error;
-    throw packageError('atomic package render failed');
+  } finally {
+    if (writerLock !== undefined) releaseDevSecretWriterLock(writerLock);
   }
 }
 
@@ -596,6 +981,50 @@ export function createGcloudSecretManagerAdapter(dependencies = {}) {
       }
       return { version: match[1] };
     },
+
+    async listVersions({ projectId, secretId }) {
+      let output;
+      try {
+        output = execFile(
+          'gcloud',
+          [
+            'secrets',
+            'versions',
+            'list',
+            secretId,
+            '--project',
+            projectId,
+            '--format=json(name,createTime,state)',
+          ],
+          { encoding: 'utf8', maxBuffer: MAX_PAYLOAD_BYTES * 2, stdio: ['ignore', 'pipe', 'pipe'] }
+        );
+      } catch {
+        throw packageError('gcloud Secret Manager version metadata listing failed');
+      }
+      let response;
+      try {
+        response = JSON.parse(String(output));
+      } catch {
+        throw packageError('gcloud Secret Manager version metadata is invalid');
+      }
+      if (!Array.isArray(response)) {
+        throw packageError('gcloud Secret Manager version metadata is invalid');
+      }
+      return response.map((entry) => {
+        if (!isPlainObject(entry) || typeof entry.name !== 'string') {
+          throw packageError('gcloud Secret Manager version metadata is invalid');
+        }
+        const match = entry.name.match(/\/versions\/([1-9]\d*)$/u);
+        if (match === null) {
+          throw packageError('gcloud Secret Manager version metadata is invalid');
+        }
+        return {
+          version: match[1],
+          createTime: entry.createTime,
+          state: entry.state,
+        };
+      });
+    },
   };
 }
 
@@ -615,6 +1044,310 @@ export function writeSecretPackagePayload(path, payload, definition) {
     rmSync(temporaryPath, { force: true });
     if (error instanceof SecretPackageError) throw error;
     throw packageError('atomic payload write failed');
+  }
+}
+
+function prepareNewPublishReceiptPath(value) {
+  const path = readPublishReceiptPath(value);
+  preparePrivateReceiptParent(path);
+  const status = readOptionalStatus(path, 'publish receipt');
+  if (status !== undefined) {
+    assertPrivateReceiptStatus(status);
+    throw packageError('publish receipt already exists; use publish-resume');
+  }
+  return path;
+}
+
+function publishReceiptLockPath(receiptPath, identity) {
+  return join(dirname(receiptPath), `.${identity.projectId}.${identity.secretId}.publish.lock`);
+}
+
+function acquirePublishReceiptLock(receiptPath, identity) {
+  preparePrivateReceiptParent(receiptPath);
+  const lockPath = publishReceiptLockPath(receiptPath, identity);
+  const lock = {
+    schemaVersion: 1,
+    operation: PUBLISH_LOCK_OPERATION,
+    environment: identity.environment,
+    projectId: identity.projectId,
+    secretId: identity.secretId,
+    hostname: readHostname(),
+    pid: process.pid,
+  };
+  try {
+    installPrivateFileNoReplace(lockPath, `${JSON.stringify(lock)}\n`, () =>
+      runPublishFailpoint(identity.failpoint, 'after-publish-lock-link')
+    );
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      throw packageError('publish receipt lock already exists');
+    }
+    throw packageError('publish receipt lock is unavailable');
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    rmSync(lockPath, { force: true });
+    syncDirectory(dirname(lockPath));
+  };
+}
+
+function readPublishLock(path) {
+  const status = readOptionalStatus(path, 'publish lock');
+  if (status === undefined) throw packageError('publish lock is unavailable');
+  assertPrivateReceiptStatus(status);
+  let candidate;
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    assertPrivateReceiptStatus(fstatSync(descriptor));
+    const data = readFileSync(descriptor);
+    if (data.byteLength > 4096) throw packageError('publish lock exceeds the metadata limit');
+    candidate = parseStrictJson(data.toString('utf8'), 'publish lock');
+  } catch {
+    throw packageError('publish lock is invalid');
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  assertPlainObject(candidate, 'publish lock');
+  assertExactKeys(candidate, PUBLISH_LOCK_KEYS, 'publish lock');
+  if (
+    candidate.schemaVersion !== 1 ||
+    candidate.operation !== PUBLISH_LOCK_OPERATION ||
+    !ENVIRONMENT_SET.has(candidate.environment) ||
+    candidate.projectId !== readProjectId(candidate.projectId) ||
+    candidate.secretId !== PACKAGE_SECRET_IDS[candidate.environment] ||
+    typeof candidate.hostname !== 'string' ||
+    candidate.hostname.length === 0 ||
+    !Number.isSafeInteger(candidate.pid) ||
+    candidate.pid <= 0
+  ) {
+    throw packageError('publish lock is invalid');
+  }
+  return candidate;
+}
+
+function reservePublishReceipt(path, receipt, failpoint) {
+  const validated = validatePublishReceipt(receipt);
+  preparePrivateReceiptParent(path);
+  try {
+    installPrivateFileNoReplace(path, `${JSON.stringify(validated)}\n`, () =>
+      runPublishFailpoint(failpoint, 'after-publish-receipt-link')
+    );
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      const existing = readOptionalStatus(path, 'publish receipt');
+      if (existing !== undefined) assertPrivateReceiptStatus(existing);
+      throw packageError('publish receipt already exists; use publish-resume');
+    }
+    throw packageError('atomic publish receipt reservation failed');
+  }
+}
+
+function installPrivateFileNoReplace(path, data, afterLink) {
+  const parent = dirname(path);
+  const temporaryPath = join(parent, `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
+  let linked = false;
+  try {
+    writePrivateFile(temporaryPath, data);
+    linkSync(temporaryPath, path);
+    linked = true;
+    afterLink();
+    syncDirectory(parent);
+    rmSync(temporaryPath);
+    syncDirectory(parent);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    if (linked) {
+      try {
+        syncDirectory(parent);
+      } catch {
+        // Preserve the complete linked journal inode; recovery remains fail-closed.
+      }
+    }
+    throw error;
+  }
+}
+
+function runPublishFailpoint(failpoint, name) {
+  if (typeof failpoint === 'function') failpoint(name);
+}
+
+function readPublishReceiptPath(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    throw packageError('publish receipt path is invalid');
+  }
+  return resolve(value);
+}
+
+function preparePrivateReceiptParent(path) {
+  const parent = dirname(path);
+  try {
+    mkdirSync(parent, { recursive: true, mode: 0o700 });
+  } catch {
+    throw packageError('publish receipt parent directory is unavailable');
+  }
+  let status;
+  try {
+    status = lstatSync(parent);
+  } catch {
+    throw packageError('publish receipt parent directory is unavailable');
+  }
+  if (
+    !status.isDirectory() ||
+    status.isSymbolicLink() ||
+    (status.mode & 0o077) !== 0 ||
+    (status.mode & 0o300) !== 0o300
+  ) {
+    throw packageError('publish receipt parent directory must be private and owner-writable');
+  }
+}
+
+function readOptionalStatus(path, label) {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if (isMissingFileError(error)) return undefined;
+    throw packageError(`${label} is unavailable`);
+  }
+}
+
+function isMissingFileError(error) {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT';
+}
+
+function isAlreadyExistsError(error) {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST';
+}
+
+function assertPrivateReceiptStatus(status) {
+  if (!status.isFile() || status.isSymbolicLink()) {
+    throw packageError('publish receipt must be a regular non-symlink file');
+  }
+  if ((status.mode & 0o177) !== 0) {
+    throw packageError('publish receipt permissions must be mode 0600 or more restrictive');
+  }
+}
+
+function readPublishReceipt(path) {
+  const status = readOptionalStatus(path, 'publish receipt');
+  if (status === undefined) throw packageError('publish receipt is unavailable');
+  assertPrivateReceiptStatus(status);
+
+  let descriptor;
+  try {
+    descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    throw packageError('publish receipt is unavailable');
+  }
+  try {
+    assertPrivateReceiptStatus(fstatSync(descriptor));
+    const data = readFileSync(descriptor);
+    if (data.byteLength > 4096) throw packageError('publish receipt exceeds the metadata limit');
+    return validatePublishReceipt(parseStrictJson(data.toString('utf8'), 'publish receipt'));
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function createPublishReceipt({
+  environment,
+  operationId,
+  prePublishMaxVersion,
+  projectId,
+  secretId,
+  startedAt,
+  state,
+  version,
+}) {
+  return validatePublishReceipt({
+    schemaVersion: 2,
+    operation: PUBLISH_RECEIPT_OPERATION,
+    operationId,
+    prePublishMaxVersion,
+    state,
+    startedAt,
+    environment,
+    projectId,
+    secretId,
+    version,
+  });
+}
+
+function validatePublishReceipt(candidate) {
+  assertPlainObject(candidate, 'publish receipt');
+  assertExactKeys(candidate, PUBLISH_RECEIPT_KEYS, 'publish receipt');
+  if (candidate.schemaVersion !== 2) {
+    throw packageError('publish receipt schemaVersion is unsupported');
+  }
+  if (candidate.operation !== PUBLISH_RECEIPT_OPERATION) {
+    throw packageError('publish receipt operation is invalid');
+  }
+  if (!PUBLISH_RECEIPT_STATES.has(candidate.state)) {
+    throw packageError('publish receipt state is invalid');
+  }
+  const environment = readEnvironment(candidate.environment);
+  const projectId = readProjectId(candidate.projectId);
+  const operationId = readOperationId(candidate.operationId);
+  const prePublishMaxVersion = readVersionWatermark(candidate.prePublishMaxVersion);
+  const startedAt = readStartedAt(candidate.startedAt);
+  if (candidate.secretId !== PACKAGE_SECRET_IDS[environment]) {
+    throw packageError('publish receipt secret ID is invalid');
+  }
+  if (candidate.state === 'publishing' && candidate.version !== null) {
+    throw packageError('publish receipt version is invalid');
+  }
+  const version = candidate.version === null ? null : readNumericVersion(candidate.version);
+  if (candidate.state !== 'publishing' && version === null) {
+    throw packageError('publish receipt version is invalid');
+  }
+  return {
+    schemaVersion: 2,
+    operation: PUBLISH_RECEIPT_OPERATION,
+    operationId,
+    prePublishMaxVersion,
+    state: candidate.state,
+    startedAt,
+    environment,
+    projectId,
+    secretId: candidate.secretId,
+    version,
+  };
+}
+
+function writePublishReceipt(path, receipt) {
+  const validated = validatePublishReceipt(receipt);
+  preparePrivateReceiptParent(path);
+  const existing = readPublishReceipt(path);
+  if (
+    existing.operationId !== validated.operationId ||
+    existing.environment !== validated.environment ||
+    existing.projectId !== validated.projectId ||
+    existing.secretId !== validated.secretId ||
+    existing.startedAt !== validated.startedAt ||
+    existing.prePublishMaxVersion !== validated.prePublishMaxVersion ||
+    (existing.version !== null && existing.version !== validated.version)
+  ) {
+    throw packageError('publish receipt update does not match the reserved operation');
+  }
+  if (
+    (existing.state === 'verified' && validated.state !== 'verified') ||
+    (existing.state === 'pending-verification' && validated.state === 'publishing')
+  ) {
+    throw packageError('publish receipt state transition is invalid');
+  }
+
+  const parent = dirname(path);
+  const temporaryPath = join(parent, `.${basename(path)}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    writePrivateFile(temporaryPath, `${JSON.stringify(validated)}\n`);
+    renameSync(temporaryPath, path);
+    syncDirectory(parent);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    if (error instanceof SecretPackageError) throw error;
+    throw packageError('atomic publish receipt write failed');
   }
 }
 
@@ -831,6 +1564,15 @@ function readProjectId(projectId) {
   return projectId;
 }
 
+function holdDevSecretRenderLockForTest() {
+  const milliseconds = process.env.INTEXURAOS_SECRET_RENDER_TEST_LOCK_HOLD_MS ?? '0';
+  if (milliseconds === '0') return;
+  if (process.env.NODE_ENV !== 'test' || !/^[1-9][0-9]{0,3}$/u.test(milliseconds)) {
+    throw packageError('DEV secret render test lock hold is invalid');
+  }
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(milliseconds));
+}
+
 function readNumericVersion(version) {
   const value = typeof version === 'number' ? String(version) : version;
   if (
@@ -841,6 +1583,46 @@ function readNumericVersion(version) {
     throw packageError('Secret Manager version must be an exact positive numeric version');
   }
   return value;
+}
+
+function readVersionWatermark(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^(?:0|[1-9]\d*)$/u.test(value) ||
+    !Number.isSafeInteger(Number(value))
+  ) {
+    throw packageError('publish receipt pre-publish watermark is invalid');
+  }
+  return value;
+}
+
+function readOperationId(value) {
+  if (typeof value !== 'string' || !UUID_V4_PATTERN.test(value)) {
+    throw packageError('publish receipt operation ID is invalid');
+  }
+  return value;
+}
+
+function normalizeUtcTimestamp(value, label) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u.test(value)
+  ) {
+    throw packageError(`${label} is invalid`);
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw packageError(`${label} is invalid`);
+  }
+  return parsed.toISOString();
+}
+
+function readStartedAt(value) {
+  const normalized = normalizeUtcTimestamp(value, 'publish receipt startedAt');
+  if (normalized !== value) {
+    throw packageError('publish receipt startedAt must be canonical UTC');
+  }
+  return normalized;
 }
 
 function readOutputDirectory(outputDir) {

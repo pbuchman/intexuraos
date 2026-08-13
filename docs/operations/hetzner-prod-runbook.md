@@ -213,6 +213,83 @@ any stable runtime file link. It then revalidates the candidate with
 `--preflight`, including runtime-token issuance and a minimal Firestore request
 through the candidate runtime key.
 
+Every mutating loader operation (`--stage-only`, `--preflight`, `--activate`,
+and `--rollback`, plus the combined provisioning operation) holds the same
+`flock` on `/run/lock/intexuraos/prod-secret-package.lock`. The parent directory
+is `root:root` mode `0700`, the lock file is `root:root` mode `0600`, and lock
+acquisition fails closed after 30 seconds. This serializes GitHub workflows,
+provisioning, and approved manual recovery without making emergency rollback
+wait indefinitely. `--current-release` is read-only and does not take the lock.
+
+Before any render or projection mutation, the loader resolves both storage
+roots through their nearest existing real path and requires them to be
+disjoint: neither may equal, contain, or be contained by the other, including
+through a symlinked ancestor. The render root must be a non-symlink
+`root:root` directory with exact mode `0700`; the runtime projection root must
+be a non-symlink `root:root` directory with exact mode `0711`. Dangling
+symlinks, non-directory ancestors, special permission bits, or a pre-created
+deploy-owned root fail closed before either tree is changed.
+
+Before either activation or rollback changes `current`, the loader performs a
+complete local, network-independent validation of the immutable release. It
+requires the numeric version in the release name, metadata, and parsed dotenv
+to agree; validates the runtime service-account identity and private-key shape;
+checks internal auth, Cloudflare INI, and TLS key formats; and requires exact
+non-symlink file sets, owners, groups, and modes. Rollback runs this validation
+but does not call an external API. The metadata `envNames` list must exactly
+equal the tracked PROD manifest and `.env.prod` must contain every fixed,
+tracked-config, and package name exactly once, with no extra or empty member.
+Online package fetch is bounded to 20 seconds by default and runtime
+service-account token issuance is bounded to 15 seconds by default; both
+release the host lock after timeout. Candidate HTTP proofs use a five-second
+connection timeout and a 20-second total timeout for every request.
+When the Cloudflare proof is enabled, its package-bound attestation directory
+and version file must be non-symlink `root:root` objects with exact modes
+`0700` and `0600`; a deploy-owned or group/other-writable replacement is
+rejected before any HTTP request.
+
+At the first package cutover, the loader seals the pre-package runtime files as
+`legacy-pre-packages`. It builds this snapshot in a private mode-`0700` sibling
+staging directory, records SHA-256 for all five artifacts in mode-`0600`
+metadata, validates the same runtime identity/key and artifact formats, changes
+the complete directory to mode `0711`, then publishes it with one no-clobber
+rename and fsync. An interrupted build is removed without creating a partial
+final snapshot, so the next locked deployment can retry. This special release
+is accepted only by the offline rollback operation; it does not read the
+package manifest or tracked runtime config, invoke the candidate validator, or
+contact Google or Cloudflare:
+
+```bash
+sudo INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/load-secrets.sh --rollback legacy-pre-packages
+```
+
+Any missing artifact, digest mismatch, symlink, owner/mode mismatch, invalid
+runtime service-account identity/private key, empty environment assignment, or
+malformed internal-auth/Cloudflare/TLS artifact blocks the rollback without
+changing `current` or a stable runtime link.
+
+Stable runtime links use a durable two-state transaction marker. While the
+marker is `installing`, every renamed original is recorded as a private
+`.package-backup-*` path and recovery restores the complete pre-transaction
+set. After all five links are verified and their parent directories are
+fsynced, the marker is durably replaced with `committed`. Recovery of that
+state verifies the complete committed link set, removes only the backups named
+by the marker, fsyncs their parent directories, and removes the marker last.
+Therefore a kill or power loss during cleanup cannot leave an untracked secret
+backup or make rollback discard the only recoverable copy. An invalid marker,
+backup directory, or committed link fails closed and retains the managed state
+for incident recovery.
+
+Before an immutable candidate directory is renamed out of private staging, the
+loader fsyncs each of its six exact regular files and the staging directory.
+It then renames the directory and fsyncs the projection root before reporting
+the staged release or allowing activation; activation repeats the release/root
+durability barrier for a candidate staged by an older invocation. A process
+loss immediately after publication therefore leaves either no named candidate
+or one complete candidate that the next locked `--stage-only` run validates
+and reuses. It cannot make `current` point at an unpersisted partial release.
+
 After preflight, the wrapper atomically runs `--activate <release-name>`. Alloy
 is not restarted during staging or preflight because its systemd unit still
 reads the previously active `.env.prod`. Immediately after successful
@@ -278,6 +355,13 @@ reloads the previous PM2 code release (including a partially switched
 projection rollback or Alloy reload fails compensation, is a deployment
 incident, and must not be reported as success. Never copy individual members
 between versions.
+
+Once `--activate` has been attempted, compensation always invokes the offline
+`--rollback` path even when `--current-release` still reports the recorded
+previous release. This closes the interruption window after stable-link commit
+but before the projection pointer switch: rollback first completes durable
+transaction-marker/backup recovery, and only then may the wrapper mark the
+attempt compensated.
 
 ### Runtime Service-Account Rotation
 

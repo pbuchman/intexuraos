@@ -71,8 +71,12 @@ public in the compiled SPA, but is not tracked so it can be rotated coherently.
 | Environment | Runtime loading                                                                                                                                                       |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | local       | exact DEV version plus versioned config, rendered under `${HOME}/.config/intexuraos/secret-packages/dev/current` and projected to mode-`0600` `.envrc`/approved files |
-| dev         | the same pinned DEV package/render root on home-dev; PM2, observability, and orchestrator receive separate allowlisted projections                                    |
+| dev         | the same pinned four-file DEV projection root on home-dev; PM2, observability, and orchestrator receive separate allowlisted projections                              |
 | prod        | exact PROD version fetched by the external Hetzner provisioner, validated and atomically projected to `/etc/intexuraos/.env.prod` and protected files                 |
+
+The DEV path in the table is a reserved four-file projection root. A generic
+`secret-package render` must use a separate private scratch root because its
+three-file `current` release is not a valid local/home-dev projection.
 
 Renderers may access only their environment package. Runtime services,
 orchestrator processes, and code workers do not receive Secret Manager access.

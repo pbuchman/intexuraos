@@ -1,6 +1,7 @@
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { generateKeyPairSync } from 'node:crypto';
 import {
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdtempSync,
@@ -8,16 +9,20 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
+  rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, platform, tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { parse } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
 const syncSecretsPath = resolve(repoRoot, 'scripts/sync-secrets.sh');
+const secretPackageCliPath = resolve(repoRoot, 'scripts/secret-package.mjs');
+const devSecretProjectionPath = resolve(repoRoot, 'scripts/lib/dev-secret-projection.mjs');
 const loadSecretsPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
 const loadGrafanaEnvPath = resolve(repoRoot, 'scripts/observability/load-grafana-cloud-env.sh');
@@ -136,33 +141,313 @@ function validOrchestratorEnvironment(
   };
 }
 
-function makePathThatFailsTheSecondMove(tempRoot: string): {
-  counterPath: string;
-  path: string;
-} {
-  const fakeBin = join(tempRoot, 'fake-bin');
-  const counterPath = join(tempRoot, 'mv-count');
-  mkdirSync(fakeBin, { recursive: true });
-  writeFileSync(
-    join(fakeBin, 'mv'),
+function syncDevPackage(options: {
+  failpoint?: string;
+  githubKeyOutput: string;
+  lockFailpoint?: string;
+  outputPath: string;
+  packageOutputDir: string;
+  payloadPath: string;
+  tempRoot: string;
+  version: string;
+}): ReturnType<typeof spawnSync> {
+  return spawnSync(
+    'bash',
     [
-      '#!/usr/bin/env bash',
-      'set -euo pipefail',
-      'count=0',
-      'if [[ -f "${SYNC_TEST_MV_COUNT_FILE}" ]]; then',
-      '  count="$(<"${SYNC_TEST_MV_COUNT_FILE}")"',
-      'fi',
-      'count=$((count + 1))',
-      'printf \'%s\\n\' "${count}" >"${SYNC_TEST_MV_COUNT_FILE}"',
-      'if [[ "${count}" -eq 2 ]]; then',
-      '  exit 71',
-      'fi',
-      'exec /bin/mv "$@"',
-      '',
-    ].join('\n'),
-    { mode: 0o755 }
+      syncSecretsPath,
+      '--version',
+      options.version,
+      '--project-id',
+      'test-project',
+      '--output',
+      options.outputPath,
+      '--package-output-dir',
+      options.packageOutputDir,
+      '--github-app-key-output',
+      options.githubKeyOutput,
+      '--payload-file',
+      options.payloadPath,
+    ],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: options.tempRoot,
+        INTEXURAOS_SECRET_SYNC_LOCK_TEST_FAILPOINT: options.lockFailpoint ?? '',
+        INTEXURAOS_SECRET_SYNC_TEST_FAILPOINT: options.failpoint ?? '',
+        NODE_ENV: 'test',
+        TMPDIR: options.tempRoot,
+      },
+    }
   );
-  return { counterPath, path: `${fakeBin}:${process.env.PATH ?? ''}` };
+}
+
+function startDevPackageSync(options: {
+  githubKeyOutput: string;
+  holdLockMilliseconds?: number;
+  outputPath: string;
+  packageOutputDir: string;
+  payloadPath: string;
+  tempRoot: string;
+  version: string;
+}): {
+  completed: Promise<{ status: number | null; stderr: string; stdout: string }>;
+} {
+  const child = spawn(
+    'bash',
+    [
+      syncSecretsPath,
+      '--version',
+      options.version,
+      '--project-id',
+      'test-project',
+      '--output',
+      options.outputPath,
+      '--package-output-dir',
+      options.packageOutputDir,
+      '--github-app-key-output',
+      options.githubKeyOutput,
+      '--payload-file',
+      options.payloadPath,
+    ],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        HOME: options.tempRoot,
+        INTEXURAOS_SECRET_SYNC_TEST_LOCK_HOLD_MS: String(options.holdLockMilliseconds ?? 0),
+        NODE_ENV: 'test',
+        TMPDIR: options.tempRoot,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }
+  );
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', (chunk: string) => {
+    stderr += chunk;
+  });
+  return {
+    completed: new Promise((resolveCompleted) => {
+      child.on('close', (status) => resolveCompleted({ status, stderr, stdout }));
+    }),
+  };
+}
+
+function startGenericDevRender(options: {
+  holdLockMilliseconds?: number;
+  lockPreparationReleaseFile?: string;
+  outputDir: string;
+  payloadPath: string;
+  version: string;
+}): {
+  child: ReturnType<typeof spawn>;
+  completed: Promise<{ status: number | null; stderr: string; stdout: string }>;
+} {
+  const child = spawn(
+    process.execPath,
+    [
+      secretPackageCliPath,
+      'render',
+      '--environment',
+      'dev',
+      '--version',
+      options.version,
+      '--project-id',
+      'test-project',
+      '--output-dir',
+      options.outputDir,
+      '--payload-file',
+      options.payloadPath,
+    ],
+    {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        INTEXURAOS_SECRET_SYNC_LOCK_TEST_FAILPOINT:
+          options.lockPreparationReleaseFile === undefined ? '' : 'hold-after-preparing-owner',
+        INTEXURAOS_SECRET_SYNC_LOCK_TEST_RELEASE_FILE: options.lockPreparationReleaseFile ?? '',
+        INTEXURAOS_SECRET_RENDER_TEST_LOCK_HOLD_MS: String(options.holdLockMilliseconds ?? 0),
+        NODE_ENV: 'test',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }
+  );
+  let stdout = '';
+  let stderr = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stderr.on('data', (chunk: string) => {
+    stderr += chunk;
+  });
+  return {
+    child,
+    completed: new Promise((resolveCompleted) => {
+      child.on('close', (status) => resolveCompleted({ status, stderr, stdout }));
+    }),
+  };
+}
+
+async function waitForDevSyncClaim(packageOutputDir: string): Promise<void> {
+  const lockRoot = join(packageOutputDir, '.sync-lock');
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    try {
+      if (
+        lstatSync(lockRoot).isDirectory() &&
+        readdirSync(lockRoot).some((name) => name.startsWith('claim-'))
+      ) {
+        return;
+      }
+    } catch {
+      // The first publisher has not installed its atomic claim yet.
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  throw new Error('DEV sync claim was not observed');
+}
+
+async function waitForDevLockPreparationOwner(packageOutputDir: string): Promise<string> {
+  const lockRoot = join(packageOutputDir, '.sync-lock');
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    try {
+      const name = readdirSync(lockRoot).find((entry) =>
+        /^\.preparing-owner-[0-9a-f-]+\.json$/u.test(entry)
+      );
+      if (name !== undefined) return name;
+    } catch {
+      // The writer has not installed its durable preparation owner yet.
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+  }
+  throw new Error('DEV lock preparation owner was not observed');
+}
+
+function processStartMarker(pid: number): string {
+  if (platform() === 'linux') {
+    const value = readFileSync(`/proc/${String(pid)}/stat`, 'utf8');
+    const fieldsAfterCommand = value
+      .slice(value.lastIndexOf(')') + 2)
+      .trim()
+      .split(/\s+/u);
+    return fieldsAfterCommand[19] ?? '';
+  }
+  return execFileSync('ps', ['-o', 'lstart=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+}
+
+function bootMarker(): string {
+  if (platform() === 'linux') {
+    return readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+  }
+  return execFileSync('sysctl', ['-n', 'kern.boottime'], { encoding: 'utf8' }).trim();
+}
+
+function makeStaleDevSyncClaim(options: {
+  packageOutputDir: string;
+  reason: 'non-sync-process' | 'reused-pid';
+  token: string;
+}): string {
+  const lockRoot = join(options.packageOutputDir, '.sync-lock');
+  const claimName = `claim-${options.token}`;
+  const claimPath = join(lockRoot, claimName);
+  const workDirectoryName = `.sync-work.${options.token}`;
+  mkdirSync(claimPath, { mode: 0o700, recursive: true });
+  mkdirSync(join(options.packageOutputDir, workDirectoryName), { mode: 0o700 });
+  writeFileSync(
+    join(claimPath, 'owner.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      token: options.token,
+      ownerPid: process.pid,
+      hostname: hostname(),
+      bootMarker: bootMarker(),
+      processStartMarker:
+        options.reason === 'reused-pid' ? 'stale-process-start' : processStartMarker(process.pid),
+      syncScript: syncSecretsPath,
+      workDirectoryName,
+    }),
+    { mode: 0o600 }
+  );
+  writeFileSync(join(claimPath, 'ticket'), '1\n', { mode: 0o600 });
+  return workDirectoryName;
+}
+
+function makeLegacyDevProjection(options: {
+  githubKeyOutput: string;
+  outputPath: string;
+  packageOutputDir: string;
+  payloadPath: string;
+  privateKeyPem: string;
+  tempRoot: string;
+  version: string;
+}): void {
+  const scratchOutput = join(options.tempRoot, 'scratch.envrc');
+  const scratchKey = join(options.tempRoot, 'scratch-key.pem');
+  const scratchPackages = join(options.tempRoot, 'scratch-packages');
+  const syncResult = syncDevPackage({
+    githubKeyOutput: scratchKey,
+    outputPath: scratchOutput,
+    packageOutputDir: scratchPackages,
+    payloadPath: options.payloadPath,
+    tempRoot: options.tempRoot,
+    version: options.version,
+  });
+  expect(syncResult.status).toBe(0);
+
+  execFileSync(
+    'node',
+    [
+      resolve(repoRoot, 'scripts/secret-package.mjs'),
+      'render',
+      '--environment',
+      'dev',
+      '--version',
+      options.version,
+      '--project-id',
+      'test-project',
+      '--output-dir',
+      options.packageOutputDir,
+      '--payload-file',
+      options.payloadPath,
+    ],
+    { cwd: repoRoot, env: { ...process.env, HOME: options.tempRoot }, stdio: 'pipe' }
+  );
+  copyFileSync(scratchOutput, options.outputPath);
+  copyFileSync(scratchKey, options.githubKeyOutput);
+  expect(readFileSync(options.githubKeyOutput, 'utf8')).toBe(options.privateKeyPem);
+  rmSync(scratchPackages, { recursive: true, force: true });
+  rmSync(scratchOutput, { force: true });
+  rmSync(scratchKey, { force: true });
+}
+
+function expectCompleteDevProjection(options: {
+  expectedPrivateKeyPem: string;
+  expectedVersion: string;
+  githubKeyOutput: string;
+  outputPath: string;
+  packageOutputDir: string;
+}): void {
+  const currentPath = join(options.packageOutputDir, 'current');
+  const envrc = parse(readFileSync(options.outputPath, 'utf8'));
+  const metadata = JSON.parse(readFileSync(join(currentPath, 'metadata.json'), 'utf8')) as {
+    version: number;
+  };
+  expect(envrc.INTEXURAOS_SECRET_PACKAGE_VERSION).toBe(options.expectedVersion);
+  expect(String(metadata.version)).toBe(options.expectedVersion);
+  expect(readFileSync(options.githubKeyOutput, 'utf8')).toBe(options.expectedPrivateKeyPem);
+  expect(readFileSync(join(currentPath, 'github-app-private-key.pem'), 'utf8')).toBe(
+    options.expectedPrivateKeyPem
+  );
 }
 
 describe('runtime configuration cutover', () => {
@@ -353,109 +638,842 @@ describe('runtime configuration cutover', () => {
     expect(statSync(outputPath).mode & 0o777).toBe(0o600);
   });
 
-  it('rolls back package current, .envrc, and GitHub PEM when publication fails after the first artifact', () => {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-transaction-'));
-    const outputPath = join(tempRoot, '.envrc');
-    const packageOutputDir = join(tempRoot, 'packages');
-    const githubKeyOutput = join(tempRoot, 'github-app.pem');
-    const previousPayloadPath = join(tempRoot, 'payload-v7.json');
-    const candidatePayloadPath = join(tempRoot, 'payload-v8.json');
-    const previous = makeDevSecretPackagePayload();
-    const candidate = makeDevSecretPackagePayload();
-    writeFileSync(previousPayloadPath, JSON.stringify(previous.payload), { mode: 0o600 });
-    writeFileSync(candidatePayloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
-
-    const commonArgs = [
-      syncSecretsPath,
-      '--project-id',
-      'test-project',
-      '--output',
-      outputPath,
-      '--package-output-dir',
-      packageOutputDir,
-      '--github-app-key-output',
-      githubKeyOutput,
-    ];
-    execFileSync('bash', [...commonArgs, '--version', '7', '--payload-file', previousPayloadPath], {
-      cwd: repoRoot,
-      env: { ...process.env, HOME: tempRoot, TMPDIR: tempRoot },
-      stdio: 'pipe',
-    });
-    const previousCurrentTarget = readlinkSync(join(packageOutputDir, 'current'));
-    const previousEnvrc = readFileSync(outputPath);
-    const previousGithubKey = readFileSync(githubKeyOutput);
-    const failingMove = makePathThatFailsTheSecondMove(tempRoot);
-
-    const result = spawnSync(
-      'bash',
-      [...commonArgs, '--version', '8', '--payload-file', candidatePayloadPath],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          HOME: tempRoot,
-          PATH: failingMove.path,
-          SYNC_TEST_MV_COUNT_FILE: failingMove.counterPath,
-          TMPDIR: tempRoot,
-        },
-      }
-    );
-
-    expect(result.status).not.toBe(0);
-    expect(readFileSync(failingMove.counterPath, 'utf8').trim()).toBe('2');
-    expect(readlinkSync(join(packageOutputDir, 'current'))).toBe(previousCurrentTarget);
-    expect(readFileSync(outputPath)).toEqual(previousEnvrc);
-    expect(readFileSync(githubKeyOutput)).toEqual(previousGithubKey);
-    expect(readFileSync(githubKeyOutput, 'utf8')).toBe(previous.privateKeyPem);
-    expect(readFileSync(githubKeyOutput, 'utf8')).not.toBe(candidate.privateKeyPem);
-  }, 30_000);
-
-  it('removes newly published local artifacts when a first sync transaction fails', () => {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-first-transaction-'));
-    const outputPath = join(tempRoot, '.envrc');
-    const packageOutputDir = join(tempRoot, 'packages');
-    const githubKeyOutput = join(tempRoot, 'github-app.pem');
-    const payloadPath = join(tempRoot, 'payload.json');
-    const { payload } = makeDevSecretPackagePayload();
-    const failingMove = makePathThatFailsTheSecondMove(tempRoot);
-    writeFileSync(payloadPath, JSON.stringify(payload), { mode: 0o600 });
-
-    const result = spawnSync(
-      'bash',
-      [
-        syncSecretsPath,
-        '--version',
-        '1',
-        '--project-id',
-        'test-project',
-        '--output',
-        outputPath,
-        '--package-output-dir',
-        packageOutputDir,
-        '--github-app-key-output',
+  it.each([
+    ['candidate-durable', '7'],
+    ['compatibility-active', '7'],
+    ['envrc-link-installed', '7'],
+    ['github-link-installed', '7'],
+    ['before-activation', '7'],
+    ['after-activation', '8'],
+  ])(
+    'keeps a complete legacy or candidate projection after SIGKILL at %s and resumes',
+    (failpoint, visibleVersion) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-crash-legacy-'));
+      const outputPath = join(tempRoot, '.envrc');
+      const packageOutputDir = join(tempRoot, 'packages');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const previousPayloadPath = join(tempRoot, 'payload-v7.json');
+      const candidatePayloadPath = join(tempRoot, 'payload-v8.json');
+      const previous = makeDevSecretPackagePayload();
+      const candidate = makeDevSecretPackagePayload();
+      writeFileSync(previousPayloadPath, JSON.stringify(previous.payload), { mode: 0o600 });
+      writeFileSync(candidatePayloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
+      makeLegacyDevProjection({
         githubKeyOutput,
-        '--payload-file',
+        outputPath,
+        packageOutputDir,
+        payloadPath: previousPayloadPath,
+        privateKeyPem: previous.privateKeyPem,
+        tempRoot,
+        version: '7',
+      });
+
+      const interrupted = syncDevPackage({
+        failpoint,
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath: candidatePayloadPath,
+        tempRoot,
+        version: '8',
+      });
+
+      expect(interrupted.status).not.toBe(0);
+      const expected = visibleVersion === '7' ? previous : candidate;
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: expected.privateKeyPem,
+        expectedVersion: visibleVersion,
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+
+      const resumed = syncDevPackage({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath: candidatePayloadPath,
+        tempRoot,
+        version: '8',
+      });
+      expect(resumed.status).toBe(0);
+      expect(lstatSync(outputPath).isSymbolicLink()).toBe(true);
+      expect(lstatSync(githubKeyOutput).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(outputPath)).toBe(join(packageOutputDir, 'current', '.envrc'));
+      expect(readlinkSync(githubKeyOutput)).toBe(
+        join(packageOutputDir, 'current', 'github-app-private-key.pem')
+      );
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: candidate.privateKeyPem,
+        expectedVersion: '8',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    },
+    30_000
+  );
+
+  it.each([
+    'candidate-durable',
+    'envrc-link-installed',
+    'github-link-installed',
+    'before-activation',
+    'after-activation',
+  ])(
+    'fails closed or exposes the complete candidate on first-install SIGKILL at %s',
+    (failpoint) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-crash-first-'));
+      const outputPath = join(tempRoot, '.envrc');
+      const packageOutputDir = join(tempRoot, 'packages');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload-v1.json');
+      const candidate = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
+
+      const interrupted = syncDevPackage({
+        failpoint,
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
         payloadPath,
-      ],
-      {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          HOME: tempRoot,
-          PATH: failingMove.path,
-          SYNC_TEST_MV_COUNT_FILE: failingMove.counterPath,
-          TMPDIR: tempRoot,
-        },
+        tempRoot,
+        version: '1',
+      });
+
+      expect(interrupted.status).not.toBe(0);
+      if (failpoint === 'after-activation') {
+        expectCompleteDevProjection({
+          expectedPrivateKeyPem: candidate.privateKeyPem,
+          expectedVersion: '1',
+          githubKeyOutput,
+          outputPath,
+          packageOutputDir,
+        });
+      } else {
+        expect(() => readFileSync(outputPath, 'utf8')).toThrow();
+        expect(() => readFileSync(githubKeyOutput, 'utf8')).toThrow();
+        expect(existsSync(join(packageOutputDir, 'current'))).toBe(false);
       }
+
+      const resumed = syncDevPackage({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '1',
+      });
+      expect(resumed.status).toBe(0);
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: candidate.privateKeyPem,
+        expectedVersion: '1',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    },
+    30_000
+  );
+
+  it(
+    'serializes two real concurrent DEV publishers and removes every ephemeral claim',
+    { timeout: 30_000 },
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-concurrent-'));
+      const outputPath = join(tempRoot, '.envrc');
+      const packageOutputDir = join(tempRoot, 'packages');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const firstPayloadPath = join(tempRoot, 'payload-v7.json');
+      const secondPayloadPath = join(tempRoot, 'payload-v8.json');
+      const first = makeDevSecretPackagePayload();
+      const second = makeDevSecretPackagePayload();
+      writeFileSync(firstPayloadPath, JSON.stringify(first.payload), { mode: 0o600 });
+      writeFileSync(secondPayloadPath, JSON.stringify(second.payload), { mode: 0o600 });
+
+      const firstSync = startDevPackageSync({
+        githubKeyOutput,
+        holdLockMilliseconds: 500,
+        outputPath,
+        packageOutputDir,
+        payloadPath: firstPayloadPath,
+        tempRoot,
+        version: '7',
+      });
+      await waitForDevSyncClaim(packageOutputDir);
+      const secondSync = startDevPackageSync({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath: secondPayloadPath,
+        tempRoot,
+        version: '8',
+      });
+
+      const [firstResult, secondResult] = await Promise.all([
+        firstSync.completed,
+        secondSync.completed,
+      ]);
+      expect(firstResult).toMatchObject({ status: 0, stderr: '' });
+      expect(secondResult).toMatchObject({ status: 0, stderr: '' });
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: second.privateKeyPem,
+        expectedVersion: '8',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+      expect(readdirSync(join(packageOutputDir, '.sync-lock'))).toEqual([]);
+      expect(
+        readdirSync(packageOutputDir).filter(
+          (name) => name.startsWith('.sync-work.') || name.startsWith('.sync-lock.')
+        )
+      ).toEqual([]);
+    }
+  );
+
+  it.each([
+    ['reused-pid', '11111111-1111-4111-8111-111111111111'],
+    ['non-sync-process', '22222222-2222-4222-8222-222222222222'],
+  ] as const)(
+    'reclaims a stale %s claim without deleting a concurrent owner path',
+    (reason, token) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-stale-claim-'));
+      const outputPath = join(tempRoot, '.envrc');
+      const packageOutputDir = join(tempRoot, 'packages');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const candidate = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
+      const workDirectoryName = makeStaleDevSyncClaim({
+        packageOutputDir,
+        reason,
+        token,
+      });
+
+      const result = syncDevPackage({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '9',
+      });
+
+      expect(result).toMatchObject({ status: 0, stderr: '' });
+      expect(existsSync(join(packageOutputDir, '.sync-lock', `claim-${token}`))).toBe(false);
+      expect(existsSync(join(packageOutputDir, workDirectoryName))).toBe(false);
+      expect(readdirSync(join(packageOutputDir, '.sync-lock'))).toEqual([]);
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: candidate.privateKeyPem,
+        expectedVersion: '9',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    },
+    30_000
+  );
+
+  it(
+    'recovers after SIGKILL between creating a lock preparation and installing its owner',
+    { timeout: 30_000 },
+    () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-lock-preparation-crash-'));
+      const outputPath = join(tempRoot, '.envrc');
+      const packageOutputDir = join(tempRoot, 'packages');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const candidate = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
+
+      const interrupted = syncDevPackage({
+        githubKeyOutput,
+        lockFailpoint: 'after-preparing-directory',
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '9',
+      });
+
+      expect(interrupted.status).not.toBe(0);
+      expect(readdirSync(join(packageOutputDir, '.sync-lock'))).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^\.preparing-[0-9a-f-]+$/u),
+          expect.stringMatching(/^\.preparing-owner-[0-9a-f-]+\.json$/u),
+        ])
+      );
+
+      const resumed = syncDevPackage({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '9',
+      });
+
+      expect(resumed).toMatchObject({ status: 0, stderr: '' });
+      expect(readdirSync(join(packageOutputDir, '.sync-lock'))).toEqual([]);
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: candidate.privateKeyPem,
+        expectedVersion: '9',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    }
+  );
+
+  it(
+    'recovers after SIGKILL while constructing an owner inode before companion publication',
+    { timeout: 30_000 },
+    () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-lock-owner-inode-crash-'));
+      const outputPath = join(tempRoot, '.envrc');
+      const packageOutputDir = join(tempRoot, 'packages');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const candidate = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
+
+      const interrupted = syncDevPackage({
+        githubKeyOutput,
+        lockFailpoint: 'after-preparing-owner-open',
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '9',
+      });
+      expect(interrupted.status).not.toBe(0);
+
+      const resumed = syncDevPackage({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '9',
+      });
+
+      expect(resumed).toMatchObject({ status: 0, stderr: '' });
+      expect(readdirSync(join(packageOutputDir, '.sync-lock'))).toEqual([]);
+      expect(readdirSync(packageOutputDir).filter((name) => name.includes('owner-temp'))).toEqual(
+        []
+      );
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: candidate.privateKeyPem,
+        expectedVersion: '9',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    }
+  );
+
+  it(
+    'blocks a second writer while a live companion-only preparation is unpublished',
+    { timeout: 30_000 },
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-live-lock-preparation-'));
+      const outputDir = join(tempRoot, 'packages');
+      const firstPayloadPath = join(tempRoot, 'payload-v7.json');
+      const secondPayloadPath = join(tempRoot, 'payload-v8.json');
+      const releaseFile = join(tempRoot, 'release-lock-preparation');
+      const firstCandidate = makeDevSecretPackagePayload();
+      const secondCandidate = makeDevSecretPackagePayload();
+      writeFileSync(firstPayloadPath, JSON.stringify(firstCandidate.payload), { mode: 0o600 });
+      writeFileSync(secondPayloadPath, JSON.stringify(secondCandidate.payload), { mode: 0o600 });
+
+      const first = startGenericDevRender({
+        lockPreparationReleaseFile: releaseFile,
+        outputDir,
+        payloadPath: firstPayloadPath,
+        version: '7',
+      });
+      const preparationOwnerName = await waitForDevLockPreparationOwner(outputDir);
+      const second = spawnSync(
+        process.execPath,
+        [
+          secretPackageCliPath,
+          'render',
+          '--environment',
+          'dev',
+          '--version',
+          '8',
+          '--project-id',
+          'test-project',
+          '--output-dir',
+          outputDir,
+          '--payload-file',
+          secondPayloadPath,
+        ],
+        {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            INTEXURAOS_SECRET_SYNC_LOCK_TEST_FAILPOINT: '',
+            INTEXURAOS_SECRET_SYNC_LOCK_TEST_RELEASE_FILE: '',
+            INTEXURAOS_SECRET_SYNC_LOCK_TIMEOUT_MS: '100',
+            NODE_ENV: 'test',
+          },
+        }
+      );
+      const activePreparationWasPreserved = existsSync(
+        join(outputDir, '.sync-lock', preparationOwnerName)
+      );
+      writeFileSync(releaseFile, 'release\n', { mode: 0o600 });
+      const firstResult = await first.completed;
+
+      expect(second.status).not.toBe(0);
+      expect(activePreparationWasPreserved).toBe(true);
+      expect(firstResult).toMatchObject({ status: 0, stderr: '' });
+      expect(readlinkSync(join(outputDir, 'current'))).toMatch(/^dev-v7-/u);
+      expect(readdirSync(join(outputDir, '.sync-lock'))).toEqual([]);
+    }
+  );
+
+  it.each(['envrc', 'github-key'] as const)(
+    'rejects a %s endpoint located inside the private projection root',
+    (endpoint) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-overlap-direct-'));
+      const packageOutputDir = join(tempRoot, 'packages');
+      const safeOutputPath = join(tempRoot, '.envrc');
+      const safeGithubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const { payload } = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(payload), { mode: 0o600 });
+
+      const result = syncDevPackage({
+        githubKeyOutput:
+          endpoint === 'github-key'
+            ? join(packageOutputDir, 'endpoints', 'github-app.pem')
+            : safeGithubKeyOutput,
+        outputPath:
+          endpoint === 'envrc' ? join(packageOutputDir, 'endpoints', '.envrc') : safeOutputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '10',
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('Unable to promote the complete DEV secret projection');
+      expect(existsSync(join(packageOutputDir, 'current'))).toBe(false);
+    },
+    30_000
+  );
+
+  it.each(['envrc', 'github-key'] as const)(
+    'rejects a %s endpoint parent that resolves through a symlink into the projection root',
+    (endpoint) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-overlap-alias-'));
+      const packageOutputDir = join(tempRoot, 'packages');
+      const aliasPath = join(tempRoot, 'projection-alias');
+      const safeOutputPath = join(tempRoot, '.envrc');
+      const safeGithubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const { payload } = makeDevSecretPackagePayload();
+      mkdirSync(packageOutputDir, { mode: 0o700 });
+      symlinkSync(packageOutputDir, aliasPath, 'dir');
+      writeFileSync(payloadPath, JSON.stringify(payload), { mode: 0o600 });
+
+      const result = syncDevPackage({
+        githubKeyOutput:
+          endpoint === 'github-key' ? join(aliasPath, 'github-app.pem') : safeGithubKeyOutput,
+        outputPath: endpoint === 'envrc' ? join(aliasPath, '.envrc') : safeOutputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '10',
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('Unable to promote the complete DEV secret projection');
+      expect(existsSync(join(packageOutputDir, 'current'))).toBe(false);
+    },
+    30_000
+  );
+
+  it('keeps generic package render roots distinct from the DEV projection root', () => {
+    const script = readFileSync(syncSecretsPath, 'utf8');
+    const scriptsReadme = readFileSync(resolve(repoRoot, 'scripts/README.md'), 'utf8');
+    const runtimeOperations = readFileSync(
+      resolve(repoRoot, 'docs/operations/runtime-configuration.md'),
+      'utf8'
     );
 
-    expect(result.status).not.toBe(0);
-    expect(existsSync(join(packageOutputDir, 'current'))).toBe(false);
-    expect(existsSync(outputPath)).toBe(false);
-    expect(existsSync(githubKeyOutput)).toBe(false);
-  }, 30_000);
+    expect(script).toContain('PROJECTION_OUTPUT_DIR');
+    expect(script).toContain('CANDIDATE_RENDER_DIR');
+    expect(script).not.toContain('SECRET_PACKAGE_RENDER_DIR:-');
+    expect(scriptsReadme).toMatch(/must never be passed to generic\s+`secret-package render`/u);
+    expect(runtimeOperations).toMatch(
+      /must never be reused as the `--output-dir` of\s+generic `secret-package render`/u
+    );
+  });
+
+  it(
+    'rejects a generic package render into a DEV projection-managed root',
+    { timeout: 30_000 },
+    () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-managed-root-'));
+      const packageOutputDir = join(tempRoot, 'projection');
+      const outputPath = join(tempRoot, '.envrc');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const { payload } = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(payload), { mode: 0o600 });
+
+      const sync = syncDevPackage({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '10',
+      });
+      expect(sync.status, sync.stderr).toBe(0);
+
+      const genericRender = spawnSync(
+        process.execPath,
+        [
+          secretPackageCliPath,
+          'render',
+          '--environment',
+          'dev',
+          '--version',
+          '11',
+          '--project-id',
+          'test-project',
+          '--output-dir',
+          packageOutputDir,
+          '--payload-file',
+          payloadPath,
+        ],
+        { cwd: repoRoot, encoding: 'utf8' }
+      );
+
+      expect(genericRender.status).not.toBe(0);
+      expect(genericRender.stderr).toContain('DEV projection-managed root');
+      expect(readFileSync(outputPath, 'utf8')).toContain(
+        'export INTEXURAOS_SECRET_PACKAGE_VERSION=10'
+      );
+    }
+  );
+
+  it(
+    'holds a generic DEV writer behind an active sync and rejects it after projection classification',
+    { timeout: 30_000 },
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-sync-before-render-'));
+      const packageOutputDir = join(tempRoot, 'projection');
+      const outputPath = join(tempRoot, '.envrc');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const payloadPath = join(tempRoot, 'payload.json');
+      const candidate = makeDevSecretPackagePayload();
+      writeFileSync(payloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
+
+      const sync = startDevPackageSync({
+        githubKeyOutput,
+        holdLockMilliseconds: 500,
+        outputPath,
+        packageOutputDir,
+        payloadPath,
+        tempRoot,
+        version: '10',
+      });
+      await waitForDevSyncClaim(packageOutputDir);
+      const generic = startGenericDevRender({
+        outputDir: packageOutputDir,
+        payloadPath,
+        version: '11',
+      });
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+
+      expect(generic.child.exitCode).toBeNull();
+      const [syncResult, genericResult] = await Promise.all([sync.completed, generic.completed]);
+      expect(syncResult).toMatchObject({ status: 0, stderr: '' });
+      expect(genericResult.status).not.toBe(0);
+      expect(genericResult.stderr).toContain('DEV projection-managed root');
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: candidate.privateKeyPem,
+        expectedVersion: '10',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    }
+  );
+
+  it(
+    'waits for a generic DEV writer before converting its complete release into a projection',
+    { timeout: 30_000 },
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-render-before-sync-'));
+      const packageOutputDir = join(tempRoot, 'projection');
+      const outputPath = join(tempRoot, '.envrc');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const genericPayloadPath = join(tempRoot, 'payload-v8.json');
+      const syncPayloadPath = join(tempRoot, 'payload-v9.json');
+      const preparedOutput = join(tempRoot, 'prepared.envrc');
+      const preparedKey = join(tempRoot, 'prepared-key.pem');
+      const preparedProjection = join(tempRoot, 'prepared-projection');
+      const genericCandidate = makeDevSecretPackagePayload();
+      const syncCandidate = makeDevSecretPackagePayload();
+      writeFileSync(genericPayloadPath, JSON.stringify(genericCandidate.payload), { mode: 0o600 });
+      writeFileSync(syncPayloadPath, JSON.stringify(syncCandidate.payload), { mode: 0o600 });
+      const prepared = syncDevPackage({
+        githubKeyOutput: preparedKey,
+        outputPath: preparedOutput,
+        packageOutputDir: preparedProjection,
+        payloadPath: genericPayloadPath,
+        tempRoot,
+        version: '8',
+      });
+      expect(prepared).toMatchObject({ status: 0, stderr: '' });
+      copyFileSync(preparedOutput, outputPath);
+      copyFileSync(preparedKey, githubKeyOutput);
+
+      const generic = startGenericDevRender({
+        holdLockMilliseconds: 500,
+        outputDir: packageOutputDir,
+        payloadPath: genericPayloadPath,
+        version: '8',
+      });
+      await waitForDevSyncClaim(packageOutputDir);
+      const sync = startDevPackageSync({
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+        payloadPath: syncPayloadPath,
+        tempRoot,
+        version: '9',
+      });
+
+      const [genericResult, syncResult] = await Promise.all([generic.completed, sync.completed]);
+      expect(genericResult).toMatchObject({ status: 0, stderr: '' });
+      expect(syncResult).toMatchObject({ status: 0, stderr: '' });
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: syncCandidate.privateKeyPem,
+        expectedVersion: '9',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    }
+  );
+
+  it(
+    'serializes two generic DEV scratch writers without classifying the scratch root as a projection',
+    { timeout: 30_000 },
+    async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-generic-writers-'));
+      const outputDir = join(tempRoot, 'scratch-render');
+      const firstPayloadPath = join(tempRoot, 'payload-v7.json');
+      const secondPayloadPath = join(tempRoot, 'payload-v8.json');
+      const firstCandidate = makeDevSecretPackagePayload();
+      const secondCandidate = makeDevSecretPackagePayload();
+      writeFileSync(firstPayloadPath, JSON.stringify(firstCandidate.payload), { mode: 0o600 });
+      writeFileSync(secondPayloadPath, JSON.stringify(secondCandidate.payload), { mode: 0o600 });
+
+      const first = startGenericDevRender({
+        holdLockMilliseconds: 500,
+        outputDir,
+        payloadPath: firstPayloadPath,
+        version: '7',
+      });
+      await waitForDevSyncClaim(outputDir);
+      const second = startGenericDevRender({
+        outputDir,
+        payloadPath: secondPayloadPath,
+        version: '8',
+      });
+
+      const [firstResult, secondResult] = await Promise.all([first.completed, second.completed]);
+      expect(firstResult).toMatchObject({ status: 0, stderr: '' });
+      expect(secondResult).toMatchObject({ status: 0, stderr: '' });
+      expect(readlinkSync(join(outputDir, 'current'))).toMatch(/^dev-v8-/u);
+      expect(existsSync(join(outputDir, '.intexuraos-dev-secret-projection'))).toBe(false);
+      expect(readdirSync(join(outputDir, '.sync-lock'))).toEqual([]);
+    }
+  );
+
+  it.each([
+    [
+      'missing projected version',
+      (envrcPath: string): void => {
+        writeFileSync(
+          envrcPath,
+          readFileSync(envrcPath, 'utf8').replace(
+            /^export INTEXURAOS_SECRET_PACKAGE_VERSION=.*\n/mu,
+            ''
+          ),
+          { mode: 0o600 }
+        );
+      },
+    ],
+    [
+      'wrong projected version',
+      (envrcPath: string): void => {
+        writeFileSync(
+          envrcPath,
+          readFileSync(envrcPath, 'utf8').replace(
+            /^export INTEXURAOS_SECRET_PACKAGE_VERSION=.*$/mu,
+            'export INTEXURAOS_SECRET_PACKAGE_VERSION=999'
+          ),
+          { mode: 0o600 }
+        );
+      },
+    ],
+    [
+      'missing package env member',
+      (envrcPath: string): void => {
+        writeFileSync(
+          envrcPath,
+          readFileSync(envrcPath, 'utf8').replace(
+            /^export INTEXURAOS_OPENAI_APP_API_KEY=.*\n/mu,
+            ''
+          ),
+          { mode: 0o600 }
+        );
+      },
+    ],
+    [
+      'mismatched package env member',
+      (envrcPath: string): void => {
+        writeFileSync(
+          envrcPath,
+          readFileSync(envrcPath, 'utf8').replace(
+            /^export INTEXURAOS_OPENAI_APP_API_KEY=.*$/mu,
+            "export INTEXURAOS_OPENAI_APP_API_KEY='mismatched-value'"
+          ),
+          { mode: 0o600 }
+        );
+      },
+    ],
+    [
+      'GitHub key inconsistent with metadata',
+      (_envrcPath: string, candidatePackageDir: string): void => {
+        const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+        writeFileSync(
+          join(candidatePackageDir, 'github-app-private-key.pem'),
+          privateKey.export({ format: 'pem', type: 'pkcs8' }),
+          { mode: 0o600 }
+        );
+      },
+    ],
+    [
+      'metadata env membership inconsistent with the package',
+      (_envrcPath: string, candidatePackageDir: string): void => {
+        const metadataPath = join(candidatePackageDir, 'metadata.json');
+        const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as { envNames: string[] };
+        metadata.envNames = metadata.envNames.slice(1);
+        writeFileSync(metadataPath, `${JSON.stringify(metadata)}\n`, { mode: 0o600 });
+      },
+    ],
+  ] as const)(
+    'rejects a staged DEV projection with %s before changing current',
+    (_label, corruptCandidate) => {
+      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-invalid-projection-'));
+      const packageOutputDir = join(tempRoot, 'active-projection');
+      const outputPath = join(tempRoot, '.envrc');
+      const githubKeyOutput = join(tempRoot, 'github-app.pem');
+      const activePayloadPath = join(tempRoot, 'payload-v7.json');
+      const candidatePayloadPath = join(tempRoot, 'payload-v8.json');
+      const candidateEnvrcSource = join(tempRoot, 'candidate-source.envrc');
+      const candidateKeySource = join(tempRoot, 'candidate-source-key.pem');
+      const candidateProjection = join(tempRoot, 'candidate-projection');
+      const candidateEnvrc = join(tempRoot, 'candidate.envrc');
+      const candidatePackageRoot = join(tempRoot, 'candidate-package');
+      const activeCandidate = makeDevSecretPackagePayload();
+      const replacementCandidate = makeDevSecretPackagePayload();
+      writeFileSync(activePayloadPath, JSON.stringify(activeCandidate.payload), { mode: 0o600 });
+      writeFileSync(candidatePayloadPath, JSON.stringify(replacementCandidate.payload), {
+        mode: 0o600,
+      });
+      expect(
+        syncDevPackage({
+          githubKeyOutput,
+          outputPath,
+          packageOutputDir,
+          payloadPath: activePayloadPath,
+          tempRoot,
+          version: '7',
+        }).status
+      ).toBe(0);
+      expect(
+        syncDevPackage({
+          githubKeyOutput: candidateKeySource,
+          outputPath: candidateEnvrcSource,
+          packageOutputDir: candidateProjection,
+          payloadPath: candidatePayloadPath,
+          tempRoot,
+          version: '8',
+        }).status
+      ).toBe(0);
+      const candidateRender = spawnSync(
+        process.execPath,
+        [
+          secretPackageCliPath,
+          'render',
+          '--environment',
+          'dev',
+          '--version',
+          '8',
+          '--project-id',
+          'test-project',
+          '--output-dir',
+          candidatePackageRoot,
+          '--payload-file',
+          candidatePayloadPath,
+        ],
+        { cwd: repoRoot, encoding: 'utf8' }
+      );
+      expect(candidateRender).toMatchObject({ status: 0, stderr: '' });
+      copyFileSync(candidateEnvrcSource, candidateEnvrc);
+      const candidatePackageDir = resolve(
+        candidatePackageRoot,
+        readlinkSync(join(candidatePackageRoot, 'current'))
+      );
+      corruptCandidate(candidateEnvrc, candidatePackageDir);
+      const activeTarget = readlinkSync(join(packageOutputDir, 'current'));
+
+      const promotion = spawnSync(
+        process.execPath,
+        [
+          devSecretProjectionPath,
+          '--candidate-envrc',
+          candidateEnvrc,
+          '--candidate-package-dir',
+          candidatePackageDir,
+          '--envrc-output',
+          outputPath,
+          '--github-key-output',
+          githubKeyOutput,
+          '--package-output-dir',
+          packageOutputDir,
+          '--version',
+          '8',
+        ],
+        { cwd: repoRoot, encoding: 'utf8' }
+      );
+
+      expect(promotion.status).not.toBe(0);
+      expect(promotion.stderr).toContain('DEV secret projection promotion failed');
+      expect(readlinkSync(join(packageOutputDir, 'current'))).toBe(activeTarget);
+      expectCompleteDevProjection({
+        expectedPrivateKeyPem: activeCandidate.privateKeyPem,
+        expectedVersion: '7',
+        githubKeyOutput,
+        outputPath,
+        packageOutputDir,
+      });
+    },
+    30_000
+  );
 
   it('uses one exact PROD package and renders every required runtime file', () => {
     const script = readFileSync(loadSecretsPath, 'utf8');

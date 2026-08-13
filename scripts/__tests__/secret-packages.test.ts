@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { parse as parseDotenv } from 'dotenv';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -24,7 +24,10 @@ import {
   fetchSecretPackage,
   loadSecretPackageManifest,
   publishSecretPackage,
+  reconcileSecretPackagePublish,
   renderSecretPackage,
+  resumeSecretPackagePublish,
+  unlockSecretPackagePublish,
   validateSecretPackageManifest,
   validateSecretPackagePayload,
 } from '../lib/secret-package.mjs';
@@ -57,7 +60,58 @@ interface TestSecretPackagePayload {
   files: Record<string, string>;
 }
 
+function makePublishReceipt(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    schemaVersion: 2,
+    operation: 'secret-package-publish',
+    operationId: '11111111-1111-4111-8111-111111111111',
+    state: 'pending-verification',
+    startedAt: '2026-08-13T17:00:00.000Z',
+    prePublishMaxVersion: '42',
+    environment: 'dev',
+    projectId: 'test-project',
+    secretId: 'INTEXURAOS_SECRET_PACKAGE_DEV',
+    version: '43',
+    ...overrides,
+  };
+}
+
+function versionMetadata(
+  version: string,
+  createTime = '2026-08-13T17:00:01.000Z'
+): { createTime: string; state: string; version: string } {
+  return { createTime, state: 'ENABLED', version };
+}
+
+function publishLockPath(receiptPath: string, environment = 'dev'): string {
+  const secretId =
+    environment === 'dev' ? 'INTEXURAOS_SECRET_PACKAGE_DEV' : 'INTEXURAOS_SECRET_PACKAGE_PROD';
+  return join(dirname(receiptPath), `.test-project.${secretId}.publish.lock`);
+}
+
+function makePublishLock(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    operation: 'secret-package-publish-lock',
+    environment: 'dev',
+    projectId: 'test-project',
+    secretId: 'INTEXURAOS_SECRET_PACKAGE_DEV',
+    hostname: 'test-host',
+    pid: 2147483647,
+    ...overrides,
+  };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolvePromise!: (value: T) => void;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
+
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
@@ -308,6 +362,45 @@ describe('CRC32C integrity', () => {
 });
 
 describe('Secret Manager adapter boundary', () => {
+  it('lists target version metadata without accessing payloads', async () => {
+    const execFile = vi.fn(() =>
+      JSON.stringify([
+        {
+          name: 'projects/test-project/secrets/INTEXURAOS_SECRET_PACKAGE_DEV/versions/7',
+          createTime: '2026-08-13T17:00:00.123456Z',
+          state: 'ENABLED',
+        },
+      ])
+    );
+    const adapter = createGcloudSecretManagerAdapter({ execFile });
+
+    await expect(
+      adapter.listVersions({
+        projectId: 'test-project',
+        secretId: 'INTEXURAOS_SECRET_PACKAGE_DEV',
+      })
+    ).resolves.toEqual([
+      {
+        createTime: '2026-08-13T17:00:00.123456Z',
+        state: 'ENABLED',
+        version: '7',
+      },
+    ]);
+    expect(execFile).toHaveBeenCalledWith(
+      'gcloud',
+      [
+        'secrets',
+        'versions',
+        'list',
+        'INTEXURAOS_SECRET_PACKAGE_DEV',
+        '--project',
+        'test-project',
+        '--format=json(name,createTime,state)',
+      ],
+      expect.objectContaining({ encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    );
+  });
+
   it('preserves a server CRC32C above the signed 32-bit boundary', async () => {
     const manifest = loadSecretPackageManifest({ manifestPath });
     const payload = makePayload('dev', manifest);
@@ -399,8 +492,10 @@ describe('Secret Manager adapter boundary', () => {
   it('publishes validated bytes and verifies the exact new version without logging payloads', async () => {
     const manifest = loadSecretPackageManifest({ manifestPath });
     const payload = makePayload('prod', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
     const expectedData = Buffer.from(JSON.stringify(payload), 'utf8');
     const addVersion = vi.fn(async () => ({ version: '41' }));
+    const listVersions = vi.fn(async () => [versionMetadata('40', '2026-08-13T16:59:59.000Z')]);
     const accessVersion = vi.fn(async () => ({
       data: expectedData,
       dataCrc32c: BigInt(crc32c(expectedData)),
@@ -408,11 +503,12 @@ describe('Secret Manager adapter boundary', () => {
     const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 
     const result = await publishSecretPackage({
-      adapter: { accessVersion, addVersion },
+      adapter: { accessVersion, addVersion, listVersions },
       environment: 'prod',
       manifest,
       payload,
       projectId: 'test-project',
+      receiptPath,
     });
 
     expect(addVersion).toHaveBeenCalledOnce();
@@ -427,8 +523,412 @@ describe('Secret Manager adapter boundary', () => {
       version: '41',
     });
     expect(result.version).toBe('41');
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toEqual({
+      schemaVersion: 2,
+      operation: 'secret-package-publish',
+      operationId: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u
+      ),
+      state: 'verified',
+      startedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u),
+      prePublishMaxVersion: '40',
+      environment: 'prod',
+      projectId: 'test-project',
+      secretId: 'INTEXURAOS_SECRET_PACKAGE_PROD',
+      version: '41',
+    });
+    expect(fileMode(receiptPath)).toBe('600');
     expect(consoleLog).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('fake-secret-for');
+  });
+
+  it('durably reserves the receipt before addVersion and blocks a concurrent publisher', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('dev', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    const enteredAdd = deferred<boolean>();
+    const releaseAdd = deferred<{ version: string }>();
+    const addVersion = vi.fn(async () => {
+      expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+        state: 'publishing',
+        version: null,
+      });
+      enteredAdd.resolve(true);
+      return releaseAdd.promise;
+    });
+    const first = publishSecretPackage({
+      adapter: {
+        addVersion,
+        accessVersion: vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) })),
+        listVersions: vi.fn(async () => [versionMetadata('44')]),
+      },
+      environment: 'dev',
+      manifest,
+      payload,
+      projectId: 'test-project',
+      receiptPath,
+    });
+    await enteredAdd.promise;
+
+    await expect(
+      publishSecretPackage({
+        adapter: { addVersion, accessVersion: vi.fn(), listVersions: vi.fn() },
+        environment: 'dev',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/lock|already exists/u);
+    expect(addVersion).toHaveBeenCalledOnce();
+
+    releaseAdd.resolve({ version: '45' });
+    await expect(first).resolves.toMatchObject({ version: '45' });
+  });
+
+  it('uses one package-scoped lock for different receipt paths in the same private journal', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('dev', manifest);
+    const root = makeTempDirectory();
+    const firstReceiptPath = join(root, 'first-receipt.json');
+    const secondReceiptPath = join(root, 'second-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    const enteredAdd = deferred<boolean>();
+    const releaseAdd = deferred<{ version: string }>();
+    const firstAddVersion = vi.fn(async () => {
+      enteredAdd.resolve(true);
+      return releaseAdd.promise;
+    });
+    const secondAddVersion = vi.fn(async () => ({ version: '46' }));
+    const first = publishSecretPackage({
+      adapter: {
+        addVersion: firstAddVersion,
+        accessVersion: vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) })),
+        listVersions: vi.fn(async () => [versionMetadata('44')]),
+      },
+      environment: 'dev',
+      manifest,
+      payload,
+      projectId: 'test-project',
+      receiptPath: firstReceiptPath,
+    });
+    await enteredAdd.promise;
+
+    await expect(
+      publishSecretPackage({
+        adapter: {
+          addVersion: secondAddVersion,
+          accessVersion: vi.fn(),
+          listVersions: vi.fn(),
+        },
+        environment: 'dev',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath: secondReceiptPath,
+      })
+    ).rejects.toThrow(/lock/u);
+    expect(secondAddVersion).not.toHaveBeenCalled();
+
+    releaseAdd.resolve({ version: '45' });
+    await expect(first).resolves.toMatchObject({ version: '45' });
+  });
+
+  it('keeps an ambiguous pre-response receipt and reconciles only the sole post-watermark version', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-13T17:00:00.000Z'));
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('prod', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    const addVersion = vi.fn(async () => {
+      throw new Error('response lost after commit');
+    });
+    const accessVersion = vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) }));
+    const listVersions = vi
+      .fn()
+      .mockResolvedValueOnce([versionMetadata('45', '2026-08-13T16:59:59.000Z')])
+      .mockResolvedValueOnce([
+        versionMetadata('46', '2026-08-13T17:00:01.000Z'),
+        versionMetadata('45', '2026-08-13T16:59:59.000Z'),
+      ]);
+
+    await expect(
+      publishSecretPackage({
+        adapter: { accessVersion, addVersion, listVersions },
+        environment: 'prod',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/publish failed/u);
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+      state: 'publishing',
+      version: null,
+      prePublishMaxVersion: '45',
+    });
+
+    await expect(
+      resumeSecretPackagePublish({
+        adapter: { accessVersion },
+        environment: 'prod',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/publish-reconcile/u);
+    expect(accessVersion).not.toHaveBeenCalled();
+
+    await expect(
+      reconcileSecretPackagePublish({
+        adapter: { accessVersion, listVersions },
+        environment: 'prod',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+        version: '46',
+      })
+    ).resolves.toMatchObject({ version: '46' });
+    expect(addVersion).toHaveBeenCalledOnce();
+    expect(accessVersion).toHaveBeenCalledOnce();
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+      state: 'verified',
+      version: '46',
+    });
+  });
+
+  it('rejects an old byte-identical recovery version and multiple post-watermark versions', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('dev', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    writeFileSync(
+      receiptPath,
+      `${JSON.stringify(
+        makePublishReceipt({
+          state: 'publishing',
+          version: null,
+          prePublishMaxVersion: '45',
+        })
+      )}\n`,
+      { mode: 0o600 }
+    );
+    const accessVersion = vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) }));
+    const listVersions = vi.fn(async () => [
+      versionMetadata('47'),
+      versionMetadata('46'),
+      versionMetadata('45', '2026-08-13T16:59:59.000Z'),
+    ]);
+
+    await expect(
+      reconcileSecretPackagePublish({
+        adapter: { accessVersion, listVersions },
+        environment: 'dev',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+        version: '45',
+      })
+    ).rejects.toThrow(/post-watermark|recovery version/u);
+    await expect(
+      reconcileSecretPackagePublish({
+        adapter: { accessVersion, listVersions },
+        environment: 'dev',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+        version: '47',
+      })
+    ).rejects.toThrow(/ambiguous/u);
+    expect(accessVersion).not.toHaveBeenCalled();
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+      state: 'publishing',
+      version: null,
+    });
+  });
+
+  it('keeps the receipt blocked when metadata proves no post-watermark version', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('dev', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    writeFileSync(
+      receiptPath,
+      `${JSON.stringify(
+        makePublishReceipt({ state: 'publishing', version: null, prePublishMaxVersion: '45' })
+      )}\n`,
+      { mode: 0o600 }
+    );
+    const accessVersion = vi.fn();
+
+    await expect(
+      reconcileSecretPackagePublish({
+        adapter: {
+          accessVersion,
+          listVersions: vi.fn(async () => [versionMetadata('45', '2026-08-13T16:59:59.000Z')]),
+        },
+        environment: 'dev',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+        version: '46',
+      })
+    ).rejects.toThrow(/ambiguous/u);
+    expect(accessVersion).not.toHaveBeenCalled();
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+      state: 'publishing',
+      version: null,
+    });
+  });
+
+  it.each([
+    ['after-publish-lock-link', 'unreserved'],
+    ['after-publish-receipt-link', 'publishing'],
+  ])('leaves only a complete crash-recoverable journal at %s', async (failpoint, state) => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    const addVersion = vi.fn();
+
+    await expect(
+      publishSecretPackage({
+        adapter: {
+          accessVersion: vi.fn(),
+          addVersion,
+          listVersions: vi.fn(async () => [versionMetadata('44')]),
+        },
+        environment: 'dev',
+        failpoint: (name: string) => {
+          if (name === failpoint) throw new Error(`crash:${name}`);
+        },
+        manifest,
+        payload: makePayload('dev', manifest),
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/lock is unavailable|reservation failed/u);
+    expect(addVersion).not.toHaveBeenCalled();
+
+    if (state === 'publishing') {
+      expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+        schemaVersion: 2,
+        state: 'publishing',
+        version: null,
+      });
+    } else {
+      expect(JSON.parse(readFileSync(publishLockPath(receiptPath), 'utf8'))).toMatchObject({
+        schemaVersion: 1,
+        operation: 'secret-package-publish-lock',
+        environment: 'dev',
+        projectId: 'test-project',
+        secretId: 'INTEXURAOS_SECRET_PACKAGE_DEV',
+        pid: process.pid,
+      });
+    }
+  });
+
+  it.each([
+    ['after-add-version-response', 'publishing', null],
+    ['after-pending-receipt', 'pending-verification', '45'],
+  ])('retains a recoverable receipt at %s', async (failpoint, state, version) => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('dev', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    const addVersion = vi.fn(async () => ({ version: '45' }));
+
+    await expect(
+      publishSecretPackage({
+        adapter: {
+          accessVersion: vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) })),
+          addVersion,
+          listVersions: vi.fn(async () => [versionMetadata('44')]),
+        },
+        environment: 'dev',
+        failpoint: (name: string) => {
+          if (name === failpoint) throw new Error(`crash:${name}`);
+        },
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/crash:/u);
+    expect(addVersion).toHaveBeenCalledOnce();
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({ state, version });
+    expect(() => lstatSync(publishLockPath(receiptPath))).toThrow();
+  });
+
+  it('removes only a same-host dead-process publish lock before crash recovery', () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    const receiptPath = join(root, 'publish-receipt.json');
+    writeFileSync(
+      receiptPath,
+      `${JSON.stringify(makePublishReceipt({ state: 'publishing', version: null }))}\n`,
+      { mode: 0o600 }
+    );
+    writeFileSync(publishLockPath(receiptPath), `${JSON.stringify(makePublishLock())}\n`, {
+      mode: 0o600,
+    });
+
+    expect(
+      unlockSecretPackagePublish({
+        environment: 'dev',
+        hostname: 'test-host',
+        manifest,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).toMatchObject({ state: 'publishing', unlocked: true });
+    expect(() => lstatSync(publishLockPath(receiptPath))).toThrow();
+  });
+
+  it('reports an unreserved crashed lock as safe for a fresh publication', () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    writeFileSync(publishLockPath(receiptPath), `${JSON.stringify(makePublishLock())}\n`, {
+      mode: 0o600,
+    });
+
+    expect(
+      unlockSecretPackagePublish({
+        environment: 'dev',
+        hostname: 'test-host',
+        manifest,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).toMatchObject({ state: 'unreserved', unlocked: true });
+  });
+
+  it.each([
+    ['a live owner', 'test-host', process.pid, /still running/u],
+    ['a different host', 'different-host', 2147483647, /different host/u],
+  ])('refuses to unlock a publish journal owned by %s', (_name, lockHostname, pid, error) => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    writeFileSync(
+      publishLockPath(receiptPath),
+      `${JSON.stringify(makePublishLock({ hostname: lockHostname, pid }))}\n`,
+      { mode: 0o600 }
+    );
+
+    expect(() =>
+      unlockSecretPackagePublish({
+        environment: 'dev',
+        hostname: 'test-host',
+        manifest,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).toThrow(error);
+    expect(lstatSync(publishLockPath(receiptPath)).isFile()).toBe(true);
   });
 
   it.each([
@@ -452,20 +952,23 @@ describe('Secret Manager adapter boundary', () => {
   ])('rejects a published version when $name', async ({ observe, error }) => {
     const manifest = loadSecretPackageManifest({ manifestPath });
     const payload = makePayload('dev', manifest);
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
     const expectedData = Buffer.from(JSON.stringify(payload), 'utf8');
     const addVersion = vi.fn(async () => ({
       version: '42',
       dataCrc32c: crc32cBase64(expectedData),
     }));
     const accessVersion = vi.fn(async () => observe(expectedData));
+    const listVersions = vi.fn(async () => [versionMetadata('41')]);
 
     await expect(
       publishSecretPackage({
-        adapter: { accessVersion, addVersion },
+        adapter: { accessVersion, addVersion, listVersions },
         environment: 'dev',
         manifest,
         payload,
         projectId: 'test-project',
+        receiptPath,
       })
     ).rejects.toThrow(error);
     expect(accessVersion).toHaveBeenCalledWith({
@@ -474,9 +977,263 @@ describe('Secret Manager adapter boundary', () => {
       version: '42',
     });
   });
+
+  it('persists the numeric version before readback failure and resumes without adding a version', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const payload = makePayload('dev', manifest);
+    const expectedData = Buffer.from(JSON.stringify(payload), 'utf8');
+    const receiptPath = join(makeTempDirectory(), 'publish-receipt.json');
+    const addVersion = vi.fn(async () => ({ version: '43' }));
+    const listVersions = vi.fn(async () => [versionMetadata('42')]);
+    const accessVersion = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toEqual({
+          schemaVersion: 2,
+          operation: 'secret-package-publish',
+          operationId: expect.any(String),
+          state: 'pending-verification',
+          startedAt: expect.any(String),
+          prePublishMaxVersion: '42',
+          environment: 'dev',
+          projectId: 'test-project',
+          secretId: 'INTEXURAOS_SECRET_PACKAGE_DEV',
+          version: '43',
+        });
+        throw new Error('transient readback failure');
+      })
+      .mockResolvedValueOnce({
+        data: expectedData,
+        dataCrc32c: crc32cBase64(expectedData),
+      })
+      .mockResolvedValueOnce({
+        data: expectedData,
+        dataCrc32c: crc32cBase64(expectedData),
+      });
+
+    await expect(
+      publishSecretPackage({
+        adapter: { accessVersion, addVersion, listVersions },
+        environment: 'dev',
+        manifest,
+        payload,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/verification failed/u);
+
+    const pendingReceipt = readFileSync(receiptPath, 'utf8');
+    expect(fileMode(receiptPath)).toBe('600');
+    expect(pendingReceipt).not.toContain('fake-secret-for');
+    expect(pendingReceipt).not.toMatch(/crc|digest|payload/iu);
+
+    const differentPayload = makePayload('dev', manifest);
+    differentPayload.env.INTEXURAOS_FIREBASE_API_KEY = `AIza${'z'.repeat(35)}`;
+    await expect(
+      resumeSecretPackagePublish({
+        adapter: { accessVersion },
+        environment: 'dev',
+        manifest,
+        payload: differentPayload,
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/bytes/u);
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+      state: 'pending-verification',
+      version: '43',
+    });
+
+    const result = await resumeSecretPackagePublish({
+      adapter: { accessVersion },
+      environment: 'dev',
+      manifest,
+      payload,
+      projectId: 'test-project',
+      receiptPath,
+    });
+
+    expect(result).toMatchObject({
+      environment: 'dev',
+      secretId: 'INTEXURAOS_SECRET_PACKAGE_DEV',
+      version: '43',
+    });
+    expect(addVersion).toHaveBeenCalledOnce();
+    expect(accessVersion).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toMatchObject({
+      state: 'verified',
+      version: '43',
+    });
+  });
+
+  it('requires a new private receipt destination before adding a version', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const addVersion = vi.fn(async () => ({ version: '44' }));
+    const accessVersion = vi.fn();
+
+    await expect(
+      publishSecretPackage({
+        adapter: { accessVersion, addVersion, listVersions: vi.fn() },
+        environment: 'dev',
+        manifest,
+        payload: makePayload('dev', manifest),
+        projectId: 'test-project',
+      })
+    ).rejects.toThrow(/receipt path/u);
+    expect(addVersion).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: 'an existing regular file', mode: 0o600, symlink: false, error: /already exists/u },
+    { name: 'a symbolic link', mode: 0o600, symlink: true, error: /regular non-symlink/u },
+    { name: 'group-readable permissions', mode: 0o640, symlink: false, error: /permissions/u },
+  ])(
+    'rejects a publish receipt destination containing $name before adding a version',
+    async ({ mode, symlink, error }) => {
+      const manifest = loadSecretPackageManifest({ manifestPath });
+      const root = makeTempDirectory();
+      const targetPath = join(root, 'receipt-target.json');
+      const receiptPath = join(root, 'publish-receipt.json');
+      writeFileSync(targetPath, '{}\n', { mode: 0o600 });
+      if (symlink) {
+        symlinkSync(targetPath, receiptPath);
+      } else {
+        writeFileSync(receiptPath, '{}\n', { mode: 0o600 });
+        chmodSync(receiptPath, mode);
+      }
+      const addVersion = vi.fn(async () => ({ version: '44' }));
+
+      await expect(
+        publishSecretPackage({
+          adapter: { accessVersion: vi.fn(), addVersion, listVersions: vi.fn() },
+          environment: 'dev',
+          manifest,
+          payload: makePayload('dev', manifest),
+          projectId: 'test-project',
+          receiptPath,
+        })
+      ).rejects.toThrow(error);
+      expect(addVersion).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects a non-private publish receipt parent before adding a version', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    chmodSync(root, 0o750);
+    const addVersion = vi.fn(async () => ({ version: '44' }));
+
+    await expect(
+      publishSecretPackage({
+        adapter: { accessVersion: vi.fn(), addVersion, listVersions: vi.fn() },
+        environment: 'dev',
+        manifest,
+        payload: makePayload('dev', manifest),
+        projectId: 'test-project',
+        receiptPath: join(root, 'publish-receipt.json'),
+      })
+    ).rejects.toThrow(/parent directory must be private/u);
+    expect(addVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-private resume receipt parent before version access', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    const receiptPath = join(root, 'publish-receipt.json');
+    writeFileSync(receiptPath, `${JSON.stringify(makePublishReceipt())}\n`, { mode: 0o600 });
+    chmodSync(root, 0o750);
+    const accessVersion = vi.fn();
+
+    await expect(
+      resumeSecretPackagePublish({
+        adapter: { accessVersion },
+        environment: 'dev',
+        manifest,
+        payload: makePayload('dev', manifest),
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/parent directory must be private/u);
+    expect(accessVersion).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { name: 'a symbolic link', mode: 0o600, symlink: true, error: /regular non-symlink/u },
+    { name: 'group-readable permissions', mode: 0o640, symlink: false, error: /permissions/u },
+  ])('rejects a resume receipt that has $name', async ({ mode, symlink, error }) => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    const targetPath = join(root, 'receipt-target.json');
+    const receiptPath = join(root, 'publish-receipt.json');
+    writeFileSync(targetPath, `${JSON.stringify(makePublishReceipt())}\n`, { mode: 0o600 });
+    if (symlink) {
+      symlinkSync(targetPath, receiptPath);
+    } else {
+      writeFileSync(receiptPath, readFileSync(targetPath), { mode: 0o600 });
+      chmodSync(receiptPath, mode);
+    }
+    const accessVersion = vi.fn();
+
+    await expect(
+      resumeSecretPackagePublish({
+        adapter: { accessVersion },
+        environment: 'dev',
+        manifest,
+        payload: makePayload('dev', manifest),
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(error);
+    expect(accessVersion).not.toHaveBeenCalled();
+  });
+
+  it('rejects receipt metadata for a different project before version access', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    const receiptPath = join(root, 'publish-receipt.json');
+    writeFileSync(
+      receiptPath,
+      `${JSON.stringify(makePublishReceipt({ projectId: 'other-project' }))}\n`,
+      { mode: 0o600 }
+    );
+    const accessVersion = vi.fn();
+
+    await expect(
+      resumeSecretPackagePublish({
+        adapter: { accessVersion },
+        environment: 'dev',
+        manifest,
+        payload: makePayload('dev', manifest),
+        projectId: 'test-project',
+        receiptPath,
+      })
+    ).rejects.toThrow(/does not match/u);
+    expect(accessVersion).not.toHaveBeenCalled();
+  });
 });
 
 describe('atomic rendering', () => {
+  it('binds the DEV writer lock to the running executable instead of a caller argv entrypoint', () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const outputDir = makeTempDirectory();
+    const originalArgv = process.argv;
+
+    try {
+      process.argv = [process.execPath, '/tmp/not-the-running-process-entrypoint.mjs'];
+      renderSecretPackage({
+        environment: 'dev',
+        manifest,
+        outputDir,
+        payload: makePayload('dev', manifest),
+        version: 7,
+      });
+    } finally {
+      process.argv = originalArgv;
+    }
+
+    expect(lstatSync(join(outputDir, 'current')).isSymbolicLink()).toBe(true);
+  });
+
   it.each(['dev', 'prod'] as const)(
     'renders %s into an immutable release and atomically switches current',
     (environment) => {
@@ -648,10 +1405,12 @@ describe('secret package CLI', () => {
     const root = makeTempDirectory();
     const payload = makePayload('prod', manifest);
     const payloadPath = join(root, 'payload.json');
+    const receiptPath = join(root, 'publish-receipt.json');
     const fetchedPath = join(root, 'fetched.json');
     const data = Buffer.from(JSON.stringify(payload), 'utf8');
     writeFileSync(payloadPath, data, { mode: 0o600 });
     const addVersion = vi.fn(async () => ({ version: '12' }));
+    const listVersions = vi.fn(async () => [versionMetadata('11')]);
     const accessVersion = vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) }));
     const output: string[] = [];
 
@@ -665,8 +1424,14 @@ describe('secret package CLI', () => {
           'test-project',
           '--payload-file',
           payloadPath,
+          '--receipt-file',
+          receiptPath,
         ],
-        { adapter: { accessVersion, addVersion }, manifest, stdout: (line) => output.push(line) }
+        {
+          adapter: { accessVersion, addVersion, listVersions },
+          manifest,
+          stdout: (line) => output.push(line),
+        }
       )
     ).toBe(0);
     expect(
@@ -695,6 +1460,120 @@ describe('secret package CLI', () => {
       expect.objectContaining({ environment: 'prod', version: '12' }),
       expect.objectContaining({ environment: 'prod', version: '12' }),
     ]);
+  });
+
+  it('resumes CLI publication from the receipt without invoking addVersion again', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    const payload = makePayload('dev', manifest);
+    const payloadPath = join(root, 'payload.json');
+    const receiptPath = join(root, 'publish-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    writeFileSync(payloadPath, data, { mode: 0o600 });
+    const addVersion = vi.fn(async () => ({ version: '13' }));
+    const listVersions = vi.fn(async () => [versionMetadata('12')]);
+    const accessVersion = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('transient readback failure'))
+      .mockResolvedValueOnce({ data, dataCrc32c: crc32cBase64(data) });
+    const output: string[] = [];
+
+    await expect(
+      runSecretPackageCli(
+        [
+          'publish',
+          '--environment',
+          'dev',
+          '--project-id',
+          'test-project',
+          '--payload-file',
+          payloadPath,
+          '--receipt-file',
+          receiptPath,
+        ],
+        {
+          adapter: { accessVersion, addVersion, listVersions },
+          manifest,
+          stdout: (line) => output.push(line),
+        }
+      )
+    ).rejects.toThrow(/verification failed/u);
+
+    await expect(
+      runSecretPackageCli(
+        [
+          'publish-resume',
+          '--environment',
+          'dev',
+          '--project-id',
+          'test-project',
+          '--payload-file',
+          payloadPath,
+          '--receipt-file',
+          receiptPath,
+        ],
+        { adapter: { accessVersion }, manifest, stdout: (line) => output.push(line) }
+      )
+    ).resolves.toBe(0);
+
+    expect(addVersion).toHaveBeenCalledOnce();
+    expect(accessVersion).toHaveBeenCalledTimes(2);
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0] ?? '{}')).toMatchObject({
+      command: 'publish-resume',
+      environment: 'dev',
+      version: '13',
+    });
+    expect(output[0]).not.toContain('fake-secret-for');
+  });
+
+  it('routes ambiguous CLI recovery only through publish-reconcile', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const root = makeTempDirectory();
+    const payload = makePayload('dev', manifest);
+    const payloadPath = join(root, 'payload.json');
+    const receiptPath = join(root, 'publish-receipt.json');
+    const data = Buffer.from(JSON.stringify(payload), 'utf8');
+    writeFileSync(payloadPath, data, { mode: 0o600 });
+    writeFileSync(
+      receiptPath,
+      `${JSON.stringify(
+        makePublishReceipt({ state: 'publishing', version: null, prePublishMaxVersion: '12' })
+      )}\n`,
+      { mode: 0o600 }
+    );
+    const accessVersion = vi.fn(async () => ({ data, dataCrc32c: crc32cBase64(data) }));
+    const listVersions = vi.fn(async () => [versionMetadata('13')]);
+    const output: string[] = [];
+
+    await expect(
+      runSecretPackageCli(
+        [
+          'publish-reconcile',
+          '--environment',
+          'dev',
+          '--project-id',
+          'test-project',
+          '--payload-file',
+          payloadPath,
+          '--receipt-file',
+          receiptPath,
+          '--version',
+          '13',
+        ],
+        {
+          adapter: { accessVersion, listVersions },
+          manifest,
+          stdout: (line) => output.push(line),
+        }
+      )
+    ).resolves.toBe(0);
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0] ?? '{}')).toMatchObject({
+      command: 'publish-reconcile',
+      environment: 'dev',
+      version: '13',
+    });
   });
 
   it('accepts private payload inputs with mode 0600 or more restrictive', async () => {

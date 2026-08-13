@@ -40,7 +40,9 @@ contract. It has `schemaVersion: 1`, a `packages.dev` and `packages.prod`
 record, and `nativeSecretNames`. Each package record declares:
 
 - `secretId`: the physical container name;
-- `stableVersion`: a positive numeric version that has passed promotion;
+- `stableVersion`: the positive numeric candidate selected in reviewed desired
+  state before deployment; promotion is proved separately by successful runtime
+  smoke evidence;
 - `envNames`: the exact environment-variable member set;
 - `files`: the exact base64-encoded file member set.
 
@@ -143,8 +145,11 @@ code worker.
   version; never attempt per-member repair.
 - Validate CRC32C on upload and download. A mismatch fails closed and leaves
   active files untouched.
-- `stableVersion` moves only in a reviewed manifest change after candidate
-  verification. Publishing a version does not promote it.
+- `stableVersion` moves in a reviewed desired-state change after offline
+  candidate verification and before deployment, together with the Terraform
+  and protected workflow pins. Publishing or selecting a version does not
+  promote it; only successful runtime smoke evidence does. Compensation restores
+  all three pins to the recorded prior version.
 - Record secret ID, numeric version, payload byte count, member counts, CRC32C
   result, principal, timestamp, commit, and pass/fail only.
 
@@ -217,6 +222,15 @@ unknown members, and any attempt to mix base mode with the initial-migration
 external flags. Secret values remain in private files, never in CLI arguments,
 stdout, or stderr.
 
+For a simulated or actual lost-container recovery, omit `--base-version` and
+provide the complete package manifest as private files: one
+`--override-env NAME=<mode-0600-file>` for every `envNames` member and one
+`--override-file NAME=<mode-0600-file>` for every `files` member. In this mode
+the builder does not call Secret Manager. It rejects partial, extra, unknown,
+or duplicate member sets rather than falling back to a legacy source. Build
+the repeated arguments from the reviewed recovery inventory without placing
+values in shell history, command output, evidence, or the repository.
+
 1. Select the target environment and record the current `stableVersion` as the
    rollback version.
 2. For the initial build, resolve every manifest member from the reviewed
@@ -226,20 +240,34 @@ stdout, or stderr.
 3. Create the candidate payload without printing it. Base64-encode multiline
    file material exactly once.
 4. Run the package validator. A missing or extra member blocks publication.
-5. Publish through the package CLI, which streams the payload to `gcloud`
-   without placing it in an argument or log. Capture the returned numeric
-   version and CRC32C result.
-6. Fetch that exact numeric version into a different mode-`0600` staging path
+5. Publish through the package CLI with a new private receipt path. The CLI
+   first takes a package-scoped local journal lock, records the target's current
+   maximum numeric version, and durably reserves a complete `publishing`
+   receipt. It then streams the payload to `gcloud` without placing it in an
+   argument or log and records the returned numeric version before readback.
+6. If publication stops, preserve the candidate and receipt. Resume a
+   `pending-verification` receipt directly. For an ambiguous `publishing`
+   receipt, reconcile the exact version from Secret Manager metadata/audit
+   evidence with `publish-reconcile`; neither recovery command creates a second
+   version.
+7. Fetch that exact numeric version into a different mode-`0600` staging path
    and validate it again.
-7. Run shadow comparison with legacy values. Evidence may show only the
+8. Run shadow comparison with legacy values. Evidence may show only the
    package-level `MATCH`/`MISMATCH` result; the comparison uses an ephemeral
    HMAC key and must not persist digests.
-8. Render each required consumer projection to staging. Validate names,
+9. Render each required consumer projection to staging. Validate names,
    ownership, modes, parsability, and service-specific allowlists without
    printing content.
-9. Run environment smoke tests. Only after all gates pass, update
-   `stableVersion` to the candidate's numeric version in a reviewed commit.
-10. Delete candidate, fetch, render, and HMAC staging material.
+10. Before deployment, update `stableVersion`, the Terraform bootstrap pin, and
+    the protected workflow variable to the candidate's numeric version as one
+    reviewed desired-state change. `stableVersion` is the selected deployment
+    target, not proof that the candidate already passed production smoke.
+11. Run environment smoke tests. Only after all gates pass may deployment
+    evidence call that selected version promoted. If deployment compensates to
+    the previous release, immediately restore all three desired-state pins in a
+    reviewed recovery change; never leave a failed candidate recorded as stable.
+12. Delete candidate, fetch, render, and HMAC staging material. Retain or archive
+    the verified metadata-only receipt according to the change evidence policy.
 
 The exact command contracts are:
 
@@ -247,7 +275,18 @@ The exact command contracts are:
 node scripts/secret-package.mjs validate \
   --environment <dev-or-prod> --payload-file <candidate>
 node scripts/secret-package.mjs publish \
-  --environment <dev-or-prod> --project-id <project-id> --payload-file <candidate>
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <candidate> --receipt-file <private-receipt>
+node scripts/secret-package.mjs publish-resume \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <candidate> --receipt-file <private-receipt>
+node scripts/secret-package.mjs publish-reconcile \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <candidate> --receipt-file <private-receipt> \
+  --version <exact-recovery-version>
+node scripts/secret-package.mjs publish-unlock \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --receipt-file <private-receipt>
 node scripts/secret-package.mjs fetch \
   --environment <dev-or-prod> --version <numeric-version> \
   --project-id <project-id> --output <private-file>
@@ -265,8 +304,105 @@ the generic package `current` inside the selected render root; consumers read
 only `current/environment.env` and their allowlisted file(s). Production has a
 second, independently managed runtime projection `current`: staging a complete
 target projection does not switch that runtime pointer or its stable file
-links. Never bypass the CLI with direct `gcloud secrets versions access` or
-`gcloud secrets versions add` in an operational procedure.
+links. DEV also reserves
+`${HOME}/.config/intexuraos/secret-packages/dev` for the four-file projection
+published by `sync-secrets.sh`; never select that projection root for a generic
+render. Use a distinct mode-`0700` scratch render root and remove it after
+validation. Never bypass the CLI with direct
+`gcloud secrets versions access` or `gcloud secrets versions add` in an
+operational procedure.
+
+### Interrupted Publication Recovery
+
+The receipt must live below one canonical private journal parent: an
+owner-writable mode-`0700` directory on a local filesystem that provides hard
+links and durable directory `fsync`. Use one publisher/freeze for the package.
+The exclusive mode-`0600` lock name is derived from project and package secret
+ID, not from the receipt filename, so two different receipt paths in this same
+parent cannot publish concurrently. A different parent or host is outside that
+local lock domain and is forbidden for the operation.
+
+`publish` rejects an existing destination, symbolic link, non-regular file, or
+file with group/other access. Under the package lock, it lists only the target
+package's version metadata and records the greatest numeric ID as
+`prePublishMaxVersion` (`0` for an empty container). It then writes a complete
+private temporary inode, synchronizes it, installs the final pathname with a
+no-replace hard link, and synchronizes the parent. The same complete-inode
+reservation applies to the lock. `addVersion` is not called until the final
+receipt is durable. A power loss therefore leaves either no reserved receipt
+before any add or a complete schema-v2 receipt in state `publishing` with
+`version: null`, never a partially written final receipt.
+
+The schema-v2 receipt binds the operation with a UUID-v4 `operationId`, the
+canonical UTC `startedAt`, and `prePublishMaxVersion`. It also contains exactly
+schema/operation, state, environment, project ID, package secret ID, and a
+positive numeric version or `null` while the response is ambiguous. It contains
+no payload, member value, base64, checksum, digest, credential, or private-file
+path. Do not paste or print the candidate while diagnosing a failed
+publication.
+
+Immediately after `addVersion` returns and before the first exact-version
+readback, `publish` atomically changes the receipt to `pending-verification`
+with the returned positive numeric version. A successful server CRC32C and
+byte-for-byte readback changes only its state to `verified`.
+
+When the first command fails with a durable `pending-verification` receipt:
+
+1. Freeze the candidate and receipt; do not edit or replace either file.
+2. Confirm both remain private regular non-symlink files and that the explicit
+   environment/project still match the approved change.
+3. Run `publish-resume` with those same paths. It validates the complete
+   candidate, rejects mismatched receipt metadata, reads only the recorded
+   numeric version, verifies server CRC32C and exact bytes, and atomically marks
+   the receipt `verified`.
+4. Continue with the independent exact-version fetch and remaining promotion
+   gates only after resume succeeds.
+
+When the receipt remains in state `publishing`, the request may have committed
+even though the client did not receive the response. Do not call `publish`
+again, and do not use `publish-resume`. Freeze the candidate and publication
+window, inspect metadata-only Secret Manager version listing plus Data
+Access/Admin Activity audit evidence, and run `publish-reconcile` with
+`--version <exact-recovery-version>`.
+
+Before accessing payload bytes, reconciliation requires exactly one observed
+version ID greater than `prePublishMaxVersion`. That sole candidate must equal
+the explicit recovery version and its creation timestamp must be equal to or
+later than `startedAt`. Only then does it access that exact version, validate
+the server CRC32C and bytes, and atomically record it as `verified`. This rejects
+an old byte-identical version. Zero or multiple post-watermark versions, a
+predating timestamp, a wrong explicit version, or a byte mismatch leaves the
+ambiguous receipt unchanged and blocked.
+
+There is no supported `publish-abort`. Even zero currently visible
+post-watermark versions is not treated as sufficiently robust proof that no
+version committed. Preserve the receipt and stop/escalate for manual audit
+reconciliation; do not delete or replace it, choose another journal parent, or
+create another version.
+
+A hard crash may leave the local journal lock. On the same host, first verify
+that the PID recorded in the mode-`0600` lock is no longer running, then use
+`publish-unlock` with the same environment, project, and receipt path. It
+refuses a live PID or mismatched identity. Unlocking never reads a payload,
+creates a version, or changes the receipt. A result of `publishing` must be
+followed by `publish-reconcile`; `pending-verification` or `verified`
+must be followed by `publish-resume`. A result of `unreserved` means the process
+stopped before the synchronized receipt reservation and therefore before
+`addVersion`; only that result permits a new `publish` using the same canonical
+receipt path and parent.
+
+The operator must not run `publish` again for a candidate that has a receipt;
+that would request another immutable version. A second receipt path or second
+publisher is not a retry mechanism. `publish-resume` deliberately has no
+`addVersion` capability and is safe to repeat for a `verified` receipt;
+`publish-reconcile` accepts only an ambiguous `publishing` receipt. If the
+receipt cannot be reserved or its integrity/private-file checks fail, stop
+publication and reconcile version-creation metadata through approved Secret
+Manager audit/console evidence before any further add operation. Each dedicated
+publisher has resource-level `roles/secretmanager.viewer` only on its own target
+package for metadata listing, in addition to version creation; it receives no
+opposite-environment package access and no payload access through the viewer
+role.
 
 ## Rendering And Promotion
 
@@ -274,7 +410,10 @@ Rendering has two atomic layers:
 
 1. **Generic package render:** fetch and validate an exact numeric version,
    write an immutable release through private staging, then atomically switch
-   the generic package `current` only after every member passes validation.
+   the generic package `current` only after every member passes validation. DEV
+   generic render and projection sync share one root-local writer lock; an empty
+   lock directory is valid in a scratch root, while only the durable projection
+   marker forbids later generic rendering.
 2. **Consumer projection:** construct and validate the target-specific staging
    release. For production, `--stage-only` leaves the runtime projection
    `current` and stable runtime links unchanged; `--activate` switches them as
@@ -368,15 +507,75 @@ Rotate a provider credential as a whole-package change:
 3. Render, but do not activate, `/etc/intexuraos/.env.prod`, the runtime SA JSON,
    nginx internal-auth token, certbot/Cloudflare credential, TLS key, and the
    ephemeral web-build environment. Validate owner/mode and member allowlists.
-4. Run token issuance and minimal Firestore preflight directly against the
-   staged runtime key without changing the runtime projection `current` or
-   stable runtime links. The generic package `current` may already point at the
-   validated candidate.
-5. Atomically promote the complete projection, reload only `code-agent` with
+4. Run the complete candidate credential canary directly against the staged
+   runtime key without changing the runtime projection `current` or stable
+   runtime links: obtain a token; perform Firestore `listCollectionIds`; list at
+   most one entry from `intexuraos-images-dev` while returning only the response
+   kind; query only the Firebase Auth account count with
+   `returnUserInfo=false`; and publish one constant redacted message to
+   `intexuraos-runtime-credential-canary-dev`. That Terraform-owned topic has no
+   subscription, and the publish proof must contain one server message ID.
+5. Verify the packaged Cloudflare token is active, resolves only the expected
+   account/zone, and can list DNS records on that zone. Complete the
+   package-bound Cloudflare DNS Edit attestation below before this read-only
+   proof. All API bodies and credentials remain outside logs and evidence.
+6. Atomically promote the complete projection, reload only `code-agent` with
    the candidate environment, and require its semantic health including the
    Firestore check. Only then reload the complete PM2 fleet/nginx and run the
    remaining direct-origin and public smoke suite.
-6. Attest the commit and exact PROD numeric version without payload data.
+7. Attest the commit and exact PROD numeric version without payload data.
+
+#### Cloudflare DNS Edit attestation
+
+Cloudflare's non-mutating DNS-record list accepts either `DNS Read` or
+`DNS Edit`, so the API proof cannot distinguish `DNS Read` from `DNS Edit`.
+Do not create/delete a DNS record merely to test the candidate. Instead, bind a
+human-reviewed policy assertion to the token ID returned by Cloudflare's
+read-only token-verification endpoint.
+
+For every PROD package version `<VERSION>`:
+
+1. In Cloudflare **My Profile → API Tokens**, open the dedicated certificate
+   token without copying its value. Verify `Zone DNS Edit` and `Zone Read`, both
+   scoped to the single active `intexuraos.cloud` zone in account
+   `e4bc566c37e21368bffb131d2ac69358`. Record the non-secret 32-character token
+   ID, reviewer, UTC timestamp, and change-record reference.
+2. On Hetzner, retain a root-managed directory
+   `/etc/intexuraos/cloudflare-dns-attestations` with mode `0700`. Write the
+   following non-secret document as
+   `prod-v<VERSION>.json` with mode `0600`; preserve one file per rollback
+   version:
+
+   ```json
+   {
+     "schemaVersion": 1,
+     "environment": "prod",
+     "packageVersion": "<VERSION>",
+     "accountId": "e4bc566c37e21368bffb131d2ac69358",
+     "zoneName": "intexuraos.cloud",
+     "permission": "Zone DNS Edit",
+     "resourceScope": "exact-zone",
+     "tokenId": "<32-character-token-id>",
+     "verifiedAt": "<UTC-RFC3339>",
+     "verifiedBy": "<operator-identity>",
+     "evidenceReference": "<change-record-reference>"
+   }
+   ```
+
+3. Run the loader preflight. It checks directory/file type and mode, exact
+   package/account/zone fields, active token status and matching token ID, exact
+   active-zone resolution, and a read-only DNS-record list. The review timestamp
+   may be no more than 24 hours old and no more than five minutes in the future.
+   A missing, malformed, mismatched, or stale-review replacement document must
+   stop before activation; never bypass the gate in a production deployment.
+4. The loader cannot observe later policy edits. Re-open and re-attest the token
+   for every package version and before deliberately reactivating an old version
+   with `--activate`. Automated compensation uses `--rollback` to restore only
+   the previously recorded, already verified projection without depending on a
+   current Cloudflare attestation or external API availability; the deploy
+   wrapper then immediately runs the complete post-switch health suite.
+   The `SKIP_CLOUDFLARE_CREDENTIAL_SMOKE` switch exists only for isolated
+   offline tests, never for a deployment or recovery.
 
 The required target modes are documented in the
 [Hetzner production runbook](./hetzner-prod-runbook.md).
@@ -384,9 +583,47 @@ The required target modes are documented in the
 ## Version Reconciliation Gate
 
 A promotion is not closed until every independently persisted version pin has
-been reconciled. Candidate deployment may temporarily use a new numeric version
-while the reviewed `stableVersion` still identifies the prior release, but that
-state is never final evidence.
+been reconciled. For PROD, the reviewed manifest, Terraform bootstrap input,
+and protected workflow variable select the same candidate before any remote
+mutation; this is desired state, not a claim that production smoke already
+passed. Runtime pointers and public evidence join that value only after
+activation. A failed deployment must compensate runtime and restore the three
+desired-state pins to the recorded prior version in a reviewed recovery change.
+
+### Ordered compensated-deployment pin recovery
+
+After the deployment wrapper has restored the recorded prior runtime release,
+recover the three desired-state pins in this order:
+
+1. Impose a release freeze: freeze automatic production deployment dispatches
+   by stopping merges/pushes to `development`, and cancel every queued deploy.
+   Do not cancel the compensation process that is restoring runtime.
+2. Verify the runtime projection `current`, stable runtime links, Alloy, PM2,
+   nginx, and `/deployment.json` all identify the recorded prior version. If
+   compensation did not complete, treat this as an incident and do not mutate
+   any pin.
+3. In repository settings, set `PROD_SECRET_PACKAGE_VERSION` to the recorded
+   prior version. Changing the protected repository variable does not itself
+   dispatch a workflow.
+4. Revert both tracked pins in one reviewed commit:
+   `packages.prod.stableVersion` in
+   `config/environments/secret-packages.json` and
+   `prod_secret_package_version` in
+   `terraform/hetzner-prod/prod.auto.tfvars.json`. The commit must contain no
+   unrelated desired-state change.
+5. Merge that recovery commit as the only permitted `development` change. Its
+   deployment must pass the pre-remote three-pin verifier, observe the already
+   restored prior projection, and complete the full health and public
+   attestation checks without changing to the failed candidate.
+6. Record the repository-variable audit event, recovery commit, workflow run,
+   three numeric pin values, runtime pointer, and attestation result. Resume
+   deployment dispatches only after every source equals the recorded prior
+   version and the recovery run is green.
+
+Never revert the tracked pins first: that push would start with the candidate
+still selected by the protected repository variable and must fail the
+pre-remote gate. Never leave the repository variable on the failed candidate
+while the tracked desired state records the prior release.
 
 - For DEV, compare `packages.dev.stableVersion`, the numeric version selected by
   local/home-dev sync, the generic package `current/metadata.json`, the
@@ -490,15 +727,14 @@ Hetzner runtime key is a bounded compatibility exception.
    `private_key_id`, and parseability; never log the private key.
 4. Fetch the new numeric version, stage the rendered file, install it as
    `/home/deploy/runtime-sa-key.json` with mode `0600`, and obtain a token.
-5. Run the minimum canary matrix: obtain a token without printing it; perform
-   the Firestore `listCollectionIds` read; create, read, and delete one zero-byte
-   object under a change-specific canary prefix in each of
-   `intexuraos-whatsapp-media-dev`, `intexuraos-shared-content-dev`, and
-   `intexuraos-images-dev`; publish one redacted change-ID event to a
-   pre-approved no-production-effect canary topic named in the change record and
-   require a message ID; and read metadata for the pre-approved synthetic
-   Firebase Auth account without modifying it. Stop if a safe topic/account is
-   not approved before the window.
+5. Run the same non-printing candidate canary enforced by the loader: token
+   issuance; Firestore `listCollectionIds`; a one-entry metadata-only list on
+   `intexuraos-images-dev`; Firebase Auth count query with
+   `returnUserInfo=false`; one constant redacted publish with a required message
+   ID to the no-subscription
+   `intexuraos-runtime-credential-canary-dev` topic; and the Cloudflare checks
+   bound to the fresh package-version attestation. Stop if the Terraform-owned
+   topic or reviewed Cloudflare attestation is unavailable.
 6. Reload the canary and then all production processes. Start a 24-hour
    pre-disable observation only after the complete fleet is healthy. PASS
    requires zero new credential-related authentication/authorization failures
@@ -672,6 +908,29 @@ four hours from incident declaration to a validated package and all required
 allowlisted projections ready for controlled activation. The recovery point is
 the latest promoted numeric version; the immediately previous verified version
 is the rollback target. Package payloads are not backed up in Git or Terraform.
+The exact per-member owner and recovery-source inventory is
+`config/environments/secret-package-recovery.json`. Its schema-v2 catalog maps
+every environment/file member to exactly one reviewed source ID and one of four
+methods; CI verifies owner/source one-to-one coverage, rejects unknown or unused
+sources, and emits counts only:
+
+- `provider-regeneration`: create a replacement in the named provider's
+  authoritative settings, then coordinate downstream replacement and revoke
+  the old credential;
+- `coordinated-rotation`: generate fresh cryptographic material with the
+  documented consumer cutover and rollback procedure;
+- `offline-escrow`: recover byte-identical encryption/signing material from the
+  independent two-copy encrypted escrow outside GCP and Git;
+- `authoritative-metadata`: reconstruct non-secret IDs/bindings from the named
+  provider/account records and independently cross-check them.
+
+The inventory never contains a value, private location, key ID, or value-derived
+fingerprint. Before legacy/container cleanup, each named provider account must
+be accessible and the offline escrow must have two readable, independently held
+copies plus a tested decryption/reconstruction procedure. An unavailable source
+fails the cleanup and DR gates. Record every drill or incident using
+`docs/templates/secret-package-recovery-evidence.md`, which deliberately has no
+field for values or value-derived fingerprints.
 
 - Keep at least the active and immediately previous verified package versions
   enabled during normal operation and the observation window.
@@ -679,10 +938,16 @@ is the rollback target. Package payloads are not backed up in Git or Terraform.
 - Maintain external recovery procedures for the provisioner credential, domain
   registrar/DNS control, GitHub App private key, TLS material, and provider API
   tokens. Do not archive those values with documentation.
+- Attest every catalog source by source ID and method. Do not mark full recovery
+  ready until provider access, authoritative metadata, coordinated-rotation
+  dependencies, and the two-copy offline escrow are all available.
 - If a package container is lost, Terraform recreates the empty container and
-  IAM. Authorized owners reconstruct a full candidate from authoritative
-  providers, publish it outside Terraform, validate it, and perform normal
-  candidate promotion.
+  IAM. Authorized owners reconstruct one private file per member from
+  authoritative providers. Run the builder in full-recovery mode (all
+  `--override-env` and `--override-file` members, no `--base-version` and no
+  legacy/external flags), publish it outside Terraform, validate it, and
+  perform normal candidate promotion. Exact membership is an executable gate
+  and the builder performs zero Secret Manager reads.
 - If the bootstrap identity is lost, recover or federate that identity first;
   the package cannot solve its own bootstrap dependency.
 - Treat destroyed Secret Manager versions as unrecoverable. Reconstruct and

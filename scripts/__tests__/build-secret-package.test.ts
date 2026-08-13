@@ -28,6 +28,7 @@ import { verifySecretPackages } from '../verify-secret-packages.mjs';
 const repoRoot = resolve(__dirname, '..', '..');
 const manifestPath = resolve(repoRoot, 'config', 'environments', 'secret-packages.json');
 const sourcesPath = resolve(repoRoot, 'config', 'environments', 'secret-package-sources.json');
+const recoveryPath = resolve(repoRoot, 'config', 'environments', 'secret-package-recovery.json');
 const verifierPath = resolve(repoRoot, 'scripts', 'verify-secret-packages.mjs');
 const temporaryDirectories: string[] = [];
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -119,7 +120,7 @@ describe('secret package source manifest', () => {
   });
 
   it('is verified with the package manifest and emits source counts only', () => {
-    const result = verifySecretPackages({ manifestPath, sourcesPath });
+    const result = verifySecretPackages({ manifestPath, recoveryPath, sourcesPath });
 
     expect(result.sourceManifest).toEqual({
       schemaVersion: 2,
@@ -146,6 +147,78 @@ describe('secret package source manifest', () => {
     expect(output).not.toContain('firebase-api-key-file');
     expect(output).not.toContain('runtime-gcp-service-account-file');
     expect(output).not.toContain('cloudflare-dns-api-token-file');
+    expect(result.recoveryInventory).toEqual({
+      schemaVersion: 2,
+      recoveryCoordinator: '@pbuchman',
+      recoveryMethodCounts: {
+        'authoritative-metadata': 1,
+        'coordinated-rotation': 1,
+        'offline-escrow': 1,
+        'provider-regeneration': 16,
+      },
+      sourceCount: 19,
+      packages: {
+        dev: {
+          envOwnerCount: 35,
+          envSourceCount: 35,
+          fileOwnerCount: 1,
+          fileSourceCount: 1,
+          owners: ['@pbuchman'],
+        },
+        prod: {
+          envOwnerCount: 28,
+          envSourceCount: 28,
+          fileOwnerCount: 3,
+          fileSourceCount: 3,
+          owners: ['@pbuchman'],
+        },
+      },
+    });
+  });
+
+  it('fails verification when the recovery inventory omits an authoritative member owner', () => {
+    const root = makeTempDirectory();
+    const invalidRecoveryPath = join(root, 'secret-package-recovery.json');
+    const recovery = JSON.parse(readFileSync(recoveryPath, 'utf8')) as {
+      packages: { dev: { envOwners: Record<string, string> } };
+    };
+    delete recovery.packages.dev.envOwners.INTEXURAOS_OPENAI_APP_API_KEY;
+    writeFileSync(invalidRecoveryPath, JSON.stringify(recovery), { mode: 0o600 });
+
+    expect(() =>
+      verifySecretPackages({ manifestPath, recoveryPath: invalidRecoveryPath, sourcesPath })
+    ).toThrow(/recovery inventory.*exact env owner coverage/u);
+  });
+
+  it('fails verification when a member has no authoritative recovery source', () => {
+    const root = makeTempDirectory();
+    const invalidRecoveryPath = join(root, 'secret-package-recovery.json');
+    const recovery = JSON.parse(readFileSync(recoveryPath, 'utf8')) as {
+      packages: { prod: { envSources: Record<string, string> } };
+    };
+    delete recovery.packages.prod.envSources.INTEXURAOS_INTERNAL_AUTH_TOKEN;
+    writeFileSync(invalidRecoveryPath, JSON.stringify(recovery), { mode: 0o600 });
+
+    expect(() =>
+      verifySecretPackages({ manifestPath, recoveryPath: invalidRecoveryPath, sourcesPath })
+    ).toThrow(/recovery inventory.*exact env source coverage/u);
+  });
+
+  it('fails verification when the recovery catalog contains an unknown or unused source', () => {
+    const root = makeTempDirectory();
+    const invalidRecoveryPath = join(root, 'secret-package-recovery.json');
+    const recovery = JSON.parse(readFileSync(recoveryPath, 'utf8')) as {
+      sources: Record<string, unknown>;
+    };
+    recovery.sources.unused = {
+      authority: 'Unreviewed source',
+      method: 'provider-regeneration',
+    };
+    writeFileSync(invalidRecoveryPath, JSON.stringify(recovery), { mode: 0o600 });
+
+    expect(() =>
+      verifySecretPackages({ manifestPath, recoveryPath: invalidRecoveryPath, sourcesPath })
+    ).toThrow(/recovery inventory.*unused source/u);
   });
 
   it('makes the CI verifier fail closed when the source manifest is invalid', () => {
@@ -164,7 +237,15 @@ describe('secret package source manifest', () => {
   it('prints metadata-only verification for explicit package and source manifests', () => {
     const result = spawnSync(
       process.execPath,
-      [verifierPath, '--manifest', manifestPath, '--sources-manifest', sourcesPath],
+      [
+        verifierPath,
+        '--manifest',
+        manifestPath,
+        '--sources-manifest',
+        sourcesPath,
+        '--recovery-manifest',
+        recoveryPath,
+      ],
       { encoding: 'utf8' }
     );
 
@@ -173,6 +254,7 @@ describe('secret package source manifest', () => {
     expect(JSON.parse(result.stdout)).toMatchObject({
       valid: true,
       sourceManifest: { legacySecretVersionCount: 36, schemaVersion: 2 },
+      recoveryInventory: { recoveryCoordinator: '@pbuchman', schemaVersion: 2, sourceCount: 19 },
     });
     expect(result.stdout).not.toContain('legacySecretVersions');
     expect(result.stdout).not.toContain('firebase-api-key-file');
@@ -272,6 +354,30 @@ describe('secret package builder documentation', () => {
       expect(document).toContain('INTEXURAOS_SSL_PRIVATE_KEY');
     }
   );
+
+  it('links the exact owner inventory and a value-free recovery evidence template', () => {
+    const operations = readFileSync(
+      resolve(repoRoot, 'docs/operations/secret-packages.md'),
+      'utf8'
+    );
+    const evidence = readFileSync(
+      resolve(repoRoot, 'docs/templates/secret-package-recovery-evidence.md'),
+      'utf8'
+    );
+
+    expect(operations).toContain('config/environments/secret-package-recovery.json');
+    expect(operations).toContain('docs/templates/secret-package-recovery-evidence.md');
+    expect(evidence).toContain('Package numeric version');
+    expect(evidence).toContain('Member owner coverage');
+    expect(evidence).toContain('Authoritative recovery source coverage');
+    expect(evidence).toContain('Offline escrow availability');
+    expect(operations).toContain('provider-regeneration');
+    expect(operations).toContain('coordinated-rotation');
+    expect(operations).toContain('offline-escrow');
+    expect(operations).toContain('authoritative-metadata');
+    expect(evidence).toContain('Secret Manager reads during full recovery');
+    expect(evidence).toContain('No secret values, payloads, hashes, or suffixes');
+  });
 });
 
 describe('secret package candidate builder', () => {
@@ -471,6 +577,65 @@ describe('secret package candidate builder', () => {
 });
 
 describe('post-cleanup secret package candidate builder', () => {
+  it.each(['dev', 'prod'] as const)(
+    'reconstructs a complete %s candidate from authoritative private member files without any Secret Manager source',
+    async (environment) => {
+      const manifest = loadSecretPackageManifest({ manifestPath });
+      const sources = loadSecretPackageSources({ manifest, sourcesPath });
+      const overrides = makeFullRecoveryOverrides(environment);
+
+      const result = await buildSecretPackageCandidate({
+        environment,
+        manifest,
+        overrides,
+        projectId: 'test-project',
+        sources,
+      });
+
+      expect(result).toMatchObject({
+        sourceMode: 'full-recovery',
+        legacySourceCount: 0,
+        externalSourceCount: 0,
+        overrideEnvCount: manifest.packages[environment].envNames.length,
+        overrideFileCount: manifest.packages[environment].files.length,
+      });
+      expect(Object.keys(result.payload.env)).toEqual(manifest.packages[environment].envNames);
+      expect(Object.keys(result.payload.files)).toEqual(manifest.packages[environment].files);
+      expect(() =>
+        validateSecretPackagePayload({ environment, manifest, payload: result.payload })
+      ).not.toThrow();
+    }
+  );
+
+  it('fails closed when full recovery omits or invents a member', async () => {
+    const manifest = loadSecretPackageManifest({ manifestPath });
+    const sources = loadSecretPackageSources({ manifest, sourcesPath });
+    const missing = makeFullRecoveryOverrides('dev');
+    delete missing.env.INTEXURAOS_OPENAI_APP_API_KEY;
+
+    await expect(
+      buildSecretPackageCandidate({
+        environment: 'dev',
+        manifest,
+        overrides: missing,
+        projectId: 'test-project',
+        sources,
+      })
+    ).rejects.toThrow(/full recovery.*exact env member set/u);
+
+    const unknown = makeFullRecoveryOverrides('dev');
+    unknown.env.INTEXURAOS_UNKNOWN_SECRET = Buffer.from('must-not-be-accepted');
+    await expect(
+      buildSecretPackageCandidate({
+        environment: 'dev',
+        manifest,
+        overrides: unknown,
+        projectId: 'test-project',
+        sources,
+      })
+    ).rejects.toThrow(/unknown env override/u);
+  });
+
   it('builds a complete candidate from one exact base package version plus explicit overrides', async () => {
     const manifest = loadSecretPackageManifest({ manifestPath });
     const sources = loadSecretPackageSources({ manifest, sourcesPath });
@@ -745,6 +910,76 @@ describe('secret package candidate CLI', () => {
     expect(stdout.join('\n')).not.toContain('BEGIN PRIVATE KEY');
   });
 
+  it.each(['dev', 'prod'] as const)(
+    'atomically performs a complete offline %s recovery from exact private member files',
+    async (environment) => {
+      const root = makeTempDirectory();
+      const output = join(root, `${environment}-recovery-candidate.json`);
+      const overrideArguments = writeFullRecoveryOverrideFiles(root, environment);
+      const accessVersion = vi.fn(async () => {
+        throw new Error('Secret Manager must not be read during full recovery');
+      });
+      const stdout: string[] = [];
+
+      await expect(
+        runBuildSecretPackageCli(
+          [
+            '--environment',
+            environment,
+            '--project-id',
+            'test-project',
+            '--output',
+            output,
+            ...overrideArguments,
+          ],
+          { adapter: { accessVersion }, stdout: (line: string) => stdout.push(line) }
+        )
+      ).resolves.toBe(0);
+
+      const payload = JSON.parse(readFileSync(output, 'utf8')) as {
+        env: Record<string, string>;
+        files: Record<string, string>;
+      };
+      const manifest = loadSecretPackageManifest({ manifestPath });
+      expect(Object.keys(payload.env)).toEqual(manifest.packages[environment].envNames);
+      expect(Object.keys(payload.files)).toEqual(manifest.packages[environment].files);
+      expect(statSync(output).mode & 0o777).toBe(0o600);
+      expect(accessVersion).not.toHaveBeenCalled();
+      expect(JSON.parse(stdout[0] ?? '{}')).toMatchObject({
+        valid: true,
+        sourceMode: 'full-recovery',
+        overrideEnvCount: manifest.packages[environment].envNames.length,
+        overrideFileCount: manifest.packages[environment].files.length,
+      });
+      expect(stdout.join('\n')).not.toContain('base-value-for-');
+      expect(stdout.join('\n')).not.toContain('BEGIN PRIVATE KEY');
+    }
+  );
+
+  it('rejects partial offline recovery without falling back to legacy sources', async () => {
+    const root = makeTempDirectory();
+    const privateInput = join(root, 'private-input');
+    writeFileSync(privateInput, 'rotated-value', { mode: 0o600 });
+    const accessVersion = vi.fn();
+
+    await expect(
+      runBuildSecretPackageCli(
+        [
+          '--environment',
+          'dev',
+          '--project-id',
+          'test-project',
+          '--output',
+          join(root, 'candidate.json'),
+          '--override-env',
+          `INTEXURAOS_OPENAI_APP_API_KEY=${privateInput}`,
+        ],
+        { adapter: { accessVersion }, stdout: vi.fn() }
+      )
+    ).rejects.toThrow(/full recovery.*exact env member set/u);
+    expect(accessVersion).not.toHaveBeenCalled();
+  });
+
   it('rejects duplicate, unknown, symlink, and non-private overrides before fetching the base', async () => {
     const root = makeTempDirectory();
     const privateInput = join(root, 'private-input');
@@ -882,6 +1117,38 @@ function makeBasePayload(environment: 'dev' | 'prod'): {
     })
   );
   return { schemaVersion: 1, environment, env, files };
+}
+
+function makeFullRecoveryOverrides(environment: 'dev' | 'prod'): {
+  env: Record<string, Buffer>;
+  files: Record<string, Buffer>;
+} {
+  const payload = makeBasePayload(environment);
+  return {
+    env: Object.fromEntries(
+      Object.entries(payload.env).map(([name, value]) => [name, Buffer.from(value)])
+    ),
+    files: Object.fromEntries(
+      Object.entries(payload.files).map(([name, value]) => [name, Buffer.from(value, 'base64')])
+    ),
+  };
+}
+
+function writeFullRecoveryOverrideFiles(root: string, environment: 'dev' | 'prod'): string[] {
+  const overrides = makeFullRecoveryOverrides(environment);
+  const arguments_: string[] = [];
+  for (const [kind, values] of [
+    ['env', overrides.env],
+    ['file', overrides.files],
+  ] as const) {
+    for (const [name, value] of Object.entries(values)) {
+      const path = join(root, `${kind}-${name}`);
+      writeFileSync(path, value, { mode: 0o600 });
+      chmodSync(path, 0o600);
+      arguments_.push(`--override-${kind}`, `${name}=${path}`);
+    }
+  }
+  return arguments_;
 }
 
 function makeExternalInputs(environment: 'dev' | 'prod'): Record<string, Buffer> {

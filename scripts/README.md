@@ -4,12 +4,13 @@ Build, deployment, and utility scripts.
 
 ## build-secret-package.mjs
 
-Builds a complete DEV or PROD candidate in one of two modes: initial migration
+Builds a complete DEV or PROD candidate in one of three modes: initial migration
 from the exact legacy numeric versions declared in the tracked, non-secret
 `config/environments/secret-package-sources.json` manifest, or ongoing rotation
 from one exact numeric version of the active package plus explicit private
-member overrides. It never reads `latest` and never prints source values or
-payloads.
+member overrides, or lost-container recovery from the complete authoritative
+private-file member set. It never reads `latest` and never prints source values
+or payloads.
 
 ```bash
 node scripts/build-secret-package.mjs \
@@ -57,6 +58,15 @@ applies the named replacements, then validates the complete candidate again.
 Base mode rejects `latest`, non-canonical versions such as `01`, duplicate or
 unknown members, empty override sets, and all legacy external-input flags.
 
+If the target package container and all package versions are unavailable, omit
+`--base-version` and pass every manifest member exactly once with the same
+repeatable `--override-env NAME=FILE` and `--override-file NAME=FILE` options.
+This full-recovery mode performs no Secret Manager read and fails closed for a
+missing, extra, duplicate, or unknown member. The private inputs must be
+reconstructed by the owners from the exact source/method recorded in the
+schema-v2 recovery inventory; CI rejects missing, unknown, or unused sources.
+Partial recovery never falls back to deleted legacy sources.
+
 Every external or override input must be a non-symlink regular file with no
 group/other permission bits and at most 64 KiB. The builder verifies source
 CRC32C, creates the payload deterministically, runs the complete package
@@ -76,7 +86,20 @@ node scripts/secret-package.mjs validate \
   --environment <dev-or-prod> --payload-file <mode-0600-candidate>
 node scripts/secret-package.mjs publish \
   --environment <dev-or-prod> --project-id <project-id> \
-  --payload-file <mode-0600-candidate>
+  --payload-file <mode-0600-candidate> \
+  --receipt-file <private-receipt>
+node scripts/secret-package.mjs publish-resume \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <mode-0600-candidate> \
+  --receipt-file <private-receipt>
+node scripts/secret-package.mjs publish-reconcile \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <mode-0600-candidate> \
+  --receipt-file <private-receipt> \
+  --version <exact-recovery-version>
+node scripts/secret-package.mjs publish-unlock \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --receipt-file <private-receipt>
 node scripts/secret-package.mjs fetch \
   --environment <dev-or-prod> --version <numeric-version> \
   --project-id <project-id> --output <mode-0600-path>
@@ -96,6 +119,55 @@ maximum payload, positive numeric versions, CRC32C, restrictive staging modes,
 and atomic promotion. It invokes `gcloud` without logging payload data. Shadow
 comparison uses an ephemeral HMAC and emits only package-level
 `MATCH`/`MISMATCH`.
+
+`publish` requires a new receipt path under one canonical private journal parent
+on a local filesystem that supports durable directory `fsync` and hard links.
+Its mode-`0600` lock is package-scoped by project and secret ID, so different
+receipt filenames in that parent still serialize. A different parent or host is
+outside the lock domain; use one parent and one publisher/freeze for each
+package operation.
+
+Under the lock, `publish` first lists only target-package version metadata and
+records the largest ID as `prePublishMaxVersion`. It writes and synchronizes a
+complete private temporary inode, hard-links it to the final receipt pathname
+with no replacement, then synchronizes the parent. Only after that durable
+reservation may it call `addVersion`. A crash therefore leaves either no final
+receipt before any add, or a complete schema-v2 receipt in state `publishing`
+with `version: null`, never a partially written final inode. The receipt also
+binds a UUID-v4 `operationId` and canonical UTC `startedAt`; it contains only
+those fields plus schema/operation, state, environment, project ID, package
+secret ID, watermark, and numeric version. It never contains the candidate,
+member values, checksums, digests, credentials, or private paths.
+
+As soon as `addVersion` returns the exact numeric version, and before readback,
+the receipt becomes `pending-verification`. Successful server CRC32C and exact
+byte-for-byte readback changes it to `verified`. Preserve the exact candidate
+and receipt after any interruption. Run `publish-resume` only for a
+`pending-verification` or `verified` receipt; it reads the already recorded
+version and has no `addVersion` or version-selection path.
+
+For an ambiguous state `publishing` receipt, run `publish-reconcile` with
+`--version <exact-recovery-version>`. Before any payload access it lists only
+metadata and requires exactly one observed version ID greater than
+`prePublishMaxVersion`; that version must equal the argument and its creation
+time must not predate `startedAt`. It then verifies only that exact version's
+server CRC32C and bytes. An old byte-identical version is rejected, and zero or
+multiple post-watermark versions leave the receipt unchanged and blocked.
+
+There is no supported `publish-abort`: even zero currently observed candidates
+is not treated as sufficiently robust proof that no version committed. Stop and
+escalate instead of deleting/replacing the receipt, selecting a second journal
+parent, or publishing again. The operator must not run `publish` again when a
+receipt exists.
+
+After a hard crash, use `publish-unlock` only on the same host and only after
+confirming the recorded PID no longer exists. A result of `publishing` must be
+followed by `publish-reconcile`; `pending-verification` or `verified` must be
+followed by `publish-resume`. The result `unreserved` proves the process stopped
+before the synchronized receipt reservation and therefore before `addVersion`;
+only that result permits a new `publish` at the same canonical path and parent.
+The dedicated publishers receive resource-level target-package metadata viewer
+access for their own environment only; neither can inspect the opposite package.
 
 Rendering creates an immutable `<env>-v<N>-<crc32c-hex>/` release under the
 output directory, then atomically switches `current`. Every release has
@@ -137,6 +209,24 @@ must not be used as shared secret storage.
 The package `current` link, `.envrc`, and GitHub App PEM are transactional: any
 failure after rendering restores the prior set, or removes the new set when no
 prior projection existed.
+
+That directory is the DEV projection root and must never be passed to generic
+`secret-package render`; generic renders use a separate private scratch root
+whose three-file `current` contract is intentionally different. The sync CLI
+keeps its public `--package-output-dir`/`--output-dir` aliases, but both select
+only the projection root. Generic render and projection sync take the same
+root-local writer lock; after sync installs the durable marker, generic `render`
+rejects the managed root before it can create or switch a release.
+`SECRET_PACKAGE_RENDER_DIR` is not a sync input;
+`INTEXURAOS_SECRET_PACKAGE_PROJECTION_DIR` is the explicit environment override.
+
+Concurrent syncs and generic renders serialize through unique mode-`0700`
+claims in `.sync-lock`. A generic scratch root may retain an empty lock directory;
+only the durable marker classifies a DEV projection root.
+Each claim binds a random token to hostname, boot identity, PID, process start,
+and the sync command. A stopped or PID-reused owner permits deletion of only
+its unrepeatable claim and matching work directory; no contender removes a
+shared lock name. The lock directory stays present and empty after cleanup.
 
 ## observability/load-grafana-cloud-env.sh
 

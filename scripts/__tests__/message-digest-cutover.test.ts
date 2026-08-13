@@ -1616,6 +1616,7 @@ cleanup() { :; }
 require_command() { :; }
 validate_inputs() { :; }
 resolve_commit_metadata() { trace resolve-commit; }
+verify_repository_secret_package_version_pins() { trace verify-package-pins; }
 prepare_sync_source() { trace prepare-local-verification; }
 setup_ssh() { trace setup-ssh; }
 resolve_activation_context() { ACTIVATION_MODE="cutover_complete"; trace resolve-context; }
@@ -1642,6 +1643,7 @@ cat "$TRACE_FILE"
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout.trim().split('\n')).toEqual([
         'resolve-commit',
+        'verify-package-pins',
         'prepare-local-verification',
         'setup-ssh',
         'resolve-context',

@@ -10,7 +10,10 @@ import {
   loadSecretPackageManifest,
   parseSecretPackageJson,
   publishSecretPackage,
+  reconcileSecretPackagePublish,
   renderSecretPackage,
+  resumeSecretPackagePublish,
+  unlockSecretPackagePublish,
   validateSecretPackagePayload,
   writeSecretPackagePayload,
 } from './lib/secret-package.mjs';
@@ -18,14 +21,20 @@ import {
 const COMMAND_OPTIONS = {
   'dual-compare': ['environment', 'hmac-key-file', 'left-payload-file', 'right-payload-file'],
   fetch: ['environment', 'output', 'project-id', 'version'],
-  publish: ['environment', 'payload-file', 'project-id'],
+  publish: ['environment', 'payload-file', 'project-id', 'receipt-file'],
+  'publish-reconcile': ['environment', 'payload-file', 'project-id', 'receipt-file', 'version'],
+  'publish-resume': ['environment', 'payload-file', 'project-id', 'receipt-file'],
+  'publish-unlock': ['environment', 'project-id', 'receipt-file'],
   render: ['environment', 'output-dir', 'payload-file', 'project-id', 'version'],
   validate: ['environment', 'payload-file'],
 };
 const REQUIRED_OPTIONS = {
   'dual-compare': ['environment', 'hmac-key-file', 'left-payload-file', 'right-payload-file'],
   fetch: ['environment', 'output', 'project-id', 'version'],
-  publish: ['environment', 'payload-file', 'project-id'],
+  publish: ['environment', 'payload-file', 'project-id', 'receipt-file'],
+  'publish-reconcile': ['environment', 'payload-file', 'project-id', 'receipt-file', 'version'],
+  'publish-resume': ['environment', 'payload-file', 'project-id', 'receipt-file'],
+  'publish-unlock': ['environment', 'project-id', 'receipt-file'],
   render: ['environment', 'output-dir', 'project-id', 'version'],
   validate: ['environment', 'payload-file'],
 };
@@ -36,7 +45,7 @@ const PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u;
  *
  * @param {string[]} argv
  * @param {{
- *   adapter?: { accessVersion?: Function, addVersion?: Function },
+ *   adapter?: { accessVersion?: Function, addVersion?: Function, listVersions?: Function },
  *   manifest?: ReturnType<typeof loadSecretPackageManifest>,
  *   stdout?: (line: string) => void,
  * }} [dependencies]
@@ -76,6 +85,47 @@ export async function runSecretPackageCli(argv, dependencies = {}) {
       manifest,
       payload,
       projectId,
+      receiptPath: options['receipt-file'],
+    });
+    stdout(JSON.stringify({ command, ...result }));
+    return 0;
+  }
+
+  if (command === 'publish-unlock') {
+    const result = unlockSecretPackagePublish({
+      environment,
+      manifest,
+      projectId,
+      receiptPath: options['receipt-file'],
+    });
+    stdout(JSON.stringify({ command, ...result }));
+    return 0;
+  }
+
+  if (command === 'publish-reconcile') {
+    const payload = readPayloadFile(options['payload-file']);
+    const result = await reconcileSecretPackagePublish({
+      adapter,
+      environment,
+      manifest,
+      payload,
+      projectId,
+      receiptPath: options['receipt-file'],
+      version: options.version,
+    });
+    stdout(JSON.stringify({ command, ...result }));
+    return 0;
+  }
+
+  if (command === 'publish-resume') {
+    const payload = readPayloadFile(options['payload-file']);
+    const result = await resumeSecretPackagePublish({
+      adapter,
+      environment,
+      manifest,
+      payload,
+      projectId,
+      receiptPath: options['receipt-file'],
     });
     stdout(JSON.stringify({ command, ...result }));
     return 0;

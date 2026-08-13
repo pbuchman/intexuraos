@@ -332,6 +332,10 @@ describe('versioned runtime configuration Terraform cutover', () => {
         `resource "google_secret_manager_secret_iam_member" "secret_package_${environment}_publisher_target_accessor" {`,
         '\n}\n'
       );
+      const targetMetadataViewer = sectionBetween(
+        `resource "google_secret_manager_secret_iam_member" "secret_package_${environment}_publisher_target_metadata_viewer" {`,
+        '\n}\n'
+      );
       const sourceAccessor = sectionBetween(
         `resource "google_secret_manager_secret_iam_member" "secret_package_${environment}_publisher_source_accessor" {`,
         '\n}\n'
@@ -357,6 +361,16 @@ describe('versioned runtime configuration Terraform cutover', () => {
         `member    = "serviceAccount:\${google_service_account.secret_package_${environment}_publisher.email}"`
       );
       expect(targetAccessor).not.toContain(
+        environment === 'dev' ? 'INTEXURAOS_SECRET_PACKAGE_PROD' : 'INTEXURAOS_SECRET_PACKAGE_DEV'
+      );
+      expect(targetMetadataViewer).toContain(
+        `secret_id = module.secret_manager.secret_ids["${packageName}"]`
+      );
+      expect(targetMetadataViewer).toContain('role      = "roles/secretmanager.viewer"');
+      expect(targetMetadataViewer).toContain(
+        `member    = "serviceAccount:\${google_service_account.secret_package_${environment}_publisher.email}"`
+      );
+      expect(targetMetadataViewer).not.toContain(
         environment === 'dev' ? 'INTEXURAOS_SECRET_PACKAGE_PROD' : 'INTEXURAOS_SECRET_PACKAGE_DEV'
       );
       expect(sourceAccessor).toContain(

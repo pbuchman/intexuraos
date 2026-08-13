@@ -229,11 +229,12 @@ export function validateSecretPackageSources(candidate, manifestCandidate) {
 }
 
 /**
- * Build one complete package payload either from exact legacy sources or from
- * one exact base-package version plus explicit member overrides.
+ * Build one complete package payload from exact legacy sources, from one exact
+ * base-package version plus explicit member overrides, or from the complete
+ * authoritative private-file set during lost-container recovery.
  *
  * @param {{
- *   adapter: { accessVersion: Function },
+ *   adapter?: { accessVersion: Function },
  *   baseVersion?: number | string,
  *   environment: 'dev' | 'prod',
  *   externalInputs?: Record<string, Buffer | Uint8Array>,
@@ -255,9 +256,6 @@ export async function buildSecretPackageCandidate(options) {
     ? validateSecretPackageSources(options.sources, manifest)
     : loadSecretPackageSources({ manifest });
   const projectId = readProjectId(options?.projectId);
-  if (typeof options?.adapter?.accessVersion !== 'function') {
-    throw new Error('Secret package candidate access adapter is unavailable');
-  }
 
   const sourceDefinition = sources.packages[environment];
   const packageDefinition = manifest.packages[environment];
@@ -265,6 +263,7 @@ export async function buildSecretPackageCandidate(options) {
     if (options.externalInputs !== undefined) {
       throw new Error('Secret package candidate cannot mix base-package and legacy inputs');
     }
+    requireAccessAdapter(options?.adapter);
     const baseVersion = readExactNumericVersion(options.baseVersion);
     const overrides = validateOverrides(options.overrides, packageDefinition);
     const basePackage = await fetchSecretPackage({
@@ -300,8 +299,32 @@ export async function buildSecretPackageCandidate(options) {
     };
   }
   if (options?.overrides !== undefined) {
-    throw new Error('Secret package candidate overrides require an exact base version');
+    if (options.externalInputs !== undefined) {
+      throw new Error('Secret package candidate cannot mix full recovery and legacy inputs');
+    }
+    const overrides = validateFullRecoveryOverrides(options.overrides, packageDefinition);
+    const env = Object.fromEntries(
+      packageDefinition.envNames.map((name) => [
+        name,
+        decodeEnvUtf8(overrides.env[name], 'env override'),
+      ])
+    );
+    const files = Object.fromEntries(
+      packageDefinition.files.map((name) => [name, overrides.files[name].toString('base64')])
+    );
+    const payload = { schemaVersion: 1, environment, env, files };
+    const metadata = validateSecretPackagePayload({ environment, manifest, payload });
+    return {
+      payload,
+      metadata,
+      sourceMode: 'full-recovery',
+      legacySourceCount: 0,
+      externalSourceCount: 0,
+      overrideEnvCount: Object.keys(overrides.env).length,
+      overrideFileCount: Object.keys(overrides.files).length,
+    };
   }
+  requireAccessAdapter(options?.adapter);
   const externalInputs = validateExternalInputs(options?.externalInputs, sourceDefinition);
   const legacyCache = new Map();
   const readLegacy = async (secretId) => {
@@ -362,7 +385,7 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
   const stdout = dependencies.stdout ?? ((line) => process.stdout.write(`${line}\n`));
   if (argv.length === 1 && argv[0] === '--help') {
     stdout(
-      'Usage: build-secret-package.mjs --environment dev|prod --project-id ID --output FILE (--firebase-api-key-file FILE [...] | --base-version N (--override-env NAME=FILE | --override-file NAME=FILE) [...])'
+      'Usage: build-secret-package.mjs --environment dev|prod --project-id ID --output FILE (--firebase-api-key-file FILE [...] | --base-version N (--override-env NAME=FILE | --override-file NAME=FILE) [...] | complete --override-env/--override-file member set)'
     );
     return 0;
   }
@@ -387,8 +410,10 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
   const suppliedExternalOptionNames = EXTERNAL_INPUT_OPTIONS.filter(
     (name) => cliOptions[name] !== undefined
   );
-  const adapter = dependencies.adapter ?? createGcloudSecretManagerAdapter();
   const baseMode = cliOptions['base-version'] !== undefined;
+  const overrideMode =
+    (cliOptions['override-env']?.length ?? 0) > 0 || (cliOptions['override-file']?.length ?? 0) > 0;
+  const adapter = dependencies.adapter ?? createGcloudSecretManagerAdapter();
   let result;
   if (baseMode) {
     if (suppliedExternalOptionNames.length > 0) {
@@ -407,13 +432,22 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
       projectId: cliOptions['project-id'],
       sources,
     });
-  } else {
-    if (
-      (cliOptions['override-env']?.length ?? 0) > 0 ||
-      (cliOptions['override-file']?.length ?? 0) > 0
-    ) {
-      throw new Error('Secret package candidate overrides require an exact base version');
+  } else if (overrideMode) {
+    if (suppliedExternalOptionNames.length > 0) {
+      throw new Error('Secret package candidate cannot mix full recovery and legacy inputs');
     }
+    const overrides = {
+      env: readCliOverrides(cliOptions['override-env'], packageDefinition.envNames, 'env'),
+      files: readCliOverrides(cliOptions['override-file'], packageDefinition.files, 'file'),
+    };
+    result = await buildSecretPackageCandidate({
+      environment,
+      manifest,
+      overrides,
+      projectId: cliOptions['project-id'],
+      sources,
+    });
+  } else {
     if (!sameItems([...suppliedExternalOptionNames].sort(), externalOptionNames)) {
       throw new Error('Secret package candidate requires the exact external input file set');
     }
@@ -441,9 +475,9 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
       sourceMode: result.sourceMode,
       legacySourceCount: result.legacySourceCount,
       externalSourceCount: result.externalSourceCount,
-      ...(result.sourceMode === 'base-package'
+      ...(['base-package', 'full-recovery'].includes(result.sourceMode)
         ? {
-            baseVersion: result.baseVersion,
+            ...(result.baseVersion === undefined ? {} : { baseVersion: result.baseVersion }),
             overrideEnvCount: result.overrideEnvCount,
             overrideFileCount: result.overrideFileCount,
           }
@@ -566,6 +600,23 @@ function validateOverrides(candidate, packageDefinition) {
     throw new Error('Secret package candidate requires at least one explicit override');
   }
   return { env, files };
+}
+
+function validateFullRecoveryOverrides(candidate, packageDefinition) {
+  const overrides = validateOverrides(candidate, packageDefinition);
+  if (!sameItems(Object.keys(overrides.env), packageDefinition.envNames)) {
+    throw new Error('Secret package candidate full recovery requires the exact env member set');
+  }
+  if (!sameItems(Object.keys(overrides.files), packageDefinition.files)) {
+    throw new Error('Secret package candidate full recovery requires the exact file member set');
+  }
+  return overrides;
+}
+
+function requireAccessAdapter(adapter) {
+  if (typeof adapter?.accessVersion !== 'function') {
+    throw new Error('Secret package candidate access adapter is unavailable');
+  }
 }
 
 function validateOverrideBytes(candidate, allowedNames, kind) {

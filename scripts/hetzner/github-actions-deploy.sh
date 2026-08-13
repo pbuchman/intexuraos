@@ -44,6 +44,7 @@ DEPLOYMENT_METADATA_PUBLISHED="false"
 DEPLOYMENT_ATTESTATION_VERIFIED="false"
 STAGED_SECRET_PROJECTION=""
 PREVIOUS_SECRET_PROJECTION=""
+SECRET_PROJECTION_ACTIVATION_ATTEMPTED="false"
 SECRET_PROJECTION_ACTIVATED="false"
 SECRET_PROJECTION_COMPENSATED="false"
 CUTOVER_ADMISSION_IRREVERSIBLE="false"
@@ -136,6 +137,14 @@ resolve_commit_metadata() {
   [[ "${COMMIT_SHA_VALUE}" =~ ^[0-9a-f]{40}$ ]] || fail "COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
   [[ "${WORKFLOW_RUN_ID_VALUE}" == "manual" || "${WORKFLOW_RUN_ID_VALUE}" =~ ^[0-9]+$ ]] \
     || fail "GITHUB_RUN_ID must be numeric"
+}
+
+verify_repository_secret_package_version_pins() {
+  node scripts/hetzner/verify-secret-package-version-pins.mjs \
+    "${SECRET_PACKAGE_VERSION}" \
+    config/environments/secret-packages.json \
+    terraform/hetzner-prod/prod.auto.tfvars.json >/dev/null \
+    || fail 'PROD secret package version pins are inconsistent'
 }
 
 prepare_sync_source() {
@@ -477,10 +486,18 @@ prepare_runtime_dependencies() {
 
 activate_secret_projection() {
   local staged_projection_quoted=""
+  local activation_status=0
   [[ -n "${STAGED_SECRET_PROJECTION}" ]] || fail 'Staged secret projection is unresolved'
   printf -v staged_projection_quoted '%q' "${STAGED_SECRET_PROJECTION}"
-  run_remote \
+  SECRET_PROJECTION_ACTIVATION_ATTEMPTED="true"
+  if run_remote \
     "sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --activate ${staged_projection_quoted}"
+  then
+    activation_status=0
+  else
+    activation_status=$?
+  fi
+  [[ "${activation_status}" -eq 0 ]] || return "${activation_status}"
   SECRET_PROJECTION_ACTIVATED="true"
 }
 
@@ -550,24 +567,69 @@ restore_previous_web_and_edge() {
 compensate_secret_projection() {
   local previous_projection_quoted=""
   local compensation_failed=0
-  [[ "${SECRET_PROJECTION_ACTIVATED}" == "true" ]] || return 0
+  local active_projection=""
+  local previous_projection_was_already_active="false"
+  local observed_after_rollback=""
+  local rollback_status=0
+  [[ "${SECRET_PROJECTION_ACTIVATED}" == "true" || "${SECRET_PROJECTION_ACTIVATION_ATTEMPTED}" == "true" ]] \
+    || return 0
   [[ "${SECRET_PROJECTION_COMPENSATED}" != "true" ]] || return 0
   [[ -n "${PREVIOUS_SECRET_PROJECTION}" ]] || return 1
+  [[ -n "${STAGED_SECRET_PROJECTION}" ]] || return 1
+
+  if ! active_projection="$(run_remote \
+    'sudo -n SKIP_RUNTIME_CREDENTIAL_SMOKE=1 INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --current-release')"
+  then
+    printf 'ERROR: Could not reconcile the active production secret projection\n' >&2
+    return 1
+  fi
+
+  if [[ "${active_projection}" != "${STAGED_SECRET_PROJECTION}" && "${active_projection}" != "${PREVIOUS_SECRET_PROJECTION}" ]]; then
+    printf 'ERROR: Active production secret projection is neither the candidate nor recorded previous release\n' >&2
+    return 1
+  fi
+  if [[ "${active_projection}" == "${PREVIOUS_SECRET_PROJECTION}" \
+    && "${SECRET_PROJECTION_ACTIVATED}" != "true" ]]; then
+    previous_projection_was_already_active="true"
+  fi
+
   printf -v previous_projection_quoted '%q' "${PREVIOUS_SECRET_PROJECTION}"
   printf 'Compensating failed deployment with prior production release\n' >&2
   if run_remote \
     "sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --rollback ${previous_projection_quoted}"
   then
-    reload_alloy_for_previous_projection || compensation_failed=1
+    rollback_status=0
   else
-    compensation_failed=1
+    rollback_status=$?
   fi
+  if ! observed_after_rollback="$(run_remote \
+    'sudo -n SKIP_RUNTIME_CREDENTIAL_SMOKE=1 INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --current-release')"
+  then
+    printf 'ERROR: Could not verify the production secret projection after rollback\n' >&2
+    return 1
+  fi
+  if [[ "${observed_after_rollback}" != "${PREVIOUS_SECRET_PROJECTION}" ]]; then
+    printf 'ERROR: Production secret projection rollback did not restore the recorded previous release\n' >&2
+    return 1
+  fi
+  if [[ "${rollback_status}" -ne 0 ]]; then
+    printf 'ERROR: Offline projection rollback/recovery did not complete successfully\n' >&2
+    return 1
+  fi
+  if [[ "${previous_projection_was_already_active}" == "true" ]]; then
+    SECRET_PROJECTION_ACTIVATION_ATTEMPTED="false"
+    SECRET_PROJECTION_COMPENSATED="true"
+    return 0
+  fi
+  reload_alloy_for_previous_projection || compensation_failed=1
   reload_previous_runtime || compensation_failed=1
   restore_previous_web_and_edge || compensation_failed=1
   verify_backend_readiness || compensation_failed=1
   verify_runtime_readiness || compensation_failed=1
   cleanup_remote_secret_canary_config || compensation_failed=1
   if [[ "${compensation_failed}" -eq 0 ]]; then
+    SECRET_PROJECTION_ACTIVATION_ATTEMPTED="false"
+    SECRET_PROJECTION_ACTIVATED="false"
     SECRET_PROJECTION_COMPENSATED="true"
   fi
   return "${compensation_failed}"
@@ -577,9 +639,9 @@ cleanup() {
   local exit_status=$?
 
   set +e
-  if [[ "${SECRET_PROJECTION_ACTIVATED}" == "true" &&
-    "${DEPLOYMENT_COMPLETED}" != "true" &&
-    "${CUTOVER_ADMISSION_IRREVERSIBLE}" != "true"
+  if [[ "${DEPLOYMENT_COMPLETED}" != "true" &&
+    "${CUTOVER_ADMISSION_IRREVERSIBLE}" != "true" &&
+    ( "${SECRET_PROJECTION_ACTIVATED}" == "true" || "${SECRET_PROJECTION_ACTIVATION_ATTEMPTED}" == "true" )
   ]]; then
     if ! compensate_secret_projection; then
       printf 'ERROR: Could not restore the prior secret projection, runtime, Web, and edge\n' >&2
@@ -953,6 +1015,7 @@ main() {
   require_command unzip
   validate_inputs
   resolve_commit_metadata
+  verify_repository_secret_package_version_pins
   prepare_sync_source
   setup_ssh
   resolve_activation_context
@@ -970,6 +1033,7 @@ main() {
     prepare_remote_web_layout
     prepare_runtime_dependencies
     activate_secret_projection
+    verify_active_secret_projection_version
     reload_alloy_for_active_projection
     run_secret_projection_canary
     if [[ "${ACTIVATION_MODE}" == "cutover" ]]; then

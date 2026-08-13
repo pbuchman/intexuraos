@@ -29,6 +29,7 @@ const TOPICS = [
   'bookmark-summarize',
   'pr-triage',
   'message-digest-runs',
+  'intexuraos-runtime-credential-canary-dev',
 ];
 
 const TOPIC_ENDPOINTS = {
@@ -47,6 +48,7 @@ const TOPIC_ENDPOINTS = {
   'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
   'pr-triage': 'http://host.docker.internal:8128/internal/code/pubsub/pr-triage',
   'message-digest-runs': 'http://host.docker.internal:8135/internal/message-digests/pubsub/run',
+  'intexuraos-runtime-credential-canary-dev': null,
 };
 
 const app = express();
