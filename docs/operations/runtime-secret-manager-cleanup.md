@@ -1,4 +1,10 @@
-# Runtime Secret Manager Cleanup
+# Runtime Secret Manager Cleanup — Historical / Completed
+
+> **Status: historical and completed.** This document preserves evidence of a
+> one-time cleanup and is not an active runbook. Do not replay its commands,
+> frozen plan, paths, checksums, counts, or deletion procedure. Current package
+> lifecycle and legacy cleanup gates are defined in
+> [Secret Packages Operations](./secret-packages.md).
 
 This is the one-time destructive runbook for permanently deleting the 26
 obsolete runtime-configuration secrets and their obsolete dependants. It is not

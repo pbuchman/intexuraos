@@ -22,8 +22,14 @@ with ad-hoc bulk commands.
 | Path | Purpose |
 | --- | --- |
 | `/opt/intexuraos` | Repo checkout run by PM2 |
-| `/etc/intexuraos/.env.prod` | `deploy:deploy` mode-600 merge of versioned runtime configuration and actual GCP secrets |
+| `/etc/intexuraos/.env.prod` | `deploy:deploy` mode-`0600` merge of versioned config and the exact PROD package env projection |
+| `/home/deploy/provisioner-sa-key.json` | external bootstrap credential, mode `0600`; never present in the package or used by PM2 |
+| `/home/deploy/runtime-sa-key.json` | mode-`0600` runtime credential atomically rendered from the PROD package |
 | `/etc/intexuraos/internal-auth-token` | `root:www-data` mode-640 internal auth token injected by nginx after Google OIDC verification |
+| `/etc/letsencrypt/cloudflare.ini` | root-owned mode-`0600` certbot credential rendered from the PROD package |
+| `/etc/intexuraos/tls-private-key.pem` | root-owned mode-`0600` TLS key projection |
+| `/var/lib/intexuraos/secret-packages/prod/current` | exact validated generic package release pointer |
+| `/var/lib/intexuraos/secret-projections/prod/current` | transactional target-specific projection pointer; stable paths above resolve through it |
 | `/var/www/intexuraos/web/releases/<commit-sha>` | Immutable complete Vite bundle for one release |
 | `/var/www/intexuraos/web/current` | Atomically replaced symlink to the Vite release served by nginx |
 | `/var/www/intexuraos/web/dist` | Legacy bootstrap bundle retained for the first atomic cutover only |
@@ -44,35 +50,32 @@ Required local operator inputs are intentionally outside the repo:
 | Local input | Purpose |
 | --- | --- |
 | `HCLOUD_TOKEN` | Hetzner provider token read from the environment |
-| `$HOME/.config/gcloud/sa-key.json` | Google provider credential for retained GCP resources |
+| Short-lived operator credential | Google provider credential for retained GCP resources; use impersonation where available |
 | `$HOME/.ssh/intexuraos_hetzner_deploy` | SSH private key used by Terraform bootstrap |
-| `$HOME/.config/intexuraos/hetzner/provisioner-sa-key.json` | Provisioner service account key copied to the VM |
-| `$HOME/.config/intexuraos/hetzner/runtime-sa-key.json` | Runtime service account key copied to the VM |
+| `$HOME/.config/intexuraos/hetzner/provisioner-sa-key.json` | Bounded provisioner key copied to the VM; external to PROD and authorized only for the PROD package |
 
 Use this form for normal reproducible changes:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod plan
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply
 ```
 
 With `hetzner_bootstrap_enabled=true`, Terraform creates or recreates the VM,
-copies the service account keys, syncs the repo to `/opt/intexuraos`, installs
-runtime dependencies, loads secrets, builds the web bundle, starts PM2, and
-deploys nginx. Manual provisioning commands below are for repair or emergency
-operation, not the default path.
+installs the external provisioner credential, syncs the repo, and invokes the
+loader with an approved numeric PROD version. The loader obtains and renders
+the runtime credential from the package before PM2 starts. Terraform must not
+copy, accept, or store the runtime SA JSON or package payload. Manual commands
+below are for repair or emergency operation, not the default path.
 
 ## GitHub Actions Production Deployment
 
 Merging to `development` deploys production to Hetzner through
 `.github/workflows/deploy.yml`. The workflow syncs the checked-out commit to
-`/opt/intexuraos`, renders versioned configuration and refreshes actual GCP
-secret material on the VM, installs
+`/opt/intexuraos`, fetches and stages an exact numeric PROD package, installs
 dependencies, reloads and health-checks the backward-compatible backend, then
 builds and publishes the web bundle, reloads nginx, and verifies the Hetzner
 origin with `curl --resolve`. This backend-first order keeps already-open old
@@ -88,13 +91,15 @@ status is accepted only when the GitHub trigger provenance in
 `GITHUB_SHA`; an empty or different provenance SHA fails the workflow.
 
 Hetzner deploys expose exact release evidence at `GET /deployment.json` as
-uncached JSON containing `commitSha`, `workflowRunId`, and `deployedAt`. The
+uncached JSON containing `commitSha`, `workflowRunId`, `deployedAt`, and
+`secretPackageVersion`. The
 script removes the prior marker before syncing the first runtime change, so an
 interrupted rollout cannot present stale success evidence. After PM2, nginx,
 direct-origin health, and public WhatsApp health are ready, it atomically
-publishes the new marker and verifies its exact commit and workflow run through
+publishes the new marker and verifies its exact commit, workflow run, and
+numeric PROD package version through
 both the direct origin and public DNS. Verification also requires exactly those
-three keys, a canonical UTC timestamp, `Content-Type: application/json`, and a
+four keys, a canonical UTC timestamp, `Content-Type: application/json`, and a
 `Cache-Control` policy containing `no-store`.
 
 Required GitHub configuration:
@@ -102,7 +107,21 @@ Required GitHub configuration:
 | Name | Type | Purpose |
 | --- | --- | --- |
 | `HETZNER_DEPLOY_SSH_PRIVATE_KEY` | repository secret | Private key matching `deploy_ssh_public_key` in `terraform/hetzner-prod/prod.auto.tfvars.json` |
-| `HETZNER_PROD_HOST` | repository variable, optional | Hetzner host/IP; defaults to `162.55.210.48` |
+| `HETZNER_PROD_HOST` | repository variable, optional | Approved production host/IP |
+| `PROD_SECRET_PACKAGE_VERSION` | repository variable | Reviewed positive numeric PROD version mapped by the workflow to process-local `SECRET_PACKAGE_VERSION`; never `latest` or an alias |
+
+There is no manual version input or GitHub environment binding for this pin in
+the current workflow. Access to the repository variable and changes to the
+workflow that consumes it must therefore be restricted through repository
+administration and reviewed branch/ruleset controls. A manual emergency run
+sets process-local `SECRET_PACKAGE_VERSION` explicitly; it does not change the
+repository variable.
+
+The retained-GCP jobs use GitHub OIDC and the Terraform-managed WIF providers.
+Their attribute conditions bind immutable owner/repository IDs, the exact
+repository name, and `refs/heads/development`. Do not add a GCP service-account
+JSON key to GitHub. The Hetzner job itself has no Google credential and only
+uses SSH; the VM's external provisioner identity fetches PROD.
 
 Manual dispatch target `hetzner-prod` runs the same Hetzner deploy. Manual
 dispatch targets `firestore`, `transcription`, and `code-worker` still trigger
@@ -110,8 +129,9 @@ only the retained GCP Cloud Build targets. Migrated
 app/web services must not be redeployed through GCP Cloud Run or app Cloud
 Build triggers.
 
-For emergency use outside GitHub Actions, check out the exact intended commit
-and invoke `scripts/hetzner/github-actions-deploy.sh` without `GITHUB_SHA` or
+For emergency use outside GitHub Actions, obtain incident approval, check out
+the exact intended commit, set the approved numeric PROD version, and invoke
+`scripts/hetzner/github-actions-deploy.sh` without `GITHUB_SHA` or
 `GITHUB_RUN_ID`. The script uses `git rev-parse HEAD`, records
 `workflowRunId` as `manual`, and retains the same readiness and attestation
 gates. It refuses a checkout with tracked or untracked changes and syncs a
@@ -124,7 +144,11 @@ Run on the VM as root:
 
 ```bash
 cd /opt/intexuraos
-INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/provision.sh --email ops@example.com
+RELEASE_SHA="$(git rev-parse --verify HEAD)"
+[[ "${RELEASE_SHA}" =~ ^[0-9a-f]{40}$ ]] || exit 1
+INTEXURAOS_COMMIT_SHA="${RELEASE_SHA}" INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/provision.sh \
+  --version <prod-numeric-version> --email <operations-email>
 ```
 
 Provisioning installs Node 22, PM2, Google Cloud CLI, nginx with Lua support,
@@ -141,33 +165,33 @@ if type(loader) ~= "function" then error(err or "missing resty.openidc") end
 LUA
 ```
 
-Certbot uses `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN`, a dedicated Cloudflare
-token with Zone DNS Edit permission for the `intexuraos.cloud` zone. Do not
-reuse the Browser Rendering token stored in `INTEXURAOS_CLOUDFLARE_API_TOKEN`.
-Terraform creates this DNS-token secret separately from the app-secret
-inventory and grants Secret Manager Secret Accessor to the
-`ixos-hetzner-provisioner-dev` service account. Use that service account
-key for `/home/deploy/provisioner-sa-key.json` on the VM.
+Certbot uses the PROD package's `cloudflareDnsApiTokenBase64` file member, a
+dedicated Cloudflare token with only the required zone permissions. Do not
+reuse the Browser Rendering token. The provisioner fetches the package and
+renders the certbot projection; certbot and nginx never call Secret Manager.
 
 Runtime services use a separate `ixos-hetzner-runtime-dev` service
 account key at `/home/deploy/runtime-sa-key.json`. That runtime account has the
 retained GCP data-plane permissions needed by PM2 services: Firestore user,
 Pub/Sub publisher, Firebase Auth admin, logging writer, object admin for the
-retained writable buckets, self token creation for signing, and access to the
-explicit Hetzner runtime secret allowlist. Do not reuse the provisioner key for
-PM2 runtime.
+retained writable buckets, and self token creation for signing. It has no
+Secret Manager permission. Do not reuse the provisioner key for PM2 runtime.
 
-Terraform bootstrap copies the local keys from
-`provisioner_sa_key_path` and `runtime_sa_key_path` to these VM paths.
+Terraform bootstrap copies only the external provisioner credential. The
+runtime JSON is rotated outside Terraform, packaged as
+`runtimeGcpServiceAccountJsonBase64`, validated, and rendered atomically as
+mode `0600` by the provisioner.
 
 ## Runtime Configuration And Secret Refresh
 
-The VM needs readable keys at `/home/deploy/provisioner-sa-key.json` and
-`/home/deploy/runtime-sa-key.json`. `load-secrets.sh` renders production values
-from `config/environments/`, uses the provisioner key to read only the remaining
-actual secrets, and writes `GOOGLE_APPLICATION_CREDENTIALS` in `.env.prod` to
-the runtime key. The exact repository-versus-Secret-Manager boundary is defined
-in the [runtime configuration policy](./runtime-configuration.md).
+The VM initially needs only the external provisioner credential at
+`/home/deploy/provisioner-sa-key.json`. `load-secrets.sh` uses it to fetch the
+approved exact PROD package version, validates CRC32C/schema/environment/exact
+membership, and renders all target projections to private staging. It writes
+`GOOGLE_APPLICATION_CREDENTIALS` in `.env.prod` to the runtime key rendered
+from the same package. The provisioner is never inside the package. The exact
+boundary is defined in the
+[runtime configuration policy](./runtime-configuration.md).
 
 SentryBox code-task automation depends on Hetzner runtime secrets for inbound
 webhook verification. Workers read issue evidence through the private
@@ -176,23 +200,108 @@ webhook verification. Workers read issue evidence through the private
 before rotating `INTEXURAOS_SENTRY_WEBHOOK_SECRET`,
 or `INTEXURAOS_SENTRY_AUTOMATION_USER_ID`.
 
+Routine refreshes must use `github-actions-deploy.sh`; do not invoke the
+loader's combined compatibility mode as a shortcut. The deploy wrapper installs
+the locked workspace dependencies first, then invokes the loader with the exact
+commit and numeric package version using `--stage-only`. The loader returns only
+`PREVIOUS_PROJECTION_RELEASE_NAME` and `STAGED_PROJECTION_RELEASE_NAME`. The
+generic renderer has already atomically switched the generic package `current`
+at `/var/lib/intexuraos/secret-packages/prod/current` to the validated package
+release. `--stage-only` does not change the independently managed runtime
+projection `current` at `/var/lib/intexuraos/secret-projections/prod/current` or
+any stable runtime file link. It then revalidates the candidate with
+`--preflight`, including runtime-token issuance and a minimal Firestore request
+through the candidate runtime key.
+
+After preflight, the wrapper atomically runs `--activate <release-name>`. Alloy
+is not restarted during staging or preflight because its systemd unit still
+reads the previously active `.env.prod`. Immediately after successful
+activation, the wrapper installs/reconfigures Alloy against the newly active
+projection, restarts it, and requires `alloy.service` to be active. It then
+renders a protected candidate PM2 configuration, reloads only `code-agent` with
+`--only code-agent --update-env`, and waits for its direct-origin semantic
+health. The checked-in verifier requires the `firestore` dependency check to be
+healthy. Only then does the wrapper reload the complete PM2 fleet and run the
+full backend, edge, and public health suite. No package payload or secret value
+is printed.
+
+Verify metadata without displaying content:
+
 ```bash
-cd /opt/intexuraos
-sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
+sudo stat -Lc '%U:%G %a %n' \
+  /etc/intexuraos/.env.prod \
+  /home/deploy/runtime-sa-key.json \
+  /etc/intexuraos/internal-auth-token \
+  /etc/letsencrypt/cloudflare.ini \
+  /etc/intexuraos/tls-private-key.pem
 ```
 
-The script prints secret names only, never values. It writes the validated,
-merged `/etc/intexuraos/.env.prod` with mode `600` using an explicit Hetzner
-runtime secret allowlist and updates `/etc/intexuraos/internal-auth-token` for
-nginx. The `--secret` option rejects the policy-derived blocklist containing
-every versioned configuration name and the permanent Google OAuth redirect
-tombstone, so none can be read from Secret Manager.
+Required results are the documented owners, `0600` for environment/key/token
+files and `0640` for the nginx token. Run the package canary and direct-origin
+smoke suite before PM2/nginx reload. Full candidate/promotion/rollback steps are
+in [Secret Packages Operations](./secret-packages.md).
+
+### Production Package Cutover
+
+1. Record the currently active numeric PROD version and verify it can still be
+   fetched and rendered as the rollback candidate.
+2. Publish the complete replacement payload outside Terraform, fetch the
+   returned numeric version, validate CRC32C and exact membership, and require
+   the legacy comparison to show only approved differences.
+3. On the VM, fetch the candidate with the provisioner into private staging.
+   Confirm the provisioner can access PROD only and the runtime SA cannot
+   access Secret Manager.
+4. Stage all projections. Validate the runtime credential's account/project/key
+   ID and token issuance without printing JSON. Validate TLS/Cloudflare formats,
+   nginx token presence, `.env.prod` allowlists, owners, and modes.
+5. Run candidate credential token issuance and minimal Firestore preflight
+   without changing the active projection.
+6. Atomically activate the complete projection. Reconfigure/restart Alloy from
+   the now-active `.env.prod` and require `alloy.service` to be active. Reload
+   only `code-agent` with the candidate environment and require semantic health
+   including Firestore. Then reload the complete PM2 fleet/nginx, run the
+   remaining smoke suite, and publish evidence containing only commit and
+   numeric package version.
+7. Observe audit/application logs. Do not disable/destroy the prior package
+   version or old runtime SA key until the approved observation and rollback
+   gates pass.
+
+Before activation, any failure leaves the runtime projection `current` and
+every stable runtime link unchanged; the generic package `current` may already
+identify the validated candidate and is not consumed directly by PM2/nginx.
+After activation, the deploy EXIT trap runs `--rollback` for the recorded prior
+immutable projection and restores all stable links through the runtime
+projection `current`. Only after that rollback succeeds, it reloads Alloy
+against the restored `.env.prod` by using the previous immutable code release,
+reloads the previous PM2 code release (including a partially switched
+`code-agent`), and requires the full backend and runtime health suites. A failed
+projection rollback or Alloy reload fails compensation, is a deployment
+incident, and must not be reported as success. Never copy individual members
+between versions.
+
+### Runtime Service-Account Rotation
+
+Create the replacement key outside Terraform, package it into a complete new
+PROD version, and use the provisioner to render it mode `0600`. Canary minimal
+Firestore/GCS/Pub/Sub/Firebase Auth operations, then reload the fleet. Disable
+the old key, monitor by key ID, and delete only after the soak period. The
+provisioner remains separate and the runtime SA never receives package access.
+If a key is exposed, rotation/revocation precedes any optional Git-history
+cleanup.
+
+### Break Glass And Recovery
+
+Emergency access requires incident approval and a time-bounded resource-level
+accessor grant to PROD only. Numeric pinning, CRC, schema validation,
+redaction, staging, and atomic promotion still apply. Remove the grant and
+review Data Access logs immediately after recovery. If the VM is rebuilt,
+recover the external provisioner first, then fetch the approved exact package;
+the package cannot recover its own bootstrap identity.
 
 ## Deploy Or Reload Runtime
 
 ```bash
 cd /opt/intexuraos
-sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh
 sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh
 sudo -iu deploy bash -lc 'cd /opt/intexuraos && CI=true pnpm install --frozen-lockfile'
 RELEASE_SHA='<40-character lowercase Git SHA deployed to /opt/intexuraos>'
@@ -209,9 +318,10 @@ sudo INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh
 `/var/www/intexuraos/web/releases/<commit-sha>`, and atomically switches
 `/var/www/intexuraos/web/current` only after the release is ready. It clears inherited
 `INTEXURAOS_*` variables and temporarily replaces `apps/web/.env*` files with
-a sanitized `.env.production.local` containing only web-safe Auth0/Firebase/
-Sentry values plus generated public API paths, so ignored local env files
-cannot leak backend secrets into Vite.
+a sanitized ephemeral `.env.production.local` containing only the package
+version's browser-safe Firebase member, web-safe Auth0/Sentry values, and
+generated public API paths. It is removed after the build, and backend package
+members can never enter Vite.
 `reload-pm2.sh` renders the CommonJS ecosystem config to a private JSON file
 before starting PM2, because PM2 treats `ecosystem.config.prod.cjs` as a plain
 script on the Hetzner host. It derives every local `/health` URL and expected
@@ -220,6 +330,18 @@ all-service semantic-health passes before `pm2 save`.
 `PM2_HEALTH_URLS` remains an explicit override for controlled diagnostics; each
 space-delimited entry must use `service-name|http://127.0.0.1:PORT/health`.
 Normal deployments must leave it unset.
+
+For an approved recovery, inspect only the active release name with:
+
+```bash
+sudo INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/load-secrets.sh --current-release
+```
+
+Use `--rollback <recorded-release-name>` only as part of the documented
+compensation flow, followed immediately by reloading the previous code release
+and Alloy against the restored `.env.prod`, then running the complete health
+suite.
 
 PM2 file logs are bounded by `/etc/logrotate.d/intexuraos-pm2`: daily rotation,
 early rotation at 100 MB per file, 14 retained rotations, compression with one
@@ -262,10 +384,11 @@ The previous GCP load-balancer IP for rollback context was `136.110.232.83`.
 Use it only after recreating the legacy GCP load balancer with
 `enable_load_balancer=true`.
 
-For automated certbot DNS-01 issuance, store a dedicated Cloudflare token with
-Zone DNS Edit and Zone Read permissions for `intexuraos.cloud` as a new version
-of `INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN` in GCP Secret Manager. The Browser
-Rendering token in `INTEXURAOS_CLOUDFLARE_API_TOKEN` must not be reused.
+For automated certbot DNS-01 issuance, rotate the dedicated token in the PROD
+package's `cloudflareDnsApiTokenBase64` member, publish a complete numeric
+candidate, and render `/etc/letsencrypt/cloudflare.ini` as mode `0600`. Do not
+create or read an individual Cloudflare secret. The Browser Rendering token
+must not be reused.
 
 Until that Cloudflare record and token state is corrected, direct origin checks
 with `curl --resolve intexuraos.cloud:443:162.55.210.48 ...` are the canonical
@@ -281,12 +404,10 @@ buckets or Firestore.
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/environments/dev plan \
   -var='enable_load_balancer=false'
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/environments/dev apply \
   -var='enable_load_balancer=false'
 ```
@@ -303,13 +424,11 @@ replacement, not an in-place repair. Use:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod plan \
   -replace=hcloud_server.prod \
   -out=/tmp/hetzner-prod-recreate-final.tfplan
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply /tmp/hetzner-prod-recreate-final.tfplan
 ```
 
@@ -330,7 +449,6 @@ curl --fail --silent --show-error --max-time 15 \
   https://intexuraos.cloud/healthz
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod plan -detailed-exitcode
 ```
 
@@ -356,7 +474,6 @@ process.stdout.write(JSON.stringify({
 NODE
 )"
 
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 gcloud pubsub topics publish intexuraos-pr-triage-dev \
   --project=intexuraos-dev-pbuchman \
   --message="${PR_TRIAGE_PAYLOAD}"
@@ -384,12 +501,10 @@ with Pub/Sub filters active and Scheduler jobs paused:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod plan \
   -var='activate_hetzner_async_consumers=false'
 
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply \
   -var='activate_hetzner_async_consumers=false'
 ```
@@ -403,7 +518,6 @@ apply the activation gate:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply \
   -var='activate_hetzner_async_consumers=true'
 ```
@@ -432,7 +546,6 @@ Run the one-time cleanup with the normal Hetzner Terraform credentials:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply \
   -var='enable_retired_async_consumer_cleanup=true'
 ```
@@ -442,7 +555,6 @@ plain applies do not keep a cleanup marker in state:
 
 ```bash
 STORAGE_EMULATOR_HOST= FIRESTORE_EMULATOR_HOST= PUBSUB_EMULATOR_HOST= \
-GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json \
 terraform -chdir=terraform/hetzner-prod apply
 ```
 

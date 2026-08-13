@@ -43,6 +43,8 @@ const phases = [
       { name: 'endpoints', script: 'verify-required-endpoints.mjs' },
       { name: 'hash-routing', script: 'verify-hash-routing.mjs' },
       { name: 'terraform-secrets', script: 'verify-terraform-secrets.mjs' },
+      { name: 'secret-packages', script: 'verify-secret-packages.mjs' },
+      { name: 'credential-files', script: 'verify-credential-files.mjs' },
       { name: 'pubsub', script: 'verify-pubsub.mjs' },
       { name: 'logging', script: 'verify-logging.mjs' },
       { name: 'incoming-request-logging', script: 'verify-incoming-request-logging.mjs' },

@@ -29,6 +29,17 @@ const SECRET_PATTERNS = [
   { regex: /-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----/g, name: 'Private Key' },
 ];
 
+const FORBIDDEN_STATE_PATTERNS = [
+  {
+    regex: /\bsecret_data\b/u,
+    name: 'Secret payload written to Terraform state',
+  },
+  {
+    regex: /^\s*data\s+"google_secret_manager_secret_version"\s+/u,
+    name: 'Secret Manager version data source writes payload to Terraform state',
+  },
+];
+
 const ALLOWED_PATTERNS = [
   /var\./,
   /data\./,
@@ -75,6 +86,17 @@ function checkFile(filePath) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (line.trim().startsWith('#') || line.trim().startsWith('//')) continue;
+
+    for (const { regex, name } of FORBIDDEN_STATE_PATTERNS) {
+      if (regex.test(line)) {
+        violations.push({
+          line: i + 1,
+          type: name,
+          content: '[redacted Terraform secret-state expression]',
+          matched: '[redacted]',
+        });
+      }
+    }
     if (isAllowedContext(line)) continue;
 
     for (const { regex, name } of SECRET_PATTERNS) {

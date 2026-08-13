@@ -64,6 +64,7 @@ log "Redeploying Cloud Functions for worker: ${WORKER}"
 case "${WORKER}" in
   transcription)
     FUNCTIONS=("intexuraos-transcription-${ENVIRONMENT}")
+    FUNCTION_SECRETS="INTEXURAOS_INTERNAL_AUTH_TOKEN=INTEXURAOS_INTERNAL_AUTH_TOKEN:2,INTEXURAOS_SPEECHMATICS_APP_API_KEY=INTEXURAOS_SPEECHMATICS_APP_API_KEY:1"
     ;;
   *)
     log "WARNING: No function mapping found for worker: ${WORKER}"
@@ -77,6 +78,7 @@ for FUNC in "${FUNCTIONS[@]}"; do
   gcloud functions deploy "${FUNC}" \
     --region="${REGION}" \
     --source="${DEST_PATH}" \
+    --set-secrets="${FUNCTION_SECRETS}" \
     --gen2 \
     --quiet &
 done

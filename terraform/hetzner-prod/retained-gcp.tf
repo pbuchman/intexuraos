@@ -70,35 +70,45 @@ locals {
     llm_usage_service            = "intexuraos-llm-usage-${local.retained_gcp_environment}@${var.project_id}.iam.gserviceaccount.com"
   }
 
-  retained_gcp_secret_ids = toset([
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
-    "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
-    "INTEXURAOS_WHATSAPP_WABA_ID",
-    "INTEXURAOS_WHATSAPP_APP_SECRET",
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
+  retained_gcp_target_secret_ids = toset([
     "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-    "INTEXURAOS_SSL_PRIVATE_KEY",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
-    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    var.cloudflare_dns_api_token_secret_id,
-    "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_MINIMAX_APP_API_KEY",
-    "INTEXURAOS_MIMO_APP_API_KEY",
-    "INTEXURAOS_DASHSCOPE_APP_API_KEY",
-    "INTEXURAOS_KIMI_APP_API_KEY",
-    "INTEXURAOS_OPENROUTER_APP_API_KEY",
-    "INTEXURAOS_LINEAR_API_KEY",
-    "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
-    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY",
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
+    "INTEXURAOS_SECRET_PACKAGE_DEV",
+    "INTEXURAOS_SECRET_PACKAGE_PROD",
+    "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
   ])
+
+  retained_gcp_legacy_secret_ids = toset([
+    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
+    "INTEXURAOS_DASHSCOPE_APP_API_KEY",
+    "INTEXURAOS_ENCRYPTION_KEY",
+    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY",
+    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
+    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
+    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
+    "INTEXURAOS_KIMI_APP_API_KEY",
+    "INTEXURAOS_LINEAR_API_KEY",
+    "INTEXURAOS_MIMO_APP_API_KEY",
+    "INTEXURAOS_MINIMAX_APP_API_KEY",
+    "INTEXURAOS_OPENAI_APP_API_KEY",
+    "INTEXURAOS_OPENROUTER_APP_API_KEY",
+    "INTEXURAOS_ORCHESTRATOR_SECRET",
+    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
+    "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
+    "INTEXURAOS_SSL_PRIVATE_KEY",
+    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
+    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
+    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
+    "INTEXURAOS_WHATSAPP_APP_SECRET",
+    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
+    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
+    "INTEXURAOS_WHATSAPP_WABA_ID",
+    var.cloudflare_dns_api_token_secret_id,
+  ])
+
+  retained_gcp_secret_ids = setunion(
+    local.retained_gcp_target_secret_ids,
+    var.legacy_secret_manager_enabled ? local.retained_gcp_legacy_secret_ids : toset([])
+  )
 
   retained_gcp_inventory = {
     project_id                    = local.retained_gcp.project_id
@@ -112,6 +122,6 @@ locals {
     cloud_build_triggers          = local.retained_gcp_cloud_build_triggers
     service_accounts              = local.retained_gcp_service_accounts
     secret_ids                    = local.retained_gcp_secret_ids
-    cloudflare_dns_api_token_name = local.retained_gcp.cloudflare_dns_api_token_secret_id
+    cloudflare_dns_api_token_name = var.legacy_secret_manager_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null
   }
 }

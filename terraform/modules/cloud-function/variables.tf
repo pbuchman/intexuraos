@@ -98,9 +98,22 @@ variable "env_vars" {
 }
 
 variable "secrets" {
-  description = "Secret Manager secrets to expose as environment variables (key = env var name, value = secret ID)"
-  type        = map(string)
-  default     = {}
+  description = "Secret Manager secrets exposed as environment variables with immutable numeric versions"
+  type = map(object({
+    secret_id = string
+    version   = number
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for secret in values(var.secrets) :
+      length(trimspace(secret.secret_id)) > 0 &&
+      secret.version > 0 &&
+      floor(secret.version) == secret.version
+    ])
+    error_message = "Each secret must have a non-empty secret_id and a positive integer version."
+  }
 }
 
 variable "invoker_members" {

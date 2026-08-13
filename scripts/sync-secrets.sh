@@ -1,86 +1,60 @@
 #!/usr/bin/env bash
-# sync-secrets.sh - Single entrypoint for local secret sync and missing-secret population.
-#
-# Modes:
-#   1) Default (non-interactive):
-#      - Syncs Terraform-defined INTEXURAOS_* secrets from GCP Secret Manager into .envrc
-#      - Prints missing/unreadable secrets
-#
-#   2) --add-new (interactive):
-#      - Runs default sync
-#      - Prompts only for missing secret values (no overwrite flow)
-#
-# Usage:
-#   ./scripts/sync-secrets.sh [environment] [--add-new] [--project-id <project_id>]
-#
-# Examples:
-#   ./scripts/sync-secrets.sh
-#   ./scripts/sync-secrets.sh dev
-#   ./scripts/sync-secrets.sh dev --add-new
-#   ./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman --add-new
+# Render the exact DEV secret package, merge it with tracked runtime config,
+# and atomically publish the local .envrc and GitHub App private key.
 
 set -euo pipefail
 
 SCRIPT_NAME="$(basename "$0")"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ENVRC_FILE="${REPO_ROOT}/.envrc"
+SECRET_PACKAGE_CLI="${REPO_ROOT}/scripts/secret-package.mjs"
 RUNTIME_CONFIG_RENDERER="${REPO_ROOT}/scripts/render-runtime-config.mjs"
 
-DEFAULT_ENVIRONMENT="dev"
-ADD_NEW_MODE=0
-ENVIRONMENT="${DEFAULT_ENVIRONMENT}"
+ENVIRONMENT="dev"
 CLI_PROJECT_ID=""
+CLI_PACKAGE_VERSION=""
+ENVRC_FILE="${REPO_ROOT}/.envrc"
+PACKAGE_OUTPUT_DIR="${SECRET_PACKAGE_RENDER_DIR:-${INTEXURAOS_SECRET_PACKAGE_ROOT:-${HOME}/.config/intexuraos/secret-packages/dev}}"
+GITHUB_KEY_OUTPUT="${GITHUB_APP_PRIVATE_KEY_PATH:-${HOME}/.code-orchestrator/github-app.pem}"
+PAYLOAD_FILE=""
 REGION_VALUE="${REGION:-europe-central2}"
+RENDERER_CREDENTIAL_FILE="${SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS:-}"
 
-NON_EXPORTABLE_SECRETS=(
-  "INTEXURAOS_SSL_PRIVATE_KEY"
-  "INTEXURAOS_GITHUB_APP_PRIVATE_KEY"
-)
-
-declare -a TERRAFORM_SECRETS=()
-declare -a SECRET_MANAGER_SECRETS=()
-SECRET_MAP_FILE=""
-PARALLEL_TEMP_DIR=""
 RUNTIME_CONFIG_FILE=""
-BLOCKED_SECRET_NAMES_FILE=""
 ENVRC_TEMP_FILE=""
-ENVRC_UPDATED=0
-
-declare -a EXPORTED_SECRETS=()
-declare -a SKIPPED_NON_EXPORTABLE=()
-declare -a MISSING_SECRETS=()
-declare -a MISSING_VERSIONS=()
-declare -a UNREADABLE_SECRETS=()
-declare -a PROMPTABLE_MISSING=()
-declare -a MANUAL_MISSING=()
-
-declare -a ADDED_SECRETS=()
-declare -a FAILED_ADDS=()
-declare -a SKIPPED_INPUT=()
+GITHUB_KEY_TEMP_FILE=""
+TRANSACTION_DIR=""
+TRANSACTION_ACTIVE=0
+PREVIOUS_PACKAGE_CURRENT_PRESENT=0
+PREVIOUS_PACKAGE_CURRENT_TARGET=""
+PREVIOUS_ENVRC_PRESENT=0
+PREVIOUS_GITHUB_KEY_PRESENT=0
 
 usage() {
   cat <<EOF
 Usage:
-  ${SCRIPT_NAME} [environment] [--add-new] [--project-id <project_id>] [--output <path>]
+  ${SCRIPT_NAME} [dev] --version <N> [options]
 
-Modes:
-  default        Non-interactive sync from GCP Secret Manager to .envrc
-  --add-new      Sync + prompt for missing Terraform-defined secret values
-
-Arguments:
-  environment    Terraform environment name (default: ${DEFAULT_ENVIRONMENT})
+The version may instead be supplied through SECRET_PACKAGE_VERSION. It must be
+an exact positive integer.
 
 Options:
-  --add-new      Prompt for missing secret values (no overwrite flow)
-  --project-id   Override GCP project ID
-  --output       Override output file path (default: <repo>/.envrc)
-  -h, --help     Show this help
+  --version <N>                    Exact DEV package version
+  --project-id <project_id>        Override GCP project ID
+  --output <path>                  .envrc output (default: <repo>/.envrc)
+  --package-output-dir <path>      Private package render root
+  --output-dir <path>              Alias for --package-output-dir
+  --github-app-key-output <path>   GitHub App PEM output
+  --payload-file <path>            Offline package payload (tests/bootstrap)
+  -h, --help                       Show this help
 
 Project ID resolution order:
   1) --project-id
-  2) \$PROJECT_ID
-  3) gcloud active project
+  2) PROJECT_ID
+  3) active gcloud project
+
+Set SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS to the dedicated home-dev
+renderer key. It is used only to fetch the DEV package and is not projected.
 EOF
 }
 
@@ -90,486 +64,38 @@ fail() {
 }
 
 cleanup() {
-  if [[ -n "${SECRET_MAP_FILE}" && -f "${SECRET_MAP_FILE}" ]]; then
-    rm -f "${SECRET_MAP_FILE}"
-  fi
-  if [[ -n "${PARALLEL_TEMP_DIR}" && -d "${PARALLEL_TEMP_DIR}" ]]; then
-    rm -rf "${PARALLEL_TEMP_DIR}"
+  local exit_code=$?
+  trap - EXIT
+  set +e
+
+  if [[ ${TRANSACTION_ACTIVE} -eq 1 && ${exit_code} -ne 0 ]]; then
+    if ! rollback_local_transaction; then
+      echo "ERROR: Local secret-package transaction rollback failed" >&2
+      exit_code=1
+    fi
   fi
   if [[ -n "${RUNTIME_CONFIG_FILE}" && -f "${RUNTIME_CONFIG_FILE}" ]]; then
     rm -f "${RUNTIME_CONFIG_FILE}"
   fi
-  if [[ -n "${BLOCKED_SECRET_NAMES_FILE}" && -f "${BLOCKED_SECRET_NAMES_FILE}" ]]; then
-    rm -f "${BLOCKED_SECRET_NAMES_FILE}"
-  fi
   if [[ -n "${ENVRC_TEMP_FILE}" && -f "${ENVRC_TEMP_FILE}" ]]; then
     rm -f "${ENVRC_TEMP_FILE}"
   fi
+  if [[ -n "${GITHUB_KEY_TEMP_FILE}" && -f "${GITHUB_KEY_TEMP_FILE}" ]]; then
+    rm -f "${GITHUB_KEY_TEMP_FILE}"
+  fi
+  if [[ -n "${TRANSACTION_DIR}" ]]; then
+    rm -rf "${TRANSACTION_DIR}"
+  fi
+
+  exit "${exit_code}"
 }
 
 trap cleanup EXIT
 
-is_non_exportable_secret() {
-  local secret_name="$1"
-  local blocked
-  for blocked in "${NON_EXPORTABLE_SECRETS[@]}"; do
-    if [[ "${secret_name}" == "${blocked}" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-is_sensitive_secret_name() {
-  local secret_name="$1"
-  [[ "${secret_name}" == *TOKEN* || "${secret_name}" == *SECRET* || "${secret_name}" == *KEY* ]]
-}
-
-extract_terraform_secret_entries() {
-  local tf_file="$1"
-
-  awk '
-    /module[[:space:]]+"secret_manager"[[:space:]]*[{]/ { in_module = 1; next }
-    in_module && /secrets[[:space:]]*=[[:space:]]*[{]/ { in_secrets = 1; next }
-    in_secrets && /^[[:space:]]*[}][[:space:]]*$/ { in_secrets = 0; in_module = 0; next }
-    in_secrets {
-      # Use quote splitting for macOS awk compatibility (no gawk-only match() array arg).
-      quote_count = split($0, parts, "\"")
-      if (quote_count >= 4 && parts[2] ~ /^INTEXURAOS_[A-Z0-9_]+$/ && parts[3] ~ /^[[:space:]]*=[[:space:]]*$/) {
-        print parts[2] "\t" parts[4]
-      }
-    }
-  ' "${tf_file}"
-}
-
-load_terraform_secret_map() {
-  local tf_file="$1"
-  local temp_map_file
-
-  temp_map_file="$(mktemp "${TMPDIR:-/tmp}/sync-secrets-map.XXXXXX")"
-  extract_terraform_secret_entries "${tf_file}" | sort -u > "${temp_map_file}"
-
-  if [[ ! -s "${temp_map_file}" ]]; then
-    rm -f "${temp_map_file}"
-    fail "No INTEXURAOS_* secrets found in ${tf_file}"
-  fi
-
-  if [[ -n "${SECRET_MAP_FILE}" && -f "${SECRET_MAP_FILE}" ]]; then
-    rm -f "${SECRET_MAP_FILE}"
-  fi
-  SECRET_MAP_FILE="${temp_map_file}"
-
-  TERRAFORM_SECRETS=()
-  while IFS=$'\t' read -r key description; do
-    if [[ -z "${key}" ]]; then
-      continue
-    fi
-    TERRAFORM_SECRETS+=("${key}")
-  done < "${SECRET_MAP_FILE}"
-}
-
-load_runtime_config() {
-  RUNTIME_CONFIG_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-runtime-config.XXXXXX")"
-  BLOCKED_SECRET_NAMES_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-blocked-secret-names.XXXXXX")"
-
-  if ! node "${RUNTIME_CONFIG_RENDERER}" \
-    --environment "${ENVIRONMENT}" \
-    --format shell-export > "${RUNTIME_CONFIG_FILE}"
-  then
-    fail "Unable to render tracked runtime configuration for ${ENVIRONMENT}"
-  fi
-
-  if ! node --input-type=module - "${REPO_ROOT}/scripts/lib/runtime-config.mjs" \
-    > "${BLOCKED_SECRET_NAMES_FILE}" <<'NODE'
-import { pathToFileURL } from 'node:url';
-
-const runtimeConfigModule = await import(pathToFileURL(process.argv[2]).href);
-const policy = runtimeConfigModule.loadRuntimePolicy();
-const blockedNames = [
-  ...new Set([
-    ...policy.scopes.common,
-    ...policy.scopes.dev,
-    ...policy.scopes.prod,
-    ...policy.deleteOnlyNames,
-  ]),
-].sort();
-process.stdout.write(`${blockedNames.join('\n')}\n`);
-NODE
-  then
-    fail "Unable to load the runtime configuration policy"
-  fi
-
-  [[ -s "${BLOCKED_SECRET_NAMES_FILE}" ]] \
-    || fail "Runtime configuration policy blocklist is empty"
-}
-
-select_secret_manager_names() {
-  local name=""
-
-  SECRET_MANAGER_SECRETS=()
-  for name in "${TERRAFORM_SECRETS[@]}"; do
-    if grep -qFx "${name}" "${BLOCKED_SECRET_NAMES_FILE}"; then
-      continue
-    fi
-    SECRET_MANAGER_SECRETS+=("${name}")
-  done
-
-  TERRAFORM_SECRETS=("${SECRET_MANAGER_SECRETS[@]}")
-}
-
-get_secret_description() {
-  local secret_name="$1"
-  local description=""
-
-  if [[ -n "${SECRET_MAP_FILE}" && -f "${SECRET_MAP_FILE}" ]]; then
-    description="$(awk -F $'\t' -v key="${secret_name}" '$1 == key { print $2; exit }' "${SECRET_MAP_FILE}")"
-  fi
-
-  if [[ -z "${description}" ]]; then
-    description="<no description>"
-  fi
-
-  printf '%s' "${description}"
-}
-
-_run_parallel_fetch() {
-  local secrets_list_file="$1"
-
-  if ! python3 - "${PROJECT_ID}" "${PARALLEL_TEMP_DIR}" "${secrets_list_file}" << 'PYTHON_FETCH'
-import sys, json, base64, ssl, os
-from concurrent.futures import ThreadPoolExecutor
-from urllib.request import Request, urlopen
-from subprocess import check_output
-
-project_id, temp_dir, secrets_file = sys.argv[1], sys.argv[2], sys.argv[3]
-
-ssl_ctx = ssl.create_default_context()
-try:
-    import certifi
-    ssl_ctx.load_verify_locations(certifi.where())
-except ImportError:
-    # Keep create_default_context() and the operating system trust store.
-    pass
-
-token = check_output(["gcloud", "auth", "print-access-token"], text=True).strip()
-base_url = f"https://secretmanager.googleapis.com/v1/projects/{project_id}/secrets"
-headers = {"Authorization": f"Bearer {token}"}
-
-existing = set()
-page_url = f"{base_url}?filter=name%3AINTEXURAOS_&pageSize=100"
-while page_url:
-    resp = json.loads(urlopen(Request(page_url, headers=headers), context=ssl_ctx).read())
-    for s in resp.get("secrets", []):
-        existing.add(s["name"].split("/")[-1])
-    nxt = resp.get("nextPageToken")
-    page_url = f"{base_url}?filter=name%3AINTEXURAOS_&pageSize=100&pageToken={nxt}" if nxt else None
-
-with open(os.path.join(temp_dir, "_existing.txt"), "w") as f:
-    f.write("\n".join(sorted(existing)))
-
-with open(secrets_file) as f:
-    to_check = [line.strip() for line in f if line.strip()]
-to_fetch = [s for s in to_check if s in existing]
-
-def fetch(name):
-    url = f"{base_url}/{name}/versions/latest:access"
-    try:
-        data = json.loads(urlopen(Request(url, headers=headers), context=ssl_ctx).read())
-        value = base64.b64decode(data["payload"]["data"]).decode()
-        with open(os.path.join(temp_dir, f"{name}.status"), "w") as sf:
-            sf.write("present")
-        with open(os.path.join(temp_dir, f"{name}.value"), "w") as vf:
-            vf.write(value)
-    except Exception:
-        try:
-            list_url = f"{base_url}/{name}/versions?pageSize=1"
-            list_data = json.loads(urlopen(Request(list_url, headers=headers), context=ssl_ctx).read())
-            status = "missing-version" if not list_data.get("versions") else "unreadable"
-        except Exception:
-            status = "unreadable"
-        with open(os.path.join(temp_dir, f"{name}.status"), "w") as sf:
-            sf.write(status)
-
-with ThreadPoolExecutor(max_workers=20) as pool:
-    list(pool.map(fetch, to_fetch))
-
-print(f"  Listed {len(existing)} secrets, fetched {len(to_fetch)} values")
-PYTHON_FETCH
-  then
-    fail "Parallel fetch failed. Check python3, gcloud auth, and network."
-  fi
-}
-
-add_secret_value() {
-  local secret_name="$1"
-  local secret_value="$2"
-  printf '%s' "${secret_value}" | gcloud secrets versions add "${secret_name}" \
-    --project="${PROJECT_ID}" \
-    --data-file=- >/dev/null
-}
-
-write_envrc_header() {
-  local output_path="$1"
-  local registry_value="${REGISTRY:-${REGION_VALUE}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev}"
-  cat > "${output_path}" <<EOF
-export PROJECT_ID=${PROJECT_ID}
-export REGION=${REGION_VALUE}
-export REGISTRY=${registry_value}
-EOF
-}
-
-append_envrc_footer() {
-  local output_path="$1"
-  cat >> "${output_path}" <<'EOF'
-
-# === LOCAL OVERRIDES ===
-# Load .envrc.local if exists (for local dev overrides)
-[[ -f .envrc.local ]] && source .envrc.local || true
-EOF
-}
-
-sync_and_classify() {
-  local secret_name=""
-  local secret_status=""
-  local secret_value=""
-
-  EXPORTED_SECRETS=()
-  SKIPPED_NON_EXPORTABLE=()
-  MISSING_SECRETS=()
-  MISSING_VERSIONS=()
-  UNREADABLE_SECRETS=()
-  PROMPTABLE_MISSING=()
-  MANUAL_MISSING=()
-
-  mkdir -p "$(dirname "${ENVRC_FILE}")"
-  ENVRC_TEMP_FILE="$(mktemp "${ENVRC_FILE}.tmp.XXXXXX")"
-  chmod 600 "${ENVRC_TEMP_FILE}"
-
-  write_envrc_header "${ENVRC_TEMP_FILE}"
-  printf '\n# === TRACKED RUNTIME CONFIGURATION ===\n' >> "${ENVRC_TEMP_FILE}"
-  cat "${RUNTIME_CONFIG_FILE}" >> "${ENVRC_TEMP_FILE}"
-
-  if [[ ${#TERRAFORM_SECRETS[@]} -eq 0 ]]; then
-    append_envrc_footer "${ENVRC_TEMP_FILE}"
-    mv -f "${ENVRC_TEMP_FILE}" "${ENVRC_FILE}"
-    ENVRC_TEMP_FILE=""
-    ENVRC_UPDATED=1
-    return
-  fi
-
-  echo "Syncing Terraform-defined secrets..."
-
-  if [[ -n "${PARALLEL_TEMP_DIR}" && -d "${PARALLEL_TEMP_DIR}" ]]; then
-    rm -rf "${PARALLEL_TEMP_DIR}"
-  fi
-  PARALLEL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sync-secrets-fetch.XXXXXX")"
-  local secrets_list_file="${PARALLEL_TEMP_DIR}/_secrets_list.txt"
-  printf '%s\n' "${TERRAFORM_SECRETS[@]}" > "${secrets_list_file}"
-
-  _run_parallel_fetch "${secrets_list_file}"
-
-  local existing_file="${PARALLEL_TEMP_DIR}/_existing.txt"
-
-  for secret_name in "${TERRAFORM_SECRETS[@]}"; do
-    if ! grep -qFx "${secret_name}" "${existing_file}" 2>/dev/null; then
-      MISSING_SECRETS+=("${secret_name}")
-      continue
-    fi
-
-    local status_file="${PARALLEL_TEMP_DIR}/${secret_name}.status"
-    local value_file="${PARALLEL_TEMP_DIR}/${secret_name}.value"
-
-    if [[ ! -f "${status_file}" ]]; then
-      UNREADABLE_SECRETS+=("${secret_name}")
-      continue
-    fi
-
-    secret_status="$(cat "${status_file}")"
-
-    case "${secret_status}" in
-      present)
-        if is_non_exportable_secret "${secret_name}"; then
-          SKIPPED_NON_EXPORTABLE+=("${secret_name}")
-        elif [[ -f "${value_file}" ]]; then
-          secret_value="$(cat "${value_file}")"
-          printf 'export %s=%q\n' "${secret_name}" "${secret_value}" >> "${ENVRC_TEMP_FILE}"
-          EXPORTED_SECRETS+=("${secret_name}")
-        else
-          UNREADABLE_SECRETS+=("${secret_name}")
-        fi
-        ;;
-      missing-version)
-        MISSING_VERSIONS+=("${secret_name}")
-        if is_non_exportable_secret "${secret_name}"; then
-          MANUAL_MISSING+=("${secret_name}")
-        else
-          PROMPTABLE_MISSING+=("${secret_name}")
-        fi
-        ;;
-      unreadable)
-        UNREADABLE_SECRETS+=("${secret_name}")
-        ;;
-    esac
-  done
-
-  append_envrc_footer "${ENVRC_TEMP_FILE}"
-  chmod 600 "${ENVRC_TEMP_FILE}"
-
-  local unresolved=0
-  unresolved=$(( ${#MISSING_SECRETS[@]} + ${#MISSING_VERSIONS[@]} + ${#UNREADABLE_SECRETS[@]} ))
-  if [[ ${unresolved} -gt 0 ]]; then
-    rm -f "${ENVRC_TEMP_FILE}"
-    ENVRC_TEMP_FILE=""
-    return
-  fi
-
-  mv -f "${ENVRC_TEMP_FILE}" "${ENVRC_FILE}"
-  ENVRC_TEMP_FILE=""
-  ENVRC_UPDATED=1
-}
-
-print_secret_list() {
-  local heading="$1"
-  shift
-  local items=("$@")
-
-  if [[ ${#items[@]} -eq 0 ]]; then
-    return
-  fi
-
-  echo "${heading}"
-  local item=""
-  for item in "${items[@]}"; do
-    echo "  - ${item}"
-  done
-  echo ""
-}
-
-print_sync_summary() {
-  echo "============================================"
-  echo "IntexuraOS Secrets Sync"
-  echo "============================================"
-  echo "Project:      ${PROJECT_ID}"
-  echo "Environment:  ${ENVIRONMENT}"
-  echo "Mode:         $([[ ${ADD_NEW_MODE} -eq 1 ]] && echo "sync + add-new" || echo "sync-only")"
-  echo "Output file:  ${ENVRC_FILE}"
-  echo ""
-  echo "Secret Manager values:      ${#TERRAFORM_SECRETS[@]}"
-  echo "Exported to .envrc:        ${#EXPORTED_SECRETS[@]}"
-  echo "Skipped (non-exportable):  ${#SKIPPED_NON_EXPORTABLE[@]}"
-  echo ""
-}
-
-prompt_for_missing_versions() {
-  local secret_name=""
-  local description=""
-  local value=""
-
-  if [[ ${#PROMPTABLE_MISSING[@]} -eq 0 ]]; then
-    echo "No promptable missing secrets found."
-    echo ""
-    return
-  fi
-
-  echo "Interactive add-new: prompting for missing secret values"
-  echo ""
-
-  for secret_name in "${PROMPTABLE_MISSING[@]}"; do
-    description="$(get_secret_description "${secret_name}")"
-    echo "Secret: ${secret_name}"
-    echo "Description: ${description}"
-
-    if is_sensitive_secret_name "${secret_name}"; then
-      read -rsp "Enter value (hidden, leave blank to skip): " value
-      echo ""
-    else
-      read -rp "Enter value (leave blank to skip): " value
-    fi
-
-    if [[ -z "${value}" ]]; then
-      SKIPPED_INPUT+=("${secret_name}")
-      echo "Skipped."
-      echo ""
-      continue
-    fi
-
-    if add_secret_value "${secret_name}" "${value}"; then
-      ADDED_SECRETS+=("${secret_name}")
-      echo "Added new secret version."
-    else
-      FAILED_ADDS+=("${secret_name}")
-      echo "Failed to add secret version."
-    fi
-    echo ""
-  done
-}
-
-print_add_new_summary() {
-  if [[ ${ADD_NEW_MODE} -eq 0 ]]; then
-    return
-  fi
-
-  echo "Add-new summary:"
-  echo "  Added:   ${#ADDED_SECRETS[@]}"
-  echo "  Failed:  ${#FAILED_ADDS[@]}"
-  echo "  Skipped: ${#SKIPPED_INPUT[@]}"
-  echo ""
-
-  print_secret_list "Added versions:" "${ADDED_SECRETS[@]}"
-  print_secret_list "Failed adds:" "${FAILED_ADDS[@]}"
-  print_secret_list "Skipped during prompt:" "${SKIPPED_INPUT[@]}"
-}
-
-print_missing_report() {
-  echo "Missing/blocked secrets report:"
-  echo ""
-
-  print_secret_list "Missing secret resources (run terraform apply):" "${MISSING_SECRETS[@]}"
-  print_secret_list "Missing secret values (no versions):" "${MISSING_VERSIONS[@]}"
-  print_secret_list "Unreadable secrets (check gcloud auth/permissions):" "${UNREADABLE_SECRETS[@]}"
-
-  if [[ ${#MANUAL_MISSING[@]} -gt 0 ]]; then
-    echo "Manual population required for non-exportable secrets:"
-    local secret_name=""
-    for secret_name in "${MANUAL_MISSING[@]}"; do
-      echo "  - ${secret_name}"
-    done
-    echo ""
-  fi
-
-  local issue_count=0
-  issue_count=$(( ${#MISSING_SECRETS[@]} + ${#MISSING_VERSIONS[@]} + ${#UNREADABLE_SECRETS[@]} ))
-
-  if [[ ${issue_count} -eq 0 ]]; then
-    echo "All Terraform-defined secrets are available and readable."
-  else
-    echo "Found ${issue_count} unresolved secret issue(s)."
-  fi
-
-  echo ""
-  if [[ ${ENVRC_UPDATED} -eq 1 ]]; then
-    echo "Updated ${ENVRC_FILE}"
-  else
-    echo "Left ${ENVRC_FILE} unchanged because the generated environment was incomplete."
-  fi
-}
-
-resolve_project_id() {
-  local resolved=""
-
-  if [[ -n "${CLI_PROJECT_ID}" ]]; then
-    resolved="${CLI_PROJECT_ID}"
-  elif [[ -n "${PROJECT_ID:-}" ]]; then
-    resolved="${PROJECT_ID}"
-  else
-    resolved="$(gcloud config get-value project 2>/dev/null || true)"
-  fi
-
-  if [[ -z "${resolved}" || "${resolved}" == "(unset)" ]]; then
-    fail "Could not resolve project ID. Set --project-id, \$PROJECT_ID, or run 'gcloud config set project <PROJECT_ID>'."
-  fi
-
-  PROJECT_ID="${resolved}"
+require_option_value() {
+  local option_name="$1"
+  local option_value="${2:-}"
+  [[ -n "${option_value}" ]] || fail "${option_name} requires a value"
 }
 
 parse_args() {
@@ -577,28 +103,58 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --add-new)
-        ADD_NEW_MODE=1
+      --version)
+        require_option_value "$1" "${2:-}"
+        CLI_PACKAGE_VERSION="$2"
+        shift 2
+        ;;
+      --version=*)
+        CLI_PACKAGE_VERSION="${1#*=}"
         shift
         ;;
       --project-id)
-        shift
-        [[ $# -gt 0 ]] || fail "--project-id requires a value"
-        CLI_PROJECT_ID="$1"
-        shift
+        require_option_value "$1" "${2:-}"
+        CLI_PROJECT_ID="$2"
+        shift 2
         ;;
       --project-id=*)
         CLI_PROJECT_ID="${1#*=}"
         shift
         ;;
       --output)
-        shift
-        [[ $# -gt 0 ]] || fail "--output requires a path"
-        ENVRC_FILE="$1"
-        shift
+        require_option_value "$1" "${2:-}"
+        ENVRC_FILE="$2"
+        shift 2
         ;;
       --output=*)
         ENVRC_FILE="${1#*=}"
+        shift
+        ;;
+      --package-output-dir|--output-dir)
+        require_option_value "$1" "${2:-}"
+        PACKAGE_OUTPUT_DIR="$2"
+        shift 2
+        ;;
+      --package-output-dir=*|--output-dir=*)
+        PACKAGE_OUTPUT_DIR="${1#*=}"
+        shift
+        ;;
+      --github-app-key-output|--github-app-private-key-output)
+        require_option_value "$1" "${2:-}"
+        GITHUB_KEY_OUTPUT="$2"
+        shift 2
+        ;;
+      --github-app-key-output=*|--github-app-private-key-output=*)
+        GITHUB_KEY_OUTPUT="${1#*=}"
+        shift
+        ;;
+      --payload-file)
+        require_option_value "$1" "${2:-}"
+        PAYLOAD_FILE="$2"
+        shift 2
+        ;;
+      --payload-file=*)
+        PAYLOAD_FILE="${1#*=}"
         shift
         ;;
       -h|--help)
@@ -609,9 +165,7 @@ parse_args() {
         fail "Unknown option: $1"
         ;;
       *)
-        if [[ ${environment_set} -eq 1 ]]; then
-          fail "Unexpected positional argument: $1"
-        fi
+        [[ ${environment_set} -eq 0 ]] || fail "Unexpected positional argument: $1"
         ENVIRONMENT="$1"
         environment_set=1
         shift
@@ -620,39 +174,299 @@ parse_args() {
   done
 }
 
+resolve_package_version() {
+  local resolved="${CLI_PACKAGE_VERSION:-${SECRET_PACKAGE_VERSION:-}}"
+  if [[ ! "${resolved}" =~ ^[1-9][0-9]*$ ]]; then
+    fail "--version or SECRET_PACKAGE_VERSION must be an exact positive numeric version"
+  fi
+  PACKAGE_VERSION="${resolved}"
+}
+
+resolve_project_id() {
+  local resolved=""
+  if [[ -n "${CLI_PROJECT_ID}" ]]; then
+    resolved="${CLI_PROJECT_ID}"
+  elif [[ -n "${PROJECT_ID:-}" ]]; then
+    resolved="${PROJECT_ID}"
+  else
+    command -v gcloud >/dev/null 2>&1 \
+      || fail "gcloud CLI is required when --project-id and PROJECT_ID are absent"
+    resolved="$(gcloud config get-value project 2>/dev/null || true)"
+  fi
+  if [[ ! "${resolved}" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]]; then
+    fail "Resolved GCP project ID is invalid"
+  fi
+  PROJECT_ID="${resolved}"
+}
+
+validate_inputs() {
+  [[ "${ENVIRONMENT}" == "dev" ]] || fail "Local package sync supports only the dev environment"
+  [[ -n "${ENVRC_FILE}" ]] || fail "--output must not be empty"
+  [[ -n "${PACKAGE_OUTPUT_DIR}" ]] || fail "--package-output-dir must not be empty"
+  [[ -n "${GITHUB_KEY_OUTPUT}" ]] || fail "--github-app-key-output must not be empty"
+  if [[ -n "${PAYLOAD_FILE}" && ! -f "${PAYLOAD_FILE}" ]]; then
+    fail "Offline payload file is unavailable"
+  fi
+  if [[ -z "${PAYLOAD_FILE}" && -n "${RENDERER_CREDENTIAL_FILE}" ]]; then
+    if ! node --input-type=module - \
+      "${RENDERER_CREDENTIAL_FILE}" \
+      "${PROJECT_ID}" <<'NODE'
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
+const [path, projectId] = process.argv.slice(2);
+let status;
+let credential;
+let descriptor;
+try {
+  status = lstatSync(path);
+  if (!status.isFile() || status.isSymbolicLink() || (status.mode & 0o177) !== 0) process.exit(1);
+  descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const openedStatus = fstatSync(descriptor);
+  if (!openedStatus.isFile() || (openedStatus.mode & 0o177) !== 0) process.exit(1);
+  credential = JSON.parse(readFileSync(descriptor, 'utf8'));
+} catch {
+  process.exit(1);
+} finally {
+  if (descriptor !== undefined) closeSync(descriptor);
+}
+const expectedEmail = `ixos-home-secret-renderer-dev@${projectId}.iam.gserviceaccount.com`;
+if (
+  credential?.type !== 'service_account' ||
+  credential?.project_id !== projectId ||
+  credential?.client_email !== expectedEmail
+) process.exit(1);
+NODE
+    then
+      fail "Dedicated DEV package renderer credential is invalid or not mode 0600"
+    fi
+  fi
+  [[ "${REGION_VALUE}" =~ ^[a-z][a-z0-9-]*[a-z0-9]$ ]] || fail "REGION is invalid"
+}
+
+render_tracked_config() {
+  RUNTIME_CONFIG_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-runtime-config.XXXXXX")"
+  chmod 600 "${RUNTIME_CONFIG_FILE}"
+  if ! node "${RUNTIME_CONFIG_RENDERER}" \
+    --environment dev \
+    --format shell-export > "${RUNTIME_CONFIG_FILE}"
+  then
+    fail "Unable to render tracked DEV runtime configuration"
+  fi
+}
+
+begin_local_transaction() {
+  local current_path="${PACKAGE_OUTPUT_DIR}/current"
+
+  [[ "${ENVRC_FILE}" != "${GITHUB_KEY_OUTPUT}" ]] \
+    || fail ".envrc and GitHub App PEM outputs must be different paths"
+
+  TRANSACTION_DIR="$(mktemp -d "${TMPDIR:-/tmp}/intexuraos-local-sync.XXXXXX")"
+  chmod 700 "${TRANSACTION_DIR}"
+
+  if [[ -L "${current_path}" ]]; then
+    PREVIOUS_PACKAGE_CURRENT_PRESENT=1
+    PREVIOUS_PACKAGE_CURRENT_TARGET="$(readlink "${current_path}")"
+    if [[ ! "${PREVIOUS_PACKAGE_CURRENT_TARGET}" =~ ^dev-v[1-9][0-9]*-[0-9a-f]{8}$ ]]; then
+      fail "Existing DEV package current link is invalid"
+    fi
+  elif [[ -e "${current_path}" ]]; then
+    fail "Existing DEV package current path must be a renderer-managed symlink"
+  fi
+
+  if [[ -e "${ENVRC_FILE}" || -L "${ENVRC_FILE}" ]]; then
+    [[ -f "${ENVRC_FILE}" && ! -L "${ENVRC_FILE}" ]] \
+      || fail "Existing .envrc output must be a regular file"
+    cp "${ENVRC_FILE}" "${TRANSACTION_DIR}/envrc.previous"
+    chmod 600 "${TRANSACTION_DIR}/envrc.previous"
+    PREVIOUS_ENVRC_PRESENT=1
+  fi
+
+  if [[ -e "${GITHUB_KEY_OUTPUT}" || -L "${GITHUB_KEY_OUTPUT}" ]]; then
+    [[ -f "${GITHUB_KEY_OUTPUT}" && ! -L "${GITHUB_KEY_OUTPUT}" ]] \
+      || fail "Existing GitHub App PEM output must be a regular file"
+    cp "${GITHUB_KEY_OUTPUT}" "${TRANSACTION_DIR}/github-key.previous"
+    chmod 600 "${TRANSACTION_DIR}/github-key.previous"
+    PREVIOUS_GITHUB_KEY_PRESENT=1
+  fi
+
+  TRANSACTION_ACTIVE=1
+}
+
+rollback_local_transaction() {
+  node --input-type=module - \
+    "${PACKAGE_OUTPUT_DIR}/current" \
+    "${PREVIOUS_PACKAGE_CURRENT_PRESENT}" \
+    "${PREVIOUS_PACKAGE_CURRENT_TARGET}" \
+    "${ENVRC_FILE}" \
+    "${PREVIOUS_ENVRC_PRESENT}" \
+    "${TRANSACTION_DIR}/envrc.previous" \
+    "${GITHUB_KEY_OUTPUT}" \
+    "${PREVIOUS_GITHUB_KEY_PRESENT}" \
+    "${TRANSACTION_DIR}/github-key.previous" <<'NODE'
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+} from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { dirname } from 'node:path';
+
+const [
+  currentPath,
+  previousCurrentPresent,
+  previousCurrentTarget,
+  envrcPath,
+  previousEnvrcPresent,
+  envrcBackup,
+  githubKeyPath,
+  previousGithubKeyPresent,
+  githubKeyBackup,
+] = process.argv.slice(2);
+
+function restoreFile(path, present, backup) {
+  if (present !== '1') {
+    rmSync(path, { force: true });
+    return;
+  }
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const temporaryPath = `${path}.rollback-${process.pid}-${randomUUID()}`;
+  try {
+    copyFileSync(backup, temporaryPath);
+    chmodSync(temporaryPath, 0o600);
+    renameSync(temporaryPath, path);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
+}
+
+if (previousCurrentPresent === '1') {
+  const temporaryLink = `${currentPath}.rollback-${process.pid}-${randomUUID()}`;
+  try {
+    symlinkSync(previousCurrentTarget, temporaryLink, 'dir');
+    renameSync(temporaryLink, currentPath);
+  } finally {
+    rmSync(temporaryLink, { force: true });
+  }
+} else {
+  rmSync(currentPath, { force: true });
+}
+restoreFile(envrcPath, previousEnvrcPresent, envrcBackup);
+restoreFile(githubKeyPath, previousGithubKeyPresent, githubKeyBackup);
+NODE
+}
+
+commit_local_transaction() {
+  TRANSACTION_ACTIVE=0
+}
+
+render_secret_package() {
+  local renderer_args=(
+    render
+    --environment dev
+    --version "${PACKAGE_VERSION}"
+    --project-id "${PROJECT_ID}"
+    --output-dir "${PACKAGE_OUTPUT_DIR}"
+  )
+  if [[ -n "${PAYLOAD_FILE}" ]]; then
+    renderer_args+=(--payload-file "${PAYLOAD_FILE}")
+  fi
+
+  mkdir -p "${PACKAGE_OUTPUT_DIR}"
+  chmod 700 "${PACKAGE_OUTPUT_DIR}"
+  if [[ -n "${RENDERER_CREDENTIAL_FILE}" && -z "${PAYLOAD_FILE}" ]]; then
+    if ! CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${RENDERER_CREDENTIAL_FILE}" \
+      node "${SECRET_PACKAGE_CLI}" "${renderer_args[@]}" >/dev/null
+    then
+      fail "Unable to render the exact DEV secret package version"
+    fi
+  elif ! node "${SECRET_PACKAGE_CLI}" "${renderer_args[@]}" >/dev/null; then
+    fail "Unable to render the exact DEV secret package version"
+  fi
+
+  PACKAGE_ENV_FILE="${PACKAGE_OUTPUT_DIR}/current/environment.env"
+  PACKAGE_GITHUB_KEY_FILE="${PACKAGE_OUTPUT_DIR}/current/github-app-private-key.pem"
+  [[ -f "${PACKAGE_ENV_FILE}" ]] || fail "Rendered package environment file is unavailable"
+  [[ -f "${PACKAGE_GITHUB_KEY_FILE}" ]] || fail "Rendered GitHub App PEM is unavailable"
+}
+
+stage_envrc() {
+  local output_directory
+  local registry_value="${REGISTRY:-${REGION_VALUE}-docker.pkg.dev/${PROJECT_ID}/intexuraos-dev}"
+  output_directory="$(dirname "${ENVRC_FILE}")"
+  mkdir -p "${output_directory}"
+  ENVRC_TEMP_FILE="$(mktemp "${ENVRC_FILE}.tmp.XXXXXX")"
+  chmod 600 "${ENVRC_TEMP_FILE}"
+
+  {
+    printf 'export PROJECT_ID=%q\n' "${PROJECT_ID}"
+    printf 'export REGION=%q\n' "${REGION_VALUE}"
+    printf 'export REGISTRY=%q\n' "${registry_value}"
+    printf '\n# === TRACKED RUNTIME CONFIGURATION ===\n'
+    cat "${RUNTIME_CONFIG_FILE}"
+    printf '\n# === DEV SECRET PACKAGE (version %s) ===\n' "${PACKAGE_VERSION}"
+    printf 'export INTEXURAOS_SECRET_PACKAGE_VERSION=%q\n' "${PACKAGE_VERSION}"
+    PACKAGE_ENV_FILE_PATH="${PACKAGE_ENV_FILE}" node <<'NODE'
+const { readFileSync } = require('node:fs');
+const { parse } = require('dotenv');
+const path = process.env.PACKAGE_ENV_FILE_PATH;
+if (!path) process.exit(1);
+const parsed = parse(readFileSync(path, 'utf8'));
+const shellQuote = (value) => `'${value.replaceAll("'", "'\\''")}'`;
+for (const name of Object.keys(parsed).sort()) {
+  if (!/^INTEXURAOS_[A-Z0-9_]+$/u.test(name)) process.exit(2);
+  process.stdout.write(`export ${name}=${shellQuote(parsed[name])}\n`);
+}
+NODE
+    cat <<'EOF'
+
+# === LOCAL OVERRIDES ===
+# Load .envrc.local if exists (for local dev overrides)
+[[ -f .envrc.local ]] && source .envrc.local || true
+EOF
+  } > "${ENVRC_TEMP_FILE}"
+  chmod 600 "${ENVRC_TEMP_FILE}"
+}
+
+stage_github_key() {
+  local output_directory
+  output_directory="$(dirname "${GITHUB_KEY_OUTPUT}")"
+  mkdir -p "${output_directory}"
+  chmod 700 "${output_directory}"
+  GITHUB_KEY_TEMP_FILE="$(mktemp "${GITHUB_KEY_OUTPUT}.tmp.XXXXXX")"
+  cp "${PACKAGE_GITHUB_KEY_FILE}" "${GITHUB_KEY_TEMP_FILE}"
+  chmod 600 "${GITHUB_KEY_TEMP_FILE}"
+}
+
+publish_local_artifacts() {
+  mv -f "${GITHUB_KEY_TEMP_FILE}" "${GITHUB_KEY_OUTPUT}"
+  GITHUB_KEY_TEMP_FILE=""
+  chmod 600 "${GITHUB_KEY_OUTPUT}"
+
+  mv -f "${ENVRC_TEMP_FILE}" "${ENVRC_FILE}"
+  ENVRC_TEMP_FILE=""
+  chmod 600 "${ENVRC_FILE}"
+}
+
 main() {
   parse_args "$@"
   umask 077
-
-  command -v gcloud >/dev/null 2>&1 || fail "gcloud CLI is not installed or not in PATH"
-  command -v python3 >/dev/null 2>&1 || fail "python3 is required for parallel secret fetching"
-  command -v node >/dev/null 2>&1 || fail "node is required for runtime configuration"
+  command -v node >/dev/null 2>&1 || fail "node is required for package rendering"
+  resolve_package_version
   resolve_project_id
+  validate_inputs
+  render_tracked_config
+  begin_local_transaction
+  render_secret_package
+  stage_envrc
+  stage_github_key
+  publish_local_artifacts
+  commit_local_transaction
 
-  local tf_file="${REPO_ROOT}/terraform/environments/${ENVIRONMENT}/main.tf"
-  [[ -f "${tf_file}" ]] || fail "Terraform file not found: ${tf_file}"
-
-  load_terraform_secret_map "${tf_file}"
-  load_runtime_config
-  select_secret_manager_names
-  sync_and_classify
-  print_sync_summary
-  print_missing_report
-
-  if [[ ${ADD_NEW_MODE} -eq 1 ]]; then
-    prompt_for_missing_versions
-    if [[ ${#ADDED_SECRETS[@]} -gt 0 ]]; then
-      sync_and_classify
-    fi
-    print_add_new_summary
-    print_missing_report
-  fi
-
-  local unresolved=0
-  unresolved=$(( ${#MISSING_SECRETS[@]} + ${#MISSING_VERSIONS[@]} + ${#UNREADABLE_SECRETS[@]} ))
-  if [[ ${unresolved} -gt 0 ]]; then
-    exit 2
-  fi
+  echo "Rendered DEV secret package version ${PACKAGE_VERSION}."
+  echo "Updated ${ENVRC_FILE}."
+  echo "Updated ${GITHUB_KEY_OUTPUT}."
 }
 
 main "$@"

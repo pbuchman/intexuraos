@@ -1052,7 +1052,7 @@ describe('DockerProvider', () => {
       );
     });
 
-    it('recreates secrets directory and writes prompt files when restoring preserved worker', async () => {
+    it('recreates prompt files without copying host credentials when restoring a worker', async () => {
       const fs = await import('node:fs');
       const config = createTestConfig({ taskId: 'preserved-task-2' });
       await provider.createWorker(config);
@@ -1090,8 +1090,8 @@ describe('DockerProvider', () => {
         'utf-8'
       );
 
-      // Should copy GCP credentials
-      expect(fs.promises.copyFile).toHaveBeenCalled();
+      // Host credentials and the full secret package stay outside code workers.
+      expect(fs.promises.copyFile).not.toHaveBeenCalled();
     });
   });
 
@@ -2794,8 +2794,8 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('GCP credentials copy', () => {
-    it('copies GCP SA key when gcpSaKeyPath exists during preserved resume', async () => {
+  describe('GCP credential isolation', () => {
+    it('does not copy the host GCP SA key during preserved resume', async () => {
       const fsModule = await import('node:fs');
       const config = createTestConfig({ taskId: 'gcp-preserved' });
       await provider.createWorker(config);
@@ -2812,10 +2812,7 @@ describe('DockerProvider', () => {
         })
       );
 
-      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
-        '/test/gcp-sa.json',
-        expect.stringContaining('gcp-sa.json')
-      );
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
     it('skips GCP copy when gcpSaKeyPath is empty during preserved resume', async () => {
@@ -2838,7 +2835,7 @@ describe('DockerProvider', () => {
       expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
-    it('copies GCP SA key when gcpSaKeyPath exists during orphan resume', async () => {
+    it('does not copy the host GCP SA key during orphan resume', async () => {
       const fsModule = await import('node:fs');
       mocks.mockContainer.inspect.mockResolvedValueOnce({
         State: { Running: true },
@@ -2854,13 +2851,10 @@ describe('DockerProvider', () => {
         })
       );
 
-      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
-        '/test/gcp-sa.json',
-        expect.stringContaining('gcp-sa.json')
-      );
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
-    it('copies GCP SA key during normal creation when gcpSaKeyPath exists', async () => {
+    it('does not copy the host GCP SA key during normal creation', async () => {
       const fsModule = await import('node:fs');
       (fsModule.promises.copyFile as ReturnType<typeof vi.fn>).mockClear();
 
@@ -2870,10 +2864,7 @@ describe('DockerProvider', () => {
         })
       );
 
-      expect(fsModule.promises.copyFile).toHaveBeenCalledWith(
-        '/test/gcp-sa.json',
-        expect.stringContaining('gcp-sa.json')
-      );
+      expect(fsModule.promises.copyFile).not.toHaveBeenCalled();
     });
 
     it('skips GCP copy during normal creation when gcpSaKeyPath is empty', async () => {
@@ -4728,7 +4719,7 @@ describe('DockerProvider', () => {
       expect(gcpSaCopyCalls).toHaveLength(0);
     });
 
-    it('copies gcp-sa.json when gcpSaKeyPath exists', async () => {
+    it('does not copy gcp-sa.json even when the host credential exists', async () => {
       const fsModule = await import('node:fs');
 
       (fsModule.existsSync as Mock).mockImplementation(() => true);
@@ -4750,8 +4741,7 @@ describe('DockerProvider', () => {
       const gcpSaCopyCalls = copyFileCalls.filter(
         (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('gcp-sa.json')
       );
-      expect(gcpSaCopyCalls).toHaveLength(1);
-      expect(gcpSaCopyCalls?.[0]?.[0]).toBe('/test/gcp-sa.json');
+      expect(gcpSaCopyCalls).toHaveLength(0);
     });
   });
 

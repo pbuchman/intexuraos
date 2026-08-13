@@ -16,9 +16,11 @@ SWAP_FILE="${SWAP_FILE:-/swapfile}"
 SWAP_SIZE="${SWAP_SIZE:-4G}"
 SKIP_CERTBOT=0
 SKIP_SECRETS=0
+SECRET_PACKAGE_VERSION="${SECRET_PACKAGE_VERSION:-}"
+INTEXURAOS_COMMIT_SHA="${INTEXURAOS_COMMIT_SHA:-}"
 
 usage() {
-  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod %s --email ops@example.com [--deploy-dir path] [--skip-certbot] [--skip-secrets]\n' "$(basename "$0")"
+  printf 'Usage: INTEXURAOS_ENVIRONMENT=prod INTEXURAOS_COMMIT_SHA=<40-character-lowercase-sha> %s --version N --email ops@example.com [--deploy-dir path] [--skip-certbot] [--skip-secrets]\n' "$(basename "$0")"
 }
 
 fail() {
@@ -61,6 +63,16 @@ parse_args() {
         DEPLOY_DIR="${1#*=}"
         shift
         ;;
+      --version|--secret-package-version)
+        shift
+        [[ $# -gt 0 ]] || fail "--version requires a value"
+        SECRET_PACKAGE_VERSION="$1"
+        shift
+        ;;
+      --version=*|--secret-package-version=*)
+        SECRET_PACKAGE_VERSION="${1#*=}"
+        shift
+        ;;
       --skip-certbot)
         SKIP_CERTBOT=1
         shift
@@ -78,6 +90,15 @@ parse_args() {
         ;;
     esac
   done
+}
+
+validate_secret_package_version() {
+  if [[ "${SKIP_SECRETS}" -ne 1 && ! "${SECRET_PACKAGE_VERSION}" =~ ^[1-9][0-9]*$ ]]; then
+    fail "SECRET_PACKAGE_VERSION or --version must be an exact positive numeric version"
+  fi
+  if [[ "${SKIP_SECRETS}" -ne 1 && ! "${INTEXURAOS_COMMIT_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+    fail "INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
+  fi
 }
 
 install_base_packages() {
@@ -206,6 +227,13 @@ prepare_user_and_directories() {
   install -d -o root -g root -m 755 /etc/intexuraos
 }
 
+install_workspace_dependencies() {
+  [[ -f "${DEPLOY_DIR}/package.json" ]] || fail "${DEPLOY_DIR}/package.json is required"
+  [[ -f "${DEPLOY_DIR}/pnpm-lock.yaml" ]] || fail "${DEPLOY_DIR}/pnpm-lock.yaml is required"
+  sudo -H -u "${DEPLOY_USER}" env CI=true \
+    bash -c 'cd -- "$1" && pnpm install --frozen-lockfile' _ "${DEPLOY_DIR}"
+}
+
 configure_firewall() {
   ufw allow OpenSSH
   ufw allow http
@@ -258,6 +286,7 @@ install_pm2_logrotate() {
 main() {
   parse_args "$@"
   require_prod
+  validate_secret_package_version
   require_root
 
   install_base_packages
@@ -265,12 +294,13 @@ main() {
   ensure_swap
   install_node_22
   prepare_user_and_directories
+  install_workspace_dependencies
   install_pm2_logrotate
   configure_firewall
   write_pm2_systemd_unit
 
   if [[ "${SKIP_SECRETS}" -ne 1 ]]; then
-    "${SCRIPT_DIR}/load-secrets.sh" --project-id "${PROJECT_ID}"
+    INTEXURAOS_COMMIT_SHA="${INTEXURAOS_COMMIT_SHA}" "${SCRIPT_DIR}/load-secrets.sh" --version "${SECRET_PACKAGE_VERSION}" --project-id "${PROJECT_ID}"
     install_grafana_alloy_collector
   fi
 

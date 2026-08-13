@@ -25,9 +25,6 @@ fi
 # Verify /secrets mount
 if [ -d "/secrets" ]; then
   echo "[claude-stub] /secrets mount verified"
-  if [ -f "/secrets/gcp-sa.json" ]; then
-    echo "[claude-stub] GCP SA key present"
-  fi
   if [ -f "/secrets/github-token" ]; then
     echo "[claude-stub] GitHub token present"
   fi

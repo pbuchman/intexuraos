@@ -2,38 +2,172 @@
 
 Build, deployment, and utility scripts.
 
-## sync-secrets.sh
+## build-secret-package.mjs
 
-Single entrypoint for local secrets workflow.
+Builds a complete DEV or PROD candidate in one of two modes: initial migration
+from the exact legacy numeric versions declared in the tracked, non-secret
+`config/environments/secret-package-sources.json` manifest, or ongoing rotation
+from one exact numeric version of the active package plus explicit private
+member overrides. It never reads `latest` and never prints source values or
+payloads.
 
 ```bash
-# Run from repository root
-./scripts/sync-secrets.sh [environment]
-
-# Examples:
-./scripts/sync-secrets.sh                  # sync only (non-interactive)
-./scripts/sync-secrets.sh dev              # explicit environment
-./scripts/sync-secrets.sh --add-new        # sync + prompt for missing values
-./scripts/sync-secrets.sh dev --add-new    # env-specific add-new mode
+node scripts/build-secret-package.mjs \
+  --environment dev --project-id <project-id> \
+  --output <mode-0600-candidate> \
+  --firebase-api-key-file <mode-0600-file>
 ```
 
-Mode 1: default (non-interactive)
+The PROD command additionally requires its two PROD-only external files:
 
-1. Reads Terraform-defined `INTEXURAOS_*` secrets from `terraform/environments/<env>/main.tf`
-2. Syncs readable/exportable secrets from GCP Secret Manager into `.envrc`
-3. Prints missing/unreadable secrets (no prompts)
+```bash
+node scripts/build-secret-package.mjs \
+  --environment prod --project-id <project-id> \
+  --output <mode-0600-candidate> \
+  --firebase-api-key-file <mode-0600-file> \
+  --runtime-gcp-service-account-file <mode-0600-file> \
+  --cloudflare-dns-api-token-file <mode-0600-file>
+```
 
-Mode 2: `--add-new` (interactive)
+Firebase is an external input for both environments. The runtime service-account
+JSON and Cloudflare DNS token are external PROD-only inputs; supplying them for
+DEV is rejected. The DEV GitHub App PEM comes from exact version `1` of
+`INTEXURAOS_GITHUB_APP_PRIVATE_KEY`, while the PROD TLS PEM comes from exact
+version `1` of `INTEXURAOS_SSL_PRIVATE_KEY`. All other legacy mappings and their
+numeric versions are defined explicitly in the source manifest.
 
-1. Runs the same sync flow as default mode
-2. Prompts only for missing secret values (no overwrite flow)
-3. Re-syncs `.envrc` after successful additions
+After the first complete package has been promoted, build later rotations from
+that package even after legacy containers are removed. Pin the reviewed base
+version and pass at least one override as a private file path; repeat either
+override option to rotate more members:
+
+```bash
+node scripts/build-secret-package.mjs \
+  --environment dev --project-id <project-id> \
+  --output <mode-0600-candidate> \
+  --base-version <numeric-version> \
+  --override-env INTEXURAOS_OPENAI_APP_API_KEY=<mode-0600-file> \
+  --override-file githubAppPrivateKeyPemBase64=<mode-0600-file>
+```
+
+`--override-env` accepts only an exact `envNames` member and
+`--override-file` only an exact `files` member from the package manifest. The
+builder validates the base package's server CRC32C and complete membership,
+applies the named replacements, then validates the complete candidate again.
+Base mode rejects `latest`, non-canonical versions such as `01`, duplicate or
+unknown members, empty override sets, and all legacy external-input flags.
+
+Every external or override input must be a non-symlink regular file with no
+group/other permission bits and at most 64 KiB. The builder verifies source
+CRC32C, creates the payload deterministically, runs the complete package
+validator, and atomically installs the candidate with mode `0600`. Standard
+output contains only validation metadata and counts. Optional
+`--manifest <path>` and `--sources-manifest <path>` overrides are intended for
+isolated verification and tests.
+
+## secret-package.mjs
+
+The single safe interface for validating, fetching, publishing, rendering, and
+shadow-comparing the DEV/PROD package contracts in
+`config/environments/secret-packages.json`.
+
+```bash
+node scripts/secret-package.mjs validate \
+  --environment <dev-or-prod> --payload-file <mode-0600-candidate>
+node scripts/secret-package.mjs publish \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <mode-0600-candidate>
+node scripts/secret-package.mjs fetch \
+  --environment <dev-or-prod> --version <numeric-version> \
+  --project-id <project-id> --output <mode-0600-path>
+node scripts/secret-package.mjs render \
+  --environment <dev-or-prod> --version <numeric-version> \
+  --project-id <project-id> --output-dir <private-directory>
+node scripts/secret-package.mjs dual-compare \
+  --environment <dev-or-prod> --left-payload-file <candidate-a> \
+  --right-payload-file <candidate-b> --hmac-key-file <ephemeral-key>
+```
+
+`render` may use `--payload-file <already-fetched-file>` for offline validated
+rendering. Otherwise it fetches the requested exact version. Never substitute
+`latest`. The CLI enforces schema version, environment, exact env/file
+membership, string values, base64/PEM/service-account JSON shape, 64 KiB
+maximum payload, positive numeric versions, CRC32C, restrictive staging modes,
+and atomic promotion. It invokes `gcloud` without logging payload data. Shadow
+comparison uses an ephemeral HMAC and emits only package-level
+`MATCH`/`MISMATCH`.
+
+Rendering creates an immutable `<env>-v<N>-<crc32c-hex>/` release under the
+output directory, then atomically switches `current`. Every release has
+`environment.env` and `metadata.json`. DEV also has
+`github-app-private-key.pem`; PROD has `cloudflare-dns-api-token`,
+`runtime-gcp-service-account.json`, and `tls-private-key.pem`. All files and the
+`current` target are implementation artifacts; consumer installers copy only
+their allowlisted projection.
+
+Candidates and rendered staging artifacts live outside the repository, use
+mode `0600`, and are removed immediately. Terraform owns the containers and IAM
+but not versions or values.
+
+Run repository policy verification with the command below. It validates both
+tracked manifests and prints names/counts only, never source versions or values.
+
+```bash
+pnpm run verify:secret-packages
+```
+
+See [Secret Packages Operations](../docs/operations/secret-packages.md) for the
+candidate, promotion, rotation, rollback, and evidence procedure.
+
+## sync-secrets.sh
+
+Local/home-dev renderer for one exact DEV package version.
+
+```bash
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
+  ./scripts/sync-secrets.sh --version <dev-numeric-version>
+```
+
+It merges repository-backed DEV configuration with the validated package
+projection, writes an immutable release under
+`${HOME}/.config/intexuraos/secret-packages/dev`, atomically switches `current`,
+and writes mode-`0600` `.envrc`. It fetches no individual legacy secrets and
+has no add-new mode. `.envrc.local` is sourced last for host-only overrides and
+must not be used as shared secret storage.
+The package `current` link, `.envrc`, and GitHub App PEM are transactional: any
+failure after rendering restores the prior set, or removes the new set when no
+prior projection existed.
+
+## observability/load-grafana-cloud-env.sh
+
+Builds the home-dev Grafana/Alloy projection without GCP access. It reads only
+`INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN` from
+`${SECRET_PACKAGE_RENDER_DIR}/current/environment.env`; the default render root
+is `${HOME}/.config/intexuraos/secret-packages/dev`. It merges that token with
+the tracked Loki URL and username and atomically installs `OUTPUT_FILE` as mode
+`0600`. A missing render, token, or tracked value leaves the previous output
+untouched.
+
+Under sudo/systemd on home-dev, select the deployment user's render explicitly;
+root's `HOME` is not the package owner:
+
+```bash
+sudo -n env \
+  HOME=/home/pbuchman \
+  SECRET_PACKAGE_RENDER_DIR=/home/pbuchman/.config/intexuraos/secret-packages/dev \
+  INTEXURAOS_ENVIRONMENT=dev \
+  bash scripts/observability/load-grafana-cloud-env.sh
+```
 
 Prerequisites:
 
-- gcloud CLI installed and authenticated
-- Project configured (or provided with `--project-id`)
-- Terraform applied (secret resources must exist before adding versions)
+- `gcloud` installed;
+- an explicitly selected operator/renderer identity authorized only for the DEV
+  package (`ixos-home-secret-renderer-dev`; home-dev transitional key at
+  `/home/pbuchman/.config/intexuraos/secret-renderer-sa-key.json`, mode `0600`,
+  selected only for the sync command; local Mac prefers ADC impersonation);
+- the Terraform-managed package container/IAM already applied;
+- an approved positive numeric version.
 
 ## verify-connections.sh
 

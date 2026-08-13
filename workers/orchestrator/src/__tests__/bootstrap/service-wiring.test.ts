@@ -42,6 +42,8 @@ function makeParsedEnv(errorHubHost = 'home-dev.example.ts.net:8443'): Bootstrap
     INTEXURAOS_USAGE_WEBHOOK_URL: 'https://usage.test',
     INTEXURAOS_GITHUB_APP_ID: '12345',
     INTEXURAOS_GITHUB_INSTALLATION_ID: '67890',
+    INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH:
+      '/run/intexuraos/dev/current/github-app-private-key.pem',
     INTEXURAOS_PROJECT_ID: 'project-id',
     GOOGLE_APPLICATION_CREDENTIALS: '/path/to/sa.json',
     INTEXURAOS_LINEAR_API_KEY: 'linear-key',

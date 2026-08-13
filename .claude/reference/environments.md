@@ -47,17 +47,38 @@ Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports o
 
 The retained transcription Cloud Function receives its runtime `INTEXURAOS_SENTRY_DSN` as a plain environment variable from `config/environments/dev.json`. The old `INTEXURAOS_SENTRY_DSN_DEV` container and accessor binding remain temporarily only for migration rollback and must not be read by any runtime.
 
-## Runtime Configuration And Secrets
+## Runtime Configuration And Secret Packages
 
-**Classification source of truth:** `config/environments/policy.json` and [the runtime configuration policy](../../docs/operations/runtime-configuration.md).
+**Classification sources of truth:** `config/environments/policy.json`,
+`config/environments/secret-packages.json`, and
+[the runtime configuration policy](../../docs/operations/runtime-configuration.md).
 
-Secret Manager is only for values whose disclosure grants access, impersonation, signing, decryption, or another privileged operation: passwords, bearer/API tokens, OAuth client secrets, private keys, HMAC material, and encryption keys. Public identifiers, URLs, OAuth client IDs, DSNs, project names, public verification keys, and feature flags belong in versioned `config/environments/` files. Do not create a Secret Manager version for repository-backed configuration.
+Repository-backed environment files contain reviewable non-secret settings.
+Privileged runtime values are consolidated into two atomic Secret Manager
+packages: `INTEXURAOS_SECRET_PACKAGE_DEV` and
+`INTEXURAOS_SECRET_PACKAGE_PROD`. Each consumer uses an exact positive numeric
+version; `latest`, aliases, per-field fallback, and direct reads of legacy
+individual secrets are forbidden.
 
-| Environment | Runtime loading                                                                                                                          |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| local       | `sync-secrets.sh` merges versioned dev config with actual secrets; `direnv allow`; host-only overrides live in `.envrc.local`            |
-| dev         | the same mode-`0600` merged `.envrc` on home-dev; the orchestrator receives only its generated strict allowlist                          |
-| prod        | `load-secrets.sh` merges versioned prod config with the explicit remaining-secret allowlist into mode-`0600` `/etc/intexuraos/.env.prod` |
+The only native individual application secrets are
+`INTEXURAOS_INTERNAL_AUTH_TOKEN` and
+`INTEXURAOS_SPEECHMATICS_APP_API_KEY`, retained for the transcription function.
+Internal auth is also a member of DEV and PROD; Speechmatics is also a DEV
+member but is not needed in PROD.
+`INTEXURAOS_FIREBASE_API_KEY` is a build-time member of both packages. It remains
+public in the compiled SPA, but is not tracked so it can be rotated coherently.
+
+| Environment | Runtime loading                                                                                                                                                       |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| local       | exact DEV version plus versioned config, rendered under `${HOME}/.config/intexuraos/secret-packages/dev/current` and projected to mode-`0600` `.envrc`/approved files |
+| dev         | the same pinned DEV package/render root on home-dev; PM2, observability, and orchestrator receive separate allowlisted projections                                    |
+| prod        | exact PROD version fetched by the external Hetzner provisioner, validated and atomically projected to `/etc/intexuraos/.env.prod` and protected files                 |
+
+Renderers may access only their environment package. Runtime services,
+orchestrator processes, and code workers do not receive Secret Manager access.
+The provisioner/bootstrap credential always remains outside the package it
+opens. See [Secret Packages Operations](../../docs/operations/secret-packages.md)
+for publication, promotion, rotation, rollback, audit, and disaster recovery.
 
 Local and dev PM2 services must not inherit `FIRESTORE_EMULATOR_HOST` or `STORAGE_EMULATOR_HOST`; they must use real retained GCP Firestore/Storage. Local and dev PM2 services must set `PUBSUB_EMULATOR_HOST=localhost:8102` against their own host-local Pub/Sub emulator.
 
@@ -67,15 +88,21 @@ Automated login credentials live outside the repo in `~/.intexuraos/logins.md` w
 
 Use local when the goal is edit-run-verify feedback on the current checkout. It is dev running on the current machine: same shared GCP resources, same Auth0, same Pub/Sub-emulator alias pattern, different process location.
 
-| Component             | Manager | Commands                                                                         |
-| --------------------- | ------- | -------------------------------------------------------------------------------- |
-| Secret sync           | direnv  | `./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman && direnv allow` |
-| Pub/Sub emulator + UI | Docker  | `node scripts/dev-setup.mjs`                                                     |
-| Apps (services + web) | PM2     | `pnpm run dev` or `pnpm run services:start`                                      |
-| Logs                  | PM2     | `pnpm exec pm2 logs <name>`                                                      |
-| Status                | PM2     | `pnpm exec pm2 status`                                                           |
+| Component             | Manager | Commands                                                                                                                                 |
+| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Secret sync           | direnv  | `SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS=<renderer-key> ./scripts/sync-secrets.sh --version <dev-numeric-version> && direnv allow` |
+| Pub/Sub emulator + UI | Docker  | `node scripts/dev-setup.mjs`                                                                                                             |
+| Apps (services + web) | PM2     | `pnpm run dev` or `pnpm run services:start`                                                                                              |
+| Logs                  | PM2     | `pnpm exec pm2 logs <name>`                                                                                                              |
+| Status                | PM2     | `pnpm exec pm2 status`                                                                                                                   |
 
 `pnpm run dev` is the simple path: it runs `scripts/dev-setup.mjs`, starts PM2 from `ecosystem.config.cjs` with `--update-env`, and tails logs. Services run through `tsx` from `src/` and PM2 watches source files for automatic reload. The web app runs through Vite on port `3000`.
+
+Local/home-dev PM2 uses the external
+`${HOME}/.config/intexuraos/home-runtime-sa-key.json`; home-dev orchestrator uses
+the separate generator-fixed
+`${HOME}/.config/intexuraos/home-orchestrator-sa-key.json`. Neither belongs in a
+package or worker, and neither identity has Secret Manager access.
 
 If Docker Desktop config uses a GUI credential store, `scripts/dev-setup.mjs` creates a temporary Docker config for compose startup that removes `credsStore` while preserving CLI plugins. This avoids credential-helper hangs without modifying `~/.docker/config.json`.
 

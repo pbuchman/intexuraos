@@ -58,10 +58,15 @@ const MATRIX_CORPUS_SECRET_MANAGER_NAMES = [
   'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
 ] as const;
 const TEST_RUNS_READ_FLAG = 'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED' as const;
-const TERRAFORM_DEV_MAIN = readFileSync('terraform/environments/dev/main.tf', 'utf8');
 const COMMON_RUNTIME_CONFIG = JSON.parse(
   readFileSync('config/environments/common.json', 'utf8')
 ) as Record<string, string>;
+const SECRET_PACKAGE_MANIFEST = JSON.parse(
+  readFileSync('config/environments/secret-packages.json', 'utf8')
+) as { packages: { dev: { envNames: string[] } } };
+const SECRET_PACKAGE_SOURCES = JSON.parse(
+  readFileSync('config/environments/secret-package-sources.json', 'utf8')
+) as { packages: { dev: { legacyEnvNames: string[] } } };
 
 function loadDevConfig(extraEnv: Record<string, string> = {}): DevConfigSummary {
   const stdout = execFileSync(
@@ -254,25 +259,30 @@ describe('ecosystem.config.cjs', () => {
     }
   });
 
-  it('keeps public Matrix corpus metadata in repo config and private material in Secret Manager', () => {
-    const matrixCorpusSection =
-      TERRAFORM_DEV_MAIN.split('# Production Matrix corpus evaluator')[1]?.split(
-        '# Firebase configuration for web app'
-      )[0] ?? '';
+  it('keeps public Matrix corpus metadata in repo config and private material in the DEV package', () => {
+    const packageEnvNames = SECRET_PACKAGE_MANIFEST.packages.dev.envNames;
+    const legacyEnvNames = SECRET_PACKAGE_SOURCES.packages.dev.legacyEnvNames;
 
-    expect(matrixCorpusSection).not.toBe('');
-    expect(matrixCorpusSection).not.toMatch(/synthetic-|home-dev|BEGIN PRIVATE|contact@/);
     for (const name of MATRIX_CORPUS_SECRET_MANAGER_NAMES) {
-      expect(matrixCorpusSection.match(new RegExp(`"${name}"`, 'g'))?.length, name).toBe(1);
+      expect(
+        packageEnvNames.filter((candidate) => candidate === name),
+        name
+      ).toHaveLength(1);
+      expect(
+        legacyEnvNames.filter((candidate) => candidate === name),
+        name
+      ).toHaveLength(1);
       expect(COMMON_RUNTIME_CONFIG[name], name).toBeUndefined();
     }
     for (const name of MATRIX_CORPUS_VERSIONED_CONFIG_NAMES) {
       expect(COMMON_RUNTIME_CONFIG[name], name).toBeDefined();
-      expect(matrixCorpusSection, name).not.toContain(`"${name}"`);
+      expect(packageEnvNames, name).not.toContain(name);
+      expect(legacyEnvNames, name).not.toContain(name);
     }
     for (const name of MATRIX_CORPUS_RUNTIME_ONLY_NAMES) {
       expect(COMMON_RUNTIME_CONFIG[name], name).toBeUndefined();
-      expect(matrixCorpusSection, name).not.toContain(`"${name}"`);
+      expect(packageEnvNames, name).not.toContain(name);
+      expect(legacyEnvNames, name).not.toContain(name);
     }
   });
 

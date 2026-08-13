@@ -1,128 +1,221 @@
-# Runtime Configuration And Secret Manager Policy
+# Runtime Configuration And Secret Package Policy
 
-This is the operational source of truth for deciding whether an IntexuraOS
-runtime value belongs in Git or in GCP Secret Manager.
+This is the classification source of truth for deciding whether an IntexuraOS
+runtime value belongs in Git, an atomic Secret Manager package, or one of the
+two native Secret Manager exceptions. Package publication and rotation are
+covered by [Secret Packages Operations](./secret-packages.md).
 
-## Non-Negotiable Rule
+## Classification Rule
 
-Secret Manager contains only values that are not allowed in repository-backed
-runtime configuration: passwords, bearer/API tokens, OAuth client secrets,
-private keys, HMAC material, and encryption keys.
+Versioned files under `config/environments/` contain only reviewable,
+non-sensitive configuration: public URLs and identifiers, OAuth client IDs,
+project names, public verification material, feature flags, routing, and
+service topology that is approved for repository disclosure.
 
-Public identifiers, public URLs, OAuth client IDs, DSNs, public verification
-keys, and the Firebase browser API key belong in the versioned files under
-`config/environments/`. Private operational identifiers and bindings remain in
-Secret Manager when disclosure would reveal internal topology or authorization
-context. The exact allowlist in `policy.json` is authoritative; never duplicate
-a versioned config value in a new Secret Manager version.
+Values that grant access, signing, impersonation, decryption, or privileged API
+use belong in exactly one environment package:
 
-The machine-readable classification is
-`config/environments/policy.json`. It is enforced by
-`scripts/render-runtime-config.mjs`, `scripts/sync-secrets.sh`, and
-`scripts/hetzner/load-secrets.sh`.
+- `INTEXURAOS_SECRET_PACKAGE_DEV` for local and home-dev;
+- `INTEXURAOS_SECRET_PACKAGE_PROD` for Hetzner production.
 
-## Versioned Configuration
+The only native individual application secrets are
+`INTEXURAOS_INTERNAL_AUTH_TOKEN` and
+`INTEXURAOS_SPEECHMATICS_APP_API_KEY`, retained because the Gen2 transcription
+function requires native Secret Manager injection. They are also package
+members wherever non-Gen2 runtimes need them: internal auth is in DEV and PROD,
+while Speechmatics is in DEV only. The Google-managed Cloud Build
+connection token is outside application ownership.
 
-| File | Scope |
+`INTEXURAOS_FIREBASE_API_KEY` is a special case: Firebase browser keys are
+public identifiers, not authorization boundaries, but this key is deliberately
+removed from tracked config and included as a build-time member of both
+packages. That enables coordinated rotation and closes repository exposure
+alerts; the built SPA still exposes it by design. Protect Firebase with API-key
+restrictions, Security Rules, quotas, Auth, and App Check.
+
+Never duplicate a package member in tracked config or create another
+individual application secret for it.
+
+## Machine-Readable Sources
+
+| File | Purpose |
 | --- | --- |
-| `config/environments/common.json` | Shared dev and production values |
-| `config/environments/dev.json` | Dev-only values, including the loopback Matrix adapter URL |
-| `config/environments/prod.json` | Production-only values, including the externally reachable Matrix adapter URL |
-| `config/environments/policy.json` | Exact names, scopes, and Secret Manager classification policy |
+| `config/environments/common.json` | Shared non-secret values |
+| `config/environments/dev.json` | DEV-only non-secret values |
+| `config/environments/prod.json` | PROD-only non-secret values |
+| `config/environments/policy.json` | Classification, scope, and retired-name policy |
+| `config/environments/secret-packages.json` | Package IDs, exact env/file members, native exceptions, and promoted numeric versions |
 
-Render and validate without exposing any Secret Manager value:
+The package manifest is non-secret. A payload is secret and must never be
+tracked. Its `env` and `files` keys must match the selected manifest package
+exactly; unknown and missing members fail validation.
+
+Validate the repository-backed portion without fetching secrets:
 
 ```bash
 node scripts/render-runtime-config.mjs --environment dev --format shell-export >/dev/null
 node scripts/render-runtime-config.mjs --environment prod --format dotenv >/dev/null
+pnpm run verify:secret-packages
 ```
 
-The 27 obsolete Secret Manager containers have been permanently removed: 25
-values now rendered from versioned configuration plus the dead
-`INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI` and retired
-`INTEXURAOS_GEMINI_APP_API_KEY`. Versioned configuration names and
-Secret Manager names must remain fully disjoint. The rollback list remains
-empty. Permanent delete-only tombstones in `deleteOnlyNames` retain both names.
-Both runtime loaders block the union of all versioned config scopes and these
-tombstones from Secret Manager reads. The redirect URI is derived by the
-application and must never be reintroduced. Direct Gemini platform access was
-retired on 2026-08-12; application LLM traffic is routed through OpenRouter for
-centralized usage and cost visibility. Do not recreate either container or
-reintroduce either environment variable.
+Validation output must contain names/counts/results only.
+
+## Consumer Model
+
+| Consumer | Source | Allowed projection |
+| --- | --- | --- |
+| Local PM2/Vite | exact DEV numeric version plus versioned config | mode-`0600` `.envrc` and approved local files |
+| home-dev PM2 | exact DEV numeric version plus versioned config | mode-`0600` `.envrc`, filtered per-service env |
+| home-dev orchestrator | host-rendered DEV projection | strict env allowlist plus GitHub App PEM |
+| code-worker | orchestrator projection | task-specific env/files only; no package or Secret Manager access |
+| Grafana/Alloy | exact DEV numeric version | dedicated observability env projection |
+| Hetzner services/web/nginx/TLS | exact PROD numeric version plus versioned config | target-specific files from the production renderer |
+| Retained transcription | exact numeric native versions | the two native secret env injections only |
+
+Runtime processes consume rendered projections. They do not fetch packages,
+read individual legacy secrets, or receive Secret Manager IAM. The identity
+that opens a package is separate from any credential inside that package.
+
+## Adding Or Changing A Runtime Value
+
+1. Classify the value before implementation.
+2. For a non-secret, update the correct environment JSON and `policy.json` in
+   the same pull request as its consumer.
+3. For a secret, add its logical name to the correct DEV/PROD package member
+   lists and every required projection. Do not add a new container.
+4. If Gen2 transcription requires the value natively, obtain explicit review
+   before changing `nativeSecretNames`; the exception list stays minimal.
+5. Update validators, renderers, allowlists, tests, IAM if ownership changes,
+   and the operational documentation in the same pull request.
+6. Build and publish a complete new candidate package outside Terraform. Never
+   commit or log the payload.
+7. Validate, shadow-compare, render to staging, canary, and promote using an
+   exact numeric version.
+
+A missing member blocks the whole candidate. Per-field fallback, partial
+promotion, `latest`, and mutable aliases are forbidden.
 
 ## Development Workflow
 
-1. Classify every new runtime value before writing code:
-   - secret material goes to Secret Manager and Terraform/IAM;
-   - non-secret configuration goes to `common.json`, `dev.json`, or `prod.json`
-     and the matching scope in `policy.json`.
-2. Update and review the versioned configuration in the same PR as the code
-   that consumes it. Never put secret material in the repository, examples,
-   fixtures, screenshots, logs, or PR descriptions.
-3. Validate both render targets using the commands above.
-4. Refresh the local runtime:
+Refresh local or home-dev only from a reviewed DEV numeric version:
 
-   ```bash
-   ./scripts/sync-secrets.sh --project-id intexuraos-dev-pbuchman
-   direnv allow
-   pnpm run services:restart
-   ```
+```bash
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
+  ./scripts/sync-secrets.sh --version <dev-numeric-version>
+direnv allow
+pnpm run services:restart
+```
 
-   `sync-secrets.sh` atomically creates `.envrc` with mode `0600`. It renders
-   tracked config, fetches only real secrets, and sources `.envrc.local` last so
-   developer-local overrides remain authoritative. Neither `.envrc` nor
-   `.envrc.local` may be committed.
-5. If the home-dev orchestrator uses the changed value, generate its dedicated
-   strict environment instead of copying all `INTEXURAOS_*` variables:
+The loader validates CRC32C, schema, environment, exact membership, and file
+shape before atomically switching the immutable release at
+`${HOME}/.config/intexuraos/secret-packages/dev/current` and creating `.envrc`
+as mode `0600`. `.envrc.local` is sourced last for host-only non-secret
+overrides and must not contain shared secrets. Both files are ignored by Git.
+Set `GOOGLE_APPLICATION_CREDENTIALS` in `.envrc.local` to
+`${HOME}/.config/intexuraos/home-runtime-sa-key.json`. The dedicated
+`ixos-home-runtime-dev` identity has only the local data-plane union and no
+Secret Manager access; do not reuse the broad migration/operator credential.
 
-   ```bash
-   direnv exec . node scripts/generate-orchestrator-env.mjs \
-     --output "$HOME/.code-orchestrator/env"
-   sudo systemctl restart intexuraos-orchestrator@pbuchman
-   curl -fsS http://localhost:8199/health | jq .
-   ```
+If the home-dev orchestrator projection changes, regenerate it from the same
+package version and restart only after validation:
 
-   The generator writes atomically with mode `0600`, supplies host defaults,
-   validates required names, and discards variables outside the explicit
-   orchestrator allowlist.
+```bash
+direnv exec . node scripts/generate-orchestrator-env.mjs \
+  --output "$HOME/.code-orchestrator/env"
+sudo systemctl restart intexuraos-orchestrator@pbuchman
+curl -fsS http://localhost:8199/health | jq .
+```
 
-Use `./scripts/sync-secrets.sh --add-new` only to populate a missing version of
-a value classified as an actual secret. It must never be used to re-create one
-of the migrated configuration values.
+The generator writes atomically with mode `0600` and drops everything outside
+the orchestrator allowlist. A code worker receives a further task-specific
+projection and must not receive the host package or broad GCP credential.
+The generator fixes `GOOGLE_APPLICATION_CREDENTIALS` to
+`${HOME}/.config/intexuraos/home-orchestrator-sa-key.json`, ignoring an
+inherited value. That host-only `ixos-home-orchestrator-dev` identity has only
+repository-level Artifact Registry reader access and is never mounted into a
+worker.
+
+Grafana/Alloy uses `scripts/observability/load-grafana-cloud-env.sh`. It reads
+only `INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN` from
+`${SECRET_PACKAGE_RENDER_DIR}/current/environment.env` (defaulting to the DEV
+render root above), merges the tracked Loki URL/username, and atomically writes
+the collector env as mode `0600`. It has no GCP/Secret Manager access.
+
+On home-dev, sudo does not inherit the deployment user's `HOME`. Always pass
+both paths explicitly when refreshing the systemd-owned projection:
+
+```bash
+sudo -n env \
+  HOME=/home/pbuchman \
+  SECRET_PACKAGE_RENDER_DIR=/home/pbuchman/.config/intexuraos/secret-packages/dev \
+  INTEXURAOS_ENVIRONMENT=dev \
+  bash scripts/observability/load-grafana-cloud-env.sh
+```
+
+Do not use the former `--add-new` per-secret workflow. Package versions are
+constructed and published as complete validated candidates through
+`scripts/secret-package.mjs`.
 
 ## Hetzner Production
 
-`scripts/hetzner/load-secrets.sh` renders the production configuration and
-fetches only the explicit remaining-secret allowlist. It atomically prepares
-the merged material and installs `/etc/intexuraos/.env.prod` as
-`deploy:deploy`, mode `0600`. PM2 and the web build consume that merged file;
-they do not care which values originated in Git or Secret Manager.
+The protected deployment supplies an exact PROD numeric version.
+`scripts/hetzner/load-secrets.sh` fetches it with the external provisioner
+identity, validates it, and stages all target projections before activation.
+It then atomically installs:
 
-Alloy follows the same boundary:
+- `/etc/intexuraos/.env.prod` as `deploy:deploy`, mode `0600`;
+- `/home/deploy/runtime-sa-key.json` as the runtime user, mode `0600`;
+- `/etc/intexuraos/internal-auth-token`, mode `0640`;
+- the approved Cloudflare/TLS files, mode `0600`.
 
-- `INTEXURAOS_GRAFANA_CLOUD_LOKI_URL` and
-  `INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME` come from versioned configuration;
-- only `INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN` is read from Secret Manager.
+The production web build receives only its build-time allowlist in an
+ephemeral file. Backend secrets must never reach Vite. PM2/nginx reload only
+after all candidate outputs pass validation. See the
+[Hetzner production runbook](./hetzner-prod-runbook.md).
 
-After changing runtime configuration, use the normal deployment workflow and
-run the semantic health checks in the
-[Hetzner production runbook](./hetzner-prod-runbook.md). Do not edit
-`.env.prod` manually.
+## Ownership, Publication, And IAM
 
-The one-time destructive removal of obsolete Secret Manager resources must
-follow the dedicated
-[runtime Secret Manager cleanup runbook](./runtime-secret-manager-cleanup.md).
-It freezes the exact 396-resource allowlist, deployment order, audit gates, and
-rollback floor; it is not a general Terraform apply procedure.
+Terraform owns containers and IAM but not values or package versions. Publish
+payloads outside Terraform through stdin or a mode-`0600` ephemeral file that
+is removed immediately. Grant resource-level access to one package:
 
-## Safe Verification
+- publishers may add a version to their approved package;
+- DEV renderers may access only the DEV package;
+- the Hetzner provisioner and protected deploy identity may access only PROD;
+- runtime service accounts, the orchestrator, and code workers have no Secret
+  Manager access;
+- transcription can access only the two native secrets at pinned versions.
 
-- Inspect names and classifications, never rendered values in logs.
-- Check generated file permissions with `stat`; do not print the files.
-- Compare expected values to process environments only as `MATCH` or
-  `MISMATCH`.
-- Secret Manager audit checks may output timestamp, principal, and secret name,
-  but never payload data.
-- Policy validation must keep rollback empty, retain the redirect tombstone,
-  and report zero overlap between active or retired configuration and Secret
-  Manager names.
+Use WIF/OIDC or service-account impersonation for automation and operators
+where possible. A long-lived bootstrap key remains outside both packages and
+must be separately protected and rotated.
+
+## Rotation And Rollback
+
+Every rotation creates a complete immutable candidate. Fetch and deploy it by
+numeric version, retain the previously verified numeric version for rollback,
+and switch the whole package together. Never roll back an exposed Firebase key
+or compromised service-account key; instead publish a new complete package
+with replacement credentials.
+
+For the runtime service-account JSON, create replacement, publish, canary,
+disable the old key, monitor, then delete. For the browser key, create and
+restrict replacement, publish to both packages, deploy and verify DEV then
+PROD, delete the old key, then close the repository alert as revoked.
+
+## Safe Verification And Evidence
+
+- Inspect names, member counts, numeric versions, byte counts, permissions,
+  owners, and CRC/validation status; never inspect values in logs.
+- Compare sources using ephemeral HMAC and report only package-level
+  `MATCH`/`MISMATCH`.
+- Check generated file permissions with `stat`; never print the file.
+- Enable Secret Manager Data Access audit logging and review
+  `AccessSecretVersion` by timestamp, principal, package ID, and numeric
+  version.
+- Never include a package payload, base64, private key, rendered environment,
+  token, or reversible digest in evidence.
+
+The historical individual-secret cleanup record is
+[Runtime Secret Manager Cleanup](./runtime-secret-manager-cleanup.md). It is not
+a current deployment procedure and must not be replayed.

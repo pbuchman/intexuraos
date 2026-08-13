@@ -77,35 +77,36 @@ orchestrator (local)
 
 ## Environment Variables
 
-The application environment is a merge of repository-backed configuration,
-actual secrets fetched by `sync-secrets.sh`, and `.envrc.local` overrides. The
-systemd service does not receive that full environment: generate its dedicated
-strict allowlist with `scripts/generate-orchestrator-env.mjs`. Use
-`sync-secrets.sh --add-new` only for a value classified as secret in
-`config/environments/policy.json`.
+The host renderer fetches one exact numeric DEV package version and merges its
+validated env projection with repository-backed configuration. The systemd
+service never receives the full host environment or Secret Manager access:
+`scripts/generate-orchestrator-env.mjs` writes its strict mode-`0600` env file,
+and the DEV package's GitHub App PEM is rendered to a protected host path.
+`.envrc.local` is only for host-specific non-secret overrides.
 
 ### Required (startup fails if missing)
 
-| Variable                            | Source                | Description                                       |
-| ----------------------------------- | --------------------- | ------------------------------------------------- |
-| `INTEXURAOS_REPOSITORY_URL`         | versioned config      | GitHub repo URL for clone/fetch                   |
-| `INTEXURAOS_CODE_AGENT_URL`         | host default/override | Webhook callback URL                              |
-| `INTEXURAOS_ORCHESTRATOR_SECRET`    | Secret Manager        | HMAC signing secret                               |
-| `INTEXURAOS_USAGE_WEBHOOK_URL`      | `.envrc.local`        | Usage events webhook URL (code-agent gateway)     |
-| `INTEXURAOS_PROJECT_ID`             | generated             | GCP project for Secret Manager                    |
-| `INTEXURAOS_ENVIRONMENT`            | generated             | Fixed home-dev environment tag (`dev`)            |
-| `INTEXURAOS_RUNTIME`                | generated             | Fixed home-dev runtime tag (`dev`)                |
-| `INTEXURAOS_GITHUB_APP_ID`          | versioned config      | GitHub App ID                                     |
-| `INTEXURAOS_GITHUB_INSTALLATION_ID` | versioned config      | GitHub App installation ID                        |
-| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | Secret Manager        | Service-to-service auth                           |
-| `INTEXURAOS_LINEAR_API_KEY`         | Secret Manager        | Linear API key (passed to workers)                |
-| `INTEXURAOS_ERROR_HUB_HOST`         | `.envrc.local`        | Private SentryBox `.ts.net:8443` host for workers |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`    | Secret Manager        | MiniMax worker API key                            |
-| `INTEXURAOS_MIMO_APP_API_KEY`       | Secret Manager        | MiMo worker API key                               |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | Secret Manager        | Dashscope worker API key                          |
-| `INTEXURAOS_KIMI_APP_API_KEY`       | Secret Manager        | Kimi Code worker API key                          |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY` | Secret Manager        | OpenRouter validation API key                     |
-| `GOOGLE_APPLICATION_CREDENTIALS`    | generated             | GCP SA key path                                   |
+| Variable                            | Source                    | Description                                                                                                        |
+| ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `INTEXURAOS_REPOSITORY_URL`         | versioned config          | GitHub repo URL for clone/fetch                                                                                    |
+| `INTEXURAOS_CODE_AGENT_URL`         | host default/override     | Webhook callback URL                                                                                               |
+| `INTEXURAOS_ORCHESTRATOR_SECRET`    | DEV projection            | HMAC signing secret                                                                                                |
+| `INTEXURAOS_USAGE_WEBHOOK_URL`      | `.envrc.local`            | Usage events webhook URL (code-agent gateway)                                                                      |
+| `INTEXURAOS_PROJECT_ID`             | generated                 | Retained GCP project metadata                                                                                      |
+| `INTEXURAOS_ENVIRONMENT`            | generated                 | Fixed home-dev environment tag (`dev`)                                                                             |
+| `INTEXURAOS_RUNTIME`                | generated                 | Fixed home-dev runtime tag (`dev`)                                                                                 |
+| `INTEXURAOS_GITHUB_APP_ID`          | versioned config          | GitHub App ID                                                                                                      |
+| `INTEXURAOS_GITHUB_INSTALLATION_ID` | versioned config          | GitHub App installation ID                                                                                         |
+| `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | DEV projection            | Service-to-service auth                                                                                            |
+| `INTEXURAOS_LINEAR_API_KEY`         | DEV projection            | Linear API key (passed only to eligible workers)                                                                   |
+| `INTEXURAOS_ERROR_HUB_HOST`         | `.envrc.local`            | Private SentryBox `.ts.net:8443` host for workers                                                                  |
+| `INTEXURAOS_MINIMAX_APP_API_KEY`    | DEV projection            | MiniMax worker API key                                                                                             |
+| `INTEXURAOS_MIMO_APP_API_KEY`       | DEV projection            | MiMo worker API key                                                                                                |
+| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | DEV projection            | Dashscope worker API key                                                                                           |
+| `INTEXURAOS_KIMI_APP_API_KEY`       | DEV projection            | Kimi Code worker API key                                                                                           |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY` | DEV projection            | OpenRouter validation API key                                                                                      |
+| `GITHUB_APP_PRIVATE_KEY_PATH`       | rendered DEV file         | Mode-`0600` GitHub App PEM path                                                                                    |
+| `GOOGLE_APPLICATION_CREDENTIALS`    | generator-fixed host path | `${HOME}/.config/intexuraos/home-orchestrator-sa-key.json`; dedicated Artifact Registry reader, never a DEV member |
 
 ### Optional
 
@@ -136,22 +137,15 @@ Node.js 22+, Docker, gcloud CLI, cloudflared. pnpm is needed for building, not a
 git clone https://github.com/pbuchman/intexuraos.git && cd intexuraos
 pnpm install && pnpm build
 
-# 2. Render versioned config and sync actual secrets (creates mode-600 .envrc)
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
-PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh
+# 2. Render one reviewed version. On home-dev, select the renderer credential
+# for this command only; do not export it into .envrc or the systemd service.
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS=/home/pbuchman/.config/intexuraos/secret-renderer-sa-key.json \
+  ./scripts/sync-secrets.sh --version <dev-numeric-version>
+# Local Mac should instead use user ADC + impersonation of
+# ixos-home-secret-renderer-dev.
 
-# Optional: prompt only for missing values classified as actual secrets
-PROJECT_ID=intexuraos-dev-pbuchman ./scripts/sync-secrets.sh --add-new
-
-# 3. Add orchestrator vars to .envrc.local (see .envrc.local.example for full list)
-cat >> .envrc.local << 'EOF'
-export INTEXURAOS_REPOSITORY_PATH=$HOME/.code-orchestrator/repo
-export INTEXURAOS_CODE_AGENT_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/
-export INTEXURAOS_USAGE_WEBHOOK_URL=https://intexuraos-code-agent-cj44trunra-lm.a.run.app/internal/webhooks/usage-events
-# Optional explicit override; the orchestrator follows :latest by default
-# export INTEXURAOS_CODE_WORKER_IMAGE=europe-central2-docker.pkg.dev/.../code-worker:latest
-export GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/gcloud/sa-key.json
-EOF
+# 3. Copy .envrc.local.example to .envrc.local and set only required host paths/
+# URLs. Do not copy package values or an operator/provisioner credential into it.
 
 # 4. Reload env
 direnv allow
@@ -256,23 +250,36 @@ sudo systemctl start intexuraos-orchestrator@pbuchman
 
 #### Updating Runtime Configuration Or Secrets
 
-The orchestrator env file is not auto-synced. Regenerate it after either a
-versioned configuration change or an actual Secret Manager rotation:
+The orchestrator env file and GitHub App PEM are not auto-synced. Regenerate
+them after a versioned configuration change or DEV package promotion:
 
 ```bash
-# 1. Render tracked config and sync actual secrets to .envrc
+# 1. Fetch/validate one exact DEV version and render the host projection
 cd ~/deploy/intexuraos
-./scripts/sync-secrets.sh
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/intexuraos/secret-renderer-sa-key.json" \
+  ./scripts/sync-secrets.sh --version <dev-numeric-version>
 
 # 2. Source .envrc plus the final .envrc.local overrides and generate only the
-# orchestrator allowlist. The generator writes atomically with mode 600.
+# orchestrator allowlist. The generator writes atomically with mode 0600.
 direnv exec . node scripts/generate-orchestrator-env.mjs \
   --output "$HOME/.code-orchestrator/env"
 
-# 3. Restart and verify
+# 3. Verify the PEM/env owners and modes without printing content, then restart
+stat -c '%U:%G %a %n' \
+  "$HOME/.code-orchestrator/env" \
+  "$HOME/.code-orchestrator/github-app.pem"
 sudo systemctl restart intexuraos-orchestrator@pbuchman
 curl -fsS http://localhost:8199/health | jq .
 ```
+
+The orchestrator reads the rendered files only. Its principal must fail any
+direct Secret Manager access attempt. Start one code-worker canary, confirm its
+environment/file names match the task allowlist and it cannot access Secret
+Manager, then replace remaining workers. Do not print worker environment values.
+The generator always replaces any inherited `GOOGLE_APPLICATION_CREDENTIALS`
+with `${HOME}/.config/intexuraos/home-orchestrator-sa-key.json`; that dedicated
+identity can only pull from the DEV Artifact Registry repository. It is a host
+bootstrap file, is never packaged, and is never forwarded to a code worker.
 
 #### Full Recovery (from scratch)
 
@@ -362,14 +369,19 @@ The orchestrator secret is used for request signing between code-agent and orche
 
 1. **Generate:** `openssl rand -hex 32`
 2. **Store in two places:**
-   - `.envrc` (synced from Secret Manager): `INTEXURAOS_ORCHESTRATOR_SECRET`
+   - host-rendered DEV projection: `INTEXURAOS_ORCHESTRATOR_SECRET`
    - IntexuraOS UI: Worker Settings -> your worker -> `dispatchSigningSecret`
 
 Both must match or task dispatch fails signature verification.
 
 ### GitHub Private Key
 
-The GitHub App private key is fetched automatically from GCP Secret Manager on startup (not from a local file). The code caches it at `~/.code-orchestrator/github-app.pem`.
+The GitHub App private key is rendered from the exact DEV package version to
+`~/.code-orchestrator/github-app.pem` as mode `0600` before startup. The
+orchestrator reads that path and never calls Secret Manager. Rotate it by
+publishing a complete DEV candidate, canarying token issuance, promoting the
+numeric version, and retaining the prior package version for package-wide
+rollback.
 
 ---
 
@@ -689,7 +701,7 @@ cd ../../workers/orchestrator && pnpm test:e2e
 +-- worktrees/              # Git worktrees for tasks (auto-created)
 
 ~/.code-orchestrator/
-+-- github-app.pem          # GitHub App private key (auto-fetched)
++-- github-app.pem          # GitHub App private key (host-rendered DEV projection)
 +-- state.json              # Task state (auto-created)
 +-- github-token            # Current GitHub token (auto-created)
 +-- secrets/                # Per-task secrets (auto-created)
@@ -706,7 +718,8 @@ cd ../../workers/orchestrator && pnpm test:e2e
 | Missing `INTEXURAOS_REPOSITORY_URL` | Validate `config/environments/common.json`, then rerun sync and generator    |
 | 502 from tunnel                     | Orchestrator not running: `pnpm --filter orchestrator dev`                   |
 | HMAC signature mismatch             | `dispatchSigningSecret` in UI must match `INTEXURAOS_ORCHESTRATOR_SECRET`    |
-| "Secret Manager" fetch failed       | Check `GOOGLE_APPLICATION_CREDENTIALS` path exists                           |
+| DEV package render failed           | Verify external renderer identity, numeric version, CRC/schema, and manifest |
+| GitHub App PEM missing              | Re-render the same DEV version; verify mode `0600`; do not fetch in process  |
 | Tests skipped                       | Check E2E prerequisites above                                                |
 | "Network not found"                 | `./scripts/setup-worker-network.sh`                                          |
 | "Image not found"                   | `docker build -t code-worker:test -f Dockerfile.test .`                      |

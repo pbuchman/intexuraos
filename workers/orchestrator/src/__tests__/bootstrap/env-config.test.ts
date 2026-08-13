@@ -24,6 +24,8 @@ function makeValidEnv(overrides: Partial<Record<string, string>> = {}): EnvReade
     INTEXURAOS_USAGE_WEBHOOK_URL: 'https://usage.test',
     INTEXURAOS_GITHUB_APP_ID: '12345',
     INTEXURAOS_GITHUB_INSTALLATION_ID: '67890',
+    INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH:
+      '/run/intexuraos/dev/current/github-app-private-key.pem',
     INTEXURAOS_PROJECT_ID: 'proj-id',
     GOOGLE_APPLICATION_CREDENTIALS: '/path/to/sa.json',
     INTEXURAOS_LINEAR_API_KEY: 'lin-key',
@@ -121,6 +123,9 @@ describe('loadEnvConfig', () => {
     expect(config.codeAgentUrl).toBe('https://code-agent.test');
     expect(config.gcpSaKeyPath).toBe('/path/to/sa.json');
     expect(config.projectId).toBe('proj-id');
+    expect(config.githubPrivateKeyPath).toBe(
+      '/run/intexuraos/dev/current/github-app-private-key.pem'
+    );
     expect(config.linearApiKey).toBe('lin-key');
     expect(config.kimiApiKey).toBe('ABCDEFG');
     expect(config.port).toBe(DEFAULT_PORT);
@@ -207,7 +212,6 @@ describe('loadEnvConfig', () => {
       makeValidEnv({
         INTEXURAOS_REPOSITORY_PATH: '/custom/repo',
         INTEXURAOS_CODE_WORKER_FORENSICS_PATH: '/custom/forensics',
-        INTEXURAOS_GITHUB_APP_PRIVATE_KEY: 'PEM-KEY',
         INTEXURAOS_GIT_USER_NAME: 'Alice',
         INTEXURAOS_GIT_USER_EMAIL: 'alice@example.com',
         INTEXURAOS_OPENROUTER_APP_API_KEY: 'or-key',
@@ -215,7 +219,6 @@ describe('loadEnvConfig', () => {
     );
     expect(config.repoPath).toBe('/custom/repo');
     expect(config.workerForensicsBasePath).toBe('/custom/forensics');
-    expect(config.githubPrivateKeyOverride).toBe('PEM-KEY');
     expect(config.gitUserNameOverride).toBe('Alice');
     expect(config.gitUserEmailOverride).toBe('alice@example.com');
     expect(config.openRouterApiKey).toBe('or-key');
