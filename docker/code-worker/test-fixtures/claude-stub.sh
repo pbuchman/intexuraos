@@ -32,6 +32,20 @@ else
   echo "[claude-stub] WARNING: /secrets not mounted"
 fi
 
+if [ -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+  echo "[claude-stub] GCP credential env: PRESENT (SECURITY ISSUE!)"
+  exit 1
+else
+  echo "[claude-stub] GCP credential env: ABSENT (good)"
+fi
+
+if [ -e "/secrets/gcp-sa.json" ]; then
+  echo "[claude-stub] GCP service-account file: PRESENT (SECURITY ISSUE!)"
+  exit 1
+else
+  echo "[claude-stub] GCP service-account file: ABSENT (good)"
+fi
+
 # ------------------------------------------------------------------------------
 # Process a single command (used by both interactive and print modes)
 # ------------------------------------------------------------------------------

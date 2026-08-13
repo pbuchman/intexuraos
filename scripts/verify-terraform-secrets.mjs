@@ -101,12 +101,12 @@ function checkFile(filePath) {
 
     for (const { regex, name } of SECRET_PATTERNS) {
       const matches = line.matchAll(new RegExp(regex));
-      for (const match of matches) {
+      for (const _match of matches) {
         violations.push({
           line: i + 1,
           type: name,
-          content: line.trim().slice(0, 100),
-          matched: match[0].slice(0, 40) + '...',
+          content: '[redacted Terraform source line]',
+          matched: '[redacted]',
         });
       }
     }

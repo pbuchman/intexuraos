@@ -56,6 +56,51 @@ describe('WebhookClient', () => {
   });
 
   describe('send', () => {
+    it('logs delivery metadata without serializing the webhook payload', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+      } as Response);
+      const logger: Logger = {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      };
+      const logCanary = 'WEBHOOK_PAYLOAD_CANARY_baf128';
+      const urlCanary = 'WEBHOOK_URL_SECRET_CANARY_821fd1';
+      const client = new WebhookClient(
+        createStatePersistence(),
+        logger,
+        'test-internal-auth-token'
+      );
+
+      const result = await client.send({
+        url: `https://callback:${urlCanary}@example.com/webhook?token=${urlCanary}#fragment`,
+        secret: 'test-secret',
+        payload: {
+          taskId: 'task-log-metadata',
+          status: 'completed',
+          result: { privateOutput: logCanary },
+        },
+        taskId: 'task-log-metadata',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain(logCanary);
+      expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain(urlCanary);
+      expect(logger.info).toHaveBeenNthCalledWith(
+        1,
+        {
+          taskId: 'task-log-metadata',
+          url: 'https://example.com/webhook',
+          payloadType: 'object',
+        },
+        'Sending webhook'
+      );
+    });
+
     it('should send webhook with correct signature', async () => {
       mockFetch.mockResolvedValue({
         ok: true,

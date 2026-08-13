@@ -8,10 +8,29 @@
 | Started | 2026-08-13, Europe/Warsaw |
 | Baseline | `origin/development` at `9faf87a17c06359bc29254c73d8b94f1315fa70d` |
 | Implementation branch | `codex/secret-packages-production` |
+| Pushed implementation commit | `02018515f75eb02c03a8990861cd938142b96b18` |
+| Current working state | Provider-health and secret-log hardening is implemented and passed complete current-worktree CI; delivery commit and PR remain pending |
 | Linear issue | None by explicit user decision |
 | GCP project | `intexuraos-dev-pbuchman` |
 | Environments | local, dev/home-dev, prod/Hetzner, retained GCP transcription |
 | Canonical evidence | This document |
+
+## Current execution state
+
+- The foundational implementation commit is pushed to
+  `origin/codex/secret-packages-production`; no pull request has been opened, nothing has been
+  merged to `development`, and no production deployment has run.
+- DEV package versions `v1` and `v2` were published and proven byte-identical with valid CRC32C and
+  package-level HMAC comparison. Subsequent live provider probes proved that the embedded MiMo,
+  DashScope, and Kimi credentials are rejected upstream. Those versions therefore prove package
+  mechanics only and are not valid rollout or rollback candidates.
+- A fresh, verified provider credential set must be used to publish byte-identical replacement DEV
+  versions `v3` and `v4`; the required rollback exercise is `v4 → v3 → v4`.
+- Local rendering of DEV `v2` is partial because full service health has not passed. home-dev was
+  moved from `v2` to `v1` during the rollback attempt and remains on `v1`; no version with all
+  required providers healthy is active there.
+- The PROD package has no published version. Production staging, canary, activation, rollback, PR,
+  merge, and deployment are all pending.
 
 ## Single objective
 
@@ -140,12 +159,36 @@ in the compiled SPA by Firebase design, but no longer exists in tracked runtime 
 - `ecosystem.config.cjs`
 - `ecosystem.config.prod.cjs`
 - `docker/code-worker/entrypoint.sh`
+- `docker/code-worker/test-fixtures/claude-stub.sh`
 - `workers/orchestrator/src/bootstrap/secret-manager.ts`
+- `workers/orchestrator/src/bootstrap/api-key-validator.ts`
+- `workers/orchestrator/src/bootstrap/service-wiring.ts`
 - `workers/orchestrator/src/start.ts`
+- `workers/orchestrator/src/types/api.ts`
 - `workers/orchestrator/src/services/isolation/worker-create.ts`
+- `workers/orchestrator/src/services/isolation/docker-container.ts`
 - `workers/orchestrator/src/services/isolation/docker-volume.ts`
 - `workers/orchestrator/src/services/isolation/worker-env.ts`
+- `apps/code-agent/src/domain/models/workerSettings.ts`
+- `apps/code-agent/src/domain/services/codeTaskDispatchBlockers.ts`
+- `apps/code-agent/src/infra/services/workerHealthProbe.ts`
 - relevant tests under `scripts/__tests__/` and `workers/orchestrator/src/__tests__/`
+
+### Secret-log and forensic hardening
+
+- `packages/common-http/src/http/logger.ts`
+- `packages/infra-notion/src/notion.ts`
+- `apps/notion-service/src/routes/webhookRoutes.ts`
+- `apps/code-agent/src/domain/usecases/processGitHubWebhook.ts`
+- `apps/code-agent/src/infra/services/hmacSigning.ts`
+- `apps/linear-agent/src/infra/linear/requestCache.ts`
+- `scripts/hetzner/nginx/intexuraos.conf`
+- `scripts/test-llm-clients.ts`
+- `scripts/verify-terraform-secrets.mjs`
+- `tools/pubsub-ui/server.mjs`
+- `.claude/hooks/log-command-end.sh`
+- `scripts/__tests__/secret-log-redaction.test.ts`
+- redaction and no-credential-forensics tests in the corresponding `__tests__` directories
 
 ### Infrastructure and IAM
 
@@ -205,14 +248,34 @@ in the compiled SPA by Firebase design, but no longer exists in tracked runtime 
 
 ### Phase 3 — Build candidate packages
 
-- [x] Resolve every required logical member before restart; missing legacy members block cutover.
-- [ ] Build DEV and PROD candidates from explicitly selected numeric legacy versions and approved
-  external credential files.
-- [ ] Publish both environment candidates without logging payloads. DEV `v1` and `v2` are complete;
-  PROD remains gated on the narrowly scoped Cloudflare DNS token.
+- [x] Resolve every required logical member for the initial DEV candidates before restart; missing
+  members block candidate construction.
+- [x] Publish initial DEV `v1` and `v2` without logging payloads and prove exact byte equality,
+  numeric fetches, server/readback CRC32C, exact membership, and package-level HMAC `MATCH`.
+- [ ] Replace the three credentials rejected by live upstream probes and build current DEV
+  candidates `v3` and `v4` from exact sources; require them to be byte-identical before rollout.
+- [ ] Build the PROD candidate from explicitly selected numeric legacy versions, the rotated
+  runtime service-account file, and approved external credential files.
+- [ ] Publish the PROD candidate without logging its payload. Publication remains gated on a
+  narrowly scoped Cloudflare token with `DNS: Edit` for the single `intexuraos.cloud` zone.
 - [ ] Record only secret IDs, numeric versions, byte counts, CRC32C verification results, and member
-  counts.
-- [ ] Execute shadow comparison against legacy values and require all members to report `MATCH`.
+  counts for the replacement DEV and PROD candidates.
+- [ ] Execute final DEV and PROD shadow comparisons and require all members to report `MATCH`.
+
+### External credential and authorization gates
+
+- [ ] MiMo: the management console redirects to Xiaomi Account login and requires acceptance of the
+  Xiaomi User Agreement and Privacy Policy. The user must complete or explicitly authorize that
+  login/acceptance before a replacement credential can be obtained. No replacement credential has
+  been created.
+- [ ] DashScope: no Coding Plan subscription is active. The current Pro option is USD 50/month and
+  requires an explicit purchase decision, or GLM/Qwen must be removed from the required worker and
+  package contract. No subscription or payment has been initiated.
+- [ ] Kimi: the current account permits another key, but creation of a persistent credential awaits
+  explicit user confirmation at the creation action. No replacement key has been created.
+- [ ] Cloudflare: token configuration is staged for `Kontakt@pbuchman's Account` and only the
+  `intexuraos.cloud` zone with `DNS: Edit`; final token creation awaits explicit user confirmation.
+  No token has been created.
 
 ### Phase 4 — Firebase browser key rotation
 
@@ -247,9 +310,12 @@ in the compiled SPA by Firebase design, but no longer exists in tracked runtime 
 
 ### Phase 6 — Environment rollout
 
-- [x] Local Mac renders exact DEV package `v2`; service-level smoke remains part of the rollout gate.
-- [ ] home-dev PM2 and systemd orchestrator use the same verified DEV version.
-- [ ] One code-worker canary runs without direct Secret Manager access; then all workers cut over.
+- [ ] Local Mac renders exact DEV package `v2`, but service-level smoke cannot pass until healthy
+  replacement provider credentials are published in DEV `v3`/`v4`.
+- [ ] home-dev PM2 and systemd orchestrator use the same verified DEV version. The rollback attempt
+  left home-dev active on `v1`; three upstream credentials fail authentication there.
+- [ ] One code-worker isolation canary runs without direct Secret Manager access; the no-GCP-env and
+  no-GCP-file assertions pass, but the provider-health canary and all-worker cutover remain pending.
 - [ ] Grafana/Alloy reads its rendered projection.
 - [ ] Production stages the exact PROD version without replacing active files.
 - [ ] Production canary passes Firestore, GCS, Pub/Sub, Auth/OAuth, WhatsApp, Matrix, Sentry,
@@ -262,7 +328,9 @@ in the compiled SPA by Firebase design, but no longer exists in tracked runtime 
 
 ### Phase 7 — Rollback proof and legacy cleanup
 
-- [x] Publish rollback-safe DEV `v1` and forward DEV `v2` containing the same current credentials.
+- [ ] Publish rollback-safe DEV `v3` and forward DEV `v4` containing the same fresh, live-validated
+  credentials. Historical `v1`/`v2` are byte-identical but are not rollback-safe because MiMo,
+  DashScope, and Kimi reject their credentials.
 - [ ] Switch to the prior verified numeric version, render, restart, and pass three five-minute
   smoke/error-count samples over 15 minutes with zero unexpected auth/credential/health failures.
 - [ ] Switch forward again and repeat the identical three-sample, 15-minute gate.
@@ -290,26 +358,28 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 | Verification | Required result | Evidence |
 | --- | --- | --- |
 | Targeted package tests | PASS | 2026-08-13 16:18 Europe/Warsaw: final package/builder/integration/deployment/Hetzner/runtime/Terraform selection `260/260`; post-cleanup base-package builder selection `134/134` |
-| Runtime/Hetzner/orchestrator tests | PASS | 2026-08-13 16:29 Europe/Warsaw: included in the complete `7929/7929` test run |
+| Runtime/Hetzner/orchestrator tests | PASS | 2026-08-13 18:29 Europe/Warsaw: included in the complete current-worktree `7960/7960` test run |
+| Provider-health contract tests | test-first FAIL, then targeted PASS | 2026-08-13: orchestrator `126/126` and code-agent `49/49` PASS after introducing additive provider statuses and fail-closed dispatch; included in the complete current-worktree CI PASS at 18:29 Europe/Warsaw |
+| Secret-log/forensics hardening tests | test-first FAIL, then PASS | 2026-08-13: test-first failures captured for request bodies, authorization fragments, query strings, command text, token fragments, repository credentials, and worker forensic artifacts; consolidated focused selection `910/910` PASS, independent residual sink audit found `0` active P0/HIGH paths, and complete current-worktree CI passed at 18:29 Europe/Warsaw |
 | Documentation contract tests | test-first FAIL, then PASS | 2026-08-13: five new audit-derived checks failed before the documentation change; final `scripts/__tests__/secret-package-integrations.test.ts` `13/13` PASS |
 | `pnpm run verify:secret-packages` | PASS | 2026-08-13 16:18 Europe/Warsaw: schema-v2 source coverage valid; DEV 35 env + 1 file, PROD 28 env + 3 files; both environments bind the correct base package for post-cleanup rotations |
 | `pnpm run verify:credential-files` | PASS | 2026-08-13 16:18 Europe/Warsaw: credential file guard PASS |
-| Documentation format/diff checks | PASS | 2026-08-13 16:29 Europe/Warsaw: complete CI format phase and `git diff --check` PASS |
-| `pnpm run typecheck:tests` | PASS | 2026-08-13 16:29 Europe/Warsaw: PASS in complete CI run |
-| `pnpm run ci:tracked` | PASS, complete run | 2026-08-13 16:29 Europe/Warsaw: run `#3` PASS after final IAM-condition, Alloy, sync-version and post-cleanup builder changes; Type/Lint, Static Validation, `7929/7929` tests, coverage validation, web build, format, and post-build checks all PASS |
+| Documentation format/diff checks | PASS | 2026-08-13 18:29 Europe/Warsaw: repository-wide format phase PASS in the complete current-worktree CI run; `git diff --check` also PASS |
+| `pnpm run typecheck:tests` | PASS | 2026-08-13: current-worktree rerun PASS; complete Type/Lint phase also passed at 18:29 Europe/Warsaw |
+| `pnpm run ci:tracked` | PASS, complete current-worktree run | 2026-08-13 18:29 Europe/Warsaw, run `#4`: Type/Lint PASS, Static Validation PASS, `7960/7960` tests PASS, coverage validation PASS, web build and format PASS, post-build checks PASS; final result `CI passed` |
 | Terraform format | no diff | 2026-08-13 15:39 Europe/Warsaw: `terraform fmt -check -recursive terraform` PASS |
 | Terraform validate, retained GCP | PASS | 2026-08-13 15:39 Europe/Warsaw: retained GCP, Hetzner, and standalone web-app module validation PASS after WIF/publisher and payload-removal changes |
 | Terraform plan, retained GCP | exit `0`, no drift | 2026-08-13 16:17 Europe/Warsaw: after applying publisher own-package readback, removing the temporary migration admin role, and correcting the metadata-only condition to the numeric project resource-name prefix, a fresh retained-GCP plan exited `0` with `No changes` |
 | Terraform validate/plan, Hetzner | PASS and reviewed | 2026-08-13 16:03 Europe/Warsaw: validate PASS; fresh plan with the provisioner identity reviewed as `2 add / 0 change / 1 replace-delete` (`terraform_data.bootstrap_prod` replacement plus additive legacy runtime-key migration guard); deliberately not applied before the package-aware release exists on the server |
-| DEV shadow comparison | all members `MATCH` | 2026-08-13 15:52 Europe/Warsaw: dedicated DEV publisher impersonation rebuilt all 35 exact legacy sources plus the external Firebase member; dedicated renderer fetched numeric `v2`; ephemeral HMAC comparison returned `MATCH`; payload is 5,838 bytes with verified server CRC32C |
+| DEV shadow comparison | all members `MATCH` and live provider probes valid | PARTIAL — 2026-08-13 15:52 Europe/Warsaw: dedicated DEV publisher impersonation rebuilt all 35 exact legacy sources plus the external Firebase member; dedicated renderer fetched numeric `v2`; ephemeral HMAC comparison returned `MATCH`; payload is 5,838 bytes with verified server CRC32C. Later live probes rejected the MiMo, DashScope, and Kimi members, so final `v3`/`v4` comparison and validation are PENDING |
 | PROD shadow comparison | all members `MATCH` | PENDING |
-| Local smoke | PASS | PARTIAL — 2026-08-13: exact `v2` projection and modes PASS; web build PASS and contains replacement—not previous—Firebase key; version projection regression fixed test-first and local `v2 → v1 → v2` transaction PASS; service smoke remains PENDING |
-| home-dev smoke | PASS | PENDING |
-| code-worker canary | PASS without Secret Manager access | PENDING |
+| Local smoke | PASS | PARTIAL — 2026-08-13: exact `v2` projection and modes PASS; web build PASS and contains replacement—not previous—Firebase key; version projection regression fixed test-first and local `v2 → v1 → v2` transaction PASS. Full service health is blocked by the three invalid upstream credentials |
+| home-dev smoke | PASS | PARTIAL — exact DEV rendering and restart mechanics exercised, but the rollback attempt left the host active on `v1`; MiMo, DashScope, and Kimi authentication fail, so no healthy DEV promotion has passed |
+| code-worker canary | PASS without Secret Manager access | PARTIAL — live isolation assertion passed with no GCP credential environment variable or credential file; valid-provider dispatch and full canary smoke remain PENDING |
 | Production canary | PASS | PENDING |
 | Production full smoke | PASS | PENDING |
 | Version reconciliation | all persisted pins/pointers equal the promoted numeric versions | PENDING |
-| Rollback drill | prior and forward each have three PASS samples over 15 minutes with zero unexpected auth/credential/health failures | PENDING |
+| Rollback drill | DEV `v4 → v3 → v4` and PROD prior/forward each have three PASS samples over 15 minutes with zero unexpected auth/credential/health failures | PENDING — attempted DEV `v2 → v1` exposed the invalid provider credentials and stopped the drill; home-dev currently remains on `v1` |
 | Secret Manager audit | frozen 34-name set, exhaustive pages, zero legacy reads for 72 hours, both positive controls PASS | PENDING |
 | Firebase usage cutover | replacement traffic on DEV/PROD; old-key count `0` for 24 continuous hours | PENDING |
 | Runtime SA rotation soak | 24-hour pre-disable and seven-day disabled intervals both have zero old-key use/failures | PENDING |
@@ -329,16 +399,23 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 | 2026-08-13 Europe/Warsaw | Test-first integration baseline | `scripts/__tests__/secret-package-integrations.test.ts`: 6 tests written and all 6 failed against the baseline for the intended missing behavior (package CLI, rendered consumers, orchestrator file source, worker sync removal, Firebase membership, deployment pin) |
 | 2026-08-13 Europe/Warsaw | Applied package foundation | refreshed Terraform plan `No changes`; DEV/PROD package containers exist with narrow reader IAM; transcription native versions are `2` and `1`; replacement Firebase restrictions match the approved three referrers and four Firebase APIs |
 | 2026-08-13 Europe/Warsaw | Credential staging | new runtime and dedicated DEV renderer keys created outside Terraform/repository; metadata/account/project and mode `0600` validated; old runtime key retained for rollback |
-| 2026-08-13 Europe/Warsaw | DEV package publication | DEV `v1` and `v2` published and fetched by numeric version; equal 5,838-byte payloads, server CRC32C verified, HMAC comparison `MATCH`; ephemeral payloads and comparison key removed after verification |
-| 2026-08-13 Europe/Warsaw | DEV renderer/rollback | dedicated renderer fetched exact `v2` locally and from home-dev; local projection exercised `v2 → v1 → v2`; `.envrc`, renderer credential, and GitHub PEM verified mode `0600` |
+| 2026-08-13 Europe/Warsaw | DEV package publication | DEV `v1` and `v2` published and fetched by numeric version; equal 5,838-byte payloads, server CRC32C verified, HMAC comparison `MATCH`; ephemeral payloads and comparison key removed after verification. This is package-integrity evidence, not rollout approval, because later probes rejected three provider credentials |
+| 2026-08-13 Europe/Warsaw | DEV renderer/rollback | dedicated renderer fetched exact `v2` locally and from home-dev; local projection exercised `v2 → v1 → v2`; `.envrc`, renderer credential, and GitHub PEM verified mode `0600`. The home-dev rollback attempt later stopped on `v1` after provider failures; a healthy `v4 → v3 → v4` drill is required |
 | 2026-08-13 Europe/Warsaw | Firebase build cutover proof | local production-mode SPA build passed using DEV `v2`; byte-safe check confirmed replacement key is present and previous key is absent without logging either value |
 | 2026-08-13 15:09 Europe/Warsaw | Fresh retained-GCP convergence | `GOOGLE_APPLICATION_CREDENTIALS=~/.config/gcloud/sa-key.json terraform -chdir=terraform/environments/dev plan -input=false -lock-timeout=60s -detailed-exitcode -out=<ephemeral-plan> -no-color`; exit `0`; `No changes`; ephemeral plan removed |
 | 2026-08-13 15:09 Europe/Warsaw | Home identity live IAM | Read-only project-IAM query plus exhaustive iteration over every Secret Manager container found exactly `0` Secret Manager bindings for both home identities. `ixos-home-runtime-dev`: only `datastore.user`, `firebaseauth.admin`, `logging.logWriter`, `pubsub.publisher`, plus `storage.objectAdmin` on `intexuraos-whatsapp-media-dev`, `intexuraos-shared-content-dev`, and `intexuraos-images-dev`. `ixos-home-orchestrator-dev`: only repository-level `artifactregistry.reader` |
 | 2026-08-13 15:36 Europe/Warsaw | Publisher IAM recovery | Initial all-in-one apply exposed an ordering hazard: WIF/account changes completed, but resource-level Secret Manager bindings failed after the operator's broad role was removed. Recovery used three explicit Terraform plans: one-resource temporary bootstrap, `65` narrow publisher bindings, then bootstrap destruction. No secret, version, or workload resource was deleted. |
 | 2026-08-13 15:52 Europe/Warsaw | Publisher/WIF live proof | Both DEV and PROD publisher impersonations returned tokens; the local operator has `0` project bindings for `secretmanager.admin` or project-wide `serviceAccountTokenCreator`; both WIF providers require immutable owner ID `368465`, repository ID `1118959310`, exact repository, and `refs/heads/development`. |
 | 2026-08-13 16:17 Europe/Warsaw | Final retained-GCP convergence and metadata IAM | Full un-targeted refresh plan exited `0` with `No changes`. A separate metadata-only live audit confirmed package metadata and `getIamPolicy` access, no project `secretmanager.admin`, no project-wide Token Creator, the numeric project-prefix condition, and own-package-only publisher readback with no DEV/PROD crossover. No payload was accessed. |
-| 2026-08-13 16:29 Europe/Warsaw | Final pre-PROD code verification | `pnpm run ci:tracked` PASS: Type/Lint, Static Validation, `7929/7929` tests, coverage validation, web build, format, and post-build checks; focused package/runtime selection `260/260` and both manifest/credential guards also PASS. |
+| 2026-08-13 16:29 Europe/Warsaw | Historical pre-hardening code verification | `pnpm run ci:tracked` PASS: Type/Lint, Static Validation, `7929/7929` tests, coverage validation, web build, format, and post-build checks; focused package/runtime selection `260/260` and both manifest/credential guards also PASS. This run is preserved as historical evidence but is stale after the current uncommitted hardening and cannot satisfy the final CI gate. |
 | 2026-08-13 16:31 Europe/Warsaw | Post-cleanup rotation path | Dedicated DEV publisher fetched exact package `v2`; base-package mode applied one explicit private-file override, validated server CRC32C and exact membership, wrote mode `0600`, and reproduced the reviewed package byte-for-byte. The candidate was moved to Trash; no value was logged. |
+| 2026-08-13 Europe/Warsaw | Provider live validation | Official endpoint probes, with response bodies and credentials kept out of this artifact, classified MiMo, DashScope, and Kimi credentials as invalid. MiniMax and OpenRouter were recognized but quota/rate degraded. DEV `v1`/`v2` are therefore not promotion or rollback candidates. |
+| 2026-08-13 Europe/Warsaw | Provider-health hardening | `/health` now reports additive `providerApiKeys[*].status` values `missing`, `unknown`, `valid`, `invalid`, or `degraded`; startup validation updates the existing health object asynchronously, and code-agent dispatch fails closed unless a configured provider is `valid`. Legacy health payloads without status remain parseable. Targeted orchestrator `126/126` and code-agent `49/49` tests PASS; complete current-worktree CI PASS. |
+| 2026-08-13 Europe/Warsaw | Secret-log and forensic hardening | Changes remove request-body logging, credential/header/signature fragments, nginx query strings, raw hook commands, token suffixes, embedded repository credentials, and credential-bearing worker forensic copies; forensic directories/files are explicitly private. Test-first regressions, consolidated `910/910`, an independent residual sweep with `0` active P0/HIGH paths, and complete current-worktree CI all PASS. |
+| 2026-08-13 Europe/Warsaw | External console gates | MiMo is blocked on user login/terms; DashScope has no active Coding Plan and requires an explicit USD 50/month Pro purchase decision or removal of GLM/Qwen; Kimi key creation and the single-zone Cloudflare `DNS: Edit` token both await action-time confirmation. No replacement credential, key, or token was created and no purchase/payment was made. |
+| 2026-08-13 Europe/Warsaw | Git delivery state | Commit `02018515f75eb02c03a8990861cd938142b96b18` is pushed on `codex/secret-packages-production`; subsequent hardening remains uncommitted. No PR, merge, PROD package publication, or production deployment exists. |
+| 2026-08-13 17:55 Europe/Warsaw | Goal artifact verification | File-scoped Prettier write/check and `git diff --check -- docs/plans/2026-08-13-secret-packages-production-goal.md` exited `0`; no repository-wide verification was claimed. |
+| 2026-08-13 18:29 Europe/Warsaw | Current hardening verification | Complete `pnpm run ci:tracked` run `#4` PASS: Type/Lint, Static Validation, `7960/7960` tests, coverage validation, web build, format, and post-build checks. A preceding coverage-only failure identified three untested defensive branches in Docker inspect redaction; direct tests were added for null, non-string, and separator-free environment entries before this green run. |
 
 ## Production acceptance criteria
 
@@ -348,6 +425,11 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 - [ ] No active runtime path calls `versions/latest` or reads an individual application secret.
 - [ ] No package payload or service-account private key exists in Git, Terraform state, logs, or
   deployment attestations.
+- [ ] Request bodies, credential-bearing headers, signature/token fragments, raw command text,
+  query strings, repository credentials, and credential-bearing worker forensics are absent from
+  logs and retained diagnostic artifacts.
+- [ ] Every required provider is live-validated as `valid`; `missing`, `unknown`, `invalid`, and
+  `degraded` providers fail closed for new code-task dispatch.
 - [ ] Firebase browser key is absent from tracked configuration, rotated, deployed, and the alert is
   closed.
 - [ ] Hetzner runtime credential is rotated, mode `0600`, and runtime has no Secret Manager access.
@@ -362,17 +444,24 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 - Modified: `GET /deployment.json` adds the required positive numeric string field
   `secretPackageVersion`; publication and verification require exactly
   `commitSha`, `workflowRunId`, `deployedAt`, and `secretPackageVersion`.
+- Modified additively: orchestrator `GET /health` keeps `healthContractVersion: 1` and adds
+  `providerApiKeys[*].status` with one of `missing`, `unknown`, `valid`, `invalid`, or `degraded`.
+  Existing consumers that omit or do not inspect this field remain compatible; code-agent uses the
+  field when present and fails closed for dispatch unless a configured provider is `valid`.
 - Created: none.
 - Removed: none.
 - Unchanged: all other public and internal HTTP contracts. Package version evidence is deliberately
-  exposed in this uncached public deployment attestation and recorded in this goal artifact.
+  exposed in the uncached public deployment attestation and recorded in this goal artifact.
 
 ## Rollback boundary
 
 Before credential revocation, rollback uses the previous verified package version. After a Firebase
 or service-account key is revoked, any version containing it is permanently invalid and must not be
 selected. A new rollback-safe version containing the current credential and previous non-credential
-configuration must therefore be published before revocation.
+configuration must therefore be published before revocation. DEV `v1` and `v2` are already invalid
+for rollout/rollback because three upstream providers reject their credentials even though the
+payloads are byte-identical. DEV promotion requires fresh, byte-identical `v3` and `v4`, followed by
+the complete `v4 → v3 → v4` drill.
 
 ## Completion record
 

@@ -11,6 +11,7 @@ import { performHttpFetch } from '@intexuraos/common-http';
 import type { Logger } from 'pino';
 import type { WorkerConfig } from '../../domain/models/workerSettings.js';
 import type {
+  ProviderApiKeyValidationStatus,
   ProviderApiKeyStatus,
   WorkerAuthProvider,
   WorkerAuthStatusDetails,
@@ -19,6 +20,13 @@ import type {
 import type { WorkerHealthProbe } from '../../domain/ports/workerHealthProbe.js';
 
 const PROBE_TIMEOUT_MS = 5000;
+const PROVIDER_API_KEY_VALIDATION_STATUSES = new Set<unknown>([
+  'missing',
+  'unknown',
+  'valid',
+  'invalid',
+  'degraded',
+] satisfies ProviderApiKeyValidationStatus[]);
 const REQUIRED_HEALTH_FIELDS = [
   'status',
   'capacity',
@@ -49,7 +57,7 @@ interface OrchestratorHealthResponse {
   running: number;
   available: number;
   workerAuths: Record<string, unknown>;
-  providerApiKeys: Record<string, { configured: boolean }>;
+  providerApiKeys: Record<string, ProviderApiKeyStatus>;
   dockerHealthy: boolean;
   diskHealthy: boolean;
 }
@@ -129,7 +137,7 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
           running: data.running,
           available: data.available,
           workerAuths: data.workerAuths as Record<WorkerAuthProvider, WorkerAuthStatusDetails>,
-          providerApiKeys: data.providerApiKeys as Record<string, ProviderApiKeyStatus>,
+          providerApiKeys: data.providerApiKeys,
           dockerHealthy: data.dockerHealthy,
           diskHealthy: data.diskHealthy,
           responseTimeMs,
@@ -237,13 +245,31 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       typeof data.workerAuths === 'object' &&
       data.workerAuths !== null &&
       'providerApiKeys' in data &&
-      typeof data.providerApiKeys === 'object' &&
-      data.providerApiKeys !== null &&
+      this.isValidProviderApiKeys(data.providerApiKeys) &&
       'dockerHealthy' in data &&
       typeof data.dockerHealthy === 'boolean' &&
       'diskHealthy' in data &&
       typeof data.diskHealthy === 'boolean'
     );
+  }
+
+  private isValidProviderApiKeys(value: unknown): value is Record<string, ProviderApiKeyStatus> {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    }
+
+    return Object.values(value as Record<string, unknown>).every((entry) => {
+      if (typeof entry !== 'object' || entry === null || !('configured' in entry)) {
+        return false;
+      }
+      if (typeof entry.configured !== 'boolean') {
+        return false;
+      }
+      if (!('status' in entry)) {
+        return true;
+      }
+      return PROVIDER_API_KEY_VALIDATION_STATUSES.has(entry.status);
+    });
   }
 
   private isLegacyCapacityHealth(data: unknown): boolean {
@@ -280,6 +306,9 @@ export class WorkerHealthProbeImpl implements WorkerHealthProbe {
       }
       if (field === 'dockerHealthy' || field === 'diskHealthy') {
         return typeof value !== 'boolean';
+      }
+      if (field === 'providerApiKeys') {
+        return !this.isValidProviderApiKeys(value);
       }
       return typeof value !== 'object' || value === null;
     });

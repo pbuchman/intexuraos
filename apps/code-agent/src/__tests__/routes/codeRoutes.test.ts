@@ -48,6 +48,7 @@ import type { WorkerConfig, WorkerHealthState } from '../../domain/models/worker
 import { mockWorkerHealthProbe, mockUserServiceClient } from '../helpers/mockServices.js';
 import { createFirestoreTurnMetricsRepository } from '../../infra/firestore/firestoreTurnMetricsRepository.js';
 import { Timestamp } from '@google-cloud/firestore';
+import { Writable } from 'node:stream';
 import type { DispatchRetry } from '../../domain/models/dispatchRetry.js';
 import type { DispatchRetryRepository } from '../../domain/repositories/dispatchRetryRepository.js';
 
@@ -1106,6 +1107,68 @@ describe('codeRoutes', () => {
   });
 
   describe('PATCH /internal/code-tasks/:taskId', () => {
+    it('logs update metadata without serializing the authenticated request body', async () => {
+      const repo = createFirestoreCodeTaskRepository({
+        firestore: fakeFirestore as unknown as Firestore,
+        logger,
+      });
+      const created = await repo.create({
+        userId: 'user-123',
+        prompt: 'Sensitive update logging test',
+        sanitizedPrompt: 'sensitive update logging test',
+        systemPromptHash: 'abc123',
+        workerType: 'opus',
+        workerLocation: 'vm',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        traceId: 'trace-log-redaction',
+      });
+      expect(created.ok).toBe(true);
+      if (!created.ok) return;
+
+      const chunks: string[] = [];
+      const logStream = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void): void {
+          chunks.push(chunk.toString());
+          callback();
+        },
+      });
+      const appWithLogger = await buildServer(logStream);
+      appWithLogger.log.level = 'info';
+      const logCanary = 'CODE_TASK_UPDATE_BODY_CANARY_43dd90';
+
+      try {
+        const response = await appWithLogger.inject({
+          method: 'PATCH',
+          url: `/internal/code-tasks/${created.value.id}`,
+          headers: { 'x-internal-auth': 'test-internal-token' },
+          payload: {
+            status: 'failed',
+            error: { code: 'WORKER_ERROR', message: logCanary },
+            statusSummary: { phase: 'testing', message: logCanary },
+          },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const logRecords = chunks
+          .join('')
+          .trim()
+          .split('\n')
+          .filter((line) => line.length > 0)
+          .map((line) => JSON.parse(line) as Record<string, unknown>);
+        const updateLog = logRecords.find((record) => record['msg'] === 'Updating code task');
+
+        expect(chunks.join('')).not.toContain(logCanary);
+        expect(updateLog).toMatchObject({
+          taskId: created.value.id,
+          updatedFields: ['status', 'error', 'statusSummary'],
+        });
+        expect(updateLog).not.toHaveProperty('body');
+      } finally {
+        await appWithLogger.close();
+      }
+    });
+
     it('updates task status successfully', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,

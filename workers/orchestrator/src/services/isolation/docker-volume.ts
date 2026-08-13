@@ -110,7 +110,8 @@ export class DockerVolume {
     if (taskForensicsPath === null) {
       return null;
     }
-    fs.mkdirSync(taskForensicsPath, { recursive: true });
+    fs.mkdirSync(taskForensicsPath, { mode: 0o700, recursive: true });
+    fs.chmodSync(taskForensicsPath, 0o700);
     return taskForensicsPath;
   }
 

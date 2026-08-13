@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Logger } from 'pino';
 import {
+  buildProviderApiKeyHealth,
   buildTaskDispatcherWorkerSecrets,
   CREDENTIAL_REFRESH_BUFFER_MS,
   runCredentialRefreshTick,
@@ -187,6 +188,22 @@ describe('buildTaskDispatcherWorkerSecrets', () => {
       DASHSCOPE_API_KEY: 'dashscope-key',
       KIMI_API_KEY: 'kimi-key',
       OPENROUTER_API_KEY: 'openrouter-key',
+    });
+  });
+});
+
+describe('buildProviderApiKeyHealth', () => {
+  it('starts configured providers as unknown and empty providers as missing', () => {
+    const env = makeParsedEnv();
+    env.mimoApiKey = '   ';
+    env.openRouterApiKey = '';
+
+    expect(buildProviderApiKeyHealth(env)).toEqual({
+      MINIMAX_API_KEY: { configured: true, status: 'unknown' },
+      MIMO_API_KEY: { configured: false, status: 'missing' },
+      DASHSCOPE_API_KEY: { configured: true, status: 'unknown' },
+      KIMI_API_KEY: { configured: true, status: 'unknown' },
+      OPENROUTER_API_KEY: { configured: false, status: 'missing' },
     });
   });
 });

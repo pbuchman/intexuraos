@@ -155,7 +155,6 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
     this.logger.info(
       {
         event: 'speechmatics_submit_start',
-        audioUrl: input.audioUrl,
         mimeType: input.mimeType,
         language: input.language,
       },
@@ -206,7 +205,6 @@ export class SpeechmaticsTranscriptionAdapter implements SpeechTranscriptionPort
           error: errorMessage,
           errorContext,
           durationMs,
-          audioUrl: input.audioUrl,
         },
         'Failed to submit transcription job'
       );

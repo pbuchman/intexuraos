@@ -337,7 +337,11 @@ describe('Notion utilities', () => {
         expect.objectContaining({
           method: 'POST',
           bodyLength: 14,
+          headers: expect.objectContaining({ authorization: '[REDACTED]' }),
         })
+      );
+      expect(JSON.stringify(vi.mocked(logger.info).mock.calls)).not.toContain(
+        'secret-token-12345678901234567890'
       );
     });
 

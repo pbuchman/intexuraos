@@ -116,6 +116,23 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES['openrouter-free'].disableExperimentalBetas).toBe(true);
   });
 
+  it.each([
+    ['auto', 'ANTHROPIC_API_KEY'],
+    ['opus', 'ANTHROPIC_API_KEY'],
+    ['sonnet', 'ANTHROPIC_API_KEY'],
+    ['minimax', 'ANTHROPIC_AUTH_TOKEN'],
+    ['mimo-pro', 'ANTHROPIC_AUTH_TOKEN'],
+    ['glm', 'ANTHROPIC_AUTH_TOKEN'],
+    ['qwen', 'ANTHROPIC_AUTH_TOKEN'],
+    ['kimi', 'ANTHROPIC_API_KEY'],
+    ['openrouter-free', 'ANTHROPIC_AUTH_TOKEN'],
+  ] as const)(
+    'uses the provider-required Claude credential variable for %s',
+    (workerType, envVar) => {
+      expect(WORKER_TYPES[workerType].anthropicCredentialEnvVar).toBe(envVar);
+    }
+  );
+
   it('every apiKeyEnvVar referenced by a worker type is a valid WorkerSecrets field', () => {
     const workerSecretsKeys: ReadonlySet<string> = new Set<keyof WorkerSecrets>([
       'ANTHROPIC_API_KEY',

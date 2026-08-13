@@ -22,7 +22,6 @@ export interface BuildWorkerEnvResult {
   env: string[];
   useSharedCreds: boolean;
   useSharedCodexAuth: boolean;
-  keySuffix: string;
 }
 
 export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult {
@@ -40,6 +39,7 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
   const useSharedCodexAuth =
     runtime === 'codex' && providerConfig.sharedCodexAuthPath !== undefined;
   const requiredApiKeyEnvVar = workerTypeConfig.apiKeyEnvVar;
+  const anthropicCredentialEnvVar = workerTypeConfig.anthropicCredentialEnvVar;
 
   if (runtime === 'claude') {
     if (requiredApiKeyEnvVar === undefined) {
@@ -52,6 +52,12 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
       throw new IntexuraOSError(
         'MISCONFIGURED',
         `Worker type '${workerType}' requires ${requiredApiKeyEnvVar} but it is not configured`
+      );
+    }
+    if (anthropicCredentialEnvVar === undefined) {
+      throw new IntexuraOSError(
+        'MISCONFIGURED',
+        `Worker type '${workerType}' is missing Anthropic credential transport configuration`
       );
     }
   }
@@ -81,7 +87,12 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
   if (runtime === 'claude') {
     env.push('CLAUDE_PROJECT_DIR=/repo');
     if (!useSharedCreds) {
-      env.push(`ANTHROPIC_API_KEY=${apiKey}`, `ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`);
+      if (anthropicCredentialEnvVar === 'ANTHROPIC_AUTH_TOKEN') {
+        env.push(`ANTHROPIC_AUTH_TOKEN=${apiKey}`, 'ANTHROPIC_API_KEY=');
+      } else {
+        env.push(`ANTHROPIC_API_KEY=${apiKey}`, 'ANTHROPIC_AUTH_TOKEN=');
+      }
+      env.push(`ANTHROPIC_BASE_URL=${workerTypeConfig.apiBaseUrl}`);
     }
     if (workerTypeConfig.model !== undefined) {
       env.push(`ANTHROPIC_MODEL=${workerTypeConfig.model}`);
@@ -111,16 +122,7 @@ export function buildWorkerEnv(input: BuildWorkerEnvInput): BuildWorkerEnvResult
     env.push('WORKER_FORENSICS_DIR=/var/crash');
   }
 
-  const keySuffix =
-    runtime === 'codex'
-      ? 'shared-auth (auth.json)'
-      : useSharedCreds
-        ? 'shared-creds (.credentials.json)'
-        : apiKey.length > 4
-          ? '...' + apiKey.slice(-4)
-          : '****';
-
-  return { env, useSharedCreds, useSharedCodexAuth, keySuffix };
+  return { env, useSharedCreds, useSharedCodexAuth };
 }
 
 export function resolveForensicsSeccompProfilePath(logger: Logger): string | null {

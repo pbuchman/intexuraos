@@ -26,6 +26,31 @@ export function normalizeUrl(url: string): string {
 }
 
 /**
+ * Remove credentials and bearer-like query parameters before a repository URL
+ * crosses a logging or error-message boundary.
+ */
+export function sanitizeRepositoryUrlForLogging(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return url.replace(/(https?:\/\/)[^/@\s]+@/giu, '$1[REDACTED]@').replace(/[?#].*$/u, '');
+  }
+}
+
+function sanitizeRepositoryText(value: string): string {
+  return value.replace(/https?:\/\/[^\s'"<>]+/giu, (url) => sanitizeRepositoryUrlForLogging(url));
+}
+
+function sanitizedErrorMessage(error: unknown): string {
+  return sanitizeRepositoryText(error instanceof Error ? error.message : 'Unknown error');
+}
+
+/**
  * Compare two Git URLs to see if they point to the same repository.
  */
 export function urlsMatch(actual: string, expected: string): boolean {
@@ -57,7 +82,7 @@ export async function validateRepository(
   try {
     stat = statSync(gitPath);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = sanitizedErrorMessage(error);
     throw new IntexuraOSError(
       'INTERNAL_ERROR',
       `Failed to stat .git directory at ${gitPath}: ${message}`
@@ -77,7 +102,7 @@ export async function validateRepository(
     const { stdout } = await execFileAsync('git', ['remote', 'get-url', 'origin'], { cwd: path });
     actualUrl = stdout.trim();
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = sanitizedErrorMessage(error);
     throw new IntexuraOSError(
       'INTERNAL_ERROR',
       `Failed to get remote origin URL for repository at ${path}: ${message}\n` +
@@ -89,8 +114,8 @@ export async function validateRepository(
     throw new IntexuraOSError(
       'INVALID_REQUEST',
       `REPOSITORY_PATH ${path} has wrong remote origin.\n` +
-        `Expected: ${expectedUrl}\n` +
-        `Actual: ${actualUrl}\n` +
+        `Expected: ${sanitizeRepositoryUrlForLogging(expectedUrl)}\n` +
+        `Actual: ${sanitizeRepositoryUrlForLogging(actualUrl)}\n` +
         `This may be a different repository. Please verify or use a different path.`
     );
   }
@@ -124,7 +149,8 @@ export async function validateRepository(
  * Clone a repository to a specified path.
  */
 export async function cloneRepository(url: string, path: string, logger: Logger): Promise<void> {
-  logger.info({ url, path }, 'Cloning repository');
+  const sanitizedUrl = sanitizeRepositoryUrlForLogging(url);
+  logger.info({ url: sanitizedUrl, path }, 'Cloning repository');
 
   // Ensure parent directory exists
   const parentDir = dirname(path);
@@ -145,18 +171,20 @@ export async function cloneRepository(url: string, path: string, logger: Logger)
     logger.info({ path }, 'Repository cloned successfully');
   } catch (error: unknown) {
     const execError = error as { message?: string; stderr?: string; code?: number };
+    const message = sanitizeRepositoryText(execError.message ?? 'Unknown error');
+    const stderr =
+      execError.stderr === undefined ? undefined : sanitizeRepositoryText(execError.stderr);
     logger.error(
       {
-        error,
-        stderr: execError.stderr,
+        errorMessage: message,
+        stderr,
         exitCode: execError.code,
-        url,
+        url: sanitizedUrl,
         path,
       },
       'Failed to clone repository'
     );
-    const message = execError.message ?? 'Unknown error';
-    const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
+    const stderrInfo = stderr ? `\nGit output: ${stderr.trim()}` : '';
     throw new IntexuraOSError(
       'INTERNAL_ERROR',
       `Failed to clone repository: ${message}${stderrInfo}`
@@ -175,17 +203,19 @@ export async function fetchRemote(path: string, logger: Logger): Promise<void> {
     logger.info({ path }, 'Fetch completed successfully');
   } catch (error: unknown) {
     const execError = error as { message?: string; stderr?: string; code?: number };
+    const message = sanitizeRepositoryText(execError.message ?? 'Unknown error');
+    const stderr =
+      execError.stderr === undefined ? undefined : sanitizeRepositoryText(execError.stderr);
     logger.error(
       {
-        error,
-        stderr: execError.stderr,
+        errorMessage: message,
+        stderr,
         exitCode: execError.code,
         path,
       },
       'Failed to fetch from remote'
     );
-    const message = execError.message ?? 'Unknown error';
-    const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
+    const stderrInfo = stderr ? `\nGit output: ${stderr.trim()}` : '';
     throw new IntexuraOSError(
       'INTERNAL_ERROR',
       `Failed to fetch from remote: ${message}${stderrInfo}`
@@ -209,17 +239,19 @@ export async function cleanWorktree(path: string, logger: Logger): Promise<void>
     logger.info({ path }, 'Worktree cleaned successfully');
   } catch (error: unknown) {
     const execError = error as { message?: string; stderr?: string; code?: number };
+    const message = sanitizeRepositoryText(execError.message ?? 'Unknown error');
+    const stderr =
+      execError.stderr === undefined ? undefined : sanitizeRepositoryText(execError.stderr);
     logger.error(
       {
-        error,
-        stderr: execError.stderr,
+        errorMessage: message,
+        stderr,
         exitCode: execError.code,
         path,
       },
       'Failed to clean worktree'
     );
-    const message = execError.message ?? 'Unknown error';
-    const stderrInfo = execError.stderr ? `\nGit output: ${execError.stderr.trim()}` : '';
+    const stderrInfo = stderr ? `\nGit output: ${stderr.trim()}` : '';
     throw new IntexuraOSError(
       'INTERNAL_ERROR',
       `Failed to clean worktree: ${message}${stderrInfo}`
@@ -253,7 +285,10 @@ export async function sanitizeRepoConfig(
       // Wrong-repo URLs are already caught by validateRepository() before this runs.
       // This self-heals on every start when the URL was previously fetched with
       // embedded credentials, so it is informational, not a warning condition.
-      logger.info({ expectedUrl, path }, 'Sanitized embedded credentials from remote.origin.url');
+      logger.info(
+        { expectedUrl: sanitizeRepositoryUrlForLogging(expectedUrl), path },
+        'Sanitized embedded credentials from remote.origin.url'
+      );
       await execFileAsync('git', ['remote', 'set-url', 'origin', expectedUrl], { cwd: path });
     }
   } catch {
@@ -285,12 +320,16 @@ export async function sanitizeRepoConfig(
  * If path exists: validate it's the correct repo, sanitize config, fetch latest, and clean worktree
  */
 export async function ensureRepository(url: string, path: string, logger: Logger): Promise<void> {
+  const sanitizedUrl = sanitizeRepositoryUrlForLogging(url);
   if (existsSync(path)) {
     logger.info({ path }, 'Repository path exists, validating...');
     try {
       await validateRepository(path, url, logger);
     } catch (error) {
-      logger.error({ error, path, url }, 'Repository validation failed');
+      logger.error(
+        { errorMessage: sanitizedErrorMessage(error), path, url: sanitizedUrl },
+        'Repository validation failed'
+      );
       throw error;
     }
 
@@ -301,16 +340,25 @@ export async function ensureRepository(url: string, path: string, logger: Logger
       await fetchRemote(path, logger);
     } catch (error) {
       fetchSucceeded = false;
-      logger.warn({ error, path, url }, 'Fetch failed, continuing with existing local state');
+      logger.warn(
+        { errorMessage: sanitizedErrorMessage(error), path, url: sanitizedUrl },
+        'Fetch failed, continuing with existing local state'
+      );
     }
 
     try {
       await cleanWorktree(path, logger);
     } catch (error) {
       if (fetchSucceeded) {
-        logger.error({ error, path, url }, 'Clean worktree failed after successful fetch');
+        logger.error(
+          { errorMessage: sanitizedErrorMessage(error), path, url: sanitizedUrl },
+          'Clean worktree failed after successful fetch'
+        );
       } else {
-        logger.error({ error, path, url }, 'Both fetch and clean failed — repository is unusable');
+        logger.error(
+          { errorMessage: sanitizedErrorMessage(error), path, url: sanitizedUrl },
+          'Both fetch and clean failed — repository is unusable'
+        );
       }
       throw error;
     }
@@ -319,7 +367,10 @@ export async function ensureRepository(url: string, path: string, logger: Logger
     try {
       await cloneRepository(url, path, logger);
     } catch (error) {
-      logger.error({ error, path, url }, 'Repository clone failed');
+      logger.error(
+        { errorMessage: sanitizedErrorMessage(error), path, url: sanitizedUrl },
+        'Repository clone failed'
+      );
       throw error;
     }
   }

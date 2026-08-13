@@ -85,7 +85,8 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
         : undefined;
 
     if (hostAttemptForensicsPath !== undefined) {
-      await fs.promises.mkdir(hostAttemptForensicsPath, { recursive: true });
+      await fs.promises.mkdir(hostAttemptForensicsPath, { mode: 0o700, recursive: true });
+      await fs.promises.chmod(hostAttemptForensicsPath, 0o700);
       await fs.promises.writeFile(
         path.join(hostAttemptForensicsPath, 'attempt-start.json'),
         JSON.stringify(
@@ -98,7 +99,7 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
           null,
           2
         ),
-        'utf-8'
+        { encoding: 'utf8', mode: 0o600 }
       );
     }
 
@@ -129,7 +130,7 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
       worker.attemptLogBuffer += text;
       if (persistentAttemptLogPath !== undefined) {
         try {
-          fs.appendFileSync(persistentAttemptLogPath, text, 'utf-8');
+          fs.appendFileSync(persistentAttemptLogPath, text, { encoding: 'utf8', mode: 0o600 });
         } catch (error) {
           logger.warn({ taskId, error }, 'Failed to persist attempt exec stream chunk');
         }
@@ -142,7 +143,7 @@ export async function runAttemptInContainer(input: RunAttemptInput): Promise<voi
       await fs.promises.writeFile(
         path.join(hostAttemptForensicsPath, 'exec-exit-code.txt'),
         String(exitCode),
-        'utf-8'
+        { encoding: 'utf8', mode: 0o600 }
       );
     }
     if (
@@ -267,7 +268,6 @@ export interface CreateContainerSpecResult {
   spec: Docker.ContainerCreateOptions;
   useSharedCreds: boolean;
   useSharedCodexAuth: boolean;
-  keySuffix: string;
 }
 
 /**
@@ -298,7 +298,7 @@ export function buildCreateContainerSpec(
     logger,
   } = input;
 
-  const { env, useSharedCreds, useSharedCodexAuth, keySuffix } = buildWorkerEnv({
+  const { env, useSharedCreds, useSharedCodexAuth } = buildWorkerEnv({
     taskId,
     runtime,
     workerType,
@@ -350,7 +350,7 @@ export function buildCreateContainerSpec(
     },
   };
 
-  return { spec, useSharedCreds, useSharedCodexAuth, keySuffix };
+  return { spec, useSharedCreds, useSharedCodexAuth };
 }
 
 export interface ResumeInput {
@@ -539,18 +539,22 @@ export async function createWorkerOrchestration(
       config.resolvedImage ?? (await registry.pullAndResolveImage(taskId, requestedImage));
     logger.info({ taskId }, 'Container creation started');
 
-    // Precompute the env so we know the keySuffix for the log line below.
-    const { keySuffix } = buildWorkerEnv({
+    const { useSharedCreds, useSharedCodexAuth } = buildWorkerEnv({
       taskId,
       runtime,
       workerType,
       config,
       providerConfig,
     });
+    const authentication = useSharedCodexAuth
+      ? 'shared-codex-auth'
+      : useSharedCreds
+        ? 'shared-credentials'
+        : 'direct-api-key';
 
     logger.info(
       {},
-      `Creating worker container: taskId=${taskId} workerType=${workerType} runtime=${runtime} image=${resolvedImage} apiKey=${keySuffix} baseUrl=${WORKER_TYPES[workerType].apiBaseUrl} worktreePath=${worktreePath}`
+      `Creating worker container: taskId=${taskId} workerType=${workerType} runtime=${runtime} image=${resolvedImage} authentication=${authentication} baseUrl=${WORKER_TYPES[workerType].apiBaseUrl} worktreePath=${worktreePath}`
     );
 
     // Create any host-side directories referenced by the container spec

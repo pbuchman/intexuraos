@@ -96,8 +96,7 @@ function createLoggingFetch(
             : (init.headers as Record<string, string>);
 
       for (const [key, value] of Object.entries(headers)) {
-        headersForLog[key] =
-          key.toLowerCase() === 'authorization' ? value.substring(0, 20) + '...[REDACTED]' : value;
+        headersForLog[key] = key.toLowerCase() === 'authorization' ? '[REDACTED]' : value;
       }
     }
 

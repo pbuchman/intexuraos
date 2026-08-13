@@ -14,6 +14,9 @@ import { join } from 'node:path';
 
 // Track invocation order across mocks.
 const callOrder: string[] = [];
+const providerApiKeys = {
+  KIMI_API_KEY: { configured: true, status: 'unknown' as const },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bootstrap module mocks (hoisted by vitest.vi.mock)
@@ -97,6 +100,7 @@ vi.mock('../bootstrap/service-wiring.js', () => ({
       heartbeatManager: {},
       workerAuthRegistry: {},
       isolationProvider: {},
+      providerApiKeys,
     };
   }),
   startCredentialRefreshLoop: vi.fn(() => {
@@ -199,11 +203,23 @@ describe('start() — full bootstrap happy path', () => {
     expect(validateWorkerApiKeys).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ kimiKey: 'ABCDEFG' }),
-      expect.anything()
+      expect.anything(),
+      providerApiKeys
     );
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
     expect(initWorker).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
+  });
+
+  it('does not wait for provider validation before starting main', async () => {
+    vi.mocked(validateWorkerApiKeys).mockImplementationOnce(
+      () => new Promise<void>(() => undefined)
+    );
+
+    await start();
+
+    expect(main).toHaveBeenCalledOnce();
+    expect(vi.mocked(main).mock.calls[0]).toContain(providerApiKeys);
   });
 
   it('initializes the worker with serviceName=orchestrator and the env environment', async () => {

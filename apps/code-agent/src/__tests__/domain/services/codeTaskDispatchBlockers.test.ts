@@ -456,4 +456,57 @@ describe('classifyCodeTaskDispatchability', () => {
       workerNames: ['provider-ready'],
     });
   });
+
+  it.each(['missing', 'unknown', 'invalid', 'degraded'] as const)(
+    'blocks provider dispatch when the validation status is %s',
+    (status) => {
+      const result = classifyCodeTaskDispatchability({
+        workerType: 'openrouter-free',
+        workers: [worker('provider-not-ready')],
+        healthByWorkerName: {
+          'provider-not-ready': healthy({
+            providerApiKeys: {
+              OPENROUTER_API_KEY: { configured: true, status },
+            },
+          }),
+        },
+      });
+
+      expect(result).toEqual(expect.objectContaining({
+        dispatchable: false,
+        reason: 'provider_auth_unavailable',
+      }));
+    }
+  );
+
+  it('allows provider dispatch only when a status-bearing entry is configured and valid', () => {
+    const validResult = classifyCodeTaskDispatchability({
+      workerType: 'openrouter-free',
+      workers: [worker('provider-valid')],
+      healthByWorkerName: {
+        'provider-valid': healthy({
+          providerApiKeys: {
+            OPENROUTER_API_KEY: { configured: true, status: 'valid' },
+          },
+        }),
+      },
+    });
+    const inconsistentResult = classifyCodeTaskDispatchability({
+      workerType: 'openrouter-free',
+      workers: [worker('provider-inconsistent')],
+      healthByWorkerName: {
+        'provider-inconsistent': healthy({
+          providerApiKeys: {
+            OPENROUTER_API_KEY: { configured: false, status: 'valid' },
+          },
+        }),
+      },
+    });
+
+    expect(validResult).toEqual({ dispatchable: true, workerNames: ['provider-valid'] });
+    expect(inconsistentResult).toEqual(expect.objectContaining({
+      dispatchable: false,
+      reason: 'provider_auth_unavailable',
+    }));
+  });
 });

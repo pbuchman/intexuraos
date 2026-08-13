@@ -3,7 +3,6 @@ import type { Logger } from 'pino';
 import { IntexuraOSError } from '@intexuraos/common-core';
 import {
   validateWorkerApiKey,
-  keySuffix,
   extractErrorChain,
   fetchWithRetry,
   logWorkerAuthStartupStatus,
@@ -13,6 +12,7 @@ import {
 } from '../../bootstrap/api-key-validator.js';
 import type { WorkerAuthRegistry, WorkerAuthProvider } from '../../services/worker-auth/index.js';
 import type { WorkerAuthState, WorkerAuthStatus } from '../../services/worker-auth/types.js';
+import type { ProviderApiKeyHealth } from '../../types/api.js';
 
 type LogEntry = [level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]];
 
@@ -85,21 +85,6 @@ describe('validateWorkerApiKey', () => {
       expect(err).toBeInstanceOf(IntexuraOSError);
       expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
     }
-  });
-});
-
-describe('keySuffix', () => {
-  it('returns the last four characters for long keys', () => {
-    expect(keySuffix('sk-abcdef1234')).toBe('...1234');
-  });
-
-  it('returns a placeholder for short keys', () => {
-    expect(keySuffix('abc')).toBe('****');
-    expect(keySuffix('abcd')).toBe('****');
-  });
-
-  it('returns a placeholder for empty keys', () => {
-    expect(keySuffix('')).toBe('****');
   });
 });
 
@@ -309,7 +294,7 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
       codex: makeState('not_configured'),
     });
 
-    await validateWorkerApiKeys(registry, noKeys, logger);
+    await validateWorkerApiKeys(registry, noKeys, logger, {});
 
     const claudeInfo = logger.calls.filter(
       ([level, , message]) =>
@@ -329,7 +314,7 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
       codex: makeState('active', { authMode: 'oauth' }),
     });
 
-    await validateWorkerApiKeys(registry, noKeys, logger);
+    await validateWorkerApiKeys(registry, noKeys, logger, {});
 
     const claudeWarn = logger.calls.filter(
       ([level, , message]) =>
@@ -352,7 +337,7 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
       }),
     });
 
-    await validateWorkerApiKeys(registry, noKeys, logger);
+    await validateWorkerApiKeys(registry, noKeys, logger, {});
 
     const codexInfo = logger.calls.filter(
       ([level, , message]) =>
@@ -373,7 +358,7 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
       codex: makeState('invalid'),
     });
 
-    await validateWorkerApiKeys(registry, noKeys, logger);
+    await validateWorkerApiKeys(registry, noKeys, logger, {});
 
     const codexWarn = logger.calls.filter(
       ([level, , message]) =>
@@ -382,6 +367,43 @@ describe('validateWorkerApiKeys — auth-state logging branches', () => {
     expect(codexWarn).toHaveLength(1);
     // Sentry INTEXURAOS-HOME-DEV-1G: same suppression contract as the Claude warn.
     expect(codexWarn[0]?.[1]).toMatchObject({ _skipSentry: true });
+  });
+
+  it('updates the shared provider health object with live validation results', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 429 }))
+      .mockResolvedValueOnce(new Response(null, { status: 400 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const providerApiKeys: Record<string, ProviderApiKeyHealth> = {
+      MINIMAX_API_KEY: { configured: true, status: 'unknown' },
+      MIMO_API_KEY: { configured: true, status: 'unknown' },
+      DASHSCOPE_API_KEY: { configured: true, status: 'unknown' },
+      KIMI_API_KEY: { configured: true, status: 'unknown' },
+      OPENROUTER_API_KEY: { configured: true, status: 'unknown' },
+    };
+
+    await validateWorkerApiKeys(
+      makeRegistry({ claude: makeState('active'), codex: makeState('active') }),
+      {
+        minimaxKey: 'minimax-test-key',
+        mimoKey: 'mimo-test-key',
+        dashscopeKey: 'dashscope-test-key',
+        kimiKey: 'kimi-test-key',
+        openRouterKey: 'openrouter-test-key',
+      },
+      makeLogger(),
+      providerApiKeys
+    );
+
+    expect(providerApiKeys).toEqual({
+      MINIMAX_API_KEY: { configured: true, status: 'valid' },
+      MIMO_API_KEY: { configured: true, status: 'invalid' },
+      DASHSCOPE_API_KEY: { configured: true, status: 'degraded' },
+      KIMI_API_KEY: { configured: true, status: 'unknown' },
+      OPENROUTER_API_KEY: { configured: true, status: 'degraded' },
+    });
   });
 });
 
@@ -411,6 +433,24 @@ describe('validateThirdPartyApiKey', () => {
     );
     expect(errorCall).toBeDefined();
     expect(errorCall?.[1]).toMatchObject({ _skipSentry: true });
+    expect(errorCall?.[1]).not.toHaveProperty('apiKey');
+    expect(JSON.stringify(errorCall)).not.toContain('1234');
+  });
+
+  it.each([
+    [200, 'valid'],
+    [401, 'invalid'],
+    [403, 'invalid'],
+    [429, 'degraded'],
+    [500, 'degraded'],
+    [503, 'degraded'],
+    [400, 'unknown'],
+  ] as const)('maps HTTP %s to provider status %s', async (httpStatus, expectedStatus) => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: httpStatus }));
+
+    const status = await validateThirdPartyApiKey('kimi', 'provider-test-key', makeLogger());
+
+    expect(status).toBe(expectedStatus);
   });
 
   it('does not carry _skipSentry on the success info log', async () => {
@@ -429,6 +469,8 @@ describe('validateThirdPartyApiKey', () => {
     // Success path must remain pageable — a successful validation is a
     // positive signal we want to keep in Sentry noise.
     expect(successCall?.[1]).not.toMatchObject({ _skipSentry: true });
+    expect(successCall?.[1]).not.toHaveProperty('apiKey');
+    expect(JSON.stringify(successCall)).not.toContain('1234');
   });
 
   it.each([
@@ -467,6 +509,49 @@ describe('validateThirdPartyApiKey', () => {
       method: 'GET',
       headers: { Authorization: 'Bearer sk-test-key-1234' },
     });
+  });
+
+  it.each(['minimax', 'mimo-pro', 'qwen'] as const)(
+    'uses bearer authorization for the %s Anthropic-compatible endpoint',
+    async (workerTypeName) => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{"content":[]}', { status: 200 }));
+
+      const logger = makeLogger();
+      await validateThirdPartyApiKey(workerTypeName, 'provider-test-key', logger);
+
+      const [, options] = fetchSpy.mock.calls[0] ?? [];
+      expect(options).toMatchObject({
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer provider-test-key',
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+      });
+      expect((options?.headers as Record<string, string>)['x-api-key']).toBeUndefined();
+    }
+  );
+
+  it('uses x-api-key authorization for Kimi Code', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"content":[]}', { status: 200 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('kimi', 'provider-test-key', logger);
+
+    const [, options] = fetchSpy.mock.calls[0] ?? [];
+    expect(options).toMatchObject({
+      method: 'POST',
+      headers: {
+        'x-api-key': 'provider-test-key',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+    });
+    expect((options?.headers as Record<string, string>)['Authorization']).toBeUndefined();
   });
 
   it('uses the models endpoint for direct API-key runtimes without a configured model', async () => {
@@ -509,7 +594,7 @@ describe('validateThirdPartyApiKey', () => {
     const logger = makeLogger();
     const validation = validateThirdPartyApiKey('kimi', 'sk-test-key-1234', logger);
     await vi.advanceTimersByTimeAsync(6_000);
-    await validation;
+    await expect(validation).resolves.toBe('unknown');
 
     const warnCall = logger.calls.find(
       ([level, , message]) =>
@@ -521,8 +606,9 @@ describe('validateThirdPartyApiKey', () => {
     expect(warnCall?.[1]).toMatchObject({
       error: 'network down',
       url: 'https://api.kimi.com/coding/v1/messages',
-      apiKey: '...1234',
     });
+    expect(warnCall?.[1]).not.toHaveProperty('apiKey');
+    expect(JSON.stringify(warnCall)).not.toContain('1234');
     expect(warnCall?.[1]).not.toMatchObject({ _skipSentry: true });
   });
 });

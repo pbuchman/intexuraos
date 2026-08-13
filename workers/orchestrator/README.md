@@ -495,6 +495,20 @@ This writes shared auth to `~/.code-orchestrator/codex-auth/auth.json`.
 
 Check worker auth status: `curl http://localhost:8199/health | jq .workerAuths`
 
+Direct third-party provider credentials are reported separately under
+`providerApiKeys`. Each entry contains `configured` and a live-validation
+`status`: `missing`, `unknown`, `valid`, `invalid`, or `degraded`. The startup
+probe updates this map asynchronously. Code-agent dispatches a provider-backed
+worker only when its entry is configured and `valid`; `invalid`, `degraded`,
+`unknown`, and `missing` fail closed for that provider without stopping the
+orchestrator or unrelated worker types. Older orchestrators that omit `status`
+remain readable during a rolling deployment, using the former
+configured-only behavior.
+
+```bash
+curl -fsS http://localhost:8199/health | jq '.providerApiKeys'
+```
+
 #### Health Endpoint Examples
 
 **Healthy (worker auth active):**

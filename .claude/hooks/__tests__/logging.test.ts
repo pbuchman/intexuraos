@@ -152,11 +152,12 @@ describe.sequential('Claude Hooks - Logging', () => {
       expectAllowed(result);
     });
 
-    it('writes to commands.log with proper format', () => {
+    it('writes only a one-way command hash to a private commands.log', () => {
       const { path: tempDir, cleanup } = createTempDir();
 
       try {
-        const command = 'echo "hello world"';
+        const secretCanary = 'HOOK_COMMAND_SECRET_CANARY';
+        const command = `curl -H "Authorization: Bearer ${secretCanary}" https://example.test`;
 
         // Create timing file
         executeHookSyncWithTempDir(
@@ -173,10 +174,11 @@ describe.sequential('Claude Hooks - Logging', () => {
         // Check commands.log format
         if (fs.existsSync(commandsLogPath)) {
           const logContent = fs.readFileSync(commandsLogPath, 'utf-8');
-          // Format: [timestamp] duration command (duration has variable padding)
-          // Should NOT have "?" duration - should be an actual number
-          expect(logContent).toMatch(/\[.*?\]\s+[\d.]+s\s+echo/);
+          expect(logContent).toMatch(/\[.*?\]\s+[\d.]+s\s+command_hash=[a-f\d]{12}/u);
           expect(logContent).not.toMatch(/\[\s*\?\s*s\]/); // No unknown durations
+          expect(logContent).not.toContain(command);
+          expect(logContent).not.toContain(secretCanary);
+          expect(fs.statSync(commandsLogPath).mode & 0o077).toBe(0);
         }
       } finally {
         cleanup();

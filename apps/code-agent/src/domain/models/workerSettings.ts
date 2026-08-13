@@ -173,7 +173,15 @@ export interface WorkerAuthStatusDetails {
 
 export interface ProviderApiKeyStatus {
   configured: boolean;
+  status?: ProviderApiKeyValidationStatus;
 }
+
+export type ProviderApiKeyValidationStatus =
+  | 'missing'
+  | 'unknown'
+  | 'valid'
+  | 'invalid'
+  | 'degraded';
 
 /**
  * Worker is healthy and responding.

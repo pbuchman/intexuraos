@@ -642,7 +642,7 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
       const { taskId } = request.params;
       const body = request.body;
 
-      request.log.info({ taskId, body }, 'Updating code task');
+      request.log.info({ taskId, updatedFields: Object.keys(body) }, 'Updating code task');
 
       const result = await codeTaskRepo.update(taskId, {
         ...(body.status !== undefined && { status: body.status }),

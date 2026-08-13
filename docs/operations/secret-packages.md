@@ -318,6 +318,48 @@ records only the numeric version and redacted verification metadata.
    cannot access Secret Manager; then drain/replace remaining workers.
 5. Record the numeric version in redacted deployment evidence.
 
+#### Third-party provider credential gate
+
+Provider-backed code workers must use the authentication environment expected
+by their Anthropic-compatible upstream. MiniMax, MiMo, DashScope, and
+OpenRouter use `ANTHROPIC_AUTH_TOKEN` (Bearer); Kimi uses
+`ANTHROPIC_API_KEY` (`x-api-key`). The task projection explicitly blanks the
+competing variable so a stale host value cannot change the selected header.
+
+The orchestrator publishes a live status for each configured provider under
+`GET /health` → `providerApiKeys`: `valid` for a successful upstream response,
+`invalid` for `401`/`403`, `degraded` for `429` or upstream `5xx`, and `unknown`
+for network or unclassified failures. Empty values are `missing`. Code-agent
+dispatch is fail-closed and selects a provider worker only when that entry is
+both configured and `valid`; Claude OAuth and Codex auth remain separate.
+
+Rotate a provider credential as a whole-package change:
+
+1. Confirm the provider product, account, region, plan entitlement, API base,
+   and model match the worker definition. Creating a persistent key, accepting
+   provider terms, or buying a plan requires the responsible operator's
+   explicit approval.
+2. Create the replacement in the provider console. Write it once to an
+   ephemeral regular file with mode `0600`; never paste it into a command,
+   issue, chat, log, or tracked file.
+3. Build from the exact active DEV package with one or more explicit
+   `--override-env NAME=<mode-0600-file>` arguments. Use only canonical manifest
+   names such as `INTEXURAOS_MIMO_APP_API_KEY`,
+   `INTEXURAOS_DASHSCOPE_APP_API_KEY`, or
+   `INTEXURAOS_KIMI_APP_API_KEY`.
+4. Validate and publish a new numeric DEV version, fetch it back with server
+   CRC32C verification, render it on local and home-dev, and restart the
+   orchestrator. Require the corresponding health entries to become `valid`.
+5. Run one real task canary per affected worker type and three five-minute
+   health/error samples. A format-only check or a non-empty key is not proof of
+   validity.
+6. Publish a second byte-identical version containing the same replacements.
+   Exercise rollback from the forward version to the prior replacement version
+   and forward again. Never use a version containing a revoked, expired, or
+   upstream-rejected credential as a rollback target.
+7. Revoke the former provider key only after both versions and the rollback
+   drill pass, then securely remove all ephemeral files.
+
 ### Production / Hetzner
 
 1. The provisioner fetches one reviewed PROD numeric version into a private

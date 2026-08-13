@@ -60,7 +60,7 @@ export async function withDeduplication<T>(
 ): Promise<T> {
   const existing = requestDedup.get(key) as Promise<T> | undefined;
   if (existing !== undefined) {
-    logger.debug({ key }, 'Request deduplication hit');
+    logger.debug({}, 'Request deduplication hit');
     return await existing;
   }
 

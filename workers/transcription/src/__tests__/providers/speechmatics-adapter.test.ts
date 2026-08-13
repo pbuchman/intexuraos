@@ -66,6 +66,34 @@ describe('SpeechmaticsTranscriptionAdapter', () => {
   });
 
   describe('submitJob', () => {
+    it('does not log signed audio URL query credentials on success', async () => {
+      mockCreateTranscriptionJob.mockResolvedValue({ id: 'job-log-safe' });
+      const logCanary = 'SPEECHMATICS_SIGNED_URL_CANARY_21ca8d';
+
+      const result = await adapter.submitJob({
+        audioUrl: `https://storage.example.com/audio.ogg?X-Goog-Signature=${logCanary}`,
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(JSON.stringify(mockLogger.info.mock.calls)).not.toContain(logCanary);
+    });
+
+    it('does not log signed audio URL query credentials on submission error', async () => {
+      mockCreateTranscriptionJob.mockRejectedValue(new Error('Speechmatics unavailable'));
+      const logCanary = 'SPEECHMATICS_ERROR_URL_CANARY_c153b2';
+
+      const result = await adapter.submitJob({
+        audioUrl: `https://storage.example.com/audio.ogg?X-Goog-Credential=${logCanary}`,
+        mimeType: 'audio/ogg',
+      });
+
+      expect(result.ok).toBe(false);
+      expect(
+        JSON.stringify([...mockLogger.info.mock.calls, ...mockLogger.error.mock.calls])
+      ).not.toContain(logCanary);
+    });
+
     it('returns job ID on success', async () => {
       mockCreateTranscriptionJob.mockResolvedValue({ id: 'job-123' });
 

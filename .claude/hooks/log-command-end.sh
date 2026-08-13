@@ -3,11 +3,24 @@
 # Exit 0 = always allow (this is observational, not blocking)
 
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TEMP_DIR="${CLAUDE_CMD_TIMING_DIR:-/tmp/claude-cmd-timing}"
 LOG_FILE="${SCRIPT_DIR}/commands.log"
 SESSION_COMMANDS_FILE="${SCRIPT_DIR}/session-commands.log"
+
+hash_command() {
+    if command -v sha256sum &>/dev/null; then
+        printf '%s' "$1" | sha256sum | awk '{print substr($1, 1, 12)}'
+    elif command -v shasum &>/dev/null; then
+        printf '%s' "$1" | shasum -a 256 | awk '{print substr($1, 1, 12)}'
+    elif command -v openssl &>/dev/null; then
+        printf '%s' "$1" | openssl dgst -sha256 2>/dev/null | awk '{print substr($NF, 1, 12)}'
+    else
+        printf '%s' "$1" | cksum | awk '{print substr($1, 1, 12)}'
+    fi
+}
 
 INPUT=$(cat)
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -29,9 +42,8 @@ else
     TIMESTAMP_ISO=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 fi
 
-# Find the correlation ID from the pending file (FIFO: use oldest/first entry)
-# Portable hash: use openssl md5 if available, else cksum
-COMMAND_ONLY_HASH=$(echo -n "$COMMAND" | { openssl md5 2>/dev/null || cksum; } | cut -c1-12)
+# Find the correlation ID from the pending file (FIFO: use oldest/first entry).
+COMMAND_ONLY_HASH=$(hash_command "$COMMAND")
 PENDING_FILE="${TEMP_DIR}/${COMMAND_ONLY_HASH}.pending"
 
 DURATION_SEC="?"
@@ -57,13 +69,13 @@ if [[ -f "$PENDING_FILE" ]]; then
     fi
 fi
 
-# Single-line log: [timestamp] duration command (duration right-padded to 6 chars for alignment)
-# Escape newlines in multi-line commands to keep log format intact (show as \n literal)
-# Also truncate to 500 chars to prevent log bloat
-COMMAND_ESCAPED=$(printf '%s' "$COMMAND" | awk 1 ORS='\\n' | sed 's/\\n$//')
-printf "[%s] %6s %s\n" "$TIMESTAMP_ISO" "${DURATION_SEC}s" "${COMMAND_ESCAPED:0:500}" >> "$LOG_FILE"
+# Commands frequently contain inline credentials or private paths. Persist only the one-way timing
+# correlation hash; the raw command stays in the transient hook input and never reaches the log.
+printf "[%s] %6s command_hash=%s\n" "$TIMESTAMP_ISO" "${DURATION_SEC}s" "$COMMAND_ONLY_HASH" >> "$LOG_FILE"
+chmod 600 "$LOG_FILE" 2>/dev/null || true
 
 # Append to session log (atomic append, safe for concurrent hooks)
 echo "1" >> "$SESSION_COMMANDS_FILE" 2>/dev/null || true
+chmod 600 "$SESSION_COMMANDS_FILE" 2>/dev/null || true
 
 exit 0

@@ -105,6 +105,26 @@ export function buildTaskDispatcherWorkerSecrets(
   };
 }
 
+export function buildProviderApiKeyHealth(
+  env: BootstrapEnvConfig
+): Record<string, ProviderApiKeyHealth> {
+  const health = (value: string): ProviderApiKeyHealth => {
+    const configured = value.trim() !== '';
+    return {
+      configured,
+      status: configured ? 'unknown' : 'missing',
+    };
+  };
+
+  return {
+    MINIMAX_API_KEY: health(env.minimaxApiKey),
+    MIMO_API_KEY: health(env.mimoApiKey),
+    DASHSCOPE_API_KEY: health(env.dashscopeApiKey),
+    KIMI_API_KEY: health(env.kimiApiKey),
+    OPENROUTER_API_KEY: health(env.openRouterApiKey),
+  };
+}
+
 /**
  * Builds every long-lived service the orchestrator needs and wires them
  * together. Does NOT start listeners — the caller invokes `main()` and
@@ -272,13 +292,7 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
     workerAuthRegistry.getCurrentAccessToken('claude') ?? ''
   );
 
-  const providerApiKeys: Record<string, ProviderApiKeyHealth> = {
-    MINIMAX_API_KEY: { configured: env.minimaxApiKey.trim() !== '' },
-    MIMO_API_KEY: { configured: env.mimoApiKey.trim() !== '' },
-    DASHSCOPE_API_KEY: { configured: env.dashscopeApiKey.trim() !== '' },
-    KIMI_API_KEY: { configured: env.kimiApiKey.trim() !== '' },
-    OPENROUTER_API_KEY: { configured: env.openRouterApiKey.trim() !== '' },
-  };
+  const providerApiKeys = buildProviderApiKeyHealth(env);
 
   const apiKeyValidator = new ApiKeyValidator(apiKeySecrets, logger);
 

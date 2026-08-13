@@ -28,26 +28,24 @@ describe('Redaction utilities', () => {
       expect(redactToken('abcdefghijkl')).toBe('[REDACTED]');
     });
 
-    it('shows first 4 and last 4 chars for token > 12 chars', () => {
-      // Token: "1234567890abcdefghij" (20 chars)
-      expect(redactToken('1234567890abcdefghij')).toBe('1234...ghij');
+    it('fully redacts long tokens without preserving fragments', () => {
+      expect(redactToken('1234567890abcdefghij')).toBe('[REDACTED]');
     });
 
-    it('shows first 4 and last 4 chars for 13 character token', () => {
-      // Token: "1234567890abc" (13 chars)
-      expect(redactToken('1234567890abc')).toBe('1234...0abc');
+    it('fully redacts 13 character tokens', () => {
+      expect(redactToken('1234567890abc')).toBe('[REDACTED]');
     });
 
     it('handles typical JWT token format', () => {
       const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature123';
       const redacted = redactToken(jwt);
-      expect(redacted).toBe('eyJh...e123');
+      expect(redacted).toBe('[REDACTED]');
     });
 
     it('handles API key format', () => {
       const apiKey = 'test_key_1234567890abcdefghijklmnop';
       const redacted = redactToken(apiKey);
-      expect(redacted).toBe('test...mnop');
+      expect(redacted).toBe('[REDACTED]');
     });
   });
 
@@ -62,8 +60,8 @@ describe('Redaction utilities', () => {
       const redacted = redactObject(obj, ['password', 'token']);
 
       expect(redacted['username']).toBe('john');
-      expect(redacted['password']).toBe('secr...word');
-      expect(redacted['token']).toBe('bear...5678');
+      expect(redacted['password']).toBe('[REDACTED]');
+      expect(redacted['token']).toBe('[REDACTED]');
     });
 
     it('does not modify original object', () => {
