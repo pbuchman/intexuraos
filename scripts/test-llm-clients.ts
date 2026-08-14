@@ -64,7 +64,8 @@ interface ApiKeys {
 
 function maskKey(key: string | null): string {
   if (key === null) return '(not configured)';
-  return '(configured)';
+  if (key.length < 8) return '***';
+  return `${key.substring(0, 4)}...${key.substring(key.length - 4)}`;
 }
 
 function formatUsage(usage: NormalizedUsage): string {

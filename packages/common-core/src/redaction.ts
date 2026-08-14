@@ -5,14 +5,20 @@
 
 /**
  * Redact a token/secret value for safe logging.
- * Never preserves identifying fragments of a configured value.
+ * Shows first 4 and last 4 characters only.
  */
 export function redactToken(token: string | undefined | null): string {
   if (token === undefined || token === null || token === '') {
     return '[empty]';
   }
 
-  return '[REDACTED]';
+  if (token.length <= 12) {
+    return '[REDACTED]';
+  }
+
+  const start = token.substring(0, 4);
+  const end = token.substring(token.length - 4);
+  return `${start}...${end}`;
 }
 
 /**

@@ -121,11 +121,16 @@ export function registerRoutes(
 
   // POST /tasks - Submit new task
   app.post('/tasks', { preHandler: [verifyDispatchSignature] }, async (request, reply) => {
+    // Log incoming request (redact secrets)
+    const rawBody = request.body as Record<string, unknown>;
     logger.info(
       {
         method: 'POST',
         path: '/tasks',
-        contentLength: request.headers['content-length'],
+        body: {
+          ...rawBody,
+          webhookSecret: rawBody['webhookSecret'] ? '[REDACTED]' : undefined,
+        },
       },
       'Task submission payload'
     );

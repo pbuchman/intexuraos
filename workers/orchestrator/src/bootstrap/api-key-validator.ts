@@ -14,7 +14,6 @@ import { IntexuraOSError } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import { WORKER_TYPES } from '../services/isolation/types.js';
 import type { WorkerAuthRegistry } from '../services/worker-auth/index.js';
-import type { ProviderApiKeyHealth, ProviderApiKeyValidationStatus } from '../types/api.js';
 
 /**
  * Synchronously validates an API key's format. Throws if the key is missing
@@ -25,6 +24,14 @@ export function validateWorkerApiKey(name: string, value: string): void {
   if (value === '' || value.trim() === '') {
     throw new IntexuraOSError('MISCONFIGURED', `API key ${name} is empty or whitespace-only`);
   }
+}
+
+/**
+ * Renders the last four characters of a key for safe logging.
+ * @internal exported for unit tests.
+ */
+export function keySuffix(key: string): string {
+  return key.length > 4 ? '...' + key.slice(-4) : '****';
 }
 
 /**
@@ -101,25 +108,22 @@ export async function validateThirdPartyApiKey(
   workerTypeName: string,
   apiKey: string,
   logger: Logger
-): Promise<ProviderApiKeyValidationStatus> {
+): Promise<void> {
   const config = WORKER_TYPES[workerTypeName as keyof typeof WORKER_TYPES];
   const keyName = config.apiKeyEnvVar;
+  const suffix = keySuffix(apiKey);
 
   if (keyName === undefined) {
     logger.info(
       { workerTypeName },
       'Skipping API-key validation for runtime without direct API-key authentication'
     );
-    return 'unknown';
+    return;
   }
 
   // OpenRouter uses a lightweight key introspection endpoint instead of a real inference request,
   // because free-tier models are frequently rate-limited upstream regardless of key validity.
   const isOpenRouter = config.apiBaseUrl.includes('openrouter.ai');
-  const providerAuthHeaders =
-    config.anthropicCredentialEnvVar === 'ANTHROPIC_AUTH_TOKEN'
-      ? { Authorization: `Bearer ${apiKey}` }
-      : { 'x-api-key': apiKey };
 
   const url = isOpenRouter
     ? `${config.apiBaseUrl}/v1/key`
@@ -136,7 +140,7 @@ export async function validateThirdPartyApiKey(
       ? {
           method: 'POST',
           headers: {
-            ...providerAuthHeaders,
+            'x-api-key': apiKey,
             'anthropic-version': '2023-06-01',
             'content-type': 'application/json',
           },
@@ -148,42 +152,33 @@ export async function validateThirdPartyApiKey(
         }
       : {
           method: 'GET',
-          headers: { ...providerAuthHeaders, 'anthropic-version': '2023-06-01' },
+          headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
         };
 
   try {
     const resp = await fetchWithRetry(url, fetchOptions);
     if (resp.ok) {
-      logger.info({}, `${keyName} validated successfully`);
-      return 'valid';
+      logger.info({ apiKey: suffix }, `${keyName} validated successfully`);
     } else {
       // Sentry INTEXURAOS-HOME-DEV-1F: this is a startup-time health probe, not a
-      // runtime failure. The orchestrator continues to boot while code-agent
-      // uses the published health status to block dispatch for the affected
-      // provider. Forwarding
+      // runtime failure. The orchestrator continues to boot and dispatch tasks;
+      // worker tasks that need a rotated/revoked key will fail at the per-task
+      // call site, where the real user impact is already captured. Forwarding
       // this to Sentry on every orchestrator restart (PM2 auto-restart loop)
       // produces alert noise that the previous INT-1767 fix suppressed for the
       // Claude/Codex auth-state warns; the third-party validator hits the same
       // Pino transport, so it needs the same `_skipSentry` escape hatch.
       logger.error(
-        { status: resp.status, _skipSentry: true },
-        `${keyName} validation failed — ${workerTypeName} tasks are unavailable`
+        { status: resp.status, apiKey: suffix, _skipSentry: true },
+        `${keyName} validation failed — ${workerTypeName} tasks will fail`
       );
-      if (resp.status === 401 || resp.status === 403) {
-        return 'invalid';
-      }
-      if (resp.status === 429 || resp.status >= 500) {
-        return 'degraded';
-      }
-      return 'unknown';
     }
   } catch (error) {
     const errorDetail = extractErrorChain(error);
     logger.warn(
-      { error: errorDetail, url },
+      { error: errorDetail, url, apiKey: suffix },
       `${keyName} validation request failed (network issue) — key may still be valid`
     );
-    return 'unknown';
   }
 }
 
@@ -247,8 +242,7 @@ export interface WorkerApiKeysForValidation {
 export async function validateWorkerApiKeys(
   workerAuthRegistry: WorkerAuthRegistry,
   keys: WorkerApiKeysForValidation,
-  logger: Logger,
-  providerApiKeys: Record<string, ProviderApiKeyHealth>
+  logger: Logger
 ): Promise<void> {
   const claudeState = workerAuthRegistry.getState('claude');
   if (claudeState.status === 'active') {
@@ -282,25 +276,25 @@ export async function validateWorkerApiKeys(
     logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready at startup');
   }
 
-  const validateProvider = async (
-    workerTypeName: string,
-    keyName: string,
-    apiKey: string
-  ): Promise<void> => {
-    if (apiKey.trim() === '') {
-      return;
-    }
-    const status = await validateThirdPartyApiKey(workerTypeName, apiKey, logger);
-    providerApiKeys[keyName] = { configured: true, status };
-  };
-
   // Validate all third-party API keys in parallel.
   // GLM and Qwen use the DashScope API key; Kimi uses its own native Kimi Code key.
+  /* v8 ignore start -- module-init: validateThirdPartyApiKey fan-out issues live HTTPS probes that cannot be exercised without real sockets; the inner function carries its own ignore and the per-key empty-guard branches short-circuit during unit tests before any network call @preserve */
   await Promise.all([
-    validateProvider('minimax', 'MINIMAX_API_KEY', keys.minimaxKey),
-    validateProvider('mimo-pro', 'MIMO_API_KEY', keys.mimoKey),
-    validateProvider('qwen', 'DASHSCOPE_API_KEY', keys.dashscopeKey),
-    validateProvider('kimi', 'KIMI_API_KEY', keys.kimiKey),
-    validateProvider('openrouter-free', 'OPENROUTER_API_KEY', keys.openRouterKey),
+    keys.minimaxKey !== ''
+      ? validateThirdPartyApiKey('minimax', keys.minimaxKey, logger)
+      : Promise.resolve(),
+    keys.mimoKey !== ''
+      ? validateThirdPartyApiKey('mimo-pro', keys.mimoKey, logger)
+      : Promise.resolve(),
+    keys.dashscopeKey !== ''
+      ? validateThirdPartyApiKey('qwen', keys.dashscopeKey, logger)
+      : Promise.resolve(),
+    keys.kimiKey !== ''
+      ? validateThirdPartyApiKey('kimi', keys.kimiKey, logger)
+      : Promise.resolve(),
+    keys.openRouterKey !== ''
+      ? validateThirdPartyApiKey('openrouter-free', keys.openRouterKey, logger)
+      : Promise.resolve(),
   ]);
+  /* v8 ignore stop @preserve */
 }

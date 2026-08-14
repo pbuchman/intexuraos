@@ -140,8 +140,8 @@ the additive phase; it is not a source for package candidates.
 After DEV and PROD package/build verification, a separate reviewed cleanup
 change removes the old imported/resource definition and corrects or removes the
 legacy output before the previous key is destroyed. Firestore Security Rules,
-Firebase Auth, quotas, API restrictions, and App Check remain the authorization
-controls; a browser key is public in the compiled SPA.
+Firebase Auth, quotas, and API restrictions remain the authorization controls;
+a browser key is public in the compiled SPA.
 
 ## Modules
 

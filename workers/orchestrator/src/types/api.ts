@@ -70,12 +70,4 @@ export interface HealthResponse {
 
 export interface ProviderApiKeyHealth {
   configured: boolean;
-  status: ProviderApiKeyValidationStatus;
 }
-
-export type ProviderApiKeyValidationStatus =
-  | 'missing'
-  | 'unknown'
-  | 'valid'
-  | 'invalid'
-  | 'degraded';

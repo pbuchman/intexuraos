@@ -100,7 +100,10 @@ export function getSafeRequestRoute(request: FastifyRequest): string {
  * Options for logging incoming requests with a safe header allowlist.
  */
 export interface LogIncomingRequestOptions {
-  /** @deprecated Request bodies are never logged because they can contain credentials or PII. */
+  /**
+   * Maximum length of body preview in log output.
+   * @default 500
+   */
   bodyPreviewLength?: number;
 
   /**
@@ -138,8 +141,7 @@ export interface LogIncomingRequestOptions {
  * Features:
  * - Includes only coarse diagnostic headers (content type and length)
  * - Replaces authentication values with a fixed marker
- * - Never serializes the request body because route schemas cannot prove that arbitrary nested
- *   fields are safe to log
+ * - Truncates body preview to prevent log bloat
  * - Best-effort error handling (won't crash request on logging failure)
  *
  * @example
@@ -162,6 +164,7 @@ export function logIncomingRequest(
   options: LogIncomingRequestOptions = {}
 ): void {
   const {
+    bodyPreviewLength = 500,
     includeParams = false,
     includeHeaders = true,
     message = 'Incoming request',
@@ -169,8 +172,12 @@ export function logIncomingRequest(
   } = options;
 
   try {
+    // Build log payload
+    // Handle undefined/null bodies (JSON.stringify returns undefined for undefined)
+    const bodyString = request.body === undefined ? 'undefined' : JSON.stringify(request.body);
     const logPayload: Record<string, unknown> = {
       event: 'incoming_request',
+      bodyPreview: bodyString.substring(0, bodyPreviewLength),
       ...additionalFields,
     };
 

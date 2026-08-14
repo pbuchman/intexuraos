@@ -18,6 +18,7 @@ echo ""
 echo "📦 GitHub / Git Connection:"
 if git remote -v | grep -q "origin"; then
   echo "   ✅ Git remote configured"
+  git remote -v | head -2 | sed 's/^/      /'
 
   if git ls-remote origin HEAD &>/dev/null; then
     echo "   ✅ Can connect to GitHub"

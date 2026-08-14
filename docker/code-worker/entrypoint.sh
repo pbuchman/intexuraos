@@ -1,6 +1,5 @@
 #!/bin/bash
 set -euo pipefail
-umask 077
 
 # ==============================================================================
 # Code Worker Container Entrypoint
@@ -63,7 +62,6 @@ forensics_prepare_attempt_dir() {
     stamp="$(date -u +%Y%m%dT%H%M%SZ)"
     local out_dir="${base_dir}/attempt-${stamp}-$$"
     mkdir -p "$out_dir" || return 1
-    chmod 700 "$out_dir" || return 1
     printf '%s\n' "$out_dir"
 }
 
@@ -71,7 +69,6 @@ capture_claude_crash_forensics() {
     local out_dir="$1"
 
     mkdir -p "$out_dir" 2>/dev/null || true
-    chmod 700 "$out_dir" 2>/dev/null || true
 
     {
         echo "timestamp_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -99,10 +96,30 @@ capture_claude_crash_forensics() {
     } > "${out_dir}/crash-summary.txt" 2>&1 || true
 
     (cp -a /tmp/claude-cmd-timing "${out_dir}/claude-cmd-timing" 2>/dev/null || true)
+    (cp -a /home/claude/.claude/debug "${out_dir}/claude-debug" 2>/dev/null || true)
+    (cp -a /home/claude/.claude/projects/-repo "${out_dir}/claude-projects-repo" 2>/dev/null || true)
+    (cp -a /home/claude/.claude/shell-snapshots "${out_dir}/shell-snapshots" 2>/dev/null || true)
+    (cp -a /home/claude/.claude.json "${out_dir}/.claude.json" 2>/dev/null || true)
 
     {
         find /repo /var/crash -maxdepth 3 -type f -name 'core*' 2>/dev/null || true
     } > "${out_dir}/core-files.txt" 2>&1 || true
+
+    for core_file in /repo/core* /var/crash/core*; do
+        [ -f "$core_file" ] || continue
+        cp -a "$core_file" "$out_dir/" 2>/dev/null || true
+    done
+
+    if command -v gdb >/dev/null 2>&1; then
+        for core_file in "${out_dir}"/core*; do
+            [ -f "$core_file" ] || continue
+            gdb -batch \
+                -ex "set pagination off" \
+                -ex "thread apply all bt full" \
+                /usr/local/bin/claude "$core_file" \
+                > "${out_dir}/$(basename "$core_file").gdb.txt" 2>&1 || true
+        done
+    fi
 }
 
 run_claude_attempt() {

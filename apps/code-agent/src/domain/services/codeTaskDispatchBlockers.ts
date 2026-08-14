@@ -161,11 +161,7 @@ function hasRequiredAuth(auth: CodeTaskAuthRequirement, health: HealthyWorker['h
       || (codexAuth.status === 'expired' && codexAuth.refreshSupported === true);
   }
   if (auth.kind === 'claude') return health.workerAuths.claude.status === 'active';
-  const providerHealth = health.providerApiKeys[auth.envVar];
-  if (providerHealth?.configured !== true) {
-    return false;
-  }
-  return providerHealth.status === undefined || providerHealth.status === 'valid';
+  return health.providerApiKeys[auth.envVar]?.configured === true;
 }
 
 function authBlockerReason(auth: CodeTaskAuthRequirement): CodeTaskDispatchBlockerReason {

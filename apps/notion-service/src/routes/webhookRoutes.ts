@@ -48,7 +48,17 @@ export const webhookRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     async (request, reply) => {
       logIncomingRequest(request, {
         message: 'POST /webhooks',
+        bodyPreviewLength: 200,
       });
+
+      // Log incoming webhook request for debugging
+      request.log.info(
+        {
+          webhookHeaders: request.headers,
+          webhookBody: request.body,
+        },
+        'Notion webhook received'
+      );
 
       const parseResult = webhookRequestSchema.safeParse(request.body);
       if (!parseResult.success) {

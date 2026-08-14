@@ -457,48 +457,6 @@ records only the numeric version and redacted verification metadata.
    cannot access Secret Manager; then drain/replace remaining workers.
 5. Record the numeric version in redacted deployment evidence.
 
-#### Third-party provider credential gate
-
-Provider-backed code workers must use the authentication environment expected
-by their Anthropic-compatible upstream. MiniMax, MiMo, DashScope, and
-OpenRouter use `ANTHROPIC_AUTH_TOKEN` (Bearer); Kimi uses
-`ANTHROPIC_API_KEY` (`x-api-key`). The task projection explicitly blanks the
-competing variable so a stale host value cannot change the selected header.
-
-The orchestrator publishes a live status for each configured provider under
-`GET /health` → `providerApiKeys`: `valid` for a successful upstream response,
-`invalid` for `401`/`403`, `degraded` for `429` or upstream `5xx`, and `unknown`
-for network or unclassified failures. Empty values are `missing`. Code-agent
-dispatch is fail-closed and selects a provider worker only when that entry is
-both configured and `valid`; Claude OAuth and Codex auth remain separate.
-
-Rotate a provider credential as a whole-package change:
-
-1. Confirm the provider product, account, region, plan entitlement, API base,
-   and model match the worker definition. Creating a persistent key, accepting
-   provider terms, or buying a plan requires the responsible operator's
-   explicit approval.
-2. Create the replacement in the provider console. Write it once to an
-   ephemeral regular file with mode `0600`; never paste it into a command,
-   issue, chat, log, or tracked file.
-3. Build from the exact active DEV package with one or more explicit
-   `--override-env NAME=<mode-0600-file>` arguments. Use only canonical manifest
-   names such as `INTEXURAOS_MIMO_APP_API_KEY`,
-   `INTEXURAOS_DASHSCOPE_APP_API_KEY`, or
-   `INTEXURAOS_KIMI_APP_API_KEY`.
-4. Validate and publish a new numeric DEV version, fetch it back with server
-   CRC32C verification, render it on local and home-dev, and restart the
-   orchestrator. Require the corresponding health entries to become `valid`.
-5. Run one real task canary per affected worker type and three five-minute
-   health/error samples. A format-only check or a non-empty key is not proof of
-   validity.
-6. Publish a second byte-identical version containing the same replacements.
-   Exercise rollback from the forward version to the prior replacement version
-   and forward again. Never use a version containing a revoked, expired, or
-   upstream-rejected credential as a rollback target.
-7. Revoke the former provider key only after both versions and the rollback
-   drill pass, then securely remove all ephemeral files.
-
 ### Production / Hetzner
 
 1. The provisioner fetches one reviewed PROD numeric version into a private
@@ -648,7 +606,7 @@ different release blocks closure and cleanup.
 ### Firebase Browser API Key
 
 The browser key is not an authorization boundary. Firestore Security Rules,
-Firebase Auth, API-key restrictions, quotas, and App Check protect the backend.
+Firebase Auth, API-key restrictions, and quotas protect the backend.
 
 1. Treat the repository alert as exposure of the old key. Do not merely delete
    the source line.
@@ -672,16 +630,6 @@ Firebase Auth, API-key restrictions, quotas, and App Check protect the backend.
    remove the old imported/resource definition and correct/remove the legacy
    `firebase_api_key` output before deleting the old key. Close
    the repository alert as revoked; record only its alert identifier.
-9. Manage `firebaseappcheck.googleapis.com` and the Firestore/Auth service
-   configurations through Terraform. Start both services as `UNENFORCED`, which
-   enables service-level monitoring without rejecting requests.
-10. Integrate a supported web attestation provider before interpreting
-    verified-client telemetry. reCAPTCHA Essentials is free for up to 10,000
-    assessments per month and returns errors beyond that allowance when billing
-    is disabled. Enabling billing/Premium can create cost; never create the
-    provider/key, enable billing, or select a paid tier implicitly.
-11. Enforcement is a separate controlled change after the deployed web client,
-    both origins, and telemetry prove compatibility.
 
 Firebase cutover PASS is quantitative:
 
@@ -694,9 +642,7 @@ Firebase cutover PASS is quantitative:
   explicit origin smoke tests above—not the metric—prove DEV and PROD origin
   coverage. Any request attributed to the old key resets the 24-hour window.
 - Browser telemetry during the same window must contain zero new failures
-  attributable to API-key restrictions, Auth token refresh, Firestore Rules, or
-  App Check. App Check enforcement remains a separate change; monitoring must
-  identify every supported client class before that change is approved.
+  attributable to API-key restrictions, Auth token refresh, or Firestore Rules.
 - Evidence records the old and replacement resource IDs, metric interval/counts,
   origin/test matrix, alert identifier, revoked state, and UTC closure time. It
   never records either key value.
@@ -1811,8 +1757,6 @@ circular, and each consumer receives only the declared projection.
 - [WIF best practices](https://cloud.google.com/iam/docs/best-practices-for-using-workload-identity-federation)
 - [GitHub Actions OpenID Connect](https://docs.github.com/actions/concepts/security/openid-connect)
 - [Firebase API key guidance](https://firebase.google.com/docs/projects/api-keys)
-- [Firebase App Check with reCAPTCHA Enterprise for web](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider)
-- [reCAPTCHA billing and Essentials limit](https://cloud.google.com/recaptcha/docs/billing-information)
 - [Cloud Monitoring API request metrics](https://cloud.google.com/monitoring/api/metrics_gcp_p_z#serviceruntime)
 - [Service-account key usage monitoring](https://cloud.google.com/iam/docs/service-account-monitoring)
 - [Cloud Build second-generation GitHub connection IAM](https://cloud.google.com/build/docs/automating-builds/github/connect-repo-github?generation=2nd-gen)

@@ -34,7 +34,6 @@ export interface WorkerTypeConfig {
     | 'DASHSCOPE_API_KEY'
     | 'KIMI_API_KEY'
     | 'OPENROUTER_API_KEY';
-  anthropicCredentialEnvVar?: 'ANTHROPIC_API_KEY' | 'ANTHROPIC_AUTH_TOKEN';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
   disableExperimentalBetas?: boolean;
@@ -52,14 +51,12 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_API_KEY',
     telemetryExpectation: 'required',
   },
   opus: {
     runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_API_KEY',
     model: 'opus',
     effort: 'high',
     telemetryExpectation: 'required',
@@ -68,7 +65,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://api.anthropic.com',
     apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_API_KEY',
     model: 'sonnet',
     telemetryExpectation: 'required',
   },
@@ -76,7 +72,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://api.minimax.io/anthropic',
     apiKeyEnvVar: 'MINIMAX_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     model: 'MiniMax-M3',
     telemetryExpectation: 'optional',
   },
@@ -84,7 +79,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
     apiKeyEnvVar: 'MIMO_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     model: 'mimo-v2.5-pro',
     telemetryExpectation: 'optional',
   },
@@ -92,7 +86,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     model: 'glm-5',
     telemetryExpectation: 'optional',
   },
@@ -100,7 +93,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     model: 'qwen3.5-plus',
     telemetryExpectation: 'optional',
   },
@@ -108,7 +100,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://api.kimi.com/coding',
     apiKeyEnvVar: 'KIMI_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_API_KEY',
     model: 'kimi-for-coding',
     effort: 'high',
     telemetryExpectation: 'optional',
@@ -128,7 +119,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     runtime: 'claude',
     apiBaseUrl: 'https://openrouter.ai/api',
     apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    anthropicCredentialEnvVar: 'ANTHROPIC_AUTH_TOKEN',
     model: 'google/gemma-4-31b-it:free',
     effort: 'high',
     disableExperimentalBetas: true,

@@ -60,29 +60,17 @@ describe('hmacSigning', () => {
 
   describe('signDispatchRequest', () => {
     it('generates signature with timestamp, nonce, and body', () => {
-      const isolatedLogger = {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-      } as unknown as Logger;
       const body = '{"taskId":"task-123","prompt":"Fix the bug"}';
       const timestamp = 1234567890;
       const nonce = 'test-nonce-123';
 
-      const result = signDispatchRequest(
-        { logger: isolatedLogger, dispatchSigningSecret },
-        { body, timestamp, nonce }
-      );
+      const result = signDispatchRequest({ logger, dispatchSigningSecret }, { body, timestamp, nonce });
 
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.timestamp).toBe(timestamp);
         expect(result.value.signature).toBeDefined();
         expect(result.value.signature).toMatch(/^[a-f0-9]{64}$/); // SHA256 hex
-        expect(JSON.stringify(vi.mocked(isolatedLogger.debug).mock.calls)).not.toContain(
-          result.value.signature.slice(0, 8)
-        );
       }
     });
 

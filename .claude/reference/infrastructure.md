@@ -155,20 +155,6 @@ adds an immutable validated version outside Terraform through
 `scripts/secret-package.mjs`. This prevents payload data from entering state.
 It does not authorize direct creation of containers or ad hoc versions.
 
-### Firebase App Check rollout
-
-App Check service configuration is persistent infrastructure and belongs in
-`terraform/environments/dev/main.tf`. Start Firestore and Firebase
-Authentication with `google_firebase_app_check_service_config` set to
-`UNENFORCED`; this is a monitoring-only step and must not reject traffic.
-
-A web attestation provider, its client integration, and `ENFORCED` mode are
-separate reviewed gates. Do not create reCAPTCHA/App Check keys in a console or
-enable billing/select a paid tier implicitly. Essentials requests fail after
-the no-cost monthly allowance when billing is disabled. Review quota and cost
-first, deploy the web integration to both origins, inspect legitimate-client
-telemetry, and only then plan enforcement through Terraform.
-
 ---
 
 ## Cloud Build & Deployment

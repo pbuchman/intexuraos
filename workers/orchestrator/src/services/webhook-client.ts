@@ -28,19 +28,6 @@ function signPayload(payload: string, secret: string, timestamp: number): string
   return createHmac('sha256', secret).update(message).digest('hex');
 }
 
-function sanitizeWebhookUrlForLogging(url: string): string {
-  try {
-    const parsed = new URL(url);
-    parsed.username = '';
-    parsed.password = '';
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.toString();
-  } catch {
-    return '[invalid webhook URL]';
-  }
-}
-
 export class WebhookClient {
   constructor(
     private readonly statePersistence: StatePersistence,
@@ -56,7 +43,6 @@ export class WebhookClient {
   }): Promise<Result<void, WebhookError>> {
     const { url, secret, payload, taskId } = params;
     const normalizedUrl = normalizeInternalCallbackUrl(url);
-    const logUrl = sanitizeWebhookUrlForLogging(normalizedUrl);
 
     // Serialize payload to JSON
     const rawJsonBody = JSON.stringify(payload);
@@ -65,14 +51,14 @@ export class WebhookClient {
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = signPayload(rawJsonBody, secret, timestamp);
 
-    this.logger.info({ taskId, url: logUrl, payloadType: typeof payload }, 'Sending webhook');
+    this.logger.info({ taskId, url: normalizedUrl, payload }, 'Sending webhook');
 
     // Attempt delivery with retries
     let lastError: WebhookError | null = null;
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         await this.deliver(normalizedUrl, rawJsonBody, signature, timestamp);
-        this.logger.info({ taskId, url: logUrl }, 'Webhook delivered successfully');
+        this.logger.info({ taskId, url: normalizedUrl }, 'Webhook delivered successfully');
         return { ok: true, value: undefined };
       } catch (error) {
         lastError = this.classifyError(error);
@@ -150,10 +136,9 @@ export class WebhookClient {
           const signature = signPayload(rawJsonBody, pending.secret, timestamp);
 
           const normalizedUrl = normalizeInternalCallbackUrl(pending.url);
-          const logUrl = sanitizeWebhookUrlForLogging(normalizedUrl);
           await this.deliver(normalizedUrl, rawJsonBody, signature, timestamp);
           this.logger.info(
-            { taskId: pending.taskId, url: logUrl, retryAttempt: pending.attempts + 1 },
+            { taskId: pending.taskId, url: normalizedUrl, retryAttempt: pending.attempts + 1 },
             'Pending webhook delivered successfully'
           );
           success = true;

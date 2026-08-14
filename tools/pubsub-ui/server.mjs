@@ -143,7 +143,11 @@ async function forwardToServiceEndpoint(topicName, message) {
     console.log(`[PubSub UI] │  Message ID: ${message.id}`);
     console.log(`[PubSub UI] │  Data size: ${message.data.length} bytes`);
     console.log(
-      `[PubSub UI] │  Auth token: ${INTEXURAOS_INTERNAL_AUTH_TOKEN ? 'CONFIGURED' : 'NOT SET'}`
+      `[PubSub UI] │  Auth token: ${
+        INTEXURAOS_INTERNAL_AUTH_TOKEN
+          ? '***' + INTEXURAOS_INTERNAL_AUTH_TOKEN.slice(-4)
+          : 'NOT SET'
+      }`
     );
 
     const response = await fetch(endpoint, {
@@ -193,7 +197,7 @@ async function setupTopicsAndSubscriptions() {
   console.log('[PubSub UI]   PUBSUB_EMULATOR_HOST:', process.env.PUBSUB_EMULATOR_HOST);
   console.log(
     '[PubSub UI]   AUTH_TOKEN:',
-    INTEXURAOS_INTERNAL_AUTH_TOKEN ? 'CONFIGURED' : 'NOT SET'
+    INTEXURAOS_INTERNAL_AUTH_TOKEN ? '***' + INTEXURAOS_INTERNAL_AUTH_TOKEN.slice(-4) : 'NOT SET'
   );
   console.log('[PubSub UI]   TOPICS:', TOPICS);
   console.log('[PubSub UI]   ENDPOINTS:');

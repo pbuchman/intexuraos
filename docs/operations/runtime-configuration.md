@@ -31,7 +31,7 @@ public identifiers, not authorization boundaries, but this key is deliberately
 removed from tracked config and included as a build-time member of both
 packages. That enables coordinated rotation and closes repository exposure
 alerts; the built SPA still exposes it by design. Protect Firebase with API-key
-restrictions, Security Rules, quotas, Auth, and App Check.
+restrictions, Security Rules, quotas, and Auth.
 
 Never duplicate a package member in tracked config or create another
 individual application secret for it.

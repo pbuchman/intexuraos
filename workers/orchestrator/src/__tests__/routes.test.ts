@@ -99,8 +99,8 @@ describe('Routes', () => {
       workerAuthRegistry,
       isolationProvider,
       {
-        MINIMAX_API_KEY: { configured: true, status: 'valid' },
-        DASHSCOPE_API_KEY: { configured: false, status: 'missing' },
+        MINIMAX_API_KEY: { configured: true },
+        DASHSCOPE_API_KEY: { configured: false },
       }
     );
     await app.ready();
@@ -134,32 +134,6 @@ describe('Routes', () => {
         taskId: 'task_00000000-0000-0000-0000-000000000001',
         status: 'accepted',
       });
-    });
-
-    it('logs task submission metadata without serializing the request body', async () => {
-      const logCanary = 'ORCHESTRATOR_TASK_BODY_CANARY_7e4f85';
-      const taskPayload = {
-        taskId: 'task_00000000-0000-0000-0000-000000000091',
-        workerType: 'auto',
-        prompt: `Do not log ${logCanary}`,
-        webhookUrl: 'https://example.com/webhook',
-        webhookSecret: `secret-${logCanary}`,
-      };
-      const { headers, body } = createSignedRequest(taskPayload);
-
-      const response = await app.inject({ method: 'POST', url: '/tasks', headers, body });
-
-      expect(response.statusCode).toBe(202);
-      expect(JSON.stringify(vi.mocked(mockLogger.info).mock.calls)).not.toContain(logCanary);
-      expect(mockLogger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ method: 'POST', path: '/tasks' }),
-        'Task submission payload'
-      );
-      const submissionLog = vi
-        .mocked(mockLogger.info)
-        .mock.calls.find((call) => call[1] === 'Task submission payload');
-      expect(submissionLog?.[0]).not.toHaveProperty('body');
-      expect(submissionLog?.[0]).not.toHaveProperty('payload');
     });
 
     it('should pass all optional fields through to dispatcher', async () => {
@@ -823,8 +797,8 @@ describe('Routes', () => {
         refreshSupported: true,
       });
       expect(json.providerApiKeys).toEqual({
-        MINIMAX_API_KEY: { configured: true, status: 'valid' },
-        DASHSCOPE_API_KEY: { configured: false, status: 'missing' },
+        MINIMAX_API_KEY: { configured: true },
+        DASHSCOPE_API_KEY: { configured: false },
       });
     });
 

@@ -273,7 +273,7 @@ export class DockerContainer {
     userString: string
   ): Promise<void> {
     try {
-      await fs.promises.mkdir(hostAttemptForensicsPath, { mode: 0o700, recursive: true });
+      await fs.promises.mkdir(hostAttemptForensicsPath, { recursive: true });
 
       await writeJsonArtifact(path.join(hostAttemptForensicsPath, 'orchestrator-segfault.json'), {
         taskId,
@@ -285,9 +285,10 @@ export class DockerContainer {
         const execInfo = await execInstance.inspect();
         await writeJsonArtifact(path.join(hostAttemptForensicsPath, 'exec-inspect.json'), execInfo);
       } catch (error) {
-        await writePrivateTextArtifact(
+        await fs.promises.writeFile(
           path.join(hostAttemptForensicsPath, 'exec-inspect.error.txt'),
-          error instanceof Error ? (error.stack ?? error.message) : String(error)
+          error instanceof Error ? (error.stack ?? error.message) : String(error),
+          'utf-8'
         );
       }
 
@@ -295,12 +296,13 @@ export class DockerContainer {
         const containerInfo = await container.inspect();
         await writeJsonArtifact(
           path.join(hostAttemptForensicsPath, 'container-inspect.json'),
-          redactContainerInspect(containerInfo)
+          containerInfo
         );
       } catch (error) {
-        await writePrivateTextArtifact(
+        await fs.promises.writeFile(
           path.join(hostAttemptForensicsPath, 'container-inspect.error.txt'),
-          error instanceof Error ? (error.stack ?? error.message) : String(error)
+          error instanceof Error ? (error.stack ?? error.message) : String(error),
+          'utf-8'
         );
       }
 
@@ -328,7 +330,13 @@ export class DockerContainer {
         '  (file /usr/local/bin/claude 2>/dev/null || true)',
         '} > "$OUT/container-snapshot/runtime-summary.txt" 2>&1 || true',
         'cp -a /tmp/claude-cmd-timing "$OUT/container-snapshot/claude-cmd-timing" 2>/dev/null || true',
+        'cp -a /home/claude/.claude/debug "$OUT/container-snapshot/claude-debug" 2>/dev/null || true',
+        'cp -a /home/claude/.claude/projects/-repo "$OUT/container-snapshot/claude-projects-repo" 2>/dev/null || true',
+        'cp -a /home/claude/.claude/shell-snapshots "$OUT/container-snapshot/shell-snapshots" 2>/dev/null || true',
+        'cp -a /home/claude/.claude.json "$OUT/container-snapshot/.claude.json" 2>/dev/null || true',
         'find /repo /var/crash -maxdepth 3 -type f -name "core*" > "$OUT/container-snapshot/core-files.txt" 2>/dev/null || true',
+        'for core in /repo/core* /var/crash/core*; do [ -f "$core" ] || continue; cp -a "$core" "$OUT/container-snapshot/" 2>/dev/null || true; done',
+        'if command -v gdb >/dev/null 2>&1; then for core in "$OUT"/container-snapshot/core*; do [ -f "$core" ] || continue; gdb -batch -ex "set pagination off" -ex "thread apply all bt full" /usr/local/bin/claude "$core" > "$OUT/container-snapshot/$(basename "$core").gdb.txt" 2>&1 || true; done; fi',
         'if command -v strace >/dev/null 2>&1; then strace -V > "$OUT/container-snapshot/strace-version.txt" 2>&1 || true; fi',
       ].join('; ');
 
@@ -341,13 +349,15 @@ export class DockerContainer {
         User: userString,
       });
       const snapshotResult = await this.runExecAndCapture(taskId, snapshotExec);
-      await writePrivateTextArtifact(
+      await fs.promises.writeFile(
         path.join(hostAttemptForensicsPath, 'snapshot-exec.output.txt'),
-        snapshotResult.output
+        snapshotResult.output,
+        'utf-8'
       );
-      await writePrivateTextArtifact(
+      await fs.promises.writeFile(
         path.join(hostAttemptForensicsPath, 'snapshot-exec.exit-code.txt'),
-        String(snapshotResult.exitCode)
+        String(snapshotResult.exitCode),
+        'utf-8'
       );
     } catch (error) {
       this.logger.error({ taskId, error }, 'Failed to capture segfault forensics');
@@ -355,26 +365,6 @@ export class DockerContainer {
   }
 }
 
-/** @internal Exported for security-boundary tests. */
-export function redactContainerInspect(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null) {
-    return value;
-  }
-  const copy = structuredClone(value) as { Config?: { Env?: unknown } };
-  if (Array.isArray(copy.Config?.Env)) {
-    copy.Config.Env = copy.Config.Env.map((entry) => {
-      if (typeof entry !== 'string') return '[REDACTED]';
-      const separator = entry.indexOf('=');
-      return `${separator >= 0 ? entry.slice(0, separator) : entry}=[REDACTED]`;
-    });
-  }
-  return copy;
-}
-
 async function writeJsonArtifact(filePath: string, value: unknown): Promise<void> {
-  await writePrivateTextArtifact(filePath, JSON.stringify(value, null, 2));
-}
-
-async function writePrivateTextArtifact(filePath: string, value: string): Promise<void> {
-  await fs.promises.writeFile(filePath, value, { encoding: 'utf8', mode: 0o600 });
+  await fs.promises.writeFile(filePath, JSON.stringify(value, null, 2), 'utf-8');
 }

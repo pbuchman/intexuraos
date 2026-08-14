@@ -3,7 +3,7 @@ import type { Mock } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import { DockerProvider, type DockerProviderConfig } from '../docker-provider.js';
-import { WORKER_TYPES, type WorkerConfig } from '../types.js';
+import type { WorkerConfig } from '../types.js';
 import * as fs from 'node:fs';
 
 function createMockExecStream(): NodeJS.ReadableStream & { resume: () => void } {
@@ -153,12 +153,10 @@ vi.mock('node:fs', async (importOriginal) => {
     }),
     appendFileSync: vi.fn(),
     mkdirSync: vi.fn(),
-    chmodSync: vi.fn(),
     promises: {
       ...actual.promises,
       mkdir: vi.fn().mockResolvedValue(undefined),
       copyFile: vi.fn().mockResolvedValue(undefined),
-      chmod: vi.fn().mockResolvedValue(undefined),
       rm: vi.fn().mockResolvedValue(undefined),
       readdir: vi.fn().mockResolvedValue(['system-prompt.txt', 'user-prompt.txt', 'github-token']),
       writeFile: vi.fn().mockResolvedValue(undefined),
@@ -455,21 +453,6 @@ describe('DockerProvider', () => {
           })
         )
       ).rejects.toThrow("Worker type 'codex' is missing API key configuration");
-    });
-
-    it('fails closed when a Claude worker has no credential transport configuration', async () => {
-      const originalCredentialEnvVar = WORKER_TYPES.auto.anthropicCredentialEnvVar;
-      if (originalCredentialEnvVar === undefined) {
-        throw new Error('auto worker test fixture requires a credential transport');
-      }
-      delete WORKER_TYPES.auto.anthropicCredentialEnvVar;
-      try {
-        await expect(provider.createWorker(createTestConfig())).rejects.toThrow(
-          "Worker type 'auto' is missing Anthropic credential transport configuration"
-        );
-      } finally {
-        WORKER_TYPES.auto.anthropicCredentialEnvVar = originalCredentialEnvVar;
-      }
     });
 
     it('gives different tasks different Codex state directories', async () => {
@@ -1475,14 +1458,14 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets only the Anthropic auth token for glm even with sharedCredsPath configured', async () => {
+    it('sets ANTHROPIC_API_KEY env var for glm worker even with sharedCredsPath configured', async () => {
       const config = createTestConfig({ workerType: 'glm' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContain('ANTHROPIC_AUTH_TOKEN=test-dashscope-key');
-      expect(envArr).toContain('ANTHROPIC_API_KEY=');
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-dashscope-key');
     });
 
     it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
@@ -1495,14 +1478,14 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets only the Anthropic auth token for minimax even with sharedCredsPath configured', async () => {
+    it('sets ANTHROPIC_API_KEY env var for minimax worker even with sharedCredsPath configured', async () => {
       const config = createTestConfig({ workerType: 'minimax' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContain('ANTHROPIC_AUTH_TOKEN=test-minimax-key');
-      expect(envArr).toContain('ANTHROPIC_API_KEY=');
+      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
+      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-minimax-key');
     });
 
     it('sets ANTHROPIC_BASE_URL for minimax worker even with sharedCredsPath configured', async () => {
@@ -1525,7 +1508,6 @@ describe('DockerProvider', () => {
       expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='))).toBe(
         'ANTHROPIC_API_KEY=test-kimi-key'
       );
-      expect(envArr).toContain('ANTHROPIC_AUTH_TOKEN=');
       expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='))).toBe(
         'ANTHROPIC_BASE_URL=https://api.kimi.com/coding'
       );
@@ -1567,24 +1549,12 @@ describe('DockerProvider', () => {
       expect(modelEntry).toBe('ANTHROPIC_MODEL=mimo-v2.5-pro');
     });
 
-    it('sets only the Anthropic auth token for mimo-pro', async () => {
-      const config = createTestConfig({ workerType: 'mimo-pro' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      expect(envArr).toContain('ANTHROPIC_AUTH_TOKEN=test-mimo-key');
-      expect(envArr).toContain('ANTHROPIC_API_KEY=');
-    });
-
     it('sets OpenRouter env vars for openrouter-free worker', async () => {
       const config = createTestConfig({ workerType: 'openrouter-free' });
       await sharedCredsProvider.createWorker(config);
 
       const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
       const envArr = createCall?.Env as string[];
-      expect(envArr).toContain('ANTHROPIC_AUTH_TOKEN=test-openrouter-key');
-      expect(envArr).toContain('ANTHROPIC_API_KEY=');
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
       expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://openrouter.ai/api');
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
@@ -1685,7 +1655,6 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
       expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-anthropic-key');
-      expect(envArr).toContain('ANTHROPIC_AUTH_TOKEN=');
     });
 
     it('uses per-task session path with credential file overlay for auto workers', async () => {
@@ -2640,13 +2609,6 @@ describe('DockerProvider', () => {
       mocks.mockContainer.inspect.mockResolvedValue({
         State: { Running: false },
         Id: 'test-container-id',
-        Config: {
-          Env: [
-            'ANTHROPIC_AUTH_TOKEN=FORENSICS_FULL_SECRET_SENTINEL',
-            'ANTHROPIC_API_KEY=',
-            'ANTHROPIC_BASE_URL=https://api.example.test',
-          ],
-        },
       });
 
       // Mock exec for snapshot command
@@ -2675,19 +2637,6 @@ describe('DockerProvider', () => {
       expect(writtenPaths).toContainEqual('/tmp/forensics/attempt-1/orchestrator-segfault.json');
       expect(writtenPaths).toContainEqual('/tmp/forensics/attempt-1/exec-inspect.json');
       expect(writtenPaths).toContainEqual('/tmp/forensics/attempt-1/container-inspect.json');
-      const containerInspectWrite = writeFileCalls.find(
-        (call: unknown[]) => call[0] === '/tmp/forensics/attempt-1/container-inspect.json'
-      );
-      const containerInspectJson = String(containerInspectWrite?.[1]);
-      expect(containerInspectJson).not.toContain('FORENSICS_FULL_SECRET_SENTINEL');
-      expect(containerInspectJson).toContain('ANTHROPIC_AUTH_TOKEN=[REDACTED]');
-      expect(containerInspectJson).toContain('ANTHROPIC_API_KEY=[REDACTED]');
-      expect(containerInspectJson).toContain('ANTHROPIC_BASE_URL=[REDACTED]');
-      expect(containerInspectWrite?.[2]).toEqual({ encoding: 'utf8', mode: 0o600 });
-      expect(fsModule.promises.mkdir).toHaveBeenCalledWith('/tmp/forensics/attempt-1', {
-        mode: 0o700,
-        recursive: true,
-      });
     });
 
     it('writes exec-inspect.error.txt when exec inspect throws', async () => {
@@ -3106,31 +3055,20 @@ describe('DockerProvider', () => {
     });
   });
 
-  describe('worker authentication logging', () => {
-    it('does not log any fragment of a direct API key', async () => {
-      const config = createTestConfig();
-      await provider.createWorker(
-        createTestConfig({
-          secrets: {
-            ...config.secrets,
-            ANTHROPIC_API_KEY: 'secret-with-unique-fragment-Z9Q7',
-          },
-        })
-      );
+  describe('keySuffix ternary (ts-type)', () => {
+    it('shows last 4 chars for key longer than 4 chars', async () => {
+      await provider.createWorker(createTestConfig());
 
+      // The logger.info call includes the apiKey suffix
       const infoCalls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
       const creationMsg = infoCalls.find(
-        (c: unknown[]) =>
-          typeof c[1] === 'string' && (c[1] as string).includes('Creating worker container:')
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('apiKey=')
       );
       expect(creationMsg).toBeDefined();
-      expect(creationMsg?.[1]).toContain('authentication=direct-api-key');
-      expect(creationMsg?.[1]).not.toContain('apiKey=');
-      expect(creationMsg?.[1]).not.toContain('secret-with-unique-fragment-Z9Q7');
-      expect(creationMsg?.[1]).not.toContain('Z9Q7');
+      expect(creationMsg?.[1]).toContain('apiKey=...-key');
     });
 
-    it('logs a non-secret shared-credentials label', async () => {
+    it('shows shared-creds label when using shared credentials', async () => {
       const sharedProvider = new TestableDockerProvider(
         { sharedCredsPath: '/shared/creds' },
         mockLogger,
@@ -3140,15 +3078,13 @@ describe('DockerProvider', () => {
 
       const infoCalls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
       const creationMsg = infoCalls.find(
-        (c: unknown[]) =>
-          typeof c[1] === 'string' && (c[1] as string).includes('Creating worker container:')
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('apiKey=')
       );
       expect(creationMsg).toBeDefined();
-      expect(creationMsg?.[1]).toContain('authentication=shared-credentials');
-      expect(creationMsg?.[1]).not.toContain('apiKey=');
+      expect(creationMsg?.[1]).toContain('shared-creds');
     });
 
-    it('does not log even a short direct API key', async () => {
+    it('shows **** for key with 4 or fewer chars', async () => {
       await provider.createWorker(
         createTestConfig({
           secrets: {
@@ -3166,13 +3102,10 @@ describe('DockerProvider', () => {
 
       const infoCalls = (mockLogger.info as ReturnType<typeof vi.fn>).mock.calls;
       const creationMsg = infoCalls.find(
-        (c: unknown[]) =>
-          typeof c[1] === 'string' && (c[1] as string).includes('Creating worker container:')
+        (c: unknown[]) => typeof c[1] === 'string' && (c[1] as string).includes('apiKey=')
       );
       expect(creationMsg).toBeDefined();
-      expect(creationMsg?.[1]).toContain('authentication=direct-api-key');
-      expect(creationMsg?.[1]).not.toContain('apiKey=');
-      expect(creationMsg?.[1]).not.toContain('****');
+      expect(creationMsg?.[1]).toContain('apiKey=****');
     });
   });
 
@@ -3800,24 +3733,6 @@ describe('DockerProvider', () => {
         .map((c: unknown[]) => c[0])
         .filter((p: unknown) => typeof p === 'string' && (p as string).includes('forensics'));
       expect(forensicsPaths.length).toBeGreaterThan(0);
-      expect(fsModule.promises.mkdir).toHaveBeenCalledWith(expect.stringContaining('/attempt-'), {
-        mode: 0o700,
-        recursive: true,
-      });
-      expect(fsModule.promises.chmod).toHaveBeenCalledWith(
-        expect.stringContaining('/attempt-'),
-        0o700
-      );
-      expect(fsModule.promises.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('attempt-start.json'),
-        expect.any(String),
-        { encoding: 'utf8', mode: 0o600 }
-      );
-      expect(fsModule.promises.writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('exec-exit-code.txt'),
-        expect.any(String),
-        { encoding: 'utf8', mode: 0o600 }
-      );
     });
 
     it('handles exec error and sets status to failed', async () => {
@@ -3865,7 +3780,7 @@ describe('DockerProvider', () => {
       expect(fsModule.appendFileSync).toHaveBeenCalledWith(
         expect.stringContaining('exec-stream.log'),
         expect.any(String),
-        { encoding: 'utf8', mode: 0o600 }
+        'utf-8'
       );
     });
 

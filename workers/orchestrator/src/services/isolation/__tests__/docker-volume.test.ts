@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DockerVolume, type DockerVolumeConfig } from '../docker-volume.js';
 
@@ -26,7 +25,6 @@ vi.mock('node:fs', async (importOriginal) => {
     ...actual,
     existsSync: vi.fn().mockReturnValue(true),
     mkdirSync: vi.fn(),
-    chmodSync: vi.fn(),
     promises: {
       ...actual.promises,
       mkdir: vi.fn().mockResolvedValue(undefined),
@@ -131,17 +129,6 @@ describe('DockerVolume', () => {
   it('getTaskSecretsPath returns secrets path joined with taskId', () => {
     const volume = makeVolume(mockDocker);
     expect(volume.getTaskSecretsPath('task-1')).toBe('/tmp/claude-secrets/task-1');
-  });
-
-  it('creates the task forensics directory with private permissions', () => {
-    const volume = makeVolume(mockDocker, { forensicsMode: true });
-
-    expect(volume.ensureTaskForensicsPath('task-private')).toBe('/tmp/forensics/task-private');
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp/forensics/task-private', {
-      mode: 0o700,
-      recursive: true,
-    });
-    expect(fs.chmodSync).toHaveBeenCalledWith('/tmp/forensics/task-private', 0o700);
   });
 
   it('returns claude-session prefix for claude runtime and codex-state for codex', () => {

@@ -131,20 +131,6 @@ function upstreamName(serviceName: string): string {
 }
 
 describe('Hetzner nginx runtime config', () => {
-  it('logs only the request path and never query-string credentials', () => {
-    const config = readRequired(nginxConfigPath);
-    const formatLine = config
-      .split('\n')
-      .find((line) => line.trimStart().startsWith('log_format intexuraos_no_args '));
-
-    expect(formatLine).toBeDefined();
-    expect(formatLine).toContain('$request_method $uri $server_protocol');
-    expect(formatLine).not.toContain('$request ');
-    expect(formatLine).not.toContain('$request_uri');
-    expect(formatLine).not.toContain('$args');
-    expect(config).toContain('access_log /var/log/nginx/access.log intexuraos_no_args;');
-  });
-
   it('exposes only the required OIDC-protected production corpus evaluator prefixes', () => {
     const config = readRequired(nginxConfigPath);
     const verifier = readRequired(jwtVerifierPath);

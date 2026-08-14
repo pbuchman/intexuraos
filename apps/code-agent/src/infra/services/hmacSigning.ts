@@ -63,7 +63,7 @@ export function signDispatchRequest(
     const signature = crypto.createHmac('sha256', dispatchSigningSecret).update(message).digest('hex');
 
     deps.logger.debug(
-      { timestamp: String(timestamp), signatureGenerated: true },
+      { timestamp: String(timestamp), signature: signature.substring(0, 8) + '...' },
       'Generated HMAC signature for dispatch request'
     );
 

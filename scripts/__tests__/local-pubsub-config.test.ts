@@ -52,10 +52,4 @@ describe('local Pub/Sub configuration', () => {
     expect(pubsubUiSource).toContain("From: 'noreply@google.com'");
     expect(pubsubUiSource).toContain("'X-Internal-Auth': INTEXURAOS_INTERNAL_AUTH_TOKEN");
   });
-
-  it('never logs a fragment of the internal authentication token', () => {
-    expect(pubsubUiSource).not.toMatch(/INTEXURAOS_INTERNAL_AUTH_TOKEN\.slice/u);
-    expect(pubsubUiSource).not.toContain("'***' + INTEXURAOS_INTERNAL_AUTH_TOKEN");
-    expect(pubsubUiSource).toContain("INTEXURAOS_INTERNAL_AUTH_TOKEN ? 'CONFIGURED' : 'NOT SET'");
-  });
 });

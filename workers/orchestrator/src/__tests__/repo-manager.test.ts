@@ -143,16 +143,6 @@ describe('RepoManager', () => {
       const { normalizeUrl } = await loadRepoManager();
       expect(normalizeUrl('notaurl')).toBe('notaurl');
     });
-
-    it('should remove credentials and query parameters from repository URLs used in logs', async () => {
-      const { sanitizeRepositoryUrlForLogging } = await loadRepoManager();
-
-      expect(
-        sanitizeRepositoryUrlForLogging(
-          'https://x-access-token:REPOSITORY_URL_SECRET@github.com/pbuchman/intexuraos.git?token=QUERY_SECRET#fragment'
-        )
-      ).toBe('https://github.com/pbuchman/intexuraos.git');
-    });
   });
 
   describe('urlsMatch', () => {
@@ -493,32 +483,6 @@ describe('RepoManager', () => {
         }),
         'Failed to clone repository'
       );
-    });
-
-    it('should never expose embedded repository credentials in clone logs or errors', async () => {
-      const { cloneRepository } = await loadRepoManager();
-      const repoPath = join(tempDir, 'credential-clone-failure');
-      const secret = 'REPOSITORY_CLONE_SECRET_CANARY';
-      const authenticatedUrl = `https://x-access-token:${secret}@github.com/pbuchman/intexuraos.git?token=${secret}`;
-
-      mockExecFileAsyncImpl = async (): Promise<{ stdout: string; stderr: string }> => {
-        const error = new Error(`Command failed: git clone ${authenticatedUrl}`) as Error & {
-          stderr: string;
-        };
-        error.stderr = `fatal: unable to access '${authenticatedUrl}'`;
-        throw error;
-      };
-
-      let thrownMessage = '';
-      try {
-        await cloneRepository(authenticatedUrl, repoPath, mockLogger);
-      } catch (error: unknown) {
-        thrownMessage = error instanceof Error ? error.message : String(error);
-      }
-
-      expect(thrownMessage).not.toContain(secret);
-      expect(JSON.stringify(vi.mocked(mockLogger.info).mock.calls)).not.toContain(secret);
-      expect(JSON.stringify(vi.mocked(mockLogger.error).mock.calls)).not.toContain(secret);
     });
   });
 

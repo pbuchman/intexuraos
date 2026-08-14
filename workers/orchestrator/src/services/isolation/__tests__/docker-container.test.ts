@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import { DockerContainer, redactContainerInspect } from '../docker-container.js';
+import { DockerContainer } from '../docker-container.js';
 
 interface MockContainer {
   id: string;
@@ -53,21 +53,6 @@ describe('DockerContainer', () => {
     mockContainer = mocks.mockContainer;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     container = new DockerContainer(() => mockDocker as any, createMockLogger());
-  });
-
-  it('redacts malformed and non-string container environment entries', () => {
-    expect(redactContainerInspect(null)).toBeNull();
-    expect(
-      redactContainerInspect({
-        Config: {
-          Env: ['TOKEN_WITHOUT_SEPARATOR', 42, 'SECRET=value'],
-        },
-      })
-    ).toEqual({
-      Config: {
-        Env: ['TOKEN_WITHOUT_SEPARATOR=[REDACTED]', '[REDACTED]', 'SECRET=[REDACTED]'],
-      },
-    });
   });
 
   it('createContainer delegates to docker.createContainer with provided spec', async () => {

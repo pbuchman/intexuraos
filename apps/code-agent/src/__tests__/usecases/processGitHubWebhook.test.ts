@@ -260,10 +260,9 @@ describe('processGitHubWebhook', () => {
       expect(result.reason).toBe('invalid_signature');
     }
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ _skipSentry: true }),
+      expect.objectContaining({ signature: 'sha256=deadbeef', _skipSentry: true }),
       'Invalid GitHub webhook signature'
     );
-    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain('sha256=deadbeef');
   });
 
   it('returns internal_error when audit repositories are not configured', async () => {

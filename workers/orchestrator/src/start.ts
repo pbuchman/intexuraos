@@ -153,8 +153,7 @@ export async function start(): Promise<void> {
       kimiKey: env.kimiApiKey,
       openRouterKey: env.openRouterApiKey,
     },
-    logger,
-    services.providerApiKeys
+    logger
   );
 
   startCredentialRefreshLoop(
