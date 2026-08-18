@@ -50,7 +50,7 @@ describe('IntexAgentModelCard', () => {
     expect(screen.getByRole('heading', { name: 'Intex Agent model' })).toBeInTheDocument();
     const select = screen.getByLabelText('Intex Agent model');
     expect(select).toHaveAccessibleName('Intex Agent model');
-    expect(screen.getByText(/WhatsApp Assistant/i)).toBeInTheDocument();
+    expect(screen.getByText(/Intex Agent uses for conversations/i)).toBeInTheDocument();
     expect(screen.getByText(/IntexuraOS platform key/i)).toBeInTheDocument();
     expect(Array.from((select as HTMLSelectElement).options, (option) => option.text)).toEqual([
       'DeepSeek V4 Flash',

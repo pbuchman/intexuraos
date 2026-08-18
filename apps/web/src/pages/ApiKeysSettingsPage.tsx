@@ -8,7 +8,7 @@ import {
   DEFAULT_OPENROUTER_MODELS,
   getProviderForModel,
 } from '@intexuraos/llm-contract';
-import { Button, Card, IntexAgentModelCard, Input, Layout } from '@/components';
+import { Button, Card, Input, Layout } from '@/components';
 import { useLlmKeys } from '@/hooks';
 import { formatDateTime } from '@/utils/dateFormat';
 import type { ConfigurableLlmProvider, LlmTestResult } from '@/services/llmKeysApi.types';
@@ -136,7 +136,7 @@ function groupDefaultEligibleModels(
 }
 
 export function ApiKeysSettingsPage(): React.JSX.Element {
-  const { keys, defaultModel, fallbackModel, loading, error, savingDefaultModel, intexAgentModel, setKey, deleteKey, testKey, setDefaultModel, setFallbackModel } = useLlmKeys();
+  const { keys, defaultModel, fallbackModel, loading, error, savingDefaultModel, setKey, deleteKey, testKey, setDefaultModel, setFallbackModel } = useLlmKeys();
 
   if (loading) {
     return (
@@ -266,10 +266,6 @@ export function ApiKeysSettingsPage(): React.JSX.Element {
           </div>
         ) : null}
       </Card>
-
-      {intexAgentModel.availability === 'available' ? (
-        <IntexAgentModelCard selector={intexAgentModel} />
-      ) : null}
 
       <div className="space-y-4">
         {PROVIDERS.map((provider) => (
