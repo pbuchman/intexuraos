@@ -767,7 +767,7 @@ verify_active_secret_projection_version() {
   local active_version=""
   local remote_verify_command=""
   IFS= read -r -d '' remote_verify_command <<'REMOTE_COMMAND' || true
-node --input-type=module <<'NODE'
+sudo -n node --input-type=module <<'NODE'
 import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
 const root = '/var/lib/intexuraos/secret-projections/prod';
 const current = `${root}/current`;

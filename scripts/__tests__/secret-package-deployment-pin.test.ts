@@ -466,7 +466,7 @@ describe('PROD secret package deployment pin', () => {
         'bash',
         [
           '-c',
-          'source "$1"; run_remote() { printf "%s" "$ACTIVE_VERSION"; }; verify_active_secret_projection_version',
+          'source "$1"; run_remote() { [[ "$1" == *"sudo -n node --input-type=module"* ]] || return 41; printf "%s" "$ACTIVE_VERSION"; }; verify_active_secret_projection_version',
           'deployment-active-package-test',
           deployPath,
         ],
