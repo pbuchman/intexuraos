@@ -50,8 +50,8 @@ export function formatTestModel(model: TestRunModel): string {
       return 'DeepSeek V4 Flash';
     case 'or:minimax/minimax-m3':
       return 'MiniMax M3';
-    case 'or:google/gemini-3-flash-preview':
-      return 'Gemini 3 Flash Preview';
+    case 'or:google/gemini-3.6-flash':
+      return 'Gemini 3.6 Flash';
   }
 }
 

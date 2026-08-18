@@ -275,6 +275,7 @@ ${additionalContext.trim()}
     retriedFrom: originalTaskId,
     agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
+    ...(originalTask.sentryIssue !== undefined && { sentryIssue: originalTask.sentryIssue }),
     ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
     ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
   };

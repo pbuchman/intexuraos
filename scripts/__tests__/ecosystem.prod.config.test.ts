@@ -437,7 +437,19 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(
       byName.get('mobile-notifications-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY
     ).toBeUndefined();
-    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('fishing-assistant-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('image-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_OPENAI_APP_API_KEY).toBeUndefined();
+    expect(
+      byName.get('fishing-assistant-service')?.env.INTEXURAOS_OPENAI_APP_API_KEY
+    ).toBeUndefined();
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
     );
@@ -512,7 +524,7 @@ describe('ecosystem.config.prod.cjs', () => {
       INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://127.0.0.1:8113',
       INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://127.0.0.1:8132',
       INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL: 'http://127.0.0.1:8135',
-      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3-flash-preview',
+      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3.6-flash',
       INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC: 'intexuraos-message-digest-runs-dev',
       INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: 'intexuraos-whatsapp-send-dev',
       INTEXURAOS_WEB_APP_URL: 'https://intexuraos.cloud',

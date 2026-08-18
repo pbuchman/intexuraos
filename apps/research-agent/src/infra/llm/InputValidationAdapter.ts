@@ -4,7 +4,7 @@
  */
 
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { LLMModel, OpenRouterToolCallingModel } from '@intexuraos/llm-contract';
+import type { OpenRouterModelId } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   improvementRepairPrompt,
@@ -50,7 +50,7 @@ export class InputValidationAdapter implements InputValidationProvider {
 
   constructor(
     apiKey: string,
-    model: LLMModel | OpenRouterToolCallingModel,
+    model: OpenRouterModelId,
     userId: string,
     logger: Logger,
     usageSink: UsageSink,

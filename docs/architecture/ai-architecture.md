@@ -2,14 +2,14 @@
 
 > How IntexuraOS routes model traffic, runs multi-model research, and attributes usage.
 
-**Version 3.0.0** — August 12, 2026
+**Version 3.1.0** — August 18, 2026
 
 ## Routing Invariants
 
 1. **Platform traffic uses OpenRouter.** Defaults, fallbacks, classification, routing, and other platform-owned calls use `INTEXURAOS_OPENROUTER_APP_API_KEY`.
 2. **Google-family models are OpenRouter models.** Every executable Google model ID has the form `or:google/...`; IntexuraOS does not execute direct Google/Gemini LLM requests.
-3. **Supported personal keys remain explicit.** Anthropic, OpenAI, Perplexity, and OpenRouter keys can be stored and selected where the feature supports them.
-4. **Images are OpenAI-only.** Prompt generation uses `gpt-4.1`; image generation uses `gpt-image-1`.
+3. **OpenRouter is the only configurable LLM key.** A user key takes precedence; `INTEXURAOS_OPENROUTER_APP_API_KEY` is the platform fallback.
+4. **Images and embeddings use OpenRouter.** Public/persisted aliases (`gpt-image-1`, `text-embedding-3-small`) stay unchanged, while usage records carry `or:openai/...` evidence IDs.
 5. **Historical data stays readable.** Stored research records can contain retired model identifiers, but retry and new-execution schemas accept only current executable models.
 6. **Google OAuth is separate.** Google OAuth tokens authorize Calendar operations and are not LLM credentials.
 
@@ -31,10 +31,6 @@ graph TB
 
     subgraph "Executable Routes"
         OpenRouter[OpenRouter]
-        Anthropic[Anthropic user key]
-        OpenAI[OpenAI user key]
-        Perplexity[Perplexity user key]
-        OpenAIImage[OpenAI image API]
     end
 
     Agents --> UserService
@@ -42,50 +38,42 @@ graph TB
     UserService --> Factory
     Factory --> Contract
     Factory --> OpenRouter
-    Factory --> Anthropic
-    Factory --> OpenAI
-    Factory --> Perplexity
-    Images --> OpenAIImage
+    Images --> OpenRouter
 ```
 
-`@intexuraos/llm-factory` is the executable boundary. It routes `or:` identifiers to OpenRouter, supports the remaining non-Google direct providers, and rejects raw Google model identifiers.
+`@intexuraos/llm-factory` is the executable boundary. It routes `or:` identifiers to OpenRouter and rejects direct-provider model identifiers.
 
 ## Model Selection
 
 ### Platform Defaults
 
-The canonical platform fallback is `DEFAULT_PLATFORM_LLM_MODEL`, currently MiniMax M3 through OpenRouter. Feature-specific selectors may expose other curated OpenRouter models, including Google-family models such as `or:google/gemini-3-flash-preview`.
+The canonical platform fallback is `DEFAULT_PLATFORM_LLM_MODEL`, currently MiniMax M3 through OpenRouter. Feature-specific selectors may expose other curated OpenRouter models, including Google-family models such as `or:google/gemini-3.6-flash`.
 
 ### Default and Fallback Preferences
 
 User-service stores a default model and an optional fallback. Resolution follows this order:
 
 1. Normalize a retired direct-Google preference to the platform OpenRouter default.
-2. Resolve the selected model with a supported personal key when available.
-3. Use the platform OpenRouter key for OpenRouter-backed defaults and fallbacks.
+2. Use the user's OpenRouter key when available.
+3. Otherwise use the platform OpenRouter key.
 4. Return a typed error if neither the selected route nor the platform fallback can be resolved.
 
 OpenRouter-backed defaults do not require every user to maintain a separate key. Users can still add their own OpenRouter key.
 
 ### Research Models
 
-Research accepts:
-
-- curated `or:<vendor>/<model>` entries from the OpenRouter allowlist;
-- supported Anthropic research models with an Anthropic user key;
-- supported OpenAI research models with an OpenAI user key;
-- supported Perplexity research models with a Perplexity user key.
+New Research execution accepts at most six unique curated `or:<vendor>/<model>` entries from the OpenRouter allowlist.
 
 Executable schemas exclude raw Google models. Read schemas remain intentionally broader so historical reports can be displayed and guarded without silently dropping old identifiers.
 
 ### Image Models
 
-| Stage             | Provider | Model         |
-| ----------------- | -------- | ------------- |
-| Prompt generation | OpenAI   | `gpt-4.1`     |
-| Image generation  | OpenAI   | `gpt-image-1` |
+| Stage             | Provider   | Public model alias |
+| ----------------- | ---------- | ------------------ |
+| Prompt generation | OpenRouter | `gpt-4.1`          |
+| Image generation  | OpenRouter | `gpt-image-1`      |
 
-There is no Google image adapter or Gemini image fallback.
+The aliases remain stable for API and stored-data compatibility; upstream requests use `openai/gpt-4.1` and `openai/gpt-image-1` through OpenRouter.
 
 ## Research Council
 
@@ -97,7 +85,6 @@ sequenceDiagram
     participant Research as research-agent
     participant Resolve as user-service / model resolution
     participant OR as OpenRouter
-    participant Direct as Supported user-key provider
     participant Synth as Synthesizer
 
     User->>Research: Research prompt + model choices
@@ -105,9 +92,6 @@ sequenceDiagram
     par OpenRouter models
         Research->>OR: Parallel research calls
         OR-->>Research: Results, sources, usage
-    and Supported personal-key models
-        Research->>Direct: Parallel research calls
-        Direct-->>Research: Results, sources, usage
     end
     Research->>Synth: Successful attributed results
     Synth-->>Research: Synthesized report
@@ -125,8 +109,8 @@ The pipeline continues when a subset of models fails. Failed model IDs are retai
 | Linear Agent       | Issue extraction, titles, pruning             | User-service client; OpenRouter platform fallback    |
 | Hellscript Agent   | Intent interpretation and draft generation    | User-service client; OpenRouter platform fallback    |
 | Web Agent          | Page summarization                            | User-service client; OpenRouter platform fallback    |
-| Research Agent     | Parallel research and synthesis               | Curated OpenRouter plus supported personal-key routes|
-| Image Service      | Prompt and image generation                   | OpenAI user key only                                 |
+| Research Agent     | Parallel research and synthesis               | Curated OpenRouter allowlist, maximum six models     |
+| Image Service      | Prompt and image generation                   | OpenRouter with stable public model aliases          |
 
 ## Factory Contract
 
@@ -136,7 +120,7 @@ import { createOpenRouterModelId } from '@intexuraos/llm-contract';
 
 const client = createLlmClient({
   apiKey: openRouterApiKey,
-  model: createOpenRouterModelId('google/gemini-3-flash-preview'),
+  model: createOpenRouterModelId('google/gemini-3.6-flash'),
   userId,
   logger,
   usageSink,
@@ -164,7 +148,7 @@ For OpenRouter traffic, provider-reported cost is preferred. Curated allowlists 
 
 ## Credentials and Security
 
-User LLM keys are encrypted with AES-256-GCM in user-service and decrypted only for request-time client construction. The platform OpenRouter key lives in Secret Manager and is injected only into services that need the shared route.
+The user OpenRouter key is encrypted with AES-256-GCM in user-service and decrypted only for request-time client construction. The platform OpenRouter key lives in Secret Manager and is injected only into services that need the shared route. Retired direct-provider fields remain readable only for compatibility and are not used by active clients; no historical-data migration is required.
 
 Direct Google LLM keys cannot be added or tested. The compatibility response field for a retired Google key is `null`, while deletion remains accepted so dormant encrypted values can be removed safely.
 
@@ -177,9 +161,9 @@ Google Calendar OAuth follows a separate token lifecycle: OAuth access and refre
 | `@intexuraos/llm-contract`     | Model IDs, provider mapping, executable type guards            |
 | `@intexuraos/llm-factory`      | Executable routing and unified generation clients              |
 | `@intexuraos/infra-openrouter` | OpenRouter client, allowlists, live/fallback cost calculation   |
-| `@intexuraos/infra-claude`     | Supported direct Anthropic user-key client                     |
-| `@intexuraos/infra-gpt`        | Supported direct OpenAI user-key client                        |
-| `@intexuraos/infra-perplexity` | Supported direct Perplexity user-key client                    |
+| `@intexuraos/infra-claude`     | Retained direct Anthropic adapter; inactive for app execution  |
+| `@intexuraos/infra-gpt`        | Retained direct OpenAI adapter; inactive for app execution     |
+| `@intexuraos/infra-perplexity` | Retained direct Perplexity adapter; inactive for app execution |
 | `@intexuraos/llm-pricing`      | Usage sinks and cost attribution contracts                     |
 | `@intexuraos/llm-prompts`      | Versioned prompts, schemas, and parsers                         |
 | `@intexuraos/llm-utils`        | Response parsing and redaction helpers                         |
@@ -193,9 +177,9 @@ When adding or changing an LLM route:
 3. Update the relevant allowlist, selector, executable schema, and tests together.
 4. Keep stored-response schemas broad enough for historical records.
 5. Add or update usage attribution and fallback pricing.
-6. For images, keep both prompt and generation paths OpenAI-only.
+6. Keep image and embedding public/persisted aliases stable while routing execution through OpenRouter.
 7. Do not change Google OAuth Calendar behavior while changing LLM routing.
 
 ---
 
-**Last updated:** 2026-08-12 (v3.0.0)
+**Last updated:** 2026-08-18 (v3.1.0)

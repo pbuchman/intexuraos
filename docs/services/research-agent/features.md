@@ -12,7 +12,7 @@ Research Agent automates that entire workflow: send one prompt, receive one synt
 
 ### Parallel Multi-Model Research
 
-Submit a single research prompt and Research Agent dispatches it simultaneously to the selected OpenRouter models — Gemini, Claude, GPT, Grok, Qwen, and others. Each model runs concurrently in its own Cloud Run instance, so a five-model research takes roughly the same wall-clock time as a single call.
+Submit a single research prompt and Research Agent dispatches it simultaneously to up to six selected OpenRouter models — Gemini, Claude, GPT, Grok, Qwen, and others. Each model runs concurrently in its own Cloud Run instance, so a multi-model research takes roughly the same wall-clock time as a single call.
 
 **Example:** A user asks "What are the risks of adopting a microservices architecture for a 10-person startup?" All five configured models research the question in parallel. Within minutes, the user has five expert perspectives ready for synthesis.
 
@@ -20,7 +20,7 @@ Submit a single research prompt and Research Agent dispatches it simultaneously 
 
 An OpenRouter credential provides access to 16 curated frontier models spanning 10 providers — DeepSeek, Qwen, MiniMax, xAI (Grok), Moonshot (Kimi), Anthropic, Google, OpenAI, Xiaomi, and Z.ai — through one observable route. The `GET /openrouter/models` endpoint returns the full allowlist with live pricing fetched from OpenRouter's catalog API. Models are selected in the frontend and routed through the same parallel research pipeline. Allowlist enforcement at execution time prevents unauthorized model access, and fallback pricing ensures cost tracking works even when live catalog data is unavailable. Google/Gemini models must use an `or:google/...` identifier; raw `gemini-*` identifiers and Google LLM API keys are not accepted.
 
-**Example:** A user selects Grok 4.20 Beta, Kimi K2.5, Gemini 3 Flash Preview, and Claude Sonnet 4.6. All appear in the model selector with live per-token pricing, and every selected model is dispatched through OpenRouter using the same credential and usage trail.
+**Example:** A user selects Grok 4.20 Beta, Kimi K2.5, Gemini 3.6 Flash, and Claude Sonnet 4.6. All appear in the model selector with live per-token pricing, and every selected model is dispatched through OpenRouter using the same credential and usage trail.
 
 ### Context-Aware Research Pipeline
 
@@ -42,7 +42,7 @@ A completed research can be enhanced rather than re-run from scratch. The user a
 
 ### Automatic Public Sharing
 
-Every completed research automatically generates a self-contained HTML page uploaded to Google Cloud Storage. The page includes the synthesis, individual model reports, an optional generated cover image, and attribution breakdown. A shareable public URL is created immediately — no manual export step required. Cover images use the OpenAI image pipeline only; when its credential is unavailable or generation fails, the report is still published without a cover image.
+Every completed research automatically generates a self-contained HTML page uploaded to Google Cloud Storage. The page includes the synthesis, individual model reports, an optional generated cover image, and attribution breakdown. A shareable public URL is created immediately — no manual export step required. Cover images use the OpenRouter image pipeline while retaining the `gpt-image-1` public alias; when generation fails, the report is still published without a cover image.
 
 **Example:** A researcher shares their competitive analysis with a client by pasting a single link. The recipient sees a fully formatted report without needing an IntexuraOS account. If cover generation fails, the report remains available without delaying publication.
 
@@ -74,7 +74,7 @@ Research completion and LLM failure notifications sent via WhatsApp are marked a
 
 A product manager needs competitive intelligence before a board meeting. She submits: "Compare the pricing models and market positioning of Notion, Confluence, and Linear for a 50-person engineering team."
 
-Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. She selects OpenRouter-routed Gemini 3 Flash Preview, Claude Sonnet 4.6, Grok 4.20 Beta, Kimi K2.5, and Qwen 3.5 Plus for broad coverage. Within minutes, all five complete — but one response is unusually brief and gets flagged as low quality.
+Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. She selects OpenRouter-routed Gemini 3.6 Flash, Claude Sonnet 4.6, Grok 4.20 Beta, Kimi K2.5, and Qwen 3.5 Plus for broad coverage. Within minutes, all five complete — but one response is unusually brief and gets flagged as low quality.
 
 The synthesis model reads all five reports, deprioritizing the flagged result, and produces a structured document: an executive summary, detailed findings per product, agreements on Notion's document flexibility, and a flagged contradiction between two models' assessments of Confluence pricing. The report is automatically uploaded as a shareable HTML page with a generated cover image.
 
@@ -88,7 +88,7 @@ The PM shares the link in the board pre-read Slack channel and exports it to Not
 - Context-aware prompts produce more relevant, focused research results
 - Low-quality responses detected and deprioritized before synthesis
 - Reuse prior results when expanding research — no redundant API costs
-- Shareable reports generated automatically, with an optional OpenAI-generated cover image
+- Shareable reports generated automatically, with an optional OpenRouter-generated cover image
 - Research organized in Notion without manual copy-paste
 - Important notifications ensure timely delivery of completion alerts
 
@@ -97,9 +97,10 @@ The PM shares the link in the board pre-read Slack channel and exports it to Not
 - Each input context is limited to 60,000 characters; maximum 5 contexts per research
 - Notion export requires a pre-configured target page in user settings
 - Partial failures (some models failing) require user confirmation before synthesis proceeds
-- Cover image generation requires an OpenAI API key; Google image generation is disabled
+- Cover image generation requires resolved OpenRouter access and uses the `gpt-image-1` public alias
 - OpenRouter calls require an OpenRouter credential resolved by user-service (user key or platform fallback)
 - OpenRouter model selection is restricted to a curated allowlist of 16 models
+- At most six unique models can be selected for a new run or enhancement
 
 ---
 

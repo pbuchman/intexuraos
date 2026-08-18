@@ -331,7 +331,7 @@ describe('fishing migration replay aggregator', () => {
     const requests: { url: string; body: Record<string, unknown> }[] = [];
     const aggregate = createFishingMigrationAggregator({
       apiKey: 'private-openrouter-key',
-      model: 'or:google/gemini-3-flash-preview',
+      model: 'or:google/gemini-3.6-flash',
       usageServiceUrl: 'https://usage.internal.example',
       internalAuthToken: 'private-internal-token',
       fetchImplementation: vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -358,11 +358,11 @@ describe('fishing migration replay aggregator', () => {
     });
 
     await expect(aggregate(aggregateInput())).resolves.toMatchObject({
-      model: 'or:google/gemini-3-flash-preview',
+      model: 'or:google/gemini-3.6-flash',
     });
-    expect(requests[0]?.body).toMatchObject({ model: 'google/gemini-3-flash-preview' });
+    expect(requests[0]?.body).toMatchObject({ model: 'google/gemini-3.6-flash' });
     expect(requests[1]?.body).toMatchObject({
-      events: [{ request: { model: 'google/gemini-3-flash-preview' } }],
+      events: [{ request: { model: 'google/gemini-3.6-flash' } }],
     });
   });
 

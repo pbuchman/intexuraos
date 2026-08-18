@@ -81,12 +81,12 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     completionPerToken: '0.000006',
   },
   {
-    id: 'x-ai/grok-4.1-fast',
-    name: 'Grok 4.1 Fast',
+    id: 'x-ai/grok-4.3',
+    name: 'Grok 4.3',
     provider: 'xAI',
-    contextLength: 2_000_000,
-    promptPerToken: '0.0000002',
-    completionPerToken: '0.0000005',
+    contextLength: 1_000_000,
+    promptPerToken: '0.00000125',
+    completionPerToken: '0.0000025',
   },
   // Moonshot
   {
@@ -132,12 +132,12 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     completionPerToken: '0.0000025',
   },
   {
-    id: 'google/gemini-3-flash-preview',
-    name: 'Gemini 3 Flash Preview',
+    id: 'google/gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
     provider: 'Google',
-    contextLength: 1_000_000,
-    promptPerToken: '0.0000003',
-    completionPerToken: '0.0000025',
+    contextLength: 1_048_576,
+    promptPerToken: '0.0000015',
+    completionPerToken: '0.0000075',
   },
   // OpenAI
   {

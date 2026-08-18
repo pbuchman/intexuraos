@@ -431,7 +431,7 @@ describe('ecosystem.config.cjs', () => {
       INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
       INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
       INTEXURAOS_OPENROUTER_APP_API_KEY: 'synthetic-openrouter-key',
-      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3-flash-preview',
+      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3.6-flash',
       INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC: 'message-digest-runs',
       INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: 'whatsapp-send-message',
     });
@@ -484,7 +484,7 @@ describe('ecosystem.config.cjs', () => {
     }
   });
 
-  it('passes the untracked selector subject and platform key to User Service only while enabled', () => {
+  it('passes the platform key to User Service regardless of selector state', () => {
     const absent = loadDevConfig();
     const absentUserService = absent.apps.find((app) => app.name === 'user-service');
 
@@ -498,7 +498,7 @@ describe('ecosystem.config.cjs', () => {
     const emptyUserService = empty.apps.find((app) => app.name === 'user-service');
 
     expect(emptyUserService?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('disabled');
-    expect(emptyUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(emptyUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe('platform-openrouter-key');
 
     const enabled = loadDevConfig({
       INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID: 'machine-local-subject',
@@ -525,7 +525,9 @@ describe('ecosystem.config.cjs', () => {
     const disabledUserService = disabled.apps.find((app) => app.name === 'user-service');
 
     expect(disabledUserService?.env.INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID).toBe('disabled');
-    expect(disabledUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(disabledUserService?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'platform-openrouter-key'
+    );
   });
 
   it('keeps the production Terraform selector fail-closed without a tracked subject or User Service key grant', () => {

@@ -1,12 +1,12 @@
 import { IntexuraOSError, type Logger } from '@intexuraos/common-core';
-import type { LLMModel } from '@intexuraos/llm-contract';
+import { isOpenRouterModel, type OpenRouterModelId } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import { HttpWebhookUsageSink } from '@intexuraos/llm-pricing';
 
 export interface ParsedValidationModel {
   provider: 'openrouter';
   /** Model ID as used by createLlmClient (with or: prefix for OpenRouter) */
-  modelId: string;
+  modelId: OpenRouterModelId;
   /** Raw model ID without or: prefix */
   rawId: string;
 }
@@ -40,7 +40,7 @@ export function parseValidationModels(raw: string): ParsedValidationModel[] {
       );
     }
 
-    if (!entry.startsWith('or:')) {
+    if (!isOpenRouterModel(entry)) {
       throw new IntexuraOSError(
         'MISCONFIGURED',
         `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS must use an or: OpenRouter model ID at position ${String(i + 1)}`
@@ -93,7 +93,7 @@ export function buildValidationClients(
       modelName: model.modelId,
       client: createLlmClient({
         apiKey: config.openRouterApiKey,
-        model: model.modelId as LLMModel,
+        model: model.modelId,
         userId: 'orchestrator-validation',
         logger: config.logger,
         usageSink: new HttpWebhookUsageSink({

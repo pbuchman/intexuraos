@@ -295,6 +295,7 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
       internalAuthToken: INTERNAL_AUTH_TOKEN,
       llmUsageServiceUrl: 'https://usage.example.test',
       userServiceUrl: 'https://users.example.test',
+      platformOpenRouterApiKey: 'platform-openrouter-key',
       messageDigestServiceUrl: 'https://message-digest-service.example.test',
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.example.test',
@@ -794,15 +795,6 @@ function createCatalogIntentClassifier(catalog: CanonicalMatrixCorpus): IntexAge
   return {
     async classify(input) {
       const located = locateMessage(catalog, input.message);
-      if (located.entry.scenario.id === 'intex-eval-003' && located.turnIndex === 0) {
-        return {
-          kind: 'needs_clarification' as const,
-          question: 'What end time and location should I use?',
-          blockerReason: 'missing_required_details' as const,
-          missingFields: ['end', 'location'],
-          candidateIntents: ['create_calendar_event' as const],
-        };
-      }
       const expected = expectedToolsForNormalTurn(located.entry, located.turnIndex);
       return expected.length === 0
         ? { kind: 'no_action' as const, reason: 'conversation' as const }

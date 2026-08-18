@@ -6,10 +6,10 @@
 | --- | --- |
 | Status | ACTIVE |
 | Started | 2026-08-13, Europe/Warsaw |
-| Baseline | `origin/development` at `9faf87a17c06359bc29254c73d8b94f1315fa70d` |
+| Baseline | `origin/development` at `1007254930138f59eea0c0b1717732adcc5f0b97` |
 | Implementation branch | `codex/secret-packages-production` |
-| Pushed code/evidence baseline | `02018515f75eb02c03a8990861cd938142b96b18`, `c804f759193569b6f78ef4699a2607004f17938d`, `32e22ed5f3553fe556f5aed53e152a5362ead07a`, `27c0912ec89a7f1319180606d80886b2928cb738`, `59a709e61b83a9aee4a84206343eb33a05297d7d`, `eac2dc198a37ea15228d2cdf08cc4001b2bae238`, `4c716080ffe3f395b0dfd30dc254358ac7dca3f3` |
-| Current working state | At the 2026-08-14 09:38 Europe/Warsaw capture, the scope-cleaned tree contains only the secret-package migration and its direct Firebase-key/runtime-SA/IAM/consumer/rollback work. Provider-health gating, provider purchase/login decisions, general logging/forensics hardening, and Firebase App Check were removed. The exact baseline diff is 110 paths (`27 A`, `83 M`); targeted migration tests pass `763/763`, full `pnpm run ci:tracked` passes all phases with `7986` tests, both Terraform roots validate, and the package/credential guards pass. Draft PR `#2454` remains unmerged; the scope-cleanup commit and its exact PR checks are pending at this capture. Terraform-managed retained-GCP resources were converged before removal of the unrelated App Check declarations; a new reviewed plan is required before any further apply. Live project IAM still contains two unmanaged Cloud Build service-agent `roles/secretmanager.admin` bindings pending Terraform adoption and least-privilege cleanup. DEV/PROD rollout and the Firebase, runtime-SA, and legacy-read observation intervals remain PENDING; no soak `T0` has begun. |
+| Pushed code/evidence baseline | `02018515f75eb02c03a8990861cd938142b96b18`, `c804f759193569b6f78ef4699a2607004f17938d`, `32e22ed5f3553fe556f5aed53e152a5362ead07a`, `27c0912ec89a7f1319180606d80886b2928cb738`, `59a709e61b83a9aee4a84206343eb33a05297d7d`, `eac2dc198a37ea15228d2cdf08cc4001b2bae238`, `4c716080ffe3f395b0dfd30dc254358ac7dca3f3`, `c7428b748ea8ca5ca57ae9829bcd39b0aa816cd7` |
+| Current working state | At the 2026-08-18 23:51 Europe/Warsaw capture, the scope-cleaned secret-package branch is merged locally, but not yet committed, with `origin/development` at `1007254930138f59eea0c0b1717732adcc5f0b97`. The exact baseline diff remains 110 paths (`27 A`, `83 M`) with the recorded digest below. A first full post-merge `pnpm run ci:tracked` passed all phases with `7968/7968` tests; a second exact-tree run is required after this evidence update. PROD package `v1` is published and verified, the restricted single-zone Cloudflare token and its attestation are prepared, the replacement runtime credential is packaged, and all three deployment pins equal `1`. Draft PR `#2454`, merge, package activation, production smoke, rollback drill, and every observation interval remain PENDING; no soak `T0` has begun. |
 | Linear issue | None by explicit user decision |
 | GCP project | `intexuraos-dev-pbuchman` |
 | Environments | local, dev/home-dev, prod/Hetzner, retained GCP transcription |
@@ -17,10 +17,10 @@
 
 ## Current execution state
 
-- The last pushed revision before this scope cleanup is
-  `4c716080ffe3f395b0dfd30dc254358ac7dca3f3`. Draft PR `#2454` targets `development`; nothing has
-  been merged and no production deployment has run. Exact PR checks for the scope-cleaned commit
-  remain pending.
+- The scope-cleaned revision `c7428b748ea8ca5ca57ae9829bcd39b0aa816cd7` is pushed. The latest
+  `origin/development` revision `1007254930138f59eea0c0b1717732adcc5f0b97` is merged into the local
+  worktree with the package boundary retained, but the merge commit is still PENDING. Draft PR
+  `#2454` targets `development`; no production package activation has run.
 - DEV package versions `v1` and `v2` were published and proven byte-identical with valid CRC32C,
   exact membership, and a package-level HMAC comparison. Provider credential values are opaque
   package members: provider entitlement, purchasing, and product support decisions are explicitly
@@ -28,13 +28,19 @@
 - Local rendering and the package-wide `v2 → v1 → v2` rollback mechanism were exercised. The
   local projection is on `v2`; home-dev currently remains on `v1` and must be aligned to the selected
   reviewed DEV version before the environment rollout is complete.
-- The PROD package has no published version. Production staging, canary, activation, rollback,
-  merge, and deployment are all pending.
+- PROD `v1` was built from the pinned numeric legacy sources plus the replacement Firebase key,
+  replacement runtime service-account JSON, and a newly created Cloudflare token restricted to
+  `DNS: Edit` and `Zone: Read` for only `intexuraos.cloud`. Exact `v1` fetch, CRC32C/readback,
+  membership validation, candidate-versus-published HMAC comparison, and offline render passed. A
+  root-owned mode-`0600` Cloudflare attestation for `v1` is installed on Hetzner, and the manifest,
+  Terraform, and protected GitHub variable pins all equal `1`. Production staging, canary,
+  activation, rollback, merge, and deployment are still pending.
 - A live pre-cutover 24-hour baseline found `1138` authentication events for the previous Hetzner
-  runtime key and `0` for the replacement. The old Firebase credential UID recorded `2` requests,
-  both rejected with HTTP `403` by the Generative Language API; the replacement Firebase credential
-  UID recorded `0`. These counts are readiness baselines, not soak evidence. No Firebase,
-  runtime-SA, or 72-hour legacy-read `T0` has begun.
+  runtime key. The replacement key used in PROD `v1` has ID
+  `4bf7371e272b2c67b6d0bd59cd52cae7daf18efc` and has not been activated. The old Firebase
+  credential UID recorded `2` requests, both rejected with HTTP `403` by the Generative Language
+  API; the replacement Firebase credential UID recorded `0`. These counts are readiness baselines,
+  not soak evidence. No Firebase, runtime-SA, or 72-hour legacy-read `T0` has begun.
 - Live IAM contains one unconditional and one expired conditional unmanaged project-level
   `roles/secretmanager.admin` binding for the Cloud Build service agent. The connection remains
   operational, but cleanup is gated on proving the active token's resource-level accessor and a
@@ -43,8 +49,9 @@
   host-serialized and structurally validated PROD projection, complete runtime-credential canaries,
   exact three-pin reconciliation, and an executable per-member DR source inventory. Test-first crash
   recovery now also covers incomplete DEV lock publication, durable PROD candidate publication, and
-  interrupted stable-link activation. On the scope-cleaned tree, local `ci:tracked` passes all
-  phases with `7986` tests. The required GCP topic plus package-scoped publisher metadata IAM were
+  interrupted stable-link activation. On the post-merge tree before this evidence update, local
+  `ci:tracked` passes all phases with `7968` tests. The required GCP topic plus package-scoped
+  publisher metadata IAM were
   applied with a fresh `No changes` plan before the unrelated App Check declarations were removed;
   no new Terraform apply is authorized by that historical plan.
 
@@ -236,7 +243,7 @@ in the compiled SPA by Firebase design, but no longer exists in tracked runtime 
 
 ### Exact changed-path completeness supplement
 
-Baseline: `9faf87a17c06359bc29254c73d8b94f1315fa70d`. The exact paths below are the
+Baseline: `1007254930138f59eea0c0b1717732adcc5f0b97`. The exact paths below are the
 normative changed-file inventory after removing non-secret-migration scope. Current inventory: 110
 paths (`27 A`, `83 M`, no delete/rename); sorted-path SHA-256:
 `ae1503ecfe3ae046fb102881ad11fbc8bf4f28ad7f4e73d922d29caa127ea7c3`. Any later
@@ -248,7 +255,7 @@ tokens are compared as exact entries, so a longer filename cannot satisfy a
 shorter path:
 
 ```bash
-baseline_commit=9faf87a17c06359bc29254c73d8b94f1315fa70d
+baseline_commit=1007254930138f59eea0c0b1717732adcc5f0b97
 inventory_file=docs/plans/2026-08-13-secret-packages-production-goal.md
 comm -23 \
   <(git diff --name-only "$baseline_commit" -- | LC_ALL=C sort) \
@@ -411,19 +418,19 @@ git diff --name-only "$baseline_commit" -- | LC_ALL=C sort | shasum -a 256
 - [x] Preserve all existing provider credential values unchanged as opaque members. Provider
   availability, entitlement, purchasing, and worker-type lifecycle are not acceptance gates for
   this secret-storage migration.
-- [ ] Build the PROD candidate from explicitly selected numeric legacy versions, the rotated
+- [x] Build the PROD candidate from explicitly selected numeric legacy versions, the rotated
   runtime service-account file, and approved external credential files.
-- [ ] Publish the PROD candidate without logging its payload. Publication remains gated on a
+- [x] Publish the PROD candidate without logging its payload. Publication remains gated on a
   narrowly scoped Cloudflare token with `DNS: Edit` for the single `intexuraos.cloud` zone.
-- [ ] Record only secret IDs, numeric versions, byte counts, CRC32C verification results, and member
+- [x] Record only secret IDs, numeric versions, byte counts, CRC32C verification results, and member
   counts for the replacement DEV and PROD candidates.
-- [ ] Execute final DEV and PROD shadow comparisons and require all members to report `MATCH`.
+- [x] Execute final DEV and PROD shadow comparisons and require all members to report `MATCH`.
 
 ### Package input and recovery gates
 
-- [ ] Cloudflare: the PROD package requires a raw DNS token value restricted to `DNS: Edit` for the
-  single `intexuraos.cloud` zone. No recoverable value exists in the current host projections; obtain
-  it only when building the PROD candidate and pass it through an ephemeral mode-`0600` input file.
+- [x] Cloudflare: create a replacement token restricted to `DNS: Edit` and `Zone: Read` for only the
+  `intexuraos.cloud` zone, verify it without logging the value, pass it through an ephemeral
+  mode-`0600` input file, and install the version-bound mode-`0600` production attestation.
 - [ ] Offline recovery escrow: schema-v2 inventory identifies every encryption/signing member that
   requires byte-identical recovery, but two independently held encrypted copies and a successful
   reconstruction drill have not been attested. Legacy/container destruction is blocked until they
@@ -434,7 +441,7 @@ git diff --name-only "$baseline_commit" -- | LC_ALL=C sort | shasum -a 256
 - [x] Create the replacement browser key through Terraform alongside the existing protected key.
 - [x] Verify the replacement has only approved prod/dev/localhost referrers and Firebase APIs, with
   no Generative Language API.
-- [ ] Put the replacement value into new DEV and PROD candidate versions through the secure
+- [x] Put the replacement value into new DEV and PROD candidate versions through the secure
   publisher.
 - [ ] Deploy and verify dev web Auth, token refresh, and Firestore access.
 - [ ] Deploy and verify prod web Auth, token refresh, and Firestore access.
@@ -450,9 +457,9 @@ git diff --name-only "$baseline_commit" -- | LC_ALL=C sort | shasum -a 256
 ### Phase 5 — Runtime service-account rotation
 
 - [x] Create a replacement key for the Hetzner runtime service account outside Terraform.
-- [ ] Put the replacement JSON into the PROD package using the provisioner as the distinct bootstrap
-  identity.
-- [ ] Validate only `type`, `project_id`, `client_email`, `private_key_id`, and parseability.
+- [x] Put the replacement JSON into the PROD package through the dedicated publisher while keeping
+  the provisioner outside the package as the distinct production bootstrap identity.
+- [x] Validate only `type`, `project_id`, `client_email`, `private_key_id`, and parseability.
 - [ ] Atomically render the credential at mode `0600` and verify token issuance plus minimal
   Firestore, GCS, Pub/Sub, and Firebase Auth operations.
 - [ ] Reload a canary and then all production PM2 processes.
@@ -528,29 +535,29 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 | Verification | Required result | Evidence |
 | --- | --- | --- |
 | Targeted package tests | PASS | 2026-08-13 20:55 Europe/Warsaw: complete then-current-tree selection covering package publication/recovery, builder/DR, DEV writer races, PROD loader/first-cutover rollback, runtime canary, deployment pinning, integrations, Terraform IAM, and fresh-host behavior passed `333/333` |
-| Runtime/Hetzner/orchestrator tests | PASS | 2026-08-14 09:38 Europe/Warsaw: focused secret-migration matrix passed `763/763`; the subsequent full scope-cleaned `ci:tracked` passed `7986` tests |
+| Runtime/Hetzner/orchestrator tests | PASS | 2026-08-18 23:48 Europe/Warsaw: the first complete post-merge `ci:tracked` passed `7968/7968` tests; all preceding Type/Lint and Static Validation phases and all following coverage/build/format checks also passed |
 | Documentation contract tests | test-first FAIL, then PASS | 2026-08-14 00:04 Europe/Warsaw: `scripts/__tests__/secret-package-integrations.test.ts` passed `18/18`, including publication recovery, DR inventory, pin recovery, historical-plan wording, executable observation gates, Cloud Build least-privilege cleanup, and token-argv safety contracts |
 | `pnpm run verify:secret-packages` | PASS | 2026-08-13 20:56 Europe/Warsaw: manifest/source/recovery schema coverage valid; DEV 35 env + 1 file, PROD 28 env + 3 files; 19 named recovery sources cover every member; both environments bind the correct base package for post-cleanup rotations |
 | `pnpm run verify:credential-files` | PASS | 2026-08-13 20:56 Europe/Warsaw: credential file guard PASS |
 | Documentation format/diff checks | PASS | 2026-08-14 00:35 Europe/Warsaw: repository-wide format phase and post-build checks passed in the complete exact-clean-commit `ci:tracked` run; `git diff --check` PASS |
 | `pnpm run typecheck:tests` | PASS | 2026-08-13 20:56 Europe/Warsaw: then-current-tree test typecheck PASS; the later exact-clean-commit Type/Lint phase also passed |
-| `pnpm run ci:tracked` | PASS on the scope-cleaned implementation tree; exact pushed-commit checks pending | 2026-08-14 09:38 Europe/Warsaw: exit `0`; Type/Lint, Static Validation, `7986/7986` tests with coverage, Coverage Validation, Web Build & Format, and Post-Build Checks all passed. This run preceded only the evidence-only update to this goal artifact; exact PR checks for the resulting commit remain PENDING. |
+| `pnpm run ci:tracked` | PASS on the post-merge implementation tree; exact commit and PR checks pending | 2026-08-18 23:48 Europe/Warsaw: first full post-merge run `#14` exited `0`; Type/Lint, Static Validation, `7968/7968` tests with coverage, Coverage Validation, Web Build & Format, and Post-Build Checks all passed. A second full run after the rollout-evidence update remains required before commit. |
 | Terraform format | no diff | 2026-08-13 20:57 Europe/Warsaw: `terraform fmt -check -recursive terraform` PASS |
 | Terraform validate, retained GCP | PASS | 2026-08-13 20:47 Europe/Warsaw: retained GCP and Hetzner roots validate PASS after publisher metadata IAM and canary-topic changes |
 | Terraform plan, retained GCP | reviewed plan, then post-apply exit `0` with no drift | 2026-08-13 20:52 Europe/Warsaw: reviewed additive plan applied the topic and two package-scoped metadata-viewer bindings through a Terraform-managed JIT bootstrap; bootstrap was destroyed, live operator project `secretmanager.admin` count is `0`, and the final full un-targeted plan exited `0` with `0` non-noop changes and `No changes` |
 | Terraform validate/plan, Hetzner | PASS and reviewed | 2026-08-13 16:03 Europe/Warsaw: validate PASS; fresh plan with the provisioner identity reviewed as `2 add / 0 change / 1 replace-delete` (`terraform_data.bootstrap_prod` replacement plus additive legacy runtime-key migration guard); deliberately not applied before the package-aware release exists on the server |
 | DEV shadow comparison | all members `MATCH` | 2026-08-13 15:52 Europe/Warsaw: dedicated DEV publisher impersonation rebuilt all 35 exact legacy sources plus the external Firebase member; dedicated renderer fetched numeric `v2`; ephemeral HMAC comparison returned `MATCH`; payload is 5,838 bytes with verified server CRC32C. Provider values were preserved as opaque members and were not used as a rollout gate |
-| PROD shadow comparison | all members `MATCH` | PENDING |
+| PROD shadow comparison | all members `MATCH` | 2026-08-18 23:44 Europe/Warsaw: PROD `v1` candidate and exact numeric server fetch passed schema, complete `28` env + `3` file membership, CRC32C/readback, byte-for-byte HMAC `MATCH`, and offline render; payload size `8566` bytes; no member value or digest was emitted |
 | Local smoke | PASS | PARTIAL — 2026-08-13: exact `v2` projection and modes PASS; web build PASS and contains replacement—not previous—Firebase key; version projection regression fixed test-first and local `v2 → v1 → v2` transaction PASS. Remaining service smoke is PENDING |
 | home-dev smoke | PASS | PARTIAL — exact DEV rendering and restart mechanics exercised, but the rollback attempt left the host active on `v1`; align it to the selected DEV version and repeat the package-consumer smoke |
 | code-worker canary | PASS without Secret Manager access | PARTIAL — live isolation assertion passed with no GCP credential environment variable or credential file; full package-projection canary remains PENDING |
 | Production canary | PASS | PENDING |
 | Production full smoke | PASS | PENDING |
-| Version reconciliation | all persisted pins/pointers equal the promoted numeric versions | PENDING |
+| Version reconciliation | all persisted pins/pointers equal the promoted numeric versions | PARTIAL — manifest, Terraform, and protected GitHub variable all equal PROD `1` and the pin verifier reports `MATCH`; the production pointer/deployment attestation remains on the legacy release until cutover |
 | Rollback drill | DEV prior/forward and PROD prior/forward each have three PASS samples over 15 minutes with zero unexpected auth/credential/health failures | PENDING — local `v2 → v1 → v2` package transaction passed; the complete home-dev and PROD drills remain PENDING |
 | Secret Manager audit | frozen 34-name set, exhaustive pages, zero legacy reads for 72 hours, both positive controls PASS | PENDING — all consumers have not completed cutover; the 72-hour legacy-read `T0` has not begun |
 | Firebase usage cutover | both origin smoke matrices PASS; global replacement credential UID count `> 0`; old credential UID count `0` over a closed interval of at least 24 hours evaluated after the 30-minute visibility delay; zero attributable failures | PENDING — live pre-cutover baseline: old credential UID `2` requests, both HTTP `403` to the Generative Language API; replacement credential UID `0`; Firebase `T0` has not begun |
-| Runtime SA rotation soak | closed pre-disable interval of at least 24 hours evaluated after the three-hour visibility delay: previous key `0`, replacement key `> 0`, credential failures `0`; then seven days with the old key continuously `DISABLED`, replacement use `> 0`, and failures `0` | PENDING — live pre-cutover baseline: previous key `1138`, replacement key `0`; runtime-SA `T0` has not begun; disabled-key attempts are not observable through this metric |
+| Runtime SA rotation soak | closed pre-disable interval of at least 24 hours evaluated after the three-hour visibility delay: previous key `0`, replacement key `> 0`, credential failures `0`; then seven days with the old key continuously `DISABLED`, replacement use `> 0`, and failures `0` | PENDING — live pre-cutover baseline: previous key `1138`; packaged replacement key `4bf7371e272b2c67b6d0bd59cd52cae7daf18efc` is not yet active; runtime-SA `T0` has not begun; disabled-key attempts are not observable through this metric |
 | Break-glass control review | two approvals; one resource; 60-minute conditional binding; removal/zero-binding evidence defined | PENDING — design review only; do not create a grant for testing |
 | DR drill | isolated fetch/render/reconstruction PASS within four hours; no production pointer changed | PENDING |
 | GitHub alert | closed as revoked | PENDING |
@@ -589,6 +596,9 @@ Evidence must contain command, timestamp, exit status, relevant counts/IDs, and 
 | 2026-08-14 00:55 Europe/Warsaw | Live package refresh | Secret Manager metadata shows exactly DEV versions `v1` and `v2` enabled and `0` enabled PROD package versions. No package payload was accessed and no GCP state was changed. |
 | 2026-08-14 00:35 Europe/Warsaw | Exact clean-commit local code verification | On clean commit `eac2dc198a37ea15228d2cdf08cc4001b2bae238`, `pnpm run ci:tracked` exited `0`: Type/Lint PASS (`156.153s`), Static Validation PASS (`21.553s`), `8010/8010` tests with coverage PASS (`574.534s`), Coverage Validation PASS (`1.057s`), Web Build & Format PASS (`19.398s`), and Post-Build Checks PASS (`0.091s`). The exact pushed commit then received `15` successful applicable PR checks, `8` path-filtered skips, and no failures or pending checks. |
 | 2026-08-14 09:38 Europe/Warsaw | Scope-cleaned migration verification | Removed provider-health/purchase/login work, general logging/forensics hardening, and App Check from this goal while retaining direct no-GCP code-worker isolation assertions. The exact baseline diff is 110 paths (`27 A`, `83 M`) with sorted-path SHA-256 `ae1503ecfe3ae046fb102881ad11fbc8bf4f28ad7f4e73d922d29caa127ea7c3`. Focused migration tests passed `763/763`; package and credential guards, test typecheck, Terraform format, and both Terraform validates passed; full `ci:tracked` passed Type/Lint, Static Validation, `7986/7986` tests, coverage validation, web build/format, and post-build checks. No Cloudflare token, provider credential, purchase, GCP mutation, merge, or deployment was performed. |
+| 2026-08-18 23:44 Europe/Warsaw | PROD package publication | A new runtime key for `ixos-hetzner-runtime-dev` with metadata ID `4bf7371e272b2c67b6d0bd59cd52cae7daf18efc` and the Terraform-owned replacement Firebase browser key were supplied through private mode-`0600` files. A Cloudflare token restricted to `DNS: Edit` and `Zone: Read` for exactly account `e4bc566c37e21368bffb131d2ac69358` and zone `intexuraos.cloud` was verified active; its non-secret token ID is `ade18caae171c71c3108fadf3de05705`. Dedicated publisher impersonation built and published PROD `v1`: `8566` bytes, `28` env + `3` file members, exact numeric fetch, server/readback CRC32C validation, HMAC `MATCH`, and offline render all PASS. No value or reversible digest was emitted. The private rollout workspace remains protected pending production verification and later byte-identical rollback companion publication. |
+| 2026-08-18 23:45 Europe/Warsaw | PROD rollout prerequisites | Root-owned mode-`0600` Cloudflare attestation `prod-v1.json` was installed on Hetzner. Secret Manager metadata shows exactly PROD `v1` enabled, created `2026-08-18T21:42:29Z`. Manifest, Terraform, and protected GitHub variable pins are `1/1/1` and the verifier reports `MATCH`. The runtime credential canary topic exists, package IAM is separated by environment, and the provisioner/runtime service accounts have no project-level Secret Manager role. Current public deployment remains the healthy legacy release `1007254930138f59eea0c0b1717732adcc5f0b97` from run `32175062673`, with `secretPackageVersion=null`; this proves pre-cutover state, not package activation. |
+| 2026-08-18 23:48 Europe/Warsaw | Latest-development merge verification | `origin/development` at `1007254930138f59eea0c0b1717732adcc5f0b97` was merged locally while retaining the package boundary and rejecting a conflicting direct single-secret grant to the home-dev orchestrator. Relative to that baseline the exact migration diff is still 110 paths (`27 A`, `83 M`) with sorted-path SHA-256 `ae1503ecfe3ae046fb102881ad11fbc8bf4f28ad7f4e73d922d29caa127ea7c3`; the inventory completeness check has zero missing paths. Full post-merge `ci:tracked` run `#14` exited `0`: Type/Lint, Static Validation, `7968/7968` tests with coverage, Coverage Validation, Web Build & Format, and Post-Build Checks all PASS. This run predates only the current evidence update; the exact-tree rerun and PR checks remain PENDING. |
 | 2026-08-13 18:48 Europe/Warsaw | home-dev observability projection | Read-only in-memory comparison proved `/etc/intexuraos/grafana-cloud.env` uses the same non-empty Loki token as exact DEV package `v1`; no value or digest was emitted. Render root mode is `0700`; installed projection is `0600 root:root`; `alloy.service` declares the projection as a required `EnvironmentFile`, is `running`, and has main exit status `0`. |
 
 ## Production acceptance criteria

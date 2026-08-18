@@ -99,10 +99,19 @@ export async function enhanceResearch(
     return err({ type: 'INVALID_STATUS', status: source.status });
   }
 
-  const hasNewModels = (params.additionalModels?.length ?? 0) > 0;
+  const completedModels = new Set(
+    source.llmResults
+      .filter((result) => result.status === 'completed')
+      .map((result) => result.model)
+  );
+  const hasNewModels =
+    params.additionalModels?.some((model) => !completedModels.has(model)) ?? false;
   const hasNewContexts = (params.additionalContexts?.length ?? 0) > 0;
-  const hasRemovedContexts = (params.removeContextIds?.length ?? 0) > 0;
-  const hasSynthesisChange = params.synthesisModel !== undefined;
+  const existingContextIds = new Set((source.inputContexts ?? []).map((context) => context.id));
+  const hasRemovedContexts =
+    params.removeContextIds?.some((contextId) => existingContextIds.has(contextId)) ?? false;
+  const hasSynthesisChange =
+    params.synthesisModel !== undefined && params.synthesisModel !== source.synthesisModel;
 
   if (!hasNewModels && !hasNewContexts && !hasRemovedContexts && !hasSynthesisChange) {
     logger.info(

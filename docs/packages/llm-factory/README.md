@@ -6,7 +6,7 @@ Unified factory for constructing application LLM clients.
 
 - OpenRouter model IDs use the `or:` prefix and are routed through `@intexuraos/infra-openrouter`.
 - Direct Anthropic, OpenAI, and Perplexity model IDs use their provider adapters.
-- Direct Google model IDs such as `gemini-2.5-flash` are rejected. Google-hosted models must use an OpenRouter ID such as `or:google/gemini-3-flash-preview`.
+- Direct Google model IDs such as `gemini-2.5-flash` are rejected. Google-hosted models must use an OpenRouter ID such as `or:google/gemini-3.6-flash`.
 - Tool-calling clients are available only for the curated OpenRouter tool-calling models.
 
 ## `createLlmClient`
@@ -16,7 +16,7 @@ import { createLlmClient } from '@intexuraos/llm-factory';
 
 const client = createLlmClient({
   apiKey: openRouterApiKey,
-  model: 'or:google/gemini-3-flash-preview',
+  model: 'or:google/gemini-3.6-flash',
   userId,
   logger,
   usageSink,
@@ -36,7 +36,7 @@ import { createToolCallingClient } from '@intexuraos/llm-factory';
 
 const client = createToolCallingClient({
   apiKey: openRouterApiKey,
-  model: 'or:google/gemini-3-flash-preview',
+  model: 'or:google/gemini-3.6-flash',
   userId,
   logger,
   usageSink,

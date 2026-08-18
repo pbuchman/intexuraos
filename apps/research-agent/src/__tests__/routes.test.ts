@@ -9,8 +9,11 @@ import Fastify from 'fastify';
 import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { err, ok, type Result } from '@intexuraos/common-core';
+import { OPENROUTER_ALLOWED_MODELS } from '@intexuraos/infra-openrouter';
 import {
-  DEFAULT_PLATFORM_LLM_MODEL, LlmModels,
+  createOpenRouterModelId,
+  DEFAULT_PLATFORM_LLM_MODEL,
+  LlmModels,
   LlmProviders,
   type ResearchModel,
   type LlmProvider,
@@ -47,6 +50,10 @@ import type {
   ValidationResult,
 } from '../infra/llm/InputValidationAdapter.js';
 
+const OPENROUTER_GPT54 = createOpenRouterModelId('openai/gpt-5.4');
+const OPENROUTER_CLAUDE_OPUS = createOpenRouterModelId('anthropic/claude-opus-4.6');
+const OPENROUTER_DEEPSEEK = createOpenRouterModelId('deepseek/deepseek-v4-flash');
+const HISTORICAL_DIRECT_GPT54 = LlmModels.GPT54;
 
 const INTEXURAOS_AUTH0_DOMAIN = 'test-tenant.eu.auth0.com';
 const INTEXURAOS_AUTH_AUDIENCE = 'urn:intexuraos:api';
@@ -245,7 +252,7 @@ describe('Research Routes - Unauthenticated', () => {
       method: 'POST',
       url: '/test-id/enhance',
       payload: {
-        additionalModels: [LlmModels.O4MiniDeepResearch],
+        additionalModels: [OPENROUTER_DEEPSEEK],
       },
     });
 
@@ -397,6 +404,42 @@ describe('Research Routes - Authenticated', () => {
       expect(fakeResearchEventPublisher.getPublishedEvents()[0]?.triggeredBy).toBe('create');
     });
 
+    it('rejects direct-provider models before creating research', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [HISTORICAL_DIRECT_GPT54],
+          synthesisModel: HISTORICAL_DIRECT_GPT54,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('rejects duplicate OpenRouter model IDs', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Test prompt',
+          selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, DEFAULT_PLATFORM_LLM_MODEL],
+          synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
     it('creates research with external reports', async () => {
       const token = await createToken(TEST_USER_ID);
 
@@ -407,7 +450,7 @@ describe('Research Routes - Authenticated', () => {
         payload: {
           prompt: 'Test prompt',
           selectedModels: [DEFAULT_PLATFORM_LLM_MODEL],
-          synthesisModel: LlmModels.ClaudeOpus46,
+          synthesisModel: OPENROUTER_GPT54,
           inputContexts: [{ content: 'Input context content', label: 'Custom Label' }],
         },
       });
@@ -461,9 +504,9 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 503 when API keys are missing for selected models', async () => {
+    it('returns 503 when the OpenRouter key is missing for selected models', async () => {
       const token = await createToken(TEST_USER_ID);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-openrouter-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -471,7 +514,7 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.ClaudeOpus46],
+          selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, OPENROUTER_CLAUDE_OPUS],
           synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
         },
       });
@@ -483,12 +526,12 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain('OpenRouter');
     });
 
-    it('returns 503 when API key is missing for synthesis model', async () => {
+    it('returns 503 when the OpenRouter key is missing for a synthesis request', async () => {
       const token = await createToken(TEST_USER_ID);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-openrouter-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -497,7 +540,7 @@ describe('Research Routes - Authenticated', () => {
         payload: {
           prompt: 'Test prompt',
           selectedModels: [DEFAULT_PLATFORM_LLM_MODEL],
-          synthesisModel: LlmModels.ClaudeOpus46,
+          synthesisModel: OPENROUTER_GPT54,
         },
       });
 
@@ -508,7 +551,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain('OpenRouter');
     });
 
     it('returns 500 when API key fetch fails', async () => {
@@ -543,7 +586,7 @@ describe('Research Routes - Authenticated', () => {
         payload: {
           prompt: 'Test prompt',
           selectedModels: [DEFAULT_PLATFORM_LLM_MODEL],
-          synthesisModel: LlmModels.ClaudeOpus46,
+          synthesisModel: OPENROUTER_GPT54,
           skipSynthesis: true,
         },
       });
@@ -620,8 +663,8 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.O4MiniDeepResearch],
-          synthesisModel: LlmModels.ClaudeOpus46,
+          selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, OPENROUTER_DEEPSEEK],
+          synthesisModel: OPENROUTER_GPT54,
           inputContexts: [{ content: 'Test context', label: 'Test Label' }],
         },
       });
@@ -633,11 +676,28 @@ describe('Research Routes - Authenticated', () => {
       if (saved !== undefined) {
         expect(saved.selectedModels).toEqual([
           DEFAULT_PLATFORM_LLM_MODEL,
-          LlmModels.O4MiniDeepResearch,
+          OPENROUTER_DEEPSEEK,
         ]);
-        expect(saved.synthesisModel).toBe(LlmModels.ClaudeOpus46);
+        expect(saved.synthesisModel).toBe(OPENROUTER_GPT54);
         expect(saved.inputContexts).toHaveLength(1);
       }
+    });
+
+    it('uses the platform synthesis default when the first draft model is research-only', async () => {
+      const token = await createToken(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/draft',
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          prompt: 'Draft with a research-only model first',
+          selectedModels: [OPENROUTER_CLAUDE_OPUS],
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(fakeRepo.getAll()[0]?.synthesisModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 
     it('creates draft without models when not provided (no defaults)', async () => {
@@ -714,7 +774,7 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Updated prompt',
-          selectedModels: [LlmModels.ClaudeOpus46],
+          selectedModels: [OPENROUTER_CLAUDE_OPUS],
           synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
         },
       });
@@ -723,10 +783,10 @@ describe('Research Routes - Authenticated', () => {
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.prompt).toBe('Updated prompt');
-      expect(body.data.selectedModels).toEqual([LlmModels.ClaudeOpus46]);
+      expect(body.data.selectedModels).toEqual([OPENROUTER_CLAUDE_OPUS]);
       expect(body.data.synthesisModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
       expect(body.data.llmResults).toHaveLength(1);
-      expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.Anthropic);
+      expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.OpenRouter);
       expect(body.data.llmResults[0]?.status).toBe('pending');
     });
 
@@ -735,9 +795,9 @@ describe('Research Routes - Authenticated', () => {
       const draft = createTestResearch({
         id: 'draft-456',
         status: 'draft',
-        selectedModels: [LlmModels.GPT54],
+        selectedModels: [OPENROUTER_GPT54],
         llmResults: [
-          { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_GPT54, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(draft);
@@ -748,19 +808,19 @@ describe('Research Routes - Authenticated', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt',
-          selectedModels: [LlmModels.O4MiniDeepResearch, LlmModels.ClaudeOpus46],
+          selectedModels: [OPENROUTER_DEEPSEEK, OPENROUTER_CLAUDE_OPUS],
         },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.data.selectedModels).toEqual([
-        LlmModels.O4MiniDeepResearch,
-        LlmModels.ClaudeOpus46,
+        OPENROUTER_DEEPSEEK,
+        OPENROUTER_CLAUDE_OPUS,
       ]);
       expect(body.data.llmResults).toHaveLength(2);
-      expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.OpenAI);
-      expect(body.data.llmResults[1]?.provider).toBe(LlmProviders.Anthropic);
+      expect(body.data.llmResults[0]?.provider).toBe(LlmProviders.OpenRouter);
+      expect(body.data.llmResults[1]?.provider).toBe(LlmProviders.OpenRouter);
       expect(body.data.llmResults.every((r) => r.status === 'pending')).toBe(true);
     });
 
@@ -1195,6 +1255,85 @@ describe('Research Routes - Authenticated', () => {
       expect(fakeResearchEventPublisher.getPublishedEvents()[0]?.triggeredBy).toBe('approve');
     });
 
+    it('blocks approval of a historical draft containing a direct model', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'draft',
+        selectedModels: [HISTORICAL_DIRECT_GPT54] as unknown as ResearchModel[],
+        synthesisModel: HISTORICAL_DIRECT_GPT54 as unknown as ResearchModel,
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('blocks approval of a draft containing duplicate executable models', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'draft',
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, DEFAULT_PLATFORM_LLM_MODEL],
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toBe('Research contains duplicate model IDs');
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('blocks approval of a draft containing more than six executable models', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const selectedModels = OPENROUTER_ALLOWED_MODELS.slice(0, 7).map((model) =>
+        createOpenRouterModelId(model.id)
+      );
+      const research = createTestResearch({ status: 'draft', selectedModels });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toBe('Research cannot contain more than 6 models');
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('blocks approval when the stored synthesis model is no longer executable', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        status: 'draft',
+        synthesisModel: HISTORICAL_DIRECT_GPT54,
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${research.id}/approve`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain(HISTORICAL_DIRECT_GPT54);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
     it('returns 401 without auth', async () => {
       const research = createTestResearch({ status: 'draft' });
       fakeRepo.addResearch(research);
@@ -1293,14 +1432,14 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 503 when API keys are missing for selected models', async () => {
+    it('returns 503 when the OpenRouter key is missing for selected models', async () => {
       const token = await createToken(TEST_USER_ID);
       const research = createTestResearch({
         status: 'draft',
-        selectedModels: [LlmModels.GPT54, LlmModels.ClaudeOpus46],
+        selectedModels: [OPENROUTER_GPT54, OPENROUTER_CLAUDE_OPUS],
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-google-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -1315,18 +1454,21 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain('OpenRouter');
     });
 
     it('returns 503 when API key is missing for synthesis model', async () => {
       const token = await createToken(TEST_USER_ID);
       const research = createTestResearch({
         status: 'draft',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.ClaudeOpus46,
+        selectedModels: [],
+        synthesisModel: OPENROUTER_GPT54,
+        inputContexts: [
+          { id: 'ctx-1', content: 'Source context', addedAt: '2026-01-01T00:00:00Z' },
+        ],
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-google-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -1341,7 +1483,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain(OPENROUTER_GPT54);
     });
 
     it('returns 500 when API key fetch fails', async () => {
@@ -1366,8 +1508,8 @@ describe('Research Routes - Authenticated', () => {
       const token = await createToken(TEST_USER_ID);
       const research = createTestResearch({
         status: 'draft',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.ClaudeOpus46,
+        selectedModels: [OPENROUTER_GPT54],
+        synthesisModel: OPENROUTER_GPT54,
         skipSynthesis: true,
       });
       fakeRepo.addResearch(research);
@@ -1460,8 +1602,8 @@ describe('Research Routes - Authenticated', () => {
         status: 'completed',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Google result',
           },
@@ -1473,21 +1615,102 @@ describe('Research Routes - Authenticated', () => {
 
     it('creates enhanced research with additional LLMs', async () => {
       const token = await createToken(TEST_USER_ID);
-      const source = createCompletedResearch();
+      const source = createCompletedResearch({
+        llmResults: [
+          {
+            provider: LlmProviders.OpenAI,
+            model: HISTORICAL_DIRECT_GPT54,
+            status: 'completed',
+            result: 'Historical direct-provider result',
+          },
+        ],
+      });
       fakeRepo.addResearch(source);
 
       const response = await app.inject({
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
       expect(body.data.sourceResearchId).toBe(source.id);
-      expect(body.data.selectedModels).toContain(LlmModels.ClaudeOpus46);
+      expect(body.data.selectedModels).toContain(OPENROUTER_CLAUDE_OPUS);
+      expect(body.data.llmResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            provider: LlmProviders.OpenAI,
+            model: HISTORICAL_DIRECT_GPT54,
+            status: 'completed',
+            result: 'Historical direct-provider result',
+          }),
+          expect.objectContaining({
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_CLAUDE_OPUS,
+            status: 'pending',
+          }),
+        ])
+      );
+
+      const savedResult = await fakeRepo.findById(body.data.id);
+      expect(savedResult.ok).toBe(true);
+      if (savedResult.ok) {
+        expect(savedResult.value?.llmResults[0]).toMatchObject({
+          provider: LlmProviders.OpenAI,
+          model: HISTORICAL_DIRECT_GPT54,
+          copiedFromSource: true,
+        });
+      }
+    });
+
+    it('rejects enhancement when copied and new results exceed six unique models', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch({
+        llmResults: Array.from({ length: 6 }, (_, index) => ({
+          provider: LlmProviders.OpenRouter,
+          model: `historical-model-${String(index)}`,
+          status: 'completed' as const,
+          result: `Historical result ${String(index)}`,
+        })),
+      });
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INVALID_REQUEST');
+    });
+
+    it('rejects enhancement when the inherited synthesis model is no longer executable', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch({
+        synthesisModel: HISTORICAL_DIRECT_GPT54,
+      });
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: {
+          additionalContexts: [{ content: 'A new source for the enhanced research' }],
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { error: { message: string } };
+      expect(body.error.message).toContain(HISTORICAL_DIRECT_GPT54);
+      expect(fakeResearchEventPublisher.getPublishedEvents()).toHaveLength(0);
     });
 
     it('returns 404 when source research not found', async () => {
@@ -1497,7 +1720,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: '/nonexistent/enhance',
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(404);
@@ -1515,7 +1738,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(403);
@@ -1533,7 +1756,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(409);
@@ -1560,6 +1783,23 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.code).toBe('CONFLICT');
     });
 
+    it('returns 409 when additional models are already present in completed results', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const source = createCompletedResearch();
+      fakeRepo.addResearch(source);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${source.id}/enhance`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { additionalModels: [OPENROUTER_GPT54] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body) as { success: boolean; error: { code: string } };
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
     it('creates enhanced research with new synthesis LLM', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch();
@@ -1569,13 +1809,13 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { synthesisModel: LlmModels.ClaudeOpus46 },
+        payload: { synthesisModel: OPENROUTER_GPT54 },
       });
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
-      expect(body.data.synthesisModel).toBe(LlmModels.ClaudeOpus46);
+      expect(body.data.synthesisModel).toBe(OPENROUTER_GPT54);
     });
 
     it('creates enhanced research with additional contexts', async () => {
@@ -1625,7 +1865,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(500);
@@ -1634,17 +1874,17 @@ describe('Research Routes - Authenticated', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 503 when API keys are missing for additional models', async () => {
+    it('returns 503 when the OpenRouter key is missing for additional models', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch();
       fakeRepo.addResearch(source);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-google-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(503);
@@ -1654,20 +1894,20 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain('OpenRouter');
     });
 
     it('returns 503 when API key is missing for synthesis model', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch();
       fakeRepo.addResearch(source);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-google-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { synthesisModel: LlmModels.ClaudeOpus46 },
+        payload: { synthesisModel: OPENROUTER_GPT54 },
       });
 
       expect(response.statusCode).toBe(503);
@@ -1677,16 +1917,16 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain(OPENROUTER_GPT54);
     });
 
     it('returns 503 when API key is missing for inherited synthesis model', async () => {
       const token = await createToken(TEST_USER_ID);
       const source = createCompletedResearch({
-        synthesisModel: LlmModels.ClaudeOpus46,
+        synthesisModel: OPENROUTER_GPT54,
       });
       fakeRepo.addResearch(source);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-google-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -1702,7 +1942,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain(OPENROUTER_GPT54);
     });
 
     it('returns 500 when API key fetch fails', async () => {
@@ -1715,7 +1955,7 @@ describe('Research Routes - Authenticated', () => {
         method: 'POST',
         url: `/${source.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.ClaudeOpus46] },
+        payload: { additionalModels: [OPENROUTER_CLAUDE_OPUS] },
       });
 
       expect(response.statusCode).toBe(500);
@@ -1835,14 +2075,14 @@ describe('Research Routes - Authenticated', () => {
             result: 'OpenRouter result',
           },
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.O4MiniDeepResearch,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_DEEPSEEK,
             status: 'failed',
             error: 'Rate limit',
           },
         ],
         partialFailure: {
-          failedModels: [LlmModels.O4MiniDeepResearch],
+          failedModels: [OPENROUTER_DEEPSEEK],
           detectedAt: '2024-01-01T10:00:00Z',
           retryCount: 0,
         },
@@ -1923,7 +2163,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('retry');
-      expect(body.data.message).toContain(LlmModels.O4MiniDeepResearch);
+      expect(body.data.message).toContain(OPENROUTER_DEEPSEEK);
 
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('retrying');
@@ -2068,13 +2308,13 @@ describe('Research Routes - Authenticated', () => {
         userId: TEST_USER_ID,
         title: 'Test Research',
         prompt: 'Test prompt',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.GPT54,
+        selectedModels: [OPENROUTER_GPT54],
+        synthesisModel: OPENROUTER_GPT54,
         status: 'awaiting_confirmation',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Result',
           },
@@ -2121,10 +2361,10 @@ describe('Research Routes - Authenticated', () => {
     it('returns 503 when the synthesis provider key is missing for proceed', async () => {
       const token = await createToken(TEST_USER_ID);
       const research = createAwaitingConfirmationResearch({
-        synthesisModel: LlmModels.ClaudeOpus46,
+        synthesisModel: OPENROUTER_GPT54,
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'openai-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -2140,7 +2380,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain(OPENROUTER_GPT54);
     });
 
     it('returns 500 when getApiKeys fails for proceed', async () => {
@@ -2271,7 +2511,7 @@ describe('Research Routes - Authenticated', () => {
       const token = await createToken(TEST_USER_ID);
       const research = createAwaitingConfirmationResearch({
         partialFailure: {
-          failedModels: [LlmModels.O4MiniDeepResearch],
+          failedModels: [OPENROUTER_DEEPSEEK],
           detectedAt: '2024-01-01T10:00:00Z',
           retryCount: 2,
         },
@@ -2312,8 +2552,8 @@ describe('Research Routes - Authenticated', () => {
             result: 'OpenRouter result',
           },
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.O4MiniDeepResearch,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_DEEPSEEK,
             status: 'failed',
             error: 'Rate limit',
           },
@@ -2341,10 +2581,35 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('retried_llms');
-      expect(body.data.retriedModels).toContain(LlmModels.O4MiniDeepResearch);
+      expect(body.data.retriedModels).toContain(OPENROUTER_DEEPSEEK);
 
       const updatedResearch = fakeRepo.getAll().find((r) => r.id === research.id);
       expect(updatedResearch?.status).toBe('retrying');
+    });
+
+    it('retries an active failed model without constructing a retired synthesizer', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createFailedResearch({
+        synthesisModel: HISTORICAL_DIRECT_GPT54,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'openrouter-key' });
+      const createSynthesizer = vi.spyOn(getServices(), 'createSynthesizer');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/${research.id}/retry`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; retriedModels?: string[] };
+      };
+      expect(body.data.action).toBe('retried_llms');
+      expect(body.data.retriedModels).toContain(OPENROUTER_DEEPSEEK);
+      expect(createSynthesizer).not.toHaveBeenCalled();
     });
 
     it('returns 409 when retrying failed research would require historical unsupported models', async () => {
@@ -2352,13 +2617,13 @@ describe('Research Routes - Authenticated', () => {
       const research = createFailedResearch({
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Google result',
           },
           {
-            provider: LlmProviders.OpenAI,
+            provider: LlmProviders.OpenRouter,
             model: 'glm-4.7',
             status: 'failed',
             error: 'Historical model retired',
@@ -2396,7 +2661,7 @@ describe('Research Routes - Authenticated', () => {
             result: 'Result 1',
           },
           {
-            provider: LlmProviders.OpenAI,
+            provider: LlmProviders.OpenRouter,
             model: 'o4-mini',
             status: 'completed',
             result: 'Result 2',
@@ -2431,13 +2696,13 @@ describe('Research Routes - Authenticated', () => {
         status: 'failed',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Result 1',
           },
           {
-            provider: LlmProviders.OpenAI,
+            provider: LlmProviders.OpenRouter,
             model: 'o4-mini',
             status: 'completed',
             result: 'Result 2',
@@ -2556,10 +2821,10 @@ describe('Research Routes - Authenticated', () => {
     it('returns 503 when the synthesis provider key is missing during retry', async () => {
       const token = await createToken(TEST_USER_ID);
       const research = createFailedResearch({
-        synthesisModel: LlmModels.ClaudeOpus46,
+        synthesisModel: OPENROUTER_GPT54,
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'openai-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -2574,7 +2839,7 @@ describe('Research Routes - Authenticated', () => {
       };
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('MISCONFIGURED');
-      expect(body.error.message).toContain(LlmModels.ClaudeOpus46);
+      expect(body.error.message).toContain(OPENROUTER_GPT54);
     });
 
     it('returns 500 when synthesis fails during retry', async () => {
@@ -2613,7 +2878,7 @@ describe('Research Routes - Authenticated', () => {
               result: 'Result 1',
             },
             {
-              provider: LlmProviders.OpenAI,
+              provider: LlmProviders.OpenRouter,
               model: 'o4-mini',
               status: 'completed',
               result: 'Result 2',
@@ -3927,7 +4192,7 @@ describe('Internal Routes', () => {
               type: 'llm.report',
               researchId: 'test-research-123',
               userId: TEST_USER_ID,
-              provider: LlmProviders.OpenAI,
+              provider: LlmProviders.OpenRouter,
               model: 'gemini-2.0-flash-exp',
               inputTokens: 100,
               outputTokens: 200,
@@ -3953,7 +4218,7 @@ describe('Internal Routes', () => {
               type: 'llm.report',
               researchId: 'test-research-123',
               userId: TEST_USER_ID,
-              provider: LlmProviders.OpenAI,
+              provider: LlmProviders.OpenRouter,
               model: 'gemini-2.0-flash-exp',
               inputTokens: 100,
               outputTokens: 200,
@@ -3968,6 +4233,35 @@ describe('Internal Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
+    });
+
+    it('acknowledges historical direct-provider analytics without reporting success', async () => {
+      const reportLlmSuccess = vi.spyOn(fakeUserServiceClient, 'reportLlmSuccess');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/report-analytics',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'llm.report',
+              researchId: 'test-research-123',
+              userId: TEST_USER_ID,
+              provider: LlmProviders.OpenAI,
+              model: HISTORICAL_DIRECT_GPT54,
+              inputTokens: 100,
+              outputTokens: 200,
+              durationMs: 1000,
+            }),
+            messageId: 'msg-historical-analytics',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(reportLlmSuccess).not.toHaveBeenCalled();
     });
 
     it('returns 200 even for invalid message format', async () => {
@@ -4042,14 +4336,14 @@ describe('Internal Routes', () => {
       return createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.O4MiniDeepResearch],
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
             provider: LlmProviders.OpenRouter,
             model: DEFAULT_PLATFORM_LLM_MODEL,
             status: 'pending',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
     }
@@ -4231,11 +4525,11 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.GPT54],
+        selectedModels: [OPENROUTER_GPT54],
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Already done',
           },
@@ -4249,7 +4543,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.GPT54 })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: OPENROUTER_GPT54 })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -4265,11 +4559,11 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.GPT54],
+        selectedModels: [OPENROUTER_GPT54],
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'failed',
             error: 'Previous error',
           },
@@ -4283,7 +4577,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.GPT54 })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: OPENROUTER_GPT54 })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -4326,17 +4620,17 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.ClaudeOpus46],
+        selectedModels: [OPENROUTER_CLAUDE_OPUS],
         llmResults: [
           {
-            provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus46,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_CLAUDE_OPUS,
             status: 'pending',
           },
         ],
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'openai-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -4344,7 +4638,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.ClaudeOpus46 })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: OPENROUTER_CLAUDE_OPUS })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -4358,7 +4652,7 @@ describe('Internal Routes', () => {
 
       const failures = fakeNotificationSender.getSentFailures();
       expect(failures.length).toBe(1);
-      expect(failures[0]?.model).toBe(LlmModels.ClaudeOpus46);
+      expect(failures[0]?.model).toBe(OPENROUTER_CLAUDE_OPUS);
     });
 
     it('processes LLM call and updates result on success', async () => {
@@ -4512,17 +4806,17 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.O4MiniDeepResearch],
+        selectedModels: [OPENROUTER_DEEPSEEK],
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.O4MiniDeepResearch,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_DEEPSEEK,
             status: 'pending',
           },
         ],
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -4531,7 +4825,7 @@ describe('Internal Routes', () => {
         payload: {
           message: {
             data: encodePubSubMessage(
-              createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })
+              createLlmCallEvent({ model: OPENROUTER_DEEPSEEK })
             ),
             messageId: 'msg-123',
           },
@@ -4549,19 +4843,19 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.ClaudeOpus46, LlmModels.O4MiniDeepResearch],
+        selectedModels: [OPENROUTER_CLAUDE_OPUS, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
-            provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus46,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_CLAUDE_OPUS,
             status: 'completed',
             result: 'Done',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {});
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -4569,7 +4863,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: OPENROUTER_DEEPSEEK })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -4580,22 +4874,22 @@ describe('Internal Routes', () => {
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
-      expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
+      expect(updatedResearch?.partialFailure?.failedModels).toContain(OPENROUTER_DEEPSEEK);
     });
 
     it('handles partial failure when LLM succeeds but another already failed', async () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.ClaudeOpus46, LlmModels.O4MiniDeepResearch],
+        selectedModels: [OPENROUTER_CLAUDE_OPUS, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
-            provider: LlmProviders.Anthropic,
-            model: LlmModels.ClaudeOpus46,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_CLAUDE_OPUS,
             status: 'failed',
             error: 'Previous failure',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -4607,7 +4901,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: OPENROUTER_DEEPSEEK })),
             messageId: 'msg-123',
           },
           subscription: 'test-sub',
@@ -4618,18 +4912,18 @@ describe('Internal Routes', () => {
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
-      expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.ClaudeOpus46);
+      expect(updatedResearch?.partialFailure?.failedModels).toContain(OPENROUTER_CLAUDE_OPUS);
       expect(
-        updatedResearch?.llmResults.find((r) => r.provider === LlmProviders.OpenAI)?.status
+        updatedResearch?.llmResults.find((r) => r.model === OPENROUTER_DEEPSEEK)?.status
       ).toBe('completed');
     });
 
-    it('fails synthesis when synthesis API key missing after LLM completion', async () => {
+    it('blocks a historical synthesis model after LLM completion', async () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
         selectedModels: [DEFAULT_PLATFORM_LLM_MODEL],
-        synthesisModel: LlmModels.ClaudeOpus46,
+        synthesisModel: OPENROUTER_CLAUDE_OPUS,
         llmResults: [
           {
             provider: LlmProviders.OpenRouter,
@@ -4658,7 +4952,7 @@ describe('Internal Routes', () => {
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('failed');
-      expect(updatedResearch?.synthesisError).toContain('API key required');
+      expect(updatedResearch?.synthesisError).toContain('historical synthesis model');
     });
 
     it('handles all_failed completion action when LLM call fails', async () => {
@@ -4888,7 +5182,7 @@ describe('Internal Routes', () => {
               type: 'llm.report',
               researchId: 'test-research-123',
               userId: TEST_USER_ID,
-              model: LlmModels.GPT54,
+              model: OPENROUTER_GPT54,
               inputTokens: 100,
               outputTokens: 200,
               durationMs: 1000,
@@ -4939,13 +5233,205 @@ describe('Internal Routes', () => {
       setServices(services);
     });
 
+    it('blocks stale pending historical models without publishing new work', async () => {
+      const historicalModel = HISTORICAL_DIRECT_GPT54;
+      const research = createTestResearch({
+        status: 'pending',
+        selectedModels: [historicalModel as ResearchModel],
+        synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
+        llmResults: [
+          {
+            provider: LlmProviders.OpenAI,
+            model: historicalModel,
+            status: 'pending',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-historical',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeLlmCallPublisher.getPublishedEvents()).toHaveLength(0);
+      const stored = fakeRepo.getAll()[0];
+      expect(stored?.status).toBe('failed');
+      expect(stored?.selectedModels).toEqual([historicalModel]);
+      expect(stored?.llmResults[0]?.provider).toBe(LlmProviders.OpenAI);
+      expect(stored?.llmResults[0]?.model).toBe(historicalModel);
+    });
+
+    it('blocks a stored synthesis model that is no longer executable', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        synthesisModel: HISTORICAL_DIRECT_GPT54,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'openrouter-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-unsupported-synthesis',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = fakeRepo.getAll()[0];
+      expect(stored?.status).toBe('failed');
+      expect(stored?.synthesisError).toContain(HISTORICAL_DIRECT_GPT54);
+      expect(fakeLlmCallPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('reports the research-specific key error for skip-synthesis processing', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        skipSynthesis: true,
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-skip-synthesis-no-key',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = fakeRepo.getAll()[0];
+      expect(stored?.status).toBe('failed');
+      expect(stored?.synthesisError).toBe('OpenRouter API key required for research');
+      expect(fakeLlmCallPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
+    it('dispatches skip-synthesis research without constructing a synthesizer', async () => {
+      const research = createTestResearch({
+        status: 'pending',
+        selectedModels: [OPENROUTER_CLAUDE_OPUS],
+        synthesisModel: OPENROUTER_CLAUDE_OPUS,
+        skipSynthesis: true,
+        llmResults: [
+          {
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_CLAUDE_OPUS,
+            status: 'pending',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'openrouter-key' });
+      const createSynthesizer = vi.spyOn(getServices(), 'createSynthesizer');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-skip-synthesis',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeLlmCallPublisher.getPublishedEvents()).toEqual([
+        expect.objectContaining({ model: OPENROUTER_CLAUDE_OPUS }),
+      ]);
+      expect(fakeRepo.getAll()[0]?.status).toBe('processing');
+      expect(createSynthesizer).not.toHaveBeenCalled();
+    });
+
+    it('completes skip-synthesis research when all model results already succeeded', async () => {
+      const research = createTestResearch({
+        status: 'processing',
+        skipSynthesis: true,
+        llmResults: [
+          {
+            provider: LlmProviders.OpenRouter,
+            model: DEFAULT_PLATFORM_LLM_MODEL,
+            status: 'completed',
+            result: 'Completed result',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'openrouter-key' });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/llm/pubsub/process-research',
+        headers: { from: 'noreply@google.com' },
+        payload: {
+          message: {
+            data: encodePubSubMessage({
+              type: 'research.process',
+              researchId: research.id,
+              userId: TEST_USER_ID,
+              triggeredBy: 'create',
+            }),
+            messageId: 'msg-skip-synthesis-completed',
+          },
+          subscription: 'test-sub',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeRepo.getAll()[0]?.status).toBe('completed');
+      expect(fakeLlmCallPublisher.getPublishedEvents()).toHaveLength(0);
+    });
+
     it('returns 200 with empty response when API key fetch fails (fallback to empty keys)', async () => {
       const research = createTestResearch({
         status: 'pending',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.GPT54,
+        selectedModels: [OPENROUTER_GPT54],
+        synthesisModel: OPENROUTER_GPT54,
         llmResults: [
-          { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_GPT54, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -4983,17 +5469,14 @@ describe('Internal Routes', () => {
     it('returns 200 and marks research as failed when synthesis API key is missing', async () => {
       const research = createTestResearch({
         status: 'pending',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.ClaudeOpus46,
+        selectedModels: [OPENROUTER_GPT54],
+        synthesisModel: OPENROUTER_GPT54,
         llmResults: [
-          { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_GPT54, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
-      // User has google key but not anthropic key (needed for ClaudeOpus45 synthesis)
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
-        openai: 'google-key',
-      });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -5026,10 +5509,10 @@ describe('Internal Routes', () => {
     it('processes research without title generation or context inference when OpenRouter is unavailable', async () => {
       const research = createTestResearch({
         status: 'pending',
-        selectedModels: [LlmModels.ClaudeOpus46],
-        synthesisModel: LlmModels.ClaudeOpus46,
+        selectedModels: [OPENROUTER_CLAUDE_OPUS],
+        synthesisModel: OPENROUTER_GPT54,
         llmResults: [
-          { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus46, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_CLAUDE_OPUS, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -5069,10 +5552,10 @@ describe('Internal Routes', () => {
     it('returns 500 when unexpected exception occurs during processing', async () => {
       const research = createTestResearch({
         status: 'pending',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.GPT54,
+        selectedModels: [OPENROUTER_GPT54],
+        synthesisModel: OPENROUTER_GPT54,
         llmResults: [
-          { provider: LlmProviders.OpenAI, model: LlmModels.GPT54, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_GPT54, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -5129,7 +5612,7 @@ describe('Internal Routes', () => {
               type: 'llm.report',
               researchId: 'test-research-123',
               userId: TEST_USER_ID,
-              model: LlmModels.GPT54,
+              model: OPENROUTER_GPT54,
               inputTokens: 100,
               outputTokens: 200,
               durationMs: 1000,
@@ -5148,11 +5631,11 @@ describe('Internal Routes', () => {
     it('triggers synthesis when all LLMs are already completed', async () => {
       const research = createTestResearch({
         status: 'processing',
-        selectedModels: [LlmModels.GPT54],
+        selectedModels: [OPENROUTER_GPT54],
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Already completed result',
             completedAt: new Date().toISOString(),
@@ -5331,14 +5814,14 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.O4MiniDeepResearch],
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
             provider: LlmProviders.OpenRouter,
             model: DEFAULT_PLATFORM_LLM_MODEL,
             status: 'pending',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -5396,14 +5879,14 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.O4MiniDeepResearch],
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
             provider: LlmProviders.OpenRouter,
             model: DEFAULT_PLATFORM_LLM_MODEL,
             status: 'pending',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -5454,14 +5937,14 @@ describe('Internal Routes', () => {
       return createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.O4MiniDeepResearch],
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
             provider: LlmProviders.OpenRouter,
             model: DEFAULT_PLATFORM_LLM_MODEL,
             status: 'pending',
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
     }
@@ -5525,7 +6008,7 @@ describe('Internal Routes', () => {
         payload: {
           message: {
             data: encodePubSubMessage(
-              createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })
+              createLlmCallEvent({ model: OPENROUTER_DEEPSEEK })
             ),
             messageId: 'msg-2',
           },
@@ -5596,7 +6079,7 @@ describe('Internal Routes', () => {
         payload: {
           message: {
             data: encodePubSubMessage(
-              createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })
+              createLlmCallEvent({ model: OPENROUTER_DEEPSEEK })
             ),
             messageId: 'msg-2',
           },
@@ -5607,7 +6090,7 @@ describe('Internal Routes', () => {
 
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.status).toBe('awaiting_confirmation');
-      expect(updatedResearch?.partialFailure?.failedModels).toContain(LlmModels.O4MiniDeepResearch);
+      expect(updatedResearch?.partialFailure?.failedModels).toContain(OPENROUTER_DEEPSEEK);
     });
 
     it('handles all_completed state when all LLMs succeed', async () => {
@@ -5652,16 +6135,16 @@ describe('Internal Routes', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'processing',
-        selectedModels: [LlmModels.GPT54, LlmModels.O4MiniDeepResearch],
+        selectedModels: [OPENROUTER_GPT54, OPENROUTER_DEEPSEEK],
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'First LLM result',
             completedAt: new Date().toISOString(),
           },
-          { provider: LlmProviders.OpenAI, model: LlmModels.O4MiniDeepResearch, status: 'pending' },
+          { provider: LlmProviders.OpenRouter, model: OPENROUTER_DEEPSEEK, status: 'pending' },
         ],
       });
       fakeRepo.addResearch(research);
@@ -5675,7 +6158,7 @@ describe('Internal Routes', () => {
         headers: { from: 'noreply@google.com' },
         payload: {
           message: {
-            data: encodePubSubMessage(createLlmCallEvent({ model: LlmModels.O4MiniDeepResearch })),
+            data: encodePubSubMessage(createLlmCallEvent({ model: OPENROUTER_DEEPSEEK })),
             messageId: 'msg-complete',
           },
           subscription: 'test-sub',
@@ -5687,7 +6170,7 @@ describe('Internal Routes', () => {
       const updatedResearch = fakeRepo.getAll()[0];
       expect(updatedResearch?.llmResults.every((r) => r.status === 'completed')).toBe(true);
       const secondResult = updatedResearch?.llmResults.find(
-        (r) => r.model === LlmModels.O4MiniDeepResearch
+        (r) => r.model === OPENROUTER_DEEPSEEK
       );
       expect(secondResult?.inputTokens).toBe(100);
       expect(secondResult?.outputTokens).toBe(200);
@@ -5897,7 +6380,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
 
     it('handles title generation failure (line 224)', async () => {
       const token = await createToken(TEST_USER_ID);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-key' });
+      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-key' });
 
       // Use a title generator that fails
       const services: ServiceContainer = {
@@ -6045,20 +6528,20 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         id: 'research-123',
         status: 'awaiting_confirmation',
         partialFailure: {
-          failedModels: [LlmModels.O4MiniDeepResearch],
+          failedModels: [OPENROUTER_DEEPSEEK],
           detectedAt: new Date().toISOString(),
           retryCount: 0,
         },
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Google Result',
           },
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.O4MiniDeepResearch,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_DEEPSEEK,
             status: 'failed',
             error: 'Failed',
           },
@@ -6086,20 +6569,20 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         id: 'research-123',
         status: 'awaiting_confirmation',
         partialFailure: {
-          failedModels: [LlmModels.O4MiniDeepResearch],
+          failedModels: [OPENROUTER_DEEPSEEK],
           detectedAt: new Date().toISOString(),
           retryCount: 0,
         },
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Google Result',
           },
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.O4MiniDeepResearch,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_DEEPSEEK,
             status: 'failed',
             error: 'Failed',
           },
@@ -6130,8 +6613,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         status: 'synthesizing',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Google Result',
           },
@@ -6160,8 +6643,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         status: 'completed',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Google Result',
           },
@@ -6248,8 +6731,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         status: 'completed',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Original result',
           },
@@ -6263,7 +6746,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         url: '/research-123/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          additionalModels: [LlmModels.O4MiniDeepResearch],
+          additionalModels: [OPENROUTER_DEEPSEEK],
         },
       });
 
@@ -6565,12 +7048,15 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const research = createTestResearch({
         id: 'draft-123',
         status: 'draft',
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: LlmModels.ClaudeSonnet46,
+        selectedModels: [],
+        synthesisModel: OPENROUTER_GPT54,
         skipSynthesis: false,
+        inputContexts: [
+          { id: 'ctx-1', content: 'Source context', addedAt: '2026-01-01T00:00:00Z' },
+        ],
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -6602,7 +7088,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
             label: 'Context Label',
           },
         ],
-        synthesisModel: LlmModels.GPT54,
+        synthesisModel: OPENROUTER_GPT54,
         skipSynthesis: true,
       });
       fakeRepo.addResearch(research);
@@ -6630,7 +7116,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         url: '/nonexistent-123/enhance',
         headers: { authorization: `Bearer ${token}` },
         payload: {
-          additionalModels: [LlmModels.O4MiniDeepResearch],
+          additionalModels: [OPENROUTER_DEEPSEEK],
         },
       });
 
@@ -6729,7 +7215,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       expect(body.data.userEmail).toBeUndefined();
     });
 
-    it('uses selectedModels[0] as synthesisModel when synthesisModel not provided (line 175)', async () => {
+    it('uses the platform synthesis default when synthesisModel is omitted', async () => {
       const token = await createToken(TEST_USER_ID);
       fakeUserServiceClient.setApiKeys(TEST_USER_ID, {
         openrouter: 'test-openrouter-key',
@@ -6742,15 +7228,14 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         headers: { authorization: `Bearer ${token}` },
         payload: {
           prompt: 'Test prompt for synthesisModel fallback',
-          selectedModels: [LlmModels.O4MiniDeepResearch, DEFAULT_PLATFORM_LLM_MODEL],
-          // synthesisModel not provided - should use selectedModels[0]
+          selectedModels: [OPENROUTER_CLAUDE_OPUS, DEFAULT_PLATFORM_LLM_MODEL],
         },
       });
 
       expect(response.statusCode).toBe(201);
       const body = JSON.parse(response.body) as { success: boolean; data: Research };
       expect(body.success).toBe(true);
-      expect(body.data.synthesisModel).toBe(LlmModels.O4MiniDeepResearch);
+      expect(body.data.synthesisModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
   });
 
@@ -6760,10 +7245,12 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const research = createTestResearch({
         id: 'research-123',
         status: 'completed',
+        synthesisModel: 'glm-4.7' as ResearchModel,
+        synthesisError: 'Historical error retained for display',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed',
             result: 'Completed result',
           },
@@ -6771,7 +7258,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         completedAt: new Date().toISOString(),
       });
       fakeRepo.addResearch(research);
-      fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openai: 'test-key' });
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
 
       const response = await app.inject({
         method: 'POST',
@@ -6783,6 +7270,39 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       const body = JSON.parse(response.body) as {
         success: boolean;
         data: { action: string; message: string }
+      };
+      expect(body.success).toBe(true);
+      expect(body.data.action).toBe('already_completed');
+      expect(body.data.message).toBe('Research is already completed');
+    });
+
+    it('completes a failed research with no retryable work without fetching LLM access', async () => {
+      const token = await createToken(TEST_USER_ID);
+      const research = createTestResearch({
+        id: 'research-nothing-to-retry',
+        status: 'failed',
+        llmResults: [
+          {
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
+            status: 'completed',
+            result: 'Completed result',
+          },
+        ],
+      });
+      fakeRepo.addResearch(research);
+      fakeUserServiceClient.setApiKeysUnavailable(TEST_USER_ID);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/research-nothing-to-retry/retry',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        success: boolean;
+        data: { action: string; message: string };
       };
       expect(body.success).toBe(true);
       expect(body.data.action).toBe('already_completed');
@@ -6809,8 +7329,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         synthesizedResult: 'Synthesized research result with detailed analysis.',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed' as const,
             result: 'LLM result content',
           },
@@ -6940,8 +7460,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         status: 'completed' as const,
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'completed' as const,
             result: 'LLM result',
           },
@@ -6970,7 +7490,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         notionExportInfo: {
           mainPageId: 'existing-page-id',
           mainPageUrl: 'https://notion.so/existing-page',
-          llmReportPageIds: [{ model: LlmModels.GPT54, pageId: 'report-123' }],
+          llmReportPageIds: [{ model: OPENROUTER_GPT54, pageId: 'report-123' }],
           exportedAt: '2024-01-01T00:00:00Z',
         },
       });
@@ -7221,7 +7741,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         method: 'POST',
         url: '/test-research-123/enhance',
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+        payload: { additionalModels: [OPENROUTER_DEEPSEEK] },
       });
 
       expect(response.statusCode).toBe(500);
@@ -7237,7 +7757,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         method: 'POST',
         url: '/nonexistent-id/enhance',
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+        payload: { additionalModels: [OPENROUTER_DEEPSEEK] },
       });
 
       expect(response.statusCode).toBe(404);
@@ -7273,7 +7793,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         method: 'POST',
         url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+        payload: { additionalModels: [OPENROUTER_DEEPSEEK] },
       });
 
       expect(response.statusCode).toBe(409);
@@ -7291,7 +7811,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         method: 'POST',
         url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+        payload: { additionalModels: [OPENROUTER_DEEPSEEK] },
       });
 
       expect(response.statusCode).toBe(403);
@@ -7311,7 +7831,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         method: 'POST',
         url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+        payload: { additionalModels: [OPENROUTER_DEEPSEEK] },
       });
 
       expect(response.statusCode).toBe(404);
@@ -7330,7 +7850,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         method: 'POST',
         url: `/${research.id}/enhance`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { additionalModels: [LlmModels.O4MiniDeepResearch] },
+        payload: { additionalModels: [OPENROUTER_DEEPSEEK] },
       });
 
       expect(response.statusCode).toBe(500);
@@ -7403,17 +7923,17 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
       // so it returns 'all_failed' on the success path switch.
       const research = createTestResearch({
         status: 'processing',
-        selectedModels: [LlmModels.GPT54],
+        selectedModels: [OPENROUTER_GPT54],
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'failed',
             error: 'Previous failure',
           },
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.O4MiniDeepResearch,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_DEEPSEEK,
             status: 'pending',
           },
         ],
@@ -7428,7 +7948,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         type: 'llm.call',
         researchId: research.id,
         userId: TEST_USER_ID,
-        model: LlmModels.O4MiniDeepResearch,
+        model: OPENROUTER_DEEPSEEK,
         prompt: 'Test prompt',
       };
 
@@ -7479,8 +7999,8 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         status: 'processing',
         llmResults: [
           {
-            provider: LlmProviders.OpenAI,
-            model: LlmModels.GPT54,
+            provider: LlmProviders.OpenRouter,
+            model: OPENROUTER_GPT54,
             status: 'pending',
           },
         ],
@@ -7495,7 +8015,7 @@ describe('Research Routes - Coverage Tests for Uncovered Branches', () => {
         type: 'llm.call',
         researchId: research.id,
         userId: TEST_USER_ID,
-        model: LlmModels.GPT54,
+        model: OPENROUTER_GPT54,
         prompt: 'Test prompt',
       };
 

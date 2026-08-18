@@ -81,7 +81,7 @@ describe('handleIncomingMessage', () => {
         expect(input.runtimeSettings).toBeDefined();
         if (input.runtimeSettings === undefined) throw new Error('runtime snapshot missing');
         expect(Object.isFrozen(input.runtimeSettings)).toBe(true);
-        runtimeDto.effectiveModel = IntexAgentModels.Gemini3FlashPreview;
+        runtimeDto.effectiveModel = IntexAgentModels.Gemini36Flash;
         expect(input.runtimeSettings.effectiveModel).toBe(IntexAgentModels.MiniMaxM3);
         return { outcome: 'no_action', reply: 'Okay.' };
       },
@@ -103,8 +103,8 @@ describe('handleIncomingMessage', () => {
       name: 'explicit Gemini',
       dto: {
         status: 'available',
-        effectiveModel: IntexAgentModels.Gemini3FlashPreview,
-        explicitModel: IntexAgentModels.Gemini3FlashPreview,
+        effectiveModel: IntexAgentModels.Gemini36Flash,
+        explicitModel: IntexAgentModels.Gemini36Flash,
         source: 'explicit',
         revision: 8,
         timeZone: 'Europe/Warsaw',

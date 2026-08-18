@@ -172,10 +172,22 @@ export interface OpenRouterResponse {
     message: {
       content: unknown;
       role: string;
+      annotations?: OpenRouterAnnotation[];
     };
     finish_reason: string;
     error?: unknown;
   }[];
   usage?: OpenRouterUsage;
-  annotations?: (string | { url?: string })[];
+  /** Legacy top-level annotation location retained for response compatibility. */
+  annotations?: OpenRouterAnnotation[];
 }
+
+export type OpenRouterAnnotation =
+  | string
+  | {
+      url?: string;
+      type?: string;
+      url_citation?: {
+        url?: string;
+      };
+    };

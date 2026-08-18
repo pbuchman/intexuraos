@@ -2,26 +2,28 @@
  * @vitest-environment jsdom
  */
 
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
-import { describe, expect, it, vi } from 'vitest';
+import { createOpenRouterModelId, LlmProviders } from '@intexuraos/llm-contract';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResearchDetailPage } from '../ResearchDetailPage.js';
 import type { Research } from '@/services/researchAgentApi.types';
 import type { ResearchDetailActions } from '@/hooks/useResearchDetailActions';
+
+const ACTIVE_MODEL = createOpenRouterModelId('openai/gpt-5.4');
 
 const research: Research = {
   id: 'research-1',
   userId: 'user-1',
   title: 'Cost visibility',
   prompt: 'Compare image costs',
-  selectedModels: [LlmModels.GPT54],
-  synthesisModel: LlmModels.GPT54,
+  selectedModels: [ACTIVE_MODEL],
+  synthesisModel: ACTIVE_MODEL,
   status: 'completed',
   llmResults: [
     {
-      provider: LlmProviders.OpenAI,
-      model: LlmModels.GPT54,
+      provider: LlmProviders.OpenRouter,
+      model: ACTIVE_MODEL,
       status: 'completed',
       result: 'Done',
     },
@@ -63,10 +65,12 @@ const actions: ResearchDetailActions = {
   onCloseEnhanceModal: vi.fn(),
   handleEnhance: vi.fn(),
   partialFailure: { loading: false, error: null, onConfirm: vi.fn() },
-  configuredProviders: [],
-  failedProviders: new Map(),
+  hasOpenRouterAccess: true,
   openRouterModels: [],
   openRouterLoading: false,
+  openRouterError: null,
+  modelCatalogState: 'ready',
+  onRetryModelCatalog: vi.fn(),
 };
 
 vi.mock('@/components', () => ({
@@ -78,13 +82,6 @@ vi.mock('@/components', () => ({
   ),
   Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => <div>{children}</div>,
   MarkdownContent: ({ content }: { content: string }): React.JSX.Element => <div>{content}</div>,
-  PROVIDER_MODELS: [
-    {
-      id: LlmProviders.OpenAI,
-      displayName: 'OpenAI',
-      models: [{ id: LlmModels.GPT54, name: 'GPT 5.4' }],
-    },
-  ],
 }));
 
 vi.mock('@/hooks', async () => {
@@ -110,6 +107,16 @@ vi.mock('@/components/research/ResearchActions.js', () => ({
 }));
 
 describe('ResearchDetailPage', () => {
+  beforeEach(() => {
+    actions.hasOpenRouterAccess = true;
+    actions.openRouterModels = [];
+    actions.openRouterLoading = false;
+    actions.openRouterError = null;
+    actions.modelCatalogState = 'ready';
+  });
+
+  afterEach(cleanup);
+
   it('renders nonzero total cost returned by the research API', () => {
     render(
       <MemoryRouter initialEntries={['/research/research-1']}>
@@ -121,5 +128,21 @@ describe('ResearchDetailPage', () => {
 
     expect(screen.getByText('Total Cost')).toBeInTheDocument();
     expect(screen.getByText('$0.1234')).toBeInTheDocument();
+  });
+
+  it('does not call an active stored model unavailable when OpenRouter access is unavailable', () => {
+    actions.hasOpenRouterAccess = false;
+    actions.modelCatalogState = 'access_unavailable';
+
+    render(
+      <MemoryRouter initialEntries={['/research/research-1']}>
+        <Routes>
+          <Route path="/research/:id" element={<ResearchDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/Synthesized by GPT-5.4/)).toBeInTheDocument();
+    expect(screen.queryByText(/Unavailable/)).not.toBeInTheDocument();
   });
 });

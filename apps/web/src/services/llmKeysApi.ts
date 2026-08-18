@@ -3,6 +3,7 @@ import { ApiError, apiRequest } from './apiClient.js';
 import {
   DEFAULT_INTEX_AGENT_MODEL,
   IntexAgentModels,
+  isDefaultEligibleModel,
   isIntexAgentModel,
 } from '@intexuraos/llm-contract';
 import type { IntexAgentModel } from '@intexuraos/llm-contract';
@@ -20,7 +21,7 @@ import type {
 const SELECTOR_OPTION_TUPLE = [
   { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
   { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-  { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+  { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
 ] as const;
 
 function malformedResponse(): ApiError {
@@ -106,6 +107,70 @@ function decodePatchResponse(value: unknown): IntexAgentModelPatchResponse {
   return decodeSelectorFields(value);
 }
 
+function decodeTestResult(value: unknown): LlmTestResult | null {
+  if (value === null) return null;
+  if (
+    !isPlainRecord(value) ||
+    !hasExactlyOwnKeys(value, ['status', 'message', 'testedAt']) ||
+    (value['status'] !== 'success' && value['status'] !== 'failure') ||
+    typeof value['message'] !== 'string' ||
+    typeof value['testedAt'] !== 'string'
+  ) {
+    throw malformedResponse();
+  }
+  return {
+    status: value['status'],
+    message: value['message'],
+    testedAt: value['testedAt'],
+  };
+}
+
+function decodeLlmKeysResponse(value: unknown): LlmKeysResponse {
+  if (
+    !isPlainRecord(value) ||
+    !hasExactlyOwnKeys(value, [
+      'defaultModel',
+      'fallbackModel',
+      'openrouter',
+      'accessSource',
+      'testResults',
+      'intexAgentModelSelector',
+    ])
+  ) {
+    throw malformedResponse();
+  }
+
+  const defaultModel = value['defaultModel'];
+  const fallbackModel = value['fallbackModel'];
+  const openrouter = value['openrouter'];
+  const accessSource = value['accessSource'];
+  const testResults = value['testResults'];
+  if (
+    (defaultModel !== null &&
+      (typeof defaultModel !== 'string' || !isDefaultEligibleModel(defaultModel))) ||
+    (fallbackModel !== null &&
+      (typeof fallbackModel !== 'string' || !isDefaultEligibleModel(fallbackModel))) ||
+    (openrouter !== null && typeof openrouter !== 'string') ||
+    (accessSource !== 'user' &&
+      accessSource !== 'platform' &&
+      accessSource !== 'unavailable') ||
+    (accessSource === 'user' ? openrouter === null : openrouter !== null) ||
+    !isPlainRecord(testResults) ||
+    !hasExactlyOwnKeys(testResults, ['openrouter'])
+  ) {
+    throw malformedResponse();
+  }
+
+  return {
+    defaultModel,
+    fallbackModel,
+    openrouter,
+    accessSource,
+    testResults: { openrouter: decodeTestResult(testResults['openrouter']) },
+    intexAgentModelSelector: decodeSelector(value['intexAgentModelSelector']),
+  };
+}
+
 /**
  * Get user's LLM API keys (masked values).
  */
@@ -115,13 +180,7 @@ export async function getLlmKeys(accessToken: string, userId: string): Promise<L
     `/users/${userId}/settings/llm-keys`,
     accessToken
   );
-  if (!isPlainRecord(response) || !Object.hasOwn(response, 'intexAgentModelSelector')) {
-    throw malformedResponse();
-  }
-  return {
-    ...(response as Omit<LlmKeysResponse, 'intexAgentModelSelector'>),
-    intexAgentModelSelector: decodeSelector(response['intexAgentModelSelector']),
-  };
+  return decodeLlmKeysResponse(response);
 }
 
 export async function updateIntexAgentModel(

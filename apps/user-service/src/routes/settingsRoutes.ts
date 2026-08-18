@@ -8,11 +8,9 @@ import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastif
 import { requireAuth, logIncomingRequest } from '@intexuraos/common-http';
 import {
   DEFAULT_INTEX_AGENT_MODEL,
-  getProviderForModel,
   INTEX_AGENT_MODEL_OPTIONS,
   isDefaultEligibleModel,
   isIntexAgentModel,
-  LlmProviders,
 } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { getUserSettings, isTranscriptionProvider, isValidTimezone, type GetUserSettingsErrorCode } from '../domain/settings/index.js';
@@ -442,25 +440,6 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       const { userSettingsRepository } = getServices();
 
-      // Verify the user has an API key configured for the defaultModel's provider
-      const provider = getProviderForModel(generalBody.defaultModel);
-      const settingsResult = await userSettingsRepository.getSettings(params.uid);
-
-      if (!settingsResult.ok) {
-        return await reply.fail('INTERNAL_ERROR', settingsResult.error.message);
-      }
-
-      const settings = settingsResult.value;
-      const llmApiKeys = settings?.llmApiKeys;
-      const hasKey =
-        provider === LlmProviders.OpenRouter || llmApiKeys?.[provider] !== undefined;
-      if (!hasKey) {
-        return await reply.fail(
-          'INVALID_REQUEST',
-          `Cannot set default model to ${generalBody.defaultModel}: no API key configured for provider '${provider}'`
-        );
-      }
-
       // Validate fallbackModel if provided and not null
       if (generalBody.fallbackModel !== undefined && generalBody.fallbackModel !== null) {
         if (!isDefaultEligibleModel(generalBody.fallbackModel)) {
@@ -468,16 +447,6 @@ export const settingsRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         if (generalBody.fallbackModel === generalBody.defaultModel) {
           return await reply.fail('INVALID_REQUEST', 'Fallback model must be different from the default model.');
-        }
-        const fallbackProvider = getProviderForModel(generalBody.fallbackModel);
-        const hasFallbackKey =
-          fallbackProvider === LlmProviders.OpenRouter ||
-          llmApiKeys?.[fallbackProvider] !== undefined;
-        if (!hasFallbackKey) {
-          return await reply.fail(
-            'INVALID_REQUEST',
-            `Cannot set fallback model to ${generalBody.fallbackModel}: no API key configured for provider '${fallbackProvider}'`
-          );
         }
       }
 

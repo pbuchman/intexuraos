@@ -7,7 +7,14 @@ import { handleAllCompleted } from '../../../routes/helpers/completionHandlers.j
 import type { AllCompletedHandlerParams } from '../../../routes/helpers/completionHandlers.js';
 import type { Research } from '../../../domain/research/models/Research.js';
 import { ok, err } from '@intexuraos/common-core';
-import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import {
+  createOpenRouterModelId,
+  DEFAULT_PLATFORM_LLM_MODEL,
+  IntexAgentModels,
+  LlmProviders,
+} from '@intexuraos/llm-contract';
+
+const OR_CLAUDE = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
 
 const mockLogger = {
   info: vi.fn(),
@@ -23,11 +30,11 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test question?',
     status: 'processing',
-    selectedModels: [LlmModels.ClaudeSonnet46, IntexAgentModels.Gemini3FlashPreview],
+    selectedModels: [OR_CLAUDE, IntexAgentModels.Gemini36Flash],
     llmResults: [
       {
-        provider: LlmProviders.Anthropic,
-        model: LlmModels.ClaudeSonnet46,
+        provider: LlmProviders.OpenRouter,
+        model: OR_CLAUDE,
         status: 'completed',
         result: 'Test result from Claude',
         inputTokens: 100,
@@ -36,7 +43,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
       },
       {
         provider: LlmProviders.OpenRouter,
-        model: IntexAgentModels.Gemini3FlashPreview,
+        model: IntexAgentModels.Gemini36Flash,
         status: 'completed',
         result: 'Test result from Gemini',
         inputTokens: 80,
@@ -44,7 +51,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
         costUsd: 0.008,
       },
     ],
-    synthesisModel: LlmModels.ClaudeSonnet46,
+    synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
     startedAt: '2024-01-01T00:00:00Z',
     ...overrides,
   };
@@ -72,8 +79,6 @@ describe('handleAllCompleted', () => {
       userId: 'user-123',
       researchRepo: mockResearchRepo as unknown as AllCompletedHandlerParams['researchRepo'],
       apiKeys: {
-        anthropic: 'test-key',
-        openai: 'test-key-2',
         openrouter: 'test-key-3',
       },
       services: {
@@ -197,11 +202,11 @@ describe('handleAllCompleted', () => {
 
     expect(mockResearchRepo.update).toHaveBeenCalledWith('research-123', {
       status: 'failed',
-      synthesisError: `API key required for synthesis with ${LlmModels.ClaudeSonnet46}`,
+      synthesisError: `API key required for synthesis with ${DEFAULT_PLATFORM_LLM_MODEL}`,
       completedAt: '2024-01-01T12:00:00.000Z',
     });
     expect(mockLogger.error).toHaveBeenCalledWith(
-      { researchId: 'research-123', model: LlmModels.ClaudeSonnet46 },
+      { researchId: 'research-123', model: DEFAULT_PLATFORM_LLM_MODEL },
       '[3.5.2] API key missing for synthesis model'
     );
   });
@@ -216,7 +221,7 @@ describe('handleAllCompleted', () => {
 
     expect(mockParams.userServiceClient.reportLlmSuccess).toHaveBeenCalledWith(
       'user-123',
-      'anthropic'
+      'openrouter'
     );
     expect(mockLogger.info).toHaveBeenCalledWith(
       { researchId: 'research-123' },

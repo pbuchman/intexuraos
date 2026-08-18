@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('25.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('26.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('18.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('19.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -119,9 +119,10 @@ describe('buildIntexAgentSystemPrompt', () => {
       'the user-visible outcome must be a targeted clarification, never a final creation confirmation'
     );
     expect(prompt).toContain('non-executing draft for deterministic validation');
-    expect(prompt).toContain('propose a 60-minute duration as an assumption');
-    expect(prompt).toContain('acceptance of that assumption is not permission to create the event');
-    expect(prompt).toContain('Only after all assumptions are accepted');
+    expect(prompt).toContain('derive the end from that duration');
+    expect(prompt).toContain('apply a visible 60-minute default');
+    expect(prompt).toContain('same final creation confirmation');
+    expect(prompt).not.toContain('acceptance of that assumption');
     expect(prompt).toContain(
       'For an update_calendar_event lookup, omit maxResults or set it to at least 2. Never use maxResults: 1.'
     );

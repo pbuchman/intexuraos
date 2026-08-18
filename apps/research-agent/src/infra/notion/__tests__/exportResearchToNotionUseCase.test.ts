@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
-import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { DEFAULT_PLATFORM_LLM_MODEL, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
 import type { RepositoryError } from '../../../domain/research/ports/repository.js';
 import { exportResearchToNotion } from '../exportResearchToNotionUseCase.js';
@@ -56,8 +56,8 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test research prompt',
     status: 'completed',
-    selectedModels: [LlmModels.GPT54],
-    synthesisModel: LlmModels.GPT54,
+    selectedModels: [DEFAULT_PLATFORM_LLM_MODEL],
+    synthesisModel: DEFAULT_PLATFORM_LLM_MODEL,
     llmResults: [
       {
         provider: LlmProviders.OpenAI,

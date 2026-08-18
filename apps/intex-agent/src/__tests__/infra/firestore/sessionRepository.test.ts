@@ -71,7 +71,7 @@ describe('FirestoreSessionRepository', () => {
         ...base,
         matrixCorpusProfile: {
           ...profile,
-          agentModel: 'or:google/gemini-3-flash-preview',
+          agentModel: 'or:google/gemini-3.6-flash',
         },
       },
       { ...base, matrixCorpusProfile: { ...profile, evaluatorModel: 'or:deepseek/deepseek-v4-flash' } },

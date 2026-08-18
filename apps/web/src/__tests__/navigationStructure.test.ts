@@ -41,6 +41,9 @@ describe('navigation structure', () => {
     expect(navItemsSource).toMatch(
       /export const intexAgentItems[\s\S]*to: '\/intex-agent\/sessions', label: 'Sessions'/
     );
+    expect(navItemsSource).toMatch(
+      /export const intexAgentItems[\s\S]*to: '\/intex-agent\/settings', label: 'Settings'/
+    );
     expect(appSource).toContain('to="/intex-agent/sessions"');
     expect(appSource).toContain('path="/whatsapp/sessions"');
     expect(appSource).toContain('to="/intex-agent/sessions" replace');

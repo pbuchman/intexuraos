@@ -204,7 +204,7 @@ function createContext(input?: {
     ),
   };
   const chatAdapter = {
-    modelId: 'or:google/gemini-3-flash-preview',
+    modelId: 'or:google/gemini-3.6-flash',
     createClientForUser: vi.fn().mockResolvedValue(okResult(llmClient as unknown as LlmGenerateClient)),
   };
   const embeddingClient = {

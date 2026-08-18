@@ -158,11 +158,11 @@ describe('Internal Routes', () => {
 
       expect(response.statusCode).toBe(400);
       const body = JSON.parse(response.payload) as { error: { message: string } };
-      expect(body.error.message).toContain(LlmProviders.OpenAI);
+      expect(body.error.message).toContain(LlmProviders.OpenRouter);
     });
 
     it('returns 429 when LLM is rate limited', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-key' });
       fakePromptGenerator.setFailNext(true, 'RATE_LIMITED');
 
       const response = await app.inject({
@@ -180,7 +180,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 502 when LLM fails with API error', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-key' });
       fakePromptGenerator.setFailNext(true, 'API_ERROR');
 
       const response = await app.inject({
@@ -198,7 +198,7 @@ describe('Internal Routes', () => {
     });
 
     it('generates prompt successfully', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-key' });
 
       const response = await app.inject({
         method: 'POST',
@@ -218,7 +218,7 @@ describe('Internal Routes', () => {
     });
 
     it('forwards prompt usage metadata to the prompt generator', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-key' });
 
       const response = await app.inject({
         method: 'POST',
@@ -385,7 +385,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 502 when image generation fails', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
       fakeGenerator.setFailNext(true);
 
       const response = await app.inject({
@@ -403,7 +403,7 @@ describe('Internal Routes', () => {
     });
 
     it('returns 500 and cleans up storage when DB save fails', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
       fakeRepo.setFailNextSave(true);
 
       const response = await app.inject({
@@ -424,7 +424,7 @@ describe('Internal Routes', () => {
     });
 
     it('logs error but still returns 500 when both DB save and cleanup fail', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
       fakeRepo.setFailNextSave(true);
       fakeStorage.setFailNextDelete(true);
 
@@ -445,8 +445,8 @@ describe('Internal Routes', () => {
       expect(body.error.message).toBe('Failed to save image record');
     });
 
-    it('generates image successfully with openai model', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+    it('generates image successfully with the preserved public model alias', async () => {
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
 
       const response = await app.inject({
         method: 'POST',
@@ -492,7 +492,7 @@ describe('Internal Routes', () => {
     });
 
     it('generates image with slug when title is provided', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
 
       const response = await app.inject({
         method: 'POST',
@@ -514,7 +514,7 @@ describe('Internal Routes', () => {
     });
 
     it('forwards image usage metadata to the image generator', async () => {
-      fakeUserClient.setApiKeys({ openai: 'test-openai-key' });
+      fakeUserClient.setApiKeys({ openrouter: 'test-openrouter-key' });
 
       const response = await app.inject({
         method: 'POST',

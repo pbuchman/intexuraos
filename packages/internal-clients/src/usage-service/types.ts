@@ -31,7 +31,7 @@ export interface UsageEventSource {
 export interface UsageEventRequest {
   provider: LlmProvider;
   model: string;
-  operation: 'research' | 'generate' | 'image_generation' | 'tool_calling' | 'other';
+  operation: 'research' | 'generate' | 'image_generation' | 'embedding' | 'tool_calling' | 'other';
   success: boolean;
   durationMs: number;
   promptType?: string;

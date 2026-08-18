@@ -33,6 +33,7 @@ import {
   DEFAULT_PLATFORM_LLM_MODEL,
   INTEX_AGENT_MODEL_OPTIONS,
   isIntexAgentModel,
+  normalizeRetiredOpenRouterModel,
   type LLMModel,
   type ResearchModel,
   type ImageModel,
@@ -81,7 +82,8 @@ describe('Tool calling model helpers', () => {
   });
 
   it('accepts OpenRouter model IDs for tool calling', () => {
-    expect(isToolCallingModel(OpenRouterToolCallingModels.Gemini3FlashPreview)).toBe(true);
+    expect(isToolCallingModel(OpenRouterToolCallingModels.Gemini36Flash)).toBe(true);
+    expect(isToolCallingModel('or:google/gemini-3-flash-preview')).toBe(false);
   });
 
   it('rejects non-tool-calling model IDs', () => {
@@ -97,7 +99,7 @@ describe('IntexAgentModel', () => {
     expect(Object.values(IntexAgentModels)).toEqual([
       'or:deepseek/deepseek-v4-flash',
       'or:minimax/minimax-m3',
-      'or:google/gemini-3-flash-preview',
+      'or:google/gemini-3.6-flash',
     ]);
   });
 
@@ -114,8 +116,8 @@ describe('IntexAgentModel', () => {
         provider: 'MiniMax',
       },
       {
-        id: IntexAgentModels.Gemini3FlashPreview,
-        label: 'Gemini 3 Flash Preview',
+        id: IntexAgentModels.Gemini36Flash,
+        label: 'Gemini 3.6 Flash',
         provider: 'Google',
       },
     ]);
@@ -162,6 +164,15 @@ describe('IntexAgentModel', () => {
       const typed: IntexAgentModel = value;
       expect(typed).toBe(IntexAgentModels.DeepSeekV4Flash);
     }
+  });
+
+  it('normalizes the retired Gemini preview id for rolling deployments', () => {
+    expect(normalizeRetiredOpenRouterModel('or:google/gemini-3-flash-preview')).toBe(
+      IntexAgentModels.Gemini36Flash
+    );
+    expect(normalizeRetiredOpenRouterModel(IntexAgentModels.DeepSeekV4Flash)).toBe(
+      IntexAgentModels.DeepSeekV4Flash
+    );
   });
 
   it('makes every canonical Intex Agent model eligible for tool calling', () => {
@@ -370,10 +381,14 @@ describe('supportedModels', () => {
   });
 
   describe('type compatibility', () => {
-    it('allows ResearchModel where LLMModel is expected', () => {
-      const researchModel: ResearchModel = 'claude-opus-4-6';
-      const llmModel: LLMModel = researchModel;
-      expect(llmModel).toBe('claude-opus-4-6');
+    it('uses an OpenRouter model ID for ResearchModel', () => {
+      const researchModel: ResearchModel = createOpenRouterModelId('minimax/minimax-m3');
+      expect(researchModel).toBe('or:minimax/minimax-m3');
+    });
+
+    it('retains direct model IDs in ResearchModel for historical reads', () => {
+      const historicalResearchModel: ResearchModel = LlmModels.ClaudeSonnet46;
+      expect(historicalResearchModel).toBe(LlmModels.ClaudeSonnet46);
     });
 
     it('allows ImageModel where LLMModel is expected', () => {
@@ -450,7 +465,8 @@ describe('DefaultEligibleModel', () => {
       const ids = DEFAULT_OPENROUTER_MODELS.map((m) => m.id);
       expect(ids).toContain('google/gemma-4-31b-it:free');
       expect(ids).toContain('google/gemma-4-31b-it');
-      expect(ids).toContain('google/gemini-3-flash-preview');
+      expect(ids).toContain('google/gemini-3.6-flash');
+      expect(ids).not.toContain('google/gemini-3-flash-preview');
       expect(ids).toContain('minimax/minimax-m3');
       expect(ids).toContain('qwen/qwen3.6-plus');
       expect(ids).toContain('nvidia/nemotron-3-super-120b-a12b:free');
@@ -467,9 +483,9 @@ describe('DefaultEligibleModel', () => {
   });
 
   describe('isDefaultEligibleModel', () => {
-    it('accepts non-Google fast models', () => {
-      expect(isDefaultEligibleModel('claude-3-5-haiku-20241022')).toBe(true);
-      expect(isDefaultEligibleModel('gpt-4o-mini')).toBe(true);
+    it('rejects direct-provider fast models', () => {
+      expect(isDefaultEligibleModel('claude-3-5-haiku-20241022')).toBe(false);
+      expect(isDefaultEligibleModel('gpt-4o-mini')).toBe(false);
     });
 
     it('rejects raw Gemini defaults so Google models can only run through OpenRouter', () => {
@@ -480,7 +496,8 @@ describe('DefaultEligibleModel', () => {
     it('accepts OpenRouter default models with or: prefix', () => {
       expect(isDefaultEligibleModel('or:google/gemma-4-31b-it:free')).toBe(true);
       expect(isDefaultEligibleModel('or:google/gemma-4-31b-it')).toBe(true);
-      expect(isDefaultEligibleModel('or:google/gemini-3-flash-preview')).toBe(true);
+      expect(isDefaultEligibleModel('or:google/gemini-3.6-flash')).toBe(true);
+      expect(isDefaultEligibleModel('or:google/gemini-3-flash-preview')).toBe(false);
       expect(isDefaultEligibleModel('or:minimax/minimax-m3')).toBe(true);
       expect(isDefaultEligibleModel('or:qwen/qwen3.6-plus')).toBe(true);
       expect(isDefaultEligibleModel('or:nvidia/nemotron-3-super-120b-a12b:free')).toBe(true);
@@ -500,10 +517,10 @@ describe('DefaultEligibleModel', () => {
     });
 
     it('type guard narrows to DefaultEligibleModel', () => {
-      const model = 'gpt-4o-mini';
+      const model = 'or:minimax/minimax-m3';
       if (isDefaultEligibleModel(model)) {
         const _typed: DefaultEligibleModel = model;
-        expect(_typed).toBe('gpt-4o-mini');
+        expect(_typed).toBe('or:minimax/minimax-m3');
       }
     });
   });
@@ -524,9 +541,9 @@ describe('DefaultEligibleModel', () => {
       }
     });
 
-    it('has correct display names for eligible static models', () => {
-      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBe('Claude 3.5 Haiku');
-      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBe('GPT-4o Mini');
+    it('does not expose direct-provider models as executable defaults', () => {
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBeUndefined();
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBeUndefined();
     });
 
     it('has correct display names for default OpenRouter models', () => {
@@ -534,9 +551,7 @@ describe('DefaultEligibleModel', () => {
         'Gemma 4 31B IT (Free)'
       );
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemma-4-31b-it']).toBe('Gemma 4 31B IT');
-      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemini-3-flash-preview']).toBe(
-        'Gemini 3 Flash Preview'
-      );
+      expect(DEFAULT_MODEL_DISPLAY_NAMES['or:google/gemini-3.6-flash']).toBe('Gemini 3.6 Flash');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:minimax/minimax-m3']).toBe('MiniMax M3');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:qwen/qwen3.6-plus']).toBe('Qwen 3.6 Plus');
       expect(DEFAULT_MODEL_DISPLAY_NAMES['or:nvidia/nemotron-3-super-120b-a12b:free']).toBe(
@@ -544,8 +559,8 @@ describe('DefaultEligibleModel', () => {
       );
     });
 
-    it('has exactly 8 entries (2 eligible static + 6 OpenRouter)', () => {
-      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(8);
+    it('has exactly 6 OpenRouter entries', () => {
+      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(6);
     });
   });
 });

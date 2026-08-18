@@ -225,6 +225,10 @@ describe('usageLogger', () => {
       expect(new NoopUsageSink()).toBeInstanceOf(UsageSink);
     });
 
+    it('exposes the inherited nominal brand to sanctioned subclasses', () => {
+      expect(new NoopUsageSink().__brand).toBe('UsageSink');
+    });
+
     it('custom subclass of UsageSink is instanceof UsageSink', () => {
       expect(new SpyUsageSink()).toBeInstanceOf(UsageSink);
     });

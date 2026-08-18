@@ -7,7 +7,6 @@ import type {
   LegacyDigestRunProjection,
   MessageDigestServiceClient,
 } from '@intexuraos/internal-clients';
-import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFirestoreChunkRepository } from '../infra/firestore/chunkRepository.js';
 import { createFirestoreFolderRepository } from '../infra/firestore/folderRepository.js';
@@ -492,7 +491,6 @@ function createServices(
     },
     chatRepository: {} as ServiceContainer['chatRepository'],
     embeddingClient: { embedTexts: vi.fn() } as ServiceContainer['embeddingClient'],
-    openAiClient: {} as OpenAI,
     userServiceClient: {} as ServiceContainer['userServiceClient'],
     messageDigestClient: messageDigestClient as unknown as MessageDigestServiceClient,
     whatsappClient: {} as ServiceContainer['whatsappClient'],

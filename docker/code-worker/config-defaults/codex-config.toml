@@ -5,3 +5,4 @@ bearer_token_env_var = "LINEAR_API_KEY"
 [mcp_servers.error_hub]
 command = "sh"
 args = ["-lc", 'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer']
+env_vars = ["ERROR_HUB_HOST"]

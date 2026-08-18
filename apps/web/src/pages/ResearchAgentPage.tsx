@@ -36,7 +36,7 @@ export function ResearchAgentPage(): React.JSX.Element {
       {!agent.hasAnyProvider && !agent.keysLoading ? (
         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/30">
           <p className="text-amber-800 dark:text-amber-300">
-            <strong>No API keys configured.</strong> Configure at least one API key to start
+            <strong>OpenRouter access unavailable.</strong> Configure an OpenRouter key to start
             research.{' '}
             <a href="/#/settings/api-keys" className="underline">
               Configure API keys
@@ -65,11 +65,6 @@ export function ResearchAgentPage(): React.JSX.Element {
         />
 
         <ResearchModelsCard
-          modelSelections={agent.modelSelections}
-          onModelChange={agent.handleModelChange}
-          configuredProviders={agent.configuredProviders}
-          failedProviders={agent.failedProviders}
-          keysLoading={agent.keysLoading}
           submitting={agent.submitting}
           savingDraft={agent.savingDraft}
           openRouterModels={agent.openRouterModels}
@@ -77,16 +72,16 @@ export function ResearchAgentPage(): React.JSX.Element {
           onOpenRouterChange={agent.setSelectedOpenRouterModels}
           openRouterLoading={agent.openRouterLoading}
           openRouterError={agent.openRouterError}
-          isOpenRouterConfigured={agent.isOpenRouterConfigured}
+          hasOpenRouterAccess={agent.hasOpenRouterAccess}
         />
 
         <SynthesisModelCard
           synthesisCapableModels={RESEARCH_AGENT_CONSTANTS.SYNTHESIS_CAPABLE_MODELS}
           synthesisModel={agent.synthesisModel}
           onSelect={agent.setSynthesisModel}
-          configuredProviders={agent.configuredProviders}
-          failedProviders={agent.failedProviders}
-          keysLoading={agent.keysLoading}
+          availableModels={agent.openRouterModels}
+          hasOpenRouterAccess={agent.hasOpenRouterAccess}
+          loading={agent.keysLoading || agent.openRouterLoading}
           submitting={agent.submitting}
           savingDraft={agent.savingDraft}
         />

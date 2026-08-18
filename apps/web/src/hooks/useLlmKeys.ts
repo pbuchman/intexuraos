@@ -128,7 +128,7 @@ export function useLlmKeys(): UseLlmKeysResult {
         if (!current()) return;
         await setLlmKey(token, userId, { provider, apiKey });
         if (!current()) return;
-        await refresh();
+        await refresh(false);
       } catch (err) {
         if (current()) setError(getErrorMessage(err, 'Failed to save API key'));
         throw err;
@@ -150,7 +150,7 @@ export function useLlmKeys(): UseLlmKeysResult {
         if (!current()) return;
         await deleteLlmKey(token, userId, provider);
         if (!current()) return;
-        await refresh();
+        await refresh(false);
       } catch (err) {
         if (current()) setError(getErrorMessage(err, 'Failed to delete API key'));
         throw err;
@@ -199,6 +199,10 @@ export function useLlmKeys(): UseLlmKeysResult {
         mountedRef.current && subjectRef.current === userId && subjectEpochRef.current === subjectEpoch;
 
       const previousModel = ownedKeys?.defaultModel ?? null;
+      const previousStoredFallback = ownedKeys?.fallbackModel ?? null;
+      const previousFallback =
+        previousStoredFallback === previousModel ? null : previousStoredFallback;
+      const nextFallback = previousFallback === model ? null : previousFallback;
 
       setSavingDefaultModel(true);
       setError(null);
@@ -206,19 +210,23 @@ export function useLlmKeys(): UseLlmKeysResult {
       // Optimistic update
       setKeys((prev) => {
         if (prev === null) return prev;
-        return { ...prev, defaultModel: model };
+        return { ...prev, defaultModel: model, fallbackModel: nextFallback };
       });
 
       try {
         const token = await getAccessToken();
         if (!current()) return;
-        await updateLlmPreferences(token, userId, model, ownedKeys?.fallbackModel);
+        await updateLlmPreferences(token, userId, model, nextFallback);
       } catch (err) {
         if (!current()) return;
         // Revert on failure
         setKeys((prev) => {
           if (prev === null) return prev;
-          return { ...prev, defaultModel: previousModel };
+          return {
+            ...prev,
+            defaultModel: previousModel,
+            fallbackModel: previousStoredFallback,
+          };
         });
         setError(getErrorMessage(err, 'Failed to save default model'));
       } finally {
@@ -240,6 +248,7 @@ export function useLlmKeys(): UseLlmKeysResult {
       if (currentDefault === null || currentDefault === undefined) return;
 
       const previousFallback = ownedKeys?.fallbackModel ?? null;
+      const nextFallback = model === currentDefault ? null : model;
 
       setSavingDefaultModel(true);
       setError(null);
@@ -247,13 +256,13 @@ export function useLlmKeys(): UseLlmKeysResult {
       // Optimistic update
       setKeys((prev) => {
         if (prev === null) return prev;
-        return { ...prev, fallbackModel: model };
+        return { ...prev, fallbackModel: nextFallback };
       });
 
       try {
         const token = await getAccessToken();
         if (!current()) return;
-        await updateLlmPreferences(token, userId, currentDefault, model);
+        await updateLlmPreferences(token, userId, currentDefault, nextFallback);
       } catch (err) {
         if (!current()) return;
         // Revert on failure
@@ -270,7 +279,8 @@ export function useLlmKeys(): UseLlmKeysResult {
   );
 
   const defaultModel = ownedKeys?.defaultModel ?? null;
-  const fallbackModel = ownedKeys?.fallbackModel ?? null;
+  const storedFallbackModel = ownedKeys?.fallbackModel ?? null;
+  const fallbackModel = storedFallbackModel === defaultModel ? null : storedFallbackModel;
   const intexAgentModel = useIntexAgentModel({
     subject: user?.sub,
     selector: ownedKeys?.intexAgentModelSelector,

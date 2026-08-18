@@ -1,5 +1,8 @@
 import { err, type Logger, type Result } from '@intexuraos/common-core';
-import { createGptClient } from '@intexuraos/infra-gpt';
+import {
+  createOpenRouterClient,
+  OPENROUTER_GPT_4_1,
+} from '@intexuraos/infra-openrouter';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import { generateThumbnailPrompt } from '@intexuraos/llm-prompts';
 import type { ThumbnailPrompt } from '../../domain/index.js';
@@ -9,7 +12,7 @@ import type {
   PromptGenerator,
 } from '../../domain/ports/promptGenerator.js';
 
-export interface GptPromptAdapterConfig {
+export interface OpenRouterPromptAdapterConfig {
   apiKey: string;
   userId: string;
   logger: Logger;
@@ -19,14 +22,14 @@ export interface GptPromptAdapterConfig {
 
 const DEFAULT_MODEL = 'gpt-4.1';
 
-export class GptPromptAdapter implements PromptGenerator {
+export class OpenRouterPromptAdapter implements PromptGenerator {
   private readonly apiKey: string;
   private readonly userId: string;
   private readonly model: string;
   private readonly logger: Logger;
   private readonly usageSink: UsageSink;
 
-  constructor(config: GptPromptAdapterConfig) {
+  constructor(config: OpenRouterPromptAdapterConfig) {
     this.apiKey = config.apiKey;
     this.userId = config.userId;
     this.model = config.model ?? DEFAULT_MODEL;
@@ -38,9 +41,16 @@ export class GptPromptAdapter implements PromptGenerator {
     text: string,
     options?: PromptGenerationOptions
   ): Promise<Result<ThumbnailPrompt, PromptGenerationError>> {
-    const client = createGptClient({
+    const apiModelId =
+      this.model === OPENROUTER_GPT_4_1.publicModelId
+        ? OPENROUTER_GPT_4_1.apiModelId
+        : this.model.includes('/')
+          ? this.model
+          : `openai/${this.model}`;
+    const client = createOpenRouterClient({
       apiKey: this.apiKey,
-      model: this.model,
+      model: apiModelId,
+      evidenceModelId: `or:${apiModelId}`,
       userId: this.userId,
       logger: this.logger,
       usageSink: this.usageSink,
@@ -74,6 +84,15 @@ export function mapError(code: string, message: string): PromptGenerationError {
   }
 }
 
-export function createGptPromptAdapter(config: GptPromptAdapterConfig): PromptGenerator {
-  return new GptPromptAdapter(config);
+export function createOpenRouterPromptAdapter(
+  config: OpenRouterPromptAdapterConfig
+): PromptGenerator {
+  return new OpenRouterPromptAdapter(config);
 }
+
+/** Compatibility alias; execution is OpenRouter-only. */
+export const GptPromptAdapter = OpenRouterPromptAdapter;
+/** Compatibility alias; execution is OpenRouter-only. */
+export const createGptPromptAdapter = createOpenRouterPromptAdapter;
+/** Compatibility alias; execution is OpenRouter-only. */
+export type GptPromptAdapterConfig = OpenRouterPromptAdapterConfig;

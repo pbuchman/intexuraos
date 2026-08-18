@@ -756,8 +756,8 @@ describe('intex-agent routes', () => {
           resolveLate?.(
             ok({
               status: 'available',
-              effectiveModel: IntexAgentModels.Gemini3FlashPreview,
-              explicitModel: IntexAgentModels.Gemini3FlashPreview,
+              effectiveModel: IntexAgentModels.Gemini36Flash,
+              explicitModel: IntexAgentModels.Gemini36Flash,
               source: 'explicit',
               revision: 77,
               timeZone: 'Raw/late-resolve-timezone-sentinel',

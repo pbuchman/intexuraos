@@ -110,6 +110,48 @@ describe('FirestoreUserSettingsRepository', () => {
       }
     });
 
+    it('normalizes direct-provider executable preferences without writing them back', async () => {
+      fakeFirestore.seedCollection('user_settings', [
+        {
+          id: 'legacy-direct-preferences',
+          data: {
+            userId: 'legacy-direct-preferences',
+            llmPreferences: {
+              defaultModel: LlmModels.GPT4oMini,
+              fallbackModel: LlmModels.ClaudeHaiku35,
+              futurePreference: { keep: true },
+            },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
+        },
+      ]);
+
+      const result = await repo.getSettings('legacy-direct-preferences');
+
+      expect(result).toEqual({
+        ok: true,
+        value: expect.objectContaining({
+          llmPreferences: expect.objectContaining({
+            defaultModel: IntexAgentModels.MiniMaxM3,
+            fallbackModel: IntexAgentModels.MiniMaxM3,
+            futurePreference: { keep: true },
+          }),
+        }),
+      });
+      expect(
+        fakeFirestore
+          .getAllData()
+          .get('user_settings')
+          ?.get('legacy-direct-preferences')
+          ?.['llmPreferences']
+      ).toEqual({
+        defaultModel: LlmModels.GPT4oMini,
+        fallbackModel: LlmModels.ClaudeHaiku35,
+        futurePreference: { keep: true },
+      });
+    });
+
     it('returns error when Firestore fails', async () => {
       fakeFirestore.configure({ errorToThrow: new Error('Connection failed') });
 
@@ -147,6 +189,15 @@ describe('FirestoreUserSettingsRepository', () => {
           },
         },
         {
+          id: 'bad-model-type',
+          data: {
+            userId: 'bad-model-type',
+            llmPreferences: { intexAgentModel: 42 },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
+        },
+        {
           id: 'bad-revision',
           data: {
             userId: 'bad-revision',
@@ -166,7 +217,13 @@ describe('FirestoreUserSettingsRepository', () => {
         },
       ]);
 
-      for (const userId of ['bad-map', 'bad-map-object', 'bad-model', 'bad-revision']) {
+      for (const userId of [
+        'bad-map',
+        'bad-map-object',
+        'bad-model',
+        'bad-model-type',
+        'bad-revision',
+      ]) {
         const result = await repo.getSettings(userId);
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -179,7 +236,7 @@ describe('FirestoreUserSettingsRepository', () => {
         ok: true,
         value: expect.objectContaining({
           llmPreferences: expect.objectContaining({
-            defaultModel: LlmModels.GPT4oMini,
+            defaultModel: IntexAgentModels.MiniMaxM3,
             futurePreference: { keep: true },
           }),
         }),
@@ -286,15 +343,19 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates existing settings document', async () => {
       await repo.saveSettings(createTestSettings());
 
-      const encryptedKey = createEncryptedValue('anthropic-key');
-      const result = await repo.updateLlmApiKey('user-123', LlmProviders.Anthropic, encryptedKey);
+      const encryptedKey = createEncryptedValue('openrouter-key');
+      const result = await repo.updateLlmApiKey(
+        'user-123',
+        LlmProviders.OpenRouter,
+        encryptedKey
+      );
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmApiKeys?.anthropic).toBeDefined();
+        expect(stored.value.llmApiKeys?.openrouter).toBeDefined();
       }
     });
 
@@ -397,17 +458,21 @@ describe('FirestoreUserSettingsRepository', () => {
       const testResult: LlmTestResult = {
         testedAt: new Date().toISOString(),
         status: 'success',
-        message:'OpenAI response',
+        message: 'OpenRouter response',
       };
 
-      const result = await repo.updateLlmTestResult('user-123', LlmProviders.OpenAI, testResult);
+      const result = await repo.updateLlmTestResult(
+        'user-123',
+        LlmProviders.OpenRouter,
+        testResult
+      );
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmTestResults?.openai?.message).toBe('OpenAI response');
+        expect(stored.value.llmTestResults?.openrouter?.message).toBe('OpenRouter response');
       }
     });
 
@@ -501,7 +566,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
   describe('updateLlmPreferences', () => {
     it('creates new settings document if user does not exist', async () => {
-      const result = await repo.updateLlmPreferences('new-user', LlmModels.GPT4oMini);
+      const result = await repo.updateLlmPreferences('new-user', IntexAgentModels.MiniMaxM3);
 
       expect(result.ok).toBe(true);
 
@@ -509,21 +574,21 @@ describe('FirestoreUserSettingsRepository', () => {
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
         expect(stored.value.userId).toBe('new-user');
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
       }
     });
 
     it('updates existing settings document', async () => {
       await repo.saveSettings(createTestSettings());
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.ClaudeHaiku35);
+      const result = await repo.updateLlmPreferences('user-123', IntexAgentModels.Gemini36Flash);
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.ClaudeHaiku35);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(IntexAgentModels.Gemini36Flash);
       }
     });
 
@@ -540,20 +605,24 @@ describe('FirestoreUserSettingsRepository', () => {
     });
 
     it('creates new settings with fallbackModel when user does not exist', async () => {
-      const result = await repo.updateLlmPreferences('new-user-fb', LlmModels.GPT4oMini, 'or:google/gemma-4-31b-it:free');
+      const result = await repo.updateLlmPreferences(
+        'new-user-fb',
+        IntexAgentModels.MiniMaxM3,
+        'or:google/gemma-4-31b-it:free'
+      );
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('new-user-fb');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
         expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
       }
     });
 
     it('does not set fallbackModel when creating new settings without it', async () => {
-      const result = await repo.updateLlmPreferences('new-user-nofb', LlmModels.GPT4oMini);
+      const result = await repo.updateLlmPreferences('new-user-nofb', IntexAgentModels.MiniMaxM3);
 
       expect(result.ok).toBe(true);
 
@@ -567,7 +636,11 @@ describe('FirestoreUserSettingsRepository', () => {
     it('updates fallbackModel on existing document', async () => {
       await repo.saveSettings(createTestSettings());
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini, 'or:google/gemma-4-31b-it:free');
+      const result = await repo.updateLlmPreferences(
+        'user-123',
+        IntexAgentModels.MiniMaxM3,
+        'or:google/gemma-4-31b-it:free'
+      );
 
       expect(result.ok).toBe(true);
 
@@ -580,10 +653,17 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('clears fallbackModel when null is passed on existing document', async () => {
       await repo.saveSettings(createTestSettings({
-        llmPreferences: { defaultModel: LlmModels.GPT4oMini, fallbackModel: 'or:google/gemma-4-31b-it:free' },
+        llmPreferences: {
+          defaultModel: IntexAgentModels.MiniMaxM3,
+          fallbackModel: 'or:google/gemma-4-31b-it:free',
+        },
       }));
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini, null);
+      const result = await repo.updateLlmPreferences(
+        'user-123',
+        IntexAgentModels.MiniMaxM3,
+        null
+      );
 
       expect(result.ok).toBe(true);
 
@@ -596,17 +676,24 @@ describe('FirestoreUserSettingsRepository', () => {
 
     it('leaves fallbackModel unchanged when undefined is passed on existing document', async () => {
       await repo.saveSettings(createTestSettings({
-        llmPreferences: { defaultModel: LlmModels.GPT4oMini, fallbackModel: 'or:google/gemma-4-31b-it:free' },
+        llmPreferences: {
+          defaultModel: IntexAgentModels.MiniMaxM3,
+          fallbackModel: 'or:google/gemma-4-31b-it:free',
+        },
       }));
 
-      const result = await repo.updateLlmPreferences('user-123', LlmModels.GPT4oMini, undefined);
+      const result = await repo.updateLlmPreferences(
+        'user-123',
+        IntexAgentModels.MiniMaxM3,
+        undefined
+      );
 
       expect(result.ok).toBe(true);
 
       const stored = await repo.getSettings('user-123');
       expect(stored.ok).toBe(true);
       if (stored.ok && stored.value !== null) {
-        expect(stored.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+        expect(stored.value.llmPreferences?.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
         expect(stored.value.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
       }
     });
@@ -615,7 +702,7 @@ describe('FirestoreUserSettingsRepository', () => {
   describe('getSettings with llmPreferences', () => {
     it('returns llmPreferences when present', async () => {
       const settings = createTestSettings({
-        llmPreferences: { defaultModel: LlmModels.GPT4oMini },
+        llmPreferences: { defaultModel: IntexAgentModels.MiniMaxM3 },
       });
       await repo.saveSettings(settings);
 
@@ -623,7 +710,7 @@ describe('FirestoreUserSettingsRepository', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
-        expect(result.value.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+        expect(result.value.llmPreferences?.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
       }
     });
   });
@@ -755,6 +842,42 @@ describe('FirestoreUserSettingsRepository', () => {
         expect(result.value.timezone).toBe('Asia/Tokyo');
       }
     });
+
+    it('normalizes retired Gemini preview preferences at the read boundary', async () => {
+      fakeFirestore.seedCollection('user_settings', [
+        {
+          id: 'user-123',
+          data: {
+            userId: 'user-123',
+            llmPreferences: {
+              defaultModel: 'or:google/gemini-3-flash-preview',
+              fallbackModel: 'or:google/gemini-3-flash-preview',
+              intexAgentModel: 'or:google/gemini-3-flash-preview',
+              intexAgentModelRevision: 2,
+            },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
+        },
+      ]);
+
+      const result = await repo.getSettings('user-123');
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          userId: 'user-123',
+          llmPreferences: {
+            defaultModel: IntexAgentModels.Gemini36Flash,
+            fallbackModel: IntexAgentModels.Gemini36Flash,
+            intexAgentModel: IntexAgentModels.Gemini36Flash,
+            intexAgentModelRevision: 2,
+          },
+          createdAt: 'created',
+          updatedAt: 'updated',
+        },
+      });
+    });
   });
 
   describe('narrow selector and timezone reads', () => {
@@ -775,6 +898,18 @@ describe('FirestoreUserSettingsRepository', () => {
         {
           id: 'absent',
           data: { userId: 'absent', createdAt: 'created', updatedAt: 'updated' },
+        },
+        {
+          id: 'legacy-preview',
+          data: {
+            userId: 'legacy-preview',
+            llmPreferences: {
+              intexAgentModel: 'or:google/gemini-3-flash-preview',
+              intexAgentModelRevision: 4,
+            },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
         },
         {
           id: 'invalid',
@@ -798,6 +933,14 @@ describe('FirestoreUserSettingsRepository', () => {
       await expect(repo.getIntexAgentModelState('absent')).resolves.toEqual({
         ok: true,
         value: { status: 'valid', explicitModel: null, revision: 0 },
+      });
+      await expect(repo.getIntexAgentModelState('legacy-preview')).resolves.toEqual({
+        ok: true,
+        value: {
+          status: 'valid',
+          explicitModel: IntexAgentModels.Gemini36Flash,
+          revision: 4,
+        },
       });
       await expect(repo.getIntexAgentModelState('missing')).resolves.toEqual({
         ok: true,
@@ -1078,7 +1221,7 @@ describe('FirestoreUserSettingsRepository', () => {
         },
       ]);
 
-      await repo.updateIntexAgentModel('user-123', IntexAgentModels.Gemini3FlashPreview, 0);
+      await repo.updateIntexAgentModel('user-123', IntexAgentModels.Gemini36Flash, 0);
       await repo.updateIntexAgentModel('user-123', null, 1);
 
       const raw = fakeFirestore.getAllData().get('user_settings')?.get('user-123');

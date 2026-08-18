@@ -30,20 +30,11 @@ const TOKEN = 'tok';
 const USER = 'user-1';
 
 const sampleKeys: LlmKeysResponse = {
-  defaultModel: 'gpt-4',
+  defaultModel: 'or:minimax/minimax-m3',
   fallbackModel: null,
-  google: null,
-  openai: 'sk-...abcd',
-  anthropic: null,
-  perplexity: null,
-  openrouter: null,
-  testResults: {
-    google: null,
-    openai: null,
-    anthropic: null,
-    perplexity: null,
-    openrouter: null,
-  },
+  openrouter: 'sk-or-...abcd',
+  accessSource: 'user',
+  testResults: { openrouter: null },
   intexAgentModelSelector: {
     status: 'available',
     explicitModel: null,
@@ -53,7 +44,7 @@ const sampleKeys: LlmKeysResponse = {
     options: [
       { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
       { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-      { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+      { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
     ],
   },
 };
@@ -81,15 +72,21 @@ describe('llmKeysApi', () => {
   describe('setLlmKey', () => {
     it('PATCHes the key body', async () => {
       const { apiRequest } = await import('../apiClient.js');
-      vi.mocked(apiRequest).mockResolvedValue({ provider: LlmProviders.OpenAI, masked: 'sk-...x' });
+      vi.mocked(apiRequest).mockResolvedValue({
+        provider: LlmProviders.OpenRouter,
+        masked: 'sk-or-...x',
+      });
 
-      await setLlmKey(TOKEN, USER, { provider: LlmProviders.OpenAI, apiKey: 'sk-real' });
+      await setLlmKey(TOKEN, USER, {
+        provider: LlmProviders.OpenRouter,
+        apiKey: 'sk-or-real',
+      });
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[1]).toBe(`/users/${USER}/settings/llm-keys`);
       expect(call?.[3]).toEqual({
         method: 'PATCH',
-        body: { provider: LlmProviders.OpenAI, apiKey: 'sk-real' },
+        body: { provider: LlmProviders.OpenRouter, apiKey: 'sk-or-real' },
       });
     });
   });
@@ -99,10 +96,10 @@ describe('llmKeysApi', () => {
       const { apiRequest } = await import('../apiClient.js');
       vi.mocked(apiRequest).mockResolvedValue({ deleted: true });
 
-      await deleteLlmKey(TOKEN, USER, LlmProviders.Anthropic);
+      await deleteLlmKey(TOKEN, USER, LlmProviders.OpenRouter);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe(`/users/${USER}/settings/llm-keys/${LlmProviders.Anthropic}`);
+      expect(call?.[1]).toBe(`/users/${USER}/settings/llm-keys/${LlmProviders.OpenRouter}`);
       expect(call?.[3]).toEqual({ method: 'DELETE' });
     });
   });
@@ -110,25 +107,34 @@ describe('llmKeysApi', () => {
   describe('updateLlmPreferences', () => {
     it('PATCHes /users/:uid/settings with defaultModel only when fallback is undefined', async () => {
       const { apiRequest } = await import('../apiClient.js');
-      vi.mocked(apiRequest).mockResolvedValue({ defaultModel: 'gpt-4', fallbackModel: null });
+      vi.mocked(apiRequest).mockResolvedValue({
+        defaultModel: 'or:deepseek/deepseek-v4-flash',
+        fallbackModel: null,
+      });
 
-      await updateLlmPreferences(TOKEN, USER, 'gpt-4');
+      await updateLlmPreferences(TOKEN, USER, 'or:deepseek/deepseek-v4-flash');
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[1]).toBe(`/users/${USER}/settings`);
-      expect(call?.[3]).toEqual({ method: 'PATCH', body: { defaultModel: 'gpt-4' } });
+      expect(call?.[3]).toEqual({
+        method: 'PATCH',
+        body: { defaultModel: 'or:deepseek/deepseek-v4-flash' },
+      });
     });
 
     it('includes fallbackModel when explicitly provided (including null)', async () => {
       const { apiRequest } = await import('../apiClient.js');
-      vi.mocked(apiRequest).mockResolvedValue({ defaultModel: 'gpt-4', fallbackModel: null });
+      vi.mocked(apiRequest).mockResolvedValue({
+        defaultModel: 'or:deepseek/deepseek-v4-flash',
+        fallbackModel: null,
+      });
 
-      await updateLlmPreferences(TOKEN, USER, 'gpt-4', null);
+      await updateLlmPreferences(TOKEN, USER, 'or:deepseek/deepseek-v4-flash', null);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
       expect(call?.[3]).toEqual({
         method: 'PATCH',
-        body: { defaultModel: 'gpt-4', fallbackModel: null },
+        body: { defaultModel: 'or:deepseek/deepseek-v4-flash', fallbackModel: null },
       });
     });
   });
@@ -226,6 +232,23 @@ describe('llmKeysApi', () => {
     });
   });
 
+  describe('strict OpenRouter-only response decoder', () => {
+    it.each([
+      ['legacy provider field', { ...sampleKeys, openai: 'sk-...legacy' }],
+      ['direct default model', { ...sampleKeys, defaultModel: 'gpt-4' }],
+      ['invalid access source', { ...sampleKeys, accessSource: 'openai' }],
+      ['legacy test result field', { ...sampleKeys, testResults: { openrouter: null, anthropic: null } }],
+    ])('rejects %s', async (_label, payload) => {
+      const { apiRequest } = await import('../apiClient.js');
+      vi.mocked(apiRequest).mockResolvedValue(payload);
+
+      await expect(getLlmKeys(TOKEN, USER)).rejects.toMatchObject<ApiError>({
+        code: 'MALFORMED_RESPONSE',
+        status: 502,
+      });
+    });
+  });
+
   describe('testLlmKey', () => {
     it('POSTs to /users/:uid/settings/llm-keys/:provider/test', async () => {
       const { apiRequest } = await import('../apiClient.js');
@@ -233,10 +256,12 @@ describe('llmKeysApi', () => {
         status: 'success', message: 'ok', testedAt: '2026-04-26T00:00:00Z',
       });
 
-      await testLlmKey(TOKEN, USER, LlmProviders.Google);
+      await testLlmKey(TOKEN, USER, LlmProviders.OpenRouter);
 
       const call = vi.mocked(apiRequest).mock.calls[0];
-      expect(call?.[1]).toBe(`/users/${USER}/settings/llm-keys/${LlmProviders.Google}/test`);
+      expect(call?.[1]).toBe(
+        `/users/${USER}/settings/llm-keys/${LlmProviders.OpenRouter}/test`
+      );
       expect(call?.[3]).toEqual({ method: 'POST' });
     });
   });

@@ -87,6 +87,7 @@ describe('code-worker image Codex skill bootstrap', () => {
     expect(codexConfig).toContain(
       'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer'
     );
+    expect(codexConfig).toContain('env_vars = ["ERROR_HUB_HOST"]');
     expect(codexConfig).not.toContain('npx @sentry/mcp-server');
     expect(codexConfig).not.toContain('@latest');
   });

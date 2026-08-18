@@ -2,7 +2,7 @@
 
 ## Overview
 
-Image-service generates AI images using OpenAI GPT Image 1, with LLM-powered prompt enhancement via GPT-4.1. Images are stored in GCS with automatic thumbnail generation (256px max edge, JPEG at 80% quality). Image metadata is persisted in Firestore. Runs on Cloud Run with auto-scaling.
+Image-service generates AI images through OpenRouter using the stable `gpt-image-1` public alias, with prompt enhancement through the stable `gpt-4.1` alias. Images are stored in GCS with automatic thumbnail generation (256px max edge, JPEG at 80% quality). Image metadata is persisted unchanged in Firestore.
 
 ## Architecture
 
@@ -68,7 +68,7 @@ sequenceDiagram
     Caller->>+Routes: POST /internal/images/generate
     Routes->>UC: createGenerateImageUseCase(deps, modelConfig)
     UC->>UserSvc: getApiKeys(userId)
-    UserSvc-->>UC: {openai} key
+    UserSvc-->>UC: resolved {openrouter} key
 
     UC->>ImgGen: generate(prompt, {slug})
     ImgGen-->>UC: base64 image data
@@ -97,7 +97,7 @@ sequenceDiagram
     Caller->>+Routes: POST /internal/images/prompts/generate
     Routes->>UC: createGeneratePromptUseCase(deps, modelConfig)
     UC->>UserSvc: getApiKeys(userId)
-    UserSvc-->>UC: {openai} key
+    UserSvc-->>UC: resolved {openrouter} key
 
     UC->>LLM: generateThumbnailPrompt(text)
     LLM-->>UC: structured prompt JSON
@@ -233,7 +233,7 @@ The primary focus of this release was an architectural refactoring — extractin
 
 ### GeneratePromptUseCase
 
-Resolves user API keys via user-service, selects the appropriate prompt adapter based on model provider, and delegates to the `PromptGenerator` port. Distinguishes `RATE_LIMITED` errors (retryable) from `GENERATION_FAILED` (terminal).
+Resolves OpenRouter access via user-service and delegates to the OpenRouter-backed `PromptGenerator` port. Distinguishes `RATE_LIMITED` errors (retryable) from `GENERATION_FAILED` (terminal).
 
 ### GenerateImageUseCase
 
@@ -247,15 +247,15 @@ Best-effort deletion — looks up the image record for its slug, deletes from GC
 
 ### Image Generation Models
 
-| Model         | Provider | Description                          |
-| ------------- | -------- | ------------------------------------ |
-| `gpt-image-1` | OpenAI   | GPT Image 1 (image generation model) |
+| Model alias    | Provider   | Description                          |
+| -------------- | ---------- | ------------------------------------ |
+| `gpt-image-1`  | OpenRouter | GPT Image 1 (image generation model) |
 
 ### Prompt Generation Models
 
-| Model     | Provider | Purpose            |
-| --------- | -------- | ------------------ |
-| `gpt-4.1` | OpenAI   | Prompt enhancement |
+| Model alias | Provider   | Purpose            |
+| ----------- | ---------- | ------------------ |
+| `gpt-4.1`   | OpenRouter | Prompt enhancement |
 
 ## Pub/Sub
 
@@ -273,7 +273,7 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 | Service    | Purpose              | Failure Mode     |
 | ---------- | -------------------- | ---------------- |
-| OpenAI API | GPT Image 1, GPT-4.1 | DOWNSTREAM_ERROR |
+| OpenRouter API | GPT Image 1, GPT-4.1 | DOWNSTREAM_ERROR |
 
 ### Infrastructure
 
@@ -309,7 +309,7 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **Deletion cascade**: When deleting an image, both GCS objects and Firestore record are removed independently. If either operation fails, the error is logged but the endpoint still returns `{ deleted: true }` — best-effort cleanup with no rollback.
 
-**API key validation**: The service validates that the user has an OpenAI API key before generation. If the user lacks one, a 400 error naming the provider is returned; there is no shared direct-Gemini fallback.
+**API key resolution**: The service uses the user's OpenRouter key when present and the platform OpenRouter key otherwise. If neither is available, a 400 error is returned.
 
 **Image format**: Full-size images are PNG; thumbnails are JPEG. No format selection available.
 
@@ -325,9 +325,9 @@ None. Image-service does not publish or subscribe to Pub/Sub events.
 
 **Prompt parameters trimmed (INT-605)**: The `ThumbnailPromptParameters` type only contains `framing`, `realism`, and `people`. Previously documented fields `aspectRatio`, `textOnImage`, and `logosTrademarks` were removed from the consumed contract. The LLM prompt may still produce them, but the parser discards any fields not in the validated schema.
 
-**Direct Gemini removed**: Prompt and image generation use OpenAI. Direct Gemini image-generation models are no longer exposed by image-service.
+**Direct providers removed**: Prompt and image generation execute through OpenRouter. Direct Gemini and OpenAI clients are not exposed by image-service.
 
-**No direct-provider failover**: image-service exposes only the OpenAI prompt and image models. A request failure is returned to the caller; there is no Gemini retry path.
+**Stable aliases**: image-service exposes only `gpt-4.1` and `gpt-image-1`; both route through OpenRouter, and a failed request is returned to the caller.
 
 ## File Structure
 
@@ -353,10 +353,10 @@ apps/image-service/src/
     firestore/
       GeneratedImageFirestoreRepository.ts  # Firestore CRUD for generated_images
     image/
-      OpenAIImageGenerator.ts      # GPT Image 1 integration
+      OpenAIImageGenerator.ts      # Compatibility filename; OpenRouter image integration
       FakeImageGenerator.ts        # Testing fake (no API calls)
     llm/
-      GptPromptAdapter.ts          # GPT-4.1 prompt generation
+      GptPromptAdapter.ts          # Compatibility filename; OpenRouter prompt generation
       parseResponse.ts             # LLM JSON response parser + validation
     storage/
       GcsImageStorage.ts           # GCS upload/delete with Sharp thumbnailing
@@ -373,6 +373,11 @@ apps/image-service/src/
 ```
 
 ## Migration Notes
+
+### OpenRouter-only transport (2026-08-18)
+
+- Prompt and image generation now use OpenRouter with user BYOK → platform-key fallback
+- Public and persisted aliases remain `gpt-4.1` and `gpt-image-1`
 
 ### v3.6.0: LLM Pricing Removal and Usage Sink Migration (2026-04-10–2026-04-22)
 
@@ -430,4 +435,4 @@ apps/image-service/src/
 ### Platform Key Fallback (2026-02-09)
 
 - Historical: users without personal API keys fell back to a platform-owned Gemini key
-- The fallback was retired on 2026-08-12; image-service now requires the user's OpenAI key
+- That fallback was retired on 2026-08-12, when image-service temporarily required the user's OpenAI key

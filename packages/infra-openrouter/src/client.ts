@@ -295,7 +295,7 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
     void usageLogger.log({
       userId,
       provider: LlmProviders.OpenRouter,
-      model,
+      model: evidenceModelId,
       callType,
       usage,
       success,
@@ -397,25 +397,9 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
         const content = typeof rawContent === 'string' ? rawContent : '';
         const { normalized, providerReportedUsd } = extractUsage(data.usage);
 
-        // Extract sources from annotations (OpenRouter returns web search citations as annotations)
-        const sources: string[] = [];
-        if (data.annotations !== undefined && Array.isArray(data.annotations)) {
-          for (const annotation of data.annotations) {
-            if (typeof annotation === 'string') {
-              sources.push(annotation);
-            }
-            // Check for object annotations (non-string annotations)
-            if (typeof annotation === 'object') {
-              // Annotation is an object - could have url field, but structure varies by API response
-              /* v8 ignore start -- upstream: cannot verify annotation URL structure in all responses @preserve */
-              const ann = annotation as { url?: string };
-              if (ann.url !== undefined) {
-                sources.push(ann.url);
-              }
-              /* v8 ignore stop @preserve */
-            }
-          }
-        }
+        // OpenRouter's current Chat Completions schema nests url_citation annotations
+        // in the assistant message. Keep the legacy top-level shape as a fallback.
+        const sources = extractResearchSources(data);
 
         trackUsage(
           'research',
@@ -803,6 +787,25 @@ export function createOpenRouterClient(config: OpenRouterConfig): OpenRouterClie
       }),
     };
   }
+}
+
+function extractResearchSources(data: OpenRouterResponse): string[] {
+  const annotations = [
+    ...(data.choices[0]?.message.annotations ?? []),
+    ...(data.annotations ?? []),
+  ];
+  const sources = new Set<string>();
+  for (const annotation of annotations) {
+    if (typeof annotation === 'string') {
+      sources.add(annotation);
+      continue;
+    }
+    const url = annotation.url_citation?.url ?? annotation.url;
+    if (typeof url === 'string' && url.length > 0) {
+      sources.add(url);
+    }
+  }
+  return [...sources];
 }
 
 function mapOpenRouterError(error: unknown): OpenRouterError {

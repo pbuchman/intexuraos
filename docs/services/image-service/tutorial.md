@@ -23,7 +23,7 @@ Before starting, ensure you have:
 
 - [ ] Access to the IntexuraOS development environment
 - [ ] The `INTEXURAOS_INTERNAL_AUTH_TOKEN` value for your environment
-- [ ] A valid `userId` with an OpenAI API key configured
+- [ ] A valid `userId`; OpenRouter access comes from the user's key or platform fallback
 - [ ] Basic understanding of TypeScript/Node.js
 
 ---
@@ -67,7 +67,7 @@ The first step of the two-stage pipeline turns raw text into an optimized image 
 
 You need:
 - A text body with at least 10 characters
-- The supported prompt generation model: `"gpt-4.1"` (OpenAI)
+- The supported prompt generation alias: `"gpt-4.1"` (executed through OpenRouter)
 - The `userId` whose API keys will be used for the LLM call
 
 ### Step 2.2: Send the Prompt Generation Request
@@ -162,12 +162,12 @@ curl -X POST https://intexuraos-image-service-cj44trunra-lm.a.run.app/internal/i
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "No openai API key configured for this user"
+    "message": "No openrouter API key configured for this user"
   }
 }
 ```
 
-**Solution:** Configure an OpenAI credential for the user. Direct Gemini image generation and the shared Gemini fallback are not supported.
+**Solution:** Configure an OpenRouter user key or restore the platform OpenRouter key.
 
 ### Common Error: Rate Limited
 
@@ -286,7 +286,7 @@ async function generateCoverImage(
 | Problem                       | Solution                                                                        |
 | ----------------------------- | ------------------------------------------------------------------------------- |
 | `401 UNAUTHORIZED`            | Check `X-Internal-Auth` header matches `INTEXURAOS_INTERNAL_AUTH_TOKEN`         |
-| `400 INVALID_REQUEST`         | Ensure `userId` has a matching provider API key configured                      |
+| `400 INVALID_REQUEST`         | Ensure OpenRouter access is available for `userId`                              |
 | `502 DOWNSTREAM_ERROR`        | Upstream LLM or image API failed — retry with exponential backoff               |
 | `RATE_LIMITED` (prompt only)  | Wait and retry — error originates from upstream provider                        |
 | Image URLs return 403         | GCS bucket policy may not allow public reads — check bucket IAM settings        |

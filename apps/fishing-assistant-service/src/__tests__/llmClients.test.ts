@@ -1,13 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import nock from 'nock';
 import type { Logger } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink, type HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { OPENROUTER_TEXT_EMBEDDING_3_SMALL } from '@intexuraos/infra-openrouter';
 import {
   createFixedGeminiFlashClient,
   FISHING_ASSISTANT_CHAT_MODEL_ID,
 } from '../infra/llm/fixedGeminiFlashClient.js';
-import { createOpenAiKnowledgeEmbeddingClient } from '../infra/llm/embeddingClient.js';
+import { createOpenRouterKnowledgeEmbeddingClient } from '../infra/llm/embeddingClient.js';
 
 const { createLlmClientMock } = vi.hoisted(() => ({
   createLlmClientMock: vi.fn(),
@@ -27,6 +29,13 @@ const logger: Logger = {
 describe('Fishing Assistant LLM clients', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    nock.disableNetConnect();
+    nock.cleanAll();
+  });
+
+  afterEach(() => {
+    nock.cleanAll();
+    nock.enableNetConnect();
   });
 
   describe('createFixedGeminiFlashClient', () => {
@@ -113,28 +122,38 @@ describe('Fishing Assistant LLM clients', () => {
     });
   });
 
-  describe('createOpenAiKnowledgeEmbeddingClient', () => {
-    it('uses text-embedding-3-small and returns embeddings', async () => {
-      const openAiClient = {
-        embeddings: {
-          create: vi.fn().mockResolvedValue({
-            data: [
-              { embedding: Array.from({ length: 1536 }, () => 0.1) },
-              { embedding: Array.from({ length: 1536 }, () => 0.2) },
-            ],
-          }),
-        },
-      };
+  describe('createOpenRouterKnowledgeEmbeddingClient', () => {
+    it('uses OpenRouter while preserving text-embedding-3-small semantics', async () => {
+      const usageSink = new FakeUsageSink();
+      let requestBody: unknown;
+      nock('https://openrouter.ai')
+        .post('/api/v1/embeddings', (body) => {
+          requestBody = body;
+          return true;
+        })
+        .reply(200, {
+          data: [
+            { index: 0, embedding: Array.from({ length: 1536 }, () => 0.1) },
+            { index: 1, embedding: Array.from({ length: 1536 }, () => 0.2) },
+          ],
+          usage: { prompt_tokens: 4, total_tokens: 4, cost: 0.00002 },
+        });
 
-      const client = createOpenAiKnowledgeEmbeddingClient({ openAiClient, logger });
+      const client = createOpenRouterKnowledgeEmbeddingClient({
+        apiKey: 'or-platform-key',
+        logger,
+        usageSink,
+      });
       const result = await client.embedTexts({
         userId: 'user-1',
         texts: ['pierwszy', 'drugi'],
       });
 
-      expect(openAiClient.embeddings.create).toHaveBeenCalledWith({
-        model: 'text-embedding-3-small',
+      expect(requestBody).toEqual({
+        model: OPENROUTER_TEXT_EMBEDDING_3_SMALL.apiModelId,
         input: ['pierwszy', 'drugi'],
+        dimensions: 1536,
+        encoding_format: 'float',
       });
       expect(result.ok).toBe(true);
       if (!result.ok) {
@@ -142,18 +161,24 @@ describe('Fishing Assistant LLM clients', () => {
       }
       expect(result.value).toHaveLength(2);
       expect(result.value[0]).toHaveLength(1536);
+      expect(usageSink.records[0]).toMatchObject({
+        userId: 'user-1',
+        callType: 'embedding',
+        model: OPENROUTER_TEXT_EMBEDDING_3_SMALL.evidenceModelId,
+        promptType: 'fishing-knowledge-embedding',
+      });
     });
 
-    it('fails when OpenAI returns an embedding with an unexpected dimension', async () => {
-      const openAiClient = {
-        embeddings: {
-          create: vi.fn().mockResolvedValue({
-            data: [{ embedding: [0.1, 0.2, 0.3] }],
-          }),
-        },
-      };
+    it('fails when OpenRouter returns an embedding with an unexpected dimension', async () => {
+      nock('https://openrouter.ai')
+        .post('/api/v1/embeddings')
+        .reply(200, { data: [{ index: 0, embedding: [0.1, 0.2, 0.3] }] });
 
-      const client = createOpenAiKnowledgeEmbeddingClient({ openAiClient, logger });
+      const client = createOpenRouterKnowledgeEmbeddingClient({
+        apiKey: 'or-platform-key',
+        logger,
+        usageSink: new FakeUsageSink(),
+      });
       const result = await client.embedTexts({
         userId: 'user-1',
         texts: ['krótki test'],
@@ -163,7 +188,7 @@ describe('Fishing Assistant LLM clients', () => {
         ok: false,
         error: {
           code: 'EMBEDDING_FAILED',
-          message: 'OpenAI returned an embedding with an unexpected dimension.',
+          message: 'OpenRouter returned an invalid embedding response',
         },
       });
     });

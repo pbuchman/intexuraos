@@ -13,9 +13,9 @@ describe('ImagePromptModel', () => {
   });
 
   describe('IMAGE_PROMPT_MODELS', () => {
-    it('has gpt-4.1 with openai provider', () => {
+    it('keeps gpt-4.1 as the public alias while executing through OpenRouter', () => {
       expect(IMAGE_PROMPT_MODELS['gpt-4.1']).toEqual({
-        provider: LlmProviders.OpenAI,
+        provider: LlmProviders.OpenRouter,
         modelId: 'gpt-4.1',
       });
     });
@@ -44,9 +44,9 @@ describe('ImageGenerationModel', () => {
   });
 
   describe('IMAGE_GENERATION_MODELS', () => {
-    it('has gpt-image-1 with openai provider', () => {
+    it('keeps gpt-image-1 as the public alias while executing through OpenRouter', () => {
       expect(IMAGE_GENERATION_MODELS[LlmModels.GPTImage1]).toEqual({
-        provider: LlmProviders.OpenAI,
+        provider: LlmProviders.OpenRouter,
         modelId: LlmModels.GPTImage1,
       });
     });

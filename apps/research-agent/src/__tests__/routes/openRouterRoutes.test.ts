@@ -10,6 +10,7 @@ import nock from 'nock';
 import * as jose from 'jose';
 import { ok } from '@intexuraos/common-core';
 import { clearJwksCache } from '@intexuraos/common-http';
+import { getOpenRouterRawId, RESEARCH_SYNTHESIS_MODELS } from '@intexuraos/llm-contract';
 import { buildServer } from '../../server.js';
 import { resetServices, type ServiceContainer, setServices } from '../../services.js';
 import { resetOpenRouterCache } from '../../routes/openRouterRoutes.js';
@@ -190,6 +191,32 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(firstModel?.pricing.inputPricePerMillion).toBe(1);
   });
 
+  it('returns recommended synthesis models first and preserves allowlist order for the rest', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string }[] };
+    };
+    const recommendedIds = RESEARCH_SYNTHESIS_MODELS.map(getOpenRouterRawId);
+    const remainingIds = OPENROUTER_ALLOWED_MODELS.map((model) => model.id).filter(
+      (modelId) => !recommendedIds.includes(modelId)
+    );
+
+    expect(body.data.models.map((model) => model.id)).toEqual([
+      ...recommendedIds,
+      ...remainingIds,
+    ]);
+  });
+
   it('returns fallback pricing when catalog fetch returns non-200', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
@@ -215,7 +242,10 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     // Verify fallback context lengths from allowlist were used
     const firstModel = body.data.models[0];
     expect(firstModel).toBeDefined();
-    expect(firstModel?.contextLength).toBe(OPENROUTER_ALLOWED_MODELS[0]?.contextLength);
+    const firstAllowlistedModel = OPENROUTER_ALLOWED_MODELS.find(
+      (model) => model.id === firstModel?.id
+    );
+    expect(firstModel?.contextLength).toBe(firstAllowlistedModel?.contextLength);
   });
 
   it('returns cached result within TTL without making new HTTP call', async () => {
@@ -469,8 +499,9 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     };
     expect(body.success).toBe(true);
     // All models use their entry-specific reviewed context length.
-    for (const [index, model] of body.data.models.entries()) {
-      expect(model.contextLength).toBe(OPENROUTER_ALLOWED_MODELS[index]?.contextLength);
+    for (const model of body.data.models) {
+      const allowlistedModel = OPENROUTER_ALLOWED_MODELS.find((entry) => entry.id === model.id);
+      expect(model.contextLength).toBe(allowlistedModel?.contextLength);
     }
   });
 });

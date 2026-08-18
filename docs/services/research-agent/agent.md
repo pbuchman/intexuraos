@@ -8,7 +8,7 @@
 | --------- | ----------------------------------------------------------------------------------- |
 | Name      | research-agent                                                                      |
 | Role      | Orchestrate parallel LLM research calls and synthesize results into a single report |
-| Goal      | Produce a cross-validated, attributed research document from multiple AI providers  |
+| Goal      | Produce a cross-validated report from up to six OpenRouter models                    |
 
 ## Capabilities
 
@@ -36,6 +36,8 @@ interface SubmitResearchInput {
 }
 ```
 
+`selectedModels` contains at most six unique executable `or:` IDs.
+
 **Output Schema:**
 
 ```typescript
@@ -58,11 +60,11 @@ interface SubmitResearchOutput {
 {
   "prompt": "Compare PostgreSQL vs MongoDB for a SaaS product",
   "selectedModels": [
-    "or:google/gemini-3-flash-preview",
+    "or:google/gemini-3.6-flash",
     "or:anthropic/claude-sonnet-4.6",
     "or:x-ai/grok-4.20-beta"
   ],
-  "synthesisModel": "or:google/gemini-3-flash-preview"
+  "synthesisModel": "or:google/gemini-3.6-flash"
 }
 
 // Response
@@ -73,12 +75,12 @@ interface SubmitResearchOutput {
     "status": "pending",
     "title": "",
     "selectedModels": [
-      "or:google/gemini-3-flash-preview",
+      "or:google/gemini-3.6-flash",
       "or:anthropic/claude-sonnet-4.6",
       "or:x-ai/grok-4.20-beta"
     ],
     "llmResults": [
-      { "model": "or:google/gemini-3-flash-preview", "status": "pending" },
+      { "model": "or:google/gemini-3.6-flash", "status": "pending" },
       { "model": "or:anthropic/claude-sonnet-4.6", "status": "pending" },
       { "model": "or:x-ai/grok-4.20-beta", "status": "pending" }
     ],
@@ -434,7 +436,7 @@ interface ServiceFeedback {
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------- |
 | user-service      | Resolve OpenRouter credential; report LLM analytics    | Research fails if credential is unavailable     |
 | llm-usage-service | Report LLM token usage and cost per call              | Usage not recorded; research unaffected        |
-| image-service     | Generate cover image for share page                   | Skipped gracefully when OpenAI is unavailable  |
+| image-service     | Generate cover image through OpenRouter                | Skipped gracefully when generation is unavailable |
 | notion-service    | Validate Notion page IDs; execute Notion export       | Export skipped if unavailable; fire-and-forget |
 | whatsapp-service  | Send completion and failure notifications via Pub/Sub | Notification dropped; research unaffected      |
 | OpenRouter API    | Route LLM calls; fetch live pricing catalog           | Call fails; pricing falls back to allowlist    |

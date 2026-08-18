@@ -156,7 +156,7 @@ describe('parseErrorHubMcpEntry', () => {
       command: 'sh',
       args: ['-lc', expectedCommand],
       env: null,
-      env_vars: [],
+      env_vars: ['ERROR_HUB_HOST'],
       cwd: null,
     },
   };
@@ -185,6 +185,27 @@ describe('parseErrorHubMcpEntry', () => {
     {
       name: 'injected environment',
       entry: { ...validEntry, transport: { ...validEntry.transport, env: { TOKEN: 'secret' } } },
+    },
+    {
+      name: 'missing ERROR_HUB_HOST forwarding',
+      entry: { ...validEntry, transport: { ...validEntry.transport, env_vars: [] } },
+    },
+    {
+      name: 'different environment forwarding',
+      entry: {
+        ...validEntry,
+        transport: { ...validEntry.transport, env_vars: ['SENTRY_AUTH_TOKEN'] },
+      },
+    },
+    {
+      name: 'additional environment forwarding',
+      entry: {
+        ...validEntry,
+        transport: {
+          ...validEntry.transport,
+          env_vars: ['ERROR_HUB_HOST', 'SENTRY_AUTH_TOKEN'],
+        },
+      },
     },
   ])('rejects $name', ({ entry }) => {
     expect(() => parseErrorHubMcpEntry(JSON.stringify(entry))).toThrow();

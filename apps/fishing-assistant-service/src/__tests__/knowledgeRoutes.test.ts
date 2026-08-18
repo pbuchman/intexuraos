@@ -3,7 +3,6 @@ import type { FastifyInstance } from 'fastify';
 import { err, ok, type Logger } from '@intexuraos/common-core';
 import type { AuthUser } from '@intexuraos/common-http';
 import { createFakeFirestore, type Firestore } from '@intexuraos/infra-firestore';
-import OpenAI from 'openai';
 import { buildServer } from '../server.js';
 import { getServices, resetServices, setServices, type ServiceContainer } from '../services.js';
 import { createFirestoreChunkRepository } from '../infra/firestore/chunkRepository.js';
@@ -91,7 +90,6 @@ function createServices(): Omit<RouteTestContext, 'app'> {
         return embeddingClient.embedTexts(input);
       },
     },
-    openAiClient: {} as OpenAI,
     userServiceClient: {} as ServiceContainer['userServiceClient'],
     messageDigestClient: {} as ServiceContainer['messageDigestClient'],
     whatsappClient: {} as ServiceContainer['whatsappClient'],

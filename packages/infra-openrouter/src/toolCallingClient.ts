@@ -175,7 +175,7 @@ export function createOpenRouterToolCallingClient(
     void usageLogger.log({
       userId,
       provider: LlmProviders.OpenRouter,
-      model,
+      model: evidenceModelId,
       callType: 'tool_calling',
       usage,
       success,

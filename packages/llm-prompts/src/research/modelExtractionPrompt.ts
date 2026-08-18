@@ -7,9 +7,11 @@
 
 import type { Logger } from 'pino';
 import {
+  createOpenRouterModelId,
   DEFAULT_PLATFORM_LLM_MODEL,
+  DEFAULT_RESEARCH_SYNTHESIS_MODEL,
   IntexAgentModels,
-  LlmModels,
+  RESEARCH_SYNTHESIS_MODELS,
   type ResearchModel,
 } from '@intexuraos/llm-contract';
 import type { PromptBuilder } from '../shared/types.js';
@@ -55,37 +57,22 @@ export interface ModelExtractionResponse {
 export const modelExtractionPrompt: PromptBuilder<ModelExtractionPromptDeps> = {
   name: 'research-model-extraction',
   description: 'Extracts research/synthesis model preferences from a user message',
-  version: '2.0.0',
+  version: '3.0.0',
 
   build(deps: ModelExtractionPromptDeps): string {
     const { userMessage, availableModels, synthesisModels, defaultSynthesisModel } = deps;
 
-    // Group models by provider
-    const modelsByProvider = new Map<string, AvailableModelInfo[]>();
-    for (const model of availableModels) {
-      const existing = modelsByProvider.get(model.provider) ?? [];
-      existing.push(model);
-      modelsByProvider.set(model.provider, existing);
-    }
-
     // Build available models description
     const modelsDescription = availableModels
       .map((m) => {
-        const defaultNote = m.isProviderDefault ? ' (provider default)' : '';
+        const defaultNote = m.isProviderDefault ? ' (recommended default)' : '';
         return `- ${m.id}: ${m.displayName} (${m.provider})${defaultNote}\n  Keywords: ${m.keywords.join(', ')}`;
       })
       .join('\n');
 
-    // Build provider defaults description
-    const providerDefaults = Array.from(modelsByProvider.entries())
-      .map(([provider, models]) => {
-        const defaultModel = models.find((m) => m.isProviderDefault);
-        if (defaultModel !== undefined) {
-          return `- ${provider}: ${defaultModel.id}`;
-        }
-        return null;
-      })
-      .filter((s): s is string => s !== null)
+    const recommendedModels = availableModels
+      .filter((model) => model.isProviderDefault)
+      .map((model) => `- ${model.id}`)
       .join('\n');
 
     return `You are a model selection assistant. Your task is to extract LLM model preferences from a user's research request.
@@ -93,18 +80,19 @@ export const modelExtractionPrompt: PromptBuilder<ModelExtractionPromptDeps> = {
 The selected models will be used to fan out parallel research requests. Each selected model will independently research the user's topic.
 
 ## Available Models
-These are the models available to this user (they have API keys for these):
+These are the curated OpenRouter models available to this user:
 
 ${modelsDescription}
 
 ## Constraints
-1. **One model per provider**: You cannot select multiple models from the same provider (for example, two different OpenRouter models in one request)
-2. **Synthesis models**: Only these models can be used for synthesis: ${synthesisModels.join(', ')}
-3. **Invalid synthesis**: If user requests a model for synthesis that doesn't support it, use ${defaultSynthesisModel} instead
+1. **Selection limit**: Select up to 6 unique models by exact model ID
+2. **Same author allowed**: Multiple models from the same author are allowed
+3. **Synthesis models**: Only these models can be used for synthesis: ${synthesisModels.join(', ')}
+4. **Invalid synthesis**: If user requests a model for synthesis that doesn't support it, use ${defaultSynthesisModel} instead
 
-## Provider Defaults
-When user mentions a provider without specifying a model, use these defaults:
-${providerDefaults}
+## Recommended Defaults
+When the user does not name an exact model but asks for the platform default, prefer:
+${recommendedModels}
 
 ## User Message
 
@@ -118,11 +106,11 @@ Extract which models the user wants for:
 2. **Synthesis**: Which model to use for combining research results (optional)
 
 ## Special Cases
-- "all models" / "all LLMs": Select one model from each available provider
-- "all except X": Select one model from each provider except the mentioned one
+- "all models" / "all LLMs": Select the first 6 models from the available list
+- "all except X": Select the first 6 models except the mentioned model or author
 - No model mentioned: Return empty selectedModels (user will pick later)
-- Provider name only (e.g., "use google"): Use the provider's default model
-- If the user names a model not in the Available Models list, select that provider's default model instead. If the provider itself is unavailable, omit silently.
+- Author name only (e.g., "use Google"): Select the first matching model from that author
+- If the user names a model not in the Available Models list, omit it silently
 
 ## Response Format
 Respond with ONLY valid JSON in this exact format:
@@ -228,15 +216,14 @@ export function parseModelExtractionResponseWithLogging(
  * Maps to provider default or specific models.
  */
 export const MODEL_KEYWORDS: Partial<Record<ResearchModel, string[]>> = {
-  [IntexAgentModels.Gemini3FlashPreview]: ['gemini flash', 'gemini', 'google'],
-  [LlmModels.ClaudeOpus46]: ['claude opus', 'opus'],
-  [LlmModels.ClaudeSonnet46]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
-  [LlmModels.ClaudeSonnet47]: ['claude sonnet 4.7', 'sonnet 4.7', 'claude-sonnet-4-7'],
-  [LlmModels.O4MiniDeepResearch]: ['o4', 'o4-mini', 'deep research'],
-  [LlmModels.GPT54]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
-  [LlmModels.Sonar]: ['sonar basic'],
-  [LlmModels.SonarPro]: ['sonar', 'sonar pro', 'pplx', 'perplexity'],
-  [LlmModels.SonarDeepResearch]: ['sonar deep', 'perplexity deep', 'deep sonar'],
+  [IntexAgentModels.Gemini36Flash]: ['gemini flash', 'gemini', 'google'],
+  [createOpenRouterModelId('openai/gpt-5.4')]: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
+  [createOpenRouterModelId('anthropic/claude-sonnet-4.6')]: [
+    'claude sonnet',
+    'sonnet',
+    'claude',
+    'anthropic',
+  ],
   [DEFAULT_PLATFORM_LLM_MODEL]: ['openrouter', 'platform default', 'minimax'],
 };
 
@@ -245,19 +232,15 @@ export const MODEL_KEYWORDS: Partial<Record<ResearchModel, string[]>> = {
  * Used when user says "use google" without specifying a model.
  */
 export const PROVIDER_DEFAULT_MODELS: Record<string, ResearchModel> = {
-  google: IntexAgentModels.Gemini3FlashPreview,
-  anthropic: LlmModels.ClaudeSonnet46,
-  openai: LlmModels.GPT54,
-  perplexity: LlmModels.SonarPro,
   openrouter: DEFAULT_PLATFORM_LLM_MODEL,
 };
 
 /**
  * Models that support synthesis.
  */
-export const SYNTHESIS_MODELS: ResearchModel[] = [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.GPT54];
+export const SYNTHESIS_MODELS: ResearchModel[] = [...RESEARCH_SYNTHESIS_MODELS];
 
 /**
  * Default synthesis model when not specified or invalid.
  */
-export const DEFAULT_SYNTHESIS_MODEL: ResearchModel = DEFAULT_PLATFORM_LLM_MODEL;
+export const DEFAULT_SYNTHESIS_MODEL: ResearchModel = DEFAULT_RESEARCH_SYNTHESIS_MODEL;

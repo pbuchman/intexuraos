@@ -6,8 +6,8 @@ import {
   RefreshCw,
   XCircle,
 } from 'lucide-react';
-import { PROVIDER_MODELS } from '@/components';
-import { getProviderForStoredModel, type ResearchStatus } from '@/services/researchAgentApi.types';
+import type { ResearchStatus } from '@/services/researchAgentApi.types';
+import { resolveStoredResearchModel } from '@/utils/openRouterModelNames.js';
 
 // --- Status badge config ---
 
@@ -93,21 +93,16 @@ export const RESEARCH_SORT_OPTIONS: { key: ResearchSortOption; label: string }[]
 
 // --- Shared helpers used by multiple sub-components ---
 
-/** Resolves a model ID to a human-readable display name using PROVIDER_MODELS. */
+/** Resolves current and historical model IDs without changing the stored value. */
 export function getModelDisplayName(modelId: string): string {
-  for (const provider of PROVIDER_MODELS) {
-    const model = provider.models.find((m) => m.id === modelId);
-    if (model !== undefined) {
-      return model.name;
-    }
-  }
-  return modelId;
+  return resolveStoredResearchModel({ modelId, availableModelIds: [] }).name;
 }
 
 export function getUniqueResearchProviders(models: readonly string[]): string[] {
   const providers = models
-    .map((model) => getProviderForStoredModel(model))
-    .filter((provider): provider is NonNullable<typeof provider> => provider !== null);
+    .map((model) => resolveStoredResearchModel({ modelId: model, availableModelIds: [] }))
+    .map((presentation) => presentation.author ?? presentation.provider)
+    .filter((provider) => provider !== 'historical');
 
   return [...new Set(providers)];
 }

@@ -5,7 +5,7 @@ import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { createOpenRouterToolCallingClient } from '../toolCallingClient.js';
 
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
-const TEST_MODEL = 'google/gemini-3-flash-preview';
+const TEST_MODEL = 'google/gemini-3.6-flash';
 
 const mockLogger: Logger = {
   info: vi.fn(),
@@ -58,6 +58,33 @@ describe('createOpenRouterToolCallingClient', () => {
     nock.cleanAll();
   });
 
+  it('uses the evidence model for usage while keeping the raw model in the request body', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBody = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, {
+        choices: [{ message: { content: 'done', role: 'assistant' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    const evidenceModelId = `or:${TEST_MODEL}`;
+    const client = createClientWithConfig({ evidenceModelId });
+
+    await client.run({
+      systemPrompt: 'System',
+      messages: [{ role: 'user', content: 'Finish' }],
+      tools: [],
+      toolChoice: 'auto',
+      promptType: 'evidence-model-test',
+    });
+
+    expect(capturedBody?.['model']).toBe(TEST_MODEL);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ model: evidenceModelId })
+    );
+  });
   it('returns a text response and logs usage with promptType when no tool is called', async () => {
     let capturedBody: Record<string, unknown> | undefined;
     nock(API_BASE_URL)

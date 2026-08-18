@@ -114,6 +114,30 @@ describe('FirestoreUsageAggregateRepository', () => {
         expect(result.error.code).toBe('14');
       }
     });
+
+    it('uses a safe document id while preserving the raw Research component', async () => {
+      mockDocGet.mockResolvedValue({ exists: false });
+      mockSet.mockResolvedValue(undefined);
+      const component = 'research:or:google/gemini-3.6-flash';
+      const event = createTestEvent({
+        source: { service: 'research-agent', component, client: 'openrouter', environment: 'prod' },
+        request: {
+          provider: LlmProviders.OpenRouter,
+          model: 'or:google/gemini-3.6-flash',
+          operation: 'research',
+          success: true,
+          durationMs: 100,
+        },
+      });
+
+      const result = await repo.incrementAggregate(event);
+
+      expect(result.ok).toBe(true);
+      expect(mockDoc).toHaveBeenCalledWith(expect.not.stringContaining('/'));
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceComponent: component }),
+      );
+    });
   });
 
   describe('incrementAggregate — does not throw on bad doc-id', () => {

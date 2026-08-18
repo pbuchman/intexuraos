@@ -211,7 +211,7 @@ describe('migration 128 - Message Digest service indexes', () => {
     const source = readFileSync(
       new URL('../128_message-digest-service-indexes.mjs', import.meta.url)
     );
-    expect(manifest.lastReservedId).toBe('129');
+    expect(manifest.lastReservedId).toBe('130');
     expect(manifest.entries.filter((entry) => entry.id === '128')).toEqual([
       {
         id: '128',

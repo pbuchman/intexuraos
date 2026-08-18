@@ -468,6 +468,34 @@ describe('HttpInternalAuthUsageSink', () => {
       expect(parsed.events).toHaveLength(2);
     });
 
+    it('swallows a rejected fire-and-forget flush at maxBatchSize', async () => {
+      const sink = new HttpInternalAuthUsageSink(
+        makeConfig({ flushIntervalMs: 60_000, maxBatchSize: 1 })
+      );
+      const flushSpy = vi
+        .spyOn(sink as unknown as { flushBuffered(): Promise<void> }, 'flushBuffered')
+        .mockRejectedValue(new Error('flush failed'));
+
+      await expect(sink.log(baseParams)).resolves.toBeUndefined();
+      await Promise.resolve();
+
+      expect(flushSpy).toHaveBeenCalledOnce();
+    });
+
+    it('swallows a rejected fire-and-forget timer flush', async () => {
+      const sink = new HttpInternalAuthUsageSink(
+        makeConfig({ flushIntervalMs: 5, maxBatchSize: 100 })
+      );
+      const flushSpy = vi
+        .spyOn(sink as unknown as { flushBuffered(): Promise<void> }, 'flushBuffered')
+        .mockRejectedValue(new Error('flush failed'));
+
+      await sink.log(baseParams);
+      await vi.advanceTimersByTimeAsync(5);
+
+      expect(flushSpy).toHaveBeenCalledOnce();
+    });
+
     it('flushSync() resolves cleanly when buffer is empty', async () => {
       const config = makeConfig();
       const sink = new HttpInternalAuthUsageSink(config);

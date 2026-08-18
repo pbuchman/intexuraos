@@ -750,6 +750,37 @@ describe('Internal Routes', () => {
       expect(body.data.llmPreferences?.fallbackModel).toBe(orFallback);
     });
 
+    it('preserves an absent default while normalizing a stored legacy fallback', async () => {
+      const userId = 'user-with-only-legacy-fallback-model';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          fallbackModel: LegacyGoogleModels.Gemini25Flash,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+
+      app = await buildServer();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/users/${userId}/settings`,
+        headers: {
+          'x-internal-auth': INTERNAL_AUTH_TOKEN,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body) as {
+        data: {
+          llmPreferences?: { defaultModel?: string; fallbackModel?: string };
+        };
+      };
+      expect(body.data.llmPreferences).not.toHaveProperty('defaultModel');
+      expect(body.data.llmPreferences?.fallbackModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
+    });
+
     it('normalizes a legacy Google fallback while preserving a supported default', async () => {
       const userId = 'user-with-legacy-fallback-model';
       fakeSettingsRepo.setSettings({
@@ -779,7 +810,7 @@ describe('Internal Routes', () => {
           llmPreferences?: { defaultModel: string; fallbackModel?: string };
         };
       };
-      expect(body.data.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+      expect(body.data.llmPreferences?.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
       expect(body.data.llmPreferences?.fallbackModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
     });
 

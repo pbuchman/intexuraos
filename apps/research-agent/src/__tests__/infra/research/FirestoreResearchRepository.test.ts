@@ -83,7 +83,17 @@ describe('FirestoreResearchRepository', () => {
 
   describe('findById', () => {
     it('returns research when found', async () => {
-      const research = { id: 'research-1', prompt: 'Test' };
+      const research: Research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Test Research',
+        prompt: 'Test',
+        selectedModels: [LlmModels.GPT54],
+        synthesisModel: LlmModels.GPT54,
+        status: 'pending',
+        llmResults: [],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
       mockDocGet.mockResolvedValue({ exists: true, data: () => research });
 
       const result = await repository.findById('research-1');
@@ -91,6 +101,40 @@ describe('FirestoreResearchRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value).toEqual(research);
+      }
+    });
+
+    it('preserves exact retired model and provider values on read', async () => {
+      const retiredGemini = 'or:google/gemini-3-flash-preview';
+      const research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Legacy Gemini Research',
+        prompt: 'Test',
+        selectedModels: [retiredGemini, LlmModels.GPT54],
+        synthesisModel: retiredGemini,
+        status: 'failed',
+        llmResults: [
+          { provider: LlmProviders.OpenRouter, model: retiredGemini, status: 'failed' },
+        ],
+        partialFailure: {
+          failedModels: [retiredGemini],
+          detectedAt: '2024-01-01T01:00:00Z',
+          retryCount: 0,
+        },
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocGet.mockResolvedValue({ exists: true, data: () => research });
+
+      const result = await repository.findById('research-1');
+
+      expect(result.ok).toBe(true);
+      if (result.ok && result.value !== null) {
+        expect(result.value.selectedModels).toEqual([retiredGemini, LlmModels.GPT54]);
+        expect(result.value.synthesisModel).toBe(retiredGemini);
+        expect(result.value.llmResults[0]?.model).toBe(retiredGemini);
+        expect(result.value.llmResults[0]?.provider).toBe(LlmProviders.OpenRouter);
+        expect(result.value.partialFailure?.failedModels).toEqual([retiredGemini]);
       }
     });
 
@@ -989,6 +1033,49 @@ describe('FirestoreResearchRepository', () => {
             result: 'Result content',
           },
           { provider: LlmProviders.Anthropic, model: LlmModels.ClaudeOpus46, status: 'pending' },
+        ],
+      });
+    });
+
+    it('updates a retired model only by its exact stored ID', async () => {
+      const research = {
+        id: 'research-1',
+        userId: 'user-1',
+        title: 'Legacy Gemini Research',
+        prompt: 'Test',
+        selectedModels: ['or:google/gemini-3-flash-preview'],
+        synthesisModel: 'or:google/gemini-3-flash-preview',
+        status: 'processing',
+        llmResults: [
+          {
+            provider: LlmProviders.OpenRouter,
+            model: 'or:google/gemini-3-flash-preview',
+            status: 'processing',
+          },
+        ],
+        startedAt: '2024-01-01T00:00:00Z',
+      };
+      mockDocGet.mockResolvedValue({ exists: true, data: () => research });
+      mockDocUpdate.mockResolvedValue(undefined);
+
+      const mockDocRef = { get: mockDocGet, update: mockDocUpdate };
+      mockDoc.mockReturnValue(mockDocRef);
+
+      const result = await repository.updateLlmResult(
+        'research-1',
+        'or:google/gemini-3-flash-preview',
+        { status: 'completed', result: 'Result content' }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(mockDocUpdate).toHaveBeenCalledWith({
+        llmResults: [
+          {
+            provider: LlmProviders.OpenRouter,
+            model: 'or:google/gemini-3-flash-preview',
+            status: 'completed',
+            result: 'Result content',
+          },
         ],
       });
     });

@@ -3,7 +3,6 @@ import type { FastifyInstance } from 'fastify';
 import type { Logger } from '@intexuraos/common-core';
 import type { AuthUser } from '@intexuraos/common-http';
 import { createFakeFirestore, type Firestore, Timestamp } from '@intexuraos/infra-firestore';
-import OpenAI from 'openai';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
 import { createFirestoreFolderRepository } from '../infra/firestore/folderRepository.js';
@@ -97,7 +96,7 @@ function createServices(): Omit<RouteTestContext, 'app'> {
     }),
   };
   const chatAdapter = {
-    modelId: 'or:google/gemini-3-flash-preview',
+    modelId: 'or:google/gemini-3.6-flash',
     createClientForUser: vi.fn().mockResolvedValue({ ok: true, value: llmClient }),
   };
   const chatRepository = createFirestoreChatRepository({ firestore, logger });
@@ -129,7 +128,6 @@ function createServices(): Omit<RouteTestContext, 'app'> {
     embeddingClient: {
       embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
     },
-    openAiClient: {} as OpenAI,
     userServiceClient: {} as ServiceContainer['userServiceClient'],
     messageDigestClient: messageDigestClient as unknown as ServiceContainer['messageDigestClient'],
     whatsappClient: whatsappClient as unknown as ServiceContainer['whatsappClient'],
@@ -352,13 +350,12 @@ describe('Fishing Assistant chat routes', () => {
       embeddingClient: {
         embedTexts: vi.fn(),
       } as ServiceContainer['embeddingClient'],
-      openAiClient: {} as OpenAI,
       userServiceClient: {} as ServiceContainer['userServiceClient'],
       messageDigestClient: {} as ServiceContainer['messageDigestClient'],
       whatsappClient: {} as ServiceContainer['whatsappClient'],
       usageSink: {} as ServiceContainer['usageSink'],
       chatAdapter: {
-        modelId: 'or:google/gemini-3-flash-preview',
+        modelId: 'or:google/gemini-3.6-flash',
         createClientForUser: vi.fn(),
       } as ServiceContainer['chatAdapter'],
     });
@@ -414,7 +411,6 @@ describe('Fishing Assistant chat routes', () => {
         embeddingClient: {
           embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
         },
-        openAiClient: {} as OpenAI,
         userServiceClient: {} as ServiceContainer['userServiceClient'],
         messageDigestClient: {
           queryLegacyDigestDefinitions: vi
@@ -424,7 +420,7 @@ describe('Fishing Assistant chat routes', () => {
         whatsappClient: {} as ServiceContainer['whatsappClient'],
         usageSink: {} as ServiceContainer['usageSink'],
         chatAdapter: {
-          modelId: 'or:google/gemini-3-flash-preview',
+          modelId: 'or:google/gemini-3.6-flash',
           createClientForUser: vi.fn().mockResolvedValue({
             ok: true,
             value: {

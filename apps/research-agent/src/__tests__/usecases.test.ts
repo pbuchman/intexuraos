@@ -350,7 +350,7 @@ describe('validateSelectedModels', () => {
     expect(result).not.toContain(LlmModels.ClaudeOpus46);
   });
 
-  it('keeps only one model per provider', () => {
+  it('keeps multiple unique models from the same OpenRouter provider', () => {
     const availableModels: AvailableModelInfo[] = [
       {
         id: DEFAULT_PLATFORM_LLM_MODEL,
@@ -360,20 +360,20 @@ describe('validateSelectedModels', () => {
         isProviderDefault: true,
       },
       {
-        id: IntexAgentModels.Gemini3FlashPreview,
+        id: IntexAgentModels.Gemini36Flash,
         provider: LlmProviders.OpenRouter,
-        displayName: 'Gemini 3 Flash Preview',
+        displayName: 'Gemini 3.6 Flash',
         keywords: ['openrouter'],
         isProviderDefault: false,
       },
     ];
 
     const result = validateSelectedModels(
-      [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini3FlashPreview],
+      [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash],
       availableModels
     );
 
-    expect(result).toEqual([DEFAULT_PLATFORM_LLM_MODEL]);
+    expect(result).toEqual([DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash]);
   });
 });
 

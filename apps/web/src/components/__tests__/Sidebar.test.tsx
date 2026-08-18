@@ -54,9 +54,9 @@ describe('Sidebar', () => {
       'href',
       '/intex-agent/sessions'
     );
-    expect(screen.getByRole('link', { name: /preferences/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute(
       'href',
-      '/intex-agent/preferences'
+      '/intex-agent/settings'
     );
   });
 
@@ -234,12 +234,12 @@ describe('Sidebar', () => {
 
   it('marks only the matching Intex Agent sub-item active on deep links', () => {
     render(
-      <MemoryRouter initialEntries={['/intex-agent/preferences']}>
+      <MemoryRouter initialEntries={['/intex-agent/settings']}>
         <Sidebar />
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: /^preferences$/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /^settings$/i })).toHaveAttribute(
       'aria-current',
       'page'
     );
@@ -298,9 +298,9 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /^whatsapp$/i })).not.toBeInTheDocument();
   });
 
-  it('renders the Intex Agent section with Sessions and Preferences entries', () => {
+  it('renders the Intex Agent section with Sessions and Settings entries', () => {
     render(
-      <MemoryRouter initialEntries={['/intex-agent/preferences']}>
+      <MemoryRouter initialEntries={['/intex-agent/settings']}>
         <Sidebar />
       </MemoryRouter>
     );
@@ -310,9 +310,9 @@ describe('Sidebar', () => {
       'href',
       '/intex-agent/sessions'
     );
-    expect(screen.getByRole('link', { name: /preferences/i })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute(
       'href',
-      '/intex-agent/preferences'
+      '/intex-agent/settings'
     );
   });
 });

@@ -1,5 +1,5 @@
 {
-  "lastReservedId": "129",
+  "lastReservedId": "130",
   "entries": [
     {
       "id": "001",
@@ -645,6 +645,11 @@
       "id": "129",
       "name": "github-pr-summaries-reconciliation-index",
       "checksum": "sha256:9c96446b16991f2d7bc4a960f72bea98762f94144a7618355364b0ddc7da755f"
+    },
+    {
+      "id": "130",
+      "name": "gemini-36-flash-model-migration",
+      "checksum": "sha256:03ac9fbb7e1712d006749999073d0d9cf456bc7296139363ff7b7fe31874d0fe"
     }
   ]
 }

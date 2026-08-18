@@ -777,6 +777,13 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(auditConfig).toContain('log_type = "DATA_READ"');
   });
 
+  it('does not grant home-dev orchestrator direct access to a single GitHub App secret', () => {
+    expect(terraform).not.toContain(
+      'resource "google_secret_manager_secret_iam_member" "home_orchestrator_github_app_private_key" {'
+    );
+    expect(terraform).not.toContain('data "google_service_account" "home_orchestrator" {');
+  });
+
   it('imports and restricts the existing Firebase browser key without exposing key material', () => {
     const apiKeyResource = sectionBetween(
       'resource "google_apikeys_key" "firebase_browser" {',

@@ -47,20 +47,11 @@ vi.mock('@intexuraos/common-core/errors', () => ({
 import { useLlmKeys } from '../useLlmKeys.js';
 
 const baseKeys: LlmKeysResponse = {
-  defaultModel: 'gpt-4',
+  defaultModel: 'or:minimax/minimax-m3',
   fallbackModel: null,
-  google: null,
-  openai: 'sk-...abcd',
-  anthropic: null,
-  perplexity: null,
-  openrouter: null,
-  testResults: {
-    google: null,
-    openai: null,
-    anthropic: null,
-    perplexity: null,
-    openrouter: null,
-  },
+  openrouter: 'sk-or-...abcd',
+  accessSource: 'user',
+  testResults: { openrouter: null },
   intexAgentModelSelector: {
     status: 'available',
     explicitModel: null,
@@ -70,7 +61,7 @@ const baseKeys: LlmKeysResponse = {
     options: [
       { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
       { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-      { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+      { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
     ],
   },
 };
@@ -91,11 +82,11 @@ describe('useLlmKeys', () => {
     await waitFor(() => { expect(result.current.loading).toBe(false); });
 
     expect(result.current.keys).toBe(baseKeys);
-    expect(result.current.defaultModel).toBe('gpt-4');
+    expect(result.current.defaultModel).toBe('or:minimax/minimax-m3');
     expect(mocks.getLlmKeys).toHaveBeenCalledWith('tok', 'auth0|user-1');
   });
 
-  it('exposes the independent available selector without changing legacy key state', async () => {
+  it('exposes the independent available selector without changing OpenRouter key state', async () => {
     mocks.getLlmKeys.mockResolvedValue(baseKeys);
 
     const { result } = renderHook(() => useLlmKeys());
@@ -124,18 +115,18 @@ describe('useLlmKeys', () => {
 
   it('refetches after setKey mutation', async () => {
     mocks.getLlmKeys.mockResolvedValue(baseKeys);
-    mocks.setLlmKey.mockResolvedValue({ provider: LlmProviders.Anthropic, masked: 'sk-...' });
+    mocks.setLlmKey.mockResolvedValue({ provider: LlmProviders.OpenRouter, masked: 'sk-or-...' });
 
     const { result } = renderHook(() => useLlmKeys());
     await waitFor(() => { expect(result.current.loading).toBe(false); });
 
     await act(async () => {
-      await result.current.setKey(LlmProviders.Anthropic, 'sk-secret');
+      await result.current.setKey(LlmProviders.OpenRouter, 'sk-or-secret');
     });
 
     expect(mocks.setLlmKey).toHaveBeenCalledWith('tok', 'auth0|user-1', {
-      provider: LlmProviders.Anthropic,
-      apiKey: 'sk-secret',
+      provider: LlmProviders.OpenRouter,
+      apiKey: 'sk-or-secret',
     });
     expect(mocks.getLlmKeys).toHaveBeenCalledTimes(2);
   });
@@ -242,7 +233,7 @@ describe('useLlmKeys', () => {
     const { result, rerender } = renderHook(() => useLlmKeys());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    const pending = result.current.testKey(LlmProviders.Anthropic);
+    const pending = result.current.testKey(LlmProviders.OpenRouter);
     await waitFor(() => expect(mocks.testLlmKey).toHaveBeenCalledTimes(1));
     mocks.user = { sub: 'auth0|user-2' };
     rerender();
@@ -250,7 +241,7 @@ describe('useLlmKeys', () => {
     await act(async () => { resolveTest({ status: 'success', message: 'ignored', testedAt: '2026-01-01T00:00:00Z' }); });
     await pending;
 
-    expect(result.current.keys?.testResults.anthropic).toBeNull();
+    expect(result.current.keys?.testResults.openrouter).toBeNull();
     expect(result.current.error).toBeNull();
   });
 
@@ -266,8 +257,8 @@ describe('useLlmKeys', () => {
     const { result, rerender } = renderHook(() => useLlmKeys());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    const setPending = result.current.setKey(LlmProviders.Anthropic, 'key-a');
-    const deletePending = result.current.deleteKey(LlmProviders.Google);
+    const setPending = result.current.setKey(LlmProviders.OpenRouter, 'key-a');
+    const deletePending = result.current.deleteKey(LlmProviders.OpenRouter);
     const setHandled = setPending.catch((error: unknown) => error);
     const deleteHandled = deletePending.catch((error: unknown) => error);
     await waitFor(() => expect(mocks.setLlmKey).toHaveBeenCalledTimes(1));
@@ -294,11 +285,72 @@ describe('useLlmKeys', () => {
     await waitFor(() => { expect(result.current.loading).toBe(false); });
 
     await act(async () => {
-      await result.current.setDefaultModel('claude-3-7');
+      await result.current.setDefaultModel('or:anthropic/claude-sonnet-5');
     });
 
     // Should have reverted on error
-    expect(result.current.defaultModel).toBe('gpt-4');
+    expect(result.current.defaultModel).toBe('or:minimax/minimax-m3');
     expect(result.current.error).toBe('save failed');
+  });
+
+  it('atomically clears fallback when it becomes the new default', async () => {
+    const keys = {
+      ...baseKeys,
+      fallbackModel: 'or:google/gemini-3.6-flash',
+    };
+    mocks.getLlmKeys.mockResolvedValue(keys);
+    mocks.updateLlmPreferences.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useLlmKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setDefaultModel('or:google/gemini-3.6-flash');
+    });
+
+    expect(mocks.updateLlmPreferences).toHaveBeenCalledWith(
+      'tok',
+      'auth0|user-1',
+      'or:google/gemini-3.6-flash',
+      null,
+    );
+    expect(result.current.defaultModel).toBe('or:google/gemini-3.6-flash');
+    expect(result.current.fallbackModel).toBeNull();
+  });
+
+  it('normalizes an equal stored default/fallback pair to no fallback', async () => {
+    mocks.getLlmKeys.mockResolvedValue({
+      ...baseKeys,
+      fallbackModel: baseKeys.defaultModel,
+    });
+
+    const { result } = renderHook(() => useLlmKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.defaultModel).toBe('or:minimax/minimax-m3');
+    expect(result.current.fallbackModel).toBeNull();
+  });
+
+  it('normalizes selecting the default as fallback to no fallback', async () => {
+    mocks.getLlmKeys.mockResolvedValue({
+      ...baseKeys,
+      fallbackModel: 'or:google/gemini-3.6-flash',
+    });
+    mocks.updateLlmPreferences.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useLlmKeys());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await result.current.setFallbackModel('or:minimax/minimax-m3');
+    });
+
+    expect(mocks.updateLlmPreferences).toHaveBeenCalledWith(
+      'tok',
+      'auth0|user-1',
+      'or:minimax/minimax-m3',
+      null,
+    );
+    expect(result.current.fallbackModel).toBeNull();
   });
 });

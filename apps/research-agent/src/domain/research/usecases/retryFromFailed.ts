@@ -24,7 +24,7 @@ export interface LlmCallPublisher {
 export interface RetryFromFailedDeps {
   researchRepo: ResearchRepository;
   llmCallPublisher: LlmCallPublisher;
-  synthesisDeps: Omit<RunSynthesisDeps, 'researchRepo'>;
+  synthesisDeps?: Omit<RunSynthesisDeps, 'researchRepo'>;
 }
 
 export type RetryAction = 'retried_llms' | 'retried_synthesis' | 'already_completed';
@@ -89,6 +89,9 @@ export async function retryFromFailed(
   }
 
   if (hasSynthesisError && hasSuccessfulLlms) {
+    if (synthesisDeps === undefined) {
+      return { ok: false, error: 'Synthesis dependencies are required' };
+    }
     const synthesisResult = await runSynthesis(researchId, {
       researchRepo,
       ...synthesisDeps,

@@ -80,4 +80,11 @@ describe('App.tsx lazy-loaded routes', () => {
     expect(source).toMatch(/<Navigate to="\/intex-agent\/sessions" replace \/>/);
     expect(source).toMatch(/path="\*"\s+element={<Navigate to="\/intex-agent\/sessions" replace \/>}/);
   });
+
+  it('uses a canonical Intex Agent settings route and redirects the legacy preferences route', () => {
+    expect(source).toContain('path="/intex-agent/settings"');
+    expect(source).toMatch(
+      /path="\/intex-agent\/preferences"\s+element={<Navigate to="\/intex-agent\/settings" replace \/>}/
+    );
+  });
 });

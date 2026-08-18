@@ -7,6 +7,7 @@ export type IntexAgentModelSelectorConfig =
     };
 
 export interface UserServiceConfig {
+  platformOpenRouterApiKey?: string;
   intexAgentModelSelector: IntexAgentModelSelectorConfig;
   intexAgentTestRunsRead:
     | { status: 'disabled' }
@@ -25,15 +26,21 @@ export function loadConfig(): UserServiceConfig {
   if (userId === undefined || userId === '') {
     throw new Error('INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID is required');
   }
+  const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY']?.trim();
   if (userId === 'disabled') {
-    return { intexAgentModelSelector: { status: 'disabled' }, intexAgentTestRunsRead };
+    return {
+      ...(openRouterAppApiKey !== undefined &&
+        openRouterAppApiKey !== '' && { platformOpenRouterApiKey: openRouterAppApiKey }),
+      intexAgentModelSelector: { status: 'disabled' },
+      intexAgentTestRunsRead,
+    };
   }
 
-  const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
   if (openRouterAppApiKey === undefined || openRouterAppApiKey === '') {
     throw new Error('INTEXURAOS_OPENROUTER_APP_API_KEY is required');
   }
   return {
+    platformOpenRouterApiKey: openRouterAppApiKey,
     intexAgentModelSelector: {
       status: 'enabled',
       userId,

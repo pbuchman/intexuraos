@@ -15,6 +15,7 @@ const ERROR_HUB_MCP_ARGUMENTS = [
   '-lc',
   'exec sentry-mcp --access-token tailnet-only --host "$ERROR_HUB_HOST" --disable-skills=seer',
 ];
+const ERROR_HUB_MCP_ENVIRONMENT_VARIABLES = ['ERROR_HUB_HOST'];
 const IMMUTABLE_IMAGE_PATTERN =
   /^(?:sha256:[a-f0-9]{64}|[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64})$/u;
 const EVENT_ID_PATTERN = /^[a-f0-9]{32}$/u;
@@ -125,7 +126,11 @@ export function parseErrorHubMcpEntry(jsonText) {
     args.length !== ERROR_HUB_MCP_ARGUMENTS.length ||
     !args.every((argument, index) => argument === ERROR_HUB_MCP_ARGUMENTS[index]) ||
     transport.env !== null ||
-    envVars.length !== 0 ||
+    envVars.length !== ERROR_HUB_MCP_ENVIRONMENT_VARIABLES.length ||
+    !envVars.every(
+      (environmentVariable, index) =>
+        environmentVariable === ERROR_HUB_MCP_ENVIRONMENT_VARIABLES[index]
+    ) ||
     transport.cwd !== null
   ) {
     throw new Error('Code Worker error_hub MCP entry does not match the pinned runtime contract');

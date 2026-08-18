@@ -587,6 +587,32 @@ describe('retryTask use case', () => {
       expect(createCallInput?.agentType).toBe('planning');
     });
 
+    it('should preserve the complete Sentry issue context on the retry task', async () => {
+      const sentryIssue = {
+        organizationSlug: 'intexuraos',
+        projectSlug: 'intexuraos-backend',
+        projectId: '4509002',
+        issueId: '110',
+        issueShortId: 'INTEXURAOS-6E',
+        issueUrl:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/110/',
+        title: 'Configuration warning',
+        action: 'created',
+        eventId: 'b493ff643e7e4856adbad08d108ba8b4',
+        receivedAt: '2026-08-11T12:34:56.000Z',
+      };
+      const mockTask = createMockTask({ completedAt: sixMinutesAgo, sentryIssue });
+      mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
+
+      const result = await retryTask(createDeps(), { originalTaskId, userId });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sentryIssue })
+      );
+      expect(mockCodeTaskRepo.create.mock.calls[0]?.[0]?.sentryIssue).toEqual(sentryIssue);
+    });
+
     it('should update Linear issue state to In Progress', async () => {
       const mockTask = createMockTask({ completedAt: sixMinutesAgo });
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));

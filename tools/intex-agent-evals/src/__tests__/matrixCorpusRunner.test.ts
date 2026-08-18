@@ -358,7 +358,7 @@ describe('sequential Matrix corpus state machine', () => {
     });
   });
 
-  it('accepts zero agent calls for deterministic clarification-default acceptance', async () => {
+  it('requires an agent call when a supplied start completes calendar clarification', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const ports = passingPorts([]);
     vi.mocked(ports.executeTurn).mockImplementation(async (input) => {
@@ -383,16 +383,16 @@ describe('sequential Matrix corpus state machine', () => {
     });
 
     const result = await runMatrixCorpus(
-      { runId: 'run_calendar_default_acceptance_zero_agent_calls', catalog },
+      { runId: 'run_calendar_start_clarification_zero_agent_calls', catalog },
       ports
     );
 
-    expect(result.exitCode).toBe(0);
-    expect(result.failureCodes).not.toContain('TURN_AGENT_CALL_COUNT_MISMATCH');
+    expect(result.exitCode).toBe(2);
+    expect(result.failureCodes).toContain('TURN_AGENT_CALL_COUNT_MISMATCH');
     expect(result.scenarios[2]).toMatchObject({
       scenarioId: 'intex-eval-003',
-      status: 'passed',
-      completedTurns: 3,
+      status: 'stopped',
+      completedTurns: 1,
     });
   });
 

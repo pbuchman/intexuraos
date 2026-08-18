@@ -25,11 +25,18 @@ import { formatLlmError } from '../domain/research/formatLlmError.js';
 import {
   DEFAULT_PLATFORM_LLM_MODEL,
   getProviderForModel,
+  LlmProviders,
 } from '@intexuraos/llm-contract';
 import { getServices, type DecryptedApiKeys } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
 import { handleAllCompleted } from './helpers/completionHandlers.js';
-import { isRetryableStoredResearchModel } from './helpers/storedResearchModels.js';
+import {
+  getUnsupportedHistoricalModels,
+  getUnsupportedRetryMessage,
+  getUnsupportedSynthesisMessage,
+  isExecutableSynthesisModel,
+  isRetryableStoredResearchModel,
+} from './helpers/storedResearchModels.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
 
@@ -413,75 +420,114 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
         const research = researchResult.value;
 
+        const unsupportedPendingModels = getUnsupportedHistoricalModels(
+          research.llmResults
+            .filter((result) => result.status === 'pending')
+            .map((result) => result.model)
+        );
+        if (unsupportedPendingModels.length > 0) {
+          await researchRepo.update(event.researchId, {
+            status: 'failed',
+            synthesisError: getUnsupportedRetryMessage(unsupportedPendingModels),
+          });
+          request.log.error(
+            { researchId: event.researchId, models: unsupportedPendingModels },
+            'Research contains non-executable pending models'
+          );
+          return await reply.ok({});
+        }
+
         const apiKeysResult = await userServiceClient.getApiKeys(research.userId);
         const apiKeys: DecryptedApiKeys = apiKeysResult.ok ? apiKeysResult.value : {};
 
         const synthesisModel = research.synthesisModel;
-        const synthesisProvider = getProviderForModel(synthesisModel);
-        const synthesisKey = apiKeys[synthesisProvider];
-        if (synthesisKey === undefined) {
+        const synthesisProvider = 'openrouter';
+        if (research.skipSynthesis !== true && !isExecutableSynthesisModel(synthesisModel)) {
           await researchRepo.update(event.researchId, {
             status: 'failed',
-            synthesisError: `API key required for synthesis with ${synthesisModel}`,
+            synthesisError: getUnsupportedSynthesisMessage(synthesisModel),
           });
           request.log.error(
             { researchId: event.researchId, model: synthesisModel },
-            'API key missing for synthesis'
+            'Unsupported synthesis model'
+          );
+          return await reply.ok({});
+        }
+        const synthesisKey = apiKeys.openrouter;
+        if (synthesisKey === undefined) {
+          await researchRepo.update(event.researchId, {
+            status: 'failed',
+            synthesisError:
+              research.skipSynthesis === true
+                ? 'OpenRouter API key required for research'
+                : `API key required for synthesis with ${synthesisModel}`,
+          });
+          request.log.error(
+            { researchId: event.researchId, model: synthesisModel },
+            'OpenRouter API key missing for research processing'
           );
           // PubSub ack pattern: always return 200 OK, errors logged separately
           return await reply.ok({});
         }
 
-        const { synthesizer, contextInferrer } = createSynthesisProviders(
-          synthesisModel,
-          apiKeys,
-          research.userId,
-          services,
-          request.log,
-          event.researchId
-        );
+        const synthesisProviders =
+          research.skipSynthesis === true
+            ? undefined
+            : createSynthesisProviders(
+                synthesisModel,
+                apiKeys,
+                research.userId,
+                services,
+                request.log,
+                event.researchId
+              );
 
         const deps: Parameters<typeof processResearch>[1] = {
           researchRepo,
           llmCallPublisher: services.llmCallPublisher,
           logger: request.log,
-          synthesizer,
-          reportLlmSuccess: (model): void => {
-            void userServiceClient.reportLlmSuccess(research.userId, getProviderForModel(model));
+          reportLlmSuccess: (): void => {
+            void userServiceClient.reportLlmSuccess(research.userId, 'openrouter');
           },
         };
 
-        if (apiKeys.openrouter !== undefined) {
-          deps.titleGenerator = services.createTitleGenerator(
+        if (synthesisProviders !== undefined) {
+          deps.synthesizer = synthesisProviders.synthesizer;
+        }
+
+        deps.titleGenerator = services.createTitleGenerator(
+          DEFAULT_PLATFORM_LLM_MODEL,
+          synthesisKey,
+          research.userId,
+          request.log,
+          event.researchId
+        );
+
+        deps.contextInferrer =
+          synthesisProviders?.contextInferrer ??
+          services.createContextInferrer(
             DEFAULT_PLATFORM_LLM_MODEL,
-            apiKeys.openrouter,
+            synthesisKey,
             research.userId,
             request.log,
             event.researchId
           );
-        }
-
-        if (contextInferrer !== undefined) {
-          deps.contextInferrer = contextInferrer;
-        }
 
         const processResult = await processResearch(event.researchId, deps);
 
         // For enhanced researches where all LLM results are already completed,
         // trigger synthesis immediately
-        if (processResult.triggerSynthesis) {
+        if (processResult.triggerSynthesis && synthesisProviders !== undefined) {
           request.log.info({ researchId: event.researchId }, 'Triggering synthesis directly');
 
           await runSynthesis(event.researchId, {
             researchRepo,
-            synthesizer,
+            synthesizer: synthesisProviders.synthesizer,
             notificationSender: services.notificationSender,
             shareStorage: services.shareStorage,
             shareConfig: services.shareConfig,
             imageServiceClient: services.imageServiceClient,
-            /* v8 ignore start -- ts-type: conditional spread filtered by undefined check @preserve */
-            ...(deps.contextInferrer !== undefined && { contextInferrer: deps.contextInferrer }),
-            /* v8 ignore stop @preserve */
+            contextInferrer: deps.contextInferrer,
             userId: research.userId,
             webAppUrl: services.webAppUrl,
             /* v8 ignore start -- upstream: callback only invoked by runSynthesis which is tested via domain unit tests; route test cannot trigger callback execution @preserve */
@@ -505,10 +551,24 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               },
             },
             /* v8 ignore stop @preserve */
-            imageApiKeys: apiKeys,
             notionServiceClient: services.notionServiceClient,
             researchExportSettings: services.researchExportSettings,
             researchCostSummaryClient: services.researchCostSummaryClient ?? null,
+          });
+        } else if (processResult.triggerSynthesis) {
+          await handleAllCompleted({
+            researchId: event.researchId,
+            userId: research.userId,
+            researchRepo,
+            apiKeys,
+            services,
+            userServiceClient,
+            notificationSender: services.notificationSender,
+            shareStorage: services.shareStorage,
+            shareConfig: services.shareConfig,
+            imageServiceClient: services.imageServiceClient,
+            webAppUrl: services.webAppUrl,
+            logger: request.log,
           });
         }
 
@@ -642,7 +702,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const { userServiceClient } = getServices();
 
       try {
-        await userServiceClient.reportLlmSuccess(event.userId, getProviderForModel(event.model));
+        const provider = getProviderForModel(event.model);
+        if (provider !== LlmProviders.OpenRouter) {
+          request.log.info(
+            { model: event.model, userId: event.userId },
+            'Ignored analytics for a historical direct-provider model'
+          );
+          return await reply.ok({});
+        }
+        await userServiceClient.reportLlmSuccess(event.userId, provider);
         request.log.info({ model: event.model, userId: event.userId }, 'Analytics reported');
       } catch (error) {
         request.log.warn(
@@ -846,7 +914,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.ok({});
         }
 
-        const modelProvider = getProviderForModel(event.model);
+        const modelProvider = 'openrouter';
 
         request.log.info(
           { researchId: event.researchId, model: event.model, provider: modelProvider },
@@ -866,7 +934,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.ok({});
         }
 
-        const apiKey = apiKeysResult.value[modelProvider];
+        const apiKey = apiKeysResult.value.openrouter;
         if (apiKey === undefined) {
           request.log.error(
             { researchId: event.researchId, model: event.model },

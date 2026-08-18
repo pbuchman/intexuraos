@@ -61,37 +61,34 @@ describe('OpenRouterAdapter', () => {
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
         model: EXPECTED_RAW_MODEL,
+        evidenceModelId: TEST_MODEL,
         userId: 'test-user-id',
         logger: mockLogger,
         usageSink: fakeUsageSink,
       });
     });
 
-    it('passes non-OpenRouter model directly without stripping prefix', () => {
+    it('rejects a model without the OpenRouter evidence prefix', () => {
       mockCreateOpenRouterClient.mockClear();
       const nonOpenRouterModel = 'google/gemini-2.0-flash';
-      new OpenRouterAdapter(
-        'test-key',
-        nonOpenRouterModel,
-        'test-user-id',
-        mockLogger,
-        fakeUsageSink
-      );
-
-      expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
-        apiKey: 'test-key',
-        model: nonOpenRouterModel,
-        userId: 'test-user-id',
-        logger: mockLogger,
-        usageSink: fakeUsageSink,
-      });
+      expect(
+        () =>
+          new OpenRouterAdapter(
+            'test-key',
+            nonOpenRouterModel,
+            'test-user-id',
+            mockLogger,
+            fakeUsageSink
+          )
+      ).toThrow('OpenRouter model ID must start with or:');
+      expect(mockCreateOpenRouterClient).not.toHaveBeenCalled();
     });
 
-    it('strips or: prefix for google/gemini-3-flash-preview', () => {
+    it('strips or: prefix for google/gemini-3.6-flash', () => {
       mockCreateOpenRouterClient.mockClear();
       new OpenRouterAdapter(
         'test-key',
-        'or:google/gemini-3-flash-preview',
+        'or:google/gemini-3.6-flash',
         'test-user-id',
         mockLogger,
         fakeUsageSink
@@ -99,7 +96,8 @@ describe('OpenRouterAdapter', () => {
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'google/gemini-3-flash-preview',
+        model: 'google/gemini-3.6-flash',
+        evidenceModelId: 'or:google/gemini-3.6-flash',
         userId: 'test-user-id',
         logger: mockLogger,
         usageSink: fakeUsageSink,

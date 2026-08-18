@@ -11,20 +11,6 @@ vi.mock('jose', () => ({
   jwtVerify: vi.fn(),
 }));
 
-vi.mock('@intexuraos/infra-gpt', () => ({
-  EmbeddingClient: vi.fn().mockImplementation(() => ({
-    createEmbedding: vi.fn(),
-  })),
-}));
-
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    embeddings: {
-      create: vi.fn(),
-    },
-  })),
-}));
-
 const mockedJwtVerify = vi.mocked(jose.jwtVerify);
 
 import { buildServer } from '../../server.js';

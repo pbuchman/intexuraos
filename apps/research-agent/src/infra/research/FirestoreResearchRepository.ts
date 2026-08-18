@@ -188,9 +188,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
       }
 
       const snapshot = await query.get();
-      const docs = snapshot.docs.map((doc) =>
-        toResearchSummary(doc.data() as Research)
-      );
+      const docs = snapshot.docs.map((doc) => toResearchSummary(doc.data() as Research));
 
       const items = docs.slice(0, limit);
       const lastItem = items[items.length - 1];
@@ -248,7 +246,10 @@ export class FirestoreResearchRepository implements ResearchRepository {
         if (r.model !== model) {
           return r;
         }
-        const merged = { ...r, ...result };
+        const merged = {
+          ...r,
+          ...result,
+        };
         if (result.status === 'pending' || result.status === 'processing') {
           const { error: _error, ...withoutError } = merged;
           return withoutError;

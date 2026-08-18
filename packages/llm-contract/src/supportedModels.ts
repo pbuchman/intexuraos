@@ -3,9 +3,9 @@
  *
  * Single source of truth for model names via TypeScript union types.
  * Models are categorized by their primary use case.
- * Executable model identifiers live in the regular model unions below.
- * Retired direct-Google identifiers are isolated in the legacy-read contract
- * so persisted historical data remains recognizable without becoming runnable.
+ * OpenRouter IDs are the only executable model identifiers. Direct-provider
+ * model unions remain available for persisted history and rollback-only code.
+ * Retired direct-Google identifiers are isolated in the legacy-read contract.
  */
 
 // =============================================================================
@@ -21,8 +21,11 @@ export type OpenRouter = 'openrouter';
 /** Union of all LLM providers */
 export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | OpenRouter;
 
+/** Direct providers retained for historical data and rollback-only adapters. */
+export type DirectLlmProvider = OpenAI | Anthropic | Perplexity;
+
 /** Providers that can execute new LLM requests. */
-export type ExecutableLlmProvider = Exclude<LlmProvider, Google>;
+export type ExecutableLlmProvider = OpenRouter;
 
 // =============================================================================
 // Legacy Model Types - Direct Google (read/migration only)
@@ -154,9 +157,6 @@ export const LlmProviders = {
 
 /** Runtime allowlist for provider-selection and key-validation endpoints. */
 export const EXECUTABLE_LLM_PROVIDERS: readonly ExecutableLlmProvider[] = [
-  LlmProviders.OpenAI,
-  LlmProviders.Anthropic,
-  LlmProviders.Perplexity,
   LlmProviders.OpenRouter,
 ] as const;
 
@@ -165,8 +165,8 @@ export const EXECUTABLE_LLM_PROVIDERS: readonly ExecutableLlmProvider[] = [
 // =============================================================================
 
 /**
- * Typed constants for executable direct-provider LLM models.
- * Retired direct-Google IDs live only in `LegacyGoogleModels`.
+ * Typed constants for historical direct-provider LLM model IDs.
+ * They are not accepted by executable factories or preference writes.
  */
 export const LlmModels = {
   // OpenAI
@@ -222,7 +222,7 @@ export const ALL_FAST_MODELS: FastModel[] = [LlmModels.ClaudeHaiku35, LlmModels.
 /**
  * Map from model to provider.
  */
-export const MODEL_PROVIDER_MAP: Record<LLMModel, ExecutableLlmProvider> = {
+export const MODEL_PROVIDER_MAP: Record<LLMModel, DirectLlmProvider> = {
   // OpenAI
   [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
   [LlmModels.GPT54]: LlmProviders.OpenAI,
@@ -263,7 +263,7 @@ export interface DefaultOpenRouterModel {
 export const DEFAULT_OPENROUTER_MODELS: readonly DefaultOpenRouterModel[] = [
   { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (Free)', provider: 'Google' },
   { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT', provider: 'Google' },
-  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', provider: 'Google' },
+  { id: 'google/gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google' },
   { id: 'minimax/minimax-m3', name: 'MiniMax M3', provider: 'MiniMax' },
   { id: 'qwen/qwen3.6-plus', name: 'Qwen 3.6 Plus', provider: 'Qwen' },
   {
@@ -285,27 +285,16 @@ const DEFAULT_OPENROUTER_MODEL_IDS: ReadonlySet<string> = new Set(
  * but runtime validation via `isDefaultEligibleModel()` only accepts the
  * curated models in `DEFAULT_OPENROUTER_MODELS`. Always validate at runtime.
  */
-export type DefaultEligibleStaticModel = ClaudeHaiku35 | GPT4oMini;
-export type DefaultEligibleModel = DefaultEligibleStaticModel | OpenRouterModelId;
+export type DefaultEligibleStaticModel = never;
+export type DefaultEligibleModel = OpenRouterModelId;
 
-export const DEFAULT_ELIGIBLE_STATIC_MODELS: readonly DefaultEligibleStaticModel[] = [
-  LlmModels.ClaudeHaiku35,
-  LlmModels.GPT4oMini,
-] as const;
-
-const DEFAULT_ELIGIBLE_STATIC_MODEL_IDS: ReadonlySet<string> = new Set(
-  DEFAULT_ELIGIBLE_STATIC_MODELS
-);
+export const DEFAULT_ELIGIBLE_STATIC_MODELS: readonly DefaultEligibleStaticModel[] = [];
 
 export function isDefaultEligibleModel(model: string): model is DefaultEligibleModel {
-  if (DEFAULT_ELIGIBLE_STATIC_MODEL_IDS.has(model)) return true;
   return DEFAULT_OPENROUTER_MODEL_IDS.has(model);
 }
 
 export const DEFAULT_MODEL_DISPLAY_NAMES: Record<string, string> = {
-  ...Object.fromEntries(
-    DEFAULT_ELIGIBLE_STATIC_MODELS.map((model) => [model, FAST_MODEL_DISPLAY_NAMES[model]])
-  ),
   ...Object.fromEntries(DEFAULT_OPENROUTER_MODELS.map((m) => [`or:${m.id}`, m.name])),
 };
 
@@ -317,6 +306,7 @@ export type OpenRouterMiniMaxM3 = 'or:minimax/minimax-m3' & OpenRouterModelId;
 export type OpenRouterClaudeSonnet5 = 'or:anthropic/claude-sonnet-5' & OpenRouterModelId;
 export type OpenRouterGemini35Flash = 'or:google/gemini-3.5-flash' & OpenRouterModelId;
 export type OpenRouterDeepSeekV4Flash = 'or:deepseek/deepseek-v4-flash' & OpenRouterModelId;
+export type OpenRouterGemini36Flash = 'or:google/gemini-3.6-flash' & OpenRouterModelId;
 
 export type ConversationAssistantModel =
   | OpenRouterMiniMaxM3
@@ -387,16 +377,14 @@ export function getConversationAssistantModelDisplayName(model: string): string 
 export type IntexAgentModel =
   | OpenRouterDeepSeekV4Flash
   | OpenRouterMiniMaxM3
-  | OpenRouterGemini3FlashPreview;
+  | OpenRouterGemini36Flash;
 
 export const IntexAgentModels = {
   DeepSeekV4Flash: createOpenRouterModelId(
     'deepseek/deepseek-v4-flash'
   ) as OpenRouterDeepSeekV4Flash,
   MiniMaxM3: createOpenRouterModelId('minimax/minimax-m3') as OpenRouterMiniMaxM3,
-  Gemini3FlashPreview: createOpenRouterModelId(
-    'google/gemini-3-flash-preview'
-  ) as OpenRouterGemini3FlashPreview,
+  Gemini36Flash: createOpenRouterModelId('google/gemini-3.6-flash') as OpenRouterGemini36Flash,
 } as const;
 
 export const DEFAULT_INTEX_AGENT_MODEL = IntexAgentModels.DeepSeekV4Flash;
@@ -409,12 +397,27 @@ export const DEFAULT_INTEX_AGENT_MODEL = IntexAgentModels.DeepSeekV4Flash;
  */
 export const DEFAULT_PLATFORM_LLM_MODEL = IntexAgentModels.MiniMaxM3;
 
+export type OpenRouterGPT54 = 'or:openai/gpt-5.4' & OpenRouterModelId;
+
+/** OpenRouter models explicitly allowed for new Research synthesis calls. */
+export const ResearchSynthesisModels = {
+  MiniMaxM3: DEFAULT_PLATFORM_LLM_MODEL,
+  GPT54: createOpenRouterModelId('openai/gpt-5.4') as OpenRouterGPT54,
+} as const;
+
+export const RESEARCH_SYNTHESIS_MODELS: readonly ResearchModel[] = [
+  ResearchSynthesisModels.MiniMaxM3,
+  ResearchSynthesisModels.GPT54,
+] as const;
+
+export const DEFAULT_RESEARCH_SYNTHESIS_MODEL: ResearchModel = DEFAULT_PLATFORM_LLM_MODEL;
+
 export const INTEX_AGENT_MODEL_OPTIONS = [
   { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash', provider: 'DeepSeek' },
   { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3', provider: 'MiniMax' },
   {
-    id: IntexAgentModels.Gemini3FlashPreview,
-    label: 'Gemini 3 Flash Preview',
+    id: IntexAgentModels.Gemini36Flash,
+    label: 'Gemini 3.6 Flash',
     provider: 'Google',
   },
 ] as const;
@@ -425,11 +428,33 @@ export function isIntexAgentModel(value: unknown): value is IntexAgentModel {
   return typeof value === 'string' && INTEX_AGENT_MODEL_IDS.has(value);
 }
 
+const RETIRED_GEMINI_3_FLASH_PREVIEW_MODEL = 'or:google/gemini-3-flash-preview';
+
+/**
+ * Translate the retired Gemini preview identifier at read boundaries.
+ * This keeps rolling deployments safe while migration 130 rewrites persisted settings.
+ */
+export function normalizeRetiredOpenRouterModel(model: string): string {
+  return model === RETIRED_GEMINI_3_FLASH_PREVIEW_MODEL ? IntexAgentModels.Gemini36Flash : model;
+}
+
+/**
+ * Normalize a persisted executable preference at read boundaries only.
+ *
+ * Research history must not use this helper. Unknown, direct-provider, and
+ * retired preferences fall back to the active platform model without writeback.
+ */
+export function normalizeLlmModelPreferenceForRead(model: string): DefaultEligibleModel {
+  const normalizedModel = normalizeRetiredOpenRouterModel(model);
+  return isDefaultEligibleModel(normalizedModel) ? normalizedModel : DEFAULT_PLATFORM_LLM_MODEL;
+}
+
 /**
  * Get provider for a model.
  */
 export function getProviderForModel(model: LegacyGoogleModel): Google;
-export function getProviderForModel(model: LLMModel | OpenRouterModelId): ExecutableLlmProvider;
+export function getProviderForModel(model: LLMModel): DirectLlmProvider;
+export function getProviderForModel(model: OpenRouterModelId): ExecutableLlmProvider;
 export function getProviderForModel(model: string): LlmProvider;
 export function getProviderForModel(model: string): LlmProvider {
   if (isOpenRouterModel(model)) {
@@ -439,7 +464,7 @@ export function getProviderForModel(model: string): LlmProvider {
     return LlmProviders.Google;
   }
 
-  const provider = (MODEL_PROVIDER_MAP as Partial<Record<string, ExecutableLlmProvider>>)[model];
+  const provider = (MODEL_PROVIDER_MAP as Partial<Record<string, DirectLlmProvider>>)[model];
   if (provider === undefined) {
     throw new Error(`Unknown LLM model: ${model}`);
   }
@@ -495,14 +520,12 @@ export function isFastModel(model: string): model is FastModel {
  * Tool calling is OpenRouter-only. Google-hosted models use an `or:google/...`
  * identifier and never a retired raw `gemini-*` identifier.
  */
-export type OpenRouterGemini3FlashPreview = 'or:google/gemini-3-flash-preview' & OpenRouterModelId;
-
 export type OpenRouterToolCallingModel = IntexAgentModel;
 
 export const OpenRouterToolCallingModels = {
   DeepSeekV4Flash: IntexAgentModels.DeepSeekV4Flash,
   MiniMaxM3: IntexAgentModels.MiniMaxM3,
-  Gemini3FlashPreview: IntexAgentModels.Gemini3FlashPreview,
+  Gemini36Flash: IntexAgentModels.Gemini36Flash,
 } as const;
 
 export type ToolCallingModel = OpenRouterToolCallingModel;
@@ -511,7 +534,7 @@ export type ToolCallingModel = OpenRouterToolCallingModel;
 export const ALL_TOOL_CALLING_MODELS: readonly ToolCallingModel[] = [
   OpenRouterToolCallingModels.DeepSeekV4Flash,
   OpenRouterToolCallingModels.MiniMaxM3,
-  OpenRouterToolCallingModels.Gemini3FlashPreview,
+  OpenRouterToolCallingModels.Gemini36Flash,
 ];
 
 const TOOL_CALLING_MODEL_IDS: ReadonlySet<string> = new Set(ALL_TOOL_CALLING_MODELS);

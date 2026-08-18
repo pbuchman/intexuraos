@@ -265,6 +265,7 @@ export class FakeLlmGenerateClient implements LlmGenerateClient {
  */
 export class FakeUserServiceClient implements UserServiceClient {
   private apiKeys = new Map<string, DecryptedApiKeys>();
+  private unavailableApiKeyUsers = new Set<string>();
   private failNextGetApiKeys = false;
   private failNextReportLlmSuccess = false;
   private failNextGetLlmClient = false;
@@ -274,6 +275,9 @@ export class FakeUserServiceClient implements UserServiceClient {
     if (this.failNextGetApiKeys) {
       this.failNextGetApiKeys = false;
       return err({ code: 'API_ERROR', message: 'Test getApiKeys failure' });
+    }
+    if (this.unavailableApiKeyUsers.has(userId)) {
+      return ok({});
     }
     const keys = this.apiKeys.get(userId) ?? {};
     return ok({ openrouter: 'test-platform-openrouter-key', ...keys });
@@ -314,7 +318,12 @@ export class FakeUserServiceClient implements UserServiceClient {
 
   // Test helpers
   setApiKeys(userId: string, keys: DecryptedApiKeys): void {
+    this.unavailableApiKeyUsers.delete(userId);
     this.apiKeys.set(userId, keys);
+  }
+
+  setApiKeysUnavailable(userId: string): void {
+    this.unavailableApiKeyUsers.add(userId);
   }
 
   setLlmClient(client: LlmGenerateClient): void {
