@@ -46,6 +46,8 @@ export const SKIP_SENTRY_KEY = '_skipSentry' as const;
 const SENTRY_LEVELS = new Set([40, 50, 60]);
 const WARN_LEVEL = 40;
 const INTERNAL_AUTH_TOKEN_MISMATCH_MESSAGE = 'Internal auth failed: token mismatch';
+const RETIRED_GEMINI_FALLBACK_WARNING =
+  'INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured';
 
 function isInternalAuthTokenMismatchWarning(logEntry: LogDescriptor): boolean {
   const levelValue = logEntry['level'] as unknown;
@@ -62,6 +64,10 @@ function isInternalAuthTokenMismatchWarning(logEntry: LogDescriptor): boolean {
   return (
     reason === 'token_mismatch' && typeof msg === 'string' && msg.startsWith('Internal auth failed')
   );
+}
+
+function isRetiredGeminiFallbackWarning(logEntry: LogDescriptor): boolean {
+  return logEntry['level'] === WARN_LEVEL && logEntry['msg'] === RETIRED_GEMINI_FALLBACK_WARNING;
 }
 
 /**
@@ -125,7 +131,7 @@ function sendLogToSentry(logEntry: LogDescriptor): void {
     return;
   }
 
-  if (isInternalAuthTokenMismatchWarning(logEntry)) {
+  if (isInternalAuthTokenMismatchWarning(logEntry) || isRetiredGeminiFallbackWarning(logEntry)) {
     return;
   }
 
