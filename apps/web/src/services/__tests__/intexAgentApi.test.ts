@@ -260,15 +260,17 @@ describe('intexAgentApi', () => {
 
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe('/preferences');
-    expect(call?.[3]).toMatchObject({ method: 'PUT' });
-    expect(JSON.parse(String(call?.[3]?.body))).toEqual({
-      instructions: '',
-      externalSave: {
-        enabled: true,
-        endpointUrl: 'https://external-save.example.com/intex',
-        cfAccessClientId: 'cf-client-id',
-        cfAccessClientSecret: 'cf-client-secret',
-        source: 'ios-shortcuts',
+    expect(call?.[3]).toEqual({
+      method: 'PUT',
+      body: {
+        instructions: '',
+        externalSave: {
+          enabled: true,
+          endpointUrl: 'https://external-save.example.com/intex',
+          cfAccessClientId: 'cf-client-id',
+          cfAccessClientSecret: 'cf-client-secret',
+          source: 'ios-shortcuts',
+        },
       },
     });
   });
@@ -290,14 +292,16 @@ describe('intexAgentApi', () => {
 
     const call = vi.mocked(apiRequest).mock.calls[0];
     expect(call?.[1]).toBe('/preferences/external-save/test');
-    expect(call?.[3]).toMatchObject({ method: 'POST' });
-    expect(JSON.parse(String(call?.[3]?.body))).toEqual({
-      externalSave: {
-        enabled: true,
-        endpointUrl: 'https://external-save.example.com/intex',
-        cfAccessClientId: 'cf-client-id',
-        cfAccessClientSecret: 'cf-client-secret',
-        source: 'ios-shortcuts',
+    expect(call?.[3]).toEqual({
+      method: 'POST',
+      body: {
+        externalSave: {
+          enabled: true,
+          endpointUrl: 'https://external-save.example.com/intex',
+          cfAccessClientId: 'cf-client-id',
+          cfAccessClientSecret: 'cf-client-secret',
+          source: 'ios-shortcuts',
+        },
       },
     });
     expect(result).toEqual({
@@ -377,8 +381,23 @@ describe('intexAgentApi', () => {
       '/preferences/prompt/versions',
       '/preferences/prompt/versions/1',
     ]);
-    expect(vi.mocked(apiRequest).mock.calls[1]?.[3]).toMatchObject({ method: 'POST' });
-    expect(vi.mocked(apiRequest).mock.calls[2]?.[3]).toMatchObject({ method: 'PATCH' });
-    expect(vi.mocked(apiRequest).mock.calls[3]?.[3]).toMatchObject({ method: 'DELETE' });
+    expect(vi.mocked(apiRequest).mock.calls[1]?.[3]).toEqual({
+      method: 'POST',
+      body: {
+        text: 'When I invite Jakub, use jakub@gmail.com.',
+        expectedVersion: 0,
+      },
+    });
+    expect(vi.mocked(apiRequest).mock.calls[2]?.[3]).toEqual({
+      method: 'PATCH',
+      body: {
+        text: 'When I invite Jakub, use jakub.nowak@gmail.com.',
+        expectedVersion: 1,
+      },
+    });
+    expect(vi.mocked(apiRequest).mock.calls[3]?.[3]).toEqual({
+      method: 'DELETE',
+      body: { expectedVersion: 2 },
+    });
   });
 });

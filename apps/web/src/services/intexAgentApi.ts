@@ -173,7 +173,7 @@ export async function saveIntexAgentPreferences(
     accessToken,
     {
       method: 'PUT',
-      body: JSON.stringify(request),
+      body: request,
     }
   );
 }
@@ -188,7 +188,7 @@ export async function testIntexAgentExternalSave(
     accessToken,
     {
       method: 'POST',
-      body: JSON.stringify({ externalSave }),
+      body: { externalSave },
     }
   );
 }
@@ -226,7 +226,7 @@ export async function addIntexAgentPromptPreference(
     accessToken,
     {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: request,
     }
   );
 }
@@ -242,7 +242,7 @@ export async function updateIntexAgentPromptPreference(
     accessToken,
     {
       method: 'PATCH',
-      body: JSON.stringify(request),
+      body: request,
     }
   );
 }
@@ -258,7 +258,7 @@ export async function deleteIntexAgentPromptPreference(
     accessToken,
     {
       method: 'DELETE',
-      body: JSON.stringify(request),
+      body: request,
     }
   );
 }
