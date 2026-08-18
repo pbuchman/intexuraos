@@ -29,7 +29,7 @@ export interface LlmServices {
   executionMemoryEmbeddingClient?: EmbeddingClient;
 }
 
-const TOOL_CALLING_MODEL = OpenRouterToolCallingModels.Gemini3FlashPreview;
+const TOOL_CALLING_MODEL = OpenRouterToolCallingModels.Gemini36Flash;
 
 /**
  * Create LLM-backed services.

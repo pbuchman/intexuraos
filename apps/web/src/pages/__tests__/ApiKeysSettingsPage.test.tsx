@@ -106,7 +106,7 @@ function createIntexAgentModel(
     options: [
       { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
       { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-      { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+      { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
     ],
     savingIntexAgentModel: false,
     intexAgentModelError: null,
@@ -342,8 +342,8 @@ describe('ApiKeysSettingsPage', () => {
     mockUseLlmKeys.mockReturnValue(
       createPageHookResult({
         intexAgentModel: createIntexAgentModel({
-          explicitModel: IntexAgentModels.Gemini3FlashPreview,
-          effectiveModel: IntexAgentModels.Gemini3FlashPreview,
+          explicitModel: IntexAgentModels.Gemini36Flash,
+          effectiveModel: IntexAgentModels.Gemini36Flash,
           setIntexAgentModel,
         }),
       })
@@ -392,7 +392,7 @@ describe('ApiKeysSettingsPage', () => {
     expect(select.compareDocumentPosition(reset) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(select.className).not.toMatch(/(?:^|\s)w-(?:\d+|\[\d+px\])(?:\s|$)/);
 
-    fireEvent.change(select, { target: { value: IntexAgentModels.Gemini3FlashPreview } });
+    fireEvent.change(select, { target: { value: IntexAgentModels.Gemini36Flash } });
     mockUseLlmKeys.mockReturnValue(createPageHookResult());
     rerender(<div className="w-[320px]"><ApiKeysSettingsPage /></div>);
     deferred.resolve('applied');

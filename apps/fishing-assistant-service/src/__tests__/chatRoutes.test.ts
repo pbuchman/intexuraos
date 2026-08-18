@@ -97,7 +97,7 @@ function createServices(): Omit<RouteTestContext, 'app'> {
     }),
   };
   const chatAdapter = {
-    modelId: 'or:google/gemini-3-flash-preview',
+    modelId: 'or:google/gemini-3.6-flash',
     createClientForUser: vi.fn().mockResolvedValue({ ok: true, value: llmClient }),
   };
   const chatRepository = createFirestoreChatRepository({ firestore, logger });
@@ -358,7 +358,7 @@ describe('Fishing Assistant chat routes', () => {
       whatsappClient: {} as ServiceContainer['whatsappClient'],
       usageSink: {} as ServiceContainer['usageSink'],
       chatAdapter: {
-        modelId: 'or:google/gemini-3-flash-preview',
+        modelId: 'or:google/gemini-3.6-flash',
         createClientForUser: vi.fn(),
       } as ServiceContainer['chatAdapter'],
     });
@@ -424,7 +424,7 @@ describe('Fishing Assistant chat routes', () => {
         whatsappClient: {} as ServiceContainer['whatsappClient'],
         usageSink: {} as ServiceContainer['usageSink'],
         chatAdapter: {
-          modelId: 'or:google/gemini-3-flash-preview',
+          modelId: 'or:google/gemini-3.6-flash',
           createClientForUser: vi.fn().mockResolvedValue({
             ok: true,
             value: {

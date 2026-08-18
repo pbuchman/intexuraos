@@ -128,7 +128,7 @@ describe('createLlmServices', () => {
   });
 
   describe('resolveToolCallingClient', () => {
-    it('uses the user OpenRouter key with Gemini 3 Flash Preview when user-service returns one', async () => {
+    it('uses the user OpenRouter key with Gemini 3.6 Flash when user-service returns one', async () => {
       const services = createLlmServices({
         config: makeConfig({ openRouterAppApiKey: 'platform-key' }), logger,
         userServiceClient: makeUserServiceClient('user-openrouter-key'), buildUsageSink,
@@ -138,7 +138,7 @@ describe('createLlmServices', () => {
       expect(mockCreateToolCallingClient).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'user-openrouter-key',
-          model: 'or:google/gemini-3-flash-preview',
+          model: 'or:google/gemini-3.6-flash',
           userId: 'user-123',
         })
       );
@@ -154,7 +154,7 @@ describe('createLlmServices', () => {
       expect(mockCreateToolCallingClient).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'platform-key',
-          model: 'or:google/gemini-3-flash-preview',
+          model: 'or:google/gemini-3.6-flash',
           userId: 'user-123',
         })
       );

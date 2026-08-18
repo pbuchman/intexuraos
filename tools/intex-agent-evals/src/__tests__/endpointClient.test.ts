@@ -543,7 +543,7 @@ describe('endpoint client correlation', () => {
     [
       'agent model',
       (data: Record<string, unknown>): void => {
-        data['agentModel'] = 'or:google/gemini-3-flash-preview';
+        data['agentModel'] = 'or:google/gemini-3.6-flash';
       },
     ],
     [

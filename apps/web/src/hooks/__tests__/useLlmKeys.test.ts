@@ -70,7 +70,7 @@ const baseKeys: LlmKeysResponse = {
     options: [
       { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
       { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-      { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+      { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
     ],
   },
 };

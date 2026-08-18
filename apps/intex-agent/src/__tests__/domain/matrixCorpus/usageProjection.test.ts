@@ -67,7 +67,7 @@ describe('Matrix corpus usage projection', () => {
     {
       name: 'wrong model',
       expectedCalls: [expected('agent_generation', 1)],
-      calls: [{ ...call('agent_generation', 1), modelId: 'or:google/gemini-3-flash-preview' }],
+      calls: [{ ...call('agent_generation', 1), modelId: 'or:google/gemini-3.6-flash' }],
       code: 'WRONG_MODEL',
     },
     {

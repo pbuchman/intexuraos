@@ -425,10 +425,10 @@ describe('Matrix corpus context service', () => {
   it.each([
     [
       'wrong requested agent model',
-      { agentModel: 'or:google/gemini-3-flash-preview' },
+      { agentModel: 'or:google/gemini-3.6-flash' },
       undefined,
     ],
-    ['wrong evaluator model', { evaluatorModel: 'or:google/gemini-3-flash-preview' }, undefined],
+    ['wrong evaluator model', { evaluatorModel: 'or:google/gemini-3.6-flash' }, undefined],
     ['wrong expected time zone', { expectedTimeZone: 'UTC' }, undefined],
     [
       'unavailable runtime',

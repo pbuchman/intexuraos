@@ -124,7 +124,7 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 | message-digest-service | Supplies the migrated Fishing definition and canonical summary history. |
 | whatsapp-service | Supplies source-message evidence through the definition-scoped private WhatsApp contract. |
 | llm-usage-service | Receives LLM usage through `HttpInternalAuthUsageSink`. |
-| llm-factory | Builds the fixed chat model client for `or:google/gemini-3-flash-preview`. |
+| llm-factory | Builds the fixed chat model client for `or:google/gemini-3.6-flash`. |
 
 ## Configuration
 

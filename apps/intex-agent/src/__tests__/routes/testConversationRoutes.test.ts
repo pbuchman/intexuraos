@@ -148,7 +148,7 @@ describe('test conversation routes', () => {
     ['bad run id characters', { runId: 'INTEX-E2E-ROUTE', userId: 'test-intex-agent-INTEX-E2E-ROUTE' }],
     ['scripted runner mode', { mode: 'scripted_runner' }],
     ['missing agent model', { agentModel: undefined }],
-    ['wrong agent model', { agentModel: 'or:google/gemini-3-flash-preview' }],
+    ['wrong agent model', { agentModel: 'or:google/gemini-3.6-flash' }],
     ['invalid current date', { currentDateTime: 'not-a-date' }],
     ['invalid IANA time zone', { timeZone: 'Mars/Olympus' }],
     ['tool mocks must be object', { toolMocks: null }],

@@ -20,7 +20,7 @@ Submit a single research prompt and Research Agent dispatches it simultaneously 
 
 An OpenRouter credential provides access to 16 curated frontier models spanning 10 providers — DeepSeek, Qwen, MiniMax, xAI (Grok), Moonshot (Kimi), Anthropic, Google, OpenAI, Xiaomi, and Z.ai — through one observable route. The `GET /openrouter/models` endpoint returns the full allowlist with live pricing fetched from OpenRouter's catalog API. Models are selected in the frontend and routed through the same parallel research pipeline. Allowlist enforcement at execution time prevents unauthorized model access, and fallback pricing ensures cost tracking works even when live catalog data is unavailable. Google/Gemini models must use an `or:google/...` identifier; raw `gemini-*` identifiers and Google LLM API keys are not accepted.
 
-**Example:** A user selects Grok 4.20 Beta, Kimi K2.5, Gemini 3 Flash Preview, and Claude Sonnet 4.6. All appear in the model selector with live per-token pricing, and every selected model is dispatched through OpenRouter using the same credential and usage trail.
+**Example:** A user selects Grok 4.20 Beta, Kimi K2.5, Gemini 3.6 Flash, and Claude Sonnet 4.6. All appear in the model selector with live per-token pricing, and every selected model is dispatched through OpenRouter using the same credential and usage trail.
 
 ### Context-Aware Research Pipeline
 
@@ -74,7 +74,7 @@ Research completion and LLM failure notifications sent via WhatsApp are marked a
 
 A product manager needs competitive intelligence before a board meeting. She submits: "Compare the pricing models and market positioning of Notion, Confluence, and Linear for a 50-person engineering team."
 
-Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. She selects OpenRouter-routed Gemini 3 Flash Preview, Claude Sonnet 4.6, Grok 4.20 Beta, Kimi K2.5, and Qwen 3.5 Plus for broad coverage. Within minutes, all five complete — but one response is unusually brief and gets flagged as low quality.
+Research Agent infers the domain as business strategy, selects an executive answer style, and builds context-enhanced prompts for each model. She selects OpenRouter-routed Gemini 3.6 Flash, Claude Sonnet 4.6, Grok 4.20 Beta, Kimi K2.5, and Qwen 3.5 Plus for broad coverage. Within minutes, all five complete — but one response is unusually brief and gets flagged as low quality.
 
 The synthesis model reads all five reports, deprioritizing the flagged result, and produces a structured document: an executive summary, detailed findings per product, agreements on Notion's document flexibility, and a flagged contradiction between two models' assessments of Confluence pricing. The report is automatically uploaded as a shareable HTML page with a generated cover image.
 

@@ -30,7 +30,7 @@ describe('Intex Agent Test Run foundation types', () => {
   });
 
   it.each([
-    ['wrong agent model', { agentModel: 'or:google/gemini-3-flash-preview' }],
+    ['wrong agent model', { agentModel: 'or:google/gemini-3.6-flash' }],
     ['wrong evaluator model', { evaluatorModel: 'or:anthropic/claude-sonnet' }],
     ['wrong audience', { runtimeAudience: 'production' }],
     ['negative revision', { revision: -1 }],

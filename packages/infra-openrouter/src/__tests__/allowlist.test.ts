@@ -70,6 +70,21 @@ describe('allowlist', () => {
       });
     });
 
+    it('uses reviewed Gemini 3.6 Flash context and fallback pricing', () => {
+      const entry = OPENROUTER_ALLOWED_MODELS.find(
+        (model) => model.id === 'google/gemini-3.6-flash'
+      );
+
+      expect(entry).toEqual({
+        id: 'google/gemini-3.6-flash',
+        name: 'Gemini 3.6 Flash',
+        provider: 'Google',
+        contextLength: 1_048_576,
+        promptPerToken: '0.0000015',
+        completionPerToken: '0.0000075',
+      });
+    });
+
     it('all model IDs are in provider/model format', () => {
       for (const model of OPENROUTER_ALLOWED_MODELS) {
         expect(model.id).toMatch(/^[a-z0-9-]+\/[a-z0-9._-]+$/);
@@ -98,8 +113,9 @@ describe('allowlist', () => {
       expect(isAllowedModel('or:anthropic/claude-sonnet-4.6')).toBe(false);
     });
 
-    it('accepts google/gemini-3-flash-preview', () => {
-      expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(true);
+    it('accepts Gemini 3.6 Flash and retires Gemini 3 Flash Preview', () => {
+      expect(isAllowedModel('google/gemini-3.6-flash')).toBe(true);
+      expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(false);
     });
   });
 

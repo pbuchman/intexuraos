@@ -23,10 +23,10 @@ Catalog for IntexuraOS services, workers, and packages.
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **fishing-assistant-service**     | New Fishing Assistant RAG foundation with knowledge folders/pages, embedding-backed retrieval, persisted chat history, digest/raw-message evidence, citation validation, ISO response timestamps, and web/mobile chat support |
 | **llm-usage-service**             | Richer cost visibility with prompt-type grouping, research-run cost summaries, image generation metadata, and OpenRouter/MiMo Pro 2.5 model reporting                                                                         |
-| **code-agent**                    | Scheduled execution dispatch, custom per-task timeout overrides, and OpenRouter Gemini 3 Flash Preview for GitHub Agent tool-calling triage                                                                                   |
+| **code-agent**                    | Scheduled execution dispatch, custom per-task timeout overrides, and OpenRouter Gemini 3.6 Flash for GitHub Agent tool-calling triage                                                                                   |
 | **mobile-notifications-service**  | Internal digest evidence routes for Fishing Assistant, cleaned group-message retrieval, digest state lookup, subscription-scoped access, and digest output-language preservation                                               |
 | **whatsapp-service/bookmarks**    | Reliable async recovery paths for WhatsApp bookmark saves and duplicate-safe bookmark replay; bookmark rows remain scannable on mobile                                                                                         |
-| **orchestrator / model catalog**  | Worker presets and usage reporting include Xiaomi MiMo Pro 2.5, OpenRouter catalog support includes Gemini 3 Flash Preview for tool-calling flows, and Grafana Cloud PM2 log dashboards improve ops visibility               |
+| **orchestrator / model catalog**  | Worker presets and usage reporting include Xiaomi MiMo Pro 2.5, OpenRouter catalog support includes Gemini 3.6 Flash for tool-calling flows, and Grafana Cloud PM2 log dashboards improve ops visibility               |
 
 ## v3.6.0 Highlights (Previous)
 
@@ -157,7 +157,7 @@ graph TB
 
 | Service                                | AI Models                        | Capability                                    |
 | -------------------------------------- | -------------------------------- | --------------------------------------------- |
-| [intex-agent](intex-agent/features.md) | OpenRouter Gemini 3 Flash Preview | WhatsApp text conversations with direct tools |
+| [intex-agent](intex-agent/features.md) | OpenRouter Gemini 3.6 Flash | WhatsApp text conversations with direct tools |
 
 ### Image Generation
 
@@ -177,7 +177,7 @@ graph TB
 
 | Service                              | AI Models                        | Capability                                        |
 | ------------------------------------ | -------------------------------- | ------------------------------------------------- |
-| [fishing-assistant-service](fishing-assistant-service/features.md) | OpenRouter Gemini 3 Flash Preview | Grounded fishing chat over knowledge, digests, and raw-message evidence |
+| [fishing-assistant-service](fishing-assistant-service/features.md) | OpenRouter Gemini 3.6 Flash | Grounded fishing chat over knowledge, digests, and raw-message evidence |
 
 ### Autonomous Code Execution
 
@@ -208,12 +208,12 @@ Services that directly invoke AI models for their core functionality.
 
 | Service                                                | Purpose                            | AI                                               | Docs                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [intex-agent](intex-agent/features.md)                 | WhatsApp text direct tools         | OpenRouter Gemini 3 Flash Preview                | [features](intex-agent/features.md) / [technical](intex-agent/technical.md) / [tutorial](intex-agent/tutorial.md) / [debt](intex-agent/technical-debt.md) / [agent](intex-agent/agent.md)                                        |
+| [intex-agent](intex-agent/features.md)                 | WhatsApp text direct tools         | OpenRouter Gemini 3.6 Flash                | [features](intex-agent/features.md) / [technical](intex-agent/technical.md) / [tutorial](intex-agent/tutorial.md) / [debt](intex-agent/technical-debt.md) / [agent](intex-agent/agent.md)                                        |
 | [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Gemini, Claude, GPT, Sonar                       | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
 | [image-service](image-service/features.md)             | AI image generation                | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
 | [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
-| [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3 Flash Preview + OpenAI embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
+| [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3.6 Flash + OpenAI embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
 | [message-digest-service](message-digest-service/features.md) | Scheduled private WhatsApp summaries | Configured OpenRouter model | [features](message-digest-service/features.md) / [technical](message-digest-service/technical.md) / [tutorial](message-digest-service/tutorial.md) / [debt](message-digest-service/technical-debt.md) / [agent](message-digest-service/agent.md) |
 | [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
 | [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | Gemini 2.5 Flash                                 | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
@@ -362,7 +362,7 @@ Used for direct WhatsApp text conversations and fast tool-call decisions.
 
 | Model                  | Provider   | Use Case                                |
 | ---------------------- | ---------- | --------------------------------------- |
-| Gemini 3 Flash Preview | OpenRouter | Intex tool selection and concise replies |
+| Gemini 3.6 Flash | OpenRouter | Intex tool selection and concise replies |
 
 ### Image Models (2)
 

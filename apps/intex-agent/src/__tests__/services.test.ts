@@ -1266,7 +1266,7 @@ describe('createRuntimeBoundModelClients', () => {
   it.each([
     IntexAgentModels.DeepSeekV4Flash,
     IntexAgentModels.MiniMaxM3,
-    IntexAgentModels.Gemini3FlashPreview,
+    IntexAgentModels.Gemini36Flash,
   ])('binds both product clients to the exact frozen snapshot model %s', (model) => {
     const createToolCallingClientFn = vi.fn(() => fakeToolCallingClient());
     const createLlmClientFn = vi.fn(() => fakeStructuredClient());
@@ -1455,8 +1455,8 @@ describe('composeIntexAgentExecutionServices ordinary product isolation', () => 
       catalogState: 'failed',
       runtime: {
         status: 'available',
-        effectiveModel: IntexAgentModels.Gemini3FlashPreview,
-        explicitModel: IntexAgentModels.Gemini3FlashPreview,
+        effectiveModel: IntexAgentModels.Gemini36Flash,
+        explicitModel: IntexAgentModels.Gemini36Flash,
         source: 'explicit',
         revision: 3,
         timeZone: 'Europe/Warsaw',
@@ -2101,7 +2101,7 @@ function catalogEvidence(): Awaited<
   ReturnType<CreateTestConversationRunnerServiceInput['catalogClient']['getIntexAgentCatalogEvidence']>
 > {
   return {
-    snapshotVersion: '2026-07-19',
+    snapshotVersion: '2026-08-18',
     fetchedAt: '2026-07-19T12:00:00.000Z',
     models: [],
   };
@@ -2160,9 +2160,9 @@ function catalogResponse(): Response {
           supported_parameters: supportedParameters,
         },
         {
-          id: 'google/gemini-3-flash-preview',
-          context_length: 1_000_000,
-          pricing: { prompt: '0.0000003', completion: '0.0000025' },
+          id: 'google/gemini-3.6-flash',
+          context_length: 1_048_576,
+          pricing: { prompt: '0.0000015', completion: '0.0000075' },
           architecture: { input_modalities: ['text'], output_modalities: ['text'] },
           supported_parameters: supportedParameters,
         },

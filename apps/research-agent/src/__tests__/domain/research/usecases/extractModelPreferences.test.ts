@@ -94,7 +94,7 @@ describe('extractModelPreferences', () => {
 
     it('extracts selected models from valid JSON response', async () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview, LlmModels.ClaudeSonnet46],
+        selectedModels: [IntexAgentModels.Gemini36Flash, LlmModels.ClaudeSonnet46],
         synthesisModel: LlmModels.GPT54,
       });
 
@@ -106,7 +106,7 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('research AI using gemini and claude, synthesize with gpt', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
       expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet46);
       expect(result.synthesisModel).toBe(LlmModels.GPT54);
     });
@@ -159,7 +159,7 @@ describe('extractModelPreferences', () => {
     it('validates one model per provider constraint', async () => {
       // LLM returns two OpenRouter models, should only keep the first
       const response = JSON.stringify({
-        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash],
         synthesisModel: null,
       });
 
@@ -173,7 +173,7 @@ describe('extractModelPreferences', () => {
 
       expect(result.selectedModels).toHaveLength(1);
       expect(result.selectedModels).toContain(DEFAULT_PLATFORM_LLM_MODEL);
-      expect(result.selectedModels).not.toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).not.toContain(IntexAgentModels.Gemini36Flash);
     });
 
     it('filters out models user does not have API keys for', async () => {
@@ -183,7 +183,7 @@ describe('extractModelPreferences', () => {
       };
 
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview, LlmModels.ClaudeSonnet46],
+        selectedModels: [IntexAgentModels.Gemini36Flash, LlmModels.ClaudeSonnet46],
         synthesisModel: null,
       });
 
@@ -195,13 +195,13 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini and claude', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
       expect(result.selectedModels).not.toContain(LlmModels.ClaudeSonnet46);
     });
 
     it('returns undefined synthesis model when null in response', async () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: null,
       });
 
@@ -241,7 +241,7 @@ describe('extractModelPreferences', () => {
       };
 
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: LlmModels.GPT54,
       });
 
@@ -304,7 +304,7 @@ describe('extractModelPreferences', () => {
     it('uses openrouter key for OpenRouter Gemini models', async () => {
       const keys: ApiKeyStore = { openrouter: 'openrouter-key' };
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: null,
       });
 
@@ -316,7 +316,7 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
     });
 
     it('uses openai key for GPT models', async () => {
@@ -378,7 +378,7 @@ describe('extractModelPreferences', () => {
   describe('edge cases', () => {
     it('handles response with invalid model IDs', async () => {
       const response = JSON.stringify({
-        selectedModels: ['invalid-model', IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: ['invalid-model', IntexAgentModels.Gemini36Flash],
         synthesisModel: 'also-invalid',
       });
 
@@ -390,13 +390,13 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use invalid model', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
       expect(result.selectedModels).not.toContain('invalid-model');
       expect(result.synthesisModel).toBeUndefined();
     });
 
     it('handles JSON embedded in surrounding text', async () => {
-      const response = `Here is my analysis: {"selectedModels": ["${IntexAgentModels.Gemini3FlashPreview}"], "synthesisModel": null} That's all.`;
+      const response = `Here is my analysis: {"selectedModels": ["${IntexAgentModels.Gemini36Flash}"], "synthesisModel": null} That's all.`;
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
@@ -406,7 +406,7 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
     });
 
     it('returns empty when response is array instead of object', async () => {
@@ -442,7 +442,7 @@ describe('extractModelPreferences', () => {
 
     it('handles synthesisModel that is not a string', async () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: 123,
       });
 
@@ -454,14 +454,14 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini3FlashPreview);
+      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
       expect(result.synthesisModel).toBeUndefined();
     });
 
     it('correctly marks provider defaults', async () => {
       // This test verifies that provider defaults are properly passed to the prompt
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: null,
       });
 
@@ -481,8 +481,8 @@ describe('extractModelPreferences', () => {
 
   describe('getModelDisplayName', () => {
     it('returns static display name for known models', () => {
-      expect(getModelDisplayName(IntexAgentModels.Gemini3FlashPreview)).toBe(
-        'Gemini 3 Flash Preview (OpenRouter)'
+      expect(getModelDisplayName(IntexAgentModels.Gemini36Flash)).toBe(
+        'Gemini 3.6 Flash (OpenRouter)'
       );
       expect(getModelDisplayName(LlmModels.ClaudeSonnet46)).toBe('Claude Sonnet 4.6');
     });
@@ -502,7 +502,7 @@ describe('extractModelPreferences', () => {
 
   describe('getModelKeywords', () => {
     it('returns static keywords for known models', () => {
-      const keywords = getModelKeywords(IntexAgentModels.Gemini3FlashPreview);
+      const keywords = getModelKeywords(IntexAgentModels.Gemini36Flash);
       expect(Array.isArray(keywords)).toBe(true);
       expect(keywords.length).toBeGreaterThan(0);
     });

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { IntexAgentModels, type IntexAgentModel } from '@intexuraos/llm-contract';
 
-export const INTEX_AGENT_CATALOG_SNAPSHOT_VERSION = '2026-07-19' as const;
+export const INTEX_AGENT_CATALOG_SNAPSHOT_VERSION = '2026-08-18' as const;
 
 export const INTEX_AGENT_REQUIRED_PARAMETERS = [
   'tools',
@@ -49,9 +49,9 @@ const REVIEWED_MODELS: readonly ReviewedModel[] = [
     minimumContextLength: 205_000,
   },
   {
-    id: IntexAgentModels.Gemini3FlashPreview,
-    rawId: 'google/gemini-3-flash-preview',
-    minimumContextLength: 1_000_000,
+    id: IntexAgentModels.Gemini36Flash,
+    rawId: 'google/gemini-3.6-flash',
+    minimumContextLength: 1_048_576,
   },
 ] as const;
 

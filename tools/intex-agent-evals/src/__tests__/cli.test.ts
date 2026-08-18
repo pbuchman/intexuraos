@@ -122,7 +122,7 @@ describe('parseCliArgs', () => {
     ['setup', 'extra'],
     ['preflight', 'extra'],
     ['matrix-smoke', 'extra'],
-    ['matrix-corpus', '--agent-model=or:google/gemini-3-flash-preview'],
+    ['matrix-corpus', '--agent-model=or:google/gemini-3.6-flash'],
     ['matrix-corpus', '--agent-model='],
     ['matrix-corpus', '--agent-model=or:minimax/minimax-m3', 'extra'],
     ['scenario', 'intex-eval-003', 'scenario', 'intex-eval-004'],

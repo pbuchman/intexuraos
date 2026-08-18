@@ -391,7 +391,7 @@ const SERVICE_ENV_MAPPINGS = {
   },
   'message-digest-service': {
     INTEXURAOS_DIGEST_LLM_MODEL:
-      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3-flash-preview',
+      envValue('INTEXURAOS_DIGEST_LLM_MODEL') ?? 'or:google/gemini-3.6-flash',
     INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC:
       envValue('INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC') ?? topic('message-digest-runs'),
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:

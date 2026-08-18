@@ -10,7 +10,7 @@ export type ConfigurableLlmProvider = ExecutableLlmProvider;
 export type IntexAgentModelSelectorOption =
   | { id: 'or:deepseek/deepseek-v4-flash'; label: 'DeepSeek V4 Flash' }
   | { id: 'or:minimax/minimax-m3'; label: 'MiniMax M3' }
-  | { id: 'or:google/gemini-3-flash-preview'; label: 'Gemini 3 Flash Preview' };
+  | { id: 'or:google/gemini-3.6-flash'; label: 'Gemini 3.6 Flash' };
 
 export type IntexAgentModelSelectorV1 =
   | {
@@ -22,7 +22,7 @@ export type IntexAgentModelSelectorV1 =
       options: readonly [
         Extract<IntexAgentModelSelectorOption, { id: 'or:deepseek/deepseek-v4-flash' }>,
         Extract<IntexAgentModelSelectorOption, { id: 'or:minimax/minimax-m3' }>,
-        Extract<IntexAgentModelSelectorOption, { id: 'or:google/gemini-3-flash-preview' }>,
+        Extract<IntexAgentModelSelectorOption, { id: 'or:google/gemini-3.6-flash' }>,
       ];
     }
   | { status: 'unavailable' };

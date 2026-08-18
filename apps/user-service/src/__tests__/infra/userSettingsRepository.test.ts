@@ -147,6 +147,15 @@ describe('FirestoreUserSettingsRepository', () => {
           },
         },
         {
+          id: 'bad-model-type',
+          data: {
+            userId: 'bad-model-type',
+            llmPreferences: { intexAgentModel: 42 },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
+        },
+        {
           id: 'bad-revision',
           data: {
             userId: 'bad-revision',
@@ -166,7 +175,13 @@ describe('FirestoreUserSettingsRepository', () => {
         },
       ]);
 
-      for (const userId of ['bad-map', 'bad-map-object', 'bad-model', 'bad-revision']) {
+      for (const userId of [
+        'bad-map',
+        'bad-map-object',
+        'bad-model',
+        'bad-model-type',
+        'bad-revision',
+      ]) {
         const result = await repo.getSettings(userId);
         expect(result.ok).toBe(false);
         if (!result.ok) {
@@ -755,6 +770,42 @@ describe('FirestoreUserSettingsRepository', () => {
         expect(result.value.timezone).toBe('Asia/Tokyo');
       }
     });
+
+    it('normalizes retired Gemini preview preferences at the read boundary', async () => {
+      fakeFirestore.seedCollection('user_settings', [
+        {
+          id: 'user-123',
+          data: {
+            userId: 'user-123',
+            llmPreferences: {
+              defaultModel: 'or:google/gemini-3-flash-preview',
+              fallbackModel: 'or:google/gemini-3-flash-preview',
+              intexAgentModel: 'or:google/gemini-3-flash-preview',
+              intexAgentModelRevision: 2,
+            },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
+        },
+      ]);
+
+      const result = await repo.getSettings('user-123');
+
+      expect(result).toEqual({
+        ok: true,
+        value: {
+          userId: 'user-123',
+          llmPreferences: {
+            defaultModel: IntexAgentModels.Gemini36Flash,
+            fallbackModel: IntexAgentModels.Gemini36Flash,
+            intexAgentModel: IntexAgentModels.Gemini36Flash,
+            intexAgentModelRevision: 2,
+          },
+          createdAt: 'created',
+          updatedAt: 'updated',
+        },
+      });
+    });
   });
 
   describe('narrow selector and timezone reads', () => {
@@ -775,6 +826,18 @@ describe('FirestoreUserSettingsRepository', () => {
         {
           id: 'absent',
           data: { userId: 'absent', createdAt: 'created', updatedAt: 'updated' },
+        },
+        {
+          id: 'legacy-preview',
+          data: {
+            userId: 'legacy-preview',
+            llmPreferences: {
+              intexAgentModel: 'or:google/gemini-3-flash-preview',
+              intexAgentModelRevision: 4,
+            },
+            createdAt: 'created',
+            updatedAt: 'updated',
+          },
         },
         {
           id: 'invalid',
@@ -798,6 +861,14 @@ describe('FirestoreUserSettingsRepository', () => {
       await expect(repo.getIntexAgentModelState('absent')).resolves.toEqual({
         ok: true,
         value: { status: 'valid', explicitModel: null, revision: 0 },
+      });
+      await expect(repo.getIntexAgentModelState('legacy-preview')).resolves.toEqual({
+        ok: true,
+        value: {
+          status: 'valid',
+          explicitModel: IntexAgentModels.Gemini36Flash,
+          revision: 4,
+        },
       });
       await expect(repo.getIntexAgentModelState('missing')).resolves.toEqual({
         ok: true,
@@ -1078,7 +1149,7 @@ describe('FirestoreUserSettingsRepository', () => {
         },
       ]);
 
-      await repo.updateIntexAgentModel('user-123', IntexAgentModels.Gemini3FlashPreview, 0);
+      await repo.updateIntexAgentModel('user-123', IntexAgentModels.Gemini36Flash, 0);
       await repo.updateIntexAgentModel('user-123', null, 1);
 
       const raw = fakeFirestore.getAllData().get('user_settings')?.get('user-123');

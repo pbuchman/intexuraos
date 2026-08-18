@@ -23,7 +23,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
     title: 'Test Research',
     prompt: 'Test question?',
     status: 'processing',
-    selectedModels: [LlmModels.ClaudeSonnet46, IntexAgentModels.Gemini3FlashPreview],
+    selectedModels: [LlmModels.ClaudeSonnet46, IntexAgentModels.Gemini36Flash],
     llmResults: [
       {
         provider: LlmProviders.Anthropic,
@@ -36,7 +36,7 @@ function createTestResearch(overrides: Partial<Research> = {}): Research {
       },
       {
         provider: LlmProviders.OpenRouter,
-        model: IntexAgentModels.Gemini3FlashPreview,
+        model: IntexAgentModels.Gemini36Flash,
         status: 'completed',
         result: 'Test result from Gemini',
         inputTokens: 80,

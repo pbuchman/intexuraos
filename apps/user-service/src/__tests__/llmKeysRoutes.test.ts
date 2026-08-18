@@ -198,7 +198,7 @@ describe('LLM Keys Routes', () => {
         options: [
           { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
           { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-          { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+          { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
         ],
       });
     });
@@ -226,7 +226,7 @@ describe('LLM Keys Routes', () => {
     it.each([
       [{}, IntexAgentModels.DeepSeekV4Flash, 'default_absent', 0],
       [{ intexAgentModel: IntexAgentModels.DeepSeekV4Flash, intexAgentModelRevision: 2 }, IntexAgentModels.DeepSeekV4Flash, 'explicit', 2],
-      [{ intexAgentModel: IntexAgentModels.Gemini3FlashPreview, intexAgentModelRevision: 3 }, IntexAgentModels.Gemini3FlashPreview, 'explicit', 3],
+      [{ intexAgentModel: IntexAgentModels.Gemini36Flash, intexAgentModelRevision: 3 }, IntexAgentModels.Gemini36Flash, 'explicit', 3],
     ])('projects exact available effective selector state %#', async (preferences, effectiveModel, source, revision) => {
       const userId = `auth0|selector-state-${String(revision)}`;
       fakeSettingsRepo.setRawIntexAgentModelState(userId, preferences);

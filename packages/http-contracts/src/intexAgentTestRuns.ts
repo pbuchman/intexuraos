@@ -381,7 +381,7 @@ export type PublicTestRunScenarioSummaryV1 = z.infer<typeof publicTestRunScenari
 const intexAgentModelSchema = z.enum([
   'or:deepseek/deepseek-v4-flash',
   'or:minimax/minimax-m3',
-  'or:google/gemini-3-flash-preview',
+  'or:google/gemini-3.6-flash',
 ]);
 
 export const publicTestRunHeaderV1Schema = z

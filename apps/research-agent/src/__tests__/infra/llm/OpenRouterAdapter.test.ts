@@ -87,11 +87,11 @@ describe('OpenRouterAdapter', () => {
       });
     });
 
-    it('strips or: prefix for google/gemini-3-flash-preview', () => {
+    it('strips or: prefix for google/gemini-3.6-flash', () => {
       mockCreateOpenRouterClient.mockClear();
       new OpenRouterAdapter(
         'test-key',
-        'or:google/gemini-3-flash-preview',
+        'or:google/gemini-3.6-flash',
         'test-user-id',
         mockLogger,
         fakeUsageSink
@@ -99,7 +99,7 @@ describe('OpenRouterAdapter', () => {
 
       expect(mockCreateOpenRouterClient).toHaveBeenCalledWith({
         apiKey: 'test-key',
-        model: 'google/gemini-3-flash-preview',
+        model: 'google/gemini-3.6-flash',
         userId: 'test-user-id',
         logger: mockLogger,
         usageSink: fakeUsageSink,

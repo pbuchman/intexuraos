@@ -47,7 +47,7 @@ export interface ExtractModelPreferencesDeps {
  */
 const RESEARCH_MODELS: ResearchModel[] = [
   DEFAULT_PLATFORM_LLM_MODEL,
-  IntexAgentModels.Gemini3FlashPreview,
+  IntexAgentModels.Gemini36Flash,
   LlmModels.ClaudeOpus46,
   LlmModels.ClaudeSonnet46,
   LlmModels.ClaudeSonnet47,
@@ -63,7 +63,7 @@ const RESEARCH_MODELS: ResearchModel[] = [
  */
 const MODEL_DISPLAY_NAMES: Partial<Record<ResearchModel, string>> = {
   [DEFAULT_PLATFORM_LLM_MODEL]: 'MiniMax M3 (OpenRouter)',
-  [IntexAgentModels.Gemini3FlashPreview]: 'Gemini 3 Flash Preview (OpenRouter)',
+  [IntexAgentModels.Gemini36Flash]: 'Gemini 3.6 Flash (OpenRouter)',
   [LlmModels.ClaudeOpus46]: 'Claude Opus 4.6',
   [LlmModels.ClaudeSonnet46]: 'Claude Sonnet 4.6',
   [LlmModels.ClaudeSonnet47]: 'Claude Sonnet 4.7',

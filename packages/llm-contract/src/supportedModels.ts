@@ -263,7 +263,7 @@ export interface DefaultOpenRouterModel {
 export const DEFAULT_OPENROUTER_MODELS: readonly DefaultOpenRouterModel[] = [
   { id: 'google/gemma-4-31b-it:free', name: 'Gemma 4 31B IT (Free)', provider: 'Google' },
   { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B IT', provider: 'Google' },
-  { id: 'google/gemini-3-flash-preview', name: 'Gemini 3 Flash Preview', provider: 'Google' },
+  { id: 'google/gemini-3.6-flash', name: 'Gemini 3.6 Flash', provider: 'Google' },
   { id: 'minimax/minimax-m3', name: 'MiniMax M3', provider: 'MiniMax' },
   { id: 'qwen/qwen3.6-plus', name: 'Qwen 3.6 Plus', provider: 'Qwen' },
   {
@@ -317,6 +317,7 @@ export type OpenRouterMiniMaxM3 = 'or:minimax/minimax-m3' & OpenRouterModelId;
 export type OpenRouterClaudeSonnet5 = 'or:anthropic/claude-sonnet-5' & OpenRouterModelId;
 export type OpenRouterGemini35Flash = 'or:google/gemini-3.5-flash' & OpenRouterModelId;
 export type OpenRouterDeepSeekV4Flash = 'or:deepseek/deepseek-v4-flash' & OpenRouterModelId;
+export type OpenRouterGemini36Flash = 'or:google/gemini-3.6-flash' & OpenRouterModelId;
 
 export type ConversationAssistantModel =
   | OpenRouterMiniMaxM3
@@ -387,16 +388,14 @@ export function getConversationAssistantModelDisplayName(model: string): string 
 export type IntexAgentModel =
   | OpenRouterDeepSeekV4Flash
   | OpenRouterMiniMaxM3
-  | OpenRouterGemini3FlashPreview;
+  | OpenRouterGemini36Flash;
 
 export const IntexAgentModels = {
   DeepSeekV4Flash: createOpenRouterModelId(
     'deepseek/deepseek-v4-flash'
   ) as OpenRouterDeepSeekV4Flash,
   MiniMaxM3: createOpenRouterModelId('minimax/minimax-m3') as OpenRouterMiniMaxM3,
-  Gemini3FlashPreview: createOpenRouterModelId(
-    'google/gemini-3-flash-preview'
-  ) as OpenRouterGemini3FlashPreview,
+  Gemini36Flash: createOpenRouterModelId('google/gemini-3.6-flash') as OpenRouterGemini36Flash,
 } as const;
 
 export const DEFAULT_INTEX_AGENT_MODEL = IntexAgentModels.DeepSeekV4Flash;
@@ -413,8 +412,8 @@ export const INTEX_AGENT_MODEL_OPTIONS = [
   { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash', provider: 'DeepSeek' },
   { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3', provider: 'MiniMax' },
   {
-    id: IntexAgentModels.Gemini3FlashPreview,
-    label: 'Gemini 3 Flash Preview',
+    id: IntexAgentModels.Gemini36Flash,
+    label: 'Gemini 3.6 Flash',
     provider: 'Google',
   },
 ] as const;
@@ -423,6 +422,16 @@ const INTEX_AGENT_MODEL_IDS: ReadonlySet<string> = new Set(Object.values(IntexAg
 
 export function isIntexAgentModel(value: unknown): value is IntexAgentModel {
   return typeof value === 'string' && INTEX_AGENT_MODEL_IDS.has(value);
+}
+
+const RETIRED_GEMINI_3_FLASH_PREVIEW_MODEL = 'or:google/gemini-3-flash-preview';
+
+/**
+ * Translate the retired Gemini preview identifier at read boundaries.
+ * This keeps rolling deployments safe while migration 130 rewrites persisted settings.
+ */
+export function normalizeRetiredOpenRouterModel(model: string): string {
+  return model === RETIRED_GEMINI_3_FLASH_PREVIEW_MODEL ? IntexAgentModels.Gemini36Flash : model;
 }
 
 /**
@@ -495,14 +504,12 @@ export function isFastModel(model: string): model is FastModel {
  * Tool calling is OpenRouter-only. Google-hosted models use an `or:google/...`
  * identifier and never a retired raw `gemini-*` identifier.
  */
-export type OpenRouterGemini3FlashPreview = 'or:google/gemini-3-flash-preview' & OpenRouterModelId;
-
 export type OpenRouterToolCallingModel = IntexAgentModel;
 
 export const OpenRouterToolCallingModels = {
   DeepSeekV4Flash: IntexAgentModels.DeepSeekV4Flash,
   MiniMaxM3: IntexAgentModels.MiniMaxM3,
-  Gemini3FlashPreview: IntexAgentModels.Gemini3FlashPreview,
+  Gemini36Flash: IntexAgentModels.Gemini36Flash,
 } as const;
 
 export type ToolCallingModel = OpenRouterToolCallingModel;
@@ -511,7 +518,7 @@ export type ToolCallingModel = OpenRouterToolCallingModel;
 export const ALL_TOOL_CALLING_MODELS: readonly ToolCallingModel[] = [
   OpenRouterToolCallingModels.DeepSeekV4Flash,
   OpenRouterToolCallingModels.MiniMaxM3,
-  OpenRouterToolCallingModels.Gemini3FlashPreview,
+  OpenRouterToolCallingModels.Gemini36Flash,
 ];
 
 const TOOL_CALLING_MODEL_IDS: ReadonlySet<string> = new Set(ALL_TOOL_CALLING_MODELS);

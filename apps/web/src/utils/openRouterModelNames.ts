@@ -18,7 +18,7 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
   'anthropic/claude-opus-4.6': 'Claude Opus 4.6',
   'google/gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
   'google/gemini-2.5-flash': 'Gemini 2.5 Flash',
-  'google/gemini-3-flash-preview': 'Gemini 3 Flash Preview',
+  'google/gemini-3.6-flash': 'Gemini 3.6 Flash',
   'openai/gpt-5.4': 'GPT-5.4',
   'openai/gpt-5.4-mini': 'GPT-5.4 Mini',
   'xiaomi/mimo-v2.5-pro': 'MiMo V2.5 Pro',

@@ -163,7 +163,7 @@ describe('FirestoreMatrixCorpusContextRepository', () => {
       runContext({ userId: '' }),
       runContext({ leaseFence: '0' }),
       runContext({ catalogDigest: 'invalid' }),
-      runContext({ agentModel: 'or:google/gemini-3-flash-preview' }),
+      runContext({ agentModel: 'or:google/gemini-3.6-flash' }),
       runContext({ evaluatorModel: 'or:deepseek/deepseek-v4-flash' }),
       runContext({ promptPreferencesVersion: 1.5 }),
       runContext({ promptPreferencesVersion: -1 }),

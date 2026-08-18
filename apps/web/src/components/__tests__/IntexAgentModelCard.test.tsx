@@ -30,7 +30,7 @@ function createSelector(overrides: Partial<AvailableSelector> = {}): AvailableSe
     options: [
       { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
       { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-      { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+      { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
     ],
     savingIntexAgentModel: false,
     intexAgentModelError: null,
@@ -55,7 +55,7 @@ describe('IntexAgentModelCard', () => {
     expect(Array.from((select as HTMLSelectElement).options, (option) => option.text)).toEqual([
       'DeepSeek V4 Flash',
       'MiniMax M3',
-      'Gemini 3 Flash Preview',
+      'Gemini 3.6 Flash',
     ]);
   });
 
@@ -68,13 +68,13 @@ describe('IntexAgentModelCard', () => {
     rerender(
       <IntexAgentModelCard
         selector={createSelector({
-          explicitModel: IntexAgentModels.Gemini3FlashPreview,
-          effectiveModel: IntexAgentModels.Gemini3FlashPreview,
+          explicitModel: IntexAgentModels.Gemini36Flash,
+          effectiveModel: IntexAgentModels.Gemini36Flash,
         })}
       />
     );
 
-    expect(screen.getByLabelText('Intex Agent model')).toHaveValue(IntexAgentModels.Gemini3FlashPreview);
+    expect(screen.getByLabelText('Intex Agent model')).toHaveValue(IntexAgentModels.Gemini36Flash);
     expect(screen.getByRole('button', { name: /Use default Intex Agent model/i })).toBeInTheDocument();
   });
 
@@ -113,9 +113,9 @@ describe('IntexAgentModelCard', () => {
     expect(select).toBeEnabled();
 
     await user.selectOptions(select, IntexAgentModels.MiniMaxM3);
-    await user.selectOptions(select, IntexAgentModels.Gemini3FlashPreview);
+    await user.selectOptions(select, IntexAgentModels.Gemini36Flash);
     expect(setIntexAgentModel).toHaveBeenNthCalledWith(1, IntexAgentModels.MiniMaxM3);
-    expect(setIntexAgentModel).toHaveBeenNthCalledWith(2, IntexAgentModels.Gemini3FlashPreview);
+    expect(setIntexAgentModel).toHaveBeenNthCalledWith(2, IntexAgentModels.Gemini36Flash);
 
     deferred.resolve('applied');
     await Promise.resolve();

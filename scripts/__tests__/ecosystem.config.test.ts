@@ -421,7 +421,7 @@ describe('ecosystem.config.cjs', () => {
       INTEXURAOS_WHATSAPP_SERVICE_URL: 'http://localhost:8113',
       INTEXURAOS_LLM_USAGE_SERVICE_URL: 'http://localhost:8132',
       INTEXURAOS_OPENROUTER_APP_API_KEY: 'synthetic-openrouter-key',
-      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3-flash-preview',
+      INTEXURAOS_DIGEST_LLM_MODEL: 'or:google/gemini-3.6-flash',
       INTEXURAOS_PUBSUB_MESSAGE_DIGEST_RUN_TOPIC: 'message-digest-runs',
       INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC: 'whatsapp-send-message',
     });
