@@ -54,7 +54,7 @@ graph TB
 
 ### Platform Defaults
 
-The canonical platform fallback is `DEFAULT_PLATFORM_LLM_MODEL`, currently MiniMax M3 through OpenRouter. Feature-specific selectors may expose other curated OpenRouter models, including Google-family models such as `or:google/gemini-3-flash-preview`.
+The canonical platform fallback is `DEFAULT_PLATFORM_LLM_MODEL`, currently MiniMax M3 through OpenRouter. Feature-specific selectors may expose other curated OpenRouter models, including Google-family models such as `or:google/gemini-3.6-flash`.
 
 ### Default and Fallback Preferences
 
@@ -136,7 +136,7 @@ import { createOpenRouterModelId } from '@intexuraos/llm-contract';
 
 const client = createLlmClient({
   apiKey: openRouterApiKey,
-  model: createOpenRouterModelId('google/gemini-3-flash-preview'),
+  model: createOpenRouterModelId('google/gemini-3.6-flash'),
   userId,
   logger,
   usageSink,

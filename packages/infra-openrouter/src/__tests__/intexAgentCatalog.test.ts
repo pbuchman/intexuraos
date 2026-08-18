@@ -27,9 +27,9 @@ function reviewedCatalog(): unknown {
         supported_parameters: [...INTEX_AGENT_REQUIRED_PARAMETERS],
       },
       {
-        id: 'google/gemini-3-flash-preview',
-        context_length: 1_000_000,
-        pricing: { prompt: '0.0000003', completion: '0.0000025' },
+        id: 'google/gemini-3.6-flash',
+        context_length: 1_048_576,
+        pricing: { prompt: '0.0000015', completion: '0.0000075' },
         architecture: { input_modalities: ['text'], output_modalities: ['text'] },
         supported_parameters: [...INTEX_AGENT_REQUIRED_PARAMETERS],
       },
@@ -45,11 +45,12 @@ describe('assertIntexAgentCatalogConformance', () => {
     );
 
     expect(evidence.snapshotVersion).toBe(INTEX_AGENT_CATALOG_SNAPSHOT_VERSION);
+    expect(evidence.snapshotVersion).toBe('2026-08-18');
     expect(evidence.fetchedAt).toBe('2026-07-19T12:00:00.000Z');
     expect(evidence.models.map((model) => model.id)).toEqual([
       'or:deepseek/deepseek-v4-flash',
       'or:minimax/minimax-m3',
-      'or:google/gemini-3-flash-preview',
+      'or:google/gemini-3.6-flash',
     ]);
     expect(evidence.models[0]).toMatchObject({
       rawId: 'deepseek/deepseek-v4-flash',
@@ -93,7 +94,7 @@ describe('assertIntexAgentCatalogConformance', () => {
 
   it.each([
     ['minimax/minimax-m3', 1],
-    ['google/gemini-3-flash-preview', 2],
+    ['google/gemini-3.6-flash', 2],
   ])('fails closed when required model %s is absent', (id, index) => {
     const catalog = reviewedCatalog() as { data: unknown[] };
     catalog.data.splice(index, 1);
@@ -104,21 +105,23 @@ describe('assertIntexAgentCatalogConformance', () => {
   });
 
   it.each([
-    ['DeepSeek', 999_999],
-    ['Gemini', 999_999],
-  ])('fails closed when %s is below its reviewed context minimum', (_name, contextLength) => {
-    const catalog = reviewedCatalog() as {
-      data: { id: string; context_length: number }[];
-    };
-    const index = _name === 'DeepSeek' ? 0 : 2;
-    const entry = catalog.data[index];
-    if (entry === undefined) throw new Error('Test setup failed');
-    entry.context_length = contextLength;
+    ['DeepSeek', 0, 999_999],
+    ['Gemini', 2, 1_048_575],
+  ])(
+    'fails closed when %s is below its reviewed context minimum',
+    (_name, index, contextLength) => {
+      const catalog = reviewedCatalog() as {
+        data: { id: string; context_length: number }[];
+      };
+      const entry = catalog.data[index];
+      if (entry === undefined) throw new Error('Test setup failed');
+      entry.context_length = contextLength;
 
-    expect(() => assertIntexAgentCatalogConformance(catalog, '2026-07-19T12:00:00.000Z')).toThrow(
-      'context'
-    );
-  });
+      expect(() => assertIntexAgentCatalogConformance(catalog, '2026-07-19T12:00:00.000Z')).toThrow(
+        'context'
+      );
+    }
+  );
 
   it('fails closed when MiniMax is below its reviewed 205K context minimum', () => {
     const catalog = reviewedCatalog() as {

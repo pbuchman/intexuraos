@@ -6,6 +6,7 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   isIntexAgentModel,
+  normalizeRetiredOpenRouterModel,
   type ExecutableLlmProvider,
   type IntexAgentModel,
 } from '@intexuraos/llm-contract';
@@ -77,10 +78,14 @@ function readIntexAgentModelState(
   let explicitModel: IntexAgentModel | null = null;
   if (hasModel) {
     const model = preferences['intexAgentModel'];
-    if (!isIntexAgentModel(model)) {
+    if (typeof model !== 'string') {
       return { ok: false };
     }
-    explicitModel = model;
+    const normalizedModel = normalizeRetiredOpenRouterModel(model);
+    if (!isIntexAgentModel(normalizedModel)) {
+      return { ok: false };
+    }
+    explicitModel = normalizedModel;
   }
 
   const hasRevision = Object.hasOwn(preferences, 'intexAgentModelRevision');
@@ -98,6 +103,17 @@ function readIntexAgentModelState(
   }
 
   return { ok: true, explicitModel, revision };
+}
+
+function normalizeLlmPreferencesForRead(preferences: Record<string, unknown>): LlmPreferences {
+  const normalized: Record<string, unknown> = { ...preferences };
+  for (const field of ['defaultModel', 'fallbackModel', 'intexAgentModel'] as const) {
+    const model = normalized[field];
+    if (typeof model === 'string') {
+      normalized[field] = normalizeRetiredOpenRouterModel(model);
+    }
+  }
+  return normalized as LlmPreferences;
 }
 
 /**
@@ -186,7 +202,9 @@ export class FirestoreUserSettingsRepository implements UserSettingsRepository {
         settings.llmTestResults = data.llmTestResults;
       }
       if (data.llmPreferences !== undefined) {
-        settings.llmPreferences = data.llmPreferences as LlmPreferences;
+        settings.llmPreferences = normalizeLlmPreferencesForRead(
+          data.llmPreferences as Record<string, unknown>
+        );
       }
       if (data.transcriptionPreferences !== undefined) {
         settings.transcriptionPreferences = data.transcriptionPreferences;

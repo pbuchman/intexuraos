@@ -337,6 +337,34 @@ describe('createUserServiceClient', () => {
       );
     });
 
+    it('maps the retired Gemini preview preference to Gemini 3.6 Flash', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, {
+          success: true,
+          data: { llmPreferences: { defaultModel: 'or:google/gemini-3-flash-preview' } },
+        });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { openrouter: 'openrouter-key' } });
+
+      const client = createUserServiceClient(config);
+      const result = await client.getLlmClient('user123');
+
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        {
+          userId: 'user123',
+          model: IntexAgentModels.Gemini36Flash,
+          provider: LlmProviders.OpenRouter,
+        },
+        'LLM client created successfully'
+      );
+    });
+
     it('falls back to platform OpenRouter when an explicit Gemini preference has no user key', async () => {
       nock('http://localhost:3000')
         .get('/internal/users/user123/settings')
@@ -1596,7 +1624,7 @@ describe('createUserServiceClient', () => {
       ],
       [
         'explicit source with a different effective model',
-        { ...availableRuntimeSettings, effectiveModel: IntexAgentModels.Gemini3FlashPreview },
+        { ...availableRuntimeSettings, effectiveModel: IntexAgentModels.Gemini36Flash },
       ],
       [
         'default-absent source with an explicit model',

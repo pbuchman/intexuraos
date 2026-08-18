@@ -237,7 +237,7 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
     } as unknown as WhatsAppServiceClient;
     const modelCatalog = {
       getIntexAgentCatalogEvidence: vi.fn(async () => ({
-        snapshotVersion: '2026-07-19' as const,
+        snapshotVersion: '2026-08-18' as const,
         fetchedAt: new Date().toISOString(),
         models: [{ id: catalog.agentModel }, { id: catalog.evaluatorModel }],
       })),

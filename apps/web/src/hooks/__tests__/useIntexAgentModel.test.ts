@@ -46,7 +46,7 @@ function selector(
     options: [
       { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
       { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
-      { id: IntexAgentModels.Gemini3FlashPreview, label: 'Gemini 3 Flash Preview' },
+      { id: IntexAgentModels.Gemini36Flash, label: 'Gemini 3.6 Flash' },
     ],
   };
 }
@@ -111,14 +111,14 @@ describe('useIntexAgentModel', () => {
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
-    expect(result.current.availability === 'available' && result.current.explicitModel).toBe(IntexAgentModels.Gemini3FlashPreview);
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
+    expect(result.current.availability === 'available' && result.current.explicitModel).toBe(IntexAgentModels.Gemini36Flash);
     expect(update).toHaveBeenCalledTimes(1);
 
     await act(async () => { first.resolve(response(IntexAgentModels.MiniMaxM3, 1)); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(update.mock.calls[1]?.[3]).toBe(1);
-    await act(async () => { second.resolve(response(IntexAgentModels.Gemini3FlashPreview, 2)); });
+    await act(async () => { second.resolve(response(IntexAgentModels.Gemini36Flash, 2)); });
 
     await expect(a).resolves.toBe('superseded');
     await expect(b).resolves.toBe('applied');
@@ -141,7 +141,7 @@ describe('useIntexAgentModel', () => {
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { secondA = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await expect(b).resolves.toBe('superseded');
@@ -172,12 +172,12 @@ describe('useIntexAgentModel', () => {
     await act(async () => { secondA = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await act(async () => { firstB = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { secondB = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { first.resolve(response(IntexAgentModels.MiniMaxM3, 1)); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    await act(async () => { second.resolve(response(IntexAgentModels.Gemini3FlashPreview, 2)); });
+    await act(async () => { second.resolve(response(IntexAgentModels.Gemini36Flash, 2)); });
     await expect(firstA).resolves.toBe('superseded');
     await expect(secondA).resolves.toBe('superseded');
     await expect(firstB).resolves.toBe('applied');
@@ -201,7 +201,7 @@ describe('useIntexAgentModel', () => {
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { c = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.DeepSeekV4Flash) : Promise.resolve('disposed'); });
     await expect(b).resolves.toBe('superseded');
@@ -233,11 +233,11 @@ describe('useIntexAgentModel', () => {
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     rerender({ currentSelector: selector(null, 5) });
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { first.reject(new Error('failure')); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(update.mock.calls[1]?.[3]).toBe(5);
-    await act(async () => { second.resolve(response(IntexAgentModels.Gemini3FlashPreview, 6)); });
+    await act(async () => { second.resolve(response(IntexAgentModels.Gemini36Flash, 6)); });
     await expect(a).resolves.toBe('superseded');
     await expect(b).resolves.toBe('applied');
   });
@@ -251,7 +251,7 @@ describe('useIntexAgentModel', () => {
       { initialProps: { currentSelector: selector(null, 5) as IntexAgentModelSelectorV1 } }
     );
     await waitFor(() => expect(result.current.availability).toBe('available'));
-    rerender({ currentSelector: selector(IntexAgentModels.Gemini3FlashPreview, 5) });
+    rerender({ currentSelector: selector(IntexAgentModels.Gemini36Flash, 5) });
     rerender({ currentSelector: selector(IntexAgentModels.MiniMaxM3, 4) });
     await waitFor(() => expect(result.current.availability === 'available' && result.current.revision).toBe(5));
     expect(result.current.availability === 'available' && result.current.explicitModel).toBeNull();
@@ -274,7 +274,7 @@ describe('useIntexAgentModel', () => {
   });
 
   it.each([
-    ['mismatched persisted intent', selector(null, 5), response(IntexAgentModels.Gemini3FlashPreview, 6)],
+    ['mismatched persisted intent', selector(null, 5), response(IntexAgentModels.Gemini36Flash, 6)],
     ['lower revision', selector(null, 5), response(IntexAgentModels.MiniMaxM3, 4)],
     ['equal revision with another confirmed intent', selector(null, 5), response(IntexAgentModels.MiniMaxM3, 5)],
   ])('rejects a %s PATCH response without advancing confirmation', async (_label, initial, patchResponse) => {
@@ -414,7 +414,7 @@ describe('useIntexAgentModel', () => {
     await act(async () => { mutation = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    rerender({ currentSelector: selector(IntexAgentModels.Gemini3FlashPreview, 10) });
+    rerender({ currentSelector: selector(IntexAgentModels.Gemini36Flash, 10) });
     await act(async () => { refetch.resolve({ intexAgentModelSelector: selector(IntexAgentModels.MiniMaxM3, 7) } as LlmKeysResponse); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(update.mock.calls[1]?.[3]).toBe(10);
@@ -423,7 +423,7 @@ describe('useIntexAgentModel', () => {
 
   it('supersedes token-pending A when a higher GET confirms A and B is queued', async () => {
     const token = deferred<string>();
-    const update = vi.fn().mockResolvedValue(response(IntexAgentModels.Gemini3FlashPreview, 6));
+    const update = vi.fn().mockResolvedValue(response(IntexAgentModels.Gemini36Flash, 6));
     const { result, rerender } = renderHook(
       ({ currentSelector }) => useIntexAgentModel({
         subject: 'auth0|subject', selector: currentSelector, getAccessToken: () => token.promise,
@@ -438,12 +438,12 @@ describe('useIntexAgentModel', () => {
     await act(async () => { a = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     rerender({ currentSelector: selector(IntexAgentModels.MiniMaxM3, 5) });
     await act(async () => { token.resolve('token'); });
     await expect(a).resolves.toBe('superseded');
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update.mock.calls[0]?.[2]).toBe(IntexAgentModels.Gemini3FlashPreview);
+    expect(update.mock.calls[0]?.[2]).toBe(IntexAgentModels.Gemini36Flash);
     await expect(b).resolves.toBe('applied');
   });
 
@@ -464,8 +464,8 @@ describe('useIntexAgentModel', () => {
     await act(async () => { a = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
-    rerender({ currentSelector: selector(IntexAgentModels.Gemini3FlashPreview, 5) });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
+    rerender({ currentSelector: selector(IntexAgentModels.Gemini36Flash, 5) });
     await act(async () => { token.resolve('token'); });
     await expect(a).resolves.toBe('superseded');
     await expect(b).resolves.toBe('applied');
@@ -491,7 +491,7 @@ describe('useIntexAgentModel', () => {
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { first.reject(new ApiError('CONFLICT', 'ignored', 409, { currentRevision: 1 })); });
     await act(async () => { c = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.DeepSeekV4Flash) : Promise.resolve('disposed'); });
@@ -523,12 +523,12 @@ describe('useIntexAgentModel', () => {
       ? result.current.setIntexAgentModel(IntexAgentModels.MiniMaxM3) : Promise.resolve('disposed'); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     await act(async () => { b = result.current.availability === 'available'
-      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini3FlashPreview) : Promise.resolve('disposed'); });
+      ? result.current.setIntexAgentModel(IntexAgentModels.Gemini36Flash) : Promise.resolve('disposed'); });
     await act(async () => { first.reject(new ApiError('CONFLICT', 'ignored', 409, { currentRevision: 1 })); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     await act(async () => { c = result.current.availability === 'available'
       ? result.current.setIntexAgentModel(IntexAgentModels.DeepSeekV4Flash) : Promise.resolve('disposed'); });
-    await act(async () => { retry.resolve(response(IntexAgentModels.Gemini3FlashPreview, 2)); });
+    await act(async () => { retry.resolve(response(IntexAgentModels.Gemini36Flash, 2)); });
     await waitFor(() => expect(update).toHaveBeenCalledTimes(3));
     expect(update.mock.calls[2]?.[2]).toBe(IntexAgentModels.DeepSeekV4Flash);
     await expect(a).resolves.toBe('superseded');

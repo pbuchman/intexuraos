@@ -377,14 +377,14 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { intexAgentModel: IntexAgentModels.Gemini3FlashPreview, expectedRevision: 0 },
+        payload: { intexAgentModel: IntexAgentModels.Gemini36Flash, expectedRevision: 0 },
       });
 
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { data: unknown };
       expect(body.data).toEqual({
-        explicitModel: IntexAgentModels.Gemini3FlashPreview,
-        effectiveModel: IntexAgentModels.Gemini3FlashPreview,
+        explicitModel: IntexAgentModels.Gemini36Flash,
+        effectiveModel: IntexAgentModels.Gemini36Flash,
         source: 'explicit',
         revision: 1,
       });

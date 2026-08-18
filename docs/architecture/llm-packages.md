@@ -62,7 +62,7 @@ Platform-owned LLM calls use OpenRouter and `INTEXURAOS_OPENROUTER_APP_API_KEY`.
 ```ts
 const client = createLlmClient({
   apiKey: openRouterApiKey,
-  model: 'or:google/gemini-3-flash-preview',
+  model: 'or:google/gemini-3.6-flash',
   userId,
   logger,
   usageSink,

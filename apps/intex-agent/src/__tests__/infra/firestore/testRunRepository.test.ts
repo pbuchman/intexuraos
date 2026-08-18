@@ -3540,7 +3540,7 @@ describe('Firestore Test Run foundation repository', () => {
       .doc('run_1')
       .set({
         ...testRunRecord(),
-        agentModel: 'or:google/gemini-3-flash-preview',
+        agentModel: 'or:google/gemini-3.6-flash',
         privatePrompt: 'must not leak',
       });
 

@@ -364,7 +364,7 @@ Research Agent reports usage to `llm-usage-service` for every model it invokes. 
 - Grok 4.20 Beta, Grok 4.1 Fast (xAI)
 - Kimi K2.5 (Moonshot)
 - Claude Sonnet 4.6, Claude Opus 4.6 (Anthropic via OpenRouter)
-- Gemini 3.1 Pro, Gemini 2.5 Flash, Gemini 3 Flash Preview (Google via OpenRouter)
+- Gemini 3.1 Pro, Gemini 2.5 Flash, Gemini 3.6 Flash (Google via OpenRouter)
 - GPT-5.4, GPT-5.4 Mini (OpenAI via OpenRouter)
 - MiMo V2.5 Pro (Xiaomi)
 - GLM 5 Turbo (Z.ai)
@@ -396,7 +396,7 @@ Raw Google model constants remain readable only for historical data compatibilit
 - **OpenAI-only cover images:** `generateCoverImage` uses the OpenAI prompt and image pipeline only. If the key is unavailable or either step fails, sharing continues without a cover image.
 - **ResearchSummary projection:** The `GET /` list endpoint uses `findSummariesByUserId` which returns `ResearchSummary` objects (no `synthesizedResult`, no `llmResults[].result`, no `inputContexts[].content`). The `toResearchSummary` mapper strips these fields server-side.
 - **Important WhatsApp notifications:** Both research completion and LLM failure notifications are published with `important: true`, bypassing quiet-hours suppression in the WhatsApp notification pipeline.
-- **Usage reporting via HttpInternalAuthUsageSink:** Each LLM adapter receives a `UsageSink` scoped to its component name (e.g., `research:or:google/gemini-3-flash-preview`, `synthesis:or:anthropic/claude-sonnet-4.6`, `title-generator`). Usage is reported asynchronously to `llm-usage-service` after each call completes.
+- **Usage reporting via HttpInternalAuthUsageSink:** Each LLM adapter receives a `UsageSink` scoped to its component name (e.g., `research:or:google/gemini-3.6-flash`, `synthesis:or:anthropic/claude-sonnet-4.6`, `title-generator`). Usage is reported asynchronously to `llm-usage-service` after each call completes.
 
 ## File Structure
 

@@ -58,11 +58,11 @@ interface SubmitResearchOutput {
 {
   "prompt": "Compare PostgreSQL vs MongoDB for a SaaS product",
   "selectedModels": [
-    "or:google/gemini-3-flash-preview",
+    "or:google/gemini-3.6-flash",
     "or:anthropic/claude-sonnet-4.6",
     "or:x-ai/grok-4.20-beta"
   ],
-  "synthesisModel": "or:google/gemini-3-flash-preview"
+  "synthesisModel": "or:google/gemini-3.6-flash"
 }
 
 // Response
@@ -73,12 +73,12 @@ interface SubmitResearchOutput {
     "status": "pending",
     "title": "",
     "selectedModels": [
-      "or:google/gemini-3-flash-preview",
+      "or:google/gemini-3.6-flash",
       "or:anthropic/claude-sonnet-4.6",
       "or:x-ai/grok-4.20-beta"
     ],
     "llmResults": [
-      { "model": "or:google/gemini-3-flash-preview", "status": "pending" },
+      { "model": "or:google/gemini-3.6-flash", "status": "pending" },
       { "model": "or:anthropic/claude-sonnet-4.6", "status": "pending" },
       { "model": "or:x-ai/grok-4.20-beta", "status": "pending" }
     ],

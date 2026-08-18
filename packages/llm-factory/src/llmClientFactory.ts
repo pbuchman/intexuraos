@@ -16,7 +16,7 @@
  *
  * const client = createLlmClient({
  *   apiKey: 'sk-...',
- *   model: 'or:google/gemini-3-flash-preview',
+ *   model: 'or:google/gemini-3.6-flash',
  *   userId: 'user-123',
  *   logger: pinoLogger,
  *   usageSink: myUsageSink,
@@ -189,7 +189,7 @@ type SupportedProvider =
  * // Create a Gemini client routed through OpenRouter
  * const geminiViaOpenRouter = createLlmClient({
  *   apiKey: 'sk-...',
- *   model: 'or:google/gemini-3-flash-preview',
+ *   model: 'or:google/gemini-3.6-flash',
  *   userId: 'user-123',
  *   logger: pinoLogger,
  *   usageSink: myUsageSink,

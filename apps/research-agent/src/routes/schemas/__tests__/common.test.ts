@@ -12,7 +12,7 @@ describe('supportedModelSchema', () => {
   });
 
   it('still accepts Google models through the OpenRouter namespace', () => {
-    expect(supportedModelSchema.anyOf[1].enum).toContain('or:google/gemini-3-flash-preview');
+    expect(supportedModelSchema.anyOf[1].enum).toContain('or:google/gemini-3.6-flash');
     expect(supportedModelSchema.anyOf[1].enum).not.toContain('or:unknown/model');
   });
 });

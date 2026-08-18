@@ -46,8 +46,8 @@ curl -s -X POST "$BASE_URL/" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What are the main tradeoffs between PostgreSQL and MongoDB for a SaaS product?",
-    "selectedModels": ["or:google/gemini-3-flash-preview", "or:anthropic/claude-sonnet-4.6"],
-    "synthesisModel": "or:google/gemini-3-flash-preview"
+    "selectedModels": ["or:google/gemini-3.6-flash", "or:anthropic/claude-sonnet-4.6"],
+    "synthesisModel": "or:google/gemini-3.6-flash"
   }' | jq .
 ```
 
@@ -61,10 +61,10 @@ curl -s -X POST "$BASE_URL/" \
     "status": "pending",
     "title": "",
     "prompt": "What are the main tradeoffs...",
-    "selectedModels": ["or:google/gemini-3-flash-preview", "or:anthropic/claude-sonnet-4.6"],
-    "synthesisModel": "or:google/gemini-3-flash-preview",
+    "selectedModels": ["or:google/gemini-3.6-flash", "or:anthropic/claude-sonnet-4.6"],
+    "synthesisModel": "or:google/gemini-3.6-flash",
     "llmResults": [
-      { "model": "or:google/gemini-3-flash-preview", "status": "pending" },
+      { "model": "or:google/gemini-3.6-flash", "status": "pending" },
       { "model": "or:anthropic/claude-sonnet-4.6", "status": "pending" }
     ],
     "startedAt": "2026-03-15T10:00:00.000Z"
@@ -224,8 +224,8 @@ curl -s -X POST "$BASE_URL/" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "Compare React Server Components vs traditional SSR approaches",
-    "selectedModels": ["or:google/gemini-3-flash-preview", "or:x-ai/grok-4.20-beta", "or:qwen/qwen3.5-plus-02-15"],
-    "synthesisModel": "or:google/gemini-3-flash-preview"
+    "selectedModels": ["or:google/gemini-3.6-flash", "or:x-ai/grok-4.20-beta", "or:qwen/qwen3.5-plus-02-15"],
+    "synthesisModel": "or:google/gemini-3.6-flash"
   }' | jq .
 ```
 
@@ -348,8 +348,8 @@ curl -s -X POST "$BASE_URL/" \
   -H "Content-Type: application/json" \
   -d '{
     "prompt": "What is dependency injection?",
-    "selectedModels": ["or:google/gemini-3-flash-preview"],
-    "synthesisModel": "or:google/gemini-3-flash-preview",
+    "selectedModels": ["or:google/gemini-3.6-flash"],
+    "synthesisModel": "or:google/gemini-3.6-flash",
     "skipSynthesis": true
   }' | jq .
 ```

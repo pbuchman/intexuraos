@@ -35,9 +35,9 @@ function catalog(): unknown {
         supported_parameters: [...INTEX_AGENT_REQUIRED_PARAMETERS],
       },
       {
-        id: 'google/gemini-3-flash-preview',
-        context_length: 1_000_000,
-        pricing: { prompt: '0.0000003', completion: '0.0000025' },
+        id: 'google/gemini-3.6-flash',
+        context_length: 1_048_576,
+        pricing: { prompt: '0.0000015', completion: '0.0000075' },
         architecture: { input_modalities: ['text'], output_modalities: ['text'] },
         supported_parameters: [...INTEX_AGENT_REQUIRED_PARAMETERS],
       },

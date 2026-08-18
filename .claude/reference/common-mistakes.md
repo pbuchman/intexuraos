@@ -66,7 +66,7 @@ const model = ModelId.Gemini25Flash; // unresolved and direct Google is disabled
 
 // ✅ Build the package and use the exported OpenRouter-backed constant
 import { IntexAgentModels } from '@intexuraos/llm-contract';
-const model = IntexAgentModels.Gemini3FlashPreview; // or:google/...
+const model = IntexAgentModels.Gemini36Flash; // or:google/...
 ```
 
 **Root cause:** If `no-unsafe-*` errors appear, the type isn't resolving — check imports, run `pnpm build`, or add explicit type annotations.
@@ -83,7 +83,7 @@ const model = 'gemini-2.5-flash';
 const apiKey = process.env['INTEXURAOS_GEMINI_APP_API_KEY'];
 
 // ✅ Google-family model routed through OpenRouter
-const model = createOpenRouterModelId('google/gemini-3-flash-preview');
+const model = createOpenRouterModelId('google/gemini-3.6-flash');
 const apiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
 ```
 

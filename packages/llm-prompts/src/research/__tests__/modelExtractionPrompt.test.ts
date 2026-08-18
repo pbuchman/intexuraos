@@ -40,9 +40,9 @@ describe('modelExtractionPrompt.build', () => {
     userMessage: 'Research AI developments using gemini',
     availableModels: [
       {
-        id: IntexAgentModels.Gemini3FlashPreview,
+        id: IntexAgentModels.Gemini36Flash,
         provider: LlmProviders.Google,
-        displayName: 'Gemini 3 Flash Preview',
+        displayName: 'Gemini 3.6 Flash',
         keywords: ['gemini pro', 'gemini-pro', 'pro'],
         isProviderDefault: true,
       },
@@ -73,7 +73,7 @@ describe('modelExtractionPrompt.build', () => {
 
     expect(result).toContain('## Available Models');
     expect(result).toContain(
-      `- ${IntexAgentModels.Gemini3FlashPreview}: Gemini 3 Flash Preview (${LlmProviders.Google})`
+      `- ${IntexAgentModels.Gemini36Flash}: Gemini 3.6 Flash (${LlmProviders.Google})`
     );
     expect(result).toContain(`- ${LlmModels.GPT54}: GPT 5.4 (${LlmProviders.OpenAI})`);
   });
@@ -90,9 +90,9 @@ describe('modelExtractionPrompt.build', () => {
     const deps = createTestDeps({
       availableModels: [
         {
-          id: IntexAgentModels.Gemini3FlashPreview,
+          id: IntexAgentModels.Gemini36Flash,
           provider: LlmProviders.Google,
-          displayName: 'Gemini 3 Flash Preview',
+          displayName: 'Gemini 3.6 Flash',
           keywords: ['gemini'],
           isProviderDefault: true,
         },
@@ -108,7 +108,7 @@ describe('modelExtractionPrompt.build', () => {
     const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain(
-      `${IntexAgentModels.Gemini3FlashPreview}: Gemini 3 Flash Preview (${LlmProviders.Google}) (provider default)`
+      `${IntexAgentModels.Gemini36Flash}: Gemini 3.6 Flash (${LlmProviders.Google}) (provider default)`
     );
     expect(result).not.toContain(
       `${ConversationAssistantModels.Gemini35FlashThinking}: Gemini 3.5 Flash Thinking (${LlmProviders.Google}) (provider default)`
@@ -139,7 +139,7 @@ describe('modelExtractionPrompt.build', () => {
     const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain('## Provider Defaults');
-    expect(result).toContain(`- ${LlmProviders.Google}: ${IntexAgentModels.Gemini3FlashPreview}`);
+    expect(result).toContain(`- ${LlmProviders.Google}: ${IntexAgentModels.Gemini36Flash}`);
     expect(result).toContain(`- ${LlmProviders.OpenAI}: ${LlmModels.GPT54}`);
   });
 
@@ -184,9 +184,9 @@ describe('modelExtractionPrompt.build', () => {
     const deps = createTestDeps({
       availableModels: [
         {
-          id: IntexAgentModels.Gemini3FlashPreview,
+          id: IntexAgentModels.Gemini36Flash,
           provider: LlmProviders.Google,
-          displayName: 'Gemini 3 Flash Preview',
+          displayName: 'Gemini 3.6 Flash',
           keywords: ['pro'],
           isProviderDefault: true,
         },
@@ -202,16 +202,16 @@ describe('modelExtractionPrompt.build', () => {
     const result = modelExtractionPrompt.build(deps);
 
     // Both models should be listed
-    expect(result).toContain(IntexAgentModels.Gemini3FlashPreview);
+    expect(result).toContain(IntexAgentModels.Gemini36Flash);
     expect(result).toContain(ConversationAssistantModels.Gemini35FlashThinking);
     // But only one provider default
-    expect(result).toContain(`- ${LlmProviders.Google}: ${IntexAgentModels.Gemini3FlashPreview}`);
+    expect(result).toContain(`- ${LlmProviders.Google}: ${IntexAgentModels.Gemini36Flash}`);
   });
 });
 
 describe('parseModelExtractionResponse', () => {
   const validModels: ResearchModel[] = [
-    IntexAgentModels.Gemini3FlashPreview,
+    IntexAgentModels.Gemini36Flash,
     LlmModels.GPT54,
     LlmModels.ClaudeSonnet46,
     LlmModels.SonarPro,
@@ -220,23 +220,20 @@ describe('parseModelExtractionResponse', () => {
   describe('valid responses', () => {
     it('parses valid JSON with selected models', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview, LlmModels.GPT54],
-        synthesisModel: IntexAgentModels.Gemini3FlashPreview,
+        selectedModels: [IntexAgentModels.Gemini36Flash, LlmModels.GPT54],
+        synthesisModel: IntexAgentModels.Gemini36Flash,
       });
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([
-        IntexAgentModels.Gemini3FlashPreview,
-        LlmModels.GPT54,
-      ]);
-      expect(result?.synthesisModel).toBe(IntexAgentModels.Gemini3FlashPreview);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash, LlmModels.GPT54]);
+      expect(result?.synthesisModel).toBe(IntexAgentModels.Gemini36Flash);
     });
 
     it('parses response with null synthesisModel', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: null,
       });
 
@@ -260,25 +257,25 @@ describe('parseModelExtractionResponse', () => {
 
     it('extracts JSON from surrounding text', () => {
       const response = `Based on your request, here is my analysis:
-      {"selectedModels": ["${IntexAgentModels.Gemini3FlashPreview}"], "synthesisModel": null}
+      {"selectedModels": ["${IntexAgentModels.Gemini36Flash}"], "synthesisModel": null}
       I hope this helps!`;
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini3FlashPreview]);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
     });
 
     it('extracts JSON with whitespace and newlines', () => {
       const response = `{
-        "selectedModels": ["${IntexAgentModels.Gemini3FlashPreview}"],
+        "selectedModels": ["${IntexAgentModels.Gemini36Flash}"],
         "synthesisModel": "${LlmModels.GPT54}"
       }`;
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini3FlashPreview]);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
       expect(result?.synthesisModel).toBe(LlmModels.GPT54);
     });
   });
@@ -286,31 +283,31 @@ describe('parseModelExtractionResponse', () => {
   describe('filtering invalid models', () => {
     it('filters out invalid model IDs from selectedModels', () => {
       const response = JSON.stringify({
-        selectedModels: ['invalid-model', IntexAgentModels.Gemini3FlashPreview, 'another-invalid'],
+        selectedModels: ['invalid-model', IntexAgentModels.Gemini36Flash, 'another-invalid'],
         synthesisModel: null,
       });
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini3FlashPreview]);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
     });
 
     it('filters out non-string values from selectedModels', () => {
       const response = JSON.stringify({
-        selectedModels: [123, IntexAgentModels.Gemini3FlashPreview, null, { model: 'test' }],
+        selectedModels: [123, IntexAgentModels.Gemini36Flash, null, { model: 'test' }],
         synthesisModel: null,
       });
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini3FlashPreview]);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
     });
 
     it('returns null synthesisModel for invalid synthesis model ID', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: 'invalid-synthesis-model',
       });
 
@@ -322,7 +319,7 @@ describe('parseModelExtractionResponse', () => {
 
     it('returns null synthesisModel for non-string synthesis model', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: 123,
       });
 
@@ -376,7 +373,7 @@ describe('parseModelExtractionResponse', () => {
 
     it('returns null when selectedModels is missing', () => {
       const response = JSON.stringify({
-        synthesisModel: IntexAgentModels.Gemini3FlashPreview,
+        synthesisModel: IntexAgentModels.Gemini36Flash,
       });
 
       const result = parseModelExtractionResponse(response, validModels);
@@ -397,7 +394,7 @@ describe('parseModelExtractionResponse', () => {
 
     it('returns null when selectedModels is an object', () => {
       const response = JSON.stringify({
-        selectedModels: { model: IntexAgentModels.Gemini3FlashPreview },
+        selectedModels: { model: IntexAgentModels.Gemini36Flash },
         synthesisModel: null,
       });
 
@@ -410,8 +407,8 @@ describe('parseModelExtractionResponse', () => {
   describe('edge cases', () => {
     it('handles empty validModels list', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
-        synthesisModel: IntexAgentModels.Gemini3FlashPreview,
+        selectedModels: [IntexAgentModels.Gemini36Flash],
+        synthesisModel: IntexAgentModels.Gemini36Flash,
       });
 
       const result = parseModelExtractionResponse(response, []);
@@ -423,7 +420,7 @@ describe('parseModelExtractionResponse', () => {
 
     it('handles response with additional unknown properties', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+        selectedModels: [IntexAgentModels.Gemini36Flash],
         synthesisModel: null,
         unknownField: 'should be ignored',
         anotherField: 123,
@@ -432,7 +429,7 @@ describe('parseModelExtractionResponse', () => {
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini3FlashPreview]);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
     });
 
     it('handles deeply nested JSON by extracting first match', () => {
@@ -484,7 +481,7 @@ describe('exported constants', () => {
     it('has keywords only for executable research models', () => {
       expect(Object.hasOwn(MODEL_KEYWORDS, LegacyGoogleModels.Gemini25Pro)).toBe(false);
       expect(Object.hasOwn(MODEL_KEYWORDS, LegacyGoogleModels.Gemini25Flash)).toBe(false);
-      expect(MODEL_KEYWORDS[IntexAgentModels.Gemini3FlashPreview]).toBeDefined();
+      expect(MODEL_KEYWORDS[IntexAgentModels.Gemini36Flash]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.ClaudeOpus46]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.ClaudeSonnet46]).toBeDefined();
       expect(MODEL_KEYWORDS[LlmModels.O4MiniDeepResearch]).toBeDefined();
@@ -503,9 +500,7 @@ describe('exported constants', () => {
 
   describe('PROVIDER_DEFAULT_MODELS', () => {
     it('has defaults for all major providers', () => {
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Google]).toBe(
-        IntexAgentModels.Gemini3FlashPreview
-      );
+      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Google]).toBe(IntexAgentModels.Gemini36Flash);
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Anthropic]).toBe(LlmModels.ClaudeSonnet46);
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.OpenAI]).toBe(LlmModels.GPT54);
       expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Perplexity]).toBe(LlmModels.SonarPro);
@@ -544,7 +539,7 @@ describe('parseModelExtractionResponseWithLogging', () => {
     debug: vi.fn(),
   } as unknown as Logger;
 
-  const validModels: ResearchModel[] = [IntexAgentModels.Gemini3FlashPreview, LlmModels.GPT54];
+  const validModels: ResearchModel[] = [IntexAgentModels.Gemini36Flash, LlmModels.GPT54];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -552,13 +547,13 @@ describe('parseModelExtractionResponseWithLogging', () => {
 
   it('returns valid response and does not log', () => {
     const response = JSON.stringify({
-      selectedModels: [IntexAgentModels.Gemini3FlashPreview],
+      selectedModels: [IntexAgentModels.Gemini36Flash],
       synthesisModel: LlmModels.GPT54,
     });
 
     const result = parseModelExtractionResponseWithLogging(response, validModels, mockLogger);
 
-    expect(result.selectedModels).toEqual([IntexAgentModels.Gemini3FlashPreview]);
+    expect(result.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
     expect(result.synthesisModel).toBe(LlmModels.GPT54);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
@@ -605,7 +600,7 @@ describe('parseModelExtractionResponseWithLogging', () => {
   });
 
   it('throws and logs warning for response with missing selectedModels', () => {
-    const response = JSON.stringify({ synthesisModel: IntexAgentModels.Gemini3FlashPreview });
+    const response = JSON.stringify({ synthesisModel: IntexAgentModels.Gemini36Flash });
 
     expect(() =>
       parseModelExtractionResponseWithLogging(response, validModels, mockLogger)

@@ -55,7 +55,7 @@ export interface ModelExtractionResponse {
 export const modelExtractionPrompt: PromptBuilder<ModelExtractionPromptDeps> = {
   name: 'research-model-extraction',
   description: 'Extracts research/synthesis model preferences from a user message',
-  version: '2.0.0',
+  version: '2.1.0',
 
   build(deps: ModelExtractionPromptDeps): string {
     const { userMessage, availableModels, synthesisModels, defaultSynthesisModel } = deps;
@@ -228,7 +228,7 @@ export function parseModelExtractionResponseWithLogging(
  * Maps to provider default or specific models.
  */
 export const MODEL_KEYWORDS: Partial<Record<ResearchModel, string[]>> = {
-  [IntexAgentModels.Gemini3FlashPreview]: ['gemini flash', 'gemini', 'google'],
+  [IntexAgentModels.Gemini36Flash]: ['gemini flash', 'gemini', 'google'],
   [LlmModels.ClaudeOpus46]: ['claude opus', 'opus'],
   [LlmModels.ClaudeSonnet46]: ['claude sonnet', 'sonnet', 'claude', 'anthropic'],
   [LlmModels.ClaudeSonnet47]: ['claude sonnet 4.7', 'sonnet 4.7', 'claude-sonnet-4-7'],
@@ -245,7 +245,7 @@ export const MODEL_KEYWORDS: Partial<Record<ResearchModel, string[]>> = {
  * Used when user says "use google" without specifying a model.
  */
 export const PROVIDER_DEFAULT_MODELS: Record<string, ResearchModel> = {
-  google: IntexAgentModels.Gemini3FlashPreview,
+  google: IntexAgentModels.Gemini36Flash,
   anthropic: LlmModels.ClaudeSonnet46,
   openai: LlmModels.GPT54,
   perplexity: LlmModels.SonarPro,

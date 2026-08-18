@@ -5,7 +5,7 @@ import { FakeUsageSink } from '@intexuraos/llm-pricing';
 import { createOpenRouterToolCallingClient } from '../toolCallingClient.js';
 
 const API_BASE_URL = 'https://openrouter.ai/api/v1';
-const TEST_MODEL = 'google/gemini-3-flash-preview';
+const TEST_MODEL = 'google/gemini-3.6-flash';
 
 const mockLogger: Logger = {
   info: vi.fn(),

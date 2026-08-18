@@ -22,7 +22,7 @@ describe('production Intex Agent Matrix corpus wrapper', () => {
     { arguments_: [] },
     { arguments_: ['preflight'] },
     { arguments_: ['matrix-corpus', 'extra'] },
-    { arguments_: ['matrix-corpus', '--agent-model=or:google/gemini-3-flash-preview'] },
+    { arguments_: ['matrix-corpus', '--agent-model=or:google/gemini-3.6-flash'] },
     { arguments_: ['matrix-corpus', '--agent-model='] },
     { arguments_: ['matrix-corpus', '--agent-model=or:minimax/minimax-m3', 'extra'] },
   ])('rejects every non-canonical argument vector before delegation: %j', ({ arguments_ }) => {

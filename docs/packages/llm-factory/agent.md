@@ -20,7 +20,7 @@
 ```ts
 const client = createLlmClient({
   apiKey: openRouterApiKey,
-  model: 'or:google/gemini-3-flash-preview',
+  model: 'or:google/gemini-3.6-flash',
   userId,
   logger,
   usageSink,

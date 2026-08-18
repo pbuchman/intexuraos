@@ -662,7 +662,7 @@ describe('Matrix corpus private routes', () => {
       headers: { 'x-internal-auth': internalAuthToken },
       payload: authorizedMutation(
         'register_context',
-        contextBody({ agentModel: 'or:google/gemini-3-flash-preview' })
+        contextBody({ agentModel: 'or:google/gemini-3.6-flash' })
       ),
     });
 

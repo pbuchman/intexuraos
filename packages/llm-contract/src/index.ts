@@ -68,6 +68,7 @@ export {
   DEFAULT_PLATFORM_LLM_MODEL,
   INTEX_AGENT_MODEL_OPTIONS,
   isIntexAgentModel,
+  normalizeRetiredOpenRouterModel,
   OpenRouterToolCallingModels,
 } from './supportedModels.js';
 
@@ -88,7 +89,7 @@ export type {
   ConversationAssistantModelOption,
   IntexAgentModel,
   OpenRouterDeepSeekV4Flash,
-  OpenRouterGemini3FlashPreview,
+  OpenRouterGemini36Flash,
   OpenRouterMiniMaxM3,
   OpenRouterClaudeSonnet5,
   OpenRouterGemini35Flash,

@@ -14,6 +14,7 @@ import {
   isLegacyGoogleModel,
   isOpenRouterModel,
   LlmProviders,
+  normalizeRetiredOpenRouterModel,
   type LlmProvider,
   type ExecutableLlmProvider,
   type DefaultEligibleModel,
@@ -278,11 +279,12 @@ export function providerToKeyField(provider: ExecutableLlmProvider): string {
 }
 
 function normalizeLegacyModelPreference(model: string): string {
-  if (isLegacyGoogleModel(model)) {
+  const normalizedModel = normalizeRetiredOpenRouterModel(model);
+  if (isLegacyGoogleModel(normalizedModel)) {
     return DEFAULT_PLATFORM_LLM_MODEL;
   }
 
-  return model;
+  return normalizedModel;
 }
 
 /**

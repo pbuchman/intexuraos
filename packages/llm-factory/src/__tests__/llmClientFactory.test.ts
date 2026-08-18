@@ -361,7 +361,7 @@ describe('llmClientFactory', () => {
 
       const client = createToolCallingClient({
         apiKey: 'test-key',
-        model: OpenRouterToolCallingModels.Gemini3FlashPreview,
+        model: OpenRouterToolCallingModels.Gemini36Flash,
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,
@@ -372,7 +372,7 @@ describe('llmClientFactory', () => {
       expect(createOpenRouterToolCallingClient).toHaveBeenCalledWith(
         expect.objectContaining({
           apiKey: 'test-key',
-          model: 'google/gemini-3-flash-preview',
+          model: 'google/gemini-3.6-flash',
           userId: 'test-user',
           logger: mockLogger,
           usageSink: mockUsageSink,
@@ -403,7 +403,7 @@ describe('llmClientFactory', () => {
     it.each([
       [OpenRouterToolCallingModels.DeepSeekV4Flash, 'deepseek/deepseek-v4-flash'],
       [OpenRouterToolCallingModels.MiniMaxM3, 'minimax/minimax-m3'],
-      [OpenRouterToolCallingModels.Gemini3FlashPreview, 'google/gemini-3-flash-preview'],
+      [OpenRouterToolCallingModels.Gemini36Flash, 'google/gemini-3.6-flash'],
     ] as const)(
       'admits Intex tool model %s at the OpenRouter adapter boundary',
       async (model, rawModel) => {

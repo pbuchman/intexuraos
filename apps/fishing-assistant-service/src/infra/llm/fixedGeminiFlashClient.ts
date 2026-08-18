@@ -5,7 +5,7 @@ import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory
 import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type { FixedModelChatAdapter, FishingChatClientError } from '../../domain/ports/chatModel.js';
 
-export const FISHING_ASSISTANT_CHAT_MODEL_ID = 'or:google/gemini-3-flash-preview';
+export const FISHING_ASSISTANT_CHAT_MODEL_ID = 'or:google/gemini-3.6-flash';
 
 const FISHING_ASSISTANT_CHAT_MODEL = FISHING_ASSISTANT_CHAT_MODEL_ID as LLMModel;
 

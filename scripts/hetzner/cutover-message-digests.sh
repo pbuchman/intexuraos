@@ -402,7 +402,7 @@ run_migration_at_whatsapp_url() {
   ensure_binding_file
   INTEXURAOS_WHATSAPP_SERVICE_URL="${whatsapp_service_url}" \
     INTEXURAOS_LLM_USAGE_SERVICE_URL="http://127.0.0.1:8132" \
-    INTEXURAOS_DIGEST_LLM_MODEL="${INTEXURAOS_DIGEST_LLM_MODEL:-or:google/gemini-3-flash-preview}" \
+    INTEXURAOS_DIGEST_LLM_MODEL="${INTEXURAOS_DIGEST_LLM_MODEL:-or:google/gemini-3.6-flash}" \
     GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}" \
     node "${RELEASE_DIR}/scripts/message-digests/migrate-fishing-group.mjs" \
     "${mode}" --migration-id "mdm_${MERGE_SHA}" "$@" > "${output}"
