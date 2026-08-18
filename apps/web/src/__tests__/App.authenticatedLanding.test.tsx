@@ -38,6 +38,10 @@ function SessionsPageMock(): React.JSX.Element {
   return <div>Intex Agent Sessions Page</div>;
 }
 
+function PreferencesPageMock(): React.JSX.Element {
+  return <div>Intex Agent Settings Page</div>;
+}
+
 function LegacyRedirectPageMock(): React.JSX.Element {
   return <div>Legacy Message Digest redirect</div>;
 }
@@ -113,6 +117,13 @@ vi.mock(
   }),
 );
 
+vi.mock(
+  '@/pages/IntexAgentPreferencesPage',
+  (): { IntexAgentPreferencesPage: typeof PreferencesPageMock } => ({
+    IntexAgentPreferencesPage: PreferencesPageMock,
+  }),
+);
+
 function LocationProbe(): React.JSX.Element {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}</div>;
@@ -141,6 +152,23 @@ describe('App authenticated landing routes', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-testid="location"]')?.textContent).toBe(
         '/intex-agent/sessions',
+      );
+    });
+  });
+
+  it('redirects the legacy Intex Agent preferences route to settings', async () => {
+    const { AppRoutes } = await import('../App.js');
+
+    render(
+      <MemoryRouter initialEntries={['/intex-agent/preferences']}>
+        <LocationProbe />
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-testid="location"]')?.textContent).toBe(
+        '/intex-agent/settings',
       );
     });
   });
