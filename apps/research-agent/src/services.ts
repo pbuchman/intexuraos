@@ -40,11 +40,7 @@ import {
 export type { DecryptedApiKeys } from '@intexuraos/internal-clients';
 export type { ImageServiceClient, GeneratedImageData, PromptModel, ImageModel } from './infra/image/index.js';
 import type { Logger, Result } from '@intexuraos/common-core';
-import type {
-  LLMModel,
-  OpenRouterToolCallingModel,
-  ResearchModel,
-} from '@intexuraos/llm-contract';
+import type { ResearchModel } from '@intexuraos/llm-contract';
 import {
   type LlmResearchProvider,
   type LlmSynthesisProvider,
@@ -118,14 +114,14 @@ export interface ServiceContainer {
     researchId?: string
   ) => TitleGenerator;
   createContextInferrer: (
-    model: LLMModel | OpenRouterToolCallingModel,
+    model: ResearchModel,
     apiKey: string,
     userId: string,
     logger: Logger,
     researchId?: string
   ) => ContextInferenceProvider;
   createInputValidator: (
-    model: LLMModel | OpenRouterToolCallingModel,
+    model: ResearchModel,
     apiKey: string,
     userId: string,
     logger: Logger,
@@ -335,7 +331,7 @@ export function initializeServices(): void {
     ): TitleGenerator =>
       createTitleGenerator(model, apiKey, userId, logger, buildUsageSink('title-generator'), researchId),
     createContextInferrer: (
-      model: LLMModel | OpenRouterToolCallingModel,
+      model: ResearchModel,
       apiKey: string,
       userId: string,
       logger: Logger,
@@ -350,7 +346,7 @@ export function initializeServices(): void {
         researchId
       ),
     createInputValidator: (
-      model: LLMModel | OpenRouterToolCallingModel,
+      model: ResearchModel,
       apiKey: string,
       userId: string,
       logger: Logger,

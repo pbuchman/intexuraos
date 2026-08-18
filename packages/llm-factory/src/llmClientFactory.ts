@@ -33,11 +33,8 @@ import { createOpenRouterToolCallingClient } from '@intexuraos/infra-openrouter'
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import {
   getOpenRouterRawId,
-  getProviderForModel,
   isOpenRouterModel,
-  isLegacyGoogleModel,
   isToolCallingModel,
-  isValidModel,
   LlmProviders,
   type GenerateChatOptions,
   type GenerateChatResult,
@@ -54,19 +51,14 @@ import {
   type OwnerType,
 } from '@intexuraos/llm-contract';
 import { createOpenRouterGenerateClient } from './openRouterGenerateClient.js';
-import { createClaudeGenerateClient } from './claudeGenerateClient.js';
-import { createGptGenerateClient } from './gptGenerateClient.js';
-import { createPerplexityGenerateClient } from './perplexityGenerateClient.js';
 import { IntexuraOSError, type Logger, type Result } from '@intexuraos/common-core';
 
 /**
- * Configuration for creating an LLM client.
+ * Shared configuration retained by executable and rollback-only adapters.
  */
-export interface LlmClientConfig {
+export interface LlmClientBaseConfig {
   /** API key for the LLM provider */
   apiKey: string;
-  /** Model identifier (for Google models use an `or:google/...` OpenRouter ID) */
-  model: LLMModel | OpenRouterModelId;
   /** User ID for usage tracking */
   userId: string;
   /** Logger for structured LLM usage logging */
@@ -85,6 +77,16 @@ export interface LlmClientConfig {
   maxAttempts?: number;
   /** Optional absolute wall-clock deadline shared by provider calls. */
   deadlineAtMs?: number;
+}
+
+/** Configuration for creating a new application LLM client. */
+export interface LlmClientConfig extends LlmClientBaseConfig {
+  model: OpenRouterModelId;
+}
+
+/** Internal rollback-only configuration for direct-provider adapter tests. */
+export interface LegacyDirectLlmClientConfig extends LlmClientBaseConfig {
+  model: LLMModel;
 }
 
 export interface ToolCallingClientConfig {
@@ -168,14 +170,9 @@ export interface LlmGenerateClient {
 }
 
 /**
- * Supported providers for the factory.
- * App-side: Anthropic, OpenAI, Perplexity, and OpenRouter are supported.
+ * Supported provider for new application calls.
  */
-type SupportedProvider =
-  | typeof LlmProviders.Anthropic
-  | typeof LlmProviders.OpenAI
-  | typeof LlmProviders.Perplexity
-  | typeof LlmProviders.OpenRouter;
+type SupportedProvider = typeof LlmProviders.OpenRouter;
 
 /**
  * Maps model to provider and creates the appropriate client.
@@ -199,80 +196,21 @@ type SupportedProvider =
 export function createLlmClient(config: LlmClientConfig): LlmGenerateClient {
   const model = config.model as string;
 
-  // OpenRouter models (or: prefix) are routed to the OpenRouter client
-  if (isOpenRouterModel(model)) {
-    return createOpenRouterGenerateClient(config);
-  }
-
-  if (isLegacyGoogleModel(model)) {
+  if (!isOpenRouterModel(model)) {
     throw new IntexuraOSError(
       'INVALID_REQUEST',
-      'Direct Google LLM models are disabled; use an or:google/ OpenRouter model'
+      `Direct LLM model '${model}' is disabled; use an or: OpenRouter model`
     );
   }
 
-  // Validate model is a known static model
-  if (!isValidModel(config.model)) {
-    throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
-  }
-
-  // Static models: dispatch on provider
-  const providerForModel = getProviderForModel(config.model);
-  switch (providerForModel) {
-    case LlmProviders.Anthropic:
-      return withUnsupportedGenerateChat(createClaudeGenerateClient(config));
-    case LlmProviders.OpenAI:
-      return withUnsupportedGenerateChat(createGptGenerateClient(config));
-    case LlmProviders.Perplexity:
-      return withUnsupportedGenerateChat(createPerplexityGenerateClient(config));
-    default:
-      // OpenRouter (or any future provider not in the switch) lands here. Static
-      // OpenRouter models don't exist in MODEL_PROVIDER_MAP — the `or:` prefix
-      // path above handles every OpenRouter call. Throwing keeps the factory
-      // closed under unknown providers.
-      throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM provider: ${providerForModel}`);
-  }
-}
-
-function withUnsupportedGenerateChat(client: {
-  generate(prompt: string, options: GenerateOptions): Promise<Result<GenerateResult, LLMError>>;
-}): LlmGenerateClient {
-  return {
-    async generate(
-      prompt: string,
-      options: GenerateOptions
-    ): Promise<Result<GenerateResult, LLMError>> {
-      return await client.generate(prompt, options);
-    },
-    generateChat(): Promise<Result<GenerateChatResult, LLMError>> {
-      return Promise.reject(
-        new IntexuraOSError(
-          'INVALID_REQUEST',
-          'Chat message generation is only supported for OpenRouter clients'
-        )
-      );
-    },
-    generateChatStream(): Promise<Result<GenerateChatResult, LLMError>> {
-      return Promise.reject(
-        new IntexuraOSError(
-          'INVALID_REQUEST',
-          'Chat message streaming is only supported for OpenRouter clients'
-        )
-      );
-    },
-  };
+  return createOpenRouterGenerateClient(config);
 }
 
 /**
  * Type guard to check if a provider is supported by the factory.
  */
 export function isSupportedProvider(provider: string): provider is SupportedProvider {
-  return (
-    provider === LlmProviders.Anthropic ||
-    provider === LlmProviders.OpenAI ||
-    provider === LlmProviders.Perplexity ||
-    provider === LlmProviders.OpenRouter
-  );
+  return provider === LlmProviders.OpenRouter;
 }
 
 /**
@@ -287,42 +225,29 @@ export function isSupportedProvider(provider: string): provider is SupportedProv
 export function createToolCallingClient(config: ToolCallingClientConfig): ToolCallingClient {
   const model = config.model as string;
 
-  if (isOpenRouterModel(model)) {
-    if (!isToolCallingModel(model)) {
-      throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
-    }
-
-    return createOpenRouterToolCallingClient({
-      apiKey: config.apiKey,
-      model: getOpenRouterRawId(model),
-      userId: config.userId,
-      logger: config.logger,
-      usageSink: config.usageSink,
-      ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
-      ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
-      ...(config.maxAttempts !== undefined && { maxAttempts: config.maxAttempts }),
-      ...(config.deadlineAtMs !== undefined && { deadlineAtMs: config.deadlineAtMs }),
-      evidenceModelId: model,
-    });
-  }
-
-  if (isLegacyGoogleModel(model)) {
+  if (!isOpenRouterModel(model)) {
     throw new IntexuraOSError(
       'INVALID_REQUEST',
-      'Direct Google LLM models are disabled; use an or:google/ OpenRouter model'
+      `Direct LLM model '${model}' is disabled; use an or: OpenRouter model`
     );
   }
 
-  // Validate model is supported
-  if (!isValidModel(model)) {
+  if (!isToolCallingModel(model)) {
     throw new IntexuraOSError('INVALID_REQUEST', `Unsupported LLM model: ${model}`);
   }
 
-  const providerForModel = getProviderForModel(model);
-  throw new IntexuraOSError(
-    'INVALID_REQUEST',
-    `Tool calling not supported for provider: ${providerForModel}. Use an OpenRouter tool-calling model.`
-  );
+  return createOpenRouterToolCallingClient({
+    apiKey: config.apiKey,
+    model: getOpenRouterRawId(model),
+    userId: config.userId,
+    logger: config.logger,
+    usageSink: config.usageSink,
+    ...(config.ownerType !== undefined && { ownerType: config.ownerType }),
+    ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
+    ...(config.maxAttempts !== undefined && { maxAttempts: config.maxAttempts }),
+    ...(config.deadlineAtMs !== undefined && { deadlineAtMs: config.deadlineAtMs }),
+    evidenceModelId: model,
+  });
 }
 
 // Re-export for convenience

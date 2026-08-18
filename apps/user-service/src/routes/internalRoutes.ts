@@ -14,9 +14,8 @@ import { validateInternalAuth, logIncomingRequest, type InternalAuthResult } fro
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   DEFAULT_INTEX_AGENT_MODEL,
-  DEFAULT_PLATFORM_LLM_MODEL,
   INTEX_AGENT_MODEL_OPTIONS,
-  isLegacyGoogleModel,
+  normalizeLlmModelPreferenceForRead,
 } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import type { LlmPreferences, LlmProvider } from '../domain/settings/index.js';
@@ -37,17 +36,11 @@ function normalizeLegacyLlmPreferences(
   if (preferences === undefined) return undefined;
 
   const normalized = { ...preferences };
-  if (
-    normalized.defaultModel !== undefined &&
-    isLegacyGoogleModel(normalized.defaultModel)
-  ) {
-    normalized.defaultModel = DEFAULT_PLATFORM_LLM_MODEL;
+  if (normalized.defaultModel !== undefined) {
+    normalized.defaultModel = normalizeLlmModelPreferenceForRead(normalized.defaultModel);
   }
-  if (
-    normalized.fallbackModel !== undefined &&
-    isLegacyGoogleModel(normalized.fallbackModel)
-  ) {
-    normalized.fallbackModel = DEFAULT_PLATFORM_LLM_MODEL;
+  if (normalized.fallbackModel !== undefined) {
+    normalized.fallbackModel = normalizeLlmModelPreferenceForRead(normalized.fallbackModel);
   }
   return normalized;
 }

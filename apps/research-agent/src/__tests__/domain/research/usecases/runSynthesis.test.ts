@@ -1402,7 +1402,7 @@ describe('runSynthesis', () => {
       });
     });
 
-    it('does not generate a cover image from a direct Google key', async () => {
+    it('delegates cover generation to image-service without provider keys', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -1430,12 +1430,16 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: {},
       });
 
       expect(result).toEqual({ ok: true });
-      expect(mockImageServiceClient.generatePrompt).not.toHaveBeenCalled();
-      expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalled();
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledWith(
+        'generated prompt',
+        LlmModels.GPTImage1,
+        'user-1',
+        expectedImageGenerationOptions('Test Cover Title')
+      );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
         synthesizedResult: expect.stringContaining('Synthesized result'),
@@ -1445,7 +1449,7 @@ describe('runSynthesis', () => {
         totalInputTokens: 500,
         totalOutputTokens: 200,
         totalCostUsd: 0.01, // Synthesis (0.01) - repair attribution disabled in tests
-        shareInfo: expect.not.objectContaining({ coverImageId: expect.any(String) }),
+        shareInfo: expect.objectContaining({ coverImageId: 'img-123' }),
       });
     });
 
@@ -1477,7 +1481,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { openai: 'test-openai-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1489,7 +1492,7 @@ describe('runSynthesis', () => {
       );
     });
 
-    it('skips image generation when no API keys provided', async () => {
+    it('attempts image-service generation without receiving provider keys', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -1512,7 +1515,7 @@ describe('runSynthesis', () => {
       });
 
       expect(result).toEqual({ ok: true });
-      expect(mockImageServiceClient.generatePrompt).not.toHaveBeenCalled();
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledTimes(1);
       expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
     });
 
@@ -1538,7 +1541,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { openai: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1580,7 +1582,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { openai: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1619,7 +1620,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { openai: 'test-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1669,7 +1669,6 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: { openai: 'test-openai-key' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -1681,7 +1680,7 @@ describe('runSynthesis', () => {
       );
     });
 
-    it('does not fall back to direct Google image generation without an OpenAI key', async () => {
+    it('delegates image generation regardless of the synthesis model', async () => {
       const research = createTestResearch({
         synthesisModel: LlmModels.GPT54, // GPT model (starts with 'gpt-')
       });
@@ -1711,12 +1710,11 @@ describe('runSynthesis', () => {
         shareStorage: mockShareStorage,
         shareConfig,
         imageServiceClient: mockImageServiceClient,
-        imageApiKeys: {},
       });
 
       expect(result).toEqual({ ok: true });
-      expect(mockImageServiceClient.generatePrompt).not.toHaveBeenCalled();
-      expect(mockImageServiceClient.generateImage).not.toHaveBeenCalled();
+      expect(mockImageServiceClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(mockImageServiceClient.generateImage).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -2192,7 +2190,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
     });
   });
 
-  describe('OpenAI-only cover generation (via generateCoverImage)', () => {
+  describe('OpenRouter cover generation delegated to image-service', () => {
     function createFakeImageServiceClient(): ImageServiceClient {
       return {
         generatePrompt: vi.fn().mockResolvedValue(
@@ -2205,7 +2203,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       };
     }
 
-    it('ignores a direct Google key even when it is the only image key', async () => {
+    it('does not require provider keys from research-agent', async () => {
       const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -2214,12 +2212,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: {},
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).not.toHaveBeenCalled();
-      expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
     });
 
     it('uses only OpenAI when both legacy Google and OpenAI keys exist', async () => {
@@ -2239,7 +2236,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2271,7 +2267,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2301,7 +2296,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2310,14 +2304,14 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({
           errors: expect.arrayContaining([
-            expect.objectContaining({ provider: 'OpenAI' }),
+            expect.objectContaining({ provider: 'OpenRouter' }),
           ]),
         }),
         expect.stringContaining('all 1 provider(s) exhausted')
       );
     });
 
-    it('returns null when no API keys are available', async () => {
+    it('delegates when no provider keys are supplied', async () => {
       const research = createTestResearch();
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -2326,12 +2320,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: {},
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).not.toHaveBeenCalled();
-      expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
     });
 
     it('prefers OpenAI pipeline when synthesis model is gpt-based', async () => {
@@ -2343,7 +2336,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2362,7 +2354,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       );
     });
 
-    it('does not fall back to direct Google when only a Google key is available', async () => {
+    it('always uses the stable image-service aliases', async () => {
       const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -2371,12 +2363,11 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: {},
       });
 
       expect(result).toEqual({ ok: true });
-      expect(fakeImageClient.generatePrompt).not.toHaveBeenCalled();
-      expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
+      expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
+      expect(fakeImageClient.generateImage).toHaveBeenCalledTimes(1);
     });
 
     it('uses only OpenAI pipeline when gpt-based model and only OpenAI key available', async () => {
@@ -2388,7 +2379,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });
@@ -2424,7 +2414,6 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       const result = await runSynthesis('research-1', {
         ...deps,
         imageServiceClient: fakeImageClient,
-        imageApiKeys: { openai: 'openai-key-456' },
       });
 
       expect(result).toEqual({ ok: true });

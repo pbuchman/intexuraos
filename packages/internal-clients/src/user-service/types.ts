@@ -1,7 +1,7 @@
 import type { Logger, Result } from '@intexuraos/common-core';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { LlmGenerateClient } from '@intexuraos/llm-factory';
-import type { IntexAgentModel, LlmProvider } from '@intexuraos/llm-contract';
+import type { ExecutableLlmProvider, IntexAgentModel } from '@intexuraos/llm-contract';
 
 /**
  * Configuration for the user service client.
@@ -24,8 +24,11 @@ export interface UserServiceConfig {
  * Decrypted API keys returned from user-service.
  */
 export interface DecryptedApiKeys {
+  /** @deprecated Retained only for rolling-deploy and historical test compatibility. */
   openai?: string;
+  /** @deprecated Retained only for rolling-deploy and historical test compatibility. */
   anthropic?: string;
+  /** @deprecated Retained only for rolling-deploy and historical test compatibility. */
   perplexity?: string;
   openrouter?: string;
 }
@@ -96,7 +99,7 @@ export interface UserTimezoneLookupOptions {
 export interface UserServiceClient {
   getApiKeys(userId: string): Promise<Result<DecryptedApiKeys, UserServiceError>>;
   getLlmClient(userId: string): Promise<Result<LlmGenerateClient, UserServiceError>>;
-  reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void>;
+  reportLlmSuccess(userId: string, provider: ExecutableLlmProvider): Promise<void>;
   getOAuthToken(
     userId: string,
     provider: OAuthProvider

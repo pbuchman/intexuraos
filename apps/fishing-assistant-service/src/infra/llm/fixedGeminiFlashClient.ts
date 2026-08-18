@@ -1,13 +1,11 @@
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import { type LLMModel } from '@intexuraos/llm-contract';
+import { IntexAgentModels } from '@intexuraos/llm-contract';
 import { createLlmClient, type LlmGenerateClient } from '@intexuraos/llm-factory';
 import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
 import type { FixedModelChatAdapter, FishingChatClientError } from '../../domain/ports/chatModel.js';
 
-export const FISHING_ASSISTANT_CHAT_MODEL_ID = 'or:google/gemini-3.6-flash';
-
-const FISHING_ASSISTANT_CHAT_MODEL = FISHING_ASSISTANT_CHAT_MODEL_ID as LLMModel;
+export const FISHING_ASSISTANT_CHAT_MODEL_ID = IntexAgentModels.Gemini36Flash;
 
 export interface FixedGeminiFlashClientDeps {
   userServiceClient: UserServiceClient;
@@ -42,7 +40,7 @@ export function createFixedGeminiFlashClient(
       return ok(
         createLlmClient({
           apiKey: openRouterApiKey,
-          model: FISHING_ASSISTANT_CHAT_MODEL,
+          model: FISHING_ASSISTANT_CHAT_MODEL_ID,
           userId,
           logger: deps.logger,
           usageSink: deps.usageSink,

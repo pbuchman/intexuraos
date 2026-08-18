@@ -5,10 +5,11 @@ import { formatRelative } from '@/utils/dateFormat';
 import type {
   InputContext,
   LlmResult,
+  OpenRouterModelInfo,
   ResearchStatus,
   StoredResearchModel,
 } from '@/services/researchAgentApi.types';
-import { getModelDisplayName } from './shared.js';
+import { resolveStoredResearchModel } from '@/utils/openRouterModelNames.js';
 
 type DotStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 
@@ -95,6 +96,9 @@ interface ProcessingStatusProps {
   researchStatus: ResearchStatus;
   hasInputContexts: boolean;
   title?: string;
+  availableModelIds?: string[];
+  availableModels?: OpenRouterModelInfo[];
+  availabilityKnown?: boolean;
 }
 
 export function ProcessingStatus({
@@ -104,6 +108,9 @@ export function ProcessingStatus({
   researchStatus,
   hasInputContexts,
   title = 'Processing Status',
+  availableModelIds = [],
+  availableModels = [],
+  availabilityKnown = false,
 }: ProcessingStatusProps): React.JSX.Element {
   const willSynthesize = selectedModels.length > 1 || hasInputContexts;
   const getStatusText = (result: LlmResult): string => {
@@ -140,19 +147,42 @@ export function ProcessingStatus({
   };
 
   const synthesisStatus = getSynthesisStatus();
+  const synthesisPresentation = resolveStoredResearchModel({
+    modelId: synthesisModel,
+    availableModelIds,
+    availableModels,
+  });
 
   return (
     <Card title={title} className="mb-6">
       <div className="space-y-3">
         {selectedModels.map((model) => {
           const result = llmResults.find((r) => r.model === model);
-          const modelName = getModelDisplayName(model);
+          const presentation = resolveStoredResearchModel({
+            modelId: model,
+            ...(result === undefined ? {} : { storedProvider: result.provider }),
+            availableModelIds,
+            availableModels,
+          });
+          const modelLabel = (
+            <span className="min-w-0 dark:text-slate-200">
+              <span>{presentation.name}</span>
+              {availabilityKnown && !presentation.available ? (
+                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                  Unavailable
+                </span>
+              ) : null}
+              <span className="block truncate text-xs text-slate-400">
+                {presentation.provider} · {presentation.id}
+              </span>
+            </span>
+          );
 
           if (result === undefined) {
             return (
               <div key={model} className="flex items-center gap-3">
                 <StatusDot status="pending" />
-                <span className="dark:text-slate-200">{modelName}</span>
+                {modelLabel}
                 <span className="text-sm text-slate-500 dark:text-slate-400">Waiting...</span>
               </div>
             );
@@ -162,7 +192,7 @@ export function ProcessingStatus({
             <div key={model} className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <StatusDot status={result.status} />
-                <span className="dark:text-slate-200">{modelName}</span>
+                {modelLabel}
                 <span className="text-sm text-slate-500 dark:text-slate-400">{getStatusText(result)}</span>
               </div>
               {result.status === 'failed' && result.error !== undefined && result.error !== '' ? (
@@ -178,7 +208,8 @@ export function ProcessingStatus({
               <StatusDot status={synthesisStatus.status} />
               <span className="font-medium dark:text-slate-200">Synthesis</span>
               <span className="text-sm text-slate-500 dark:text-slate-400">
-                ({getModelDisplayName(synthesisModel)})
+                ({synthesisPresentation.name} · {synthesisPresentation.id}
+                {availabilityKnown && !synthesisPresentation.available ? ' · Unavailable' : ''})
               </span>
               <span className="text-sm text-slate-500 dark:text-slate-400">{synthesisStatus.text}</span>
             </div>

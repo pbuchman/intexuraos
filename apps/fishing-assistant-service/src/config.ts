@@ -9,7 +9,7 @@ export interface Config {
   messageDigestServiceUrl: string;
   whatsappServiceUrl: string;
   llmUsageServiceUrl: string;
-  openAiAppApiKey: string;
+  openRouterAppApiKey: string;
   sentryDsn?: string;
   environment: string;
 }
@@ -30,7 +30,7 @@ export function loadConfig(): Config {
     messageDigestServiceUrl: readEnv('INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL'),
     whatsappServiceUrl: readEnv('INTEXURAOS_WHATSAPP_SERVICE_URL'),
     llmUsageServiceUrl: readEnv('INTEXURAOS_LLM_USAGE_SERVICE_URL'),
-    openAiAppApiKey: readEnv('INTEXURAOS_OPENAI_APP_API_KEY'),
+    openRouterAppApiKey: readEnv('INTEXURAOS_OPENROUTER_APP_API_KEY'),
     environment: process.env['INTEXURAOS_ENVIRONMENT'] ?? 'development',
   };
 

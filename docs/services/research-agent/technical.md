@@ -373,7 +373,7 @@ Research Agent reports usage to `llm-usage-service` for every model it invokes. 
 - `or:minimax/minimax-m3` (platform OpenRouter default)
 
 **Image model** (optional cover image generation):
-- `GPTImage1` (OpenAI key); there is no Google image fallback
+- `gpt-image-1` public alias, executed as `openai/gpt-image-1` through OpenRouter
 
 Raw Google model constants remain readable only for historical data compatibility. New execution rejects every raw `gemini-*` identifier and never requests a Google LLM credential.
 
@@ -393,7 +393,7 @@ Raw Google model constants remain readable only for historical data compatibilit
 - **No direct Google route:** Raw `gemini-*` IDs are not executable. Google model families must use an allowlisted `or:google/...` identifier and the OpenRouter credential.
 - **OpenRouter allowlist enforcement:** At execution time (not just at selection), the `process-llm-call` handler validates that OpenRouter models are on the curated allowlist. Unauthorized model IDs are rejected.
 - **OpenRouter model cache:** The `GET /openrouter/models` endpoint caches responses in-memory for 5 minutes. The cache is per-process, not shared across Cloud Run instances.
-- **OpenAI-only cover images:** `generateCoverImage` uses the OpenAI prompt and image pipeline only. If the key is unavailable or either step fails, sharing continues without a cover image.
+- **OpenRouter cover images:** `generateCoverImage` uses OpenRouter while preserving the `gpt-4.1` and `gpt-image-1` public aliases. If access is unavailable or either step fails, sharing continues without a cover image.
 - **ResearchSummary projection:** The `GET /` list endpoint uses `findSummariesByUserId` which returns `ResearchSummary` objects (no `synthesizedResult`, no `llmResults[].result`, no `inputContexts[].content`). The `toResearchSummary` mapper strips these fields server-side.
 - **Important WhatsApp notifications:** Both research completion and LLM failure notifications are published with `important: true`, bypassing quiet-hours suppression in the WhatsApp notification pipeline.
 - **Usage reporting via HttpInternalAuthUsageSink:** Each LLM adapter receives a `UsageSink` scoped to its component name (e.g., `research:or:google/gemini-3.6-flash`, `synthesis:or:anthropic/claude-sonnet-4.6`, `title-generator`). Usage is reported asynchronously to `llm-usage-service` after each call completes.
@@ -417,8 +417,7 @@ apps/research-agent/src/
 │   ├── firestore/           # researchExportSettingsRepository
 │   ├── gcs/                 # shareStorageAdapter (GCS HTML upload)
 │   ├── image/               # imageServiceClient
-│   ├── llm/                 # ClaudeAdapter, GptAdapter, PerplexityAdapter,
-│   │                        # OpenRouterAdapter,
+│   ├── llm/                 # OpenRouterAdapter plus retained historical adapters,
 │   │                        # ContextInferenceAdapter, InputValidationAdapter,
 │   │                        # LlmAdapterFactory
 │   ├── notification/        # WhatsAppNotificationSender, NoopNotificationSender

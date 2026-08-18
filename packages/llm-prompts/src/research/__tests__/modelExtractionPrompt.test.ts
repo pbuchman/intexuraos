@@ -7,6 +7,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Logger } from 'pino';
 import {
   ConversationAssistantModels,
+  createOpenRouterModelId,
   DEFAULT_PLATFORM_LLM_MODEL,
   IntexAgentModels,
   LegacyGoogleModels,
@@ -25,11 +26,15 @@ import {
   type ModelExtractionPromptDeps,
 } from '../modelExtractionPrompt.js';
 
+const OPENROUTER_GPT54 = createOpenRouterModelId('openai/gpt-5.4');
+const OPENROUTER_CLAUDE_SONNET = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
+const OPENROUTER_DEEPSEEK = createOpenRouterModelId('deepseek/deepseek-v4-flash');
+
 describe('modelExtractionPrompt metadata', () => {
   it('has correct metadata', () => {
     expect(modelExtractionPrompt.name).toBe('research-model-extraction');
     expect(modelExtractionPrompt.description).toContain('model');
-    expect(modelExtractionPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(modelExtractionPrompt.version).toBe('3.0.0');
   });
 });
 
@@ -47,7 +52,7 @@ describe('modelExtractionPrompt.build', () => {
         isProviderDefault: true,
       },
       {
-        id: LlmModels.GPT54,
+        id: OPENROUTER_GPT54,
         provider: LlmProviders.OpenAI,
         displayName: 'GPT 5.4',
         keywords: ['gpt', 'gpt-5', 'openai', 'chatgpt'],
@@ -75,7 +80,7 @@ describe('modelExtractionPrompt.build', () => {
     expect(result).toContain(
       `- ${IntexAgentModels.Gemini36Flash}: Gemini 3.6 Flash (${LlmProviders.Google})`
     );
-    expect(result).toContain(`- ${LlmModels.GPT54}: GPT 5.4 (${LlmProviders.OpenAI})`);
+    expect(result).toContain(`- ${OPENROUTER_GPT54}: GPT 5.4 (${LlmProviders.OpenAI})`);
   });
 
   it('includes keywords for each model', () => {
@@ -108,10 +113,10 @@ describe('modelExtractionPrompt.build', () => {
     const result = modelExtractionPrompt.build(deps);
 
     expect(result).toContain(
-      `${IntexAgentModels.Gemini36Flash}: Gemini 3.6 Flash (${LlmProviders.Google}) (provider default)`
+      `${IntexAgentModels.Gemini36Flash}: Gemini 3.6 Flash (${LlmProviders.Google}) (recommended default)`
     );
     expect(result).not.toContain(
-      `${ConversationAssistantModels.Gemini35FlashThinking}: Gemini 3.5 Flash Thinking (${LlmProviders.Google}) (provider default)`
+      `${ConversationAssistantModels.Gemini35FlashThinking}: Gemini 3.5 Flash Thinking (${LlmProviders.Google}) (recommended default)`
     );
   });
 
@@ -125,6 +130,14 @@ describe('modelExtractionPrompt.build', () => {
     );
   });
 
+  it('allows up to six unique models regardless of model author', () => {
+    const result = modelExtractionPrompt.build(createTestDeps());
+
+    expect(result).toContain('up to 6 unique models');
+    expect(result).toContain('Multiple models from the same author are allowed');
+    expect(result).not.toContain('One model per provider');
+  });
+
   it('includes default synthesis model fallback instruction', () => {
     const deps = createTestDeps();
     const result = modelExtractionPrompt.build(deps);
@@ -134,13 +147,13 @@ describe('modelExtractionPrompt.build', () => {
     );
   });
 
-  it('includes provider defaults section', () => {
+  it('includes recommended defaults section', () => {
     const deps = createTestDeps();
     const result = modelExtractionPrompt.build(deps);
 
-    expect(result).toContain('## Provider Defaults');
-    expect(result).toContain(`- ${LlmProviders.Google}: ${IntexAgentModels.Gemini36Flash}`);
-    expect(result).toContain(`- ${LlmProviders.OpenAI}: ${LlmModels.GPT54}`);
+    expect(result).toContain('## Recommended Defaults');
+    expect(result).toContain(`- ${IntexAgentModels.Gemini36Flash}`);
+    expect(result).toContain(`- ${OPENROUTER_GPT54}`);
   });
 
   it('omits providers without defaults from provider defaults section', () => {
@@ -156,9 +169,13 @@ describe('modelExtractionPrompt.build', () => {
       ],
     });
     const result = modelExtractionPrompt.build(deps);
+    const recommendedDefaults = result
+      .split('## Recommended Defaults')[1]
+      ?.split('## User Message')[0];
 
-    // Should not have google in defaults since no model is marked as default
-    expect(result).not.toContain(`- ${LlmProviders.Google}:`);
+    expect(recommendedDefaults).not.toContain(
+      `- ${ConversationAssistantModels.Gemini35FlashThinking}`
+    );
   });
 
   it('includes special cases instructions', () => {
@@ -168,6 +185,7 @@ describe('modelExtractionPrompt.build', () => {
     expect(result).toContain('## Special Cases');
     expect(result).toContain('"all models"');
     expect(result).toContain('"all except X"');
+    expect(result).toContain('first 6 models');
     expect(result).toContain('No model mentioned: Return empty selectedModels');
   });
 
@@ -204,30 +222,30 @@ describe('modelExtractionPrompt.build', () => {
     // Both models should be listed
     expect(result).toContain(IntexAgentModels.Gemini36Flash);
     expect(result).toContain(ConversationAssistantModels.Gemini35FlashThinking);
-    // But only one provider default
-    expect(result).toContain(`- ${LlmProviders.Google}: ${IntexAgentModels.Gemini36Flash}`);
+    // But only one recommended default
+    expect(result).toContain(`- ${IntexAgentModels.Gemini36Flash}`);
   });
 });
 
 describe('parseModelExtractionResponse', () => {
   const validModels: ResearchModel[] = [
     IntexAgentModels.Gemini36Flash,
-    LlmModels.GPT54,
-    LlmModels.ClaudeSonnet46,
-    LlmModels.SonarPro,
+    OPENROUTER_GPT54,
+    OPENROUTER_CLAUDE_SONNET,
+    OPENROUTER_DEEPSEEK,
   ];
 
   describe('valid responses', () => {
     it('parses valid JSON with selected models', () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini36Flash, LlmModels.GPT54],
+        selectedModels: [IntexAgentModels.Gemini36Flash, OPENROUTER_GPT54],
         synthesisModel: IntexAgentModels.Gemini36Flash,
       });
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
-      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash, LlmModels.GPT54]);
+      expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash, OPENROUTER_GPT54]);
       expect(result?.synthesisModel).toBe(IntexAgentModels.Gemini36Flash);
     });
 
@@ -269,14 +287,14 @@ describe('parseModelExtractionResponse', () => {
     it('extracts JSON with whitespace and newlines', () => {
       const response = `{
         "selectedModels": ["${IntexAgentModels.Gemini36Flash}"],
-        "synthesisModel": "${LlmModels.GPT54}"
+        "synthesisModel": "${OPENROUTER_GPT54}"
       }`;
 
       const result = parseModelExtractionResponse(response, validModels);
 
       expect(result).not.toBeNull();
       expect(result?.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
-      expect(result?.synthesisModel).toBe(LlmModels.GPT54);
+      expect(result?.synthesisModel).toBe(OPENROUTER_GPT54);
     });
   });
 
@@ -478,17 +496,13 @@ describe('parseModelExtractionResponse', () => {
 
 describe('exported constants', () => {
   describe('MODEL_KEYWORDS', () => {
-    it('has keywords only for executable research models', () => {
+    it('has keywords only for OpenRouter executable research models', () => {
       expect(Object.hasOwn(MODEL_KEYWORDS, LegacyGoogleModels.Gemini25Pro)).toBe(false);
       expect(Object.hasOwn(MODEL_KEYWORDS, LegacyGoogleModels.Gemini25Flash)).toBe(false);
       expect(MODEL_KEYWORDS[IntexAgentModels.Gemini36Flash]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.ClaudeOpus46]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.ClaudeSonnet46]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.O4MiniDeepResearch]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.GPT54]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.Sonar]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.SonarPro]).toBeDefined();
-      expect(MODEL_KEYWORDS[LlmModels.SonarDeepResearch]).toBeDefined();
+      expect(MODEL_KEYWORDS[createOpenRouterModelId('anthropic/claude-sonnet-4.6')]).toBeDefined();
+      expect(MODEL_KEYWORDS[createOpenRouterModelId('openai/gpt-5.4')]).toBeDefined();
+      expect(MODEL_KEYWORDS[LlmModels.GPT54 as unknown as ResearchModel]).toBeUndefined();
     });
 
     it('each model has at least one keyword', () => {
@@ -499,19 +513,19 @@ describe('exported constants', () => {
   });
 
   describe('PROVIDER_DEFAULT_MODELS', () => {
-    it('has defaults for all major providers', () => {
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Google]).toBe(IntexAgentModels.Gemini36Flash);
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Anthropic]).toBe(LlmModels.ClaudeSonnet46);
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.OpenAI]).toBe(LlmModels.GPT54);
-      expect(PROVIDER_DEFAULT_MODELS[LlmProviders.Perplexity]).toBe(LlmModels.SonarPro);
+    it('has only the OpenRouter platform default', () => {
+      expect(PROVIDER_DEFAULT_MODELS).toEqual({
+        [LlmProviders.OpenRouter]: DEFAULT_PLATFORM_LLM_MODEL,
+      });
     });
   });
 
   describe('SYNTHESIS_MODELS', () => {
-    it('includes only OpenRouter platform default and GPT 5.4', () => {
+    it('includes only OpenRouter model IDs', () => {
       expect(SYNTHESIS_MODELS).toContain(DEFAULT_PLATFORM_LLM_MODEL);
       expect(SYNTHESIS_MODELS).not.toContain(LegacyGoogleModels.Gemini25Pro);
-      expect(SYNTHESIS_MODELS).toContain(LlmModels.GPT54);
+      expect(SYNTHESIS_MODELS).toContain(createOpenRouterModelId('openai/gpt-5.4'));
+      expect(SYNTHESIS_MODELS).not.toContain(LlmModels.GPT54 as unknown as ResearchModel);
     });
 
     it('does not include non-synthesis models', () => {
@@ -539,7 +553,7 @@ describe('parseModelExtractionResponseWithLogging', () => {
     debug: vi.fn(),
   } as unknown as Logger;
 
-  const validModels: ResearchModel[] = [IntexAgentModels.Gemini36Flash, LlmModels.GPT54];
+  const validModels: ResearchModel[] = [IntexAgentModels.Gemini36Flash, OPENROUTER_GPT54];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -548,13 +562,13 @@ describe('parseModelExtractionResponseWithLogging', () => {
   it('returns valid response and does not log', () => {
     const response = JSON.stringify({
       selectedModels: [IntexAgentModels.Gemini36Flash],
-      synthesisModel: LlmModels.GPT54,
+      synthesisModel: OPENROUTER_GPT54,
     });
 
     const result = parseModelExtractionResponseWithLogging(response, validModels, mockLogger);
 
     expect(result.selectedModels).toEqual([IntexAgentModels.Gemini36Flash]);
-    expect(result.synthesisModel).toBe(LlmModels.GPT54);
+    expect(result.synthesisModel).toBe(OPENROUTER_GPT54);
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 

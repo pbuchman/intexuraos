@@ -19,7 +19,7 @@ graph TB
 
     subgraph "LLM Key Management"
         WebUI[Web UI] -->|API Key| US
-        US -->|Validate| LLM[LLM Providers<br/>4 configurable providers]
+        US -->|Validate| LLM[OpenRouter key endpoint]
         US -->|Encrypt| KMS[AES-256-GCM]
         KMS -->|Store| FS
     end
@@ -58,7 +58,7 @@ sequenceDiagram
     Note over User,Firestore: LLM API Key Storage Flow
     User->>Web: Add API key
     Web->>UserSvc: PATCH /users/:uid/settings/llm-keys
-    UserSvc->>LLMProvider: Validate key (cheap model call)
+    UserSvc->>LLMProvider: GET /api/v1/key
     alt Key invalid
         LLMProvider-->>UserSvc: Error response
         UserSvc->>UserSvc: formatLlmError(rawError)
@@ -154,7 +154,7 @@ sequenceDiagram
 | POST   | `/users/:uid/settings/llm-keys/:provider/test`  | Test LLM API key                         | Bearer token |
 | DELETE | `/users/:uid/settings/llm-keys/:provider`       | Delete LLM API key                       | Bearer token |
 
-PATCH and test accept OpenAI, Anthropic, Perplexity, and OpenRouter. DELETE also accepts `google` only to remove a retired stored key. Google OAuth routes below are unchanged and are used for Calendar access, not LLM execution.
+PATCH, test, and normal deletion accept only OpenRouter. Retired provider fields can remain in stored documents and compatibility responses, but active clients do not use them. Google OAuth routes below are unchanged and are used for Calendar access, not LLM execution.
 
 ### OAuth Connection Endpoints (Google)
 
@@ -205,11 +205,11 @@ PATCH and test accept OpenAI, Anthropic, Perplexity, and OpenRouter. DELETE also
 
 | Field        | Type           | Description                     |
 | ------------ | -------------- | ------------------------------- |
-| `google`     | EncryptedValue | Retired key retained only for deletion/cleanup |
-| `openai`     | EncryptedValue | OpenAI API key (encrypted)      |
-| `anthropic`  | EncryptedValue | Anthropic API key (encrypted)   |
-| `perplexity` | EncryptedValue | Perplexity API key (encrypted)  |
-| `openrouter` | EncryptedValue | OpenRouter API key (encrypted)  |
+| `google`     | EncryptedValue | Retired compatibility field; not executable |
+| `openai`     | EncryptedValue | Retired compatibility field; not executable |
+| `anthropic`  | EncryptedValue | Retired compatibility field; not executable |
+| `perplexity` | EncryptedValue | Retired compatibility field; not executable |
+| `openrouter` | EncryptedValue | Active OpenRouter API key (encrypted)        |
 
 ### LlmTestResult
 
@@ -313,16 +313,11 @@ The generic error parser checks for rate limits BEFORE API key errors. This prev
 
 ## LLM Key Validation
 
-Keys are validated before storage. OpenAI, Anthropic, and Perplexity use cheap, fast model calls. OpenRouter uses a dedicated key-check endpoint at zero token cost. Direct Google LLM keys cannot be added or tested; Google-family models are addressed as `or:google/...` and sent through OpenRouter.
+OpenRouter keys are validated before storage with the dedicated key-check endpoint at zero token cost. Direct OpenAI, Anthropic, Perplexity, and Google LLM keys cannot be added or tested; their model families are addressed with `or:<vendor>/...` identifiers and sent through OpenRouter.
 
-| Provider   | Validation Method                       | Validation Model          |
-| ---------- | --------------------------------------- | ------------------------- |
-| OpenAI     | Model call (generate)                   | gpt-4o-mini               |
-| Anthropic  | Model call (generate)                   | claude-3.5-haiku          |
-| Perplexity | Model call (generate)                   | sonar                     |
-| OpenRouter | Lightweight `/api/v1/key` endpoint      | N/A (no model call)       |
-
-Validation prompt (for model-call providers): `Say "API key validated" in exactly 3 words.`
+| Provider   | Validation Method                  | Validation Model    |
+| ---------- | ---------------------------------- | ------------------- |
+| OpenRouter | Lightweight `/api/v1/key` endpoint | N/A (no model call) |
 
 ## Pub/Sub Events
 
@@ -337,7 +332,7 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 | Auth0         | Identity management, authentication |
 | Google OAuth  | OAuth token management              |
 | GitHub OAuth  | OAuth token management              |
-| LLM APIs      | Key validation (4 configurable providers) |
+| OpenRouter API | Key validation through `/api/v1/key`      |
 
 ### Internal Services
 
@@ -397,11 +392,11 @@ None — user-service does not publish or subscribe to Pub/Sub events.
 
 **Rate limit vs API key errors**: Error parser checks rate limits before API key patterns to avoid misdiagnosis.
 
-**Provider naming**: Internal provider names (`google`, `openai`, `anthropic`, `perplexity`, `openrouter`) differ from display names.
+**Retired provider names**: Historical types and records can still contain `google`, `openai`, `anthropic`, or `perplexity`; active settings and execution use `openrouter`.
 
 **Internal endpoints use response contract**: All internal endpoints return `{ success: true, data: ... }` or `{ success: false, error: { code, message } }`. Callers must read from `response.data` instead of the top level.
 
-**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isDefaultEligibleModel()` from `@intexuraos/llm-contract` AND verifies the user has an API key configured for that model's provider. Unsupported model names return 400 `INVALID_REQUEST`.
+**Default model validation**: `PATCH /users/:uid/settings` validates `defaultModel` against `isDefaultEligibleModel()` from `@intexuraos/llm-contract` and verifies resolved OpenRouter access (user key or platform fallback). Unsupported model names return 400 `INVALID_REQUEST`.
 
 **Fallback model validation**: `fallbackModel` must pass the same `isDefaultEligibleModel()` check, differ from `defaultModel`, and be resolvable through a personal provider key or the platform OpenRouter route. Pass `null` to clear the fallback.
 
@@ -490,7 +485,7 @@ apps/user-service/src/
     github/
       gitHubOAuthClient.ts     # GitHub OAuth client
     llm/
-      LlmValidatorImpl.ts      # Key validation (4 configurable providers)
+      LlmValidatorImpl.ts      # OpenRouter key validation
   routes/
     deviceRoutes.ts            # Device code flow
     tokenRoutes.ts             # Token refresh

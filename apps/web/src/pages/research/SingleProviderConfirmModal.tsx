@@ -1,6 +1,8 @@
 import { AlertTriangle } from 'lucide-react';
-import { Button, PROVIDER_MODELS } from '@/components';
+import { getOpenRouterRawId, isOpenRouterModel } from '@intexuraos/llm-contract';
+import { Button } from '@/components';
 import { Modal } from '@/components/ui/Modal';
+import { resolveOpenRouterModelName } from '@/utils/openRouterModelNames.js';
 
 interface SingleProviderConfirmModalProps {
   open: boolean;
@@ -16,9 +18,9 @@ export function SingleProviderConfirmModal(
   const { open, selectedModelId, submitting, onCancel, onProceed } = props;
 
   const modelName =
-    PROVIDER_MODELS.flatMap((p) => p.models).find((m) => m.id === selectedModelId)?.name ??
-    selectedModelId ??
-    '';
+    selectedModelId !== undefined && isOpenRouterModel(selectedModelId)
+      ? resolveOpenRouterModelName(getOpenRouterRawId(selectedModelId))
+      : (selectedModelId ?? '');
 
   return (
     <Modal

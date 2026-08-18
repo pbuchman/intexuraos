@@ -339,7 +339,7 @@ describe('LLM Keys Routes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
-    it('returns null for all providers when no keys configured', { timeout: 20000 }, async () => {
+    it('returns unavailable OpenRouter access when no key is configured', { timeout: 20000 }, async () => {
       app = await buildServer();
 
       const userId = 'auth0|user-no-keys';
@@ -356,13 +356,118 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { openai: string | null; anthropic: string | null; defaultModel: string | null };
+        data: {
+          accessSource: string;
+          openrouter: string | null;
+          defaultModel: string | null;
+        };
       };
       expect(body.success).toBe(true);
       expect(body.data).not.toHaveProperty('google');
-      expect(body.data.openai).toBeNull();
-      expect(body.data.anthropic).toBeNull();
+      expect(body.data).not.toHaveProperty('openai');
+      expect(body.data).not.toHaveProperty('anthropic');
+      expect(body.data.accessSource).toBe('unavailable');
+      expect(body.data.openrouter).toBeNull();
       expect(body.data.defaultModel).toBeNull();
+    });
+
+    it('returns only OpenRouter settings and reports unavailable access', { timeout: 20000 }, async () => {
+      app = await buildServer();
+      const userId = 'auth0|openrouter-unavailable';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = (JSON.parse(response.body) as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({
+        accessSource: 'unavailable',
+        openrouter: null,
+        testResults: { openrouter: null },
+      });
+      expect(data).not.toHaveProperty('openai');
+      expect(data).not.toHaveProperty('anthropic');
+      expect(data).not.toHaveProperty('perplexity');
+    });
+
+    it('reports platform access without exposing the platform key', { timeout: 20000 }, async () => {
+      setServices({ platformOpenRouterApiKeyAvailable: true });
+      app = await buildServer();
+      const userId = 'auth0|openrouter-platform';
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = (JSON.parse(response.body) as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({ accessSource: 'platform', openrouter: null });
+    });
+
+    it('reports user access for a decryptable BYOK', { timeout: 20000 }, async () => {
+      setServices({ platformOpenRouterApiKeyAvailable: true });
+      const userId = 'auth0|openrouter-user';
+      const apiKey = 'sk-or-1234567890abcdef';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(apiKey).toString('base64'),
+          },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = (JSON.parse(response.body) as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({ accessSource: 'user', openrouter: 'sk-o...cdef' });
+    });
+
+    it('treats a blank decrypted BYOK as absent and reports platform access', { timeout: 20000 }, async () => {
+      setServices({ platformOpenRouterApiKeyAvailable: true });
+      const userId = 'auth0|openrouter-blank-user-key';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from('   ').toString('base64'),
+          },
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = (JSON.parse(response.body) as { data: Record<string, unknown> }).data;
+      expect(data).toMatchObject({ accessSource: 'platform', openrouter: null });
     });
 
     it('normalizes a stored legacy Google defaultModel to the platform model', { timeout: 20000 }, async () => {
@@ -393,6 +498,42 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.defaultModel).toBe(DEFAULT_PLATFORM_LLM_MODEL);
+    });
+
+    it('normalizes direct-provider preferences on read without writeback', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-with-direct-pref';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmPreferences: {
+          defaultModel: LlmModels.GPT4oMini,
+          fallbackModel: LlmModels.ClaudeHaiku35,
+        },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = (JSON.parse(response.body) as {
+        data: { defaultModel: string; fallbackModel: string };
+      }).data;
+      expect(data).toEqual(
+        expect.objectContaining({
+          defaultModel: DEFAULT_PLATFORM_LLM_MODEL,
+          fallbackModel: DEFAULT_PLATFORM_LLM_MODEL,
+        })
+      );
+      expect(fakeSettingsRepo.getStoredSettings(userId)?.llmPreferences).toEqual({
+        defaultModel: LlmModels.GPT4oMini,
+        fallbackModel: LlmModels.ClaudeHaiku35,
+      });
     });
 
     it('returns fallbackModel in GET response when set', { timeout: 20000 }, async () => {
@@ -457,7 +598,7 @@ describe('LLM Keys Routes', () => {
       expect(body.data.fallbackModel).toBeNull();
     });
 
-    it('returns masked keys for configured providers', { timeout: 20000 }, async () => {
+    it('does not expose configured legacy direct-provider keys', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-with-keys';
       // Use base64-encoded API keys that FakeEncryptor can decode
       const googleKey = 'AIzaSyB1234567890abcdefghij'; // 28 chars
@@ -492,12 +633,13 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { openai: string | null; anthropic: string | null };
+        data: Record<string, unknown>;
       };
       expect(body.success).toBe(true);
       expect(body.data).not.toHaveProperty('google');
-      expect(body.data.openai).toBeNull();
-      expect(body.data.anthropic).toBe('sk-a...abcd');
+      expect(body.data).not.toHaveProperty('openai');
+      expect(body.data).not.toHaveProperty('anthropic');
+      expect(body.data).toMatchObject({ accessSource: 'unavailable', openrouter: null });
     });
 
     it('returns 500 when repository fails', { timeout: 20000 }, async () => {
@@ -551,14 +693,18 @@ describe('LLM Keys Routes', () => {
       expect(body.error.message).toBe('Failed to get LLM keys');
     });
 
-    it('returns null when decryption fails', { timeout: 20000 }, async () => {
+    it('reports unavailable access when OpenRouter BYOK decryption fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-decrypt-fail';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -582,11 +728,12 @@ describe('LLM Keys Routes', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        data: { openai: string | null; anthropic: string | null };
+        data: { accessSource: string; openrouter: string | null };
       };
       expect(body.success).toBe(true);
       expect(body.data).not.toHaveProperty('google');
-      expect(body.data.openai).toBeNull();
+      expect(body.data.accessSource).toBe('unavailable');
+      expect(body.data.openrouter).toBeNull();
     });
   });
 
@@ -598,7 +745,7 @@ describe('LLM Keys Routes', () => {
         method: 'PATCH',
         url: '/users/user-123/settings/llm-keys',
         payload: {
-          provider: LlmProviders.OpenAI,
+          provider: LlmProviders.OpenRouter,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -626,7 +773,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.OpenAI,
+          provider: LlmProviders.OpenRouter,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -696,7 +843,7 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.OpenAI,
+          provider: LlmProviders.OpenRouter,
           apiKey: 'test-api-key-12345',
         },
       });
@@ -725,8 +872,8 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.OpenAI,
-          apiKey: 'sk-test1234567890abcdef',
+          provider: LlmProviders.OpenRouter,
+          apiKey: 'sk-or-test1234567890abcdef',
         },
       });
 
@@ -754,8 +901,8 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.Anthropic,
-          apiKey: 'sk-ant-test1234567890',
+          provider: LlmProviders.OpenRouter,
+          apiKey: 'sk-or-test1234567890',
         },
       });
 
@@ -786,8 +933,8 @@ describe('LLM Keys Routes', () => {
           authorization: `Bearer ${token}`,
         },
         payload: {
-          provider: LlmProviders.OpenAI,
-          apiKey: 'sk-invalid1234567890',
+          provider: LlmProviders.OpenRouter,
+          apiKey: 'sk-or-invalid1234567890',
         },
       });
 
@@ -842,6 +989,24 @@ describe('LLM Keys Routes', () => {
       expect(fakeSettingsRepo.getStoredSettings(userId)?.llmApiKeys?.google).toBeUndefined();
     });
 
+    it.each([LlmProviders.OpenAI, LlmProviders.Anthropic, LlmProviders.Perplexity])(
+      'returns 400 when attempting to store a direct-provider %s key',
+      async (provider) => {
+        app = await buildServer();
+        const userId = `auth0|direct-key-${provider}`;
+        const token = await createToken({ sub: userId });
+
+        const response = await app.inject({
+          method: 'PATCH',
+          url: `/users/${encodeURIComponent(userId)}/settings/llm-keys`,
+          headers: { authorization: `Bearer ${token}` },
+          payload: { provider, apiKey: 'direct-api-key-12345' },
+        });
+
+        expect(response.statusCode).toBe(400);
+      }
+    );
+
     it('returns 400 when provider is invalid', { timeout: 20000 }, async () => {
       app = await buildServer();
 
@@ -870,7 +1035,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/users/user-123/settings/llm-keys/google',
+        url: '/users/user-123/settings/llm-keys/openrouter',
       });
 
       expect(response.statusCode).toBe(401);
@@ -891,7 +1056,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: '/users/auth0|other-user/settings/llm-keys/google',
+        url: '/users/auth0|other-user/settings/llm-keys/openrouter',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -906,15 +1071,79 @@ describe('LLM Keys Routes', () => {
       expect(body.error.code).toBe('FORBIDDEN');
     });
 
+    it('deletes only OpenRouter BYOK and test state while preserving preferences', { timeout: 20000 }, async () => {
+      const userId = 'auth0|delete-openrouter-only';
+      const apiKey = 'sk-or-1234567890abcdef';
+      const defaultModel = IntexAgentModels.MiniMaxM3;
+      const fallbackModel = 'or:google/gemma-4-31b-it:free';
+      fakeSettingsRepo.setSettings({
+        userId,
+        llmApiKeys: {
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(apiKey).toString('base64'),
+          },
+        },
+        llmTestResults: {
+          openrouter: {
+            status: 'success',
+            message: 'ok',
+            testedAt: '2026-08-18T00:00:00.000Z',
+          },
+        },
+        llmPreferences: { defaultModel, fallbackModel },
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+      });
+      app = await buildServer();
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const stored = fakeSettingsRepo.getStoredSettings(userId);
+      expect(stored?.llmApiKeys?.openrouter).toBeUndefined();
+      expect(stored?.llmTestResults?.openrouter).toBeUndefined();
+      expect(stored?.llmPreferences).toEqual({ defaultModel, fallbackModel });
+    });
+
+    it.each([
+      LlmProviders.Google,
+      LlmProviders.OpenAI,
+      LlmProviders.Anthropic,
+      LlmProviders.Perplexity,
+    ])('returns 400 when deleting non-OpenRouter provider %s', async (provider) => {
+      app = await buildServer();
+      const userId = `auth0|delete-direct-${provider}`;
+      const token = await createToken({ sub: userId });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/${provider}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
     it('deletes key successfully', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-delete-key';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       const openaiKey = 'sk-proj1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
           openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -927,7 +1156,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -939,17 +1168,21 @@ describe('LLM Keys Routes', () => {
 
       // Verify key was deleted
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmApiKeys?.google).toBeUndefined();
+      expect(stored?.llmApiKeys?.openrouter).toBeUndefined();
       expect(stored?.llmApiKeys?.openai).toBeDefined();
     });
 
-    it('clears default model when deleting provider key used by default model', { timeout: 20000 }, async () => {
+    it('preserves a legacy default model when deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-clear';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -962,7 +1195,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -972,12 +1205,13 @@ describe('LLM Keys Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // The field-safe clear preserves the preferences map for Intex selector siblings.
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmPreferences).toEqual({});
+      expect(stored?.llmPreferences).toEqual({
+        defaultModel: LegacyGoogleModels.Gemini25Flash,
+      });
     });
 
-    it('cascade clears fallbackModel when provider key is deleted and fallback uses that provider', { timeout: 20000 }, async () => {
+    it('preserves an OpenRouter fallback when deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-fallback';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       const orKey = 'or-api-key-1234567890abc';
@@ -1009,13 +1243,12 @@ describe('LLM Keys Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // Verify fallback was cleared but defaultModel preserved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored?.llmPreferences?.defaultModel).toBe(LegacyGoogleModels.Gemini25Flash);
-      expect(stored?.llmPreferences?.fallbackModel).toBeUndefined();
+      expect(stored?.llmPreferences?.fallbackModel).toBe(orFallback);
     });
 
-    it('still returns 200 when cascade fallback clear fails', { timeout: 20000 }, async () => {
+    it('does not update preferences after deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-fallback-fail';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       const orKey = 'sk-or-1234567890abcdef1234';
@@ -1031,7 +1264,7 @@ describe('LLM Keys Routes', () => {
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      // Make updateLlmPreferences fail to test the error handling in cascade
+      // A pending preference-update failure must remain untouched because DELETE no longer cascades.
       fakeSettingsRepo.setFailNextUpdateLlmPreferences(true);
 
       app = await buildServer();
@@ -1043,19 +1276,20 @@ describe('LLM Keys Routes', () => {
         headers: { authorization: `Bearer ${token}` },
       });
 
-      // Key deletion still succeeds; cascade failure is logged but doesn't affect response
       expect(response.statusCode).toBe(200);
     });
 
-    it('preserves default model when deleting a different provider key', { timeout: 20000 }, async () => {
+    it('preserves a direct-provider historical preference when deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-preserve';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         llmPreferences: { defaultModel: LlmModels.GPT4oMini },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1068,7 +1302,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1078,12 +1312,11 @@ describe('LLM Keys Routes', () => {
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
 
-      // Verify llmPreferences was NOT cleared (different provider)
       const stored = fakeSettingsRepo.getStoredSettings(userId);
       expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
     });
 
-    it('preserves fallbackModel when deleting a provider key unrelated to fallback', { timeout: 20000 }, async () => {
+    it('preserves the entire preference pair when deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-keep-fallback';
       const googleKey = 'AIzaSyB1234567890abcdefghij';
       const openaiKey = 'sk-proj1234567890abcdefgh';
@@ -1106,10 +1339,9 @@ describe('LLM Keys Routes', () => {
       app = await buildServer();
       const token = await createToken({ sub: userId });
 
-      // Delete openai key — neither default (google) nor fallback (openrouter) belong to openai
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -1121,13 +1353,17 @@ describe('LLM Keys Routes', () => {
       expect(stored?.llmPreferences?.fallbackModel).toBe('or:google/gemma-4-31b-it:free');
     });
 
-    it('still returns 200 when cascade getSettings fails after deletion', { timeout: 20000 }, async () => {
+    it('does not read settings after deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-get-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1138,31 +1374,33 @@ describe('LLM Keys Routes', () => {
 
       const token = await createToken({ sub: userId });
 
-      // Make getSettings fail AFTER deleteLlmApiKey succeeds
-      // deleteLlmApiKey doesn't call getSettings, so this will affect the cascade check
+      // DELETE must not read preferences after removing the key.
       fakeSettingsRepo.setFailNextGet(true);
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: {
           authorization: `Bearer ${token}`,
         },
       });
 
-      // The delete still succeeds, cascade is best-effort
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
     });
 
-    it('still returns 200 when cascade clearLlmPreferences fails after deletion', { timeout: 20000 }, async () => {
+    it('does not clear preferences after deleting OpenRouter BYOK', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-cascade-clear-fail';
-      const googleKey = 'AIzaSyB1234567890abcdefghij';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          google: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(googleKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         llmPreferences: { defaultModel: LegacyGoogleModels.Gemini25Flash },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -1173,18 +1411,17 @@ describe('LLM Keys Routes', () => {
 
       const token = await createToken({ sub: userId });
 
-      // Make clearLlmPreferences fail — cascade should still not break the delete
+      // The obsolete preference-clear path must not be called.
       fakeSettingsRepo.setFailNextClearLlmPreferences(true);
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/google`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: {
           authorization: `Bearer ${token}`,
         },
       });
 
-      // The delete still succeeds, cascade is best-effort
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as { success: boolean };
       expect(body.success).toBe(true);
@@ -1200,7 +1437,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'DELETE',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1222,7 +1459,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/users/user-123/settings/llm-keys/openai/test',
+        url: '/users/user-123/settings/llm-keys/openrouter/test',
       });
 
       expect(response.statusCode).toBe(401);
@@ -1243,7 +1480,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: '/users/auth0|other-user/settings/llm-keys/openai/test',
+        url: '/users/auth0|other-user/settings/llm-keys/openrouter/test',
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1274,6 +1511,23 @@ describe('LLM Keys Routes', () => {
       expect(fakeSettingsRepo.getStoredSettings(userId)?.llmTestResults?.google).toBeUndefined();
     });
 
+    it.each([LlmProviders.OpenAI, LlmProviders.Anthropic, LlmProviders.Perplexity])(
+      'returns 400 when testing a direct-provider %s key',
+      async (provider) => {
+        app = await buildServer();
+        const userId = `auth0|test-direct-${provider}`;
+        const token = await createToken({ sub: userId });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/${provider}/test`,
+          headers: { authorization: `Bearer ${token}` },
+        });
+
+        expect(response.statusCode).toBe(400);
+      }
+    );
+
     it('returns 404 when API key not configured', { timeout: 20000 }, async () => {
       app = await buildServer();
 
@@ -1282,7 +1536,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1299,12 +1553,16 @@ describe('LLM Keys Routes', () => {
 
     it('returns 503 when encryption not configured', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-no-encrypt';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1327,7 +1585,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1344,12 +1602,16 @@ describe('LLM Keys Routes', () => {
 
     it('returns 503 when LLM validator not configured', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-no-validator';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1372,7 +1634,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1390,12 +1652,16 @@ describe('LLM Keys Routes', () => {
 
     it('returns 500 when decryption fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-decrypt-fail';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1409,7 +1675,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1426,18 +1692,22 @@ describe('LLM Keys Routes', () => {
 
     it('returns test response on success', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-success';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      fakeLlmValidator.setTestResponse('Hello! I am GPT.');
+      fakeLlmValidator.setTestResponse('Hello from OpenRouter.');
 
       app = await buildServer();
 
@@ -1445,7 +1715,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1458,24 +1728,28 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('success');
-      expect(body.data.message).toBe('Hello! I am GPT.');
+      expect(body.data.message).toBe('Hello from OpenRouter.');
       expect(body.data.testedAt).toBeDefined();
 
       // Verify test result was saved
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmTestResults?.openai).toBeDefined();
-      expect(stored?.llmTestResults?.openai?.status).toBe('success');
-      expect(stored?.llmTestResults?.openai?.message).toBe('Hello! I am GPT.');
+      expect(stored?.llmTestResults?.openrouter).toBeDefined();
+      expect(stored?.llmTestResults?.openrouter?.status).toBe('success');
+      expect(stored?.llmTestResults?.openrouter?.message).toBe('Hello from OpenRouter.');
     });
 
     it('returns 200 with failure status and stores error when test request fails', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-test-fail';
-      const openaiKey = 'sk-proj1234567890abcdefgh';
+      const openRouterKey = 'sk-or-1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from(openaiKey).toString('base64') },
+          openrouter: {
+            iv: 'iv',
+            tag: 'tag',
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
+          },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1489,7 +1763,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1507,29 +1781,29 @@ describe('LLM Keys Routes', () => {
 
       // Verify error was stored for persistence across page refresh
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmTestResults?.openai).toBeDefined();
-      expect(stored?.llmTestResults?.openai?.status).toBe('failure');
-      expect(stored?.llmTestResults?.openai?.message).toBe('Test request failed');
+      expect(stored?.llmTestResults?.openrouter).toBeDefined();
+      expect(stored?.llmTestResults?.openrouter?.status).toBe('failure');
+      expect(stored?.llmTestResults?.openrouter?.message).toBe('Test request failed');
     });
 
-    it('returns test response for anthropic provider', { timeout: 20000 }, async () => {
-      const userId = 'auth0|user-test-anthropic';
-      const anthropicKey = 'sk-ant-api1234567890abcdefgh';
+    it('returns another OpenRouter test response', { timeout: 20000 }, async () => {
+      const userId = 'auth0|user-test-openrouter-again';
+      const openRouterKey = 'sk-or-api1234567890abcdefgh';
       fakeSettingsRepo.setSettings({
         userId,
         notifications: { filters: [] },
         llmApiKeys: {
-          anthropic: {
+          openrouter: {
             iv: 'iv',
             tag: 'tag',
-            ciphertext: Buffer.from(anthropicKey).toString('base64'),
+            ciphertext: Buffer.from(openRouterKey).toString('base64'),
           },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
       });
 
-      fakeLlmValidator.setTestResponse('Hello! I am Claude.');
+      fakeLlmValidator.setTestResponse('Hello again from OpenRouter.');
 
       app = await buildServer();
 
@@ -1537,7 +1811,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/anthropic/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },
@@ -1550,7 +1824,7 @@ describe('LLM Keys Routes', () => {
       };
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('success');
-      expect(body.data.message).toBe('Hello! I am Claude.');
+      expect(body.data.message).toBe('Hello again from OpenRouter.');
     });
 
     it('returns 500 when repository fails', { timeout: 20000 }, async () => {
@@ -1563,7 +1837,7 @@ describe('LLM Keys Routes', () => {
 
       const response = await app.inject({
         method: 'POST',
-        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openai/test`,
+        url: `/users/${encodeURIComponent(userId)}/settings/llm-keys/openrouter/test`,
         headers: {
           authorization: `Bearer ${token}`,
         },

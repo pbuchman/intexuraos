@@ -21,6 +21,26 @@ describe('loadConfig', () => {
       intexAgentModelSelector: { status: 'disabled' },
       intexAgentTestRunsRead: { status: 'disabled' },
     });
+    expect(loadConfig()).not.toHaveProperty('platformOpenRouterApiKey');
+  });
+
+  it('retains the platform OpenRouter key when the independent selector is disabled', () => {
+    process.env['INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID'] = 'disabled';
+    process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'false';
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-platform-key';
+
+    expect(loadConfig()).toMatchObject({
+      platformOpenRouterApiKey: 'test-platform-key',
+      intexAgentModelSelector: { status: 'disabled' },
+    });
+  });
+
+  it('treats a whitespace-only platform OpenRouter key as unavailable', () => {
+    process.env['INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID'] = 'disabled';
+    process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'false';
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = '   ';
+
+    expect(loadConfig()).not.toHaveProperty('platformOpenRouterApiKey');
   });
 
   it('uses every nonempty non-sentinel selector value as the exact eligible subject', () => {
@@ -28,20 +48,27 @@ describe('loadConfig', () => {
     process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'test-platform-key';
     process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'false';
 
-    expect(loadConfig().intexAgentModelSelector).toEqual({
-      status: 'enabled',
-      userId: 'test-selector-subject',
-      openRouterAppApiKey: 'test-platform-key',
+    expect(loadConfig()).toMatchObject({
+      platformOpenRouterApiKey: 'test-platform-key',
+      intexAgentModelSelector: {
+        status: 'enabled',
+        userId: 'test-selector-subject',
+        openRouterAppApiKey: 'test-platform-key',
+      },
     });
   });
 
-  it('rejects enabled selector configuration without the platform OpenRouter key', () => {
-    process.env['INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID'] = 'test-selector-subject';
-    process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'false';
-    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+  it.each([undefined, '', '   '])(
+    'rejects enabled selector configuration without a usable platform OpenRouter key: %s',
+    (value) => {
+      process.env['INTEXURAOS_INTEX_AGENT_MODEL_SELECTOR_USER_ID'] = 'test-selector-subject';
+      process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'false';
+      if (value === undefined) delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+      else process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = value;
 
-    expect(() => loadConfig()).toThrow('INTEXURAOS_OPENROUTER_APP_API_KEY is required');
-  });
+      expect(() => loadConfig()).toThrow('INTEXURAOS_OPENROUTER_APP_API_KEY is required');
+    }
+  );
 
   it.each([undefined, ''])('rejects a missing selector subject: %s', (value) => {
     process.env['INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED'] = 'false';

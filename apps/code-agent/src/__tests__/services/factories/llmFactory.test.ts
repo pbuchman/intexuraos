@@ -2,8 +2,7 @@
  * Tests for llmFactory.
  *
  * Covers:
- * - executionMemoryEmbeddingClient is undefined when openaiAppApiKey=''
- * - executionMemoryEmbeddingClient is defined when openaiAppApiKey is set
+ * - execution-memory embeddings use the platform OpenRouter key
  * - resolveToolCallingClient returns the user's Google key when user-service supplies one
  * - resolveToolCallingClient falls back to the platform Gemini key
  * - resolveToolCallingClient errors when no key is available
@@ -15,7 +14,8 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import { ok, err, type Result } from '@intexuraos/common-core';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
-import type { HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { FakeUsageSink, type HttpInternalAuthUsageSink } from '@intexuraos/llm-pricing';
+import { OPENROUTER_TEXT_EMBEDDING_3_SMALL } from '@intexuraos/infra-openrouter';
 import { createLlmServices } from '../../../services/factories/llmFactory.js';
 import type { ServiceConfig } from '../../../services/types.js';
 
@@ -35,7 +35,7 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     whatsappServiceUrl: '', whatsappSendTopic: '', prTriageTopic: '',
     linearAgentUrl: '', webhookVerifySecret: '',
     orchestratorSecret: '', serviceUrl: '', codeTaskCallbackBaseUrl: '', webAppUrl: 'https://dev.intexuraos.cloud', userServiceUrl: '',
-    openRouterAppApiKey: '', openaiAppApiKey: '', llmUsageServiceUrl: '',
+    openRouterAppApiKey: '', llmUsageServiceUrl: '',
     ...overrides,
   };
 }
@@ -55,15 +55,18 @@ function makeUserServiceClient(openRouterKey?: string, forceErr = false): UserSe
   };
 }
 
-const buildUsageSink = (): HttpInternalAuthUsageSink => ({} as unknown as HttpInternalAuthUsageSink);
+let usageSink: FakeUsageSink;
+const buildUsageSink = (): HttpInternalAuthUsageSink =>
+  usageSink as unknown as HttpInternalAuthUsageSink;
 
 describe('createLlmServices', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    usageSink = new FakeUsageSink();
   });
 
   describe('executionMemoryEmbeddingClient', () => {
-    it('is undefined when openaiAppApiKey is empty', () => {
+    it('is undefined when openRouterAppApiKey is empty', () => {
       const services = createLlmServices({
         config: makeConfig(), logger,
         userServiceClient: makeUserServiceClient(), buildUsageSink,
@@ -71,9 +74,9 @@ describe('createLlmServices', () => {
       expect(services.executionMemoryEmbeddingClient).toBeUndefined();
     });
 
-    it('is defined when openaiAppApiKey is set', () => {
+    it('is defined when openRouterAppApiKey is set', () => {
       const services = createLlmServices({
-        config: makeConfig({ openaiAppApiKey: 'sk-test' }), logger,
+        config: makeConfig({ openRouterAppApiKey: 'or-test' }), logger,
         userServiceClient: makeUserServiceClient(), buildUsageSink,
       });
       expect(services.executionMemoryEmbeddingClient).toBeDefined();
@@ -89,26 +92,29 @@ describe('createLlmServices', () => {
         nock.enableNetConnect();
       });
 
-      it('routes embed() calls through the configured OpenAI client', async () => {
-        // Stub the OpenAI embeddings endpoint so the factory's embedFn
-        // (llmFactory.ts) actually executes against a fake HTTP response.
-        // This proves the factory wired embedFn to the configured OpenAI
-        // client and not, say, a detached no-op closure.
+      it('routes embed() calls through OpenRouter and records canonical usage', async () => {
         let capturedBody: unknown = null;
-        const scope = nock('https://api.openai.com')
-          .post('/v1/embeddings', (body) => {
+        const scope = nock('https://openrouter.ai')
+          .post('/api/v1/embeddings', (body) => {
             capturedBody = body;
             return true;
           })
           .reply(200, {
             object: 'list',
-            model: 'text-embedding-3-small',
+            model: OPENROUTER_TEXT_EMBEDDING_3_SMALL.apiModelId,
             usage: { prompt_tokens: 1, total_tokens: 1 },
-            data: [{ object: 'embedding', index: 0, embedding: [0.1, 0.2, 0.3] }],
+            data: [{
+              object: 'embedding',
+              index: 0,
+              embedding: Array.from(
+                { length: OPENROUTER_TEXT_EMBEDDING_3_SMALL.dimensions },
+                () => 0.1
+              ),
+            }],
           });
 
         const services = createLlmServices({
-          config: makeConfig({ openaiAppApiKey: 'sk-test' }), logger,
+          config: makeConfig({ openRouterAppApiKey: 'or-test' }), logger,
           userServiceClient: makeUserServiceClient(), buildUsageSink,
         });
         const client = services.executionMemoryEmbeddingClient;
@@ -117,12 +123,16 @@ describe('createLlmServices', () => {
 
         await client.embed('hello world');
 
-        // The request hit OpenAI — proves the factory's embedFn arrow body
-        // (the call to `executionMemoryOpenAI.embeddings.create`) executed.
         expect(scope.isDone()).toBe(true);
-        const body = capturedBody as { input?: string; model?: string } | null;
+        const body = capturedBody as { input?: string; model?: string; dimensions?: number } | null;
         expect(body?.input).toBe('hello world');
-        expect(body?.model).toBe('text-embedding-3-small');
+        expect(body?.model).toBe(OPENROUTER_TEXT_EMBEDDING_3_SMALL.apiModelId);
+        expect(body?.dimensions).toBe(1536);
+        expect(usageSink.records[0]).toMatchObject({
+          callType: 'embedding',
+          model: OPENROUTER_TEXT_EMBEDDING_3_SMALL.evidenceModelId,
+          provider: 'openrouter',
+        });
       });
     });
   });

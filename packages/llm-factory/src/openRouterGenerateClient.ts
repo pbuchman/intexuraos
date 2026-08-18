@@ -1,7 +1,6 @@
 import { createOpenRouterClient } from '@intexuraos/infra-openrouter';
 import {
   getOpenRouterRawId,
-  isOpenRouterModel,
   type GenerateChatOptions,
   type GenerateChatResult,
   type GenerateChatStreamEvent,
@@ -17,9 +16,7 @@ import type { LLMError } from '@intexuraos/llm-contract';
 import type { Result } from '@intexuraos/common-core';
 
 export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGenerateClient {
-  const rawModel = isOpenRouterModel(config.model as string)
-    ? getOpenRouterRawId(config.model as string)
-    : (config.model as string);
+  const rawModel = getOpenRouterRawId(config.model);
 
   const orClient = createOpenRouterClient({
     apiKey: config.apiKey,
@@ -31,7 +28,7 @@ export function createOpenRouterGenerateClient(config: LlmClientConfig): LlmGene
     ...(config.timeoutMs !== undefined && { timeoutMs: config.timeoutMs }),
     ...(config.maxAttempts !== undefined && { maxAttempts: config.maxAttempts }),
     ...(config.deadlineAtMs !== undefined && { deadlineAtMs: config.deadlineAtMs }),
-    evidenceModelId: config.model as string,
+    evidenceModelId: config.model,
   });
 
   return {

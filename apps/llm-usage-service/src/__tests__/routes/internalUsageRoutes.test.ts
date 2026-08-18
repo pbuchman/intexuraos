@@ -43,6 +43,27 @@ describe('internalUsageRoutes', () => {
   });
 
   describe('POST /internal/usage/events', () => {
+    it('accepts embedding as an additive operation', async () => {
+      const event = createTestEventInput({
+        request: {
+          provider: 'openrouter',
+          model: 'or:openai/text-embedding-3-small',
+          operation: 'embedding',
+          success: true,
+          durationMs: 25,
+        },
+        cost: { providerReportedUsd: 0.00001, pricingSource: 'provider_reported' },
+      });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/usage/events',
+        headers: { 'x-internal-auth': AUTH_TOKEN },
+        payload: { schemaVersion: 2, events: [event] },
+      });
+
+      expect(response.statusCode).toBe(200);
+    });
+
     it('returns 200 with ingest result for valid events', async () => {
       const response = await app.inject({
         method: 'POST',

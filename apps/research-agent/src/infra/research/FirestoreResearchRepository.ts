@@ -6,10 +6,6 @@
 import { FieldValue, getFirestore } from '@intexuraos/infra-firestore';
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
-  normalizeRetiredOpenRouterModel,
-  type ResearchModel,
-} from '@intexuraos/llm-contract';
-import {
   toResearchSummary,
   type LlmResult,
   type RepositoryError,
@@ -17,30 +13,6 @@ import {
   type ResearchRepository,
   type ResearchSummary,
 } from '../../domain/research/index.js';
-
-function normalizeResearchModel(model: ResearchModel): ResearchModel {
-  return normalizeRetiredOpenRouterModel(model) as ResearchModel;
-}
-
-function normalizeResearchForRead(research: Research): Research {
-  return {
-    ...research,
-    selectedModels: research.selectedModels.map(normalizeResearchModel),
-    synthesisModel: normalizeResearchModel(research.synthesisModel),
-    llmResults: research.llmResults.map((result) => ({
-      ...result,
-      model: normalizeRetiredOpenRouterModel(result.model),
-    })),
-    ...(research.partialFailure !== undefined
-      ? {
-          partialFailure: {
-            ...research.partialFailure,
-            failedModels: research.partialFailure.failedModels.map(normalizeResearchModel),
-          },
-        }
-      : {}),
-  };
-}
 
 export class FirestoreResearchRepository implements ResearchRepository {
   private readonly collectionName: string;
@@ -69,7 +41,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
       if (!doc.exists) {
         return ok(null);
       }
-      return ok(normalizeResearchForRead(doc.data() as Research));
+      return ok(doc.data() as Research);
     } catch (error) {
       return err({
         code: 'FIRESTORE_ERROR',
@@ -123,11 +95,11 @@ export class FirestoreResearchRepository implements ResearchRepository {
           if (startDoc.exists) {
           /* v8 ignore stop @preserve */
             const snapshot = await favoritesQuery.startAfter(startDoc).get();
-            items = snapshot.docs.map((doc) => normalizeResearchForRead(doc.data() as Research));
+            items = snapshot.docs.map((doc) => doc.data() as Research);
           }
         } else {
           const snapshot = await favoritesQuery.get();
-          items = snapshot.docs.map((doc) => normalizeResearchForRead(doc.data() as Research));
+          items = snapshot.docs.map((doc) => doc.data() as Research);
         }
 
         // If we have enough favorites, return them
@@ -156,15 +128,11 @@ export class FirestoreResearchRepository implements ResearchRepository {
         if (startDoc.exists) {
         /* v8 ignore stop @preserve */
           const snapshot = await nonFavoritesQuery.startAfter(startDoc).get();
-          nonFavorites = snapshot.docs.map((doc) =>
-            normalizeResearchForRead(doc.data() as Research)
-          );
+          nonFavorites = snapshot.docs.map((doc) => doc.data() as Research);
         }
       } else {
         const snapshot = await nonFavoritesQuery.get();
-        nonFavorites = snapshot.docs.map((doc) =>
-          normalizeResearchForRead(doc.data() as Research)
-        );
+        nonFavorites = snapshot.docs.map((doc) => doc.data() as Research);
       }
 
       // Combine and determine cursor
@@ -220,9 +188,7 @@ export class FirestoreResearchRepository implements ResearchRepository {
       }
 
       const snapshot = await query.get();
-      const docs = snapshot.docs.map((doc) =>
-        toResearchSummary(normalizeResearchForRead(doc.data() as Research))
-      );
+      const docs = snapshot.docs.map((doc) => toResearchSummary(doc.data() as Research));
 
       const items = docs.slice(0, limit);
       const lastItem = items[items.length - 1];
@@ -275,16 +241,14 @@ export class FirestoreResearchRepository implements ResearchRepository {
         return err({ code: 'NOT_FOUND', message: 'Research not found' });
       }
 
-      const research = normalizeResearchForRead(doc.data() as Research);
-      const normalizedModel = normalizeRetiredOpenRouterModel(model);
+      const research = doc.data() as Research;
       const llmResults = research.llmResults.map((r) => {
-        if (r.model !== normalizedModel) {
+        if (r.model !== model) {
           return r;
         }
         const merged = {
           ...r,
           ...result,
-          model: normalizeRetiredOpenRouterModel(result.model ?? r.model),
         };
         if (result.status === 'pending' || result.status === 'processing') {
           const { error: _error, ...withoutError } = merged;

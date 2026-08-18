@@ -381,10 +381,14 @@ describe('supportedModels', () => {
   });
 
   describe('type compatibility', () => {
-    it('allows ResearchModel where LLMModel is expected', () => {
-      const researchModel: ResearchModel = 'claude-opus-4-6';
-      const llmModel: LLMModel = researchModel;
-      expect(llmModel).toBe('claude-opus-4-6');
+    it('uses an OpenRouter model ID for ResearchModel', () => {
+      const researchModel: ResearchModel = createOpenRouterModelId('minimax/minimax-m3');
+      expect(researchModel).toBe('or:minimax/minimax-m3');
+    });
+
+    it('retains direct model IDs in ResearchModel for historical reads', () => {
+      const historicalResearchModel: ResearchModel = LlmModels.ClaudeSonnet46;
+      expect(historicalResearchModel).toBe(LlmModels.ClaudeSonnet46);
     });
 
     it('allows ImageModel where LLMModel is expected', () => {
@@ -479,9 +483,9 @@ describe('DefaultEligibleModel', () => {
   });
 
   describe('isDefaultEligibleModel', () => {
-    it('accepts non-Google fast models', () => {
-      expect(isDefaultEligibleModel('claude-3-5-haiku-20241022')).toBe(true);
-      expect(isDefaultEligibleModel('gpt-4o-mini')).toBe(true);
+    it('rejects direct-provider fast models', () => {
+      expect(isDefaultEligibleModel('claude-3-5-haiku-20241022')).toBe(false);
+      expect(isDefaultEligibleModel('gpt-4o-mini')).toBe(false);
     });
 
     it('rejects raw Gemini defaults so Google models can only run through OpenRouter', () => {
@@ -513,10 +517,10 @@ describe('DefaultEligibleModel', () => {
     });
 
     it('type guard narrows to DefaultEligibleModel', () => {
-      const model = 'gpt-4o-mini';
+      const model = 'or:minimax/minimax-m3';
       if (isDefaultEligibleModel(model)) {
         const _typed: DefaultEligibleModel = model;
-        expect(_typed).toBe('gpt-4o-mini');
+        expect(_typed).toBe('or:minimax/minimax-m3');
       }
     });
   });
@@ -537,9 +541,9 @@ describe('DefaultEligibleModel', () => {
       }
     });
 
-    it('has correct display names for eligible static models', () => {
-      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBe('Claude 3.5 Haiku');
-      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBe('GPT-4o Mini');
+    it('does not expose direct-provider models as executable defaults', () => {
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.ClaudeHaiku35]).toBeUndefined();
+      expect(DEFAULT_MODEL_DISPLAY_NAMES[LlmModels.GPT4oMini]).toBeUndefined();
     });
 
     it('has correct display names for default OpenRouter models', () => {
@@ -555,8 +559,8 @@ describe('DefaultEligibleModel', () => {
       );
     });
 
-    it('has exactly 8 entries (2 eligible static + 6 OpenRouter)', () => {
-      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(8);
+    it('has exactly 6 OpenRouter entries', () => {
+      expect(Object.keys(DEFAULT_MODEL_DISPLAY_NAMES)).toHaveLength(6);
     });
   });
 });

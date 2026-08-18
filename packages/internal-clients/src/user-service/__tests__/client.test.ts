@@ -13,18 +13,6 @@ import { createFakeUsageSink } from '@intexuraos/llm-pricing';
 import type { UserServiceClient } from '../types.js';
 
 describe('providerToKeyField', () => {
-  it('returns openai for OpenAI provider', () => {
-    expect(providerToKeyField(LlmProviders.OpenAI)).toBe(LlmProviders.OpenAI);
-  });
-
-  it('returns anthropic for Anthropic provider', () => {
-    expect(providerToKeyField(LlmProviders.Anthropic)).toBe(LlmProviders.Anthropic);
-  });
-
-  it('returns perplexity for Perplexity provider', () => {
-    expect(providerToKeyField(LlmProviders.Perplexity)).toBe(LlmProviders.Perplexity);
-  });
-
   it('returns openrouter for OpenRouter provider', () => {
     expect(providerToKeyField(LlmProviders.OpenRouter)).toBe(LlmProviders.OpenRouter);
   });
@@ -51,7 +39,7 @@ describe('createUserServiceClient', () => {
   });
 
   describe('getApiKeys', () => {
-    it('returns decrypted keys on success', async () => {
+    it('ignores direct-provider keys from the rolling-deploy response', async () => {
       const mockKeys = {
         google: 'google-key',
         openai: 'openai-key',
@@ -67,10 +55,7 @@ describe('createUserServiceClient', () => {
       const result = await client.getApiKeys('user123');
 
       if (result.ok) {
-        expect(result.value).toEqual({
-          openai: 'openai-key',
-          anthropic: 'anthropic-key',
-        });
+        expect(result.value).toEqual({});
       } else {
         expect.fail('Expected successful result');
       }
@@ -143,8 +128,7 @@ describe('createUserServiceClient', () => {
 
       if (result.ok) {
         expect(result.value).not.toHaveProperty('google');
-        expect(result.value.openai).toBeUndefined();
-        expect(result.value.anthropic).toBeUndefined();
+        expect(result.value).toEqual({});
       } else {
         expect.fail('Expected successful result');
       }
@@ -169,7 +153,37 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('ignores the retired google response field', async () => {
+    it('treats a whitespace-only user key as absent and falls back to the platform key', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { openrouter: '   ' } });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
+      const result = await client.getApiKeys('user123');
+
+      expect(result).toEqual({ ok: true, value: { openrouter: 'platform-openrouter-key' } });
+    });
+
+    it('omits OpenRouter access when both user and platform keys are blank', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { openrouter: '' } });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: '   ',
+      });
+      const result = await client.getApiKeys('user123');
+
+      expect(result).toEqual({ ok: true, value: {} });
+    });
+
+    it('ignores all legacy provider response fields', async () => {
       const mockKeys = {
         google: null,
         openai: 'openai-key',
@@ -185,13 +199,13 @@ describe('createUserServiceClient', () => {
 
       if (result.ok) {
         expect(result.value).not.toHaveProperty('google');
-        expect(result.value.openai).toBe('openai-key');
+        expect(result.value).not.toHaveProperty('openai');
       } else {
         expect.fail('Expected successful result');
       }
     });
 
-    it('includes all provider keys when all are configured', async () => {
+    it('returns only the user OpenRouter key when all legacy fields are present', async () => {
       const mockKeys = {
         google: 'google-key',
         openai: 'openai-key',
@@ -209,18 +223,14 @@ describe('createUserServiceClient', () => {
       const result = await client.getApiKeys('user123');
 
       if (result.ok) {
-        expect(result.value).not.toHaveProperty('google');
-        expect(result.value.openai).toBe('openai-key');
-        expect(result.value.anthropic).toBe('anthropic-key');
-        expect(result.value.perplexity).toBe('perplexity-key');
-        expect(result.value.openrouter).toBe('openrouter-key');
+        expect(result.value).toEqual({ openrouter: 'openrouter-key' });
       } else {
         expect.fail('Expected successful result');
       }
     });
 
     it('URL encodes userId with spaces', async () => {
-      const mockKeys = { openai: 'openai-key' };
+      const mockKeys = { openrouter: 'openrouter-key' };
       const userId = 'user 123';
 
       nock('http://localhost:3000')
@@ -239,7 +249,7 @@ describe('createUserServiceClient', () => {
     });
 
     it('URL encodes userId with plus', async () => {
-      const mockKeys = { openai: 'openai-key' };
+      const mockKeys = { openrouter: 'openrouter-key' };
       const userId = 'user+123';
 
       nock('http://localhost:3000')
@@ -258,7 +268,7 @@ describe('createUserServiceClient', () => {
     });
 
     it('URL encodes userId with pipe (Auth0 format)', async () => {
-      const mockKeys = { openai: 'openai-key' };
+      const mockKeys = { openrouter: 'openrouter-key' };
       const userId = 'auth0|1234567890';
 
       nock('http://localhost:3000')
@@ -304,6 +314,32 @@ describe('createUserServiceClient', () => {
         },
         'LLM client created successfully'
       );
+    });
+
+    it('returns NO_API_KEY when both stored and platform OpenRouter keys are blank', async () => {
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/settings')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: { openrouter: '   ' } });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: '',
+      });
+      const result = await client.getLlmClient('user123');
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'NO_API_KEY',
+          message: 'No OpenRouter access is available for this user.',
+        },
+      });
     });
 
     it('maps an explicit legacy Gemini preference to the platform OpenRouter model', async () => {
@@ -494,7 +530,7 @@ describe('createUserServiceClient', () => {
 
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toContain('openrouter');
+        expect(result.error.message).toContain('OpenRouter');
         expect(mockLogger.info).toHaveBeenCalledWith(
           { userId: 'user123', provider: LlmProviders.OpenRouter },
           'No API key configured for provider'
@@ -504,7 +540,7 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('returns INVALID_MODEL when user preference invalid', async () => {
+    it('read-normalizes an unknown stored preference to the platform OpenRouter model', async () => {
       const mockSettings = {
         llmPreferences: {
           defaultModel: 'invalid-model',
@@ -516,18 +552,29 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockSettings });
 
-      const client = createUserServiceClient(config);
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
       const result = await client.getLlmClient('user123');
 
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_MODEL');
-        expect(result.error.message).toContain('invalid-model');
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          { userId: 'user123', invalidModel: 'invalid-model' },
-          'User has invalid model preference'
+      if (result.ok) {
+        expect(result.value).toBeDefined();
+        expect(mockLogger.info).toHaveBeenCalledWith(
+          {
+            userId: 'user123',
+            model: IntexAgentModels.MiniMaxM3,
+            provider: LlmProviders.OpenRouter,
+          },
+          'LLM client created successfully'
         );
       } else {
-        expect.fail('Expected error result');
+        expect.fail('Expected unknown preference to normalize on read');
       }
     });
 
@@ -662,7 +709,7 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('rejects GPT54 model as invalid since it is not a default-eligible model', async () => {
+    it('read-normalizes a stored GPT-5.4 direct preference', async () => {
       const mockSettings = {
         llmPreferences: {
           defaultModel: LlmModels.GPT54,
@@ -674,23 +721,25 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockSettings });
 
-      const client = createUserServiceClient(config);
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
       const result = await client.getLlmClient('user123');
 
-      // GPT54 is not a default-eligible model (only fast models and default OpenRouter models are)
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_MODEL');
-        expect(result.error.message).toContain(LlmModels.GPT54);
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          { userId: 'user123', invalidModel: LlmModels.GPT54 },
-          'User has invalid model preference'
-        );
-      } else {
-        expect.fail('Expected error result for non-eligible model');
-      }
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ model: IntexAgentModels.MiniMaxM3 }),
+        'LLM client created successfully'
+      );
     });
 
-    it('rejects ClaudeSonnet46 model as invalid since it is not a default-eligible model', async () => {
+    it('read-normalizes a stored Claude direct preference', async () => {
       const mockSettings = {
         llmPreferences: {
           defaultModel: LlmModels.ClaudeSonnet46,
@@ -702,23 +751,25 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockSettings });
 
-      const client = createUserServiceClient(config);
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
       const result = await client.getLlmClient('user123');
 
-      // ClaudeSonnet46 is not a default-eligible model (only fast models and default OpenRouter models are)
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_MODEL');
-        expect(result.error.message).toContain(LlmModels.ClaudeSonnet46);
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          { userId: 'user123', invalidModel: LlmModels.ClaudeSonnet46 },
-          'User has invalid model preference'
-        );
-      } else {
-        expect.fail('Expected error result for non-eligible model');
-      }
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ model: IntexAgentModels.MiniMaxM3 }),
+        'LLM client created successfully'
+      );
     });
 
-    it('rejects SonarPro model as invalid since it is not a default-eligible model', async () => {
+    it('read-normalizes a stored Perplexity direct preference', async () => {
       const mockSettings = {
         llmPreferences: {
           defaultModel: LlmModels.SonarPro,
@@ -730,20 +781,22 @@ describe('createUserServiceClient', () => {
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, { success: true, data: mockSettings });
 
-      const client = createUserServiceClient(config);
+      nock('http://localhost:3000')
+        .get('/internal/users/user123/llm-keys')
+        .matchHeader('X-Internal-Auth', 'test-token')
+        .reply(200, { success: true, data: {} });
+
+      const client = createUserServiceClient({
+        ...config,
+        platformOpenRouterApiKey: 'platform-openrouter-key',
+      });
       const result = await client.getLlmClient('user123');
 
-      // SonarPro is not a default-eligible model (only fast models and default OpenRouter models are)
-      if (!result.ok) {
-        expect(result.error.code).toBe('INVALID_MODEL');
-        expect(result.error.message).toContain(LlmModels.SonarPro);
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          { userId: 'user123', invalidModel: LlmModels.SonarPro },
-          'User has invalid model preference'
-        );
-      } else {
-        expect.fail('Expected error result for non-eligible model');
-      }
+      expect(result.ok).toBe(true);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ model: IntexAgentModels.MiniMaxM3 }),
+        'LLM client created successfully'
+      );
     });
 
     it('creates client for default-eligible OpenRouter model with allowlist pricing', async () => {
@@ -782,13 +835,12 @@ describe('createUserServiceClient', () => {
       }
     });
 
-    it('falls back to the platform OpenRouter default when the selected provider key is missing', async () => {
+    it('normalizes a direct-provider selection to the platform OpenRouter default', async () => {
       const configWithOpenRouterKey = {
         ...config,
         platformOpenRouterApiKey: 'platform-openrouter-key',
       };
 
-      // Use ClaudeHaiku35 which IS default-eligible but no anthropic key is configured
       const mockSettings = {
         llmPreferences: {
           defaultModel: LlmModels.ClaudeHaiku35,
@@ -814,14 +866,7 @@ describe('createUserServiceClient', () => {
 
       if (result.ok) {
         expect(result.value).toBeDefined();
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-          {
-            userId: 'user123',
-            provider: LlmProviders.Anthropic,
-            requestedModel: LlmModels.ClaudeHaiku35,
-          },
-          'No API key for provider, falling back to platform OpenRouter default'
-        );
+        expect(mockLogger.warn).not.toHaveBeenCalled();
         expect(mockLogger.info).toHaveBeenCalledWith(
           {
             userId: 'user123',
@@ -861,7 +906,7 @@ describe('createUserServiceClient', () => {
 
       if (!result.ok) {
         expect(result.error.code).toBe('NO_API_KEY');
-        expect(result.error.message).toContain('openrouter');
+        expect(result.error.message).toContain('OpenRouter');
       } else {
         expect.fail('Expected error result');
       }
@@ -910,12 +955,12 @@ describe('createUserServiceClient', () => {
   describe('reportLlmSuccess', () => {
     it('calls last-used endpoint with correct provider', async () => {
       nock('http://localhost:3000')
-        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .post('/internal/users/user123/llm-keys/openrouter/last-used')
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200);
 
       const client = createUserServiceClient(config);
-      await client.reportLlmSuccess('user123', LlmProviders.Google);
+      await client.reportLlmSuccess('user123', LlmProviders.OpenRouter);
 
       // Should complete without throwing
       expect(true).toBe(true);
@@ -923,7 +968,7 @@ describe('createUserServiceClient', () => {
 
     it('silently ignores failures (best effort)', async () => {
       nock('http://localhost:3000')
-        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .post('/internal/users/user123/llm-keys/openrouter/last-used')
         .matchHeader('X-Internal-Auth', 'test-token')
         .replyWithError('ECONNREFUSED');
 
@@ -931,13 +976,13 @@ describe('createUserServiceClient', () => {
 
       // Should not throw
       await expect(
-        client.reportLlmSuccess('user123', LlmProviders.Google)
+        client.reportLlmSuccess('user123', LlmProviders.OpenRouter)
       ).resolves.toBeUndefined();
     });
 
     it('silently ignores network timeout errors', async () => {
       nock('http://localhost:3000')
-        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .post('/internal/users/user123/llm-keys/openrouter/last-used')
         .matchHeader('X-Internal-Auth', 'test-token')
         .delay(5000)
         .reply(200);
@@ -946,52 +991,52 @@ describe('createUserServiceClient', () => {
 
       // The function should not throw due to try-catch
       await expect(
-        client.reportLlmSuccess('user123', LlmProviders.Google)
+        client.reportLlmSuccess('user123', LlmProviders.OpenRouter)
       ).resolves.toBeUndefined();
     });
 
     it('silently ignores 500 server errors', async () => {
       nock('http://localhost:3000')
-        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .post('/internal/users/user123/llm-keys/openrouter/last-used')
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(500, { error: 'Internal server error' });
 
       const client = createUserServiceClient(config);
 
       await expect(
-        client.reportLlmSuccess('user123', LlmProviders.Google)
+        client.reportLlmSuccess('user123', LlmProviders.OpenRouter)
       ).resolves.toBeUndefined();
     });
 
     it('silently ignores 404 not found errors', async () => {
       nock('http://localhost:3000')
-        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .post('/internal/users/user123/llm-keys/openrouter/last-used')
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(404);
 
       const client = createUserServiceClient(config);
 
       await expect(
-        client.reportLlmSuccess('user123', LlmProviders.Google)
+        client.reportLlmSuccess('user123', LlmProviders.OpenRouter)
       ).resolves.toBeUndefined();
     });
 
     it('silently ignores JSON parse errors', async () => {
       nock('http://localhost:3000')
-        .post('/internal/users/user123/llm-keys/Google/last-used')
+        .post('/internal/users/user123/llm-keys/openrouter/last-used')
         .matchHeader('X-Internal-Auth', 'test-token')
         .reply(200, '{ invalid json }');
 
       const client = createUserServiceClient(config);
 
       await expect(
-        client.reportLlmSuccess('user123', LlmProviders.Google)
+        client.reportLlmSuccess('user123', LlmProviders.OpenRouter)
       ).resolves.toBeUndefined();
     });
 
     it('URL encodes userId with plus in reportLlmSuccess', async () => {
       const userId = 'user+special';
-      const provider = 'Google';
+      const provider = 'openrouter';
 
       nock('http://localhost:3000')
         .post(`/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`)
@@ -999,7 +1044,7 @@ describe('createUserServiceClient', () => {
         .reply(200);
 
       const client = createUserServiceClient(config);
-      await client.reportLlmSuccess(userId, LlmProviders.Google);
+      await client.reportLlmSuccess(userId, LlmProviders.OpenRouter);
 
       // Should complete without throwing
       expect(true).toBe(true);
@@ -1007,7 +1052,7 @@ describe('createUserServiceClient', () => {
 
     it('URL encodes userId with pipe (Auth0 format) in reportLlmSuccess', async () => {
       const userId = 'auth0|xyz123';
-      const provider = 'Google';
+      const provider = 'openrouter';
 
       nock('http://localhost:3000')
         .post(`/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`)
@@ -1015,7 +1060,7 @@ describe('createUserServiceClient', () => {
         .reply(200);
 
       const client = createUserServiceClient(config);
-      await client.reportLlmSuccess(userId, LlmProviders.Google);
+      await client.reportLlmSuccess(userId, LlmProviders.OpenRouter);
 
       // Should complete without throwing
       expect(true).toBe(true);

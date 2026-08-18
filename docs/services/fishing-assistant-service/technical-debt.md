@@ -29,11 +29,11 @@ The current service surface includes tests for chat repositories and routes, kno
 
 ### User API Key Dependency
 
-Chat generation depends on each user's OpenRouter key from user-service. The service handles missing keys with `NO_API_KEY`; it does not fall back to an app-level chat key.
+Chat generation uses the user's OpenRouter key when present and the platform fallback otherwise. The service returns `NO_API_KEY` only when neither is available.
 
 ### Embedding Dependency
 
-Knowledge indexing depends on OpenAI embeddings. Failed embedding calls keep the page record with `indexingStatus: failed`, `indexingError`, and no chunks.
+Knowledge indexing depends on OpenRouter embeddings. The stored alias remains `text-embedding-3-small` with 1536 dimensions; failed calls keep the page record with `indexingStatus: failed`, `indexingError`, and no chunks.
 
 ### Firestore Index Dependency
 

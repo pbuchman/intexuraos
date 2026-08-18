@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Logger } from '@intexuraos/common-core';
-import type { OpenAI } from '@intexuraos/llm-contract';
+import type { OpenRouter } from '@intexuraos/llm-contract';
 import { LlmProviders } from '@intexuraos/llm-contract';
 import type { ImagePromptModelConfig, PromptGenerator } from '../../domain/index.js';
 import { createGeneratePromptUseCase } from '../../application/generatePrompt.js';
@@ -9,18 +9,18 @@ import { FakeUserServiceClient, FakePromptGenerator, createFakeLogger } from '..
 const fakeLogger = createFakeLogger();
 
 describe('createGeneratePromptUseCase', () => {
-  const modelConfig: ImagePromptModelConfig = { provider: LlmProviders.OpenAI, modelId: 'gpt-4.1' };
+  const modelConfig: ImagePromptModelConfig = { provider: LlmProviders.OpenRouter, modelId: 'gpt-4.1' };
   let fakeUserClient: FakeUserServiceClient;
   let fakeGenerator: FakePromptGenerator;
   let createPromptGeneratorSpy: ReturnType<
-    typeof vi.fn<(provider: OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator>
+    typeof vi.fn<(provider: OpenRouter, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator>
   >;
 
   beforeEach(() => {
     fakeUserClient = new FakeUserServiceClient();
     fakeGenerator = new FakePromptGenerator();
     createPromptGeneratorSpy = vi.fn<
-      (provider: OpenAI, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator
+      (provider: OpenRouter, model: string, apiKey: string, userId: string, logger: Logger) => PromptGenerator
     >(() => fakeGenerator);
     vi.clearAllMocks();
   });
@@ -37,7 +37,7 @@ describe('createGeneratePromptUseCase', () => {
   }
 
   it('returns prompt on success', async () => {
-    fakeUserClient.setApiKeys({ openai: 'sk-test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'or-test-key' });
     const useCase = buildUseCase();
 
     const result = await useCase({ text: 'A blog about cats', model: 'gpt-4.1', userId: 'user-1' });
@@ -56,16 +56,16 @@ describe('createGeneratePromptUseCase', () => {
       },
     });
     expect(createPromptGeneratorSpy).toHaveBeenCalledWith(
-      LlmProviders.OpenAI,
+      LlmProviders.OpenRouter,
       'gpt-4.1',
-      'sk-test-key',
+      'or-test-key',
       'user-1',
       fakeLogger
     );
   });
 
   it('forwards prompt metadata to prompt generator', async () => {
-    fakeUserClient.setApiKeys({ openai: 'sk-test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'or-test-key' });
     const useCase = buildUseCase();
 
     const result = await useCase({
@@ -95,7 +95,7 @@ describe('createGeneratePromptUseCase', () => {
   });
 
   it('returns MISSING_API_KEY when provider key is absent', async () => {
-    fakeUserClient.setApiKeys({ anthropic: 'anthropic-key' });
+    fakeUserClient.setApiKeys({});
     const useCase = buildUseCase();
 
     const result = await useCase({ text: 'Some text', model: 'gpt-4.1', userId: 'user-1' });
@@ -104,11 +104,11 @@ describe('createGeneratePromptUseCase', () => {
     if (result.ok) return;
     expect(result.error.code).toBe('MISSING_API_KEY');
     if (result.error.code !== 'MISSING_API_KEY') return;
-    expect(result.error.provider).toBe(LlmProviders.OpenAI);
+    expect(result.error.provider).toBe(LlmProviders.OpenRouter);
   });
 
   it('returns RATE_LIMITED when generator returns RATE_LIMITED', async () => {
-    fakeUserClient.setApiKeys({ openai: 'sk-test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'or-test-key' });
     fakeGenerator.setFailNext(true, 'RATE_LIMITED');
     const useCase = buildUseCase();
 
@@ -120,7 +120,7 @@ describe('createGeneratePromptUseCase', () => {
   });
 
   it('returns GENERATION_FAILED for other generator errors', async () => {
-    fakeUserClient.setApiKeys({ openai: 'sk-test-key' });
+    fakeUserClient.setApiKeys({ openrouter: 'or-test-key' });
     fakeGenerator.setFailNext(true, 'API_ERROR');
     const useCase = buildUseCase();
 

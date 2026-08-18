@@ -3,16 +3,19 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowUpDown, Plus, Star, Trash2 } from 'lucide-react';
 import { Button, ErrorBanner, Layout } from '@/components';
 import { useAuth } from '@/context';
-import { useResearches } from '@/hooks';
+import { useLlmKeys, useOpenRouterModels, useResearches } from '@/hooks';
 import { formatRelative } from '@/utils/dateFormat';
 import { stripMarkdown } from '@/utils';
 import { toggleResearchFavourite } from '@/services/researchAgentApi';
-import { type ResearchSummary } from '@/services/researchAgentApi.types';
+import type {
+  OpenRouterModelInfo,
+  ResearchSummary,
+} from '@/services/researchAgentApi.types';
+import { resolveStoredResearchModel } from '@/utils/openRouterModelNames.js';
 import {
   ALL_RESEARCH_GROUP_STATUSES,
   deriveGroupStatus,
   getAccentShadow,
-  getUniqueResearchProviders,
   INACTIVE_SEGMENT_CLASS,
   RESEARCH_GROUP_STATUS_CONFIG,
   RESEARCH_SORT_OPTIONS,
@@ -178,12 +181,21 @@ function SortSelector({ activeSort, onChangeSort }: SortSelectorProps): React.JS
 
 interface ResearchRowProps {
   research: ResearchSummary;
+  availableModels: OpenRouterModelInfo[];
+  availabilityKnown: boolean;
   onDelete: () => Promise<void>;
   onToggleFavourite: (researchId: string, favourite: boolean) => void;
   updatingFavourite: string | null;
 }
 
-const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavourite, updatingFavourite }: ResearchRowProps): React.JSX.Element {
+const ResearchRow = memo(function ResearchRow({
+  research,
+  availableModels,
+  availabilityKnown,
+  onDelete,
+  onToggleFavourite,
+  updatingFavourite,
+}: ResearchRowProps): React.JSX.Element {
   const navigate = useNavigate();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -201,7 +213,47 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
     }
   };
 
-  const uniqueProviders = getUniqueResearchProviders(research.selectedModels);
+  const availableModelIds = availableModels.map((model) => model.id);
+  const modelPresentations = research.selectedModels.map((modelId) => {
+    const storedProvider = research.llmResultStatuses.find(
+      (result) => result.model === modelId,
+    )?.provider;
+    return resolveStoredResearchModel({
+      modelId,
+      ...(storedProvider === undefined ? {} : { storedProvider }),
+      availableModelIds,
+      availableModels,
+    });
+  });
+  const modelIdentity = (
+    <div className="mt-2 flex flex-wrap gap-2" aria-label="Research models">
+      {modelPresentations.map((model) => {
+        const showUnavailable = !model.id.startsWith('or:') || availabilityKnown;
+        return (
+          <span
+            key={model.id}
+            className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300"
+          >
+            <span className="font-medium">{model.name}</span>
+            <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+              {[
+                model.provider,
+                ...(model.author !== null && model.author !== model.provider
+                  ? [model.author]
+                  : []),
+                model.id,
+              ].join(' · ')}
+            </span>
+            {showUnavailable && !model.available ? (
+              <span className="mt-0.5 block font-medium text-amber-700 dark:text-amber-300">
+                Unavailable
+              </span>
+            ) : null}
+          </span>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div
@@ -214,14 +266,10 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
           <p className="truncate font-medium text-slate-900 dark:text-slate-100">
             {research.title !== '' ? stripMarkdown(research.title) : 'Untitled Research'}
           </p>
+          {modelIdentity}
         </div>
         <div className="flex items-center gap-2">
           <ResearchStatusBadge status={research.status} />
-          {uniqueProviders.map((provider) => (
-            <span key={provider} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-              {provider}
-            </span>
-          ))}
         </div>
         <span className="text-xs text-slate-400 dark:text-slate-500">
           {formatRelative(research.startedAt)}
@@ -265,11 +313,6 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <ResearchStatusBadge status={research.status} />
-          {uniqueProviders.map((provider) => (
-            <span key={provider} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">
-              {provider}
-            </span>
-          ))}
           <div className="ml-auto flex items-center gap-1">
             <button
               onClick={(e): void => {
@@ -296,6 +339,7 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
             </button>
           </div>
         </div>
+        {modelIdentity}
       </div>
 
       {/* Delete overlay */}
@@ -324,13 +368,6 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
       ) : null}
     </div>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.research.id === nextProps.research.id &&
-    prevProps.research.status === nextProps.research.status &&
-    prevProps.research.favourite === nextProps.research.favourite &&
-    prevProps.updatingFavourite === nextProps.updatingFavourite
-  );
 });
 
 // --- Main Page ---
@@ -338,6 +375,21 @@ const ResearchRow = memo(function ResearchRow({ research, onDelete, onToggleFavo
 export function ResearchListPage(): React.JSX.Element {
   const { researches, loading, loadingMore, error, hasMore, loadMore, deleteResearch, updateResearchLocally } =
     useResearches();
+  const { keys, loading: keysLoading } = useLlmKeys();
+  const openRouterByokFailed =
+    keys?.openrouter !== null && keys?.testResults.openrouter?.status === 'failure';
+  const hasOpenRouterAccess =
+    keys !== null && keys.accessSource !== 'unavailable' && !openRouterByokFailed;
+  const {
+    models: openRouterModels,
+    loading: openRouterLoading,
+    error: openRouterError,
+  } = useOpenRouterModels(hasOpenRouterAccess);
+  const modelAvailabilityKnown =
+    !keysLoading &&
+    hasOpenRouterAccess &&
+    !openRouterLoading &&
+    openRouterError === null;
   const { getAccessToken } = useAuth();
   const [updatingFavourite, setUpdatingFavourite] = useState<string | null>(null);
   const [favouriteError, setFavouriteError] = useState<string | null>(null);
@@ -439,6 +491,8 @@ export function ResearchListPage(): React.JSX.Element {
               <ResearchRow
                 key={research.id}
                 research={research}
+                availableModels={openRouterModels}
+                availabilityKnown={modelAvailabilityKnown}
                 onDelete={async (): Promise<void> => {
                   await deleteResearch(research.id);
                 }}

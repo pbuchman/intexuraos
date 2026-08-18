@@ -5,7 +5,6 @@ import {
   IntexAgentModels,
   LegacyGoogleModels,
   LlmModels,
-  LlmProviders,
 } from '@intexuraos/llm-contract';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -448,7 +447,7 @@ describe('Settings Routes', () => {
     });
 
     it.each(['disabled', 'catalog-startup-failed', 'catalog-refresh-failed'])(
-      'keeps valid general BYOK updates independent of selector state: %s',
+      'keeps valid OpenRouter updates independent of selector state: %s',
       async () => {
         const userId = 'auth0|legacy-general-success';
         fakeSettingsRepo.setSettings({
@@ -472,7 +471,7 @@ describe('Settings Routes', () => {
           method: 'PATCH',
           url: `/users/${encodeURIComponent(userId)}/settings`,
           headers: { authorization: `Bearer ${token}` },
-          payload: { defaultModel: LlmModels.GPT4oMini },
+          payload: { defaultModel: IntexAgentModels.MiniMaxM3 },
         });
         expect(response.statusCode).toBe(200);
         expect(availability).not.toHaveBeenCalled();
@@ -745,7 +744,7 @@ describe('Settings Routes', () => {
       expect(body.error.message).toContain('supported model');
     });
 
-    it('returns 400 when the selected provider has no API key', { timeout: 20000 }, async () => {
+    it('accepts an OpenRouter model without requiring a user-owned key', { timeout: 20000 }, async () => {
       app = await buildServer();
 
       const userId = 'auth0|user-without-openai-key';
@@ -755,27 +754,24 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3 },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string; message: string };
+        data: { defaultModel: string };
       };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain(
-        `no API key configured for provider '${LlmProviders.OpenAI}'`
-      );
+      expect(body.success).toBe(true);
+      expect(body.data.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
     });
 
-    it('returns 200 and saves valid fast model when API key is configured', { timeout: 20000 }, async () => {
+    it('returns 200 and saves a curated OpenRouter model', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-set-model';
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -789,7 +785,7 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3 },
       });
 
       expect(response.statusCode).toBe(200);
@@ -798,10 +794,10 @@ describe('Settings Routes', () => {
         data: { defaultModel: string };
       };
       expect(body.success).toBe(true);
-      expect(body.data.defaultModel).toBe(LlmModels.GPT4oMini);
+      expect(body.data.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
 
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+      expect(stored?.llmPreferences?.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
     });
 
     it('returns 500 when repository update fails', { timeout: 20000 }, async () => {
@@ -809,7 +805,7 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -824,7 +820,7 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3 },
       });
 
       expect(response.statusCode).toBe(500);
@@ -836,7 +832,7 @@ describe('Settings Routes', () => {
       expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
-    it('returns 500 when getSettings fails during API key check', { timeout: 20000 }, async () => {
+    it('does not read stored API keys before saving an OpenRouter preference', { timeout: 20000 }, async () => {
       fakeSettingsRepo.setFailNextGet(true);
 
       app = await buildServer();
@@ -848,16 +844,14 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3 },
       });
 
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string };
       };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.success).toBe(true);
     });
 
     it('accepts OpenRouter model as defaultModel', { timeout: 20000 }, async () => {
@@ -902,7 +896,6 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-openai-key').toString('base64') },
           openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-or-key').toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -917,7 +910,7 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini, fallbackModel: orFallback },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3, fallbackModel: orFallback },
       });
 
       expect(response.statusCode).toBe(200);
@@ -926,11 +919,11 @@ describe('Settings Routes', () => {
         data: { defaultModel: string; fallbackModel: string | null };
       };
       expect(body.success).toBe(true);
-      expect(body.data.defaultModel).toBe(LlmModels.GPT4oMini);
+      expect(body.data.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
       expect(body.data.fallbackModel).toBe(orFallback);
 
       const stored = fakeSettingsRepo.getStoredSettings(userId);
-      expect(stored?.llmPreferences?.defaultModel).toBe(LlmModels.GPT4oMini);
+      expect(stored?.llmPreferences?.defaultModel).toBe(IntexAgentModels.MiniMaxM3);
       expect(stored?.llmPreferences?.fallbackModel).toBe(orFallback);
     });
 
@@ -939,10 +932,10 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
         },
         llmPreferences: {
-          defaultModel: LlmModels.GPT4oMini,
+          defaultModel: IntexAgentModels.MiniMaxM3,
           fallbackModel: 'or:google/gemma-4-31b-it:free',
         },
         createdAt: '2025-01-01T00:00:00.000Z',
@@ -957,7 +950,7 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini, fallbackModel: null },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3, fallbackModel: null },
       });
 
       expect(response.statusCode).toBe(200);
@@ -977,7 +970,7 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -991,7 +984,10 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini, fallbackModel: 'not-a-real-model' },
+        payload: {
+          defaultModel: IntexAgentModels.MiniMaxM3,
+          fallbackModel: 'not-a-real-model',
+        },
       });
 
       expect(response.statusCode).toBe(400);
@@ -1009,7 +1005,7 @@ describe('Settings Routes', () => {
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
+          openrouter: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1023,7 +1019,10 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini, fallbackModel: LlmModels.GPT4oMini },
+        payload: {
+          defaultModel: IntexAgentModels.MiniMaxM3,
+          fallbackModel: IntexAgentModels.MiniMaxM3,
+        },
       });
 
       expect(response.statusCode).toBe(400);
@@ -1036,14 +1035,13 @@ describe('Settings Routes', () => {
       expect(body.error.message).toContain('different from the default model');
     });
 
-    it('rejects fallbackModel when no API key for its provider', { timeout: 20000 }, async () => {
+    it('accepts an OpenRouter fallback without requiring a user-owned key', { timeout: 20000 }, async () => {
       const userId = 'auth0|user-fallback-no-key';
-      const missingProviderFallback = LlmModels.ClaudeHaiku35;
+      const fallbackModel = 'or:google/gemma-4-31b-it:free';
       fakeSettingsRepo.setSettings({
         userId,
         llmApiKeys: {
-          openai: { iv: 'iv', tag: 'tag', ciphertext: Buffer.from('test-key').toString('base64') },
-          // No anthropic key
+          // No user-owned OpenRouter key; platform access is resolved at execution time.
         },
         createdAt: '2025-01-01T00:00:00.000Z',
         updatedAt: '2025-01-01T00:00:00.000Z',
@@ -1057,18 +1055,19 @@ describe('Settings Routes', () => {
         method: 'PATCH',
         url: `/users/${encodeURIComponent(userId)}/settings`,
         headers: { authorization: `Bearer ${token}` },
-        payload: { defaultModel: LlmModels.GPT4oMini, fallbackModel: missingProviderFallback },
+        payload: { defaultModel: IntexAgentModels.MiniMaxM3, fallbackModel },
       });
 
-      expect(response.statusCode).toBe(400);
+      expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body) as {
         success: boolean;
-        error: { code: string; message: string };
+        data: { defaultModel: string; fallbackModel: string | null };
       };
-      expect(body.success).toBe(false);
-      expect(body.error.code).toBe('INVALID_REQUEST');
-      expect(body.error.message).toContain('no API key configured');
-      expect(body.error.message).toContain('anthropic');
+      expect(body.success).toBe(true);
+      expect(body.data).toEqual({
+        defaultModel: IntexAgentModels.MiniMaxM3,
+        fallbackModel,
+      });
     });
   });
 

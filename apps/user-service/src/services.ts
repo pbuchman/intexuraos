@@ -49,6 +49,7 @@ export interface ServiceContainer {
   gitHubOAuthClient: GitHubOAuthClient | null;
   encryptor: Encryptor | null;
   llmValidator: LlmValidator | null;
+  platformOpenRouterApiKeyAvailable: boolean;
   intexAgentModelAvailability: IntexAgentModelAvailability;
   intexAgentTestRunsReadCapability: {
     isAvailableForUser(userId: string): Promise<boolean>;
@@ -147,6 +148,7 @@ function buildContainer(config?: ServiceContainerConfig): ServiceContainer {
     gitHubOAuthClient: loadGitHubOAuthClient(),
     encryptor: loadEncryptor(),
     llmValidator,
+    platformOpenRouterApiKeyAvailable: config?.userServiceConfig?.platformOpenRouterApiKey !== undefined,
     intexAgentModelAvailability,
     intexAgentTestRunsReadCapability,
   };

@@ -3,50 +3,19 @@
  */
 
 import type { ExecutableLlmProvider, ResearchModel } from '@intexuraos/llm-contract';
-import { LlmModels, LlmProviders, isOpenRouterModel } from '@intexuraos/llm-contract';
+import { LlmProviders, isOpenRouterModel } from '@intexuraos/llm-contract';
 
 export type LlmProvider = ExecutableLlmProvider;
 
 export type SupportedModel = ResearchModel;
 export type StoredResearchModel = string;
 
-const MODEL_TO_PROVIDER = {
-  [LlmModels.ClaudeOpus46]: LlmProviders.Anthropic,
-  [LlmModels.ClaudeSonnet46]: LlmProviders.Anthropic,
-  [LlmModels.ClaudeSonnet47]: LlmProviders.Anthropic,
-  [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
-  [LlmModels.GPT54]: LlmProviders.OpenAI,
-  [LlmModels.Sonar]: LlmProviders.Perplexity,
-  [LlmModels.SonarPro]: LlmProviders.Perplexity,
-  [LlmModels.SonarDeepResearch]: LlmProviders.Perplexity,
-} as const satisfies Record<string, LlmProvider>;
-
-// TODO: isSelectableModel treats any `or:*` string as selectable, but the backend's
-// isRetryableStoredResearchModel checks the curated allowlist via isAllowedModel.
-// If a model is removed from the allowlist, the frontend shows Retry as enabled but
-// the backend returns 409. Plumb the allowlist check into the frontend to pre-disable
-// the button instead of relying on the error response.
 export function isSelectableModel(model: string): model is SupportedModel {
-  return isOpenRouterModel(model) || Object.prototype.hasOwnProperty.call(MODEL_TO_PROVIDER, model);
-}
-
-export function getProviderForModel(model: SupportedModel): LlmProvider {
-  if (isOpenRouterModel(model)) {
-    return LlmProviders.OpenRouter;
-  }
-  return MODEL_TO_PROVIDER[model];
+  return isOpenRouterModel(model);
 }
 
 export function getProviderForStoredModel(model: StoredResearchModel): LlmProvider | null {
-  if (isOpenRouterModel(model)) {
-    return LlmProviders.OpenRouter;
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(MODEL_TO_PROVIDER, model)) {
-    return null;
-  }
-
-  return MODEL_TO_PROVIDER[model as keyof typeof MODEL_TO_PROVIDER];
+  return isOpenRouterModel(model) ? LlmProviders.OpenRouter : null;
 }
 
 /** Model info from OpenRouter curated allowlist */

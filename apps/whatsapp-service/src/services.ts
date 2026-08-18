@@ -132,6 +132,7 @@ export interface ServiceConfig {
   internalAuthTokenPrevious?: string;
   llmUsageServiceUrl: string;
   userServiceUrl: string;
+  platformOpenRouterApiKey: string;
   messageDigestServiceUrl: string;
   conversationAssistantModel: ConversationAssistantModel;
   matrixOutboundAdapterBaseUrl: string;
@@ -550,6 +551,7 @@ export function createConversationAssistantLlmClientFactory(
     internalAuthToken: config.internalAuthToken,
     logger: createAppLogger({ name: 'whatsapp-conversation-assistant-user-service' }),
     usageSink,
+    platformOpenRouterApiKey: config.platformOpenRouterApiKey,
   });
   return {
     async createLlmClientForUser(

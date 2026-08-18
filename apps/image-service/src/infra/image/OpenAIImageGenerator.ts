@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
-import { createGptClient } from '@intexuraos/infra-gpt';
+import { createOpenRouterImageClient } from '@intexuraos/infra-openrouter';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type { ImageGenerationModel } from '../../domain/index.js';
 import type {
@@ -11,7 +11,7 @@ import type {
 } from '../../domain/ports/imageGenerator.js';
 import type { ImageStorage } from '../../domain/ports/imageStorage.js';
 
-export interface OpenAIImageGeneratorConfig {
+export interface OpenRouterImageGeneratorConfig {
   apiKey: string;
   model: ImageGenerationModel;
   storage: ImageStorage;
@@ -21,7 +21,7 @@ export interface OpenAIImageGeneratorConfig {
   generateId?: () => string;
 }
 
-export class OpenAIImageGenerator implements ImageGenerator {
+export class OpenRouterImageGenerator implements ImageGenerator {
   private readonly apiKey: string;
   private readonly model: ImageGenerationModel;
   private readonly storage: ImageStorage;
@@ -30,7 +30,7 @@ export class OpenAIImageGenerator implements ImageGenerator {
   private readonly usageSink: UsageSink;
   private readonly generateId: () => string;
 
-  constructor(config: OpenAIImageGeneratorConfig) {
+  constructor(config: OpenRouterImageGeneratorConfig) {
     this.apiKey = config.apiKey;
     this.model = config.model;
     this.storage = config.storage;
@@ -46,20 +46,14 @@ export class OpenAIImageGenerator implements ImageGenerator {
   ): Promise<Result<GeneratedImageData, ImageGenerationError>> {
     const id = this.generateId();
 
-    const client = createGptClient({
+    const client = createOpenRouterImageClient({
       apiKey: this.apiKey,
-      model: this.model,
       userId: this.userId,
       logger: this.logger,
       usageSink: this.usageSink,
     });
 
-    if (client.generateImage === undefined) {
-      return err({ code: 'API_ERROR', message: 'Image generation not supported' });
-    }
-
     const generateResult = await client.generateImage(prompt, {
-      ...(options?.slug !== undefined && { slug: options.slug }),
       promptType: options?.promptType ?? 'image-generation',
       ...(options?.correlation !== undefined && { correlation: options.correlation }),
     });
@@ -103,6 +97,15 @@ function mapLlmError(code: string, message: string): ImageGenerationError {
   }
 }
 
-export function createOpenAIImageGenerator(config: OpenAIImageGeneratorConfig): ImageGenerator {
-  return new OpenAIImageGenerator(config);
+export function createOpenRouterImageGenerator(
+  config: OpenRouterImageGeneratorConfig
+): ImageGenerator {
+  return new OpenRouterImageGenerator(config);
 }
+
+/** Compatibility alias; execution is OpenRouter-only. */
+export const OpenAIImageGenerator = OpenRouterImageGenerator;
+/** Compatibility alias; execution is OpenRouter-only. */
+export const createOpenAIImageGenerator = createOpenRouterImageGenerator;
+/** Compatibility alias; execution is OpenRouter-only. */
+export type OpenAIImageGeneratorConfig = OpenRouterImageGeneratorConfig;

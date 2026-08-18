@@ -3,7 +3,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { formatPrice } from '../OpenRouterModelSelector.js';
+import type { OpenRouterModelInfo } from '@/services/researchAgentApi.types';
+import { formatPrice, orderModelsForDisplay } from '../OpenRouterModelSelector.js';
+
+function model(id: string): OpenRouterModelInfo {
+  return {
+    id,
+    name: id,
+    provider: id.split('/')[0] ?? id,
+    contextLength: 100_000,
+    pricing: { inputPricePerMillion: 1, outputPricePerMillion: 2 },
+    inputModalities: ['text'],
+    outputModalities: ['text'],
+  };
+}
 
 describe('formatPrice', () => {
   it('formats zero price as 0.00', () => {
@@ -26,5 +39,31 @@ describe('formatPrice', () => {
     for (const price of prices) {
       expect(formatPrice(price)).not.toBe('NaN');
     }
+  });
+});
+
+describe('orderModelsForDisplay', () => {
+  it('shows selected models first and preserves recommended catalog order for the rest', () => {
+    const available = [model('vendor/recommended'), model('vendor/other'), model('vendor/selected')];
+
+    expect(orderModelsForDisplay(available, ['vendor/selected']).map((item) => item.id)).toEqual([
+      'vendor/selected',
+      'vendor/recommended',
+      'vendor/other',
+    ]);
+    expect(available.map((item) => item.id)).toEqual([
+      'vendor/recommended',
+      'vendor/other',
+      'vendor/selected',
+    ]);
+  });
+
+  it('ignores selected IDs that are absent from the active catalog', () => {
+    const available = [model('vendor/recommended'), model('vendor/other')];
+
+    expect(orderModelsForDisplay(available, ['vendor/retired']).map((item) => item.id)).toEqual([
+      'vendor/recommended',
+      'vendor/other',
+    ]);
   });
 });

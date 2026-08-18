@@ -310,9 +310,9 @@ describe('getLlmClient fallback behavior', () => {
     expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
   });
 
-  it('returns primary error when fallback model has no API key', async () => {
-    // User has OpenRouter key but the fallback is an anthropic model — no anthropic key
-    // ClaudeHaiku35 is a FastModel → passes isDefaultEligibleModel
+  it('ignores a legacy direct-provider fallback after read normalization', async () => {
+    // The legacy fallback normalizes to the same OpenRouter model as the primary,
+    // so no second client or obsolete provider-key lookup is attempted.
     const ANTHROPIC_FALLBACK = LlmModels.ClaudeHaiku35;
 
     nock('http://localhost:3000')
@@ -356,13 +356,10 @@ describe('getLlmClient fallback behavior', () => {
     if (!generateResult.ok) {
       expect(generateResult.error.code).toBe('PROVIDER_ERROR');
     }
-    // Primary generate called once, then fallback attempted but no key → primary error returned
+    // Only the primary client is used because the normalized fallback is identical.
     expect(primaryGenerate).toHaveBeenCalledTimes(1);
     expect(mockCreateLlmClient).toHaveBeenCalledTimes(1);
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user123', fallbackModel: ANTHROPIC_FALLBACK }),
-      'No API key for fallback model'
-    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,23 @@
 
 export { createOpenRouterClient, type OpenRouterClient } from './client.js';
 export {
+  createOpenRouterEmbeddingsClient,
+  type OpenRouterEmbeddingOptions,
+  type OpenRouterEmbeddingsClient,
+  type OpenRouterEmbeddingsConfig,
+} from './embeddingsClient.js';
+export {
+  createOpenRouterImageClient,
+  type OpenRouterImageClient,
+  type OpenRouterImageConfig,
+  type OpenRouterImageOptions,
+} from './imageClient.js';
+export {
+  OPENROUTER_GPT_4_1,
+  OPENROUTER_GPT_IMAGE_1,
+  OPENROUTER_TEXT_EMBEDDING_3_SMALL,
+} from './modelIds.js';
+export {
   createOpenRouterToolCallingClient,
   type OpenRouterToolCallingConfig,
 } from './toolCallingClient.js';

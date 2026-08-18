@@ -173,6 +173,7 @@ export async function buildServer(
         }),
     llmUsageServiceUrl: config.llmUsageServiceUrl,
     userServiceUrl: config.userServiceUrl,
+    platformOpenRouterApiKey: config.platformOpenRouterApiKey,
     messageDigestServiceUrl: config.messageDigestServiceUrl,
     conversationAssistantModel: config.conversationAssistantModel,
     matrixOutboundAdapterBaseUrl: process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] ?? '',

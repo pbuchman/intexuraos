@@ -6,18 +6,23 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import {
+  createOpenRouterModelId,
   DEFAULT_PLATFORM_LLM_MODEL,
   IntexAgentModels,
-  LlmModels,
 } from '@intexuraos/llm-contract';
 import {
   extractModelPreferences,
   getModelDisplayName,
   getModelKeywords,
+  validateSynthesisModel,
   type ExtractModelPreferencesDeps,
 } from '../../../../domain/research/usecases/extractModelPreferences.js';
 import type { ResearchModel } from '../../../../domain/research/index.js';
 import type { ApiKeyStore, TextGenerationClient } from '../../../../domain/research/ports/index.js';
+
+const OR_CLAUDE = createOpenRouterModelId('anthropic/claude-sonnet-4.6');
+const OR_GPT = createOpenRouterModelId('openai/gpt-5.4');
+const OR_DEEPSEEK = createOpenRouterModelId('deepseek/deepseek-v4-flash');
 
 function createSilentLogger(): Logger & {
   info: ReturnType<typeof vi.fn>;
@@ -87,15 +92,12 @@ describe('extractModelPreferences', () => {
   describe('when API keys are configured', () => {
     const availableKeys: ApiKeyStore = {
       openrouter: 'openrouter-key',
-      openai: 'openai-key',
-      anthropic: 'anthropic-key',
-      perplexity: 'perplexity-key',
     };
 
     it('extracts selected models from valid JSON response', async () => {
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini36Flash, LlmModels.ClaudeSonnet46],
-        synthesisModel: LlmModels.GPT54,
+        selectedModels: [IntexAgentModels.Gemini36Flash, OR_CLAUDE],
+        synthesisModel: OR_GPT,
       });
 
       const deps: ExtractModelPreferencesDeps = {
@@ -107,8 +109,8 @@ describe('extractModelPreferences', () => {
       const result = await extractModelPreferences('research AI using gemini and claude, synthesize with gpt', deps);
 
       expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
-      expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet46);
-      expect(result.synthesisModel).toBe(LlmModels.GPT54);
+      expect(result.selectedModels).toContain(OR_CLAUDE);
+      expect(result.synthesisModel).toBe(OR_GPT);
     });
 
     it('returns empty models when LLM call fails', async () => {
@@ -156,10 +158,13 @@ describe('extractModelPreferences', () => {
       );
     });
 
-    it('validates one model per provider constraint', async () => {
-      // LLM returns two OpenRouter models, should only keep the first
+    it('allows multiple OpenRouter models and deduplicates by full model ID', async () => {
       const response = JSON.stringify({
-        selectedModels: [DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash],
+        selectedModels: [
+          DEFAULT_PLATFORM_LLM_MODEL,
+          IntexAgentModels.Gemini36Flash,
+          DEFAULT_PLATFORM_LLM_MODEL,
+        ],
         synthesisModel: null,
       });
 
@@ -171,19 +176,43 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use all gemini models', deps);
 
-      expect(result.selectedModels).toHaveLength(1);
-      expect(result.selectedModels).toContain(DEFAULT_PLATFORM_LLM_MODEL);
-      expect(result.selectedModels).not.toContain(IntexAgentModels.Gemini36Flash);
+      expect(result.selectedModels).toEqual([
+        DEFAULT_PLATFORM_LLM_MODEL,
+        IntexAgentModels.Gemini36Flash,
+      ]);
     });
 
-    it('filters out models user does not have API keys for', async () => {
+    it('caps automatic model extraction at six unique models', async () => {
+      const response = JSON.stringify({
+        selectedModels: [
+          'or:deepseek/deepseek-v4-flash',
+          'or:qwen/qwen3.5-plus-02-15',
+          'or:minimax/minimax-m3',
+          'or:x-ai/grok-4.20-beta',
+          'or:moonshotai/kimi-k2.5',
+          'or:anthropic/claude-sonnet-4.6',
+          'or:google/gemini-3.6-flash',
+        ],
+        synthesisModel: null,
+      });
+
+      const result = await extractModelPreferences('use all models', {
+        llmClient: createFakeLlmClient(response),
+        availableKeys: { openrouter: 'openrouter-key' },
+        logger,
+      });
+
+      expect(result.selectedModels).toHaveLength(6);
+      expect(result.selectedModels).not.toContain('or:google/gemini-3.6-flash');
+    });
+
+    it('filters out non-allowlisted models even when OpenRouter is configured', async () => {
       const limitedKeys: ApiKeyStore = {
         openrouter: 'openrouter-key',
-        // No anthropic key
       };
 
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini36Flash, LlmModels.ClaudeSonnet46],
+        selectedModels: [IntexAgentModels.Gemini36Flash, 'or:unknown/not-allowed'],
         synthesisModel: null,
       });
 
@@ -196,7 +225,7 @@ describe('extractModelPreferences', () => {
       const result = await extractModelPreferences('use gemini and claude', deps);
 
       expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
-      expect(result.selectedModels).not.toContain(LlmModels.ClaudeSonnet46);
+      expect(result.selectedModels).not.toContain('or:unknown/not-allowed');
     });
 
     it('returns undefined synthesis model when null in response', async () => {
@@ -217,10 +246,9 @@ describe('extractModelPreferences', () => {
     });
 
     it('returns undefined synthesis model when model does not support synthesis', async () => {
-      // Claude does not support synthesis
       const response = JSON.stringify({
-        selectedModels: [LlmModels.ClaudeSonnet46],
-        synthesisModel: LlmModels.ClaudeSonnet46,
+        selectedModels: [OR_CLAUDE],
+        synthesisModel: OR_CLAUDE,
       });
 
       const deps: ExtractModelPreferencesDeps = {
@@ -234,26 +262,21 @@ describe('extractModelPreferences', () => {
       expect(result.synthesisModel).toBeUndefined();
     });
 
-    it('returns undefined synthesis model when user lacks API key for it', async () => {
-      const limitedKeys: ApiKeyStore = {
-        openrouter: 'openrouter-key',
-        // No openai key for GPT synthesis
-      };
-
+    it('accepts OpenRouter GPT synthesis through the same OpenRouter key', async () => {
       const response = JSON.stringify({
         selectedModels: [IntexAgentModels.Gemini36Flash],
-        synthesisModel: LlmModels.GPT54,
+        synthesisModel: OR_GPT,
       });
 
       const deps: ExtractModelPreferencesDeps = {
         llmClient: createFakeLlmClient(response),
-        availableKeys: limitedKeys,
+        availableKeys: { openrouter: 'openrouter-key' },
         logger,
       };
 
       const result = await extractModelPreferences('use gemini, synthesize with gpt', deps);
 
-      expect(result.synthesisModel).toBeUndefined();
+      expect(result.synthesisModel).toBe(OR_GPT);
     });
 
     it('logs extraction result with requested and validated models', async () => {
@@ -284,7 +307,6 @@ describe('extractModelPreferences', () => {
     it('handles empty string API keys as not configured', async () => {
       const emptyKeys: ApiKeyStore = {
         openrouter: '',
-        openai: '',
       };
 
       const deps: ExtractModelPreferencesDeps = {
@@ -300,11 +322,11 @@ describe('extractModelPreferences', () => {
     });
   });
 
-  describe('provider-specific API key mapping', () => {
-    it('uses openrouter key for OpenRouter Gemini models', async () => {
+  describe('OpenRouter credential gating', () => {
+    it('uses one OpenRouter key for models from multiple authors', async () => {
       const keys: ApiKeyStore = { openrouter: 'openrouter-key' };
       const response = JSON.stringify({
-        selectedModels: [IntexAgentModels.Gemini36Flash],
+        selectedModels: [IntexAgentModels.Gemini36Flash, OR_CLAUDE, OR_DEEPSEEK],
         synthesisModel: null,
       });
 
@@ -316,63 +338,27 @@ describe('extractModelPreferences', () => {
 
       const result = await extractModelPreferences('use gemini', deps);
 
-      expect(result.selectedModels).toContain(IntexAgentModels.Gemini36Flash);
+      expect(result.selectedModels).toEqual([
+        IntexAgentModels.Gemini36Flash,
+        OR_CLAUDE,
+        OR_DEEPSEEK,
+      ]);
     });
 
-    it('uses openai key for GPT models', async () => {
-      const keys: ApiKeyStore = { openai: 'openai-key' };
-      const response = JSON.stringify({
-        selectedModels: [LlmModels.GPT54],
-        synthesisModel: null,
-      });
-
+    it('does not use a legacy direct-provider key', async () => {
       const deps: ExtractModelPreferencesDeps = {
-        llmClient: createFakeLlmClient(response),
-        availableKeys: keys,
+        llmClient: createFakeLlmClient(
+          JSON.stringify({ selectedModels: [OR_GPT], synthesisModel: OR_GPT })
+        ),
+        availableKeys: { openai: 'legacy-key' } as unknown as ApiKeyStore,
         logger,
       };
 
       const result = await extractModelPreferences('use gpt', deps);
 
-      expect(result.selectedModels).toContain(LlmModels.GPT54);
+      expect(result).toEqual({ selectedModels: [], synthesisModel: undefined });
+      expect(deps.llmClient.generate).not.toHaveBeenCalled();
     });
-
-    it('uses anthropic key for Claude models', async () => {
-      const keys: ApiKeyStore = { anthropic: 'anthropic-key' };
-      const response = JSON.stringify({
-        selectedModels: [LlmModels.ClaudeSonnet46],
-        synthesisModel: null,
-      });
-
-      const deps: ExtractModelPreferencesDeps = {
-        llmClient: createFakeLlmClient(response),
-        availableKeys: keys,
-        logger,
-      };
-
-      const result = await extractModelPreferences('use claude', deps);
-
-      expect(result.selectedModels).toContain(LlmModels.ClaudeSonnet46);
-    });
-
-    it('uses perplexity key for Sonar models', async () => {
-      const keys: ApiKeyStore = { perplexity: 'perplexity-key' };
-      const response = JSON.stringify({
-        selectedModels: [LlmModels.SonarPro],
-        synthesisModel: null,
-      });
-
-      const deps: ExtractModelPreferencesDeps = {
-        llmClient: createFakeLlmClient(response),
-        availableKeys: keys,
-        logger,
-      };
-
-      const result = await extractModelPreferences('use sonar', deps);
-
-      expect(result.selectedModels).toContain(LlmModels.SonarPro);
-    });
-
   });
 
   describe('edge cases', () => {
@@ -481,16 +467,14 @@ describe('extractModelPreferences', () => {
 
   describe('getModelDisplayName', () => {
     it('returns static display name for known models', () => {
-      expect(getModelDisplayName(IntexAgentModels.Gemini36Flash)).toBe(
-        'Gemini 3.6 Flash (OpenRouter)'
-      );
-      expect(getModelDisplayName(LlmModels.ClaudeSonnet46)).toBe('Claude Sonnet 4.6');
+      expect(getModelDisplayName(IntexAgentModels.Gemini36Flash)).toBe('Gemini 3.6 Flash');
+      expect(getModelDisplayName(OR_CLAUDE)).toBe('Claude Sonnet 4.6');
     });
 
     it('generates display name from OpenRouter model ID', () => {
       const orModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
       const result = getModelDisplayName(orModel);
-      expect(result).toBe('Claude sonnet 4.6');
+      expect(result).toBe('Claude Sonnet 4.6');
     });
 
     it('handles OpenRouter model without slash', () => {
@@ -507,9 +491,31 @@ describe('extractModelPreferences', () => {
       expect(keywords.length).toBeGreaterThan(0);
     });
 
-    it('returns openrouter keyword for OpenRouter models', () => {
+    it('returns author and model keywords for OpenRouter models', () => {
       const orModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
-      expect(getModelKeywords(orModel)).toEqual(['openrouter']);
+      expect(getModelKeywords(orModel)).toEqual([
+        'claude sonnet',
+        'sonnet',
+        'claude',
+        'anthropic',
+      ]);
+    });
+
+    it('derives keywords for stored model IDs without an OpenRouter prefix', () => {
+      const storedModel = 'vendor/custom-model' as ResearchModel;
+
+      expect(getModelKeywords(storedModel)).toEqual([
+        'openrouter',
+        'vendor',
+        'custom',
+        'model',
+      ]);
+    });
+  });
+
+  describe('validateSynthesisModel', () => {
+    it('rejects a supported synthesis model that is absent from the available catalog', () => {
+      expect(validateSynthesisModel(OR_GPT, [])).toBeUndefined();
     });
   });
 });

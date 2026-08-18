@@ -6,16 +6,12 @@
 import type { Result } from '@intexuraos/common-core';
 import { err, ERROR_HTTP_STATUS, getErrorMessage, ok } from '@intexuraos/common-core';
 import {
-  getProviderForModel,
   DEFAULT_PLATFORM_LLM_MODEL,
   IntexAgentModels,
   isDefaultEligibleModel,
   isIntexAgentModel,
-  isLegacyGoogleModel,
-  isOpenRouterModel,
   LlmProviders,
-  normalizeRetiredOpenRouterModel,
-  type LlmProvider,
+  normalizeLlmModelPreferenceForRead,
   type ExecutableLlmProvider,
   type DefaultEligibleModel,
 } from '@intexuraos/llm-contract';
@@ -53,13 +49,6 @@ export type {
   IntexAgentRuntimeSettingsClientError,
   IntexAgentRuntimeSettingsV1,
 } from './types.js';
-
-const PROVIDER_KEYS: Record<ExecutableLlmProvider, string> = {
-  openai: 'openai',
-  anthropic: 'anthropic',
-  perplexity: 'perplexity',
-  openrouter: 'openrouter',
-};
 
 const runtimeSettingsTransportLogger = {
   warn: (): void => undefined,
@@ -275,16 +264,24 @@ function runtimeSettingsError(
 }
 
 export function providerToKeyField(provider: ExecutableLlmProvider): string {
-  return PROVIDER_KEYS[provider];
+  return provider;
 }
 
-function normalizeLegacyModelPreference(model: string): string {
-  const normalizedModel = normalizeRetiredOpenRouterModel(model);
-  if (isLegacyGoogleModel(normalizedModel)) {
-    return DEFAULT_PLATFORM_LLM_MODEL;
-  }
+function normalizeLegacyModelPreference(model: string): DefaultEligibleModel {
+  return normalizeLlmModelPreferenceForRead(model);
+}
 
-  return normalizedModel;
+function resolveOpenRouterApiKey(
+  userApiKey: unknown,
+  platformApiKey: string | undefined
+): string | undefined {
+  const normalize = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  };
+
+  return normalize(userApiKey) ?? normalize(platformApiKey);
 }
 
 /**
@@ -360,30 +357,17 @@ export function createUserServiceClient(
         const body = (await response.json()) as {
           success: boolean;
           data: {
-            openai?: string | null;
-            anthropic?: string | null;
-            perplexity?: string | null;
             openrouter?: string | null;
           };
         };
 
-        const data = body.data;
-
-        // Convert null values to undefined (null is used by JSON to distinguish from missing)
+        const openRouterApiKey = resolveOpenRouterApiKey(
+          body.data.openrouter,
+          config.platformOpenRouterApiKey
+        );
         const result: DecryptedApiKeys = {};
-        if (data.openai !== null && data.openai !== undefined) {
-          result.openai = data.openai;
-        }
-        if (data.anthropic !== null && data.anthropic !== undefined) {
-          result.anthropic = data.anthropic;
-        }
-        if (data.perplexity !== null && data.perplexity !== undefined) {
-          result.perplexity = data.perplexity;
-        }
-        if (data.openrouter !== null && data.openrouter !== undefined) {
-          result.openrouter = data.openrouter;
-        } else if (config.platformOpenRouterApiKey !== undefined) {
-          result.openrouter = config.platformOpenRouterApiKey;
+        if (openRouterApiKey !== undefined) {
+          result.openrouter = openRouterApiKey;
         }
 
         return ok(result);
@@ -442,18 +426,7 @@ export function createUserServiceClient(
             ? undefined
             : normalizeLegacyModelPreference(fallbackModelRaw);
 
-        // Validate that the model is supported (including OpenRouter models)
-        if (!isDefaultEligibleModel(defaultModel)) {
-          logger.warn({ userId, invalidModel: rawModel }, 'User has invalid model preference');
-          return err({
-            code: 'INVALID_MODEL',
-            message: `Invalid model: ${rawModel}. Please select a valid model.`,
-          });
-        }
-
-        // Step 3: Get API key for that model
-        const provider = getProviderForModel(defaultModel);
-        const keyField = providerToKeyField(provider);
+        const provider = LlmProviders.OpenRouter;
 
         const keysResponse = await fetch(
           `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys`,
@@ -477,56 +450,24 @@ export function createUserServiceClient(
           data: Record<string, string | null | undefined>;
         };
 
-        const configuredApiKey = keysBody.data[keyField];
-        const apiKey =
-          configuredApiKey ??
-          (isOpenRouterModel(defaultModel) ? config.platformOpenRouterApiKey : undefined);
+        const apiKey = resolveOpenRouterApiKey(
+          keysBody.data['openrouter'],
+          config.platformOpenRouterApiKey
+        );
 
         if (apiKey === undefined) {
-          if (config.platformOpenRouterApiKey !== undefined) {
-            logger.warn(
-              { userId, provider, requestedModel: defaultModel },
-              'No API key for provider, falling back to platform OpenRouter default'
-            );
-            const fallbackModel = DEFAULT_PLATFORM_LLM_MODEL;
-            const fallbackClient = createLlmClient({
-              apiKey: config.platformOpenRouterApiKey,
-              model: fallbackModel,
-              userId,
-              logger: config.logger,
-              usageSink: config.usageSink,
-              ownerType: 'user',
-            });
-
-            logger.info(
-              { userId, model: fallbackModel, provider: LlmProviders.OpenRouter },
-              'LLM client created successfully'
-            );
-
-            return ok(fallbackClient);
-          }
-
           logger.info({ userId, provider }, 'No API key configured for provider');
           return err({
             code: 'NO_API_KEY',
-            message: `No API key configured for ${provider}. Please add your ${provider} API key in settings.`,
+            message: 'No OpenRouter access is available for this user.',
           });
         }
+        const resolvedApiKey = apiKey;
 
-        // Helper: build a client for a given model using the fetched API keys
-        function buildClientForModel(
-          model: DefaultEligibleModel,
-          apiKeys: Record<string, string | null | undefined>
-        ): LlmGenerateClient | null {
-          const modelProvider = getProviderForModel(model);
-          const modelKeyField = providerToKeyField(modelProvider);
-          const modelApiKey =
-            apiKeys[modelKeyField] ??
-            (isOpenRouterModel(model) ? config.platformOpenRouterApiKey : undefined);
-          if (modelApiKey === undefined) return null;
-
+        // The fallback uses the same resolved OpenRouter access as the primary client.
+        function buildClientForModel(model: DefaultEligibleModel): LlmGenerateClient {
           return createLlmClient({
-            apiKey: modelApiKey,
+            apiKey: resolvedApiKey,
             model,
             userId,
             logger: config.logger,
@@ -537,7 +478,7 @@ export function createUserServiceClient(
 
         // Step 4: Create and return the LLM client
         const clientConfig: LlmClientConfig = {
-          apiKey,
+          apiKey: resolvedApiKey,
           model: defaultModel,
           userId,
           logger: config.logger,
@@ -572,12 +513,7 @@ export function createUserServiceClient(
                 'Primary model failed, attempting fallback'
               );
 
-              const fallbackClient = buildClientForModel(fallbackModel, keysBody.data);
-              if (fallbackClient === null) {
-                logger.warn({ userId, fallbackModel }, 'No API key for fallback model');
-                return primaryResult;
-              }
-
+              const fallbackClient = buildClientForModel(fallbackModel);
               const fallbackResult = await fallbackClient.generate(prompt, options);
               if (fallbackResult.ok) {
                 logger.info(
@@ -605,7 +541,7 @@ export function createUserServiceClient(
       }
     },
 
-    async reportLlmSuccess(userId: string, provider: LlmProvider): Promise<void> {
+    async reportLlmSuccess(userId: string, provider: ExecutableLlmProvider): Promise<void> {
       try {
         await fetch(
           `${config.baseUrl}/internal/users/${encodeURIComponent(userId)}/llm-keys/${provider}/last-used`,

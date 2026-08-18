@@ -199,3 +199,14 @@ describe('buildUsageEvent image usage', () => {
     expect(event.usage.imageSize).toBeUndefined();
   });
 });
+
+describe('buildUsageEvent embedding usage', () => {
+  it('preserves embedding as the canonical operation', () => {
+    const event = buildUsageEvent(
+      { ...baseParams, callType: 'embedding' },
+      baseSource
+    ) as EventForTests;
+
+    expect(event.request.operation).toBe('embedding');
+  });
+});

@@ -39,10 +39,6 @@ export interface ShareConfig {
   staticAssetsUrl: string;
 }
 
-export interface ImageApiKeys {
-  openai?: string;
-}
-
 export interface RunSynthesisDeps {
   researchRepo: ResearchRepository;
   synthesizer: LlmSynthesisProvider;
@@ -55,7 +51,6 @@ export interface RunSynthesisDeps {
   webAppUrl: string;
   reportLlmSuccess?: () => void;
   logger: Logger;
-  imageApiKeys?: ImageApiKeys;
   // NotionServiceClient is from infra layer, typed as unknown to avoid import restriction
   // Use `as NotionServiceClient` when consuming (e.g., in synthesis export)
   notionServiceClient?: unknown;
@@ -86,7 +81,6 @@ export async function runSynthesis(
     webAppUrl,
     reportLlmSuccess,
     logger,
-    imageApiKeys,
     notionServiceClient,
     researchExportSettings,
     researchCostSummaryClient,
@@ -310,8 +304,6 @@ export async function runSynthesis(
       imageServiceClient,
       processedContent,
       userId,
-      imageApiKeys,
-      research.synthesisModel,
       researchId,
       logger
     );
@@ -458,40 +450,27 @@ interface ProviderPipeline {
 }
 
 /**
- * Returns an ordered list of available provider pipelines (preferred first).
- * Direct Gemini image generation is disabled; the remaining pipeline uses the
- * user's OpenAI key.
+ * Image-service owns OpenRouter credential resolution. Research keeps using the
+ * stable public aliases while delegating every configured cover request.
  */
-function getAvailableProviderPipelines(
-  imageApiKeys: ImageApiKeys | undefined,
-  _synthesisModel?: string
-): ProviderPipeline[] {
-  const hasOpenAiKey = imageApiKeys?.openai !== undefined;
-
-  const openAiPipeline: ProviderPipeline = {
-    name: 'OpenAI',
+function getAvailableProviderPipelines(): ProviderPipeline[] {
+  const openRouterPipeline: ProviderPipeline = {
+    name: 'OpenRouter',
     promptModel: 'gpt-4.1',
     imageModel: LlmModels.GPTImage1,
   };
 
-  return hasOpenAiKey ? [openAiPipeline] : [];
+  return [openRouterPipeline];
 }
 
 async function generateCoverImage(
   client: ImageServiceClient,
   synthesizedResult: string,
   userId: string,
-  imageApiKeys: ImageApiKeys | undefined,
-  synthesisModel: string | undefined,
   researchId: string,
   logger: Logger
 ): Promise<GeneratedImageData | null> {
-  const pipelines = getAvailableProviderPipelines(imageApiKeys, synthesisModel);
-
-  if (pipelines.length === 0) {
-    logger.info({}, '[4.4.1a] No API keys available for image generation');
-    return null;
-  }
+  const pipelines = getAvailableProviderPipelines();
 
   logger.info(
     { providers: pipelines.map((p) => p.name) },

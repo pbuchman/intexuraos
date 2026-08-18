@@ -74,6 +74,9 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       <ResearchActions
         research={research}
+        availableModelIds={actions.openRouterModels.map((model) => model.id)}
+        modelCatalogState={actions.modelCatalogState}
+        onRetryModelCatalog={actions.onRetryModelCatalog}
         approve={actions.approve}
         retry={actions.retry}
         deleteAction={actions.deleteAction}
@@ -124,6 +127,9 @@ export function ResearchDetailPage(): React.JSX.Element {
 
       <ResearchResults
         research={research}
+        availableModelIds={actions.openRouterModels.map((model) => model.id)}
+        availableModels={actions.openRouterModels}
+        availabilityKnown={actions.modelCatalogState === 'ready'}
         copiedSection={actions.copiedSection}
         onCopy={actions.copyToClipboard}
       />
@@ -134,6 +140,9 @@ export function ResearchDetailPage(): React.JSX.Element {
           selectedModels={research.selectedModels}
           synthesisModel={research.synthesisModel}
           researchStatus={research.status}
+          availableModelIds={actions.openRouterModels.map((model) => model.id)}
+          availableModels={actions.openRouterModels}
+          availabilityKnown={actions.modelCatalogState === 'ready'}
           hasInputContexts={
             research.inputContexts !== undefined && research.inputContexts.length > 0
           }
@@ -158,8 +167,11 @@ export function ResearchDetailPage(): React.JSX.Element {
       {actions.showEnhanceModal ? (
         <EnhanceModal
           research={research}
-          configuredProviders={actions.configuredProviders}
-          failedProviders={actions.failedProviders}
+          openRouterModels={actions.openRouterModels}
+          openRouterLoading={actions.openRouterLoading}
+          openRouterError={actions.openRouterError}
+          hasOpenRouterAccess={actions.hasOpenRouterAccess}
+          onRetryModelCatalog={actions.onRetryModelCatalog}
           onEnhance={actions.handleEnhance}
           onClose={actions.onCloseEnhanceModal}
         />

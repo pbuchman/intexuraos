@@ -40,7 +40,7 @@ import {
 } from '../domain/research/index.js';
 import {
   DEFAULT_PLATFORM_LLM_MODEL,
-  getProviderForModel,
+  DEFAULT_RESEARCH_SYNTHESIS_MODEL,
 } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import { createSynthesisProviders } from './helpers/synthesisHelper.js';
@@ -48,7 +48,7 @@ import {
   getUnsupportedHistoricalModels,
   getUnsupportedRetryMessage,
   getUnsupportedSynthesisMessage,
-  isRetryableStoredResearchModel,
+  isExecutableSynthesisModel,
 } from './helpers/storedResearchModels.js';
 import {
   approveResearchResponseSchema,
@@ -188,31 +188,14 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       const apiKeys = apiKeysResult.value;
 
-      const missingModels = body.selectedModels.filter((model) => {
-        const provider = getProviderForModel(model);
-        return apiKeys[provider] === undefined;
-      });
-
-      if (missingModels.length > 0) {
+      if (apiKeys.openrouter === undefined || apiKeys.openrouter === '') {
         return await reply.fail(
           'MISCONFIGURED',
-          `API keys missing for: ${missingModels.join(', ')}`
+          'OpenRouter API key is required for research'
         );
       }
 
-      /* v8 ignore start -- ts-type: ?? fallback chain for synthesis model selection @preserve */
-      const synthesisModel =
-        body.synthesisModel ?? body.selectedModels[0] ?? DEFAULT_PLATFORM_LLM_MODEL;
-      /* v8 ignore stop @preserve */
-      if (body.skipSynthesis !== true) {
-        const synthesisProvider = getProviderForModel(synthesisModel);
-        if (apiKeys[synthesisProvider] === undefined) {
-          return await reply.fail(
-            'MISCONFIGURED',
-            `API key required for synthesis with ${synthesisModel}`
-          );
-        }
-      }
+      const synthesisModel = body.synthesisModel ?? DEFAULT_RESEARCH_SYNTHESIS_MODEL;
 
       const researchId = generateId();
       const submitParams: Parameters<typeof submitResearch>[0] = {
@@ -329,8 +312,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         title,
         prompt: body.prompt,
         selectedModels,
-        synthesisModel:
-          body.synthesisModel ?? selectedModels[0] ?? DEFAULT_PLATFORM_LLM_MODEL,
+        synthesisModel: body.synthesisModel ?? DEFAULT_RESEARCH_SYNTHESIS_MODEL,
       };
       if (body.inputContexts !== undefined) {
         const contextsWithLabels = await generateContextLabels(
@@ -821,6 +803,29 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return await reply.fail('CONFLICT', 'Research is not in draft status');
       }
 
+      const unsupportedModels = getUnsupportedHistoricalModels(existing.value.selectedModels);
+      if (unsupportedModels.length > 0) {
+        return await reply.fail('CONFLICT', getUnsupportedRetryMessage(unsupportedModels));
+      }
+
+      if (new Set(existing.value.selectedModels).size !== existing.value.selectedModels.length) {
+        return await reply.fail('CONFLICT', 'Research contains duplicate model IDs');
+      }
+
+      if (existing.value.selectedModels.length > 6) {
+        return await reply.fail('CONFLICT', 'Research cannot contain more than 6 models');
+      }
+
+      if (
+        existing.value.skipSynthesis !== true &&
+        !isExecutableSynthesisModel(existing.value.synthesisModel)
+      ) {
+        return await reply.fail(
+          'CONFLICT',
+          getUnsupportedSynthesisMessage(existing.value.synthesisModel)
+        );
+      }
+
       const { userServiceClient } = getServices();
       const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
       if (!apiKeysResult.ok) {
@@ -828,20 +833,20 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
       const apiKeys = apiKeysResult.value;
 
-      const missingModels = existing.value.selectedModels.filter((model) => {
-        const provider = getProviderForModel(model);
-        return apiKeys[provider] === undefined;
-      });
-
-      if (missingModels.length > 0) {
+      if (
+        existing.value.selectedModels.length > 0 &&
+        (apiKeys.openrouter === undefined || apiKeys.openrouter === '')
+      ) {
         return await reply.fail(
           'MISCONFIGURED',
-          `API keys missing for: ${missingModels.join(', ')}`
+          'OpenRouter API key is required for research'
         );
       }
 
-      const synthesisProvider = getProviderForModel(existing.value.synthesisModel);
-      if (apiKeys[synthesisProvider] === undefined && existing.value.skipSynthesis !== true) {
+      if (
+        (apiKeys.openrouter === undefined || apiKeys.openrouter === '') &&
+        existing.value.skipSynthesis !== true
+      ) {
         return await reply.fail(
           'MISCONFIGURED',
           `API key required for synthesis with ${existing.value.synthesisModel}`
@@ -949,7 +954,7 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       switch (body.action) {
         case 'proceed': {
           const synthesisModel = research.synthesisModel;
-          if (!isRetryableStoredResearchModel(synthesisModel)) {
+          if (!isExecutableSynthesisModel(synthesisModel)) {
             return await reply.fail('CONFLICT', getUnsupportedSynthesisMessage(synthesisModel));
           }
 
@@ -958,8 +963,8 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
           }
 
-          const synthesisProvider = getProviderForModel(synthesisModel);
-          const synthesisKey = apiKeysResult.value[synthesisProvider];
+          const synthesisProvider = 'openrouter';
+          const synthesisKey = apiKeysResult.value.openrouter;
           if (synthesisKey === undefined) {
             return await reply.fail(
               'MISCONFIGURED',
@@ -1147,20 +1152,28 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const research = existing.value;
-      const failedModels = research.llmResults
-        .filter((result) => result.status === 'failed')
-        .map((result) => result.model);
+      const failedModels =
+        research.status === 'failed'
+          ? research.llmResults
+              .filter((result) => result.status === 'failed')
+              .map((result) => result.model)
+          : [];
       const hasSynthesisError =
         research.synthesisError !== undefined && research.synthesisError !== '';
       const hasSuccessfulLlms = research.llmResults.some((result) => result.status === 'completed');
+      const needsSynthesisRetry =
+        research.status === 'failed' &&
+        failedModels.length === 0 &&
+        hasSynthesisError &&
+        hasSuccessfulLlms;
 
       if (failedModels.length > 0) {
         const unsupportedFailedModels = getUnsupportedHistoricalModels(failedModels);
         if (unsupportedFailedModels.length > 0) {
           return await reply.fail('CONFLICT', getUnsupportedRetryMessage(unsupportedFailedModels));
         }
-      } else if (hasSynthesisError && hasSuccessfulLlms) {
-        if (!isRetryableStoredResearchModel(research.synthesisModel)) {
+      } else if (needsSynthesisRetry) {
+        if (!isExecutableSynthesisModel(research.synthesisModel)) {
           return await reply.fail(
             'CONFLICT',
             getUnsupportedSynthesisMessage(research.synthesisModel)
@@ -1168,52 +1181,57 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         }
       }
 
-      const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
-      if (!apiKeysResult.ok) {
-        return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
-      }
-
-      const synthesisModel = research.synthesisModel;
-      const synthesisProvider = getProviderForModel(synthesisModel);
-      const synthesisKey = apiKeysResult.value[synthesisProvider];
-      if (synthesisKey === undefined) {
-        return await reply.fail(
-          'MISCONFIGURED',
-          `API key required for synthesis with ${synthesisModel}`
-        );
-      }
-
-      const { synthesizer, contextInferrer } = createSynthesisProviders(
-        synthesisModel,
-        apiKeysResult.value,
-        user.userId,
-        getServices(),
-        request.log,
-        id
-      );
-
-      const retryResult = await retryFromFailed(id, {
+      const retryDeps: Parameters<typeof retryFromFailed>[1] = {
         researchRepo,
         llmCallPublisher,
-        synthesisDeps: {
-          synthesizer,
-          ...(contextInferrer !== undefined && { contextInferrer }),
-          notificationSender,
-          shareStorage,
-          shareConfig,
-          imageServiceClient,
-          userId: user.userId,
-          webAppUrl,
-          reportLlmSuccess: (): void => {
-            void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
-          },
-          imageApiKeys: apiKeysResult.value,
-          notionServiceClient,
-          researchExportSettings,
-          researchCostSummaryClient: researchCostSummaryClient ?? null,
-          logger: request.log,
-        },
-      });
+      };
+
+      if (failedModels.length > 0 || needsSynthesisRetry) {
+        const apiKeysResult = await userServiceClient.getApiKeys(user.userId);
+        if (!apiKeysResult.ok) {
+          return await reply.fail('INTERNAL_ERROR', 'Failed to fetch API keys');
+        }
+
+        const synthesisModel = research.synthesisModel;
+        const synthesisProvider = 'openrouter';
+        const synthesisKey = apiKeysResult.value.openrouter;
+        if (synthesisKey === undefined) {
+          return await reply.fail(
+            'MISCONFIGURED',
+            `API key required for synthesis with ${synthesisModel}`
+          );
+        }
+
+        if (needsSynthesisRetry) {
+          const { synthesizer, contextInferrer } = createSynthesisProviders(
+            synthesisModel,
+            apiKeysResult.value,
+            user.userId,
+            getServices(),
+            request.log,
+            id
+          );
+          retryDeps.synthesisDeps = {
+            synthesizer,
+            ...(contextInferrer !== undefined && { contextInferrer }),
+            notificationSender,
+            shareStorage,
+            shareConfig,
+            imageServiceClient,
+            userId: user.userId,
+            webAppUrl,
+            reportLlmSuccess: (): void => {
+              void userServiceClient.reportLlmSuccess(user.userId, synthesisProvider);
+            },
+            notionServiceClient,
+            researchExportSettings,
+            researchCostSummaryClient: researchCostSummaryClient ?? null,
+            logger: request.log,
+          };
+        }
+      }
+
+      const retryResult = await retryFromFailed(id, retryDeps);
 
       if (!retryResult.ok) {
         if (retryResult.error?.startsWith('Cannot retry from status') === true) {
@@ -1305,23 +1323,34 @@ export const researchRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       const sourceResearch = sourceResult.value;
 
       if (body.additionalModels !== undefined && body.additionalModels.length > 0) {
-        const missingModels = body.additionalModels.filter((model) => {
-          const provider = getProviderForModel(model);
-          return apiKeys[provider] === undefined;
-        });
-
-        if (missingModels.length > 0) {
+        if (apiKeys.openrouter === undefined || apiKeys.openrouter === '') {
           return await reply.fail(
             'MISCONFIGURED',
-            `API keys missing for: ${missingModels.join(', ')}`
+            'OpenRouter API key is required for research enhancement'
+          );
+        }
+
+        const copiedModels = sourceResearch.llmResults
+          .filter((result) => result.status === 'completed')
+          .map((result) => result.model);
+        const enhancedModelCount = new Set([...copiedModels, ...body.additionalModels]).size;
+        if (enhancedModelCount > 6) {
+          return await reply.fail(
+            'INVALID_REQUEST',
+            'Enhanced research cannot contain more than 6 unique models'
           );
         }
       }
 
       // Validate synthesis model - use explicit or inherited from source
       const effectiveSynthesisModel = body.synthesisModel ?? sourceResearch.synthesisModel;
-      const synthesisProvider = getProviderForModel(effectiveSynthesisModel);
-      if (apiKeys[synthesisProvider] === undefined) {
+      if (!isExecutableSynthesisModel(effectiveSynthesisModel)) {
+        return await reply.fail(
+          'CONFLICT',
+          getUnsupportedSynthesisMessage(effectiveSynthesisModel)
+        );
+      }
+      if (apiKeys.openrouter === undefined || apiKeys.openrouter === '') {
         return await reply.fail(
           'MISCONFIGURED',
           `API key required for synthesis with ${effectiveSynthesisModel}`

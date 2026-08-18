@@ -275,6 +275,49 @@ describe('FirestoreUsageEventRepository', () => {
       }
     });
 
+    it('applies every remaining array filter in memory', async () => {
+      const matchingEvent = createTestEvent({
+        eventId: 'evt_all_filters',
+        source: {
+          service: 'orchestrator',
+          component: 'research',
+          client: 'web',
+          environment: 'dev',
+        },
+        owner: { type: 'user', id: 'user_1' },
+        request: {
+          provider: 'openrouter',
+          model: 'or:openai/gpt-5.4',
+          operation: 'embedding',
+          success: true,
+          durationMs: 25,
+        },
+      });
+      mockQuery = createMockQuery([toMockDoc(matchingEvent)], 1);
+      mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));
+
+      const result = await repo.list({
+        timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-30T23:59:59Z' },
+        filters: {
+          services: ['orchestrator'],
+          components: ['research'],
+          clients: ['web'],
+          providers: ['openrouter'],
+          models: ['or:openai/gpt-5.4'],
+          operations: ['embedding'],
+          ownerIds: ['user_1'],
+          ownerTypes: ['user'],
+        },
+        limit: 10,
+      });
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.events).toEqual([matchingEvent]);
+        expect(result.value.totalMatched).toBe(-1);
+      }
+    });
+
     it('applies success filter to Firestore alongside array filter', async () => {
       mockQuery = createMockQuery([], 0);
       mockCollection.mockImplementation(() => ({ doc: mockDoc, where: mockQuery.where }));

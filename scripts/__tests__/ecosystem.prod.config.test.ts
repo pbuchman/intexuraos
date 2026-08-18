@@ -437,7 +437,19 @@ describe('ecosystem.config.prod.cjs', () => {
     expect(
       byName.get('mobile-notifications-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY
     ).toBeUndefined();
-    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBeUndefined();
+    expect(byName.get('whatsapp-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('fishing-assistant-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('image-service')?.env.INTEXURAOS_OPENROUTER_APP_API_KEY).toBe(
+      'openrouter-key'
+    );
+    expect(byName.get('code-agent')?.env.INTEXURAOS_OPENAI_APP_API_KEY).toBeUndefined();
+    expect(
+      byName.get('fishing-assistant-service')?.env.INTEXURAOS_OPENAI_APP_API_KEY
+    ).toBeUndefined();
     expect(byName.get('user-service')?.env.INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET).toBe(
       'github-oauth-secret'
     );

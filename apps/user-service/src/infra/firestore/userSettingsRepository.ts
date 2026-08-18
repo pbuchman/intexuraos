@@ -6,6 +6,7 @@
 import { err, getErrorMessage, ok, type Result } from '@intexuraos/common-core';
 import {
   isIntexAgentModel,
+  normalizeLlmModelPreferenceForRead,
   normalizeRetiredOpenRouterModel,
   type ExecutableLlmProvider,
   type IntexAgentModel,
@@ -107,11 +108,15 @@ function readIntexAgentModelState(
 
 function normalizeLlmPreferencesForRead(preferences: Record<string, unknown>): LlmPreferences {
   const normalized: Record<string, unknown> = { ...preferences };
-  for (const field of ['defaultModel', 'fallbackModel', 'intexAgentModel'] as const) {
+  for (const field of ['defaultModel', 'fallbackModel'] as const) {
     const model = normalized[field];
     if (typeof model === 'string') {
-      normalized[field] = normalizeRetiredOpenRouterModel(model);
+      normalized[field] = normalizeLlmModelPreferenceForRead(model);
     }
+  }
+  const intexAgentModel = normalized['intexAgentModel'];
+  if (typeof intexAgentModel === 'string') {
+    normalized['intexAgentModel'] = normalizeRetiredOpenRouterModel(intexAgentModel);
   }
   return normalized as LlmPreferences;
 }

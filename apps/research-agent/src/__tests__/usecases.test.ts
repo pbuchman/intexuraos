@@ -350,7 +350,7 @@ describe('validateSelectedModels', () => {
     expect(result).not.toContain(LlmModels.ClaudeOpus46);
   });
 
-  it('keeps only one model per provider', () => {
+  it('keeps multiple unique models from the same OpenRouter provider', () => {
     const availableModels: AvailableModelInfo[] = [
       {
         id: DEFAULT_PLATFORM_LLM_MODEL,
@@ -373,7 +373,7 @@ describe('validateSelectedModels', () => {
       availableModels
     );
 
-    expect(result).toEqual([DEFAULT_PLATFORM_LLM_MODEL]);
+    expect(result).toEqual([DEFAULT_PLATFORM_LLM_MODEL, IntexAgentModels.Gemini36Flash]);
   });
 });
 
