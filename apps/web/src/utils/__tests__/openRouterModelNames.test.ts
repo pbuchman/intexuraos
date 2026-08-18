@@ -10,6 +10,7 @@ describe('resolveOpenRouterModelName', () => {
     expect(resolveOpenRouterModelName('openai/gpt-5.4')).toBe('GPT-5.4');
     expect(resolveOpenRouterModelName('qwen/qwen3.5-plus-02-15')).toBe('Qwen 3.5 Plus');
     expect(resolveOpenRouterModelName('xiaomi/mimo-v2.5-pro')).toBe('MiMo V2.5 Pro');
+    expect(resolveOpenRouterModelName('x-ai/grok-4.3')).toBe('Grok 4.3');
   });
 
   it('returns friendly name for default allowlist models', () => {
@@ -74,6 +75,22 @@ describe('resolveStoredResearchModel', () => {
       name: 'Gemini 3 Flash Preview',
       provider: 'openrouter',
       author: 'Google',
+      available: false,
+    });
+  });
+
+  it('keeps retired Grok 4.1 Fast exact while Grok 4.3 is active', () => {
+    expect(
+      resolveStoredResearchModel({
+        modelId: 'or:x-ai/grok-4.1-fast',
+        storedProvider: 'openrouter',
+        availableModelIds: ['x-ai/grok-4.3'],
+      }),
+    ).toEqual({
+      id: 'or:x-ai/grok-4.1-fast',
+      name: 'Grok 4.1 Fast',
+      provider: 'openrouter',
+      author: 'xAI',
       available: false,
     });
   });

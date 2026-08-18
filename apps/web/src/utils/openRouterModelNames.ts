@@ -14,6 +14,8 @@ const OPENROUTER_MODEL_NAMES: Record<string, string> = {
   'qwen/qwen3.5-flash-02-23': 'Qwen 3.5 Flash',
   'minimax/minimax-m3': 'MiniMax M3',
   'x-ai/grok-4.20-beta': 'Grok 4.20 Beta',
+  'x-ai/grok-4.3': 'Grok 4.3',
+  // Retained for exact presentation of historical Research records.
   'x-ai/grok-4.1-fast': 'Grok 4.1 Fast',
   'moonshotai/kimi-k2.5': 'Kimi K2.5',
   'anthropic/claude-sonnet-4.6': 'Claude Sonnet 4.6',
@@ -80,6 +82,7 @@ function formatAuthor(rawModelId: string): string | null {
   const separator = rawModelId.indexOf('/');
   if (separator <= 0) return null;
   const author = rawModelId.slice(0, separator);
+  if (author === 'x-ai') return 'xAI';
   return author
     .split('-')
     .map((part) => (part === '' ? '' : `${part[0]?.toUpperCase() ?? ''}${part.slice(1)}`))

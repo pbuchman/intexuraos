@@ -361,7 +361,7 @@ Research Agent reports usage to `llm-usage-service` for every model it invokes. 
 - DeepSeek V4 Flash (DeepSeek)
 - Qwen 3.5 Plus, Qwen 3.5 Flash (Qwen)
 - MiniMax M3 (MiniMax)
-- Grok 4.20 Beta, Grok 4.1 Fast (xAI)
+- Grok 4.20 Beta, Grok 4.3 (xAI)
 - Kimi K2.5 (Moonshot)
 - Claude Sonnet 4.6, Claude Opus 4.6 (Anthropic via OpenRouter)
 - Gemini 3.1 Pro, Gemini 2.5 Flash, Gemini 3.6 Flash (Google via OpenRouter)

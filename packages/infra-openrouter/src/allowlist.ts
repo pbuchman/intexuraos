@@ -81,12 +81,12 @@ export const OPENROUTER_ALLOWED_MODELS: readonly AllowedOpenRouterModel[] = [
     completionPerToken: '0.000006',
   },
   {
-    id: 'x-ai/grok-4.1-fast',
-    name: 'Grok 4.1 Fast',
+    id: 'x-ai/grok-4.3',
+    name: 'Grok 4.3',
     provider: 'xAI',
-    contextLength: 2_000_000,
-    promptPerToken: '0.0000002',
-    completionPerToken: '0.0000005',
+    contextLength: 1_000_000,
+    promptPerToken: '0.00000125',
+    completionPerToken: '0.0000025',
   },
   // Moonshot
   {
