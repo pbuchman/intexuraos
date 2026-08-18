@@ -276,6 +276,7 @@ describe('ContextInferenceAdapter', () => {
         'Schema validation failed, attempting repair'
       );
       expect(mockLogger.debug).toHaveBeenCalledWith({}, 'Repair attempt succeeded');
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {
@@ -296,6 +297,7 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it('returns error when repair attempt also fails', async () => {
@@ -322,6 +324,7 @@ describe('ContextInferenceAdapter', () => {
         { firstError: expect.any(String), secondError: expect.any(String) },
         'Repair attempt failed'
       );
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     });
 
     it('returns error when repair attempt fails at API level', async () => {
@@ -446,6 +449,7 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {
@@ -468,6 +472,7 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
 
     it('returns error when repair attempt also fails', async () => {
@@ -494,6 +499,7 @@ describe('ContextInferenceAdapter', () => {
         { firstError: expect.any(String), secondError: expect.any(String) },
         'Repair attempt failed'
       );
+      expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     });
 
     it('returns error when repair attempt fails at API level', async () => {
