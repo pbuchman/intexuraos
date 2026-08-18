@@ -117,5 +117,48 @@ describe('aggregateKeyUtils', () => {
         expect(a).not.toBe(b);
       });
     });
+
+    describe('source.component slash safety', () => {
+      it('produces a Firestore-safe id for an OpenRouter Research component without mutating the event', () => {
+        const component = 'research:or:google/gemini-3.6-flash';
+        const event = createTestEvent({
+          source: { service: 'research-agent', component, client: 'openrouter', environment: 'prod' },
+          request: {
+            provider: LlmProviders.OpenRouter,
+            model: 'or:google/gemini-3.6-flash',
+            operation: 'research',
+            success: true,
+            durationMs: 100,
+          },
+        });
+
+        const id = computeAggregateId(event);
+
+        expect(id).not.toMatch(/\//);
+        expect(event.source.component).toBe(component);
+      });
+
+      it('is deterministic and does not collide with a literal percent-encoded component', () => {
+        const withSlash = createTestEvent({
+          source: {
+            service: 'research-agent',
+            component: 'research:or:x/y',
+            client: 'openrouter',
+            environment: 'prod',
+          },
+        });
+        const withLiteralEscape = createTestEvent({
+          source: {
+            service: 'research-agent',
+            component: 'research:or:x%2Fy',
+            client: 'openrouter',
+            environment: 'prod',
+          },
+        });
+
+        expect(computeAggregateId(withSlash)).toBe(computeAggregateId(withSlash));
+        expect(computeAggregateId(withSlash)).not.toBe(computeAggregateId(withLiteralEscape));
+      });
+    });
   });
 });

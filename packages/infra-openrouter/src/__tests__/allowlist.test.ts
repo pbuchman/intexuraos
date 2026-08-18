@@ -44,9 +44,9 @@ describe('allowlist', () => {
     it('context lengths match documented values from Linear issue', () => {
       const byId = (id: string): (typeof OPENROUTER_ALLOWED_MODELS)[number] | undefined =>
         OPENROUTER_ALLOWED_MODELS.find((m) => m.id === id);
-      // xAI models: 2M context
+      // xAI models
       expect(byId('x-ai/grok-4.20-beta')?.contextLength).toBe(2_000_000);
-      expect(byId('x-ai/grok-4.1-fast')?.contextLength).toBe(2_000_000);
+      expect(byId('x-ai/grok-4.3')?.contextLength).toBe(1_000_000);
       // MiniMax: 205K
       expect(byId('minimax/minimax-m3')?.contextLength).toBe(205_000);
       // Z.ai: 203K
@@ -85,6 +85,19 @@ describe('allowlist', () => {
       });
     });
 
+    it('uses official Grok 4.3 context and fallback pricing', () => {
+      const entry = OPENROUTER_ALLOWED_MODELS.find((model) => model.id === 'x-ai/grok-4.3');
+
+      expect(entry).toEqual({
+        id: 'x-ai/grok-4.3',
+        name: 'Grok 4.3',
+        provider: 'xAI',
+        contextLength: 1_000_000,
+        promptPerToken: '0.00000125',
+        completionPerToken: '0.0000025',
+      });
+    });
+
     it('all model IDs are in provider/model format', () => {
       for (const model of OPENROUTER_ALLOWED_MODELS) {
         expect(model.id).toMatch(/^[a-z0-9-]+\/[a-z0-9._-]+$/);
@@ -97,7 +110,7 @@ describe('allowlist', () => {
       expect(isAllowedModel('deepseek/deepseek-v4-flash')).toBe(true);
       expect(isAllowedModel('qwen/qwen3.5-plus-02-15')).toBe(true);
       expect(isAllowedModel('anthropic/claude-sonnet-4.6')).toBe(true);
-      expect(isAllowedModel('x-ai/grok-4.1-fast')).toBe(true);
+      expect(isAllowedModel('x-ai/grok-4.3')).toBe(true);
       expect(isAllowedModel('openai/gpt-5.4')).toBe(true);
       expect(isAllowedModel('xiaomi/mimo-v2.5-pro')).toBe(true);
     });
@@ -117,6 +130,11 @@ describe('allowlist', () => {
       expect(isAllowedModel('google/gemini-3.6-flash')).toBe(true);
       expect(isAllowedModel('google/gemini-3-flash-preview')).toBe(false);
     });
+
+    it('accepts Grok 4.3 and retires deprecated Grok 4.1 Fast', () => {
+      expect(isAllowedModel('x-ai/grok-4.3')).toBe(true);
+      expect(isAllowedModel('x-ai/grok-4.1-fast')).toBe(false);
+    });
   });
 
   describe('OPENROUTER_VALIDATION_MODEL', () => {
@@ -131,7 +149,8 @@ describe('allowlist', () => {
       expect(ids.split(', ')).toHaveLength(16);
       expect(ids).toContain('deepseek/deepseek-v4-flash');
       expect(ids).toContain('anthropic/claude-sonnet-4.6');
-      expect(ids).toContain('x-ai/grok-4.1-fast');
+      expect(ids).toContain('x-ai/grok-4.3');
+      expect(ids).not.toContain('x-ai/grok-4.1-fast');
       expect(ids).toContain('xiaomi/mimo-v2.5-pro');
       expect(ids).not.toContain(LEGACY_MIMO_MODEL_ID);
     });
