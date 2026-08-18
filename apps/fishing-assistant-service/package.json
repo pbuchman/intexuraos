@@ -26,18 +26,19 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
     "@intexuraos/llm-contract": "workspace:*",
     "@intexuraos/llm-factory": "workspace:*",
     "@intexuraos/llm-pricing": "workspace:*",
     "fastify": "catalog:",
-    "openai": "catalog:",
     "pino": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.0.16",
+    "nock": "^14.0.0",
     "vitest": "^4.0.16"
   }
 }

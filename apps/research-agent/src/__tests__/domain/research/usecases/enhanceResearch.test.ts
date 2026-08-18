@@ -187,6 +187,40 @@ describe('enhanceResearch', () => {
     }
   });
 
+  it('returns NO_CHANGES when every additional model already has a completed result', async () => {
+    const source = createCompletedResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(source));
+
+    const result = await enhanceResearch(
+      {
+        sourceResearchId: source.id,
+        userId: source.userId,
+        additionalModels: [LlmModels.GPT54],
+      },
+      deps
+    );
+
+    expect(result).toEqual(err({ type: 'NO_CHANGES' }));
+    expect(deps.mockRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('returns NO_CHANGES when every requested context removal targets a missing ID', async () => {
+    const source = createCompletedResearch();
+    deps.mockRepo.findById.mockResolvedValue(ok(source));
+
+    const result = await enhanceResearch(
+      {
+        sourceResearchId: source.id,
+        userId: source.userId,
+        removeContextIds: ['missing-context'],
+      },
+      deps
+    );
+
+    expect(result).toEqual(err({ type: 'NO_CHANGES' }));
+    expect(deps.mockRepo.save).not.toHaveBeenCalled();
+  });
+
   it('creates enhanced research with additional LLMs', async () => {
     const source = createCompletedResearch();
     deps.mockRepo.findById.mockResolvedValue(ok(source));

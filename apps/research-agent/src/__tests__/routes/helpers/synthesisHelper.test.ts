@@ -1,18 +1,12 @@
-/**
- * Tests for synthesis helper.
- */
+/** Tests for OpenRouter-only synthesis provider wiring. */
 
 /* eslint-disable @typescript-eslint/explicit-function-return-type, @typescript-eslint/no-empty-function */
 
-import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createOpenRouterModelId, LlmModels } from '@intexuraos/llm-contract';
 import { createSynthesisProviders } from '../../../routes/helpers/synthesisHelper.js';
-import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
-import {
-  DEFAULT_PLATFORM_LLM_MODEL,
-  LlmModels,
-  LlmProviders,
-} from '@intexuraos/llm-contract';
 import type { ResearchModel } from '../../../domain/research/index.js';
+import type { DecryptedApiKeys, ServiceContainer } from '../../../services.js';
 
 const mockLogger = {
   info: () => {},
@@ -20,6 +14,8 @@ const mockLogger = {
   warn: () => {},
   debug: () => {},
 };
+
+const SYNTHESIS_MODEL = createOpenRouterModelId('openai/gpt-5.4') as ResearchModel;
 
 describe('createSynthesisProviders', () => {
   const mockCreateSynthesizer = vi.fn(() => ({
@@ -44,45 +40,10 @@ describe('createSynthesisProviders', () => {
     vi.clearAllMocks();
   });
 
-  it('forwards args to synthesis providers (researchId omitted at this call site)', () => {
-    const apiKeys: DecryptedApiKeys = {
-      openrouter: 'test-or-key',
-    };
-
+  it('uses the OpenRouter key for synthesizer and context inference', () => {
     createSynthesisProviders(
-      'or:anthropic/claude-sonnet-4.6' as ResearchModel,
-      apiKeys,
-      'user-123',
-      mockServices,
-      mockLogger as never
-    );
-
-    // researchId is the 5th positional arg and is `undefined` when callers
-    // omit it — adapters fall back to research-call-site overrides.
-    expect(mockCreateSynthesizer).toHaveBeenCalledWith(
-      'or:anthropic/claude-sonnet-4.6',
-      'test-or-key',
-      'user-123',
-      mockLogger,
-      undefined
-    );
-    expect(mockCreateContextInferrer).toHaveBeenCalledWith(
-      DEFAULT_PLATFORM_LLM_MODEL,
-      'test-or-key',
-      'user-123',
-      mockLogger,
-      undefined
-    );
-  });
-
-  it('threads researchId into synthesizer + contextInferrer factories', () => {
-    const apiKeys: DecryptedApiKeys = {
-      openrouter: 'test-or-key',
-    };
-
-    createSynthesisProviders(
-      'or:anthropic/claude-sonnet-4.6' as ResearchModel,
-      apiKeys,
+      SYNTHESIS_MODEL,
+      { openrouter: 'test-or-key' },
       'user-123',
       mockServices,
       mockLogger as never,
@@ -90,14 +51,14 @@ describe('createSynthesisProviders', () => {
     );
 
     expect(mockCreateSynthesizer).toHaveBeenCalledWith(
-      'or:anthropic/claude-sonnet-4.6',
+      SYNTHESIS_MODEL,
       'test-or-key',
       'user-123',
       mockLogger,
       'research-abc'
     );
     expect(mockCreateContextInferrer).toHaveBeenCalledWith(
-      DEFAULT_PLATFORM_LLM_MODEL,
+      'or:minimax/minimax-m3',
       'test-or-key',
       'user-123',
       mockLogger,
@@ -105,110 +66,77 @@ describe('createSynthesisProviders', () => {
     );
   });
 
-  it('creates synthesizer and contextInferrer when OpenRouter API key is provided', () => {
-    const apiKeys: DecryptedApiKeys = {
-      anthropic: 'test-anthropic-key',
-      openrouter: 'test-or-key',
-    };
-
-    const result = createSynthesisProviders(
-      LlmModels.ClaudeSonnet46,
-      apiKeys,
+  it('supports callers that omit researchId', () => {
+    createSynthesisProviders(
+      SYNTHESIS_MODEL,
+      { openrouter: 'test-or-key' },
       'user-123',
       mockServices,
       mockLogger as never
     );
 
-    expect(result.synthesizer).toBeDefined();
-    expect(result.contextInferrer).toBeDefined();
-  });
-
-  it('throws when synthesis provider API key is undefined', () => {
-    const apiKeys: DecryptedApiKeys = {
-      // No anthropic key — will throw when using ClaudeSonnet45
-    };
-
-    expect(() =>
-      createSynthesisProviders(
-        LlmModels.ClaudeSonnet46,
-        apiKeys,
-        'user-123',
-        mockServices,
-        mockLogger as never
-      )
-    ).toThrow(`No API key configured for provider '${LlmProviders.Anthropic}'`);
-  });
-
-  it('throws when synthesis provider API key is empty string', () => {
-    const apiKeys: DecryptedApiKeys = {
-      [LlmProviders.Anthropic]: '',
-    };
-
-    expect(() =>
-      createSynthesisProviders(
-        LlmModels.ClaudeSonnet46,
-        apiKeys,
-        'user-123',
-        mockServices,
-        mockLogger as never
-      )
-    ).toThrow(`No API key configured for provider '${LlmProviders.Anthropic}'`);
-  });
-
-  it('creates only synthesizer when OpenRouter API key is undefined', () => {
-    const apiKeys: DecryptedApiKeys = {
-      anthropic: 'test-anthropic-key',
-      // No OpenRouter key
-    };
-
-    const result = createSynthesisProviders(
-      LlmModels.ClaudeSonnet46,
-      apiKeys,
+    expect(mockCreateSynthesizer).toHaveBeenCalledWith(
+      SYNTHESIS_MODEL,
+      'test-or-key',
       'user-123',
-      mockServices,
-      mockLogger as never
+      mockLogger,
+      undefined
     );
-
-    expect(result.synthesizer).toBeDefined();
-    expect(result.contextInferrer).toBeUndefined();
   });
 
-  it('throws when OpenRouter model is not in the curated allowlist', () => {
-    const apiKeys: DecryptedApiKeys = {
-      openrouter: 'test-or-key',
-    };
+  it.each([undefined, ''])('requires a non-empty OpenRouter key (%s)', (openrouter) => {
+    const apiKeys = (openrouter === undefined ? {} : { openrouter }) as DecryptedApiKeys;
 
-    // Use a non-allowlisted OpenRouter model ID (or: prefix with unknown model)
+    expect(() =>
+      createSynthesisProviders(
+        SYNTHESIS_MODEL,
+        apiKeys,
+        'user-123',
+        mockServices,
+        mockLogger as never
+      )
+    ).toThrow("No API key configured for provider 'openrouter'");
+  });
+
+  it('rejects a direct-provider synthesis model', () => {
+    expect(() =>
+      createSynthesisProviders(
+        LlmModels.GPT54 as unknown as ResearchModel,
+        { openrouter: 'test-or-key' },
+        'user-123',
+        mockServices,
+        mockLogger as never
+      )
+    ).toThrow(`Research synthesis model '${LlmModels.GPT54}' is not executable`);
+  });
+
+  it('rejects an allowlisted research model that is not enabled for synthesis', () => {
+    const researchOnlyModel = createOpenRouterModelId(
+      'anthropic/claude-sonnet-4.6'
+    ) as ResearchModel;
+
+    expect(() =>
+      createSynthesisProviders(
+        researchOnlyModel,
+        { openrouter: 'test-or-key' },
+        'user-123',
+        mockServices,
+        mockLogger as never
+      )
+    ).toThrow(`Research synthesis model '${researchOnlyModel}' is not executable`);
+  });
+
+  it('rejects a non-allowlisted OpenRouter synthesis model', () => {
     const invalidModel = 'or:unknown-provider/not-in-allowlist' as ResearchModel;
 
     expect(() =>
       createSynthesisProviders(
         invalidModel,
-        apiKeys,
+        { openrouter: 'test-or-key' },
         'user-123',
         mockServices,
         mockLogger as never
       )
-    ).toThrow("OpenRouter model 'or:unknown-provider/not-in-allowlist' is not in the curated allowlist");
+    ).toThrow(`Research synthesis model '${invalidModel}' is not executable`);
   });
-
-  it('succeeds for valid allowlisted OpenRouter models', () => {
-    const apiKeys: DecryptedApiKeys = {
-      openrouter: 'test-or-key',
-    };
-
-    // Use a valid allowlisted OR model
-    const validOrModel = 'or:anthropic/claude-sonnet-4.6' as ResearchModel;
-
-    const result = createSynthesisProviders(
-      validOrModel,
-      apiKeys,
-      'user-123',
-      mockServices,
-      mockLogger as never
-    );
-
-    expect(result.synthesizer).toBeDefined();
-  });
-
 });

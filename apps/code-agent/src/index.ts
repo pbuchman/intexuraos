@@ -51,7 +51,6 @@ const PRODUCTION_ONLY_ENV = [
   'INTEXURAOS_SENTRY_CODE_TASK_BASE_BRANCH', // Base branch targeted by automatic Sentry code tasks
   'INTEXURAOS_OPENROUTER_APP_API_KEY',
   'INTEXURAOS_EXECUTION_MEMORY_ENABLED', // Feature flag for execution memory retrieval/distillation
-  'INTEXURAOS_OPENAI_APP_API_KEY', // OpenAI embeddings for execution memory retrieval/distillation
   'INTEXURAOS_LLM_USAGE_SERVICE_URL', // Usage event forwarding to llm-usage-service
 ];
 
@@ -88,7 +87,6 @@ async function main(): Promise<void> {
     webAppUrl: config.webAppUrl,
     userServiceUrl: config.userServiceUrl,
     openRouterAppApiKey: config.openRouterAppApiKey,
-    openaiAppApiKey: config.openaiAppApiKey,
     llmUsageServiceUrl: config.llmUsageServiceUrl,
   });
 

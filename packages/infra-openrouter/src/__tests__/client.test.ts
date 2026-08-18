@@ -232,6 +232,55 @@ describe('createOpenRouterClient', () => {
       }
     });
 
+    it('extracts current OpenRouter url_citation annotations from the assistant message', async () => {
+      nock(API_BASE_URL)
+        .post('/chat/completions')
+        .reply(200, {
+          id: 'test-id',
+          model: `${TEST_MODEL}:online`,
+          created: Date.now(),
+          object: 'chat.completion',
+          choices: [
+            {
+              index: 0,
+              message: {
+                content: 'Research content',
+                role: 'assistant',
+                annotations: [
+                  {
+                    type: 'url_citation',
+                    url_citation: {
+                      url: 'https://example.com/current-citation',
+                      title: 'Current citation',
+                      content: 'Relevant excerpt',
+                      start_index: 0,
+                      end_index: 16,
+                    },
+                  },
+                ],
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        });
+
+      const client = createOpenRouterClient({
+        apiKey: 'test-key',
+        model: TEST_MODEL,
+        userId: 'test-user',
+        logger: mockLogger,
+        usageSink: mockUsageSink,
+      });
+
+      const result = await client.research('Test prompt');
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.sources).toEqual(['https://example.com/current-citation']);
+      }
+    });
+
     it('extracts annotations as sources', async () => {
       nock(API_BASE_URL)
         .post('/chat/completions')
@@ -459,6 +508,45 @@ describe('createOpenRouterClient', () => {
         })
       );
     });
+  });
+
+  it('uses the evidence model for usage while keeping the raw model in the request body', async () => {
+    let capturedBody: Record<string, unknown> | undefined;
+    nock(API_BASE_URL)
+      .post('/chat/completions', (body) => {
+        capturedBody = body as Record<string, unknown>;
+        return true;
+      })
+      .reply(200, {
+        id: 'test-id',
+        model: TEST_MODEL,
+        created: Date.now(),
+        object: 'chat.completion',
+        choices: [
+          {
+            index: 0,
+            message: { content: 'ok', role: 'assistant' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      });
+    const evidenceModelId = `or:${TEST_MODEL}`;
+    const client = createOpenRouterClient({
+      apiKey: 'test-key',
+      model: TEST_MODEL,
+      evidenceModelId,
+      userId: 'test-user',
+      logger: mockLogger,
+      usageSink: mockUsageSink,
+    });
+
+    await client.generate('hello', { promptType: 'evidence-model-test' });
+
+    expect(capturedBody?.['model']).toBe(TEST_MODEL);
+    expect(mockUsageLoggerLog).toHaveBeenCalledWith(
+      expect.objectContaining({ model: evidenceModelId })
+    );
   });
 
   it('classifies native AbortError failures as timeout usage without leaking details', async () => {

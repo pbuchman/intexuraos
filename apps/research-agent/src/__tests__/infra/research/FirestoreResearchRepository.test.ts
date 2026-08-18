@@ -2,7 +2,7 @@
  * Tests for FirestoreResearchRepository.
  */
 
-import { IntexAgentModels, LlmModels, LlmProviders } from '@intexuraos/llm-contract';
+import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Research } from '../../../domain/research/index.js';
 
@@ -104,7 +104,7 @@ describe('FirestoreResearchRepository', () => {
       }
     });
 
-    it('normalizes retired Gemini model references on read', async () => {
+    it('preserves exact retired model and provider values on read', async () => {
       const retiredGemini = 'or:google/gemini-3-flash-preview';
       const research = {
         id: 'research-1',
@@ -130,15 +130,11 @@ describe('FirestoreResearchRepository', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok && result.value !== null) {
-        expect(result.value.selectedModels).toEqual([
-          IntexAgentModels.Gemini36Flash,
-          LlmModels.GPT54,
-        ]);
-        expect(result.value.synthesisModel).toBe(IntexAgentModels.Gemini36Flash);
-        expect(result.value.llmResults[0]?.model).toBe(IntexAgentModels.Gemini36Flash);
-        expect(result.value.partialFailure?.failedModels).toEqual([
-          IntexAgentModels.Gemini36Flash,
-        ]);
+        expect(result.value.selectedModels).toEqual([retiredGemini, LlmModels.GPT54]);
+        expect(result.value.synthesisModel).toBe(retiredGemini);
+        expect(result.value.llmResults[0]?.model).toBe(retiredGemini);
+        expect(result.value.llmResults[0]?.provider).toBe(LlmProviders.OpenRouter);
+        expect(result.value.partialFailure?.failedModels).toEqual([retiredGemini]);
       }
     });
 
@@ -1041,7 +1037,7 @@ describe('FirestoreResearchRepository', () => {
       });
     });
 
-    it('updates a retired Gemini result through the replacement model id', async () => {
+    it('updates a retired model only by its exact stored ID', async () => {
       const research = {
         id: 'research-1',
         userId: 'user-1',
@@ -1067,7 +1063,7 @@ describe('FirestoreResearchRepository', () => {
 
       const result = await repository.updateLlmResult(
         'research-1',
-        IntexAgentModels.Gemini36Flash,
+        'or:google/gemini-3-flash-preview',
         { status: 'completed', result: 'Result content' }
       );
 
@@ -1076,7 +1072,7 @@ describe('FirestoreResearchRepository', () => {
         llmResults: [
           {
             provider: LlmProviders.OpenRouter,
-            model: IntexAgentModels.Gemini36Flash,
+            model: 'or:google/gemini-3-flash-preview',
             status: 'completed',
             result: 'Result content',
           },

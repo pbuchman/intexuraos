@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { resolveOpenRouterModelName } from '../openRouterModelNames.js';
+import {
+  resolveOpenRouterModelName,
+  resolveStoredResearchModel,
+} from '../openRouterModelNames.js';
 
 describe('resolveOpenRouterModelName', () => {
   it('returns friendly name for curated allowlist models', () => {
@@ -39,5 +42,77 @@ describe('resolveOpenRouterModelName', () => {
 
   it('handles empty string', () => {
     expect(resolveOpenRouterModelName('')).toBe('');
+  });
+});
+
+describe('resolveStoredResearchModel', () => {
+  it('marks an active OpenRouter model as available while preserving its exact stored ID', () => {
+    expect(
+      resolveStoredResearchModel({
+        modelId: 'or:anthropic/claude-sonnet-4.6',
+        storedProvider: 'openrouter',
+        availableModelIds: ['anthropic/claude-sonnet-4.6'],
+      }),
+    ).toEqual({
+      id: 'or:anthropic/claude-sonnet-4.6',
+      name: 'Claude Sonnet 4.6',
+      provider: 'openrouter',
+      author: 'Anthropic',
+      available: true,
+    });
+  });
+
+  it('keeps a retired OpenRouter model visible and unavailable', () => {
+    expect(
+      resolveStoredResearchModel({
+        modelId: 'or:google/gemini-3-flash-preview',
+        storedProvider: 'openrouter',
+        availableModelIds: ['google/gemini-3.6-flash'],
+      }),
+    ).toEqual({
+      id: 'or:google/gemini-3-flash-preview',
+      name: 'Gemini 3 Flash Preview',
+      provider: 'openrouter',
+      author: 'Google',
+      available: false,
+    });
+  });
+
+  it('preserves an unknown historical model and its stored provider', () => {
+    expect(
+      resolveStoredResearchModel({
+        modelId: 'legacy/model-that-no-longer-exists',
+        storedProvider: 'legacy-provider',
+        availableModelIds: [],
+      }),
+    ).toEqual({
+      id: 'legacy/model-that-no-longer-exists',
+      name: 'Model That No Longer Exists',
+      provider: 'legacy-provider',
+      author: null,
+      available: false,
+    });
+  });
+
+  it('prefers exact live catalog metadata for an active OpenRouter model', () => {
+    expect(
+      resolveStoredResearchModel({
+        modelId: 'or:deepseek/deepseek-v4-flash',
+        availableModelIds: ['deepseek/deepseek-v4-flash'],
+        availableModels: [
+          {
+            id: 'deepseek/deepseek-v4-flash',
+            name: 'DeepSeek V4 Flash (live)',
+            provider: 'DeepSeek Live',
+          },
+        ],
+      }),
+    ).toEqual({
+      id: 'or:deepseek/deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash (live)',
+      provider: 'DeepSeek Live',
+      author: 'DeepSeek Live',
+      available: true,
+    });
   });
 });

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
 import { LlmModels } from '@intexuraos/llm-contract';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
-import { createGptClient } from '@intexuraos/infra-gpt';
+import { createOpenRouterImageClient } from '@intexuraos/infra-openrouter';
 import {
   OpenAIImageGenerator,
   createOpenAIImageGenerator,
@@ -16,8 +16,8 @@ import type {
 
 const mockGenerateImage = vi.fn();
 
-vi.mock('@intexuraos/infra-gpt', () => ({
-  createGptClient: vi.fn(() => ({
+vi.mock('@intexuraos/infra-openrouter', () => ({
+  createOpenRouterImageClient: vi.fn(() => ({
     generateImage: mockGenerateImage,
   })),
 }));
@@ -72,9 +72,7 @@ describe('OpenAIImageGenerator', () => {
   beforeEach(() => {
     mockStorage = createMockStorage();
     vi.clearAllMocks();
-    vi.mocked(createGptClient).mockReturnValue({
-      research: vi.fn(),
-      generate: vi.fn(),
+    vi.mocked(createOpenRouterImageClient).mockReturnValue({
       generateImage: mockGenerateImage,
     });
   });
@@ -178,7 +176,6 @@ describe('OpenAIImageGenerator', () => {
       });
 
       expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
-        slug: 'test-slug',
         promptType: 'image-generation',
         correlation: { researchId: 'research-1' },
       });
@@ -248,7 +245,6 @@ describe('OpenAIImageGenerator', () => {
       });
 
       expect(mockGenerateImage).toHaveBeenCalledWith(testPrompt, {
-        slug: 'my-cool-image',
         promptType: 'image-generation',
         correlation: { researchId: 'research-123' },
       });
@@ -403,34 +399,6 @@ describe('OpenAIImageGenerator', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('API_ERROR');
-      }
-    });
-
-    it('returns API_ERROR when generateImage is not supported by client', async () => {
-      const mockClientWithoutImageGen = {
-        research: vi.fn(),
-        generate: vi.fn(),
-      } as const;
-
-      vi.mocked(createGptClient).mockReturnValue(mockClientWithoutImageGen as never);
-
-      const generator = new OpenAIImageGenerator({
-        apiKey: testApiKey,
-        model: testModel,
-        storage: mockStorage,
-        generateId: (): string => testImageId,
-        userId: 'test-user-id',
-        logger: mockLogger,
-        usageSink: mockUsageSink,
-      });
-
-      const result: Result<GeneratedImageData, ImageGenerationError> =
-        await generator.generate(testPrompt);
-
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('API_ERROR');
-        expect(result.error.message).toBe('Image generation not supported');
       }
     });
 

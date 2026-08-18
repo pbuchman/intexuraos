@@ -8,7 +8,7 @@
 | --------- | ----------------------------------------------------------------------------------- |
 | Name      | research-agent                                                                      |
 | Role      | Orchestrate parallel LLM research calls and synthesize results into a single report |
-| Goal      | Produce a cross-validated, attributed research document from multiple AI providers  |
+| Goal      | Produce a cross-validated report from up to six OpenRouter models                    |
 
 ## Capabilities
 
@@ -35,6 +35,8 @@ interface SubmitResearchInput {
   originalPrompt?: string;         // Original prompt before improvement
 }
 ```
+
+`selectedModels` contains at most six unique executable `or:` IDs.
 
 **Output Schema:**
 
@@ -434,7 +436,7 @@ interface ServiceFeedback {
 | ----------------- | ----------------------------------------------------- | ---------------------------------------------- |
 | user-service      | Resolve OpenRouter credential; report LLM analytics    | Research fails if credential is unavailable     |
 | llm-usage-service | Report LLM token usage and cost per call              | Usage not recorded; research unaffected        |
-| image-service     | Generate cover image for share page                   | Skipped gracefully when OpenAI is unavailable  |
+| image-service     | Generate cover image through OpenRouter                | Skipped gracefully when generation is unavailable |
 | notion-service    | Validate Notion page IDs; execute Notion export       | Export skipped if unavailable; fire-and-forget |
 | whatsapp-service  | Send completion and failure notifications via Pub/Sub | Notification dropped; research unaffected      |
 | OpenRouter API    | Route LLM calls; fetch live pricing catalog           | Call fails; pricing falls back to allowlist    |

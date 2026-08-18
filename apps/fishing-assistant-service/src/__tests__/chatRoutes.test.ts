@@ -3,7 +3,6 @@ import type { FastifyInstance } from 'fastify';
 import type { Logger } from '@intexuraos/common-core';
 import type { AuthUser } from '@intexuraos/common-http';
 import { createFakeFirestore, type Firestore, Timestamp } from '@intexuraos/infra-firestore';
-import OpenAI from 'openai';
 import { buildServer } from '../server.js';
 import { resetServices, setServices, type ServiceContainer } from '../services.js';
 import { createFirestoreFolderRepository } from '../infra/firestore/folderRepository.js';
@@ -129,7 +128,6 @@ function createServices(): Omit<RouteTestContext, 'app'> {
     embeddingClient: {
       embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
     },
-    openAiClient: {} as OpenAI,
     userServiceClient: {} as ServiceContainer['userServiceClient'],
     messageDigestClient: messageDigestClient as unknown as ServiceContainer['messageDigestClient'],
     whatsappClient: whatsappClient as unknown as ServiceContainer['whatsappClient'],
@@ -352,7 +350,6 @@ describe('Fishing Assistant chat routes', () => {
       embeddingClient: {
         embedTexts: vi.fn(),
       } as ServiceContainer['embeddingClient'],
-      openAiClient: {} as OpenAI,
       userServiceClient: {} as ServiceContainer['userServiceClient'],
       messageDigestClient: {} as ServiceContainer['messageDigestClient'],
       whatsappClient: {} as ServiceContainer['whatsappClient'],
@@ -414,7 +411,6 @@ describe('Fishing Assistant chat routes', () => {
         embeddingClient: {
           embedTexts: vi.fn().mockResolvedValue({ ok: true, value: [[0.1, 0.2, 0.3]] }),
         },
-        openAiClient: {} as OpenAI,
         userServiceClient: {} as ServiceContainer['userServiceClient'],
         messageDigestClient: {
           queryLegacyDigestDefinitions: vi

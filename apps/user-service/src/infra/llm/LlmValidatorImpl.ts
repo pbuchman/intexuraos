@@ -3,13 +3,9 @@
  * Uses generate() method with cheap models for fast key validation and testing.
  */
 import { err, ok, type Logger, type Result } from '@intexuraos/common-core';
-import { createGptClient } from '@intexuraos/infra-gpt';
-import { createClaudeClient } from '@intexuraos/infra-claude';
-import { createPerplexityClient } from '@intexuraos/infra-perplexity';
 import { createOpenRouterClient, OPENROUTER_VALIDATION_MODEL } from '@intexuraos/infra-openrouter';
 import {
-  LlmModels,
-  LlmProviders,
+  createOpenRouterModelId,
   type ExecutableLlmProvider,
 } from '@intexuraos/llm-contract';
 import type { UsageSink } from '@intexuraos/llm-pricing';
@@ -18,15 +14,6 @@ import type {
   LlmValidationError,
   LlmValidator,
 } from '../../domain/settings/index.js';
-
-const VALIDATION_PROMPT = 'Say "API key validated" in exactly 3 words.';
-
-const VALIDATION_MODELS = {
-  [LlmProviders.OpenAI]: LlmModels.GPT4oMini,
-  [LlmProviders.Anthropic]: LlmModels.ClaudeHaiku35,
-  [LlmProviders.Perplexity]: LlmModels.Sonar,
-  [LlmProviders.OpenRouter]: OPENROUTER_VALIDATION_MODEL,
-} as const;
 
 /**
  * Implementation of LlmValidator that delegates to infra packages.
@@ -42,170 +29,52 @@ export class LlmValidatorImpl implements LlmValidator {
   }
 
   async validateKey(
-    provider: ExecutableLlmProvider,
+    _provider: ExecutableLlmProvider,
     apiKey: string,
     userId: string
   ): Promise<Result<void, LlmValidationError>> {
-    switch (provider) {
-      case LlmProviders.OpenAI: {
-        const client = createGptClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.OpenAI],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
-            message:
-              result.error.code === 'INVALID_KEY'
-                ? 'Invalid OpenAI API key'
-                : `OpenAI API error: ${result.error.message}`,
-          });
-        }
-        return ok(undefined);
-      }
-      case LlmProviders.Anthropic: {
-        const client = createClaudeClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Anthropic],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
-            message:
-              result.error.code === 'INVALID_KEY'
-                ? 'Invalid Anthropic API key'
-                : `Anthropic API error: ${result.error.message}`,
-          });
-        }
-        return ok(undefined);
-      }
-      case LlmProviders.Perplexity: {
-        const client = createPerplexityClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Perplexity],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(VALIDATION_PROMPT, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
-            message:
-              result.error.code === 'INVALID_KEY'
-                ? 'Invalid Perplexity API key'
-                : `Perplexity API error: ${result.error.message}`,
-          });
-        }
-        return ok(undefined);
-      }
-      case LlmProviders.OpenRouter: {
-        // Use lightweight /api/v1/key endpoint for validation - no token cost
-        const client = createOpenRouterClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.OpenRouter],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.validateKey(apiKey);
-        if (!result.ok) {
-          return err({
-            code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
-            message:
-              result.error.code === 'INVALID_KEY'
-                ? 'Invalid OpenRouter API key'
-                : `OpenRouter API error: ${result.error.message}`,
-          });
-        }
-        return ok(undefined);
-      }
+    const client = createOpenRouterClient({
+      apiKey,
+      model: OPENROUTER_VALIDATION_MODEL,
+      evidenceModelId: createOpenRouterModelId(OPENROUTER_VALIDATION_MODEL),
+      userId,
+      logger: this.logger,
+      usageSink: this.usageSink,
+    });
+    const result = await client.validateKey(apiKey);
+    if (!result.ok) {
+      return err({
+        code: result.error.code === 'INVALID_KEY' ? 'INVALID_KEY' : 'API_ERROR',
+        message:
+          result.error.code === 'INVALID_KEY'
+            ? 'Invalid OpenRouter API key'
+            : `OpenRouter API error: ${result.error.message}`,
+      });
     }
+    return ok(undefined);
   }
 
   async testRequest(
-    provider: ExecutableLlmProvider,
+    _provider: ExecutableLlmProvider,
     apiKey: string,
     prompt: string,
     userId: string
   ): Promise<Result<LlmTestResponse, LlmValidationError>> {
-    switch (provider) {
-      case LlmProviders.OpenAI: {
-        const client = createGptClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.OpenAI],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: 'API_ERROR',
-            message: result.error.message,
-          });
-        }
-        return ok({ content: result.value.content });
-      }
-      case LlmProviders.Anthropic: {
-        const client = createClaudeClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Anthropic],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: 'API_ERROR',
-            message: result.error.message,
-          });
-        }
-        return ok({ content: result.value.content });
-      }
-      case LlmProviders.Perplexity: {
-        const client = createPerplexityClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.Perplexity],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: 'API_ERROR',
-            message: result.error.message,
-          });
-        }
-        return ok({ content: result.value.content });
-      }
-      case LlmProviders.OpenRouter: {
-        const client = createOpenRouterClient({
-          apiKey,
-          model: VALIDATION_MODELS[LlmProviders.OpenRouter],
-          userId,
-          logger: this.logger,
-          usageSink: this.usageSink,
-        });
-        const result = await client.generate(prompt, { promptType: 'user-service-validation' });
-        if (!result.ok) {
-          return err({
-            code: 'API_ERROR',
-            message: result.error.message,
-          });
-        }
-        return ok({ content: result.value.content });
-      }
+    const client = createOpenRouterClient({
+      apiKey,
+      model: OPENROUTER_VALIDATION_MODEL,
+      evidenceModelId: createOpenRouterModelId(OPENROUTER_VALIDATION_MODEL),
+      userId,
+      logger: this.logger,
+      usageSink: this.usageSink,
+    });
+    const result = await client.generate(prompt, { promptType: 'user-service-validation' });
+    if (!result.ok) {
+      return err({
+        code: 'API_ERROR',
+        message: result.error.message,
+      });
     }
+    return ok({ content: result.value.content });
   }
 }

@@ -28,7 +28,7 @@ const { createOpenRouterGenerateClient } = await import('../openRouterGenerateCl
 
 const baseConfig = {
   apiKey: 'test-key',
-  model: 'or:google/gemma-4-31b-it:free' as unknown as import('@intexuraos/llm-contract').LLMModel,
+  model: 'or:google/gemma-4-31b-it:free' as import('@intexuraos/llm-contract').OpenRouterModelId,
   userId: 'user-123',
   logger: mockLogger,
   usageSink: mockUsageSink,
@@ -204,23 +204,6 @@ describe('createOpenRouterGenerateClient', () => {
 
     expect(createOpenRouterClient).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'google/gemma-4-31b-it:free' })
-    );
-  });
-
-  it('passes through non-or: prefixed model as-is to createOpenRouterClient', async () => {
-    const { createOpenRouterClient } = await import('@intexuraos/infra-openrouter');
-    mockOrGenerate.mockResolvedValue(
-      ok({ content: '', usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 } })
-    );
-
-    createOpenRouterGenerateClient({
-      ...baseConfig,
-      model:
-        'anthropic/claude-sonnet-4.6' as unknown as import('@intexuraos/llm-contract').LLMModel,
-    });
-
-    expect(createOpenRouterClient).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'anthropic/claude-sonnet-4.6' })
     );
   });
 

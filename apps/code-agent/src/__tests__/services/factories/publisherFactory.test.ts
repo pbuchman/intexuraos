@@ -30,7 +30,6 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     webAppUrl: 'https://dev.intexuraos.cloud',
     userServiceUrl: '',
     openRouterAppApiKey: '',
-    openaiAppApiKey: '',
     llmUsageServiceUrl: '',
     ...overrides,
   };

@@ -58,7 +58,6 @@ export interface Config {
   // GitHub Agent (INT-743)
   openRouterAppApiKey: string;
   executionMemoryEnabled: boolean;
-  openaiAppApiKey: string;
   llmUsageServiceUrl: string;
 }
 
@@ -91,7 +90,6 @@ export function loadConfig(): Config {
   const openRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] ?? '';
   const executionMemoryEnabled =
     (process.env['INTEXURAOS_EXECUTION_MEMORY_ENABLED'] ?? '').toLowerCase() === 'true';
-  const openaiAppApiKey = process.env['INTEXURAOS_OPENAI_APP_API_KEY'] ?? '';
   const llmUsageServiceUrl = process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] ?? '';
 
   return {
@@ -131,7 +129,6 @@ export function loadConfig(): Config {
     },
     openRouterAppApiKey,
     executionMemoryEnabled,
-    openaiAppApiKey,
     llmUsageServiceUrl,
   };
 }

@@ -7,6 +7,7 @@
 import type { FastifyPluginCallback } from 'fastify';
 import type { Logger } from '@intexuraos/common-core';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
+import { getOpenRouterRawId, RESEARCH_SYNTHESIS_MODELS } from '@intexuraos/llm-contract';
 import { getServices } from '../services.js';
 import {
   OPENROUTER_ALLOWED_MODELS,
@@ -32,6 +33,20 @@ let catalogClient: OpenRouterCatalogClient | null = null;
 let catalogClientApiKey: string | null = null;
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const RECOMMENDED_OPENROUTER_MODEL_IDS = RESEARCH_SYNTHESIS_MODELS.map(getOpenRouterRawId);
+const RECOMMENDED_OPENROUTER_MODEL_ID_SET = new Set(RECOMMENDED_OPENROUTER_MODEL_IDS);
+const ORDERED_OPENROUTER_ALLOWED_MODELS = [
+  // The endpoint test enforces that every recommended synthesis model belongs to the allowlist.
+  ...RECOMMENDED_OPENROUTER_MODEL_IDS.map(
+    (modelId) => OPENROUTER_ALLOWED_MODELS.find((entry) => entry.id === modelId)
+  ).filter(
+    (model): model is (typeof OPENROUTER_ALLOWED_MODELS)[number] => model !== undefined
+  ),
+  ...OPENROUTER_ALLOWED_MODELS.filter(
+    (entry) => !RECOMMENDED_OPENROUTER_MODEL_ID_SET.has(entry.id)
+  ),
+];
 
 /**
  * Reset the in-memory cache (for testing).
@@ -88,7 +103,7 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
       catalogSnapshot === null ? null : createOpenRouterCatalogEntryMap(catalogSnapshot.catalog);
 
     // Build model info for each allowlisted model, enriching with live catalog data
-    const modelsWithPricing: OpenRouterModelInfo[] = OPENROUTER_ALLOWED_MODELS.map((entry) => {
+    const modelsWithPricing: OpenRouterModelInfo[] = ORDERED_OPENROUTER_ALLOWED_MODELS.map((entry) => {
       const catalogEntry = catalog?.get(entry.id);
       return buildModelInfo(entry, catalogEntry);
     });

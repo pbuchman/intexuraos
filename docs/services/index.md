@@ -111,16 +111,12 @@ Catalog for IntexuraOS services, workers, and packages.
 
 ## AI Capabilities Overview
 
-IntexuraOS integrates **5 core LLM providers** with **15 LLM contract models** across active app services:
+Active app services execute LLM, Research, image, and embedding calls through **OpenRouter**. Historical model/provider types remain readable, and Claude/Codex code-task runtimes remain a separate orchestrator boundary.
 
 ```mermaid
 graph TB
     subgraph "AI Providers"
-        G[Google<br>Gemini 2.5 / 2.0]
-        O[OpenAI<br>GPT-5.4 / GPT Image]
-        A[Anthropic<br>Claude 4.6 / 4.7]
-        P[Perplexity<br>Sonar Pro]
-        OR[OpenRouter<br>Curated model catalog]
+        OR[OpenRouter<br>Text, tools, Research, images, embeddings]
     end
 
     subgraph "Primary AI Agents"
@@ -131,15 +127,10 @@ graph TB
         F[fishing-assistant-service]
     end
 
-    R --> G
-    R --> O
-    R --> A
-    R --> P
     R --> OR
     X --> OR
-    I --> O
-    I --> G
-    B --> G
+    I --> OR
+    B --> OR
     F --> OR
 ```
 
@@ -151,7 +142,7 @@ graph TB
 
 | Service                                      | AI Models              | Capability                                      |
 | -------------------------------------------- | ---------------------- | ----------------------------------------------- |
-| [research-agent](research-agent/features.md) | 10 static research models + OpenRouter | Parallel queries, synthesis, confidence scoring |
+| [research-agent](research-agent/features.md) | 16 curated OpenRouter models; maximum 6 per run | Parallel queries, synthesis, confidence scoring |
 
 ### Direct Tool Conversations
 
@@ -163,7 +154,7 @@ graph TB
 
 | Service                                    | AI Models                       | Capability                       |
 | ------------------------------------------ | ------------------------------- | -------------------------------- |
-| [image-service](image-service/features.md) | GPT Image 1, Gemini Flash Image | Cover images, prompt enhancement |
+| [image-service](image-service/features.md) | `gpt-image-1` and `gpt-4.1` aliases via OpenRouter | Cover images, prompt enhancement |
 
 ### Content Intelligence
 
@@ -209,11 +200,11 @@ Services that directly invoke AI models for their core functionality.
 | Service                                                | Purpose                            | AI                                               | Docs                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [intex-agent](intex-agent/features.md)                 | WhatsApp text direct tools         | OpenRouter Gemini 3.6 Flash                | [features](intex-agent/features.md) / [technical](intex-agent/technical.md) / [tutorial](intex-agent/tutorial.md) / [debt](intex-agent/technical-debt.md) / [agent](intex-agent/agent.md)                                        |
-| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Gemini, Claude, GPT, Sonar                       | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
-| [image-service](image-service/features.md)             | AI image generation                | GPT Image 1, Gemini Flash Image                  | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
+| [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Curated OpenRouter catalog, maximum 6 models     | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
+| [image-service](image-service/features.md)             | AI image generation                | GPT aliases executed through OpenRouter          | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
 | [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
-| [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3.6 Flash + OpenAI embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
+| [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3.6 Flash + OpenRouter embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
 | [message-digest-service](message-digest-service/features.md) | Scheduled private WhatsApp summaries | Configured OpenRouter model | [features](message-digest-service/features.md) / [technical](message-digest-service/technical.md) / [tutorial](message-digest-service/tutorial.md) / [debt](message-digest-service/technical-debt.md) / [agent](message-digest-service/agent.md) |
 | [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
 | [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | Gemini 2.5 Flash                                 | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
@@ -308,17 +299,17 @@ Shared libraries used across apps and workers.
 
 | Package                                                    | Provider                   | Capabilities                                    |
 | ---------------------------------------------------------- | -------------------------- | ----------------------------------------------- |
-| [infra-claude](../packages/infra-claude/README.md)         | Anthropic                  | Text generation, web search, prompt caching     |
-| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI                     | Text generation, web search, DALL-E             |
-| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity                 | SSE-streamed research with citations            |
-| [infra-openrouter](../packages/infra-openrouter/README.md) | OpenRouter                 | OpenRouter API client for dynamic model routing |
+| [infra-claude](../packages/infra-claude/README.md)         | Anthropic (retained)       | Inactive direct adapter kept for compatibility  |
+| [infra-gpt](../packages/infra-gpt/README.md)               | OpenAI (retained)          | Inactive direct adapter kept for compatibility  |
+| [infra-perplexity](../packages/infra-perplexity/README.md) | Perplexity (retained)      | Inactive direct adapter kept for compatibility  |
+| [infra-openrouter](../packages/infra-openrouter/README.md) | OpenRouter                 | Text, chat, tools, Research, images, embeddings |
 
 ### LLM Stack
 
 | Package                                            | Purpose                                                    |
 | -------------------------------------------------- | ---------------------------------------------------------- |
 | [llm-contract](../packages/llm-contract/README.md) | Model/provider types, LLMClient interface, pricing types   |
-| [llm-factory](../packages/llm-factory/README.md)   | Unified factory for creating provider-specific LLM clients |
+| [llm-factory](../packages/llm-factory/README.md)   | OpenRouter-only executable text, chat, and tool factory     |
 | [llm-prompts](../packages/llm-prompts/README.md)   | Centralized prompt templates and Zod response schemas      |
 | [llm-pricing](../packages/llm-pricing/README.md)   | Runtime pricing lookups, usage logging to Firestore        |
 | [llm-utils](../packages/llm-utils/README.md)       | Token redaction, LLM parse error handling, Zod formatting  |
@@ -338,23 +329,9 @@ Shared libraries used across apps and workers.
 
 ## AI Models Used
 
-### Research Models (10 static + OpenRouter)
+### Research Models (OpenRouter)
 
-Used for deep research queries with parallel execution. **v2.0.0:** Users can specify models in natural language ("research with Claude and GPT").
-
-| Model                 | Provider   | Specialty            |
-| --------------------- | ---------- | -------------------- |
-| Gemini 2.5 Pro        | Google     | Reasoning, analysis  |
-| Gemini 2.5 Flash      | Google     | Fast responses       |
-| GPT-5.4               | OpenAI     | Creative synthesis   |
-| o4-mini-deep-research | OpenAI     | Deep research        |
-| Claude Opus 4.6       | Anthropic  | Nuanced analysis     |
-| Claude Sonnet 4.6     | Anthropic  | Balanced performance |
-| Claude Sonnet 4.7     | Anthropic  | Balanced performance |
-| Sonar                 | Perplexity | Real-time web search |
-| Sonar Pro             | Perplexity | Enhanced search      |
-| Sonar Deep Research   | Perplexity | Comprehensive search |
-| OpenRouter model IDs  | OpenRouter | Curated dynamic model routing |
+Used for deep research queries with parallel execution. The UI lists the curated OpenRouter catalog first, and new requests accept at most six unique `or:` model IDs. Stored reports retain exact retired model IDs and provider labels for historical display without writeback.
 
 ### Fast Conversation Models (1)
 
@@ -364,25 +341,18 @@ Used for direct WhatsApp text conversations and fast tool-call decisions.
 | ---------------------- | ---------- | --------------------------------------- |
 | Gemini 3.6 Flash | OpenRouter | Intex tool selection and concise replies |
 
-### Image Models (2)
+### Image Models
 
 Used for image generation:
 
-| Model                     | Provider | Capability            |
-| ------------------------- | -------- | --------------------- |
-| GPT-Image-1 (GPT Image 1) | OpenAI   | High-quality images   |
-| Gemini 2.5 Flash Image    | Google   | Fast image generation |
+| Public alias | Provider   | Capability          |
+| ------------ | ---------- | ------------------- |
+| `gpt-image-1` | OpenRouter | Image generation    |
+| `gpt-4.1`     | OpenRouter | Prompt enhancement  |
 
-### Validation Models (4)
+### LLM Key Validation
 
-Used for API key validation (cheap, fast):
-
-| Model            | Provider   |
-| ---------------- | ---------- |
-| Claude Haiku 3.5 | Anthropic  |
-| Gemini 2.0 Flash | Google     |
-| GPT-4o Mini      | OpenAI     |
-| Sonar            | Perplexity |
+The only configurable LLM credential is OpenRouter. User-service validates it through the zero-cost `/api/v1/key` endpoint; active settings expose `user`, `platform`, or `unavailable` access.
 
 ---
 

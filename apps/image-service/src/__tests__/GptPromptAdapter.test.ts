@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import nock from 'nock';
 import { FakeUsageSink } from '@intexuraos/llm-pricing';
+import { OPENROUTER_GPT_4_1 } from '@intexuraos/infra-openrouter';
 import { GptPromptAdapter, mapError } from '../infra/llm/GptPromptAdapter.js';
 import type { Logger } from '@intexuraos/common-core';
 
@@ -54,8 +55,11 @@ describe('GptPromptAdapter', () => {
         },
       };
 
-      nock('https://api.openai.com')
-        .post('/v1/chat/completions')
+      nock('https://openrouter.ai')
+        .post(
+          '/api/v1/chat/completions',
+          (body) => (body as { model?: string }).model === OPENROUTER_GPT_4_1.apiModelId
+        )
         .reply(200, {
           choices: [
             {
@@ -86,8 +90,8 @@ describe('GptPromptAdapter', () => {
     });
 
     it('returns PARSE_ERROR when response is invalid', async () => {
-      nock('https://api.openai.com')
-        .post('/v1/chat/completions')
+      nock('https://openrouter.ai')
+        .post('/api/v1/chat/completions')
         .reply(200, {
           choices: [
             {
@@ -113,8 +117,8 @@ describe('GptPromptAdapter', () => {
     });
 
     it('returns INVALID_KEY error for API key failure', async () => {
-      nock('https://api.openai.com')
-        .post('/v1/chat/completions')
+      nock('https://openrouter.ai')
+        .post('/api/v1/chat/completions')
         .reply(401, {
           error: {
             message: 'Incorrect API key provided',
@@ -138,10 +142,9 @@ describe('GptPromptAdapter', () => {
     });
 
     it('returns RATE_LIMITED error for rate limit', async () => {
-      // 3 withRetry attempts × up to 3 OpenAI SDK internal retries = 9 max requests.
-      nock('https://api.openai.com')
-        .post('/v1/chat/completions')
-        .times(9)
+      nock('https://openrouter.ai')
+        .post('/api/v1/chat/completions')
+        .times(3)
         .reply(429, {
           error: {
             message: 'Rate limit reached for requests',
@@ -165,7 +168,9 @@ describe('GptPromptAdapter', () => {
     });
 
     it('returns API_ERROR for other errors', async () => {
-      nock('https://api.openai.com').post('/v1/chat/completions').replyWithError('Server error');
+      nock('https://openrouter.ai')
+        .post('/api/v1/chat/completions')
+        .reply(400, { error: { message: 'Server error' } });
 
       const adapter = new GptPromptAdapter({
         apiKey: 'test-key',
@@ -182,8 +187,8 @@ describe('GptPromptAdapter', () => {
     });
 
     it('returns API_ERROR for unknown error codes from LLM contract', async () => {
-      nock('https://api.openai.com')
-        .post('/v1/chat/completions')
+      nock('https://openrouter.ai')
+        .post('/api/v1/chat/completions')
         .reply(400, {
           error: {
             message: 'Unknown error type',
@@ -207,7 +212,7 @@ describe('GptPromptAdapter', () => {
     });
 
     it('handles empty response', async () => {
-      nock('https://api.openai.com').post('/v1/chat/completions').reply(200, {
+      nock('https://openrouter.ai').post('/api/v1/chat/completions').reply(200, {
         choices: [],
       });
 
@@ -221,11 +226,14 @@ describe('GptPromptAdapter', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('PARSE_ERROR');
+        expect(result.error.code).toBe('API_ERROR');
       }
     });
 
-    it('uses custom model when specified', async () => {
+    it.each([
+      ['gpt-4o', 'openai/gpt-4o'],
+      ['anthropic/claude-sonnet-4', 'anthropic/claude-sonnet-4'],
+    ])('uses custom model %s as OpenRouter model %s', async (model, expectedApiModel) => {
       const validResponse = {
         title: 'Test',
         visualSummary: 'Summary',
@@ -238,15 +246,18 @@ describe('GptPromptAdapter', () => {
         },
       };
 
-      nock('https://api.openai.com')
-        .post('/v1/chat/completions')
+      nock('https://openrouter.ai')
+        .post(
+          '/api/v1/chat/completions',
+          (body) => (body as { model?: string }).model === expectedApiModel
+        )
         .reply(200, {
           choices: [{ message: { content: JSON.stringify(validResponse) } }],
         });
 
       const adapter = new GptPromptAdapter({
         apiKey: 'test-key',
-        model: 'gpt-4o',
+        model,
         userId: 'test-user',
         logger: mockLogger,
         usageSink: mockUsageSink,

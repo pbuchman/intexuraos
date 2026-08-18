@@ -12,6 +12,8 @@
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const ROOT = process.cwd();
 
@@ -45,6 +47,15 @@ const PROVIDER_STRINGS = ['google', 'openai', 'anthropic', 'perplexity'];
 
 // Directories/files excluded from hardcoded string checks
 const EXCLUDED_PATHS = ['packages/llm-contract/', 'migrations/', 'node_modules/', 'dist/', '.git/'];
+
+const RETAINED_DIRECT_PROVIDER_APP_FILES = new Set([
+  'apps/research-agent/src/infra/llm/ClaudeAdapter.ts',
+  'apps/research-agent/src/infra/llm/GptAdapter.ts',
+  'apps/research-agent/src/infra/llm/PerplexityAdapter.ts',
+]);
+
+const DIRECT_PROVIDER_MODULE =
+  /^(?:@intexuraos\/infra-(?:claude|gemini|gpt|perplexity)|@anthropic-ai\/sdk|@google\/(?:genai|generative-ai)|openai)(?:\/.*)?$/u;
 
 interface Violation {
   file: string;
@@ -405,6 +416,86 @@ function checkRule5_NoHardcodedProviderStrings(): void {
   }
 }
 
+/**
+ * Block new direct-provider execution imports in applications.
+ *
+ * The three retained Research adapters remain readable for historical data and
+ * rollback, but execution factories must not make them reachable. All other
+ * application LLM traffic is required to enter through OpenRouter.
+ */
+export function checkOpenRouterOnlyAppImports(root = ROOT): Violation[] {
+  const found: Violation[] = [];
+  walkDir(
+    join(root, 'apps'),
+    (file) => {
+      const relPath = relative(root, file);
+      if (RETAINED_DIRECT_PROVIDER_APP_FILES.has(relPath)) return;
+
+      const source = readFileSync(file, 'utf-8');
+      const lines = source.split('\n');
+      const sourceFile = ts.createSourceFile(
+        file,
+        source,
+        ts.ScriptTarget.Latest,
+        true,
+        file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+      );
+
+      const visit = (node: ts.Node): void => {
+        const specifier = directProviderModuleSpecifier(node);
+        if (specifier !== undefined) {
+          const line =
+            sourceFile.getLineAndCharacterOfPosition(specifier.getStart(sourceFile)).line + 1;
+          found.push({
+            file: relPath,
+            line,
+            rule: 'RULE-6',
+            message:
+              'Direct-provider imports are forbidden in apps/. Route executable LLM traffic through OpenRouter.',
+            content: lines[line - 1]?.trim(),
+          });
+          return;
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sourceFile);
+    },
+    { includeTsx: true }
+  );
+  return found;
+}
+
+function directProviderModuleSpecifier(node: ts.Node): ts.StringLiteralLike | undefined {
+  let specifier: ts.StringLiteralLike | undefined;
+
+  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+    const moduleSpecifier = node.moduleSpecifier;
+    if (moduleSpecifier !== undefined && ts.isStringLiteralLike(moduleSpecifier)) {
+      specifier = moduleSpecifier;
+    }
+  } else if (
+    ts.isImportEqualsDeclaration(node) &&
+    ts.isExternalModuleReference(node.moduleReference)
+  ) {
+    const expression = node.moduleReference.expression;
+    if (expression !== undefined && ts.isStringLiteralLike(expression)) {
+      specifier = expression;
+    }
+  } else if (ts.isCallExpression(node)) {
+    const isModuleLoad =
+      node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === 'require');
+    const firstArgument = node.arguments[0];
+    if (isModuleLoad && firstArgument !== undefined && ts.isStringLiteralLike(firstArgument)) {
+      specifier = firstArgument;
+    }
+  }
+
+  return specifier !== undefined && DIRECT_PROVIDER_MODULE.test(specifier.text)
+    ? specifier
+    : undefined;
+}
+
 function main(): void {
   console.log('=== LLM Architecture Verification ===\n');
 
@@ -423,9 +514,12 @@ function main(): void {
   console.log('Rule 5: Checking for hardcoded provider strings...');
   checkRule5_NoHardcodedProviderStrings();
 
+  console.log('Rule 6: Checking for direct-provider imports in apps/...');
+  violations.push(...checkOpenRouterOnlyAppImports());
+
   // Separate blocking violations (RULE-1, RULE-2, RULE-3) from warnings (RULE-4, RULE-5)
   // All rules are now blocking after task 029-type-safe-llm-constants completion
-  const blockingRules = ['RULE-1', 'RULE-2', 'RULE-3', 'RULE-4', 'RULE-5'];
+  const blockingRules = ['RULE-1', 'RULE-2', 'RULE-3', 'RULE-4', 'RULE-5', 'RULE-6'];
   const warningRules: string[] = [];
 
   const blockingViolations = violations.filter((v) => blockingRules.includes(v.rule));
@@ -486,4 +580,7 @@ function main(): void {
   process.exit(0);
 }
 
-main();
+const entryPoint = process.argv[1];
+if (entryPoint !== undefined && import.meta.url === pathToFileURL(entryPoint).href) {
+  main();
+}

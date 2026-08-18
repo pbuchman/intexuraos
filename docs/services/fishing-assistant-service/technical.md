@@ -2,7 +2,7 @@
 
 ## Overview
 
-`fishing-assistant-service` is a Fastify app under `apps/fishing-assistant-service`. It owns Fishing Assistant knowledge folders, pages, chunks, chats, and chat messages in Firestore. It depends on user-service, message-digest-service, whatsapp-service, llm-usage-service, OpenAI embeddings, and the shared LLM client factory.
+`fishing-assistant-service` is a Fastify app under `apps/fishing-assistant-service`. It owns Fishing Assistant knowledge folders, pages, chunks, chats, and chat messages in Firestore. Chat and embeddings execute through OpenRouter.
 
 ## Architecture
 
@@ -10,8 +10,8 @@
 graph TD
     Web[Web client] --> Service[Fishing Assistant Service]
     Service --> Firestore[(Firestore collections)]
-    Service --> OpenAI[OpenAI embeddings]
-    Service --> UserService[User Service API keys]
+    Service --> OpenRouter[OpenRouter chat and embeddings]
+    Service --> UserService[User/platform OpenRouter resolution]
     Service --> MessageDigest[Message Digest canonical summaries]
     Service --> WhatsApp[WhatsApp scoped source messages]
     Service --> LlmUsage[LLM Usage Service]
@@ -119,8 +119,8 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 | Dependency | Purpose |
 | ---------- | ------- |
 | Firestore | Persists folders, pages, chunks, chats, and messages. |
-| OpenAI embeddings | Generates `text-embedding-3-small` embeddings for knowledge chunks and questions. |
-| user-service | Loads the authenticated user's OpenRouter API key for chat generation. |
+| OpenRouter embeddings | Generates `openai/text-embedding-3-small` embeddings while preserving the persisted `text-embedding-3-small` alias and 1536 dimensions. |
+| user-service | Resolves the authenticated user's OpenRouter key with platform fallback for chat generation. |
 | message-digest-service | Supplies the migrated Fishing definition and canonical summary history. |
 | whatsapp-service | Supplies source-message evidence through the definition-scoped private WhatsApp contract. |
 | llm-usage-service | Receives LLM usage through `HttpInternalAuthUsageSink`. |
@@ -139,7 +139,7 @@ All application routes use bearer authentication through `withAuth`. `/status`, 
 | `INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL` | Yes | message-digest-service base URL. |
 | `INTEXURAOS_WHATSAPP_SERVICE_URL` | Yes | whatsapp-service base URL for scoped source evidence. |
 | `INTEXURAOS_LLM_USAGE_SERVICE_URL` | Yes | llm-usage-service base URL. |
-| `INTEXURAOS_OPENAI_APP_API_KEY` | Yes | OpenAI app key for embeddings. |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY` | Yes | Platform OpenRouter fallback and embedding credential. |
 | `INTEXURAOS_SENTRY_DSN` | No | Sentry DSN. |
 | `INTEXURAOS_ENVIRONMENT` | No | Runtime environment label. |
 | `PORT` | No | HTTP port, default `8080`. |
@@ -150,7 +150,7 @@ The service owns `fishing_knowledge_folders`, `fishing_knowledge_pages`, `fishin
 
 ## Gotchas
 
-**Chat generation requires a user key** - The fixed chat client loads `openrouter` from user-service and returns `NO_API_KEY` when missing.
+**Chat generation requires resolved access** - The fixed chat client uses the user OpenRouter key or platform fallback and returns `NO_API_KEY` only when both are unavailable.
 
 **Embedding failure stores failed pages** - Create/update paths can persist pages with `indexingStatus: failed`, `indexingError`, and `chunkCount: 0`.
 

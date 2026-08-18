@@ -85,6 +85,7 @@ describe('whatsapp-service service wiring', () => {
       internalAuthToken: 'internal-token',
       llmUsageServiceUrl: 'https://llm-usage.test',
       userServiceUrl: 'https://user-service.test',
+      platformOpenRouterApiKey: 'platform-openrouter-key',
       messageDigestServiceUrl: 'https://message-digest-service.test',
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',
@@ -117,6 +118,7 @@ describe('whatsapp-service service wiring', () => {
       internalAuthToken: 'internal-token',
       llmUsageServiceUrl: 'https://llm-usage.test',
       userServiceUrl: 'https://user-service.test',
+      platformOpenRouterApiKey: 'platform-openrouter-key',
       messageDigestServiceUrl: 'https://message-digest-service.test',
       conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
       matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',
@@ -135,6 +137,7 @@ describe('whatsapp-service service wiring', () => {
       expect.objectContaining({
         baseUrl: 'https://user-service.test',
         internalAuthToken: 'internal-token',
+        platformOpenRouterApiKey: 'platform-openrouter-key',
       })
     );
     expect(mocks.getApiKeys).toHaveBeenCalledWith('user-123');
@@ -223,6 +226,7 @@ describe('whatsapp-service service wiring', () => {
         internalAuthToken: 'internal-token',
         llmUsageServiceUrl: 'https://llm-usage.test',
         userServiceUrl: 'https://user-service.test',
+        platformOpenRouterApiKey: 'platform-openrouter-key',
         messageDigestServiceUrl: 'https://message-digest-service.test',
         conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
         matrixOutboundAdapterBaseUrl: 'https://matrix-adapter.test',

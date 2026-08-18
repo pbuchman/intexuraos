@@ -43,6 +43,7 @@ describe('whatsapp-service OpenAPI contract', () => {
     internalAuthToken: 'test-internal-auth-token',
     llmUsageServiceUrl: 'http://llm-usage.test',
     userServiceUrl: 'http://user-service.test',
+    platformOpenRouterApiKey: 'platform-openrouter-key',
     messageDigestServiceUrl: 'http://message-digest-service.test',
     conversationAssistantModel: DEFAULT_CONVERSATION_ASSISTANT_MODEL,
     port: 8080,

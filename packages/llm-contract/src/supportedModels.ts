@@ -3,9 +3,9 @@
  *
  * Single source of truth for model names via TypeScript union types.
  * Models are categorized by their primary use case.
- * Executable model identifiers live in the regular model unions below.
- * Retired direct-Google identifiers are isolated in the legacy-read contract
- * so persisted historical data remains recognizable without becoming runnable.
+ * OpenRouter IDs are the only executable model identifiers. Direct-provider
+ * model unions remain available for persisted history and rollback-only code.
+ * Retired direct-Google identifiers are isolated in the legacy-read contract.
  */
 
 // =============================================================================
@@ -21,8 +21,11 @@ export type OpenRouter = 'openrouter';
 /** Union of all LLM providers */
 export type LlmProvider = Google | OpenAI | Anthropic | Perplexity | OpenRouter;
 
+/** Direct providers retained for historical data and rollback-only adapters. */
+export type DirectLlmProvider = OpenAI | Anthropic | Perplexity;
+
 /** Providers that can execute new LLM requests. */
-export type ExecutableLlmProvider = Exclude<LlmProvider, Google>;
+export type ExecutableLlmProvider = OpenRouter;
 
 // =============================================================================
 // Legacy Model Types - Direct Google (read/migration only)
@@ -154,9 +157,6 @@ export const LlmProviders = {
 
 /** Runtime allowlist for provider-selection and key-validation endpoints. */
 export const EXECUTABLE_LLM_PROVIDERS: readonly ExecutableLlmProvider[] = [
-  LlmProviders.OpenAI,
-  LlmProviders.Anthropic,
-  LlmProviders.Perplexity,
   LlmProviders.OpenRouter,
 ] as const;
 
@@ -165,8 +165,8 @@ export const EXECUTABLE_LLM_PROVIDERS: readonly ExecutableLlmProvider[] = [
 // =============================================================================
 
 /**
- * Typed constants for executable direct-provider LLM models.
- * Retired direct-Google IDs live only in `LegacyGoogleModels`.
+ * Typed constants for historical direct-provider LLM model IDs.
+ * They are not accepted by executable factories or preference writes.
  */
 export const LlmModels = {
   // OpenAI
@@ -222,7 +222,7 @@ export const ALL_FAST_MODELS: FastModel[] = [LlmModels.ClaudeHaiku35, LlmModels.
 /**
  * Map from model to provider.
  */
-export const MODEL_PROVIDER_MAP: Record<LLMModel, ExecutableLlmProvider> = {
+export const MODEL_PROVIDER_MAP: Record<LLMModel, DirectLlmProvider> = {
   // OpenAI
   [LlmModels.O4MiniDeepResearch]: LlmProviders.OpenAI,
   [LlmModels.GPT54]: LlmProviders.OpenAI,
@@ -285,27 +285,16 @@ const DEFAULT_OPENROUTER_MODEL_IDS: ReadonlySet<string> = new Set(
  * but runtime validation via `isDefaultEligibleModel()` only accepts the
  * curated models in `DEFAULT_OPENROUTER_MODELS`. Always validate at runtime.
  */
-export type DefaultEligibleStaticModel = ClaudeHaiku35 | GPT4oMini;
-export type DefaultEligibleModel = DefaultEligibleStaticModel | OpenRouterModelId;
+export type DefaultEligibleStaticModel = never;
+export type DefaultEligibleModel = OpenRouterModelId;
 
-export const DEFAULT_ELIGIBLE_STATIC_MODELS: readonly DefaultEligibleStaticModel[] = [
-  LlmModels.ClaudeHaiku35,
-  LlmModels.GPT4oMini,
-] as const;
-
-const DEFAULT_ELIGIBLE_STATIC_MODEL_IDS: ReadonlySet<string> = new Set(
-  DEFAULT_ELIGIBLE_STATIC_MODELS
-);
+export const DEFAULT_ELIGIBLE_STATIC_MODELS: readonly DefaultEligibleStaticModel[] = [];
 
 export function isDefaultEligibleModel(model: string): model is DefaultEligibleModel {
-  if (DEFAULT_ELIGIBLE_STATIC_MODEL_IDS.has(model)) return true;
   return DEFAULT_OPENROUTER_MODEL_IDS.has(model);
 }
 
 export const DEFAULT_MODEL_DISPLAY_NAMES: Record<string, string> = {
-  ...Object.fromEntries(
-    DEFAULT_ELIGIBLE_STATIC_MODELS.map((model) => [model, FAST_MODEL_DISPLAY_NAMES[model]])
-  ),
   ...Object.fromEntries(DEFAULT_OPENROUTER_MODELS.map((m) => [`or:${m.id}`, m.name])),
 };
 
@@ -408,6 +397,21 @@ export const DEFAULT_INTEX_AGENT_MODEL = IntexAgentModels.DeepSeekV4Flash;
  */
 export const DEFAULT_PLATFORM_LLM_MODEL = IntexAgentModels.MiniMaxM3;
 
+export type OpenRouterGPT54 = 'or:openai/gpt-5.4' & OpenRouterModelId;
+
+/** OpenRouter models explicitly allowed for new Research synthesis calls. */
+export const ResearchSynthesisModels = {
+  MiniMaxM3: DEFAULT_PLATFORM_LLM_MODEL,
+  GPT54: createOpenRouterModelId('openai/gpt-5.4') as OpenRouterGPT54,
+} as const;
+
+export const RESEARCH_SYNTHESIS_MODELS: readonly ResearchModel[] = [
+  ResearchSynthesisModels.MiniMaxM3,
+  ResearchSynthesisModels.GPT54,
+] as const;
+
+export const DEFAULT_RESEARCH_SYNTHESIS_MODEL: ResearchModel = DEFAULT_PLATFORM_LLM_MODEL;
+
 export const INTEX_AGENT_MODEL_OPTIONS = [
   { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash', provider: 'DeepSeek' },
   { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3', provider: 'MiniMax' },
@@ -435,10 +439,22 @@ export function normalizeRetiredOpenRouterModel(model: string): string {
 }
 
 /**
+ * Normalize a persisted executable preference at read boundaries only.
+ *
+ * Research history must not use this helper. Unknown, direct-provider, and
+ * retired preferences fall back to the active platform model without writeback.
+ */
+export function normalizeLlmModelPreferenceForRead(model: string): DefaultEligibleModel {
+  const normalizedModel = normalizeRetiredOpenRouterModel(model);
+  return isDefaultEligibleModel(normalizedModel) ? normalizedModel : DEFAULT_PLATFORM_LLM_MODEL;
+}
+
+/**
  * Get provider for a model.
  */
 export function getProviderForModel(model: LegacyGoogleModel): Google;
-export function getProviderForModel(model: LLMModel | OpenRouterModelId): ExecutableLlmProvider;
+export function getProviderForModel(model: LLMModel): DirectLlmProvider;
+export function getProviderForModel(model: OpenRouterModelId): ExecutableLlmProvider;
 export function getProviderForModel(model: string): LlmProvider;
 export function getProviderForModel(model: string): LlmProvider {
   if (isOpenRouterModel(model)) {
@@ -448,7 +464,7 @@ export function getProviderForModel(model: string): LlmProvider {
     return LlmProviders.Google;
   }
 
-  const provider = (MODEL_PROVIDER_MAP as Partial<Record<string, ExecutableLlmProvider>>)[model];
+  const provider = (MODEL_PROVIDER_MAP as Partial<Record<string, DirectLlmProvider>>)[model];
   if (provider === undefined) {
     throw new Error(`Unknown LLM model: ${model}`);
   }

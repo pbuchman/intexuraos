@@ -5,12 +5,13 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import {
-  getProviderForModel,
-  isLegacyGoogleModel,
-  type LLMModel,
-  type OpenRouterToolCallingModel,
+  getOpenRouterRawId,
+  isOpenRouterModel,
+  RESEARCH_SYNTHESIS_MODELS,
+  type OpenRouterModelId,
   type ResearchModel,
 } from '@intexuraos/llm-contract';
+import { isAllowedModel } from '@intexuraos/infra-openrouter';
 import type { UsageSink } from '@intexuraos/llm-pricing';
 import type {
   LlmResearchProvider,
@@ -18,9 +19,6 @@ import type {
   TitleGenerator,
 } from '../../domain/research/index.js';
 import type { ContextInferenceProvider } from '../../domain/research/ports/contextInference.js';
-import { ClaudeAdapter } from './ClaudeAdapter.js';
-import { GptAdapter } from './GptAdapter.js';
-import { PerplexityAdapter } from './PerplexityAdapter.js';
 import { OpenRouterAdapter } from './OpenRouterAdapter.js';
 import { ContextInferenceAdapter } from './ContextInferenceAdapter.js';
 import {
@@ -35,21 +33,10 @@ export function createResearchProvider(
   logger: Logger,
   usageSink: UsageSink
 ): LlmResearchProvider {
-  if (isLegacyGoogleModel(model as string)) {
-    throw new Error('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
+  if (!isAllowedOpenRouterModel(model)) {
+    throw new Error('Only allowlisted OpenRouter research models are executable');
   }
-  const provider = getProviderForModel(model);
-
-  switch (provider) {
-    case 'anthropic':
-      return new ClaudeAdapter(apiKey, model, userId, logger, usageSink);
-    case 'openai':
-      return new GptAdapter(apiKey, model, userId, logger, usageSink);
-    case 'perplexity':
-      return new PerplexityAdapter(apiKey, model, userId, logger, usageSink);
-    case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink);
-  }
+  return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink);
 }
 
 export function createSynthesizer(
@@ -60,21 +47,13 @@ export function createSynthesizer(
   usageSink: UsageSink,
   researchId?: string
 ): LlmSynthesisProvider {
-  if (isLegacyGoogleModel(model as string)) {
-    throw new Error('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
+  if (
+    !isAllowedOpenRouterModel(model) ||
+    !RESEARCH_SYNTHESIS_MODELS.some((synthesisModel) => synthesisModel === model)
+  ) {
+    throw new Error('Only allowlisted OpenRouter synthesis models are executable');
   }
-  const provider = getProviderForModel(model);
-
-  switch (provider) {
-    case 'anthropic':
-      throw new Error('Anthropic does not support synthesis');
-    case 'openai':
-      return new GptAdapter(apiKey, model, userId, logger, usageSink, researchId);
-    case 'perplexity':
-      throw new Error('Perplexity does not support synthesis');
-    case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
-  }
+  return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export function createTitleGenerator(
@@ -85,41 +64,41 @@ export function createTitleGenerator(
   usageSink: UsageSink,
   researchId?: string
 ): TitleGenerator {
-  if (isLegacyGoogleModel(model as string)) {
-    throw new Error('Direct Google LLM models are disabled; use an or:google/ OpenRouter model');
+  if (!isAllowedOpenRouterModel(model)) {
+    throw new Error('Only allowlisted OpenRouter title models are executable');
   }
-  const provider = getProviderForModel(model);
+  return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
+}
 
-  switch (provider) {
-    case 'openai':
-      throw new Error('OpenAI does not support context-label title generation');
-    case 'openrouter':
-      return new OpenRouterAdapter(apiKey, model, userId, logger, usageSink, researchId);
-    case 'anthropic':
-    case 'perplexity':
-      throw new Error(`${provider} does not support title generation`);
-  }
+function isAllowedOpenRouterModel(model: string): model is OpenRouterModelId {
+  return isOpenRouterModel(model) && isAllowedModel(getOpenRouterRawId(model));
 }
 
 export function createContextInferrer(
-  model: LLMModel | OpenRouterToolCallingModel,
+  model: ResearchModel,
   apiKey: string,
   userId: string,
   logger: Logger,
   usageSink: UsageSink,
   researchId?: string
 ): ContextInferenceProvider {
+  if (!isAllowedOpenRouterModel(model)) {
+    throw new Error('Only allowlisted OpenRouter context models are executable');
+  }
   return new ContextInferenceAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 
 export function createInputValidator(
-  model: LLMModel | OpenRouterToolCallingModel,
+  model: ResearchModel,
   apiKey: string,
   userId: string,
   logger: Logger,
   usageSink: UsageSink,
   researchId?: string
 ): InputValidationProvider {
+  if (!isAllowedOpenRouterModel(model)) {
+    throw new Error('Only allowlisted OpenRouter validation models are executable');
+  }
   return new InputValidationAdapter(apiKey, model, userId, logger, usageSink, researchId);
 }
 

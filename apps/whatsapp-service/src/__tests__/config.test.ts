@@ -37,6 +37,7 @@ describe('config validation', () => {
     savedMatrixOutboundAdapterAuthToken =
       process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
     savedOpenRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'platform-openrouter-key';
     savedConversationAssistantModel =
       process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
   });
@@ -129,6 +130,7 @@ describe('config validation', () => {
     delete process.env['INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL'];
     delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
     delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
+    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
 
     const missing = validateConfigEnv();
     expect(missing).toContain('INTEXURAOS_WHATSAPP_VERIFY_TOKEN');
@@ -139,7 +141,7 @@ describe('config validation', () => {
     expect(missing).toContain('INTEXURAOS_MESSAGE_DIGEST_SERVICE_URL');
     expect(missing).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL');
     expect(missing).toContain('INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN');
-    expect(missing).not.toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
+    expect(missing).toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
     expect(missing).not.toContain('INTEXURAOS_CONVERSATION_ASSISTANT_MODEL');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_SOURCE_ACCOUNT_ID');
     expect(missing).not.toContain('INTEXURAOS_PRIVATE_WHATSAPP_OWNER_USER_ID');
@@ -178,7 +180,7 @@ describe('config validation', () => {
       'http://message-digest-service.test';
     process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://matrix-adapter.test';
     process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-adapter-token';
-    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'platform-openrouter-key';
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:minimax/minimax-m3';
 
@@ -206,7 +208,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
     process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://matrix-adapter.test';
     process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-adapter-token';
-    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'platform-openrouter-key';
     process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'] =
       'or:minimax/minimax-m3';
 
@@ -251,7 +253,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN'] = 'test-auth-token';
     process.env['INTEXURAOS_LLM_USAGE_SERVICE_URL'] = 'http://llm-usage.test';
     process.env['INTEXURAOS_USER_SERVICE_URL'] = 'http://user-service.test';
-    delete process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
+    process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'platform-openrouter-key';
     delete process.env['INTEXURAOS_CONVERSATION_ASSISTANT_MODEL'];
 
     const config = loadConfig();
@@ -260,6 +262,7 @@ describe('config validation', () => {
     expect(config.llmUsageServiceUrl).toBe('http://llm-usage.test');
     expect(config.userServiceUrl).toBe('http://user-service.test');
     expect(config.messageDigestServiceUrl).toBe('http://message-digest-service.test');
+    expect(config.platformOpenRouterApiKey).toBe('platform-openrouter-key');
     expect(config.conversationAssistantModel).toBe('or:minimax/minimax-m3');
   });
 

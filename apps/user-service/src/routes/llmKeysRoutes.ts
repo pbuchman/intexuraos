@@ -9,13 +9,10 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { logIncomingRequest, requireAuth } from '@intexuraos/common-http';
 import {
-  DEFAULT_PLATFORM_LLM_MODEL,
   DEFAULT_INTEX_AGENT_MODEL,
   EXECUTABLE_LLM_PROVIDERS,
-  getProviderForModel,
   INTEX_AGENT_MODEL_OPTIONS,
-  isLegacyGoogleModel,
-  LlmProviders,
+  normalizeLlmModelPreferenceForRead,
   type ExecutableLlmProvider,
 } from '@intexuraos/llm-contract';
 import type { EncryptedValue } from '../infra/encryption.js';
@@ -24,14 +21,10 @@ import { type LlmTestResult, maskApiKey } from '../domain/settings/index.js';
 import { formatLlmError } from '../domain/settings/formatLlmError.js';
 
 const INTEG_AGENT_MODEL_IDS = INTEX_AGENT_MODEL_OPTIONS.map(({ id }) => id);
-type DeletableLlmProvider = ExecutableLlmProvider | typeof LlmProviders.Google;
 
 function normalizeLegacyPreference(model: string | undefined): string | null {
   if (model === undefined) return null;
-  if (isLegacyGoogleModel(model)) {
-    return DEFAULT_PLATFORM_LLM_MODEL;
-  }
-  return model;
+  return normalizeLlmModelPreferenceForRead(model);
 }
 const INTEG_AGENT_SELECTOR_OPTIONS_SCHEMA = {
   type: 'array',
@@ -108,43 +101,14 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                 properties: {
                   defaultModel: { type: 'string', nullable: true },
                   fallbackModel: { type: 'string', nullable: true },
-                  openai: { type: 'string', nullable: true },
-                  anthropic: { type: 'string', nullable: true },
-                  perplexity: { type: 'string', nullable: true },
+                  accessSource: {
+                    type: 'string',
+                    enum: ['user', 'platform', 'unavailable'],
+                  },
                   openrouter: { type: 'string', nullable: true },
                   testResults: {
                     type: 'object',
                     properties: {
-                      openai: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
-                      anthropic: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
-                      perplexity: {
-                        type: 'object',
-                        nullable: true,
-                        properties: {
-                          status: { type: 'string', enum: ['success', 'failure'] },
-                          message: { type: 'string' },
-                          testedAt: { type: 'string' },
-                        },
-                        required: ['status', 'message', 'testedAt'],
-                      },
                       openrouter: {
                         type: 'object',
                         nullable: true,
@@ -188,7 +152,14 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
                     ],
                   },
                 },
-                required: ['defaultModel', 'fallbackModel', 'openai', 'anthropic', 'perplexity', 'openrouter', 'testResults', 'intexAgentModelSelector'],
+                required: [
+                  'defaultModel',
+                  'fallbackModel',
+                  'accessSource',
+                  'openrouter',
+                  'testResults',
+                  'intexAgentModelSelector',
+                ],
               },
               diagnostics: { $ref: 'Diagnostics#' },
             },
@@ -247,7 +218,11 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           return await reply.fail('FORBIDDEN', 'Cannot access other user settings');
         }
 
-        const { userSettingsRepository, intexAgentModelAvailability } = getServices();
+        const {
+          userSettingsRepository,
+          intexAgentModelAvailability,
+          platformOpenRouterApiKeyAvailable,
+        } = getServices();
         const available = await intexAgentModelAvailability.isAvailableForUser(params.uid);
         const selectorResult = await userSettingsRepository.getIntexAgentModelState(params.uid);
 
@@ -274,20 +249,24 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           if (encryptedKey === undefined || encryptor === null) return null;
           const decrypted = encryptor.decrypt(encryptedKey);
           if (!decrypted.ok) return null;
-          return maskApiKey(decrypted.value);
+          const apiKey = decrypted.value.trim();
+          return apiKey === '' ? null : maskApiKey(apiKey);
         };
+
+        const maskedOpenRouterKey = getMaskedKey(llmApiKeys?.openrouter);
+        const accessSource =
+          maskedOpenRouterKey !== null
+            ? ('user' as const)
+            : platformOpenRouterApiKeyAvailable
+              ? ('platform' as const)
+              : ('unavailable' as const);
 
         return await reply.ok({
           defaultModel: normalizeLegacyPreference(settings?.llmPreferences?.defaultModel),
           fallbackModel: normalizeLegacyPreference(settings?.llmPreferences?.fallbackModel),
-          openai: getMaskedKey(llmApiKeys?.openai),
-          anthropic: getMaskedKey(llmApiKeys?.anthropic),
-          perplexity: getMaskedKey(llmApiKeys?.perplexity),
-          openrouter: getMaskedKey(llmApiKeys?.openrouter),
+          accessSource,
+          openrouter: maskedOpenRouterKey,
           testResults: {
-            openai: llmTestResults?.openai ?? null,
-            anthropic: llmTestResults?.anthropic ?? null,
-            perplexity: llmTestResults?.perplexity ?? null,
             openrouter: llmTestResults?.openrouter ?? null,
           },
           intexAgentModelSelector: available
@@ -567,9 +546,6 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const providerNameMap: Record<ExecutableLlmProvider, string> = {
-        openai: 'GPT',
-        anthropic: 'Claude',
-        perplexity: 'Perplexity',
         openrouter: 'OpenRouter',
       };
       const providerName = providerNameMap[params.provider];
@@ -631,7 +607,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             uid: { type: 'string', description: 'User ID' },
             provider: {
               type: 'string',
-              enum: [...EXECUTABLE_LLM_PROVIDERS, LlmProviders.Google],
+              enum: EXECUTABLE_LLM_PROVIDERS,
               description: 'LLM provider name',
             },
           },
@@ -678,7 +654,7 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
         return;
       }
 
-      const params = request.params as { uid: string; provider: DeletableLlmProvider };
+      const params = request.params as { uid: string; provider: ExecutableLlmProvider };
 
       if (params.uid !== user.userId) {
         return await reply.fail('FORBIDDEN', 'Cannot delete other user settings');
@@ -693,42 +669,6 @@ export const llmKeysRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       if (!deleteResult.ok) {
         return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
-      }
-
-      // Cascade: clear defaultModel/fallbackModel if they belong to the deleted provider
-      const settingsResult = await userSettingsRepository.getSettings(params.uid);
-      if (settingsResult.ok) {
-        const prefs = settingsResult.value?.llmPreferences;
-        const currentDefault = prefs?.defaultModel;
-        const currentFallback = prefs?.fallbackModel;
-
-        let shouldClearAll = false;
-        if (currentDefault !== undefined) {
-          const defaultProvider = getProviderForModel(currentDefault);
-          if (defaultProvider === params.provider) {
-            shouldClearAll = true;
-          }
-        }
-
-        let shouldClearFallback = false;
-        if (currentFallback !== undefined) {
-          const fallbackProvider = getProviderForModel(currentFallback);
-          if (fallbackProvider === params.provider) {
-            shouldClearFallback = true;
-          }
-        }
-
-        if (shouldClearAll) {
-          const clearResult = await userSettingsRepository.clearLlmPreferences(params.uid);
-          if (!clearResult.ok) {
-            request.log.warn({ userId: params.uid }, 'Failed to cascade-clear LLM preferences after key deletion');
-          }
-        } else if (shouldClearFallback && currentDefault !== undefined) {
-          const clearResult = await userSettingsRepository.updateLlmPreferences(params.uid, currentDefault, null);
-          if (!clearResult.ok) {
-            request.log.warn({ userId: params.uid }, 'Failed to cascade-clear fallback model after key deletion');
-          }
-        }
       }
 
       return await reply.ok({});

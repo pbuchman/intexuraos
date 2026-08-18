@@ -26,9 +26,9 @@ Every generated image is accompanied by a thumbnail — a 256-pixel JPEG optimiz
 
 When you unshare a piece of research, the associated cover image is deleted from storage and from the database. No orphaned files accumulate. The system stays clean without manual intervention.
 
-### Provider-Owned Generation
+### OpenRouter Generation with Stable Aliases
 
-Prompt and image generation use the supported OpenAI provider credential. The service has no shared direct-Gemini fallback.
+Prompt and image generation execute through OpenRouter. Existing request aliases remain `gpt-4.1` and `gpt-image-1`, so callers and persisted image metadata require no migration.
 
 ### Human-Readable File Paths
 
@@ -40,13 +40,13 @@ When a title is provided, the generated image receives a readable file name deri
 - **Invisible prompt engineering** — The two-step pipeline handles the hard part so you do not have to
 - **Thumbnail included** — Every image ships with a 256px preview, ready for cards and social sharing
 - **Automatic cleanup** — Unsharing removes both storage and database records, preventing orphans
-- **Single supported provider** — Prompt and image generation use OpenAI
-- **User-controlled costs** — When users bring their own keys, their keys are used
+- **Single supported provider** — Prompt and image generation use OpenRouter
+- **User/platform access** — A user OpenRouter key takes precedence over the platform fallback
 
 ## Limitations
 
 - **Works behind the scenes** — End users never interact with this service directly; it runs in the background, called by other agents like research-agent
-- **OpenAI credential required** — Prompt and image generation require the user's OpenAI API key; there is no direct Gemini platform fallback
+- **OpenRouter access required** — Prompt and image generation use the user key or platform fallback
 - **No image editing** — Generates new images only; cannot crop, filter, or modify an existing image
 - **No style selection** — You cannot choose artistic styles, color palettes, or visual themes; the service decides what fits the content
 - **Generation takes a few seconds** — The two-step pipeline (prompt creation then image generation) adds processing time

@@ -316,6 +316,29 @@ describe('retryFromFailed', () => {
   });
 
   describe('retry synthesis', () => {
+    it('returns an error when synthesis dependencies are missing', async () => {
+      const research = createTestResearch({
+        status: 'failed',
+        llmResults: [
+          {
+            provider: LlmProviders.OpenAI,
+            model: LlmModels.GPT54,
+            status: 'completed',
+            result: 'Result 1',
+          },
+        ],
+        synthesisError: 'Previous error',
+      });
+      deps.mockRepo.findById.mockResolvedValue(ok(research));
+
+      const result = await retryFromFailed('research-1', {
+        researchRepo: deps.researchRepo,
+        llmCallPublisher: deps.llmCallPublisher,
+      });
+
+      expect(result).toEqual({ ok: false, error: 'Synthesis dependencies are required' });
+    });
+
     it('re-runs synthesis when synthesis failed but LLMs succeeded', async () => {
       const research = createTestResearch({
         status: 'failed',

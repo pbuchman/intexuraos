@@ -31,7 +31,7 @@
     "@intexuraos/http-contracts": "workspace:*",
     "@intexuraos/http-server": "workspace:*",
     "@intexuraos/infra-firestore": "workspace:*",
-    "@intexuraos/infra-gpt": "workspace:*",
+    "@intexuraos/infra-openrouter": "workspace:*",
     "@intexuraos/infra-pubsub": "workspace:*",
     "@intexuraos/infra-sentry": "workspace:*",
     "@intexuraos/internal-clients": "workspace:*",
@@ -46,7 +46,6 @@
     "ajv-formats": "^3.0.1",
     "fastify": "catalog:",
     "jose": "^6.1.3",
-    "openai": "catalog:",
     "pino": "catalog:",
     "zod": "catalog:"
   },

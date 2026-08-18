@@ -12,7 +12,7 @@ Research Agent automates that entire workflow: send one prompt, receive one synt
 
 ### Parallel Multi-Model Research
 
-Submit a single research prompt and Research Agent dispatches it simultaneously to the selected OpenRouter models — Gemini, Claude, GPT, Grok, Qwen, and others. Each model runs concurrently in its own Cloud Run instance, so a five-model research takes roughly the same wall-clock time as a single call.
+Submit a single research prompt and Research Agent dispatches it simultaneously to up to six selected OpenRouter models — Gemini, Claude, GPT, Grok, Qwen, and others. Each model runs concurrently in its own Cloud Run instance, so a multi-model research takes roughly the same wall-clock time as a single call.
 
 **Example:** A user asks "What are the risks of adopting a microservices architecture for a 10-person startup?" All five configured models research the question in parallel. Within minutes, the user has five expert perspectives ready for synthesis.
 
@@ -42,7 +42,7 @@ A completed research can be enhanced rather than re-run from scratch. The user a
 
 ### Automatic Public Sharing
 
-Every completed research automatically generates a self-contained HTML page uploaded to Google Cloud Storage. The page includes the synthesis, individual model reports, an optional generated cover image, and attribution breakdown. A shareable public URL is created immediately — no manual export step required. Cover images use the OpenAI image pipeline only; when its credential is unavailable or generation fails, the report is still published without a cover image.
+Every completed research automatically generates a self-contained HTML page uploaded to Google Cloud Storage. The page includes the synthesis, individual model reports, an optional generated cover image, and attribution breakdown. A shareable public URL is created immediately — no manual export step required. Cover images use the OpenRouter image pipeline while retaining the `gpt-image-1` public alias; when generation fails, the report is still published without a cover image.
 
 **Example:** A researcher shares their competitive analysis with a client by pasting a single link. The recipient sees a fully formatted report without needing an IntexuraOS account. If cover generation fails, the report remains available without delaying publication.
 
@@ -88,7 +88,7 @@ The PM shares the link in the board pre-read Slack channel and exports it to Not
 - Context-aware prompts produce more relevant, focused research results
 - Low-quality responses detected and deprioritized before synthesis
 - Reuse prior results when expanding research — no redundant API costs
-- Shareable reports generated automatically, with an optional OpenAI-generated cover image
+- Shareable reports generated automatically, with an optional OpenRouter-generated cover image
 - Research organized in Notion without manual copy-paste
 - Important notifications ensure timely delivery of completion alerts
 
@@ -97,9 +97,10 @@ The PM shares the link in the board pre-read Slack channel and exports it to Not
 - Each input context is limited to 60,000 characters; maximum 5 contexts per research
 - Notion export requires a pre-configured target page in user settings
 - Partial failures (some models failing) require user confirmation before synthesis proceeds
-- Cover image generation requires an OpenAI API key; Google image generation is disabled
+- Cover image generation requires resolved OpenRouter access and uses the `gpt-image-1` public alias
 - OpenRouter calls require an OpenRouter credential resolved by user-service (user key or platform fallback)
 - OpenRouter model selection is restricted to a curated allowlist of 16 models
+- At most six unique models can be selected for a new run or enhancement
 
 ---
 

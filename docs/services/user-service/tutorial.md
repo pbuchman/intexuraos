@@ -2,7 +2,7 @@
 
 > **Time:** 20–30 minutes
 > **Prerequisites:** Node.js 20+, IntexuraOS dev environment, Auth0 tenant
-> **You'll learn:** How to authenticate, manage LLM API keys (including OpenRouter), set default and fallback models, connect Google and GitHub OAuth, configure transcription preferences, and set timezone
+> **You'll learn:** How to authenticate, manage the OpenRouter API key, set default and fallback models, connect Google and GitHub OAuth, configure transcription preferences, and set timezone
 
 ---
 
@@ -11,8 +11,8 @@
 A working integration that:
 
 - Authenticates via the device code flow
-- Stores and validates LLM API keys for OpenAI, Anthropic, Perplexity, and OpenRouter
-- Tests keys with real provider calls
+- Stores and validates the user's OpenRouter API key
+- Reports whether LLM access comes from the user key, platform fallback, or is unavailable
 - Sets a default LLM model and an optional fallback model for all agents
 - Configures transcription preferences
 - Sets timezone preferences
@@ -28,7 +28,7 @@ Before starting, ensure you have:
 - [ ] IntexuraOS development environment running
 - [ ] Auth0 tenant configured
 - [ ] Encryption key generated (32 bytes hex)
-- [ ] At least one LLM API key (OpenAI, Anthropic, Perplexity, or OpenRouter); the platform OpenRouter key can satisfy OpenRouter-backed defaults
+- [ ] Optional OpenRouter user key; the platform OpenRouter key can satisfy model access
 
 ---
 
@@ -156,12 +156,12 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/ll
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "provider": "openai",
-    "apiKey": "sk-proj-XXXXXXXXXXXXXXXXXXXX"
+    "provider": "openrouter",
+    "apiKey": "sk-or-v1-XXXXXXXXXXXXXXXXXXXX"
   }'
 ```
 
-The service validates the key by making a test call to OpenAI before storing it.
+The service validates the key through OpenRouter's zero-cost `/api/v1/key` endpoint before storing it.
 
 **Success response:**
 
@@ -169,8 +169,8 @@ The service validates the key by making a test call to OpenAI before storing it.
 {
   "success": true,
   "data": {
-    "provider": "openai",
-    "masked": "sk-p...XXXX"
+    "provider": "openrouter",
+    "masked": "sk-o...XXXX"
   }
 }
 ```
@@ -182,7 +182,7 @@ The service validates the key by making a test call to OpenAI before storing it.
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "Invalid OpenAI API key"
+    "message": "Invalid OpenRouter API key"
   }
 }
 ```
@@ -228,16 +228,9 @@ curl https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys \
   "data": {
     "defaultModel": null,
     "fallbackModel": null,
-    "google": null,
-    "openai": "sk-p...XXXX",
-    "anthropic": null,
-    "perplexity": null,
+    "accessSource": "user",
     "openrouter": "sk-o...XXXX",
     "testResults": {
-      "google": null,
-      "openai": null,
-      "anthropic": null,
-      "perplexity": null,
       "openrouter": null
     }
   }
@@ -257,7 +250,7 @@ Test a stored key by making a real LLM call.
 ### Step 4.1: Test the key
 
 ```bash
-curl -X POST https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys/openai/test \
+curl -X POST https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys/openrouter/test \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -281,7 +274,7 @@ curl -X POST https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm
   "success": true,
   "data": {
     "status": "failure",
-    "message": "OpenAI API quota exceeded. Check billing.",
+    "message": "OpenRouter API quota exceeded. Check billing.",
     "testedAt": "2026-01-24T10:00:00.000Z"
   }
 }
@@ -300,7 +293,7 @@ Remove a stored API key.
 ### Step 5.1: Delete the key
 
 ```bash
-curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys/openai \
+curl -X DELETE https://user-service.intexuraos.com/users/YOUR_USER_ID/settings/llm-keys/openrouter \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -322,14 +315,14 @@ Configure which models all agents use by default and as a fallback.
 
 ### Step 6.1: Set a default model
 
-The service validates that the model passes `isDefaultEligibleModel()` and is resolvable. Direct providers require a configured user key; OpenRouter-backed models can use the platform OpenRouter key.
+The service validates that the model passes `isDefaultEligibleModel()` and is resolvable through the user or platform OpenRouter key.
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "defaultModel": "claude-3-5-haiku-20241022"
+    "defaultModel": "or:minimax/minimax-m3"
   }'
 ```
 
@@ -339,7 +332,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 {
   "success": true,
   "data": {
-    "defaultModel": "claude-3-5-haiku-20241022",
+    "defaultModel": "or:minimax/minimax-m3",
     "fallbackModel": null
   }
 }
@@ -347,15 +340,15 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 
 ### Step 6.2: Set a fallback model
 
-The fallback must differ from the default and be resolvable through a supported user key or the platform OpenRouter route.
+The fallback must differ from the default and be resolvable through OpenRouter.
 
 ```bash
 curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "defaultModel": "claude-3-5-haiku-20241022",
-    "fallbackModel": "gpt-4o-mini"
+    "defaultModel": "or:minimax/minimax-m3",
+    "fallbackModel": "or:google/gemini-3.6-flash"
   }'
 ```
 
@@ -365,8 +358,8 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 {
   "success": true,
   "data": {
-    "defaultModel": "claude-3-5-haiku-20241022",
-    "fallbackModel": "gpt-4o-mini"
+    "defaultModel": "or:minimax/minimax-m3",
+    "fallbackModel": "or:google/gemini-3.6-flash"
   }
 }
 ```
@@ -380,7 +373,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "defaultModel": "claude-3-5-haiku-20241022",
+    "defaultModel": "or:minimax/minimax-m3",
     "fallbackModel": null
   }'
 ```
@@ -392,7 +385,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
   "success": false,
   "error": {
     "code": "INVALID_REQUEST",
-    "message": "Cannot set default model to claude-3-5-haiku-20241022: no API key configured for provider 'anthropic'"
+    "message": "No OpenRouter access is available for this user."
   }
 }
 ```
@@ -411,7 +404,7 @@ curl -X PATCH https://user-service.intexuraos.com/users/YOUR_USER_ID/settings \
 
 ### Checkpoint
 
-All agents now use `claude-3-5-haiku-20241022` by default and fall back to `gpt-4o-mini` when Anthropic is unavailable.
+Agents now use the selected `or:` default and fallback models through the same resolved OpenRouter access.
 
 ---
 

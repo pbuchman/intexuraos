@@ -55,14 +55,9 @@ export interface LlmTestResult {
 export interface LlmKeysResponse {
   defaultModel: string | null;
   fallbackModel: string | null;
-  openai: string | null;
-  anthropic: string | null;
-  perplexity: string | null;
   openrouter: string | null;
+  accessSource: 'user' | 'platform' | 'unavailable';
   testResults: {
-    openai: LlmTestResult | null;
-    anthropic: LlmTestResult | null;
-    perplexity: LlmTestResult | null;
     openrouter: LlmTestResult | null;
   };
   intexAgentModelSelector: IntexAgentModelSelectorV1;

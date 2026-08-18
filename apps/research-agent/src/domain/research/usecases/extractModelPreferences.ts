@@ -7,18 +7,15 @@
 
 import type { Logger } from '@intexuraos/common-core';
 import {
+  createOpenRouterModelId,
   DEFAULT_PLATFORM_LLM_MODEL,
-  getProviderForModel,
-  type ExecutableLlmProvider,
   type ResearchModel,
-  IntexAgentModels,
-  LlmModels,
 } from '@intexuraos/llm-contract';
+import { OPENROUTER_ALLOWED_MODELS } from '@intexuraos/infra-openrouter';
 import {
   modelExtractionPrompt,
   parseModelExtractionResponse,
   MODEL_KEYWORDS,
-  PROVIDER_DEFAULT_MODELS,
   SYNTHESIS_MODELS,
   DEFAULT_SYNTHESIS_MODEL,
   type AvailableModelInfo,
@@ -42,47 +39,23 @@ export interface ExtractModelPreferencesDeps {
   logger: Logger;
 }
 
-/**
- * Research models available for selection (excludes image and non-research models).
- */
-const RESEARCH_MODELS: ResearchModel[] = [
-  DEFAULT_PLATFORM_LLM_MODEL,
-  IntexAgentModels.Gemini36Flash,
-  LlmModels.ClaudeOpus46,
-  LlmModels.ClaudeSonnet46,
-  LlmModels.ClaudeSonnet47,
-  LlmModels.O4MiniDeepResearch,
-  LlmModels.GPT54,
-  LlmModels.Sonar,
-  LlmModels.SonarPro,
-  LlmModels.SonarDeepResearch,
-];
+export const MAX_RESEARCH_MODELS = 6;
 
 /**
  * Display names for models.
  */
-const MODEL_DISPLAY_NAMES: Partial<Record<ResearchModel, string>> = {
-  [DEFAULT_PLATFORM_LLM_MODEL]: 'MiniMax M3 (OpenRouter)',
-  [IntexAgentModels.Gemini36Flash]: 'Gemini 3.6 Flash (OpenRouter)',
-  [LlmModels.ClaudeOpus46]: 'Claude Opus 4.6',
-  [LlmModels.ClaudeSonnet46]: 'Claude Sonnet 4.6',
-  [LlmModels.ClaudeSonnet47]: 'Claude Sonnet 4.7',
-  [LlmModels.O4MiniDeepResearch]: 'O4 Mini Deep Research',
-  [LlmModels.GPT54]: 'GPT 5.4',
-  [LlmModels.Sonar]: 'Sonar',
-  [LlmModels.SonarPro]: 'Sonar Pro',
-  [LlmModels.SonarDeepResearch]: 'Sonar Deep Research',
-};
+const MODEL_DISPLAY_NAMES = new Map<string, string>(
+  OPENROUTER_ALLOWED_MODELS.map((model) => [createOpenRouterModelId(model.id), model.name])
+);
 
 /**
  * Get model display name, generating one for OpenRouter models.
  */
 export function getModelDisplayName(model: ResearchModel): string {
   const staticModel = model as string;
-  if (staticModel in MODEL_DISPLAY_NAMES) {
-    /* v8 ignore start -- ts-type: noUncheckedIndexedAccess requires ?? but `in` check guarantees key exists @preserve */
-    return MODEL_DISPLAY_NAMES[staticModel as ResearchModel] ?? 'Unknown Model';
-    /* v8 ignore stop @preserve */
+  const configuredName = MODEL_DISPLAY_NAMES.get(staticModel);
+  if (configuredName !== undefined) {
+    return configuredName;
   }
   // OpenRouter model - extract name from ID (e.g., 'anthropic/claude-sonnet-4.6' -> 'Claude Sonnet 4.6')
   const parts = staticModel.split('/');
@@ -100,76 +73,57 @@ export function getModelKeywords(model: ResearchModel): string[] {
     return MODEL_KEYWORDS[staticModel as ResearchModel] ?? ['openrouter'];
     /* v8 ignore stop @preserve */
   }
-  // OpenRouter model - return generic keyword
-  return ['openrouter'];
-}
-
-/**
- * Get API key field name for a provider.
- * Provider is always one of the known values from getProviderForModel.
- */
-const PROVIDER_KEY_MAP: Record<ExecutableLlmProvider, keyof ApiKeyStore> = {
-  openai: 'openai',
-  anthropic: 'anthropic',
-  perplexity: 'perplexity',
-  openrouter: 'openrouter',
-};
-
-function providerToKeyField(provider: ExecutableLlmProvider): keyof ApiKeyStore {
-  return PROVIDER_KEY_MAP[provider];
+  const rawId = staticModel.startsWith('or:') ? staticModel.slice(3) : staticModel;
+  const [author = '', slug = ''] = rawId.split('/', 2);
+  return [
+    'openrouter',
+    author,
+    ...slug.split(/[-.:]/u).filter((part) => part !== ''),
+  ].filter((keyword, index, keywords) => keyword !== '' && keywords.indexOf(keyword) === index);
 }
 
 /**
  * Build the list of models available to the user based on their API keys.
  */
 function buildAvailableModels(keys: ApiKeyStore): AvailableModelInfo[] {
-  const available: AvailableModelInfo[] = [];
-
-  for (const model of RESEARCH_MODELS) {
-    const provider = getProviderForModel(model);
-    const keyField = providerToKeyField(provider);
-    const hasKey = keys[keyField] !== undefined && keys[keyField] !== '';
-
-    if (hasKey) {
-      const isProviderDefault = PROVIDER_DEFAULT_MODELS[provider] === model;
-      available.push({
-        id: model,
-        provider,
-        displayName: getModelDisplayName(model),
-        keywords: getModelKeywords(model),
-        isProviderDefault,
-      });
-    }
+  if (keys.openrouter === undefined || keys.openrouter === '') {
+    return [];
   }
 
-  return available;
+  return OPENROUTER_ALLOWED_MODELS.map((modelInfo) => {
+    const model = createOpenRouterModelId(modelInfo.id);
+    return {
+      id: model,
+      provider: modelInfo.provider,
+      displayName: modelInfo.name,
+      keywords: getModelKeywords(model),
+      isProviderDefault: model === DEFAULT_PLATFORM_LLM_MODEL,
+    };
+  });
 }
 
 /**
  * Validate that selected models follow constraints:
- * 1. Only one model per provider
- * 2. Models must be in the available list
+ * Models must be in the available list, are deduplicated by full ID, and capped at six.
  */
 export function validateSelectedModels(
   models: ResearchModel[],
   availableModels: AvailableModelInfo[]
 ): ResearchModel[] {
   const availableIds = new Set(availableModels.map((m) => m.id));
-  const seenProviders = new Set<string>();
+  const seenModels = new Set<string>();
   const valid: ResearchModel[] = [];
 
   for (const model of models) {
-    if (!availableIds.has(model)) {
+    if (!availableIds.has(model) || seenModels.has(model)) {
       continue;
     }
 
-    const provider = getProviderForModel(model);
-    if (seenProviders.has(provider)) {
-      continue;
-    }
-
-    seenProviders.add(provider);
+    seenModels.add(model);
     valid.push(model);
+    if (valid.length === MAX_RESEARCH_MODELS) {
+      break;
+    }
   }
 
   return valid;
@@ -252,7 +206,7 @@ export async function extractModelPreferences(
       return { selectedModels: [], synthesisModel: undefined };
     }
 
-    // Validate selected models (one per provider, must be available)
+    // Validate selected models (unique IDs, allowlisted, maximum six)
     const validatedModels = validateSelectedModels(parsed.selectedModels, availableModels);
 
     // Validate synthesis model

@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  DEFAULT_PLATFORM_LLM_MODEL,
-  LlmModels,
-  LlmProviders,
   getOpenRouterRawId,
   isOpenRouterModel,
 } from '@intexuraos/llm-contract';
-import { getSelectedModelsList, PROVIDER_MODELS, MAX_TOTAL_MODELS } from '@/components';
+import { getActiveSelectedModelsList, MAX_TOTAL_MODELS } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys, useOpenRouterModels } from '@/hooks';
 import { ApiError } from '@/services/apiClient';
@@ -19,15 +16,12 @@ import {
   validateInput,
 } from '@/services/researchAgentApi';
 import {
-  getProviderForModel,
-  getProviderForStoredModel,
-  isSelectableModel,
-  type LlmProvider,
   type SupportedModel,
   type SaveDraftRequest,
 } from '@/services/researchAgentApi.types';
+import { RESEARCH_SYNTHESIS_MODELS } from '@/utils/researchModelAvailability.js';
 
-const SYNTHESIS_CAPABLE_MODELS: SupportedModel[] = [DEFAULT_PLATFORM_LLM_MODEL, LlmModels.GPT54];
+const SYNTHESIS_CAPABLE_MODELS = RESEARCH_SYNTHESIS_MODELS;
 
 export const RESEARCH_AGENT_CONSTANTS = {
   MAX_INPUT_CONTEXTS: 5,
@@ -44,21 +38,23 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
   const navigate = useNavigate();
   const { getAccessToken } = useAuth();
   const { keys, loading: keysLoading } = useLlmKeys();
-  const isOpenRouterConfigured = keys !== null;
+  const openRouterByokFailed =
+    keys?.openrouter !== null && keys?.testResults.openrouter?.status === 'failure';
+  const hasOpenRouterAccess =
+    keys !== null && keys.accessSource !== 'unavailable' && !openRouterByokFailed;
   const {
     models: openRouterModels,
     loading: openRouterLoading,
     error: openRouterError,
-  } = useOpenRouterModels(isOpenRouterConfigured);
+  } = useOpenRouterModels(hasOpenRouterAccess);
 
   const isEditMode = draftId !== null && draftId !== '';
 
   const [prompt, setPrompt] = useState('');
-  const [modelSelections, setModelSelections] = useState<Map<LlmProvider, SupportedModel | null>>(
-    () => new Map(),
-  );
   const [synthesisModel, setSynthesisModel] = useState<SupportedModel | null>(null);
   const [selectedOpenRouterModels, setSelectedOpenRouterModels] = useState<string[]>([]);
+  const [selectedModelsTouched, setSelectedModelsTouched] = useState(false);
+  const [synthesisModelTouched, setSynthesisModelTouched] = useState(false);
   const [inputContexts, setInputContexts] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -81,45 +77,25 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
   const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPromptRef = useRef('');
   const lastSavedStateRef = useRef<{
-    modelSelections: Map<LlmProvider, SupportedModel | null>;
     synthesisModel: SupportedModel | null;
     inputContexts: string[];
     selectedOpenRouterModels: string[];
   }>({
-    modelSelections: new Map(),
     synthesisModel: null,
     inputContexts: [],
     selectedOpenRouterModels: [],
   });
 
-  const configuredProviders: LlmProvider[] =
-    keysLoading || keys === null
-      ? []
-      : [
-          ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
-          LlmProviders.OpenRouter,
-        ];
-
-  const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
-    const map = new Map<LlmProvider, string>();
-    if (keys !== null) {
-      for (const provider of PROVIDER_MODELS) {
-        const testResult = keys.testResults[provider.id];
-        if (testResult?.status === 'failure') {
-          map.set(provider.id, testResult.message);
-        }
-      }
-    }
-    return map;
-  })();
-
   useEffect(() => {
-    const regularCount = Array.from(modelSelections.values()).filter((m) => m !== null).length;
-    const maxOR = MAX_TOTAL_MODELS - regularCount;
-    if (selectedOpenRouterModels.length > maxOR) {
-      setSelectedOpenRouterModels((prev) => prev.slice(0, maxOR));
+    if (isEditMode && !selectedModelsTouched) return;
+    const normalized = [...new Set(selectedOpenRouterModels)].slice(0, MAX_TOTAL_MODELS);
+    if (
+      normalized.length !== selectedOpenRouterModels.length ||
+      normalized.some((model, index) => model !== selectedOpenRouterModels[index])
+    ) {
+      setSelectedOpenRouterModels(normalized);
     }
-  }, [modelSelections, selectedOpenRouterModels.length]);
+  }, [isEditMode, selectedModelsTouched, selectedOpenRouterModels]);
 
   useEffect(() => {
     if (!isEditMode) {
@@ -131,25 +107,16 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
         const token = await getAccessToken();
         const draft = await getResearch(token, draftId);
         setPrompt(draft.prompt);
-        const selections = new Map<LlmProvider, SupportedModel | null>();
-        for (const provider of PROVIDER_MODELS) {
-          const selectedModel = draft.selectedModels.find(
-            (m): m is SupportedModel =>
-              isSelectableModel(m) && getProviderForStoredModel(m) === provider.id,
-          );
-          selections.set(provider.id, selectedModel ?? null);
-        }
-        setModelSelections(selections);
         const orModels = draft.selectedModels
           .filter((m) => isOpenRouterModel(m))
           .map((m) => getOpenRouterRawId(m));
         setSelectedOpenRouterModels(orModels);
-        const draftSynthesisModel =
-          isSelectableModel(draft.synthesisModel) &&
-          SYNTHESIS_CAPABLE_MODELS.includes(draft.synthesisModel)
-            ? draft.synthesisModel
-            : null;
+        const draftSynthesisModel = isOpenRouterModel(draft.synthesisModel)
+          ? draft.synthesisModel
+          : null;
         setSynthesisModel(draftSynthesisModel);
+        setSelectedModelsTouched(false);
+        setSynthesisModelTouched(false);
         lastSavedPromptRef.current = draft.prompt;
         const loadedContexts =
           draft.inputContexts !== undefined && draft.inputContexts.length > 0
@@ -157,7 +124,6 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
             : [];
         setInputContexts(loadedContexts);
         lastSavedStateRef.current = {
-          modelSelections: selections,
           synthesisModel: draftSynthesisModel,
           inputContexts: loadedContexts,
           selectedOpenRouterModels: orModels,
@@ -172,41 +138,69 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
 
   useEffect(() => {
     if (isEditMode) return;
-    if (!keysLoading && keys !== null) {
-      const configured = PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id);
-      const selections = new Map<LlmProvider, SupportedModel | null>();
-      for (const provider of PROVIDER_MODELS) {
-        selections.set(provider.id, null);
-      }
-      setModelSelections(selections);
-      const availableSynthesis = SYNTHESIS_CAPABLE_MODELS.find((m) =>
-        configured.includes(getProviderForModel(m)),
+    if (!keysLoading && hasOpenRouterAccess && openRouterModels.length > 0) {
+      const availableIds = new Set(openRouterModels.map((model) => model.id));
+      const availableSynthesis = SYNTHESIS_CAPABLE_MODELS.find((model) =>
+        availableIds.has(getOpenRouterRawId(model)),
       );
       if (availableSynthesis !== undefined) {
         setSynthesisModel(availableSynthesis);
       }
     }
-  }, [keysLoading, keys, isEditMode]);
+  }, [keysLoading, hasOpenRouterAccess, isEditMode, openRouterModels]);
+
+  useEffect(() => {
+    if (isEditMode) return;
+    if (openRouterModels.length === 0) return;
+    const availableIds = new Set(openRouterModels.map((model) => model.id));
+    setSelectedOpenRouterModels((current) =>
+      current.filter((modelId) => availableIds.has(modelId)),
+    );
+    setSynthesisModel((current) => {
+      if (current !== null && availableIds.has(getOpenRouterRawId(current))) return current;
+      return (
+        SYNTHESIS_CAPABLE_MODELS.find((model) =>
+          availableIds.has(getOpenRouterRawId(model)),
+        ) ?? null
+      );
+    });
+  }, [isEditMode, openRouterModels]);
+
+  const handleSelectedOpenRouterModelsChange = useCallback((models: string[]): void => {
+    setSelectedOpenRouterModels(models);
+    setSelectedModelsTouched(true);
+  }, []);
+
+  const handleSynthesisModelChange = useCallback((model: SupportedModel): void => {
+    setSynthesisModel(model);
+    setSynthesisModelTouched(true);
+  }, []);
 
   const performAutosave = useCallback(async (): Promise<void> => {
     if (!isEditMode || !hasUnsavedChanges || prompt.trim().length === 0) return;
     try {
       const token = await getAccessToken();
       const validCtx = inputContexts.filter((c) => c.trim().length > 0);
-      const selectedModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
+      const selectedModels = getActiveSelectedModelsList(
+        selectedOpenRouterModels,
+        openRouterModels.map((model) => model.id),
+      );
       const request: SaveDraftRequest = { prompt };
-      if (selectedModels.length > 0) request.selectedModels = selectedModels;
-      if (synthesisModel !== null) request.synthesisModel = synthesisModel;
+      if (selectedModelsTouched) request.selectedModels = selectedModels;
+      if (synthesisModelTouched && synthesisModel !== null) {
+        request.synthesisModel = synthesisModel;
+      }
       if (validCtx.length > 0) request.inputContexts = validCtx.map((content) => ({ content }));
       await updateDraft(token, draftId, request);
       lastSavedPromptRef.current = prompt;
       lastSavedStateRef.current = {
-        modelSelections,
         synthesisModel,
         inputContexts: validCtx,
         selectedOpenRouterModels,
       };
       setHasUnsavedChanges(false);
+      setSelectedModelsTouched(false);
+      setSynthesisModelTouched(false);
     } catch {
       /* silent */
     }
@@ -215,22 +209,21 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     draftId,
     hasUnsavedChanges,
     prompt,
-    modelSelections,
     synthesisModel,
     inputContexts,
     selectedOpenRouterModels,
+    selectedModelsTouched,
+    synthesisModelTouched,
+    openRouterModels,
     getAccessToken,
   ]);
 
   useEffect(() => {
     if (!isEditMode) return;
     const promptChanged = prompt !== lastSavedPromptRef.current;
-    const currentModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
-    const savedModels = getSelectedModelsList(
-      lastSavedStateRef.current.modelSelections,
-      lastSavedStateRef.current.selectedOpenRouterModels,
-    );
-    const modelsChanged = JSON.stringify(currentModels) !== JSON.stringify(savedModels);
+    const modelsChanged =
+      JSON.stringify(selectedOpenRouterModels) !==
+      JSON.stringify(lastSavedStateRef.current.selectedOpenRouterModels);
     const synthesisChanged = synthesisModel !== lastSavedStateRef.current.synthesisModel;
     const contextsChanged =
       JSON.stringify(inputContexts) !== JSON.stringify(lastSavedStateRef.current.inputContexts);
@@ -239,7 +232,6 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     }
   }, [
     prompt,
-    modelSelections,
     synthesisModel,
     inputContexts,
     selectedOpenRouterModels,
@@ -284,17 +276,13 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     }
   };
 
-  const handleModelChange = (provider: LlmProvider, model: SupportedModel | null): void => {
-    setModelSelections((prev) => {
-      const next = new Map(prev);
-      next.set(provider, model);
-      return next;
-    });
-  };
-
   const validContexts = inputContexts.filter((ctx) => ctx.trim().length > 0);
   const hasValidContexts = validContexts.length > 0;
-  const selectedModels = getSelectedModelsList(modelSelections, selectedOpenRouterModels);
+  const activeOpenRouterModelIds = openRouterModels.map((model) => model.id);
+  const selectedModels = getActiveSelectedModelsList(
+    selectedOpenRouterModels,
+    activeOpenRouterModelIds,
+  );
   const isSingleModelNoContext = selectedModels.length === 1 && !hasValidContexts;
 
   const executeSubmit = async (params?: {
@@ -464,8 +452,10 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
       const token = await getAccessToken();
       const contextObjects = validContexts.map((content) => ({ content }));
       const request: SaveDraftRequest = { prompt };
-      if (selectedModels.length > 0) request.selectedModels = selectedModels;
-      if (synthesisModel !== null) request.synthesisModel = synthesisModel;
+      if (!isEditMode || selectedModelsTouched) request.selectedModels = selectedModels;
+      if ((!isEditMode || synthesisModelTouched) && synthesisModel !== null) {
+        request.synthesisModel = synthesisModel;
+      }
       if (contextObjects.length > 0) request.inputContexts = contextObjects;
       let resultId: string;
       if (isEditMode) {
@@ -473,6 +463,8 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
         resultId = updated.id;
         lastSavedPromptRef.current = prompt;
         setHasUnsavedChanges(false);
+        setSelectedModelsTouched(false);
+        setSynthesisModelTouched(false);
       } else {
         const result = await saveDraft(token, request);
         resultId = result.id;
@@ -485,17 +477,21 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     }
   };
 
-  const hasAnyProvider = configuredProviders.length > 0;
+  const hasAnyProvider = hasOpenRouterAccess;
   const hasModelOrContext = selectedModels.length > 0 || hasValidContexts;
   const hasSynthesisModel =
-    synthesisModel !== null && SYNTHESIS_CAPABLE_MODELS.includes(synthesisModel);
-  const canSubmit = prompt.length >= 10 && hasModelOrContext && hasSynthesisModel;
+    synthesisModel !== null &&
+    SYNTHESIS_CAPABLE_MODELS.includes(synthesisModel) &&
+    activeOpenRouterModelIds.includes(getOpenRouterRawId(synthesisModel));
+  const canSubmit =
+    hasOpenRouterAccess && prompt.length >= 10 && hasModelOrContext && hasSynthesisModel;
 
   const getDisabledReason = (): string | undefined => {
     if (canSubmit) return undefined;
+    if (!hasOpenRouterAccess) return 'OpenRouter access is unavailable';
     if (prompt.length < 10) return 'Enter a research prompt (at least 10 characters)';
     if (!hasModelOrContext) return 'Select at least one model or provide input context';
-    if (!hasSynthesisModel) return 'Select the platform OpenRouter model or GPT-5.4 for synthesis';
+    if (!hasSynthesisModel) return 'Select an available OpenRouter synthesis model';
     return undefined;
   };
 
@@ -523,21 +519,17 @@ function useResearchAgentImpl(options: UseResearchAgentOptions) { // eslint-disa
     // form state
     prompt,
     setPrompt,
-    modelSelections,
-    handleModelChange,
     synthesisModel,
-    setSynthesisModel,
+    setSynthesisModel: handleSynthesisModelChange,
     selectedOpenRouterModels,
-    setSelectedOpenRouterModels,
+    setSelectedOpenRouterModels: handleSelectedOpenRouterModelsChange,
     inputContexts,
     addInputContext,
     removeInputContext,
     updateInputContext,
     selectedModels,
     // dependent data
-    configuredProviders,
-    failedProviders,
-    isOpenRouterConfigured,
+    hasOpenRouterAccess,
     openRouterModels,
     openRouterLoading,
     openRouterError,

@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
-import { LlmProviders } from '@intexuraos/llm-contract';
-import { PROVIDER_MODELS } from '@/components';
 import { useAuth } from '@/context';
 import { useLlmKeys } from '@/hooks';
 import { useOpenRouterModels } from './useOpenRouterModels.js';
@@ -16,13 +14,17 @@ import {
   exportToNotion,
 } from '@/services/researchAgentApi';
 import type {
-  LlmProvider,
   OpenRouterModelInfo,
   PartialFailureDecision,
   Research,
   SupportedModel,
 } from '@/services/researchAgentApi.types';
-import type { ActionState, ConfirmableAction, ExportState } from '@/components/research/ResearchActions.js';
+import type {
+  ActionState,
+  ConfirmableAction,
+  ExportState,
+  ModelCatalogState,
+} from '@/components/research/ResearchActions.js';
 
 interface EnhanceParams {
   additionalModels?: SupportedModel[];
@@ -49,10 +51,12 @@ export interface ResearchDetailActions {
   onCloseEnhanceModal: () => void;
   handleEnhance: (params: EnhanceParams) => Promise<void>;
   partialFailure: ActionState & { onConfirm: (action: PartialFailureDecision) => void };
-  configuredProviders: LlmProvider[];
-  failedProviders: Map<LlmProvider, string>;
+  hasOpenRouterAccess: boolean;
   openRouterModels: OpenRouterModelInfo[];
   openRouterLoading: boolean;
+  openRouterError: string | null;
+  modelCatalogState: ModelCatalogState;
+  onRetryModelCatalog: () => void;
 }
 
 export function useResearchDetailActions(
@@ -62,10 +66,42 @@ export function useResearchDetailActions(
   navigate: NavigateFunction,
 ): ResearchDetailActions {
   const { getAccessToken } = useAuth();
-  const { keys, loading: keysLoading } = useLlmKeys();
-  const isOpenRouterConfigured = keys !== null && keys.openrouter !== null;
-  // TODO: rewire to lazy-fetch when EnhanceModal OpenRouter integration lands — currently eagerly fetches on every detail page load
-  const { models: openRouterModels, loading: openRouterLoading } = useOpenRouterModels(isOpenRouterConfigured);
+  const {
+    keys,
+    loading: keysLoading,
+    error: keysError,
+    refresh: refreshKeys,
+  } = useLlmKeys();
+  const openRouterByokFailed =
+    keys?.openrouter !== null && keys?.testResults.openrouter?.status === 'failure';
+  const hasOpenRouterAccess =
+    keys !== null && keys.accessSource !== 'unavailable' && !openRouterByokFailed;
+  const {
+    models: openRouterModels,
+    loading: openRouterLoading,
+    error: openRouterCatalogError,
+    refresh: refreshOpenRouterModels,
+  } = useOpenRouterModels(hasOpenRouterAccess);
+  const modelCatalogState: ModelCatalogState = keysLoading
+    ? 'loading'
+    : keysError !== null
+      ? 'error'
+      : !hasOpenRouterAccess
+        ? 'access_unavailable'
+        : openRouterLoading
+          ? 'loading'
+          : openRouterCatalogError !== null
+            ? 'error'
+            : 'ready';
+  const openRouterError = keysError ?? openRouterCatalogError;
+
+  const handleRetryModelCatalog = (): void => {
+    if (keysError !== null || !hasOpenRouterAccess) {
+      void refreshKeys(false);
+      return;
+    }
+    void refreshOpenRouterModels();
+  };
 
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
@@ -87,27 +123,6 @@ export function useResearchDetailActions(
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<{ mainPageUrl: string } | null>(null);
-
-  const configuredProviders: LlmProvider[] =
-    keysLoading || keys === null
-      ? []
-      : [
-          ...PROVIDER_MODELS.filter((p) => keys[p.id] !== null).map((p) => p.id),
-          LlmProviders.OpenRouter,
-        ];
-
-  const failedProviders: Map<LlmProvider, string> = ((): Map<LlmProvider, string> => {
-    const map = new Map<LlmProvider, string>();
-    if (keys !== null) {
-      for (const provider of PROVIDER_MODELS) {
-        const testResult = keys.testResults[provider.id];
-        if (testResult?.status === 'failure') {
-          map.set(provider.id, testResult.message);
-        }
-      }
-    }
-    return map;
-  })();
 
   const copyToClipboard = (text: string, section: string): void => {
     void navigator.clipboard.writeText(text).then(
@@ -328,9 +343,11 @@ export function useResearchDetailActions(
       error: confirmError,
       onConfirm: (action: PartialFailureDecision): void => { void handleConfirm(action); },
     },
-    configuredProviders,
-    failedProviders,
+    hasOpenRouterAccess,
     openRouterModels,
     openRouterLoading,
+    openRouterError,
+    modelCatalogState,
+    onRetryModelCatalog: handleRetryModelCatalog,
   };
 }

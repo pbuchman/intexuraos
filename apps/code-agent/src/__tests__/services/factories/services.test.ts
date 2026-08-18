@@ -28,7 +28,6 @@ function makeConfig(overrides: Partial<ServiceConfig> = {}): ServiceConfig {
     webAppUrl: 'https://dev.intexuraos.cloud',
     userServiceUrl: 'http://user-service',
     openRouterAppApiKey: '',
-    openaiAppApiKey: '',
     llmUsageServiceUrl: '',
     ...overrides,
   };
@@ -95,8 +94,8 @@ describe('initServices', () => {
     expect(c.executionMemoryApplicationRepo).toBeDefined();
   });
 
-  it('omits executionMemoryEmbeddingClient when openaiAppApiKey is empty', () => {
-    initServices(makeConfig({ openaiAppApiKey: '' }));
+  it('omits executionMemoryEmbeddingClient when openRouterAppApiKey is empty', () => {
+    initServices(makeConfig({ openRouterAppApiKey: '' }));
     const c = getServices();
     expect(c.executionMemoryEmbeddingClient).toBeUndefined();
   });

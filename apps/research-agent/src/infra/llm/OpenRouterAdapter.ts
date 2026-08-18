@@ -42,11 +42,15 @@ export class OpenRouterAdapter implements LlmResearchProvider, LlmSynthesisProvi
     usageSink: UsageSink,
     researchId?: string
   ) {
-    // Strip 'or:' prefix before passing to OpenRouter API client
-    const rawModel = isOpenRouterModel(model) ? getOpenRouterRawId(model) : model;
+    if (!isOpenRouterModel(model)) {
+      throw new Error('OpenRouter model ID must start with or:');
+    }
+    // The API receives the raw ID, while usage keeps the canonical `or:*` identity.
+    const rawModel = getOpenRouterRawId(model);
     this.client = createOpenRouterClient({
       apiKey,
       model: rawModel,
+      evidenceModelId: model,
       userId,
       logger,
       usageSink,

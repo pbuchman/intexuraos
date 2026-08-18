@@ -75,17 +75,17 @@ describe('services', () => {
       expect(services.generateId).toBeDefined();
     });
 
-    it('createPromptGenerator returns openai adapter for openai provider', () => {
+    it('createPromptGenerator returns an OpenRouter adapter', () => {
       initializeServices();
 
       const services = getServices();
-      const generator = services.createPromptGenerator('openai', 'gpt-4.1', 'test-key', 'test-user-id', mockLogger);
+      const generator = services.createPromptGenerator('openrouter', 'gpt-4.1', 'test-key', 'test-user-id', mockLogger);
 
       expect(generator).toBeDefined();
       expect(generator.generateThumbnailPrompt).toBeDefined();
     });
 
-    it('createImageGenerator returns OpenAI generator for gpt-image-1', () => {
+    it('createImageGenerator returns an OpenRouter generator for gpt-image-1', () => {
       initializeServices();
 
       const services = getServices();
