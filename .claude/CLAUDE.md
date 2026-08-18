@@ -65,6 +65,8 @@ All rules verified by `pnpm run ci:tracked`. If CI passes, rules are satisfied. 
 
 **User Communication:** ALWAYS use the `AskUserQuestion` tool for questions — never inline questions in text responses. If multiple questions are needed, aggregate them into a single multi-part `AskUserQuestion` call. Non-negotiable.
 
+**Browser Verification:** When the user asks to verify behavior in a browser, including Google Chrome, ALWAYS use Computer Use. Browser extensions and extension-backed browser control are forbidden. Non-negotiable.
+
 **Git CLI:** Always prefer `gh` CLI over raw `git` commands. Use `gh` for status, diff, log, branching, PRs, and any operation `gh` supports. Fall back to `git` only when `gh` has no equivalent.
 
 **Full Investigation:** NEVER present partial investigation results with hedging language ("maybe", "possibly", "there are multiple possible causes", "could be"). Always perform complete investigation with all mandatory evidence before presenting findings. Present definitive root cause backed by concrete evidence (logs, code, config). If evidence is genuinely insufficient, say exactly what evidence is missing and fetch it — do not guess. Non-negotiable.
