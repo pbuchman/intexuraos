@@ -615,6 +615,41 @@ describe('createSentryStream - sendLogToSentry internal function', () => {
     expect(captureMessage).not.toHaveBeenCalled();
   });
 
+  it('captures the retired Gemini fallback message when logged as an error', () => {
+    process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
+    const { captureException, captureMessage, withScope } = getMockedSentry();
+    const primaryEntries: Record<string, unknown>[] = [];
+    const primaryStream = new Writable({
+      write(chunk, _encoding, callback): void {
+        primaryEntries.push(JSON.parse(String(chunk)) as Record<string, unknown>);
+        callback();
+      },
+    });
+    const logger = pino(
+      { level: 'warn' },
+      createSentryStream(pino.multistream([{ level: 'trace', stream: primaryStream }]))
+    );
+
+    logger.error(
+      'INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured'
+    );
+
+    expect(primaryEntries).toHaveLength(1);
+    expect(primaryEntries[0]).toMatchObject({
+      level: 50,
+      msg: 'INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured',
+    });
+    expect(withScope).toHaveBeenCalledTimes(1);
+    expect(captureMessage).not.toHaveBeenCalled();
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'INTEXURAOS_GEMINI_APP_API_KEY is not set — platform Gemini fallback unavailable; users must have their own Gemini API key configured',
+      })
+    );
+  });
+
   it('skips Sentry captureMessage for internal auth token mismatch warnings', () => {
     process.env['INTEXURAOS_SENTRY_DSN'] = 'https://test@sentry.io/123';
     const { captureMessage } = getMockedSentry();
