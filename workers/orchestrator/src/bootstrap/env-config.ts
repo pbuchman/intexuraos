@@ -34,6 +34,7 @@ export interface BootstrapEnvConfig {
   usageWebhookUrl: string;
   githubAppId: string;
   githubInstallationId: string;
+  githubPrivateKeyPath: string;
   projectId: string;
   gcpSaKeyPath: string;
   port: number;
@@ -45,7 +46,6 @@ export interface BootstrapEnvConfig {
   workerForensicsMode: boolean;
   workerForensicsBasePath?: string;
   preserveWorkerContainers: boolean;
-  githubPrivateKeyOverride?: string;
   linearApiKey: string;
   errorHubHost: string;
   minimaxApiKey: string;
@@ -179,6 +179,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const usageWebhookUrl = getRequiredEnv('INTEXURAOS_USAGE_WEBHOOK_URL', env);
   const githubAppId = getRequiredEnv('INTEXURAOS_GITHUB_APP_ID', env);
   const githubInstallationId = getRequiredEnv('INTEXURAOS_GITHUB_INSTALLATION_ID', env);
+  const githubPrivateKeyPath = getRequiredEnv('INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH', env);
   const projectId = getRequiredEnv('INTEXURAOS_PROJECT_ID', env);
   const gcpSaKeyPath = getRequiredEnv('GOOGLE_APPLICATION_CREDENTIALS', env);
 
@@ -232,7 +233,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
 
   const repoPath = readOptionalString(env, 'INTEXURAOS_REPOSITORY_PATH');
   const workerForensicsBasePath = readOptionalString(env, 'INTEXURAOS_CODE_WORKER_FORENSICS_PATH');
-  const githubPrivateKeyOverride = readOptionalString(env, 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY');
   const gitUserNameOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_NAME');
   const gitUserEmailOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_EMAIL');
   const sentryDsn = readOptionalString(env, 'INTEXURAOS_SENTRY_DSN');
@@ -251,6 +251,7 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     usageWebhookUrl,
     githubAppId,
     githubInstallationId,
+    githubPrivateKeyPath,
     projectId,
     gcpSaKeyPath,
     port,
@@ -262,7 +263,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     workerForensicsMode,
     ...(workerForensicsBasePath !== undefined ? { workerForensicsBasePath } : {}),
     preserveWorkerContainers,
-    ...(githubPrivateKeyOverride !== undefined ? { githubPrivateKeyOverride } : {}),
     linearApiKey,
     errorHubHost,
     minimaxApiKey,

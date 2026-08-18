@@ -19,8 +19,14 @@ variable "services" {
   }))
 }
 
-variable "secret_ids" {
-  description = "Map of secret names to their IDs"
-  type        = map(string)
+variable "legacy_secret_manager_enabled" {
+  description = "Keep legacy per-service Secret Manager bindings during package migration"
+  type        = bool
+  default     = true
 }
 
+variable "secret_ids" {
+  description = "Legacy individual secret IDs retained only during package migration"
+  type        = map(string)
+  default     = {}
+}

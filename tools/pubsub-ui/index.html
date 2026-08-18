@@ -219,6 +219,9 @@
       .event.message-digest-runs {
         border-left-color: #f59e0b;
       }
+      .event.intexuraos-runtime-credential-canary-dev {
+        border-left-color: #06b6d4;
+      }
 
       .event-header {
         display: flex;
@@ -286,6 +289,10 @@
       }
       .message-digest-runs .event-badge {
         background: #f59e0b;
+        color: #0f172a;
+      }
+      .intexuraos-runtime-credential-canary-dev .event-badge {
+        background: #06b6d4;
         color: #0f172a;
       }
 
@@ -506,6 +513,9 @@
               <option value="bookmark-enrich">bookmark-enrich</option>
               <option value="bookmark-summarize">bookmark-summarize</option>
               <option value="message-digest-runs">message-digest-runs</option>
+              <option value="intexuraos-runtime-credential-canary-dev">
+                intexuraos-runtime-credential-canary-dev
+              </option>
             </select>
           </div>
 
@@ -622,6 +632,11 @@
           userId: '{userId}',
           definitionId: 'md_test-digest-001',
           runId: 'mdr_test-run-001',
+          requestedAt: '{isoTimestamp}',
+        },
+        'intexuraos-runtime-credential-canary-dev': {
+          type: 'runtime.credential.canary',
+          canary: 'manual-local',
           requestedAt: '{isoTimestamp}',
         },
       };

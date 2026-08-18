@@ -1,25 +1,29 @@
 /**
  * GCP credential validation.
  *
- * Validates the service-account key file exists and that `gcloud` can
- * activate it. Throws descriptive `Error`s so callers (i.e. `start.ts`)
+ * Validates the service-account key file exists and that `gcloud` can obtain
+ * a token with an isolated credential override. Throws descriptive `Error`s so callers (i.e. `start.ts`)
  * can format the failure message and exit the process.
  */
 
 import { existsSync } from 'node:fs';
-import { execSync, type ExecSyncOptions } from 'node:child_process';
+import { execFileSync, type ExecFileSyncOptions } from 'node:child_process';
 import { IntexuraOSError } from '@intexuraos/common-core';
 import { EXEC_TIMEOUT_MS } from '../types/constants.js';
 
 /** Minimal injectable dependencies — tests use fakes. */
 export interface GcpValidatorDeps {
   existsSync: (path: string) => boolean;
-  execSync: (command: string, options: ExecSyncOptions) => Buffer | string;
+  execFileSync: (
+    file: string,
+    args: readonly string[],
+    options: ExecFileSyncOptions
+  ) => Buffer | string;
 }
 
 const defaultDeps: GcpValidatorDeps = {
   existsSync,
-  execSync,
+  execFileSync,
 };
 
 /**
@@ -27,7 +31,7 @@ const defaultDeps: GcpValidatorDeps = {
  *
  * Throws an `Error` if:
  *   - the file is missing (message names the expected path)
- *   - `gcloud auth activate-service-account` fails (message names the key file)
+ *   - isolated `gcloud auth print-access-token` fails (message names the key file)
  */
 export function validateGcpCredentials(
   gcpSaKeyPath: string,
@@ -43,16 +47,20 @@ export function validateGcpCredentials(
   }
 
   try {
-    deps.execSync(
-      `gcloud auth activate-service-account --key-file="${gcpSaKeyPath}" --project="${projectId}"`,
-      { timeout: EXEC_TIMEOUT_MS, stdio: 'pipe' }
-    );
-  } catch (error) {
+    deps.execFileSync('gcloud', ['auth', 'print-access-token', '--project', projectId], {
+      timeout: EXEC_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE: gcpSaKeyPath,
+        CLOUDSDK_CORE_PROJECT: projectId,
+      },
+    });
+  } catch {
     throw new IntexuraOSError(
       'MISCONFIGURED',
       `GCP authentication failed for credentials file ${gcpSaKeyPath}. ` +
-        `Verify the file exists, is readable, and has correct permissions. ` +
-        `Original error: ${error instanceof Error ? error.message : String(error)}`
+        `Verify the file exists, is readable, and has correct permissions.`
     );
   }
 }

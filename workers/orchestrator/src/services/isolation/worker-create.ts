@@ -217,10 +217,6 @@ export async function attachToExistingContainer(input: AttachExistingInput): Pro
   await fs.promises.mkdir(taskRuntimeHomePath, { recursive: true, mode: 0o700 });
   await volume.writePromptFiles(taskSecretsPath, config.systemPrompt, config.prompt);
 
-  if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
-    await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
-  }
-
   const handle: WorkerHandle = {
     taskId,
     containerId,
@@ -537,10 +533,6 @@ export async function createWorkerOrchestration(
 
   let dockerContainer: Docker.Container | undefined;
   try {
-    if (config.gcpSaKeyPath && fs.existsSync(config.gcpSaKeyPath)) {
-      await fs.promises.copyFile(config.gcpSaKeyPath, path.join(taskSecretsPath, 'gcp-sa.json'));
-    }
-
     const taskForensicsPath = volume.ensureTaskForensicsPath(taskId);
     const requestedImage = providerConfig.imageName;
     const resolvedImage =

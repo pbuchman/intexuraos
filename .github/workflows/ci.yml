@@ -222,6 +222,12 @@ jobs:
       - name: Validate Terraform Secrets
         run: node scripts/verify-terraform-secrets.mjs
 
+      - name: Validate Secret Packages
+        run: node scripts/verify-secret-packages.mjs
+
+      - name: Reject Credential Files
+        run: node scripts/verify-credential-files.mjs
+
       - name: Validate PubSub
         run: node scripts/verify-pubsub.mjs
 

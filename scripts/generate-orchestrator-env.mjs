@@ -16,6 +16,7 @@ export const ORCHESTRATOR_ENV_ALLOWLIST = [
   'INTEXURAOS_ENVIRONMENT',
   'INTEXURAOS_ERROR_HUB_HOST',
   'INTEXURAOS_GITHUB_APP_ID',
+  'INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH',
   'INTEXURAOS_GITHUB_INSTALLATION_ID',
   'INTEXURAOS_GIT_USER_EMAIL',
   'INTEXURAOS_GIT_USER_NAME',
@@ -48,6 +49,7 @@ const REQUIRED_ORCHESTRATOR_ENV = [
   'INTEXURAOS_DASHSCOPE_APP_API_KEY',
   'INTEXURAOS_ERROR_HUB_HOST',
   'INTEXURAOS_GITHUB_APP_ID',
+  'INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH',
   'INTEXURAOS_GITHUB_INSTALLATION_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_KIMI_APP_API_KEY',
@@ -132,12 +134,18 @@ function validateErrorHubHost(value) {
 
 function readAllowedEnvironment(source, userHome) {
   const fixedHomeDevValues = {
+    GOOGLE_APPLICATION_CREDENTIALS: join(
+      userHome,
+      '.config',
+      'intexuraos',
+      'home-orchestrator-sa-key.json'
+    ),
     INTEXURAOS_ENVIRONMENT: 'dev',
     INTEXURAOS_RUNTIME: 'dev',
   };
   const defaults = {
-    GOOGLE_APPLICATION_CREDENTIALS: join(userHome, '.config', 'gcloud', 'sa-key.json'),
     INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
+    INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH: join(userHome, '.code-orchestrator', 'github-app.pem'),
     INTEXURAOS_PROJECT_ID: source.INTEXURAOS_PROJECT_ID ?? source.PROJECT_ID,
     INTEXURAOS_REPOSITORY_PATH: join(userHome, '.code-orchestrator', 'repo'),
     INTEXURAOS_WORKER_CAPACITY: '3',

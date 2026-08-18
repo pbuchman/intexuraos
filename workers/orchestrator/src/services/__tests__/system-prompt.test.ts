@@ -963,12 +963,13 @@ describe('system-prompt', () => {
     );
 
     it.each(['planning', 'execution', 'pull_request', 'review'])(
-      '%s prompt contains GCP service account credentials section',
+      '%s prompt documents the cloud access boundary',
       (label) => {
         const result = buildForLabel(label);
 
-        expect(result).toContain('### GCP Service Account Credentials');
-        expect(result).toContain('/secrets/gcp-sa.json');
+        expect(result).toContain('### Cloud Access Boundary');
+        expect(result).toContain('no GCP service-account credential');
+        expect(result).not.toContain('/secrets/gcp-sa.json');
       }
     );
 
@@ -987,7 +988,7 @@ describe('system-prompt', () => {
       const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['bug'] });
 
       const ghCliCount = result.split('### Git CLI (MANDATORY').length - 1;
-      const gcpCount = result.split('### GCP Service Account Credentials').length - 1;
+      const gcpCount = result.split('### Cloud Access Boundary').length - 1;
       const debugCount = result.split('### Code Task Debugging (MANDATORY').length - 1;
 
       expect(ghCliCount).toBe(1);
@@ -999,7 +1000,7 @@ describe('system-prompt', () => {
       const result = systemPrompt.build({ ...baseParams, linearIssueLabels: ['code-task'] });
 
       const ghCliCount = result.split('### Git CLI (MANDATORY').length - 1;
-      const gcpCount = result.split('### GCP Service Account Credentials').length - 1;
+      const gcpCount = result.split('### Cloud Access Boundary').length - 1;
       const debugCount = result.split('### Code Task Debugging (MANDATORY').length - 1;
 
       expect(ghCliCount).toBe(1);
@@ -1494,7 +1495,7 @@ describe('system-prompt', () => {
   it('ask agent prompt includes worker instructions', () => {
     const result = askAgentPrompt.build({ ...baseParams, agentType: 'ask_agent' });
     expect(result).toContain('Git CLI (MANDATORY');
-    expect(result).toContain('GCP Service Account Credentials');
+    expect(result).toContain('Cloud Access Boundary');
     expect(result).toContain('Code Task Debugging');
   });
 

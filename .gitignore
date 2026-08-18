@@ -42,7 +42,15 @@ apps/*/.env
 
 # GCP Service Account Keys
 *service-account*.json
+*sa-key*.json
 gcp-*.json
+
+# Secret package candidates, fetches, and render staging
+.secret-package-staging/
+secret-package-payload*.json
+secret-package-staging*.json
+*.secret-package-payload.json
+*.secret-package-staging.json
 
 # Terraform
 terraform/.terraform/

@@ -673,6 +673,36 @@
       "description": "Technical-Debt documentation for whatsapp-service"
     },
     {
+      "path": "operations/secret-packages.md",
+      "title": "Secret Packages Operations",
+      "category": "operations",
+      "description": "Atomic DEV/PROD secret package publication, promotion, rotation, rollback, audit, and recovery"
+    },
+    {
+      "path": "operations/runtime-configuration.md",
+      "title": "Runtime Configuration And Secret Package Policy",
+      "category": "operations",
+      "description": "Classification and consumer policy for repository configuration, package members, and native exceptions"
+    },
+    {
+      "path": "operations/hetzner-prod-runbook.md",
+      "title": "Hetzner Production Runtime Runbook",
+      "category": "operations",
+      "description": "Production bootstrap, exact-version package cutover, verification, and rollback"
+    },
+    {
+      "path": "operations/runtime-secret-manager-cleanup.md",
+      "title": "Runtime Secret Manager Cleanup — Historical / Completed",
+      "category": "operations",
+      "description": "Historical record of the completed individual-secret cleanup; not an active runbook"
+    },
+    {
+      "path": "runbooks/internal-auth-rotation.md",
+      "title": "Internal Service-to-Service Auth Rotation",
+      "category": "runbooks",
+      "description": "Coordinated package and native-secret single-token maintenance cutover"
+    },
+    {
       "path": "architecture/ai-architecture.md",
       "title": "AI Architecture",
       "category": "architecture",
@@ -1070,17 +1100,19 @@
     }
   ],
   "statistics": {
-    "total": 175,
+    "total": 183,
     "byCategory": {
       "overview": 1,
       "services-index": 1,
-      "services": 105,
+      "services": 110,
+      "operations": 4,
+      "runbooks": 1,
       "architecture": 14,
       "setup": 14,
-      "packages": 40
+      "packages": 38
     },
     "version": "4.0.0",
-    "lastUpdated": "2026-06-24",
-    "generatedAt": "2026-06-24T00:00:00.000000"
+    "lastUpdated": "2026-08-13",
+    "generatedAt": "2026-08-13T00:00:00.000000"
   }
 }

@@ -21,14 +21,18 @@ Consolidated reference for building, deploying, and managing the orchestrator an
 │  │ Image: europe-central2-docker.pkg.dev/.../code-     │   │
 │  │        worker:latest                                 │   │
 │  │ Runs: claude --print or codex exec                  │   │
-│  │ Mounts: /repo (worktree), /secrets (GCP SA, tokens) │   │
+│  │ Mounts: /repo plus task-specific allowlisted files   │   │
 │  │ Network: code-worker-net                             │   │
 │  │ Deps: container runs its own pnpm install           │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The orchestrator is **not** containerized — it runs as a native Node.js process. Only the code-worker runs in Docker. Dependency installation (`pnpm install`) happens inside the Docker container, not on the host.
+The orchestrator is **not** containerized — it runs as a native Node.js process.
+Only the code-worker runs in Docker. The host renders one exact numeric DEV
+package version before orchestrator startup. Neither process receives Secret
+Manager IAM; a worker gets only a task-specific projection of approved names
+and files, never the package payload.
 
 ---
 
@@ -129,31 +133,59 @@ Always use `--no-cache` when the entrypoint or any COPY'd file has changed.
 
 1. Verifies non-root execution (UID 1001)
 2. Network restriction check (metadata server blocked)
-3. Creates runtime directories (`/home/claude/.config/gcloud`, `/home/claude/.claude`)
+3. Creates runtime directories and validates task-specific mounts
 4. Verifies `/repo` mount and git state
-5. Activates GCP service account
+5. Validates any explicitly allowlisted GCP credential projection without printing it
 6. Loads GitHub token (with background refresh loop)
 7. In managed mode, installs dependencies once and waits for `run-attempt` invocations
 8. For each attempt (`/entrypoint.sh run-attempt`), runs the runtime-specific CLI (`claude --print --output-format stream-json` or `codex exec --json`)
 
 Orchestrator reuses the same container for follow-up attempts and invokes `--continue` when resuming.
 
+The env/file builder uses an explicit allowlist per task/runtime. It rejects
+unknown package names, full `.envrc`, package JSON, provisioner/operator keys,
+and any credential that grants Secret Manager access. Sensitive files are
+copied into the task session with mode `0600`, mounted read-only where possible,
+and removed with the task. Logs and diagnostics may show names and presence
+only.
+
+### Secret Package Rollout
+
+1. Fetch and validate an exact numeric DEV package on the host through
+   `scripts/sync-secrets.sh`; `latest` and aliases are forbidden.
+2. Render `.envrc`, `~/.code-orchestrator/env`, and
+   `~/.code-orchestrator/github-app.pem` to private staging, then atomically
+   activate them after CRC/schema/membership/mode checks.
+3. Restart the orchestrator and require health plus GitHub App installation
+   token issuance.
+4. Create one code-worker canary. Verify projected names, mounted file modes,
+   the minimum GCP operation if required, inability to access Secret Manager,
+   and callback flow.
+5. Replace remaining workers and record commit plus numeric DEV version only.
+   Never record values or container environments.
+
+Rollback fetches and validates the previously verified numeric DEV version,
+atomically replaces the complete host projection, restarts the orchestrator,
+and recreates workers. Per-field rollback and copying a file from another
+version are forbidden. See
+[Secret Packages Operations](../../docs/operations/secret-packages.md).
+
 ### Container Environment Variables
 
 Set by `docker-provider.ts` when creating containers:
 
-| Variable                         | Source                | Purpose                               |
-| -------------------------------- | --------------------- | ------------------------------------- |
-| `TASK_ID`                        | Task config           | Task identifier                       |
-| `ANTHROPIC_API_KEY`              | OAuth access token    | Claude API authentication             |
-| `ANTHROPIC_BASE_URL`             | Worker type config    | API endpoint (varies by provider)     |
-| `ANTHROPIC_MODEL`                | Worker type config    | Model override (optional)             |
-| `LINEAR_API_KEY`                 | Secrets               | Linear MCP integration                |
-| `ERROR_HUB_HOST`                 | Orchestrator config   | Private SentryBox `.ts.net:8443` host |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Hardcoded `/secrets/` | GCP auth inside container             |
-| `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`     | Hook path resolution                  |
-| `WORKER_MANAGED_MODE`            | Hardcoded `1`         | Enable managed run-attempt mode       |
-| `WORKER_CONTINUE`                | Per-attempt config    | Resume previous runtime session       |
+| Variable                         | Source                  | Purpose                                                                      |
+| -------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
+| `TASK_ID`                        | Task config             | Task identifier                                                              |
+| `ANTHROPIC_API_KEY`              | OAuth access token      | Claude API authentication                                                    |
+| `ANTHROPIC_BASE_URL`             | Worker type config      | API endpoint (varies by provider)                                            |
+| `ANTHROPIC_MODEL`                | Worker type config      | Model override (optional)                                                    |
+| `LINEAR_API_KEY`                 | filtered DEV projection | Linear MCP integration for eligible tasks                                    |
+| `ERROR_HUB_HOST`                 | Orchestrator config     | Private SentryBox `.ts.net:8443` host                                        |
+| `GOOGLE_APPLICATION_CREDENTIALS` | optional task file      | Separate least-privilege credential path; never from DEV or a host admin key |
+| `CLAUDE_PROJECT_DIR`             | Hardcoded `/repo`       | Hook path resolution                                                         |
+| `WORKER_MANAGED_MODE`            | Hardcoded `1`           | Enable managed run-attempt mode                                              |
+| `WORKER_CONTINUE`                | Per-attempt config      | Resume previous runtime session                                              |
 
 ---
 
@@ -241,6 +273,16 @@ pnpm --filter orchestrator test:e2e
 ---
 
 ## Deployment Checklist
+
+### When The DEV Package Changes
+
+1. Record the previous verified numeric version.
+2. Validate, publish, refetch, and shadow-compare a complete candidate without
+   logging values.
+3. Render the host/orchestrator files to staging and verify mode `0600`.
+4. Promote atomically, restart the orchestrator, and run one worker canary.
+5. Verify the worker cannot access Secret Manager; then recreate the fleet.
+6. Retain the prior numeric version until rollback and observation gates pass.
 
 ### When `entrypoint.sh` Changes
 
