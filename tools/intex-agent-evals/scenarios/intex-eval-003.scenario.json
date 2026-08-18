@@ -1,19 +1,19 @@
 {
   "schemaVersion": "1",
   "id": "intex-eval-003",
-  "title": "Accept a proposed calendar duration before final confirmation",
-  "description": "Proposes a safe one-hour duration for a missing end, accepts that assumption in text, then separately confirms and creates the synthetic event.",
+  "title": "Clarify a missing start, then use the default calendar duration",
+  "description": "Asks only for a genuinely missing start time, then uses a visible one-hour default in the final confirmation without asking for an end time.",
   "currentDateTime": "2026-07-16T10:00:00+02:00",
   "timeZone": "Europe/Warsaw",
   "turns": [
     {
       "kind": "message",
-      "text": "Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 on 2026-07-21 at noon.",
+      "text": "Add INTEX-EVAL-003 lunch with Marta INTEX-EVAL-003-F01 on 2026-07-21.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "Yes",
+      "text": "At noon.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -91,8 +91,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "States the grounded event title, date, and noon start; says the optional location can be omitted; and proposes a 60-minute duration ending at 13:00.",
-              "Asks whether that duration assumption is acceptable without showing final creation-confirmation buttons or claiming that an event was created."
+              "Asks only for the genuinely missing start time for the grounded event title and date.",
+              "Does not ask for an end time, duration, or optional location; does not show final creation-confirmation buttons; and does not claim that an event was created."
             ]
           }
         ]
@@ -162,10 +162,10 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Treats the plain-text yes only as acceptance of the proposed duration, then presents a separate reviewable sanitized preview using observable redacted structured labels for Title, Start, and End and asks whether to create it.",
+              "Uses the supplied noon start and a visible 60-minute default ending at 13:00 while preserving the previously supplied title and date, then presents the final reviewable sanitized confirmation.",
               "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, and `End: [redacted]`.",
               "The redacted values are complete expected evidence for the judge and are not missing information.",
-              "Does not request the date again or expose raw argument content in the sanitized reply."
+              "Does not ask for an end time, request the date again, or expose raw argument content in the sanitized reply."
             ]
           }
         ]
@@ -268,7 +268,7 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the clarified calendar event was created successfully.",
+              "Clearly communicates that the calendar event with the visible default duration was created successfully.",
               "Does not request more calendar details or another confirmation."
             ]
           }

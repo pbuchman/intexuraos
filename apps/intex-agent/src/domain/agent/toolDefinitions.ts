@@ -185,7 +185,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
         requiredInput:
           'summary, start, and end are required. Summary must be a concise user-grounded event title, never analysis or a clarification message. Use ISO/provider-accepted date-time strings and include timeZone when known.',
         boundary:
-          'If the title, date, time, start, or end is missing or ambiguous, this call is draft-only and the user-visible outcome must remain a clarification, never final creation confirmation. When end is missing, propose a 60-minute duration first and wait for acceptance; never invent an end silently. Never put analysis or uncertainty into summary. Availability-first requests require query_calendar_events first.',
+          'If the title, date, or start is missing or ambiguous, this call is draft-only and the user-visible outcome must remain a clarification. An explicit duration is sufficient to derive end. When both end and duration are absent, use a visible 60-minute default in the same final confirmation without a separate acceptance turn. Never put analysis or uncertainty into summary. Availability-first requests require query_calendar_events first.',
         examples:
           'Positive: "Schedule dentist tomorrow 09:00-09:30." Negative: "Am I free Friday afternoon?"',
         result: 'Returns status, event ID, summary, and optional calendar link.',

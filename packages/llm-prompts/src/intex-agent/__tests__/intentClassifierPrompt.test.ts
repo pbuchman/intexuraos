@@ -10,7 +10,7 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('9.0.0');
+    expect(intexAgentIntentClassifierPrompt.version).toBe('10.0.0');
     expect(intexAgentIntentClassifierRepairPrompt.version).toBe('3.0.0');
   });
 
@@ -31,9 +31,10 @@ describe('intexAgentIntentClassifierPrompt', () => {
       'Use the user IANA time zone for calendar requests unless the user explicitly supplies another time zone'
     );
     expect(prompt).toContain('Do not report the user IANA time zone as a missing required detail');
-    expect(prompt).toContain('missing end or duration');
-    expect(prompt).toContain('needs_clarification');
-    expect(prompt).toContain('Do not silently assume a duration');
+    expect(prompt).toContain('explicit duration is sufficient to derive the end');
+    expect(prompt).toContain('safe 60-minute default');
+    expect(prompt).toContain('one final creation confirmation');
+    expect(prompt).not.toContain('Do not silently assume a duration');
     expect(prompt).toContain(
       'Set languageOverride only when the current user message explicitly asks for the reply language'
     );

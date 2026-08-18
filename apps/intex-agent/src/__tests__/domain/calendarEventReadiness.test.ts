@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assessCalendarEventReadiness,
-  isCalendarDraftAcceptance,
-  parseAcceptedCalendarEventDraft,
+  parseCalendarEventDraft,
 } from '../../domain/agent/calendarEventReadiness.js';
 
 const VALID_SAFE_DEFAULT_DRAFT = {
@@ -69,7 +68,7 @@ describe('calendarEventReadiness', () => {
     });
   });
 
-  it('drops invented optional fields and proposes one hour for a missing end', () => {
+  it('drops invented optional fields and applies one hour for a missing end', () => {
     const result = assessCalendarEventReadiness({
       toolArgs: {
         summary: 'Turniej OPEN B++',
@@ -85,22 +84,18 @@ describe('calendarEventReadiness', () => {
       replyLanguage: 'pl',
     });
 
-    expect(result).toMatchObject({
-      status: 'needs_clarification',
-      missingFields: ['end'],
-      draft: {
-        toolArgs: {
-          summary: 'Turniej OPEN B++',
-          start: '2026-08-14T18:00:00+02:00',
-          end: '2026-08-14T19:00:00+02:00',
-          timeZone: 'Europe/Warsaw',
-        },
-        omittedFields: ['location', 'description', 'attendees'],
+    expect(result).toEqual({
+      status: 'ready',
+      toolArgs: {
+        summary: 'Turniej OPEN B++',
+        start: '2026-08-14T18:00:00+02:00',
+        end: '2026-08-14T19:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
       },
     });
   });
 
-  it('records an explicit time zone as user-confirmed in a proposed draft', () => {
+  it('keeps an explicit time zone when applying the one-hour default', () => {
     expect(
       assessCalendarEventReadiness({
         toolArgs: {
@@ -115,17 +110,129 @@ describe('calendarEventReadiness', () => {
         runtimeTimeZone: 'Europe/Warsaw',
         replyLanguage: 'en',
       })
-    ).toMatchObject({
-      status: 'needs_clarification',
-      draft: {
-        fields: {
-          timeZone: {
-            value: 'America/New_York',
-            status: 'user_confirmed',
-            source: 'user_message',
-          },
-        },
+    ).toEqual({
+      status: 'ready',
+      toolArgs: {
+        summary: 'Dentist',
+        start: '2026-08-18T14:30:00-04:00',
+        end: '2026-08-18T15:30:00-04:00',
+        timeZone: 'America/New_York',
       },
+    });
+  });
+
+  it('derives the end from an explicit natural-language duration', () => {
+    expect(
+      assessCalendarEventReadiness({
+        toolArgs: {
+          summary: 'Trening',
+          start: '2026-08-18T18:00:00+02:00',
+          end: '2026-08-18T21:00:00+02:00',
+        },
+        evidenceTexts: ['Dodaj trening 18 sierpnia o 18:00. Będzie trwał dwie godziny.'],
+        hasExplicitStart: true,
+        hasExplicitEnd: false,
+        explicitDurationMinutes: 120,
+        runtimeTimeZone: 'Europe/Warsaw',
+        replyLanguage: 'pl',
+      })
+    ).toEqual({
+      status: 'ready',
+      toolArgs: {
+        summary: 'Trening',
+        start: '2026-08-18T18:00:00+02:00',
+        end: '2026-08-18T20:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+    });
+  });
+
+  it('derives an offset-free end from a duration without inventing a time zone', () => {
+    expect(
+      assessCalendarEventReadiness({
+        toolArgs: {
+          summary: 'Training',
+          start: '2026-08-18T18:00:00',
+        },
+        evidenceTexts: ['Schedule Training on 2026-08-18 at 18:00 for two hours.'],
+        hasExplicitStart: true,
+        hasExplicitEnd: false,
+        explicitDurationMinutes: 120,
+        runtimeTimeZone: '',
+        replyLanguage: 'en',
+      })
+    ).toEqual({
+      status: 'ready',
+      toolArgs: {
+        summary: 'Training',
+        start: '2026-08-18T18:00:00',
+        end: '2026-08-18T20:00:00',
+      },
+    });
+  });
+
+  it.each([
+    ['pl', 'Do której ma trwać wydarzenie „Trening”?'],
+    ['en', 'When should “Trening” end?'],
+  ] as const)(
+    'asks for an explicit end in %s when the start cannot be combined with a duration',
+    (replyLanguage, reply) => {
+      expect(
+        assessCalendarEventReadiness({
+          toolArgs: { summary: 'Trening', start: 'not-an-instant' },
+          evidenceTexts: ['Trening ma potrwać dwie godziny.'],
+          hasExplicitStart: true,
+          hasExplicitEnd: false,
+          explicitDurationMinutes: 120,
+          runtimeTimeZone: 'Europe/Warsaw',
+          replyLanguage,
+        })
+      ).toEqual({ status: 'needs_clarification', reply, missingFields: ['end'] });
+    }
+  );
+
+  it('asks for clarification when an explicit end conflicts with the duration', () => {
+    expect(
+      assessCalendarEventReadiness({
+        toolArgs: {
+          summary: 'Trening',
+          start: '2026-08-18T18:00:00+02:00',
+          end: '2026-08-18T21:00:00+02:00',
+        },
+        evidenceTexts: ['Dodaj trening 18 sierpnia 18:00-21:00 na dwie godziny.'],
+        hasExplicitStart: true,
+        hasExplicitEnd: true,
+        explicitDurationMinutes: 120,
+        runtimeTimeZone: 'Europe/Warsaw',
+        replyLanguage: 'pl',
+      })
+    ).toEqual({
+      status: 'needs_clarification',
+      reply:
+        'Podany czas zakończenia wydarzenia „Trening” nie zgadza się z czasem trwania. Którą wartość mam przyjąć?',
+      missingFields: ['end'],
+    });
+  });
+
+  it('reports an English conflict for offset-free end and duration values', () => {
+    expect(
+      assessCalendarEventReadiness({
+        toolArgs: {
+          summary: 'Training',
+          start: '2026-08-18T18:00:00',
+          end: '2026-08-18T21:00:00',
+        },
+        evidenceTexts: ['Schedule Training on 2026-08-18 from 18:00 to 21:00 for two hours.'],
+        hasExplicitStart: true,
+        hasExplicitEnd: true,
+        explicitDurationMinutes: 120,
+        runtimeTimeZone: '',
+        replyLanguage: 'en',
+      })
+    ).toEqual({
+      status: 'needs_clarification',
+      reply: 'The stated end time for “Training” conflicts with the duration. Which value should I use?',
+      missingFields: ['end'],
     });
   });
 
@@ -298,7 +405,7 @@ describe('calendarEventReadiness', () => {
     });
   });
 
-  it('proposes an offset-free end and does not claim that grounded location is omitted', () => {
+  it('applies an offset-free default end and keeps a grounded location', () => {
     const result = assessCalendarEventReadiness({
       toolArgs: {
         summary: 'Dentist',
@@ -314,17 +421,12 @@ describe('calendarEventReadiness', () => {
     });
 
     expect(result).toMatchObject({
-      status: 'needs_clarification',
-      draft: {
-        toolArgs: {
-          end: '2026-08-18T10:00:00',
-          location: 'Smile Clinic',
-        },
+      status: 'ready',
+      toolArgs: {
+        end: '2026-08-18T10:00:00',
+        location: 'Smile Clinic',
       },
     });
-    expect(result.status).toBe('needs_clarification');
-    if (result.status !== 'needs_clarification') throw new Error('expected clarification');
-    expect(result.reply).not.toContain('omit the location');
   });
 
   it('uses the Polish tournament fallback only for grounded meta summaries', () => {
@@ -380,26 +482,12 @@ describe('calendarEventReadiness', () => {
     }
   });
 
-  it.each(['Tak', 'yes', 'Pasuje.', 'sounds good', 'może być'])(
-    'recognizes a narrow draft acceptance: %s',
-    (message) => {
-      expect(isCalendarDraftAcceptance(message)).toBe(true);
-    }
-  );
-
-  it.each(['Tak, ale do 21:00', 'nie', 'add it', 'what did you assume?'])(
-    'does not treat corrections, rejection, or questions as acceptance: %s',
-    (message) => {
-      expect(isCalendarDraftAcceptance(message)).toBe(false);
-    }
-  );
-
-  it('accepts only a complete persisted safe-default draft', () => {
+  it('parses a complete persisted safe-default draft and rejects inconsistent fields', () => {
     const draft = VALID_SAFE_DEFAULT_DRAFT;
 
-    expect(parseAcceptedCalendarEventDraft(draft)).toEqual(draft);
+    expect(parseCalendarEventDraft(draft)).toEqual(draft);
     expect(
-      parseAcceptedCalendarEventDraft({
+      parseCalendarEventDraft({
         ...draft,
         fields: {
           ...draft.fields,
@@ -408,7 +496,7 @@ describe('calendarEventReadiness', () => {
       })
     ).toBeNull();
     expect(
-      parseAcceptedCalendarEventDraft({
+      parseCalendarEventDraft({
         ...draft,
         fields: {
           ...draft.fields,
@@ -417,7 +505,7 @@ describe('calendarEventReadiness', () => {
       })
     ).toBeNull();
     expect(
-      parseAcceptedCalendarEventDraft({
+      parseCalendarEventDraft({
         ...draft,
         fields: {
           ...draft.fields,
@@ -425,8 +513,24 @@ describe('calendarEventReadiness', () => {
         },
       })
     ).toBeNull();
-    expect(parseAcceptedCalendarEventDraft({ version: 1, toolArgs: {} })).toBeNull();
-    expect(parseAcceptedCalendarEventDraft(null)).toBeNull();
+    expect(parseCalendarEventDraft({ version: 1, toolArgs: {} })).toBeNull();
+    expect(parseCalendarEventDraft(null)).toBeNull();
+  });
+
+  it('parses an incomplete V1 draft so later details can preserve its confirmed fields', () => {
+    const draft = {
+      version: 1,
+      toolArgs: { summary: 'Trening' },
+      fields: {
+        summary: { value: 'Trening', status: 'user_confirmed', source: 'user_message' },
+        start: { status: 'missing', source: 'none' },
+        end: { status: 'missing', source: 'none' },
+        timeZone: { status: 'missing', source: 'none' },
+      },
+      omittedFields: ['location', 'description', 'attendees'],
+    } as const;
+
+    expect(parseCalendarEventDraft(draft)).toEqual(draft);
   });
 
   it.each([
@@ -571,7 +675,7 @@ describe('calendarEventReadiness', () => {
     ],
     ['non-string omitted field', { ...VALID_SAFE_DEFAULT_DRAFT, omittedFields: [7] }],
   ])('rejects malformed persisted calendar draft: %s', (_name, draft) => {
-    expect(parseAcceptedCalendarEventDraft(draft)).toBeNull();
+    expect(parseCalendarEventDraft(draft)).toBeNull();
   });
 
   it('accepts persisted drafts with an omitted or explicitly user-confirmed time zone', () => {
@@ -599,7 +703,7 @@ describe('calendarEventReadiness', () => {
       },
     };
 
-    expect(parseAcceptedCalendarEventDraft(withoutTimeZone)).toEqual(withoutTimeZone);
-    expect(parseAcceptedCalendarEventDraft(explicitTimeZone)).toEqual(explicitTimeZone);
+    expect(parseCalendarEventDraft(withoutTimeZone)).toEqual(withoutTimeZone);
+    expect(parseCalendarEventDraft(explicitTimeZone)).toEqual(explicitTimeZone);
   });
 });

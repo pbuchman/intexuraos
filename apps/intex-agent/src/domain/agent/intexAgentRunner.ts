@@ -66,8 +66,7 @@ import {
 } from './capabilities.js';
 import {
   assessCalendarEventReadiness,
-  isCalendarDraftAcceptance,
-  parseAcceptedCalendarEventDraft,
+  parseCalendarEventDraft,
   type CalendarEventDraftV1,
 } from './calendarEventReadiness.js';
 import type {
@@ -280,13 +279,49 @@ const CALENDAR_MERIDIEM_CLOCK_PATTERN =
 const CALENDAR_CONTEXTUAL_HOUR_PATTERN =
   /(?<![\p{L}\p{N}])(?:at|o)\s+(\d{1,2})(?![\p{L}\p{N}:])/iu;
 const CALENDAR_ENGLISH_DURATION_PATTERN =
-  /(?<![\p{L}\p{N}])for\s+(\d+|an?|one|two|three|half\s+an?)\s+(hours?|minutes?)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(?:for|lasting|will\s+last)\s+(?:(\d+(?:[.,]\d+)?|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|half(?:\s+an?)?)\s*)?(hours?|hrs?|h|minutes?|mins?|min)(?![\p{L}\p{N}])/iu;
 const CALENDAR_POLISH_DURATION_PATTERN =
-  /(?<![\p{L}\p{N}])na\s+(?:(\d+)\s+)?(?:godzin(?:ę|y|a)|minut(?:ę|y)?)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(?:(?:na|przez)\s+|(?:będzie|bedzie)\s+trwa(?:ć|c|ł|l|ła|la|ło|lo)\s+|potrwa(?:ć|c)?\s+|ma\s+trwa(?:ć|c)\s+)(?:(\d+(?:[.,]\d+)?|pół|pol|jeden|jedna|jedną|dwa|dwie|trzy|cztery|pięć|piec|sześć|szesc|siedem|osiem|dziewięć|dziewiec|dziesięć|dziesiec|jedenaście|jedenascie|dwanaście|dwanascie)\s*)?(godzin(?:ę|e|y|a)?|godz\.?|h|minut(?:ę|e|y|a)?|min\.?)(?![\p{L}\p{N}])/iu;
+const CALENDAR_COMPACT_DURATION_PATTERN =
+  /(?<![\p{L}\p{N}])(\d+(?:[.,]\d+)?)\s*(h|hrs?|godz\.?|mins?|min\.?)(?![\p{L}\p{N}])/iu;
+const CALENDAR_DURATION_WORD_QUANTITIES: Readonly<Record<string, number>> = {
+  a: 1,
+  an: 1,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+  jeden: 1,
+  jedna: 1,
+  dwa: 2,
+  dwie: 2,
+  trzy: 3,
+  cztery: 4,
+  piec: 5,
+  szesc: 6,
+  siedem: 7,
+  osiem: 8,
+  dziewiec: 9,
+  dziesiec: 10,
+  jedenascie: 11,
+  dwanascie: 12,
+  pol: 0.5,
+  half: 0.5,
+  'half a': 0.5,
+  'half an': 0.5,
+};
 const CALENDAR_UNTIL_CLOCK_PATTERN =
-  /(?<![\p{L}\p{N}])until\s+(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(?:until|do)\s+(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
 const CALENDAR_CLOCK_RANGE_PATTERN =
-  /(?<![\p{L}\p{N}])(?:from\s+)?(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)\s*(?:-|–|to)\s*(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(?:(?:from|od)\s+)?(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)\s*(?:-|–|to|do)\s*(noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)(?![\p{L}\p{N}])/iu;
 const CALENDAR_NEGATED_CLOCK_PATTERN =
   /(?:\b(?:do\s+not|don['’]?t)\s+(?:use|schedule|book|set)\s+(?:at\s+)?(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)|\b(?:any\s+time\s+)?(?:except|other\s+than)\s+(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)|\bnot\s+at\s+(?:noon|midnight|\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?)|\bnie\s+(?:używaj|uzywaj|ustawiaj|planuj)\s+(?:o\s+|na\s+)?(?:południe|poludnie|północ|polnoc|\d{1,2}(?::\d{2})?)|\b(?:dowolna\s+godzina|dowolnej\s+porze)\s+poza\s+(?:południem|poludniem|północą|polnoca|\d{1,2}(?::\d{2})?))(?![\p{L}\p{N}])/iu;
 const CALENDAR_NEGATED_DURATION_PATTERN =
@@ -575,26 +610,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         };
       }
 
-      const acceptedCalendarDraft = isCalendarDraftAcceptance(input.message)
-        ? findLatestAcceptedCalendarDraft(input.events)
-        : null;
-      if (acceptedCalendarDraft !== null) {
-        return {
-          outcome: 'needs_confirmation',
-          reply: buildConfirmationReply(
-            'create_calendar_event',
-            acceptedCalendarDraft.draft.toolArgs,
-            config.userPreferences ?? null,
-            detectedReplyLanguage,
-            input.timeZone
-          ),
-          toolName: 'create_calendar_event',
-          toolArgs: acceptedCalendarDraft.draft.toolArgs,
-          ...(acceptedCalendarDraft.toolSelection === undefined
-            ? {}
-            : { toolSelection: acceptedCalendarDraft.toolSelection }),
-        };
-      }
+      const activeCalendarDraft = findActiveCalendarDraft(input.events);
 
       const classifiedIntent =
         config.intentClassifier === undefined
@@ -644,7 +660,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         replyContext: input.replyContext,
         replyLanguage: replyLanguageForIntent(queryNormalizedIntent, detectedReplyLanguage),
       });
-      const durationProposalIntent = applyCalendarEndDefaultProposalIntent(
+      const calendarDefaultIntent = applyCalendarEndDefaultIntent(
         dateNormalizedIntent,
         {
           message: input.message,
@@ -652,7 +668,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           replyContext: input.replyContext,
         }
       );
-      const intent = applyMissingCalendarAttendeeEmailClarification(durationProposalIntent, {
+      const intent = applyMissingCalendarAttendeeEmailClarification(calendarDefaultIntent, {
         message: input.message,
         events: input.events,
         replyContext: input.replyContext,
@@ -827,6 +843,15 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         attendeesToAdd: calendarUpdateAttendeeEmails as string[],
         activeUserTexts: calendarUpdateRelevantTexts,
       });
+      const currentCalendarEvidence = currentCalendarEvidenceTexts(
+        input.message,
+        input.replyContext
+      );
+      const explicitDurationMinutes = resolveCalendarDurationMinutes(
+        input.message,
+        input.events,
+        input.replyContext
+      );
 
       const runnerResult = await parseRunnerContent(
         {
@@ -850,11 +875,26 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
                     input.events,
                     input.replyContext
                   ),
-                  hasExplicitEnd: hasCalendarEndSignal(
+                  hasExplicitEnd: hasCalendarExplicitEndTimeSignal(
                     input.message,
                     input.events,
                     input.replyContext
                   ),
+                  ...(explicitDurationMinutes === undefined
+                    ? {}
+                    : { explicitDurationMinutes }),
+                  hasCurrentExplicitSummary: currentCalendarEvidence.some(
+                    containsExplicitCalendarSummarySignal
+                  ),
+                  hasCurrentExplicitStart: currentCalendarEvidence.some(
+                    containsCalendarClockTimeSignal
+                  ),
+                  hasCurrentExplicitEnd: currentCalendarEvidence.some(
+                    containsCalendarEndTimeSignal
+                  ),
+                  ...(activeCalendarDraft === null
+                    ? {}
+                    : { activeDraft: activeCalendarDraft }),
                 },
               }
             : {}),
@@ -1043,7 +1083,7 @@ function applyCompleteCalendarClarificationContext(
   return clarificationToToolIntent(intent, 'create_calendar_event');
 }
 
-function applyCalendarEndDefaultProposalIntent(
+function applyCalendarEndDefaultIntent(
   intent: IntexAgentIntentClassification,
   context: Readonly<{
     message: string;
@@ -1233,56 +1273,20 @@ function clarificationToToolIntent(
   };
 }
 
-function findLatestAcceptedCalendarDraft(
+function findActiveCalendarDraft(
   events: readonly IntexAgentSessionEvent[]
-): Readonly<{
-  draft: CalendarEventDraftV1;
-  toolSelection?: IntexAgentToolSelectionMetadata;
-}> | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index];
-    /* v8 ignore start -- ts-type: bounded index still includes undefined with noUncheckedIndexedAccess @preserve */
-    if (event === undefined) continue;
-    /* v8 ignore stop @preserve */
-    if (event.type === 'assistant_message' || event.type === 'llm_call_usage') continue;
-    if (event.type === 'clarification_requested') {
-      const draft = parseAcceptedCalendarEventDraft(event.payload['calendarEventDraft']);
-      if (draft === null) return null;
-      const toolSelection = parseToolSelectionMetadata(event.payload['toolSelection']);
-      return {
-        draft,
-        ...(toolSelection === undefined ? {} : { toolSelection }),
-      };
-    }
-    if (
-      event.type === 'user_message' ||
-      event.type === 'confirmation_requested' ||
-      event.type === 'confirmation_resolved' ||
-      event.type === 'tool_call_completed' ||
-      event.type === 'tool_call_failed'
-    ) {
-      return null;
-    }
-  }
-  return null;
-}
-
-function parseToolSelectionMetadata(value: unknown): IntexAgentToolSelectionMetadata | undefined {
+): CalendarEventDraftV1 | null {
+  const activeClarification = findActiveClarificationEvent(events);
   if (
-    typeof value !== 'object' ||
-    value === null ||
-    Array.isArray(value) ||
-    !Number.isInteger((value as Record<string, unknown>)['turnIndex']) ||
-    Number((value as Record<string, unknown>)['turnIndex']) < 0 ||
-    !Number.isInteger((value as Record<string, unknown>)['ordinal']) ||
-    Number((value as Record<string, unknown>)['ordinal']) < 1
+    activeClarification === undefined ||
+    !isCalendarClarification(activeClarification.event)
   ) {
-    return undefined;
+    return null;
   }
-  return {
-    turnIndex: Number((value as Record<string, unknown>)['turnIndex']),
-    ordinal: Number((value as Record<string, unknown>)['ordinal']),
-  };
+  const draft = parseCalendarEventDraft(
+    activeClarification.event.payload['calendarEventDraft']
+  );
+  return draft;
 }
 
 function hasCalendarStartSignal(
@@ -1293,12 +1297,17 @@ function hasCalendarStartSignal(
   return hasActiveCalendarSignal(message, events, replyContext, containsCalendarClockTimeSignal);
 }
 
-function hasCalendarEndSignal(
+function hasCalendarExplicitEndTimeSignal(
   message: string,
   events: readonly IntexAgentSessionEvent[],
   replyContext: IntexIncomingMessageReplyContext | undefined
 ): boolean {
-  return hasActiveCalendarSignal(message, events, replyContext, containsCalendarEndTimeSignal);
+  return hasActiveCalendarSignal(
+    message,
+    events,
+    replyContext,
+    containsCalendarExplicitEndTimeSignal
+  );
 }
 
 function hasActiveCalendarSignal(
@@ -1362,6 +1371,30 @@ function calendarCreateEvidenceTexts(
     expectsUserMessage = true;
   }
   return texts;
+}
+
+function currentCalendarEvidenceTexts(
+  message: string,
+  replyContext: IntexIncomingMessageReplyContext | undefined
+): string[] {
+  return [
+    message,
+    ...(replyContext?.source === 'inbound_user_message' ? [replyContext.text] : []),
+  ];
+}
+
+function resolveCalendarDurationMinutes(
+  message: string,
+  events: readonly IntexAgentSessionEvent[],
+  replyContext: IntexIncomingMessageReplyContext | undefined
+): number | undefined {
+  const currentEvidence = currentCalendarEvidenceTexts(message, replyContext);
+  if (currentEvidence.some(containsCalendarTimeWithdrawalSignal)) return undefined;
+  for (const evidence of calendarCreateEvidenceTexts(message, events, replyContext)) {
+    const durationMinutes = extractCalendarDurationMinutes(evidence);
+    if (durationMinutes !== undefined) return durationMinutes;
+  }
+  return undefined;
 }
 
 function findActiveClarificationEvent(
@@ -2060,18 +2093,62 @@ function containsCalendarClockTimeSignal(message: string): boolean {
 }
 
 function containsCalendarEndTimeSignal(message: string): boolean {
+  return (
+    extractCalendarDurationMinutes(message) !== undefined ||
+    containsCalendarExplicitEndTimeSignal(message)
+  );
+}
+
+function extractCalendarDurationMinutes(message: string): number | undefined {
   const normalized = message.normalize('NFKC');
   const englishDuration = CALENDAR_ENGLISH_DURATION_PATTERN.exec(normalized);
   if (englishDuration !== null) {
-    const quantity = englishDuration[1]?.toLocaleLowerCase('en-US');
-    return quantity !== undefined && (Number.isNaN(Number(quantity)) || Number(quantity) > 0);
+    return durationMinutes(englishDuration[1], englishDuration[2] as string);
   }
 
   const polishDuration = CALENDAR_POLISH_DURATION_PATTERN.exec(normalized);
   if (polishDuration !== null) {
-    const numericQuantity = polishDuration[1];
-    return numericQuantity === undefined || Number(numericQuantity) > 0;
+    return durationMinutes(polishDuration[1], polishDuration[2] as string);
   }
+
+  const compactDuration = CALENDAR_COMPACT_DURATION_PATTERN.exec(normalized);
+  if (compactDuration !== null) {
+    return durationMinutes(compactDuration[1], compactDuration[2] as string);
+  }
+
+  return undefined;
+}
+
+function durationMinutes(
+  quantityValue: string | undefined,
+  unitValue: string
+): number | undefined {
+  const normalizedQuantity = quantityValue
+    ?.normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replaceAll('ł', 'l')
+    .toLocaleLowerCase('en-US')
+    .trim();
+  const quantity =
+    normalizedQuantity === undefined || normalizedQuantity === ''
+      ? 1
+      : (CALENDAR_DURATION_WORD_QUANTITIES[normalizedQuantity] ??
+        Number(normalizedQuantity.replace(',', '.')));
+  if (!Number.isFinite(quantity) || quantity <= 0) return undefined;
+  const normalizedUnit = unitValue
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replaceAll('ł', 'l')
+    .toLocaleLowerCase('en-US');
+  const multiplier = /^(?:h|hr|hrs|hour|hours|godz|godzin)/u.test(normalizedUnit)
+    ? 60
+    : 1;
+  const minutes = quantity * multiplier;
+  return Number.isInteger(minutes) ? minutes : undefined;
+}
+
+function containsCalendarExplicitEndTimeSignal(message: string): boolean {
+  const normalized = message.normalize('NFKC');
 
   const untilClock = CALENDAR_UNTIL_CLOCK_PATTERN.exec(normalized);
   if (untilClock?.[1] !== undefined) {
@@ -2646,11 +2723,42 @@ interface RunnerOutputValidationInput {
     evidenceTexts: readonly string[];
     hasExplicitStart: boolean;
     hasExplicitEnd: boolean;
+    explicitDurationMinutes?: number;
+    hasCurrentExplicitSummary: boolean;
+    hasCurrentExplicitStart: boolean;
+    hasCurrentExplicitEnd: boolean;
+    activeDraft?: CalendarEventDraftV1;
   }>;
   todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope;
   calendarUpdateAttendeeEmails?: string[];
   synthesizedCalendarUpdatePreview?: true;
   matrixCorpusLlm?: MatrixCorpusLlmRecorder;
+}
+
+function mergeCalendarEventDraftArgs(
+  toolArgs: Record<string, unknown>,
+  readiness: NonNullable<RunnerOutputValidationInput['calendarCreateReadiness']>
+): Record<string, unknown> {
+  const draft = readiness.activeDraft;
+  if (draft === undefined) return toolArgs;
+
+  const merged = { ...draft.toolArgs, ...toolArgs };
+  preserveCalendarDraftField(merged, draft, 'summary', readiness.hasCurrentExplicitSummary);
+  preserveCalendarDraftField(merged, draft, 'start', readiness.hasCurrentExplicitStart);
+  preserveCalendarDraftField(merged, draft, 'end', readiness.hasCurrentExplicitEnd);
+  preserveCalendarDraftField(merged, draft, 'timeZone', false);
+  return merged;
+}
+
+function preserveCalendarDraftField(
+  merged: Record<string, unknown>,
+  draft: CalendarEventDraftV1,
+  fieldName: keyof CalendarEventDraftV1['fields'],
+  hasCurrentValue: boolean
+): void {
+  if (hasCurrentValue) return;
+  const value = draft.fields[fieldName].value;
+  if (value !== undefined) merged[fieldName] = value;
 }
 
 async function parseRunnerContent(
@@ -2741,11 +2849,18 @@ async function parseRunnerContent(
     toolExecution?.toolName === 'create_calendar_event' &&
     input.calendarCreateReadiness !== undefined
   ) {
+    const readinessToolArgs = mergeCalendarEventDraftArgs(
+      toolExecution.args,
+      input.calendarCreateReadiness
+    );
     const readiness = assessCalendarEventReadiness({
-      toolArgs: toolExecution.args,
+      toolArgs: readinessToolArgs,
       evidenceTexts: input.calendarCreateReadiness.evidenceTexts,
       hasExplicitStart: input.calendarCreateReadiness.hasExplicitStart,
       hasExplicitEnd: input.calendarCreateReadiness.hasExplicitEnd,
+      ...(input.calendarCreateReadiness.explicitDurationMinutes === undefined
+        ? {}
+        : { explicitDurationMinutes: input.calendarCreateReadiness.explicitDurationMinutes }),
       runtimeTimeZone,
       replyLanguage,
     });
@@ -2759,11 +2874,9 @@ async function parseRunnerContent(
         candidateIntents: ['create_calendar_event'],
         suggestedNextStep:
           replyLanguage === 'pl'
-            ? 'Potwierdź zaproponowane wartości albo podaj poprawione szczegóły wydarzenia.'
-            : 'Accept the proposed values or provide corrected event details.',
-        /* v8 ignore start -- upstream: validated create_calendar_event start always matches the readiness date-time parser, so a missing end always returns a persisted draft @preserve */
+            ? 'Podaj brakujące albo poprawione szczegóły wydarzenia.'
+            : 'Provide the missing or corrected event details.',
         ...(readiness.draft === undefined ? {} : { calendarEventDraft: readiness.draft }),
-        /* v8 ignore stop @preserve */
         ...(toolExecution.selectionMetadata === undefined
           ? {}
           : { toolSelection: toolExecution.selectionMetadata }),
@@ -2775,6 +2888,7 @@ async function parseRunnerContent(
     toolExecution !== undefined &&
     isMutatingToolName(toolExecution.toolName) &&
     parsed?.outcome === 'needs_clarification' &&
+    !(toolExecution.toolName === 'create_calendar_event' && calendarCreateArgs !== undefined) &&
     input.synthesizedCalendarUpdatePreview !== true
   ) {
     return {
