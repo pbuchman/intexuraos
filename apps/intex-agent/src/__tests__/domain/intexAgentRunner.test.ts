@@ -217,7 +217,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('25.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('26.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -2090,9 +2090,13 @@ describe('createIntexAgentRunner', () => {
         timeZone: 'Europe/Warsaw',
       })
     ).resolves.toMatchObject({
-      outcome: 'needs_clarification',
-      missingFields: ['end'],
-      candidateIntents: ['create_calendar_event'],
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'Lunch with Marta',
+        start: '2026-07-28T16:00:00+02:00',
+        end: '2026-07-28T17:00:00+02:00',
+      },
     });
   });
 
@@ -3327,25 +3331,220 @@ describe('createIntexAgentRunner', () => {
   );
 
   it.each([
+    ['Dodaj trening jutro o 18:00, będzie trwał dwie godziny.', '2026-06-25T20:00:00+02:00'],
+    ['Dodaj trening jutro o 18:00, potrwa dwie godziny.', '2026-06-25T20:00:00+02:00'],
+    ['Dodaj trening jutro o 18:00 przez dwie godziny.', '2026-06-25T20:00:00+02:00'],
+    ['Dodaj trening jutro o 18:00 na 2 godziny.', '2026-06-25T20:00:00+02:00'],
+    ['Dodaj trening jutro o 18:00, 2h.', '2026-06-25T20:00:00+02:00'],
+    ['Dodaj trening jutro o 18:00, potrwa 2h.', '2026-06-25T20:00:00+02:00'],
+    ['Dodaj trening jutro o 18:00 na 90 minut.', '2026-06-25T19:30:00+02:00'],
+  ])('derives the calendar end from a natural duration: %s', async (message, expectedEnd) => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Trening',
+          start: '2026-06-25T18:00:00+02:00',
+          end: '2026-06-25T22:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Gotowe do potwierdzenia.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_calendar_event']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'Trening',
+        start: '2026-06-25T18:00:00+02:00',
+        end: expectedEnd,
+        timeZone: 'Europe/Warsaw',
+      },
+    });
+  });
+
+  it('uses the one-hour default when a fractional-minute duration is not calendar-safe', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Training',
+          start: '2026-06-25T18:00:00+02:00',
+          end: '2026-06-25T22:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Ready for confirmation.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_calendar_event']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Schedule Training tomorrow at 18:00 for 1.5 minutes.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolArgs: {
+        summary: 'Training',
+        start: '2026-06-25T18:00:00+02:00',
+        end: '2026-06-25T19:00:00+02:00',
+      },
+    });
+  });
+
+  it('preserves the active calendar draft when the user supplies only a duration', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Będzie trwał dwie godziny',
+          start: '2026-08-14T09:00:00+02:00',
+          end: '2026-08-14T11:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Gotowe do potwierdzenia.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_calendar_event']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [
+        event('user_message', {
+          text: 'Dodaj Turniej OPEN B++ 14 sierpnia 2026 o 18:00 do mojego kalendarza.',
+        }),
+        event('clarification_requested', {
+          message: 'Jak długo ma trwać wydarzenie?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['end'],
+          candidateIntents: ['create_calendar_event'],
+          calendarEventDraft: safeCalendarDraft(),
+        }),
+        event('assistant_message', { text: 'Jak długo ma trwać wydarzenie?' }),
+      ],
+      message: 'Będzie trwał dwie godziny.',
+      currentDateTime: '2026-08-12T10:48:00.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'Turniej OPEN B++',
+        start: '2026-08-14T18:00:00+02:00',
+        end: '2026-08-14T20:00:00+02:00',
+        timeZone: 'Europe/Warsaw',
+      },
+    });
+  });
+
+  it('asks which value to use when the explicit end conflicts with the duration', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Trening',
+          start: '2026-06-25T18:00:00+02:00',
+          end: '2026-06-25T21:00:00+02:00',
+        },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Gotowe do potwierdzenia.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['create_calendar_event']),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Dodaj trening jutro 18:00-21:00 na dwie godziny.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['end'],
+      candidateIntents: ['create_calendar_event'],
+      reply: expect.stringContaining('nie zgadza się z czasem trwania'),
+    });
+  });
+
+  it.each([
     {
       message: 'Add lunch with Marta on 2026-07-21 at noon.',
       events: [],
       replyContext: undefined,
-      language: 'en',
       summary: 'Lunch with Marta',
     },
     {
       message: 'Schedule the site inspection on the 2nd at noon.',
       events: [],
       replyContext: undefined,
-      language: 'en',
       summary: 'Site inspection',
     },
     {
       message: 'Dodaj lunch z Martą 21 lipca o 12:00.',
       events: [],
       replyContext: undefined,
-      language: 'pl',
       summary: 'Lunch with Marta',
     },
     {
@@ -3357,12 +3556,11 @@ describe('createIntexAgentRunner', () => {
         text: 'Dentist next Tuesday',
         truncated: false,
       },
-      language: 'en',
       summary: 'Dentist',
     },
   ])(
-    'proposes a one-hour default instead of confirming an invented calendar end: $message',
-    async ({ events, language, message, replyContext, summary }) => {
+    'uses a one-hour default in the final confirmation: $message',
+    async ({ events, message, replyContext, summary }) => {
       const client = new ToolExecutingFakeToolCallingClient({
         toolName: 'create_calendar_event',
         args: {
@@ -3395,29 +3593,15 @@ describe('createIntexAgentRunner', () => {
       });
 
       expect(result).toMatchObject({
-        outcome: 'needs_clarification',
-        blockerReason: 'missing_required_details',
-        missingFields: ['end'],
-        candidateIntents: ['create_calendar_event'],
-        calendarEventDraft: {
-          version: 1,
-          toolArgs: {
-            summary,
-            start: '2026-07-21T12:00:00+02:00',
-            end: '2026-07-21T13:00:00+02:00',
-          },
-          fields: {
-            end: {
-              status: 'proposed_default',
-              source: 'safe_default',
-              value: '2026-07-21T13:00:00+02:00',
-            },
-          },
-          omittedFields: expect.arrayContaining(['location']),
+        outcome: 'needs_confirmation',
+        toolName: 'create_calendar_event',
+        toolArgs: {
+          summary,
+          start: '2026-07-21T12:00:00+02:00',
+          end: '2026-07-21T13:00:00+02:00',
         },
       });
-      expect(result.reply).toContain(language === 'pl' ? '60 minut' : '60 minutes');
-      expect(result.outcome).not.toBe('needs_confirmation');
+      expect(result).not.toHaveProperty('calendarEventDraft');
     }
   );
 
@@ -3469,21 +3653,18 @@ describe('createIntexAgentRunner', () => {
     });
 
     expect(result).toMatchObject({
-      outcome: 'needs_clarification',
-      missingFields: ['end'],
-      calendarEventDraft: {
-        toolArgs: {
-          summary: 'Lunch with Marta',
-          start: '2026-07-21T12:00:00+02:00',
-          end: '2026-07-21T13:00:00+02:00',
-        },
-        omittedFields: expect.arrayContaining(['location']),
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+      toolArgs: {
+        summary: 'Lunch with Marta',
+        start: '2026-07-21T12:00:00+02:00',
+        end: '2026-07-21T13:00:00+02:00',
       },
     });
     expect(client.calls).toHaveLength(1);
   });
 
-  it('keeps an explicit provider clarification ahead of a mutating calendar preview', async () => {
+  it('uses the deterministic default despite a provider request for end clarification', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_calendar_event',
       args: {
@@ -3520,217 +3701,14 @@ describe('createIntexAgentRunner', () => {
     });
 
     expect(result).toMatchObject({
-      outcome: 'needs_clarification',
-      missingFields: ['end'],
-      candidateIntents: ['create_calendar_event'],
-      calendarEventDraft: {
-        version: 1,
-        toolArgs: {
-          summary: 'Turniej OPEN B++',
-          start: '2026-08-14T18:00:00+02:00',
-          end: '2026-08-14T19:00:00+02:00',
-        },
-      },
-    });
-    expect(result.outcome).not.toBe('needs_confirmation');
-  });
-
-  it('turns acceptance of a proposed calendar default into a separate exact confirmation', async () => {
-    const draft = {
-      version: 1,
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
       toolArgs: {
         summary: 'Turniej OPEN B++',
         start: '2026-08-14T18:00:00+02:00',
         end: '2026-08-14T19:00:00+02:00',
-        timeZone: 'Europe/Warsaw',
       },
-      fields: {
-        summary: {
-          value: 'Turniej OPEN B++',
-          status: 'user_confirmed',
-          source: 'user_message',
-        },
-        start: {
-          value: '2026-08-14T18:00:00+02:00',
-          status: 'user_confirmed',
-          source: 'user_message',
-        },
-        end: {
-          value: '2026-08-14T19:00:00+02:00',
-          status: 'proposed_default',
-          source: 'safe_default',
-        },
-        timeZone: {
-          value: 'Europe/Warsaw',
-          status: 'runtime_default',
-          source: 'runtime',
-        },
-      },
-      omittedFields: ['location', 'description', 'attendees'],
-    };
-    const client = new FakeToolCallingClient([]);
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: conversationIntentClassifier(),
-      toolExecutor: fakeToolExecutor(),
     });
-
-    const result = await runner.run({
-      session: session(),
-      events: [
-        event('user_message', {
-          text: 'Dodaj Turniej OPEN B++ 14 sierpnia 2026 o 18:00 do mojego kalendarza.',
-        }),
-        event('clarification_requested', {
-          message: 'Mogę przyjąć 60 minut, czyli do 19:00. Pasuje?',
-          blockerReason: 'missing_required_details',
-          missingFields: ['end'],
-          candidateIntents: ['create_calendar_event'],
-          calendarEventDraft: draft,
-          toolSelection: { turnIndex: 2, ordinal: 1 },
-        }),
-        event('assistant_message', {
-          text: 'Mogę przyjąć 60 minut, czyli do 19:00. Pasuje?',
-        }),
-      ],
-      message: 'Tak',
-      currentDateTime: '2026-08-12T10:48:00.000Z',
-      timeZone: 'Europe/Warsaw',
-    });
-
-    expect(result).toMatchObject({
-      outcome: 'needs_confirmation',
-      toolName: 'create_calendar_event',
-      toolArgs: draft.toolArgs,
-      toolSelection: { turnIndex: 2, ordinal: 1 },
-    });
-    expect(result.reply).toContain('Czy dodać wydarzenie w kalendarzu?');
-    expect(client.calls).toHaveLength(0);
-  });
-
-  it('confirms an accepted safe calendar draft without Matrix selection metadata', async () => {
-    const client = new FakeToolCallingClient([]);
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: conversationIntentClassifier(),
-      toolExecutor: fakeToolExecutor(),
-    });
-
-    const result = await runner.run({
-      session: session(),
-      events: [
-        event('clarification_requested', {
-          message: 'Mogę przyjąć 60 minut. Pasuje?',
-          calendarEventDraft: safeCalendarDraft(),
-        }),
-        event('session_started', { reason: 'existing_session' }),
-        event('assistant_message', { text: 'Mogę przyjąć 60 minut. Pasuje?' }),
-      ],
-      message: 'Tak',
-      currentDateTime: CURRENT_DATE_TIME,
-      timeZone: 'Europe/Warsaw',
-    });
-
-    expect(result).toMatchObject({
-      outcome: 'needs_confirmation',
-      toolName: 'create_calendar_event',
-    });
-    expect(result).not.toHaveProperty('toolSelection');
-    expect(client.calls).toHaveLength(0);
-  });
-
-  it('does not accept a malformed persisted calendar draft', async () => {
-    const client = new FakeToolCallingClient([
-      ok(toolResult({ outcome: 'no_action', reply: 'Please provide the missing details.' })),
-    ]);
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: conversationIntentClassifier(),
-      toolExecutor: fakeToolExecutor(),
-    });
-
-    await expect(
-      runner.run({
-        session: session(),
-        events: [
-          event('clarification_requested', {
-            message: 'Accept the proposed duration?',
-            calendarEventDraft: { version: 1, toolArgs: {} },
-          }),
-        ],
-        message: 'Yes',
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toEqual({
-      outcome: 'no_action',
-      reply: 'Please provide the missing details.',
-    });
-    expect(client.calls).toHaveLength(1);
-  });
-
-  it.each([
-    ['user_message', { text: 'A newer answer.' }],
-    ['confirmation_requested', { confirmationId: 'confirmation-newer' }],
-    ['confirmation_resolved', { confirmationId: 'confirmation-newer' }],
-    ['tool_call_completed', { toolName: 'create_note' }],
-    ['tool_call_failed', { toolName: 'create_note' }],
-  ] as const)('does not accept a draft superseded by %s', async (type, payload) => {
-    const client = new FakeToolCallingClient([
-      ok(toolResult({ outcome: 'no_action', reply: 'The proposal is no longer active.' })),
-    ]);
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: conversationIntentClassifier(),
-      toolExecutor: fakeToolExecutor(),
-    });
-
-    await expect(
-      runner.run({
-        session: session(),
-        events: [
-          event('clarification_requested', {
-            message: 'Accept the proposed duration?',
-            calendarEventDraft: safeCalendarDraft(),
-          }),
-          event(type, payload),
-          event('assistant_message', { text: 'Later assistant message.' }),
-        ],
-        message: 'Yes',
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toMatchObject({ outcome: 'no_action' });
-  });
-
-  it.each([
-    ['primitive', 'invalid'],
-    ['null', null],
-    ['array', []],
-    ['fractional turn', { turnIndex: 0.5, ordinal: 1 }],
-    ['negative turn', { turnIndex: -1, ordinal: 1 }],
-    ['fractional ordinal', { turnIndex: 0, ordinal: 1.5 }],
-    ['zero ordinal', { turnIndex: 0, ordinal: 0 }],
-  ])('drops malformed persisted tool selection metadata: %s', async (_name, toolSelection) => {
-    const runner = createIntexAgentRunner({
-      client: new FakeToolCallingClient([]),
-      intentClassifier: conversationIntentClassifier(),
-      toolExecutor: fakeToolExecutor(),
-    });
-
-    const result = await runner.run({
-      session: session(),
-      events: [
-        event('clarification_requested', {
-          message: 'Accept the proposed duration?',
-          calendarEventDraft: safeCalendarDraft(),
-          toolSelection,
-        }),
-      ],
-      message: 'Yes',
-      currentDateTime: CURRENT_DATE_TIME,
-    });
-
-    expect(result).toMatchObject({ outcome: 'needs_confirmation' });
-    expect(result).not.toHaveProperty('toolSelection');
   });
 
   it.each([
@@ -3842,7 +3820,10 @@ describe('createIntexAgentRunner', () => {
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
-    ).resolves.toMatchObject({ outcome: 'needs_clarification' });
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'create_calendar_event',
+    });
   });
 
   it('does not restore a date across a non-calendar clarification boundary', async () => {
@@ -3918,7 +3899,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls).toHaveLength(1);
   });
 
-  it('keeps selection metadata on a calendar default proposal', async () => {
+  it('keeps selection metadata on a calendar confirmation with the default duration', async () => {
     const client = new ToolExecutingFakeToolCallingClient(
       {
         toolName: 'create_calendar_event',
@@ -3949,7 +3930,7 @@ describe('createIntexAgentRunner', () => {
         timeZone: 'Europe/Warsaw',
       })
     ).resolves.toMatchObject({
-      outcome: 'needs_clarification',
+      outcome: 'needs_confirmation',
       toolSelection: { turnIndex: 4, ordinal: 1 },
     });
   });
@@ -7024,7 +7005,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('25.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('26.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);

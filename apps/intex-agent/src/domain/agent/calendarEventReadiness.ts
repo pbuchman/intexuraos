@@ -45,6 +45,7 @@ interface CalendarEventReadinessInput {
   evidenceTexts: readonly string[];
   hasExplicitStart: boolean;
   hasExplicitEnd: boolean;
+  explicitDurationMinutes?: number;
   runtimeTimeZone: string;
   replyLanguage: IntexAgentReplyLanguage;
 }
@@ -141,9 +142,9 @@ export function assessCalendarEventReadiness(
     };
   }
 
-  if (!input.hasExplicitEnd) {
-    const proposedEnd = addMinutesPreservingOffset(start, 60);
-    if (proposedEnd === null) {
+  if (input.explicitDurationMinutes !== undefined) {
+    const durationEnd = addMinutesPreservingOffset(start, input.explicitDurationMinutes);
+    if (durationEnd === null) {
       return {
         status: 'needs_clarification',
         reply:
@@ -153,30 +154,49 @@ export function assessCalendarEventReadiness(
         missingFields: ['end'],
       };
     }
-    const draftArgs: Record<string, unknown> = {
-      ...normalizedArgs,
-      summary,
-      start,
-      end: proposedEnd,
-      ...(timeZone === null ? {} : { timeZone }),
-    };
-    const draft = buildDraft({
-      normalizedArgs: draftArgs,
-      start,
-      end: proposedEnd,
-      timeZone,
-      omittedFields,
-      summary,
-      summaryStatus: 'user_confirmed',
-      startStatus: 'user_confirmed',
-      endStatus: 'proposed_default',
-      timeZoneStatus: timeZoneResolution.status,
-    });
+    if (input.hasExplicitEnd && end !== null && !calendarDateTimesMatch(end, durationEnd)) {
+      return {
+        status: 'needs_clarification',
+        reply:
+          input.replyLanguage === 'pl'
+            ? `Podany czas zakończenia wydarzenia „${summary}” nie zgadza się z czasem trwania. Którą wartość mam przyjąć?`
+            : `The stated end time for “${summary}” conflicts with the duration. Which value should I use?`,
+        missingFields: ['end'],
+      };
+    }
     return {
-      status: 'needs_clarification',
-      reply: buildDefaultDurationQuestion(summary, start, proposedEnd, omittedFields, input.replyLanguage),
-      missingFields: ['end'],
-      draft,
+      status: 'ready',
+      toolArgs: {
+        ...normalizedArgs,
+        summary,
+        start,
+        end: durationEnd,
+        ...(timeZone === null ? {} : { timeZone }),
+      },
+    };
+  }
+
+  if (!input.hasExplicitEnd) {
+    const defaultEnd = addMinutesPreservingOffset(start, 60);
+    if (defaultEnd === null) {
+      return {
+        status: 'needs_clarification',
+        reply:
+          input.replyLanguage === 'pl'
+            ? `Do której ma trwać wydarzenie „${summary}”?`
+            : `When should “${summary}” end?`,
+        missingFields: ['end'],
+      };
+    }
+    return {
+      status: 'ready',
+      toolArgs: {
+        ...normalizedArgs,
+        summary,
+        start,
+        end: defaultEnd,
+        ...(timeZone === null ? {} : { timeZone }),
+      },
     };
   }
 
@@ -203,41 +223,24 @@ export function assessCalendarEventReadiness(
   };
 }
 
-export function isCalendarDraftAcceptance(message: string): boolean {
-  return /^(?:tak|yes|yep|ok(?:ay)?|pasuje|zgoda|może\s+być|moze\s+byc|przyjmij|accept|works(?:\s+for\s+me)?|sounds\s+good)[.!]?$/iu.test(
-    message.normalize('NFKC').trim()
-  );
-}
-
-export function parseAcceptedCalendarEventDraft(value: unknown): CalendarEventDraftV1 | null {
+export function parseCalendarEventDraft(value: unknown): CalendarEventDraftV1 | null {
   if (!isRecord(value) || value['version'] !== 1 || !isRecord(value['toolArgs'])) return null;
   if (!isRecord(value['fields']) || !Array.isArray(value['omittedFields'])) return null;
-  const summary = stringValue(value['toolArgs']['summary']);
-  const start = stringValue(value['toolArgs']['start']);
-  const end = stringValue(value['toolArgs']['end']);
-  if (summary === null || start === null || end === null) return null;
 
   const fields = value['fields'];
   const parsedSummary = parseDraftField(fields['summary']);
   const parsedStart = parseDraftField(fields['start']);
   const parsedEnd = parseDraftField(fields['end']);
   const parsedTimeZone = parseDraftField(fields['timeZone']);
-  const toolTimeZone = stringValue(value['toolArgs']['timeZone']);
   if (
     parsedSummary === null ||
     parsedStart === null ||
     parsedEnd === null ||
     parsedTimeZone === null ||
-    parsedSummary.status !== 'user_confirmed' ||
-    parsedSummary.source !== 'user_message' ||
-    parsedSummary.value !== summary ||
-    parsedStart.status !== 'user_confirmed' ||
-    parsedStart.source !== 'user_message' ||
-    parsedStart.value !== start ||
-    parsedEnd.status !== 'proposed_default' ||
-    parsedEnd.source !== 'safe_default' ||
-    parsedEnd.value !== end ||
-    !isMatchingDraftTimeZone(parsedTimeZone, toolTimeZone) ||
+    !isConsistentDraftField(parsedSummary, value['toolArgs']['summary']) ||
+    !isConsistentDraftField(parsedStart, value['toolArgs']['start']) ||
+    !isConsistentDraftField(parsedEnd, value['toolArgs']['end']) ||
+    !isConsistentDraftField(parsedTimeZone, value['toolArgs']['timeZone']) ||
     value['omittedFields'].some((field) => typeof field !== 'string')
   ) {
     return null;
@@ -377,9 +380,9 @@ function buildDraft(input: Readonly<{
   end: string | null;
   timeZone: string | null;
   omittedFields: string[];
-  summaryStatus: CalendarEventDraftFieldStatus;
-  startStatus: CalendarEventDraftFieldStatus;
-  endStatus: CalendarEventDraftFieldStatus;
+  summaryStatus: Extract<CalendarEventDraftFieldStatus, 'user_confirmed' | 'missing'>;
+  startStatus: Extract<CalendarEventDraftFieldStatus, 'user_confirmed' | 'missing'>;
+  endStatus: Extract<CalendarEventDraftFieldStatus, 'user_confirmed' | 'missing'>;
   timeZoneStatus: Extract<
     CalendarEventDraftFieldStatus,
     'user_confirmed' | 'runtime_default' | 'missing'
@@ -410,16 +413,17 @@ function buildDraft(input: Readonly<{
 
 function draftField(
   value: string | null,
-  status: CalendarEventDraftFieldStatus
+  status: Extract<
+    CalendarEventDraftFieldStatus,
+    'user_confirmed' | 'runtime_default' | 'missing'
+  >
 ): CalendarEventDraftField {
   const source: CalendarEventDraftFieldSource =
-    status === 'proposed_default'
-      ? 'safe_default'
-      : status === 'runtime_default'
-        ? 'runtime'
-        : status === 'user_confirmed'
-          ? 'user_message'
-          : 'none';
+    status === 'runtime_default'
+      ? 'runtime'
+      : status === 'user_confirmed'
+        ? 'user_message'
+        : 'none';
   return {
     ...(value === null ? {} : { value }),
     status,
@@ -465,6 +469,23 @@ function isFieldSource(value: unknown): value is CalendarEventDraftFieldSource {
   );
 }
 
+function isConsistentDraftField(field: CalendarEventDraftField, toolValue: unknown): boolean {
+  if (field.status === 'missing' || field.status === 'ambiguous') {
+    return field.source === 'none' && field.value === undefined && toolValue === undefined;
+  }
+  const expectedSource: CalendarEventDraftFieldSource =
+    field.status === 'user_confirmed'
+      ? 'user_message'
+      : field.status === 'proposed_default'
+        ? 'safe_default'
+        : 'runtime';
+  return (
+    field.source === expectedSource &&
+    field.value !== undefined &&
+    field.value === stringValue(toolValue)
+  );
+}
+
 function resolveCalendarTimeZone(
   rawTimeZone: unknown,
   runtimeTimeZone: string,
@@ -487,56 +508,8 @@ function resolveCalendarTimeZone(
     : { value: null, status: 'missing' };
 }
 
-function isMatchingDraftTimeZone(
-  field: CalendarEventDraftField,
-  toolTimeZone: string | null
-): boolean {
-  if (toolTimeZone === null) {
-    return field.value === undefined && field.status === 'missing' && field.source === 'none';
-  }
-  return (
-    field.value === toolTimeZone &&
-    ((field.status === 'user_confirmed' && field.source === 'user_message') ||
-      (field.status === 'runtime_default' && field.source === 'runtime'))
-  );
-}
-
 function resolveOmittedFields(args: Record<string, unknown>): string[] {
   return ['location', 'description', 'attendees'].filter((field) => args[field] === undefined);
-}
-
-function buildDefaultDurationQuestion(
-  summary: string,
-  start: string,
-  end: string,
-  omittedFields: readonly string[],
-  language: IntexAgentReplyLanguage
-): string {
-  const startLabel = formatDraftDateTime(start, language);
-  const endTime = extractClock(end);
-  const locationSentence = omittedFields.includes('location')
-    ? language === 'pl'
-      ? ' Lokalizację mogę pominąć.'
-      : ' I can omit the location.'
-    : '';
-  return language === 'pl'
-    ? `Widzę: „${summary}”, ${startLabel}.${locationSentence} Nie znam czasu zakończenia — mogę przyjąć 60 minut, czyli do ${endTime}. Pasuje?`
-    : `I have “${summary}”, ${startLabel}.${locationSentence} I do not know the end time — I can assume 60 minutes, until ${endTime}. Does that work?`;
-}
-
-function formatDraftDateTime(value: string, language: IntexAgentReplyLanguage): string {
-  const year = value.slice(0, 4);
-  const month = value.slice(5, 7);
-  const day = value.slice(8, 10);
-  const hour = value.slice(11, 13);
-  const minute = value.slice(14, 16);
-  return language === 'pl'
-    ? `${day}.${month}.${year}, start ${hour}:${minute}`
-    : `${year}-${month}-${day} at ${hour}:${minute}`;
-}
-
-function extractClock(value: string): string {
-  return value.slice(11, 16);
 }
 
 function addMinutesPreservingOffset(value: string, minutes: number): string | null {
@@ -556,6 +529,18 @@ function addMinutesPreservingOffset(value: string, minutes: number): string | nu
   );
   const shifted = new Date(base + minutes * 60_000).toISOString().slice(0, 19);
   return `${shifted}${suffix ?? ''}`;
+}
+
+function calendarDateTimesMatch(left: string, right: string): boolean {
+  const leftOffset = /(?:Z|[+-]\d{2}:\d{2})$/u.test(left);
+  const rightOffset = /(?:Z|[+-]\d{2}:\d{2})$/u.test(right);
+  if (leftOffset && rightOffset) {
+    const leftInstant = Date.parse(left);
+    const rightInstant = Date.parse(right);
+    return Number.isFinite(leftInstant) && leftInstant === rightInstant;
+  }
+  return left.replace(/\.\d+(?=$|Z|[+-]\d{2}:\d{2}$)/u, '') ===
+    right.replace(/\.\d+(?=$|Z|[+-]\d{2}:\d{2}$)/u, '');
 }
 
 function stringValue(value: unknown): string | null {
