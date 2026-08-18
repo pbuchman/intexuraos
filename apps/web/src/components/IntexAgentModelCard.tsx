@@ -40,7 +40,8 @@ export function IntexAgentModelCard({ selector }: IntexAgentModelCardProps): Rea
         <div className="min-w-0 flex-1">
           <h3 className="font-medium text-slate-900 dark:text-slate-100">Intex Agent model</h3>
           <p id="intex-agent-model-description" className="mt-1 break-words text-sm text-slate-500 dark:text-slate-400">
-            Choose the model for the WhatsApp Assistant. It uses the IntexuraOS platform key.
+            Choose the model Intex Agent uses for conversations. Changes save immediately and use
+            the IntexuraOS platform key.
           </p>
           {selector.intexAgentModelError !== null ? (
             <p id="intex-agent-model-error" role="alert" className="mt-2 text-sm text-red-700 dark:text-red-400">

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Pencil, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react';
-import { Layout } from '@/components';
+import { IntexAgentModelCard, Layout } from '@/components';
 import { useAuth } from '@/context';
+import { useLlmKeys } from '@/hooks';
 import {
   addIntexAgentPromptPreference,
   deleteIntexAgentPromptPreference,
@@ -101,10 +102,18 @@ function containsControlCharacter(value: string): boolean {
 
 export function IntexAgentPreferencesPage(): React.JSX.Element {
   const { getAccessToken } = useAuth();
+  const {
+    loading: modelLoading,
+    refreshing: modelRefreshing,
+    error: modelLoadError,
+    intexAgentModel,
+    refresh: refreshModel,
+  } = useLlmKeys();
   const [current, setCurrent] = useState<IntexAgentPromptPreferences | null>(null);
   const [versions, setVersions] = useState<IntexAgentPromptPreferenceVersionSummary[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<IntexAgentPromptPreferenceVersion | null>(null);
   const [newText, setNewText] = useState('');
+  const [newTextTouched, setNewTextTouched] = useState(false);
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<IntexAgentPromptPreferenceItem | null>(null);
   const [pending, setPending] = useState<PendingAction>('load');
@@ -190,6 +199,7 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
       });
       setCurrent(next);
       setNewText('');
+      setNewTextTouched(false);
       setNotice('Preference added.');
       await refreshVersions();
     } catch (caught) {
@@ -273,35 +283,61 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
 
   return (
     <Layout>
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 border-b border-slate-200 pb-5 dark:border-slate-800">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">
-                Intex Agent Preferences
-              </h1>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
-                  Current version {String(current?.currentVersion ?? 0)}
-                </span>
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
-                  Last updated {displayDate(current?.updatedAt)}
-                </span>
-                <span className="rounded-md border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900">
-                  Updated by {actorLabel(current?.updatedBy ?? null)}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                void refreshAll();
-              }}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 sm:w-auto dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Refresh
-            </button>
+      <div data-testid="intex-agent-settings-shell" className="w-full min-w-0">
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+              Intex Agent Settings
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Choose the model and manage the prompt preferences used by Intex Agent.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void Promise.all([refreshAll(), refreshModel(false)]);
+            }}
+            disabled={pending === 'load' || modelRefreshing}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-slate-500 dark:hover:text-slate-200"
+          >
+            <RefreshCw className={`h-4 w-4 ${modelRefreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        {modelLoading ? (
+          <div className="mb-6 flex min-h-24 items-center justify-center rounded-xl border border-slate-200 bg-white text-sm text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading agent model
+          </div>
+        ) : intexAgentModel.availability === 'available' ? (
+          <IntexAgentModelCard selector={intexAgentModel} />
+        ) : modelLoadError !== null && modelLoadError !== '' ? (
+          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+            Agent model selection is unavailable. {modelLoadError}
+          </div>
+        ) : null}
+
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+              Prompt preferences
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Persistent instructions injected into every Intex Agent conversation.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-800">
+              Version {String(current?.currentVersion ?? 0)}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-800">
+              Updated {displayDate(current?.updatedAt)}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 dark:border-slate-700 dark:bg-slate-800">
+              By {actorLabel(current?.updatedBy ?? null)}
+            </span>
           </div>
         </div>
 
@@ -326,9 +362,9 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
             <main className="space-y-6">
               <section className="space-y-3">
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-50">
+                  <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-50">
                     Preference Rows
-                  </h2>
+                  </h3>
                   <span className="text-sm text-slate-500">
                     {String(current?.items.length ?? 0)}/50 rows
                   </span>
@@ -337,10 +373,13 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
                 <AddPreferenceForm
                   label="New preference"
                   value={newText}
-                  validation={newTextValidation}
+                  validation={newTextTouched ? newTextValidation : null}
                   pending={pending === 'add'}
                   disabled={current === null || pending !== null}
-                  onChange={setNewText}
+                  onChange={(value) => {
+                    setNewTextTouched(true);
+                    setNewText(value);
+                  }}
                   onSubmit={() => {
                     void handleAdd();
                   }}
@@ -390,9 +429,9 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
 
             <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
               <section>
-                <h2 className="mb-3 text-lg font-semibold text-slate-950 dark:text-slate-50">
+                <h3 className="mb-3 text-lg font-semibold text-slate-950 dark:text-slate-50">
                   Versions
-                </h2>
+                </h3>
                 {versions.length === 0 ? (
                   <div className="rounded-md border border-slate-200 px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                     No versions yet.
@@ -438,9 +477,9 @@ export function IntexAgentPreferencesPage(): React.JSX.Element {
 
               {selectedVersion !== null ? (
                 <section className="space-y-3">
-                  <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-50">
+                  <h3 className="text-lg font-semibold text-slate-950 dark:text-slate-50">
                     Historical version {String(selectedVersion.version)}
-                  </h2>
+                  </h3>
                   <PromptPreview title="Historical Prompt Block" block={selectedVersion.renderedPromptBlock} />
                 </section>
               ) : null}
@@ -638,7 +677,7 @@ function PreferenceRow(props: PreferenceRowProps): React.JSX.Element {
 function PromptPreview(props: { title: string; block: string }): React.JSX.Element {
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-slate-950 dark:text-slate-50">{props.title}</h2>
+      <h3 className="mb-3 text-lg font-semibold text-slate-950 dark:text-slate-50">{props.title}</h3>
       <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 border-l-4 border-l-cyan-400 bg-slate-50 p-4 text-sm leading-6 text-slate-800 shadow-sm dark:border-slate-700 dark:border-l-cyan-500 dark:bg-slate-900 dark:text-slate-100">
         {props.block.trim() === '' ? EMPTY_PROMPT_BLOCK : props.block}
       </pre>

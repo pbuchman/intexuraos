@@ -115,14 +115,6 @@ function createIntexAgentModel(
   };
 }
 
-function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
-}
-
 function createPageHookResult(
   overrides: {
     keys?: LlmKeysResponse | null;
@@ -286,7 +278,7 @@ describe('ApiKeysSettingsPage', () => {
     expect(testButton.parentElement).toHaveClass('bottom-full');
   });
 
-  it('renders the platform selector independently of BYOK keys and failed provider tests', () => {
+  it('keeps the Intex Agent selector out of global LLM settings', () => {
     const setIntexAgentModel = vi.fn().mockResolvedValue('applied');
     mockUseLlmKeys.mockReturnValue(
       createPageHookResult({
@@ -302,10 +294,8 @@ describe('ApiKeysSettingsPage', () => {
 
     render(<ApiKeysSettingsPage />);
 
-    const select = screen.getByLabelText('Intex Agent model');
-    expect(select).toHaveValue(IntexAgentModels.DeepSeekV4Flash);
-    fireEvent.change(select, { target: { value: IntexAgentModels.MiniMaxM3 } });
-    expect(setIntexAgentModel).toHaveBeenCalledWith(IntexAgentModels.MiniMaxM3);
+    expect(screen.queryByLabelText('Intex Agent model')).not.toBeInTheDocument();
+    expect(setIntexAgentModel).not.toHaveBeenCalled();
   });
 
   it('omits every selector surface when capability is unavailable while retaining legacy settings', () => {
@@ -321,86 +311,4 @@ describe('ApiKeysSettingsPage', () => {
     expect(screen.getAllByRole('button', { name: 'Configure' })).toHaveLength(4);
   });
 
-  it('keeps Intex saving state independent from the general default model state', () => {
-    const { rerender } = render(<ApiKeysSettingsPage />);
-    mockUseLlmKeys.mockReturnValue(
-      createPageHookResult({ savingDefaultModel: true, intexAgentModel: createIntexAgentModel() })
-    );
-    rerender(<ApiKeysSettingsPage />);
-    expect(screen.getByLabelText('Intex Agent model')).not.toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByLabelText('Intex Agent model')).toBeEnabled();
-
-    mockUseLlmKeys.mockReturnValue(
-      createPageHookResult({ intexAgentModel: createIntexAgentModel({ savingIntexAgentModel: true }) })
-    );
-    rerender(<ApiKeysSettingsPage />);
-    expect(screen.getByLabelText('Intex Agent model')).toHaveAttribute('aria-busy', 'true');
-  });
-
-  it('forwards an immediate explicit selection and reset only to the selector mutation', () => {
-    const setIntexAgentModel = vi.fn().mockResolvedValue('applied');
-    mockUseLlmKeys.mockReturnValue(
-      createPageHookResult({
-        intexAgentModel: createIntexAgentModel({
-          explicitModel: IntexAgentModels.Gemini36Flash,
-          effectiveModel: IntexAgentModels.Gemini36Flash,
-          setIntexAgentModel,
-        }),
-      })
-    );
-
-    render(<ApiKeysSettingsPage />);
-    fireEvent.change(screen.getByLabelText('Intex Agent model'), {
-      target: { value: IntexAgentModels.MiniMaxM3 },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Use default Intex Agent model/i }));
-
-    expect(setIntexAgentModel).toHaveBeenNthCalledWith(1, IntexAgentModels.MiniMaxM3);
-    expect(setIntexAgentModel).toHaveBeenNthCalledWith(2, null);
-    expect(mockSetDefaultModel).not.toHaveBeenCalled();
-    expect(mockSetFallbackModel).not.toHaveBeenCalled();
-  });
-
-  it('preserves the loading shell and displays only the safe selector error while available', () => {
-    mockUseLlmKeys.mockReturnValue(createPageHookResult({ loading: true }));
-    const { rerender } = render(<ApiKeysSettingsPage />);
-    expect(screen.queryByRole('heading', { name: 'Intex Agent model' })).not.toBeInTheDocument();
-
-    mockUseLlmKeys.mockReturnValue(
-      createPageHookResult({
-        error: 'legacy page error sentinel',
-        intexAgentModel: createIntexAgentModel({ intexAgentModelError: 'Failed to save Intex Agent model' }),
-      })
-    );
-    rerender(<ApiKeysSettingsPage />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Failed to save Intex Agent model');
-    expect(screen.getByText('legacy page error sentinel')).toBeInTheDocument();
-  });
-
-  it('keeps select then reset in usable order at a narrow wrapper and never focuses a removed selector', async () => {
-    const deferred = createDeferred<'applied'>();
-    const focus = vi.spyOn(HTMLSelectElement.prototype, 'focus');
-    const available = createIntexAgentModel({
-      explicitModel: IntexAgentModels.MiniMaxM3,
-      effectiveModel: IntexAgentModels.MiniMaxM3,
-      setIntexAgentModel: vi.fn().mockReturnValue(deferred.promise),
-    });
-    mockUseLlmKeys.mockReturnValue(createPageHookResult({ intexAgentModel: available }));
-    const { rerender } = render(<div className="w-[320px]"><ApiKeysSettingsPage /></div>);
-    const select = screen.getByLabelText('Intex Agent model');
-    const reset = screen.getByRole('button', { name: /Use default Intex Agent model/i });
-    expect(select.compareDocumentPosition(reset) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(select.className).not.toMatch(/(?:^|\s)w-(?:\d+|\[\d+px\])(?:\s|$)/);
-
-    fireEvent.change(select, { target: { value: IntexAgentModels.Gemini36Flash } });
-    mockUseLlmKeys.mockReturnValue(createPageHookResult());
-    rerender(<div className="w-[320px]"><ApiKeysSettingsPage /></div>);
-    deferred.resolve('applied');
-    await waitFor(() => {
-      expect(focus).not.toHaveBeenCalled();
-    });
-    expect(screen.queryByLabelText('Intex Agent model')).not.toBeInTheDocument();
-    expect(focus).not.toHaveBeenCalled();
-    focus.mockRestore();
-  });
 });

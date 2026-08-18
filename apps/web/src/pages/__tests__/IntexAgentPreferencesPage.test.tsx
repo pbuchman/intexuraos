@@ -4,6 +4,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { IntexAgentModels } from '@intexuraos/llm-contract';
+import type { UseIntexAgentModelResult } from '@/hooks/useIntexAgentModel';
 
 const {
   mockGetPromptPreferences,
@@ -13,6 +15,9 @@ const {
   mockListVersions,
   mockGetVersion,
   mockGetAccessToken,
+  mockUseLlmKeys,
+  mockSetIntexAgentModel,
+  mockRefreshModel,
 } = vi.hoisted(() => ({
   mockGetPromptPreferences: vi.fn(),
   mockAddPromptPreference: vi.fn(),
@@ -21,6 +26,9 @@ const {
   mockListVersions: vi.fn(),
   mockGetVersion: vi.fn(),
   mockGetAccessToken: vi.fn(),
+  mockUseLlmKeys: vi.fn(),
+  mockSetIntexAgentModel: vi.fn(),
+  mockRefreshModel: vi.fn(),
 }));
 
 vi.mock('@/services/intexAgentApi', () => ({
@@ -38,9 +46,38 @@ vi.mock('@/context', () => ({
   }),
 }));
 
-vi.mock('@/components', () => ({
-  Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => <div>{children}</div>,
+vi.mock('@/hooks', () => ({
+  useLlmKeys: (): ReturnType<typeof mockUseLlmKeys> => mockUseLlmKeys(),
 }));
+
+vi.mock('@/components', async () => {
+  const { IntexAgentModelCard } = await vi.importActual<
+    typeof import('@/components/IntexAgentModelCard')
+  >('@/components/IntexAgentModelCard');
+  return {
+    IntexAgentModelCard,
+    Layout: ({ children }: { children: React.ReactNode }): React.JSX.Element => <div>{children}</div>,
+  };
+});
+
+type AvailableSelector = Extract<UseIntexAgentModelResult, { availability: 'available' }>;
+
+function createIntexAgentModel(): AvailableSelector {
+  return {
+    availability: 'available',
+    writable: true,
+    explicitModel: null,
+    effectiveModel: IntexAgentModels.DeepSeekV4Flash,
+    revision: 1,
+    options: [
+      { id: IntexAgentModels.DeepSeekV4Flash, label: 'DeepSeek V4 Flash' },
+      { id: IntexAgentModels.MiniMaxM3, label: 'MiniMax M3' },
+    ],
+    savingIntexAgentModel: false,
+    intexAgentModelError: null,
+    setIntexAgentModel: mockSetIntexAgentModel,
+  };
+}
 
 const currentPreferences = {
   userId: 'user-1',
@@ -86,6 +123,15 @@ describe('IntexAgentPreferencesPage', () => {
       items: currentPreferences.items,
       renderedPromptBlock: currentPreferences.renderedPromptBlock,
     });
+    mockSetIntexAgentModel.mockResolvedValue('applied');
+    mockRefreshModel.mockResolvedValue(undefined);
+    mockUseLlmKeys.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      error: null,
+      intexAgentModel: createIntexAgentModel(),
+      refresh: mockRefreshModel,
+    });
   });
 
   afterEach(() => {
@@ -98,8 +144,8 @@ describe('IntexAgentPreferencesPage', () => {
 
     expect(screen.getByText(/loading preferences/i)).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText('Intex Agent Preferences')).toBeInTheDocument();
-      expect(screen.getByText('Current version 1')).toBeInTheDocument();
+      expect(screen.getByText('Intex Agent Settings')).toBeInTheDocument();
+      expect(screen.getAllByText('Version 1')).toHaveLength(2);
       expect(screen.getByDisplayValue('When I invite Jakub, use jakub@gmail.com.')).toBeInTheDocument();
       expect(screen.getByText(/User Preferences v1:/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /version 1/i })).toBeInTheDocument();
@@ -110,15 +156,35 @@ describe('IntexAgentPreferencesPage', () => {
     const { IntexAgentPreferencesPage } = await import('../IntexAgentPreferencesPage');
     render(<IntexAgentPreferencesPage />);
 
-    await screen.findByText('Intex Agent Preferences');
+    await screen.findByText('Intex Agent Settings');
 
     expect(screen.getAllByLabelText(/new preference/i)).toHaveLength(1);
     expect(screen.queryByLabelText(/add another preference/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Preference text cannot be empty.')).not.toBeInTheDocument();
+
+    const newPreference = screen.getByLabelText(/new preference/i);
+    fireEvent.change(newPreference, { target: { value: 'Temporary value' } });
+    fireEvent.change(newPreference, { target: { value: '' } });
+    expect(screen.getByText('Preference text cannot be empty.')).toBeInTheDocument();
 
     const promptPreview = screen.getByText(/User Preferences v1:/).closest('pre');
     expect(promptPreview).not.toHaveClass('bg-slate-950');
     expect(promptPreview).toHaveClass('whitespace-pre-wrap');
     expect(promptPreview).toHaveClass('break-words');
+  });
+
+  it('owns the Intex Agent model selector and follows the Code Tasks page header hierarchy', async () => {
+    const { IntexAgentPreferencesPage } = await import('../IntexAgentPreferencesPage');
+    render(<IntexAgentPreferencesPage />);
+
+    const heading = await screen.findByRole('heading', { name: 'Intex Agent Settings', level: 2 });
+    expect(heading).toHaveClass('text-2xl', 'font-bold');
+    expect(screen.getByTestId('intex-agent-settings-shell')).toHaveClass('w-full', 'min-w-0');
+
+    const selector = screen.getByLabelText('Intex Agent model');
+    expect(selector).toHaveValue(IntexAgentModels.DeepSeekV4Flash);
+    fireEvent.change(selector, { target: { value: IntexAgentModels.MiniMaxM3 } });
+    expect(mockSetIntexAgentModel).toHaveBeenCalledWith(IntexAgentModels.MiniMaxM3);
   });
 
   it('adds, edits, and deletes preference rows', async () => {
@@ -238,7 +304,7 @@ describe('IntexAgentPreferencesPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/preferences changed before save/i)).toBeInTheDocument();
-      expect(screen.getByText('Current version 2')).toBeInTheDocument();
+      expect(screen.getByText('Version 2')).toBeInTheDocument();
     });
   });
 });

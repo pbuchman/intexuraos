@@ -402,7 +402,11 @@ export function AppRoutes(): React.JSX.Element {
           {/* Intex Agent routes */}
           <Route path="/intex-agent/sessions" element={<IntexAgentSessionsPage />} />
           <Route path="/intex-agent/config" element={<IntexAgentConfigPage />} />
-          <Route path="/intex-agent/preferences" element={<IntexAgentPreferencesPage />} />
+          <Route path="/intex-agent/settings" element={<IntexAgentPreferencesPage />} />
+          <Route
+            path="/intex-agent/preferences"
+            element={<Navigate to="/intex-agent/settings" replace />}
+          />
           {/* Legacy Fishing digest redirects */}
           <Route
             path="/fishing-assistant/digests/:groupKey/:date"

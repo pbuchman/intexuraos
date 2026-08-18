@@ -159,7 +159,7 @@ export function IntexAgentConfigPage(): React.JSX.Element {
         </h2>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Configure the protected endpoint used for explicit external-save requests and WhatsApp
-          images. Prompt preferences are managed from Intex Agent Preferences.
+          images. Prompt preferences are managed from Intex Agent Settings.
         </p>
       </div>
 
