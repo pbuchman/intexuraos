@@ -218,6 +218,35 @@ describe('autoRetryTask', () => {
       expect(String(createInput?.webhookSecret ?? '').length).toBeGreaterThan(0);
     });
 
+    it('preserves the complete Sentry issue context on the auto-retry task', async () => {
+      const sentryIssue = {
+        organizationSlug: 'intexuraos',
+        projectSlug: 'intexuraos-backend',
+        projectId: '4509002',
+        issueId: '110',
+        issueShortId: 'INTEXURAOS-6E',
+        issueUrl:
+          'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/110/',
+        title: 'Configuration warning',
+        action: 'created',
+        eventId: 'b493ff643e7e4856adbad08d108ba8b4',
+        receivedAt: '2026-08-11T12:34:56.000Z',
+      };
+      const failedTask = buildTask({ id: 'task_orig', sentryIssue });
+
+      const result = await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'worker_crashed',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ sentryIssue })
+      );
+      expect(mockCodeTaskRepo.create.mock.calls[0]?.[0]?.sentryIssue).toEqual(sentryIssue);
+    });
+
     it('enqueues the retry task for dispatch', async () => {
       const failedTask = buildTask({ id: 'task_orig' });
 
