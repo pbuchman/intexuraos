@@ -120,6 +120,11 @@ data "google_project" "current" {
   project_id = var.project_id
 }
 
+data "google_service_account" "home_orchestrator" {
+  project    = var.project_id
+  account_id = "ixos-home-orchestrator-${var.environment}"
+}
+
 # -----------------------------------------------------------------------------
 # Locals
 # -----------------------------------------------------------------------------
@@ -613,6 +618,12 @@ resource "google_service_account" "whatsapp_private_sync" {
   account_id   = "intexuraos-wa-private-sync-${var.environment}"
   display_name = "IntexuraOS Private WhatsApp Sync (${var.environment})"
   description  = "External bridge caller identity for private WhatsApp sync ingestion"
+}
+
+resource "google_secret_manager_secret_iam_member" "home_orchestrator_github_app_private_key" {
+  secret_id = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_APP_PRIVATE_KEY"]
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${data.google_service_account.home_orchestrator.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {

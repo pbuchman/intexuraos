@@ -154,6 +154,32 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(auditConfig).toContain('log_type = "DATA_READ"');
   });
 
+  it('scopes home-dev orchestrator access to the GitHub App private key secret', () => {
+    const serviceAccount = sectionBetween(
+      'data "google_service_account" "home_orchestrator" {',
+      '\n}\n'
+    );
+    const secretAccess = sectionBetween(
+      'resource "google_secret_manager_secret_iam_member" "home_orchestrator_github_app_private_key" {',
+      '\n}\n'
+    );
+
+    expect(serviceAccount).toContain('project    = var.project_id');
+    expect(serviceAccount).toContain('account_id = "ixos-home-orchestrator-${var.environment}"');
+
+    expect(secretAccess).toContain(
+      'secret_id = module.secret_manager.secret_ids["INTEXURAOS_GITHUB_APP_PRIVATE_KEY"]'
+    );
+    expect(secretAccess).toContain('role      = "roles/secretmanager.secretAccessor"');
+    expect(secretAccess).toContain(
+      'member    = "serviceAccount:${data.google_service_account.home_orchestrator.email}"'
+    );
+    expect(secretAccess).not.toContain('for_each');
+    expect(
+      terraform.match(/\$\{data\.google_service_account\.home_orchestrator\.email\}/gu)
+    ).toHaveLength(1);
+  });
+
   it('imports and restricts the existing Firebase browser key without exposing key material', () => {
     const apiKeyResource = sectionBetween(
       'resource "google_apikeys_key" "firebase_browser" {',

@@ -19,8 +19,9 @@ if [ "${1:-}" = "mcp" ]; then
   grep -Fq '[mcp_servers.error_hub]' "$CONFIG_PATH"
   grep -Fq 'command = "sh"' "$CONFIG_PATH"
   grep -Fq "exec sentry-mcp --access-token tailnet-only --host \"\$ERROR_HUB_HOST\" --disable-skills=seer" "$CONFIG_PATH"
+  grep -Fq 'env_vars = ["ERROR_HUB_HOST"]' "$CONFIG_PATH"
   cat <<'JSON'
-{"name":"error_hub","enabled":true,"disabled_reason":null,"transport":{"type":"stdio","command":"sh","args":["-lc","exec sentry-mcp --access-token tailnet-only --host \"$ERROR_HUB_HOST\" --disable-skills=seer"],"env":null,"env_vars":[],"cwd":null}}
+{"name":"error_hub","enabled":true,"disabled_reason":null,"transport":{"type":"stdio","command":"sh","args":["-lc","exec sentry-mcp --access-token tailnet-only --host \"$ERROR_HUB_HOST\" --disable-skills=seer"],"env":null,"env_vars":["ERROR_HUB_HOST"],"cwd":null}}
 JSON
   exit 0
 fi
