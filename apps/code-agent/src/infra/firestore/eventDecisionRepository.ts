@@ -67,7 +67,13 @@ export function createFirestoreEventDecisionRepository(deps: {
           decisionLatencyMs: input.decisionLatencyMs,
         };
 
-        await docRef.set(data);
+        // The deterministic document ID makes a retry safe even when the first
+        // commit succeeded server-side but its acknowledgement was interrupted.
+        try {
+          await docRef.set(data);
+        } catch {
+          await docRef.set(data);
+        }
 
         return ok({
           id,

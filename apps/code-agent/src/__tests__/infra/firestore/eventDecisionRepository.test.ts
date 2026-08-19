@@ -153,6 +153,28 @@ describe('createFirestoreEventDecisionRepository', () => {
       expect(mockDocRef.set).toHaveBeenCalledTimes(2);
     });
 
+    it('should retry a failed write once before returning success', async () => {
+      const mockDocRef = {
+        set: vi.fn()
+          .mockRejectedValueOnce(new Error('Temporary Firestore failure'))
+          .mockResolvedValueOnce(undefined),
+      };
+
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      const result = await repo.save(createDecisionInput());
+
+      expect(result.ok).toBe(true);
+      expect(mockDocRef.set).toHaveBeenCalledTimes(2);
+    });
+
     it('should return FIRESTORE_ERROR on failure', async () => {
       const mockDocRef = {
         set: vi.fn().mockRejectedValue(new Error('Firestore unavailable')),
@@ -170,6 +192,7 @@ describe('createFirestoreEventDecisionRepository', () => {
       const result = await repo.save(createDecisionInput());
 
       expect(result.ok).toBe(false);
+      expect(mockDocRef.set).toHaveBeenCalledTimes(2);
       if (!result.ok) {
         expect(result.error.code).toBe('FIRESTORE_ERROR');
         expect(result.error.message).toContain('Firestore unavailable');
