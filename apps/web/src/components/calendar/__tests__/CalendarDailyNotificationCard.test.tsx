@@ -74,7 +74,7 @@ describe('CalendarDailyNotificationCard', () => {
     expect(
       screen.getByText(/outbound adapter endpoint, auth token, and intex_agent target room mapping/i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/target mapping missing/i)).toBeInTheDocument();
+    expect(await screen.findByText(/target mapping missing/i)).toBeInTheDocument();
   });
 
   it('offers 15-minute time options and saves updates', async () => {

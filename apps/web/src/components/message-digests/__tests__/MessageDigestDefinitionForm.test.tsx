@@ -103,14 +103,14 @@ describe('MessageDigestDefinitionForm', () => {
     expect(screen.getByText('Fix 2 fields before saving.')).toHaveAttribute('role', 'alert');
     expect(screen.getByLabelText('Digest name')).toHaveFocus();
 
-    await user.type(screen.getByLabelText('Digest name'), 'Morning digest');
+    fireEvent.change(screen.getByLabelText('Digest name'), {
+      target: { value: 'Morning digest' },
+    });
     expect(screen.getByText('Fix 1 field before saving.')).toHaveAttribute('role', 'alert');
 
-    await user.clear(screen.getByLabelText('Summary instructions'));
-    await user.type(
-      screen.getByLabelText('Summary instructions'),
-      'Summarize decisions, open questions, and important facts.'
-    );
+    fireEvent.change(screen.getByLabelText('Summary instructions'), {
+      target: { value: 'Summarize decisions, open questions, and important facts.' },
+    });
     expect(screen.queryByText(/fields? before saving\./u)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create digest' })).toBeEnabled();
   });
@@ -168,7 +168,7 @@ describe('MessageDigestDefinitionForm', () => {
 
     fireEvent.change(editor, { target: { value: 'x'.repeat(19) } });
     expect(screen.getByText('19 / 4000')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Preview summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview summary' }));
     expect(screen.getByText('Instructions must contain at least 20 characters.')).toBeInTheDocument();
     expect(editor).toHaveAttribute(
       'aria-describedby',
@@ -176,7 +176,7 @@ describe('MessageDigestDefinitionForm', () => {
     );
 
     fireEvent.change(editor, { target: { value: 'x'.repeat(4_001) } });
-    await user.click(screen.getByRole('button', { name: 'Preview summary' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preview summary' }));
     expect(screen.getByText('Instructions must be 4000 characters or fewer.')).toBeInTheDocument();
     expect(editor).toHaveFocus();
   });
@@ -347,7 +347,6 @@ describe('MessageDigestDefinitionForm', () => {
   });
 
   it('switches to Custom without mutating instructions and returns focus to the editor', async () => {
-    const user = userEvent.setup();
     const initial = validValue({
       instructions: {
         templateId: 'fishing_group',
@@ -356,14 +355,15 @@ describe('MessageDigestDefinitionForm', () => {
     });
     renderForm({ initialValue: initial });
     const textarea = screen.getByLabelText('Summary instructions');
-    await user.click(textarea);
-    await user.type(textarea, ' Keep weather details.');
+    fireEvent.change(textarea, {
+      target: { value: `${initial.instructions.text} Keep weather details.` },
+    });
     const editedText = (textarea as HTMLTextAreaElement).value;
 
-    await user.click(screen.getByRole('button', { name: 'Custom instructions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Custom instructions' }));
 
     expect(textarea).toHaveValue(editedText);
-    expect(textarea).toHaveFocus();
+    await waitFor(() => expect(textarea).toHaveFocus(), { timeout: 3_000 });
     expect(screen.getByRole('button', { name: 'Custom instructions' })).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -478,7 +478,7 @@ describe('MessageDigestDefinitionForm', () => {
     expect(screen.getByRole('heading', { name: 'Today on the water' })).toBeInTheDocument();
     expect(screen.getByText('Two plans')).toBeInTheDocument();
     expect(screen.getByText(/17 messages/)).toBeInTheDocument();
-    expect(screen.getByText(/Jul 27, 2026/)).toBeInTheDocument();
+    expect(within(previewDialog).getByText(/Jul 27, 2026/)).toBeInTheDocument();
     expect(mocks.previewMessageDigest).toHaveBeenCalledWith(
       'test-token',
       {

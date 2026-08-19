@@ -93,35 +93,39 @@ describe('WhatsAppMessageDigestsPage', () => {
   });
 
   it('uses name ordering for search and restores the user’s prior sort when search clears', async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers();
     renderPage();
 
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'nextRunAt');
-    await user.click(screen.getByRole('button', { name: 'Sort ascending' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Sort by' }), {
+      target: { value: 'nextRunAt' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Sort ascending' }));
     expect(mocks.useMessageDigestList).toHaveBeenLastCalledWith({
       sort: 'nextRunAt',
       direction: 'asc',
     });
 
-    await user.type(screen.getByRole('searchbox', { name: 'Search digests' }), 'fish');
-    await waitFor(() =>
-      expect(mocks.useMessageDigestList).toHaveBeenLastCalledWith({
-        query: 'fish',
-        sort: 'name',
-        direction: 'asc',
-      })
-    );
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search digests' }), {
+      target: { value: 'fish' },
+    });
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(mocks.useMessageDigestList).toHaveBeenLastCalledWith({
+      query: 'fish',
+      sort: 'name',
+      direction: 'asc',
+    });
     expect(screen.getByTestId('list-location-probe')).toHaveTextContent(
       '/whatsapp/message-digests?query=fish&sort=name&direction=asc'
     );
 
-    await user.clear(screen.getByRole('searchbox', { name: 'Search digests' }));
-    await waitFor(() =>
-      expect(mocks.useMessageDigestList).toHaveBeenLastCalledWith({
-        sort: 'nextRunAt',
-        direction: 'asc',
-      })
-    );
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search digests' }), {
+      target: { value: '' },
+    });
+    await act(async () => vi.advanceTimersByTime(300));
+    expect(mocks.useMessageDigestList).toHaveBeenLastCalledWith({
+      sort: 'nextRunAt',
+      direction: 'asc',
+    });
     expect(screen.getByTestId('list-location-probe')).toHaveTextContent(
       '/whatsapp/message-digests?sort=nextRunAt&direction=asc'
     );

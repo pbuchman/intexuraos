@@ -1,6 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { buildWebSentryConfig } from '../sentryConfig.js';
 
+const FIRESTORE_CANCELLATION_NAME_ERROR =
+  "Cannot assign to read only property 'name' of object 'Error: Operation cancelled'";
+
+interface TestSentryEvent {
+  exception?: {
+    values?: {
+      type?: string;
+      value?: string;
+      stacktrace?: {
+        frames?: { filename?: string }[];
+      };
+    }[];
+  };
+}
+
+function runBeforeSend(event: TestSentryEvent): TestSentryEvent | null | undefined {
+  const config = buildWebSentryConfig({
+    dsn: 'https://public@example.invalid/1',
+    environment: 'prod',
+    commitSha: '1234567890abcdef1234567890abcdef12345678',
+  }) as ReturnType<typeof buildWebSentryConfig> & {
+    beforeSend?: (candidate: TestSentryEvent, hint: object) => TestSentryEvent | null;
+  };
+
+  return config.beforeSend?.(event, {});
+}
+
 describe('buildWebSentryConfig', () => {
   it.each([
     ['prod', 0.1],
@@ -31,6 +58,7 @@ describe('buildWebSentryConfig', () => {
       release: '1234567890abcdef1234567890abcdef12345678',
       tracesSampleRate: 0.25,
       sendDefaultPii: false,
+      beforeSend: expect.any(Function),
     });
     expect(JSON.stringify(result)).not.toContain('must-not-escape');
   });
@@ -51,7 +79,71 @@ describe('buildWebSentryConfig', () => {
       release: '1234567890abcdef1234567890abcdef12345678',
       tracesSampleRate: 0.1,
       sendDefaultPii: false,
+      beforeSend: expect.any(Function),
     });
+  });
+
+  it('drops the expected Firestore timer cancellation constructor failure', () => {
+    const event = {
+      exception: {
+        values: [{
+          type: 'TypeError',
+          value: FIRESTORE_CANCELLATION_NAME_ERROR,
+          stacktrace: {
+            frames: [
+              { filename: 'https://intexuraos.cloud/assets/firebase-DjIaBHIJ.js' },
+              { filename: 'https://intexuraos.cloud/assets/firebase-DjIaBHIJ.js' },
+            ],
+          },
+        }],
+      },
+    };
+
+    expect(runBeforeSend(event)).toBeNull();
+  });
+
+  it.each([
+    {
+      name: 'the same message without a stack',
+      event: {
+        exception: {
+          values: [{ type: 'TypeError', value: FIRESTORE_CANCELLATION_NAME_ERROR }],
+        },
+      },
+    },
+    {
+      name: 'the same message with an application frame',
+      event: {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: FIRESTORE_CANCELLATION_NAME_ERROR,
+            stacktrace: {
+              frames: [
+                { filename: 'https://intexuraos.cloud/assets/firebase-DjIaBHIJ.js' },
+                { filename: 'https://intexuraos.cloud/assets/index-FJfXyRiG.js' },
+              ],
+            },
+          }],
+        },
+      },
+    },
+    {
+      name: 'a different Firebase TypeError',
+      event: {
+        exception: {
+          values: [{
+            type: 'TypeError',
+            value: 'Cannot assign to read only property',
+            stacktrace: {
+              frames: [{ filename: 'https://intexuraos.cloud/assets/firebase-DjIaBHIJ.js' }],
+            },
+          }],
+        },
+      },
+    },
+  ])('keeps $name', ({ event }) => {
+    expect(runBeforeSend(event)).toBe(event);
   });
 
   it('omits absent optional BrowserOptions instead of emitting undefined properties', () => {

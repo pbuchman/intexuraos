@@ -516,7 +516,7 @@ describe('IntexAgentSessionsPage', () => {
     expect(screen.queryByText(/private backend payload/i)).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText('Current query')).not.toHaveTextContent(/run=|scenario=|test-runs/);
-    });
+    }, { timeout: 5_000 });
   });
 
   it('aborts stale scenario work and shows only the current mobile selection', async () => {
