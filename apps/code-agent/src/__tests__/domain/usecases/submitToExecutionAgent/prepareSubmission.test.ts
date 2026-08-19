@@ -225,6 +225,7 @@ describe('prepareSubmission', () => {
       planningTask: expect.objectContaining({ id: originalTaskId }),
       userId,
       linearIssueId,
+      linearIssueUuid: 'parent-uuid',
       effectiveWorkerType: expect.any(String),
     });
   });

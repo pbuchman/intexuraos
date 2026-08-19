@@ -22,6 +22,7 @@ import type { PreparedSubmission } from '../../../../domain/usecases/submitToExe
 describe('dispatchSubmission', () => {
   const userId = 'user_123';
   const linearIssueId = 'INT-100';
+  const linearIssueUuid = 'issue-uuid-100';
 
   let mockLogger: Logger;
   let mockCodeTaskRepo: {
@@ -76,6 +77,7 @@ describe('dispatchSubmission', () => {
       planningTask: makeTask(),
       userId,
       linearIssueId,
+      linearIssueUuid,
       effectiveWorkerType: 'auto',
     };
   }
@@ -143,6 +145,14 @@ describe('dispatchSubmission', () => {
       parentTaskId: 'task_planning',
       followUpReason: 'execution_implement',
     }));
+    expect(mockLinearAgentClient.updateIssueState).toHaveBeenCalledWith({
+      userId,
+      issueId: linearIssueUuid,
+      state: 'in_progress',
+    });
+    expect(mockLinearAgentClient.addComment).toHaveBeenCalledWith(
+      expect.objectContaining({ userId, issueId: linearIssueUuid }),
+    );
     expect(mockTaskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
     expect(result.value).not.toHaveProperty('childTaskIds');
   });

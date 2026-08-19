@@ -63,6 +63,7 @@ describe('submitTaskFeedback use case', () => {
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-465';
+  const linearIssueUuid = 'issue-uuid-465';
   const feedback = 'Please update the error handling to be more defensive';
 
   beforeEach(() => {
@@ -340,7 +341,7 @@ describe('submitTaskFeedback use case', () => {
       );
       mockLinearAgentClient.validateIssue.mockResolvedValue(
         ok({
-          id: linearIssueId,
+          id: linearIssueUuid,
           identifier: linearIssueId,
           title: 'Feedback mechanism test',
           url: `https://linear.app/pbuchman/issue/${linearIssueId}`,
@@ -603,7 +604,7 @@ describe('submitTaskFeedback use case', () => {
 
       expect(mockLinearAgentClient.updateIssueState).toHaveBeenCalledWith({
         userId,
-        issueId: linearIssueId,
+        issueId: linearIssueUuid,
         state: 'in_progress',
       });
     });

@@ -187,6 +187,7 @@ ${feedback.trim()}
 
   // Step 7: Fetch fresh labels from Linear to determine agentType before create
   let linearIssueLabelsForDispatch: string[] = [];
+  let linearIssueUuidForDispatch: string | undefined;
 
   if (originalTask.linearIssueId !== undefined) {
     const validateIssueResult = await linearAgentClient.validateIssue({
@@ -196,6 +197,7 @@ ${feedback.trim()}
 
     if (validateIssueResult.ok) {
       linearIssueLabelsForDispatch = validateIssueResult.value.labels;
+      linearIssueUuidForDispatch = validateIssueResult.value.id;
     } else {
       logger.warn(
         { linearIssueId: originalTask.linearIssueId },
@@ -300,10 +302,10 @@ ${feedback.trim()}
   );
 
   // Step 9: Update Linear issue to In Progress (if exists)
-  if (originalTask.linearIssueId !== undefined) {
+  if (originalTask.linearIssueId !== undefined && linearIssueUuidForDispatch !== undefined) {
     const updateResult = await linearAgentClient.updateIssueState({
       userId,
-      issueId: originalTask.linearIssueId,
+      issueId: linearIssueUuidForDispatch,
       state: 'in_progress',
     });
 
@@ -314,7 +316,9 @@ ${feedback.trim()}
         'Failed to update Linear issue to In Progress'
       );
     }
+  }
 
+  if (originalTask.linearIssueId !== undefined) {
     // Step 9: Add comment to Linear issue with feedback details
     // Sanitize feedback before embedding in Linear comment to prevent secret leakage
     const sanitizedFeedback = sanitizePrompt(feedback.trim());

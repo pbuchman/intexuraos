@@ -25,7 +25,17 @@ describe('linearIssueService', () => {
     vi.clearAllMocks();
     mockCreateIssue = vi.fn();
     mockUpdateIssueState = vi.fn();
-    mockValidateIssue = vi.fn();
+    mockValidateIssue = vi.fn().mockResolvedValue(
+      ok({
+        id: 'issue-uuid-123',
+        identifier: 'INT-123',
+        title: 'Issue 123',
+        url: 'https://linear.app/pbuchman/issue/INT-123',
+        labels: [],
+        childCount: 0,
+        parentId: null,
+      })
+    );
     mockGenerateTitle = vi.fn();
     mockAddComment = vi.fn();
     mockFetchIssueTree = vi.fn();
@@ -514,11 +524,11 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markInProgress(testUserId, 'issue-123');
+      await service.markInProgress(testUserId, 'INT-123');
 
       expect(mockUpdateIssueState).toHaveBeenCalledWith({
         userId: 'test-user-123',
-        issueId: 'issue-123',
+        issueId: 'issue-uuid-123',
         state: 'in_progress',
       });
     });
@@ -562,13 +572,40 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markInReview(testUserId, 'issue-123');
+      await service.markInReview(testUserId, 'INT-123');
 
+      expect(mockValidateIssue).toHaveBeenCalledWith({
+        userId: 'test-user-123',
+        identifier: 'INT-123',
+      });
       expect(mockUpdateIssueState).toHaveBeenCalledWith({
         userId: 'test-user-123',
-        issueId: 'issue-123',
+        issueId: 'issue-uuid-123',
         state: 'in_review',
       });
+    });
+
+    it('should skip the state update when the issue identifier cannot be resolved', async () => {
+      mockValidateIssue = vi.fn().mockResolvedValue(
+        err({
+          code: 'NOT_FOUND',
+          message: 'Issue INT-404 not found',
+        })
+      );
+      mockUpdateIssueState = vi.fn().mockResolvedValue(ok(undefined));
+
+      const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
+
+      await expect(service.markInReview(testUserId, 'INT-404')).resolves.toBeUndefined();
+
+      expect(mockUpdateIssueState).not.toHaveBeenCalled();
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          linearIssueId: 'INT-404',
+          error: { code: 'NOT_FOUND', message: 'Issue INT-404 not found' },
+        },
+        'Failed to update Linear issue to In Review'
+      );
     });
 
     it('should skip state transition when no issue ID provided', async () => {
@@ -610,11 +647,11 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markTodo(testUserId, 'issue-123');
+      await service.markTodo(testUserId, 'INT-123');
 
       expect(mockUpdateIssueState).toHaveBeenCalledWith({
         userId: 'test-user-123',
-        issueId: 'issue-123',
+        issueId: 'issue-uuid-123',
         state: 'todo',
       });
     });
@@ -739,11 +776,11 @@ describe('linearIssueService', () => {
 
       const service = createLinearIssueService({ linearAgentClient: mockClient, logger: mockLogger });
 
-      await service.markQa(testUserId, 'issue-123');
+      await service.markQa(testUserId, 'INT-123');
 
       expect(mockUpdateIssueState).toHaveBeenCalledWith({
         userId: 'test-user-123',
-        issueId: 'issue-123',
+        issueId: 'issue-uuid-123',
         state: 'qa',
       });
     });

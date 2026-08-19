@@ -47,7 +47,7 @@ async function dispatchSingle(
   prepared: PreparedSubmission,
 ): Promise<Result<SubmitToExecutionAgentResult, SubmitToExecutionAgentError>> {
   const { logger, codeTaskRepo, linearAgentClient, taskEnqueueService, orchestratorSecret } = deps;
-  const { planningTask, userId, linearIssueId, effectiveWorkerType } = prepared;
+  const { planningTask, userId, linearIssueId, linearIssueUuid, effectiveWorkerType } = prepared;
 
   // Optimistic lock: set implementationTaskId on planning task BEFORE dispatch.
   const executionTaskId = `task_${randomUUID()}`;
@@ -102,7 +102,7 @@ async function dispatchSingle(
     { logger, linearAgentClient },
     {
       userId,
-      issueId: linearIssueId,
+      issueId: linearIssueUuid,
       stateFailureMessage: 'Failed to update Linear issue to In Progress for Execution Agent',
       commentFailureMessage: 'Failed to add Execution Agent start comment to Linear issue',
       body: `🚀 **Execution Agent implementation started**

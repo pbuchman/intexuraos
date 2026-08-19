@@ -37,6 +37,7 @@ export interface PreparedSubmission {
   planningTask: CodeTask;
   userId: string;
   linearIssueId: string;
+  linearIssueUuid: string;
   effectiveWorkerType: WorkerType;
 }
 
@@ -265,5 +266,11 @@ export async function prepareSubmission(
     logger.info({ userId, [workerResolution.defaultField]: effectiveWorkerType }, 'Using user default worker type');
   }
 
-  return ok({ planningTask, userId, linearIssueId, effectiveWorkerType });
+  return ok({
+    planningTask,
+    userId,
+    linearIssueId,
+    linearIssueUuid: validateResult.value.id,
+    effectiveWorkerType,
+  });
 }

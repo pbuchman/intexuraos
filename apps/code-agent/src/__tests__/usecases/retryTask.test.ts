@@ -58,6 +58,7 @@ describe('retryTask use case', () => {
   const userId = 'test-user-123';
   const originalTaskId = 'task_abc123';
   const linearIssueId = 'INT-520';
+  const linearIssueUuid = 'issue-uuid-520';
 
   type MockTaskOverrides = Partial<CodeTask> & {
     linearIssueTitle?: string;
@@ -139,7 +140,7 @@ describe('retryTask use case', () => {
     };
     mockLinearAgentClient.validateIssue.mockResolvedValue(
       ok({
-        id: linearIssueId,
+        id: linearIssueUuid,
         identifier: linearIssueId,
         title: 'Retry mechanism test',
         url: 'https://linear.app/pbuchman/issue/INT-520',
@@ -628,7 +629,7 @@ describe('retryTask use case', () => {
       // Verify Linear state was updated to In Progress
       expect(mockLinearAgentClient.updateIssueState).toHaveBeenCalledWith({
         userId,
-        issueId: linearIssueId,
+        issueId: linearIssueUuid,
         state: 'in_progress',
       });
 

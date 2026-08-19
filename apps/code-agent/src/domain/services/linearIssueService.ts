@@ -93,9 +93,22 @@ export function createLinearIssueService(deps: LinearIssueServiceDeps): LinearIs
       return;
     }
 
+    const validationResult = await linearAgentClient.validateIssue({
+      userId,
+      identifier: linearIssueId,
+    });
+
+    if (!validationResult.ok) {
+      logger.warn(
+        { linearIssueId, error: validationResult.error },
+        `Failed to update Linear issue to ${label}`
+      );
+      return;
+    }
+
     const result = await linearAgentClient.updateIssueState({
       userId,
-      issueId: linearIssueId,
+      issueId: validationResult.value.id,
       state,
     });
 

@@ -190,6 +190,7 @@ export async function retryTask(
 
   // Fetch fresh Linear issue metadata for agent type resolution (labels not stored on task).
   let linearIssueLabelsForDispatch: string[] = [];
+  let linearIssueUuidForDispatch: string | undefined;
 
   if (originalTask.linearIssueId !== undefined) {
     const validateIssueResult = await linearAgentClient.validateIssue({
@@ -199,6 +200,7 @@ export async function retryTask(
 
     if (validateIssueResult.ok) {
       linearIssueLabelsForDispatch = validateIssueResult.value.labels;
+      linearIssueUuidForDispatch = validateIssueResult.value.id;
     } else {
       logger.warn(
         {
@@ -333,10 +335,10 @@ ${additionalContext.trim()}
   }
 
   // Step 9: Update Linear issue to In Progress
-  if (originalTask.linearIssueId !== undefined) {
+  if (originalTask.linearIssueId !== undefined && linearIssueUuidForDispatch !== undefined) {
     const stateResult = await linearAgentClient.updateIssueState({
       userId,
-      issueId: originalTask.linearIssueId,
+      issueId: linearIssueUuidForDispatch,
       state: 'in_progress',
     });
 
@@ -351,7 +353,9 @@ ${additionalContext.trim()}
       );
       // Don't fail the retry - continue without Linear state update
     }
+  }
 
+  if (originalTask.linearIssueId !== undefined) {
     // Step 10: Add comment to Linear issue
     // Sanitize additionalContext before embedding in Linear comment to prevent secret leakage
     const additionalContextSection =
