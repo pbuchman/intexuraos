@@ -126,6 +126,19 @@ export function createOpenRouterCatalogEntryMap(catalog: unknown): Map<string, C
   return entries;
 }
 
+/** Extract model availability without requiring optional pricing metadata. */
+export function createOpenRouterCatalogModelIdSet(catalog: unknown): Set<string> {
+  if (!hasBoundedCatalogSchema(catalog)) return new Set();
+  const data = (catalog as { data: unknown[] }).data;
+  const modelIds = new Set<string>();
+  for (const value of data) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
+    const id = (value as Record<string, unknown>)['id'];
+    if (typeof id === 'string') modelIds.add(id);
+  }
+  return modelIds;
+}
+
 /**
  * The only OpenRouter catalog fetcher. It bounds time and response size,
  * never logs bodies, and never serves a stale snapshot.

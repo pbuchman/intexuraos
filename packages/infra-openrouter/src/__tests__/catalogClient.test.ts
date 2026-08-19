@@ -3,6 +3,7 @@ import type { Logger } from '@intexuraos/common-core';
 import {
   createOpenRouterCatalogClient,
   createOpenRouterCatalogEntryMap,
+  createOpenRouterCatalogModelIdSet,
 } from '../catalogClient.js';
 import { INTEX_AGENT_REQUIRED_PARAMETERS } from '../intexAgentCatalog.js';
 
@@ -246,5 +247,21 @@ describe('createOpenRouterCatalogClient', () => {
         data: [null, { id: 123, pricing: {} }],
       })
     ).toEqual(new Map());
+  });
+
+  it('extracts available model IDs independently of optional display metadata', () => {
+    const liveCatalog = {
+      data: [
+        { id: 'x-ai/grok-4.3', pricing: { prompt: null, completion: null } },
+        { id: 'openai/gpt-5.4' },
+        null,
+        { id: 123 },
+      ],
+    };
+
+    expect(createOpenRouterCatalogModelIdSet(liveCatalog)).toEqual(
+      new Set(['x-ai/grok-4.3', 'openai/gpt-5.4'])
+    );
+    expect(createOpenRouterCatalogModelIdSet({ invalid: [] })).toEqual(new Set());
   });
 });

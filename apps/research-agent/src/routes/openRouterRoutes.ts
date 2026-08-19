@@ -14,6 +14,7 @@ import {
   buildModelInfo,
   createOpenRouterCatalogClient,
   createOpenRouterCatalogEntryMap,
+  createOpenRouterCatalogModelIdSet,
   type OpenRouterCatalogClient,
   type OpenRouterModelInfo,
 } from '@intexuraos/infra-openrouter';
@@ -101,12 +102,20 @@ export const openRouterRoutes: FastifyPluginCallback = (fastify, _opts, done) =>
     const catalogSnapshot = await getCatalogClient(apiKey, request.log).getCatalog();
     const catalog =
       catalogSnapshot === null ? null : createOpenRouterCatalogEntryMap(catalogSnapshot.catalog);
+    const availableModelIds =
+      catalogSnapshot === null
+        ? null
+        : createOpenRouterCatalogModelIdSet(catalogSnapshot.catalog);
 
-    // Build model info for each allowlisted model, enriching with live catalog data
-    const modelsWithPricing: OpenRouterModelInfo[] = ORDERED_OPENROUTER_ALLOWED_MODELS.map((entry) => {
-      const catalogEntry = catalog?.get(entry.id);
-      return buildModelInfo(entry, catalogEntry);
-    });
+    // A successful catalog response is authoritative for availability. Keep the
+    // reviewed static allowlist only as the outage fallback when catalog fetch fails.
+    const availableModels =
+      availableModelIds === null
+        ? ORDERED_OPENROUTER_ALLOWED_MODELS
+        : ORDERED_OPENROUTER_ALLOWED_MODELS.filter((entry) => availableModelIds.has(entry.id));
+    const modelsWithPricing: OpenRouterModelInfo[] = availableModels.map((entry) =>
+      buildModelInfo(entry, catalog?.get(entry.id))
+    );
 
     const cachedAt = new Date().toISOString();
     cache = { models: modelsWithPricing, cachedAt };

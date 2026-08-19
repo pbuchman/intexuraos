@@ -45,6 +45,7 @@ export { normalizeUsage, toModelPricing } from './costCalculator.js';
 export {
   createOpenRouterCatalogClient,
   createOpenRouterCatalogEntryMap,
+  createOpenRouterCatalogModelIdSet,
   type OpenRouterCatalogClient,
   type OpenRouterCatalogClientConfig,
   type OpenRouterCatalogSnapshot,

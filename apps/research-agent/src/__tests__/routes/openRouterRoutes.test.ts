@@ -191,6 +191,37 @@ describe('OpenRouter Routes - GET /research/openrouter/models', () => {
     expect(firstModel?.pricing.inputPricePerMillion).toBe(1);
   });
 
+  it('omits allowlisted models that are absent from a successful live catalog', async () => {
+    fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
+
+    const retiredModelId = 'x-ai/grok-4.3';
+    const catalogData = OPENROUTER_ALLOWED_MODELS.filter(
+      (model) => model.id !== retiredModelId
+    ).map((model) => ({
+      id: model.id,
+      pricing: { prompt: '0.000001', completion: '0.000005' },
+      context_length: 500_000,
+    }));
+
+    nock('https://openrouter.ai').get('/api/v1/models').reply(200, { data: catalogData });
+
+    const token = await generateJwt(TEST_USER_ID);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/openrouter/models',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      success: boolean;
+      data: { models: { id: string }[] };
+    };
+    expect(body.success).toBe(true);
+    expect(body.data.models).toHaveLength(15);
+    expect(body.data.models.some((model) => model.id === retiredModelId)).toBe(false);
+  });
+
   it('returns recommended synthesis models first and preserves allowlist order for the rest', async () => {
     fakeUserServiceClient.setApiKeys(TEST_USER_ID, { openrouter: 'test-or-key' });
 
