@@ -1,6 +1,6 @@
 import { LlmModels } from '@intexuraos/llm-contract';
 import nock from 'nock';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createImageServiceClient } from '../client.js';
 
 const BASE_URL = 'http://image-service.local';
@@ -61,6 +61,55 @@ describe('createImageServiceClient', () => {
         message: 'HTTP 400: Bad Request',
       },
     });
+  });
+
+  it('allows image generation to run longer than the generic internal request timeout', async () => {
+    vi.useFakeTimers();
+    const image = {
+      id: 'image-1',
+      thumbnailUrl: 'https://example.com/thumb.jpg',
+      fullSizeUrl: 'https://example.com/full.jpg',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+        return new Promise<Response>((resolve, reject) => {
+          const responseTimer = setTimeout(() => {
+            resolve(
+              new Response(JSON.stringify({ success: true, data: image }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              })
+            );
+          }, 30_001);
+          init?.signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(responseTimer);
+              const error = new Error('This operation was aborted');
+              error.name = 'AbortError';
+              reject(error);
+            },
+            { once: true }
+          );
+        });
+      })
+    );
+
+    try {
+      const client = createImageServiceClient({
+        baseUrl: BASE_URL,
+        internalAuthToken: 'secret',
+      });
+      const resultPromise = client.generateImage('prompt', LlmModels.GPTImage1, 'user-1');
+
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      await expect(resultPromise).resolves.toEqual({ ok: true, value: image });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 
   it('fails closed when prompt generation returns success=false', async () => {

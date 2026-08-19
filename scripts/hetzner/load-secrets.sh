@@ -445,8 +445,11 @@ NODE
   if command -v flock >/dev/null 2>&1; then
     exec {HOST_LOCK_FD}<>"${SECRET_PACKAGE_LOCK_FILE}" \
       || fail 'Unable to open the PROD secret host lock'
-    flock --exclusive --wait "${SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS}" "${HOST_LOCK_FD}" \
-      || fail 'Timed out waiting for the PROD secret host lock'
+    local deadline=$((SECONDS + SECRET_PACKAGE_LOCK_TIMEOUT_SECONDS))
+    while ! flock -x -n "${HOST_LOCK_FD}"; do
+      (( SECONDS < deadline )) || fail 'Timed out waiting for the PROD secret host lock'
+      sleep 0.05
+    done
     return 0
   fi
 
