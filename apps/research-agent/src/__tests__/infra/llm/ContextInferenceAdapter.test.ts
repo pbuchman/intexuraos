@@ -272,11 +272,24 @@ describe('ContextInferenceAdapter', () => {
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
       expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferResearchContext',
+          errorMessage: expect.stringContaining('Schema validation failed:'),
+          zodErrors: expect.any(Array),
+          llmResponse: JSON.stringify({ invalid: 'schema' }),
+          expectedSchema: expect.any(String),
+          responseLength: JSON.stringify({ invalid: 'schema' }).length,
+          parsedJson: JSON.stringify({ invalid: 'schema' }),
+        },
+        'LLM parse error in inferResearchContext: Schema validation failed'
+      );
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         { errorMessage: expect.any(String) },
         'Schema validation failed, attempting repair'
       );
       expect(mockLogger.debug).toHaveBeenCalledWith({}, 'Repair attempt succeeded');
       expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {
@@ -297,7 +310,19 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferResearchContext',
+          errorMessage: expect.stringContaining('JSON parse failed:'),
+          parseError: expect.any(String),
+          llmResponse: 'not valid json',
+          expectedSchema: expect.any(String),
+          responseLength: 'not valid json'.length,
+        },
+        'LLM parse error in inferResearchContext: JSON parse failed'
+      );
       expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('returns error when repair attempt also fails', async () => {
@@ -449,7 +474,20 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferSynthesisContext',
+          errorMessage: expect.stringContaining('Schema validation failed:'),
+          zodErrors: expect.any(Array),
+          llmResponse: JSON.stringify({ wrong: 'structure' }),
+          expectedSchema: expect.any(String),
+          responseLength: JSON.stringify({ wrong: 'structure' }).length,
+          parsedJson: JSON.stringify({ wrong: 'structure' }),
+        },
+        'LLM parse error in inferSynthesisContext: Schema validation failed'
+      );
       expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('attempts repair on JSON parse failure and succeeds', async () => {
@@ -472,7 +510,19 @@ describe('ContextInferenceAdapter', () => {
         expect(result.value.context.domain).toBe('technical');
       }
       expect(mockGenerate).toHaveBeenCalledTimes(2);
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        {
+          operation: 'inferSynthesisContext',
+          errorMessage: expect.stringContaining('JSON parse failed:'),
+          parseError: expect.any(String),
+          llmResponse: '{ malformed json',
+          expectedSchema: expect.any(String),
+          responseLength: '{ malformed json'.length,
+        },
+        'LLM parse error in inferSynthesisContext: JSON parse failed'
+      );
       expect(mockLogger.warn).not.toHaveBeenCalled();
+      expect(mockLogger.error).not.toHaveBeenCalled();
     });
 
     it('returns error when repair attempt also fails', async () => {
