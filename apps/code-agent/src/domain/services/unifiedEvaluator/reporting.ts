@@ -103,7 +103,7 @@ export async function recordDecision(
     const decisionResult = await deps.eventDecisionRepo.save(input);
     if (!decisionResult.ok) {
       logger.error(
-        { eventId: event.id, auditEventId: event.auditEventId, error: decisionResult.error },
+        { eventId: event.id, auditEventId: event.auditEventId, error: decisionResult.error, _skipSentry: true },
         'Failed to save event decision audit record'
       );
       return;
