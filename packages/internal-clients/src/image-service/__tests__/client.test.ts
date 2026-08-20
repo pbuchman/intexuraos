@@ -5,12 +5,36 @@ import { createImageServiceClient } from '../client.js';
 
 const BASE_URL = 'http://image-service.local';
 
+function stubAbortablePendingFetch(): () => AbortSignal | undefined {
+  let signal: AbortSignal | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener(
+          'abort',
+          () => {
+            const error = new Error('This operation was aborted');
+            error.name = 'AbortError';
+            reject(error);
+          },
+          { once: true }
+        );
+      });
+    })
+  );
+  return () => signal;
+}
+
 beforeEach(() => {
   nock.cleanAll();
 });
 
 afterEach(() => {
   nock.cleanAll();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe('createImageServiceClient', () => {
@@ -63,53 +87,76 @@ describe('createImageServiceClient', () => {
     });
   });
 
-  it('allows image generation to run longer than the generic internal request timeout', async () => {
+  it('uses the exact 15-minute image generation timeout', async () => {
     vi.useFakeTimers();
-    const image = {
-      id: 'image-1',
-      thumbnailUrl: 'https://example.com/thumb.jpg',
-      fullSizeUrl: 'https://example.com/full.jpg',
-    };
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_url: string | URL | Request, init?: RequestInit) => {
-        return new Promise<Response>((resolve, reject) => {
-          const responseTimer = setTimeout(() => {
-            resolve(
-              new Response(JSON.stringify({ success: true, data: image }), {
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-              })
-            );
-          }, 30_001);
-          init?.signal?.addEventListener(
-            'abort',
-            () => {
-              clearTimeout(responseTimer);
-              const error = new Error('This operation was aborted');
-              error.name = 'AbortError';
-              reject(error);
-            },
-            { once: true }
-          );
-        });
-      })
-    );
+    const getSignal = stubAbortablePendingFetch();
+    const client = createImageServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+    });
+    const resultPromise = client.generateImage('prompt', LlmModels.GPTImage1, 'user-1');
 
-    try {
-      const client = createImageServiceClient({
-        baseUrl: BASE_URL,
-        internalAuthToken: 'secret',
-      });
-      const resultPromise = client.generateImage('prompt', LlmModels.GPTImage1, 'user-1');
+    await vi.advanceTimersByTimeAsync(899_999);
+    expect(getSignal()?.aborted).toBe(false);
 
-      await vi.advanceTimersByTimeAsync(30_001);
+    await vi.advanceTimersByTimeAsync(1);
 
-      await expect(resultPromise).resolves.toEqual({ ok: true, value: image });
-    } finally {
-      vi.unstubAllGlobals();
-      vi.useRealTimers();
-    }
+    expect(getSignal()?.aborted).toBe(true);
+    await expect(resultPromise).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'Request exceeded 900000ms',
+      },
+    });
+  });
+
+  it('keeps the generic 30-second timeout for prompt generation', async () => {
+    vi.useFakeTimers();
+    const getSignal = stubAbortablePendingFetch();
+    const client = createImageServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+    });
+    const resultPromise = client.generatePrompt('text', 'gpt-4.1', 'user-1');
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(getSignal()?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(getSignal()?.aborted).toBe(true);
+    await expect(resultPromise).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'Request exceeded 30000ms',
+      },
+    });
+  });
+
+  it('keeps the generic 30-second timeout for image deletion', async () => {
+    vi.useFakeTimers();
+    const getSignal = stubAbortablePendingFetch();
+    const client = createImageServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+    });
+    const resultPromise = client.deleteImage('image-1');
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(getSignal()?.aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(getSignal()?.aborted).toBe(true);
+    await expect(resultPromise).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: 'Request exceeded 30000ms',
+      },
+    });
   });
 
   it('fails closed when prompt generation returns success=false', async () => {

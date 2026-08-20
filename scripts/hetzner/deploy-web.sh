@@ -286,12 +286,12 @@ build_and_publish() {
 main() {
   parse_args "$@"
   require_prod
-  export_build_metadata
   require_command node
   require_command pnpm
   require_command rsync
   trap restore_web_env_files EXIT
   clear_intexuraos_env
+  export_build_metadata
   export INTEXURAOS_ENVIRONMENT=prod
   export_web_service_urls
   build_and_publish
