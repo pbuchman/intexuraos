@@ -15,6 +15,7 @@
  *   - bookmark-enrich
  *   - bookmark-summarize
  *   - message-digest-run
+ *   - runtime-credential-canary
  *   - all (publishes one of each)
  */
 import { PubSub } from '@google-cloud/pubsub';
@@ -166,6 +167,14 @@ const EVENTS = {
       userId: 'test-user-404',
       definitionId: 'md_test-digest-001',
       runId: 'mdr_test-run-001',
+      requestedAt: new Date().toISOString(),
+    },
+  },
+  'runtime-credential-canary': {
+    topic: 'intexuraos-runtime-credential-canary-dev',
+    data: {
+      type: 'runtime.credential.canary',
+      canary: 'manual-local',
       requestedAt: new Date().toISOString(),
     },
   },

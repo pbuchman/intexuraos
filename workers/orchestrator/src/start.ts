@@ -9,7 +9,6 @@
  * them testable in unit tests.
  */
 
-import { writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
@@ -104,15 +103,8 @@ export async function start(): Promise<void> {
 
   validateGcpCredentials(env.gcpSaKeyPath, env.projectId);
 
-  const privateKeyPath = join(orchestratorDir, 'github-app.pem');
-  const githubPrivateKey = fetchGitHubKeys({
-    projectId: env.projectId,
-    cachePath: privateKeyPath,
-    ...(env.githubPrivateKeyOverride !== undefined
-      ? { override: env.githubPrivateKeyOverride }
-      : {}),
-  });
-  writeFileSync(privateKeyPath, githubPrivateKey, { mode: 0o600 });
+  const privateKeyPath = env.githubPrivateKeyPath;
+  fetchGitHubKeys({ privateKeyPath });
 
   await ensurePortAvailable(env.port);
 

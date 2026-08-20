@@ -4,7 +4,10 @@ Container configurations for local development.
 
 ## Overview
 
-Local development uses a **Pub/Sub emulator** for message isolation. All other GCP services (Firestore, Google Cloud Storage) use **real GCP** via Application Default Credentials (ADC).
+Local development uses a **Pub/Sub emulator** for message isolation. Firestore
+and Google Cloud Storage use the retained GCP project through an explicitly
+selected least-privilege identity. Runtime configuration is rendered from an
+exact numeric DEV secret-package version before containers start.
 
 This setup provides:
 
@@ -87,8 +90,8 @@ These are read from the shell environment (via direnv) at `docker compose up` ti
 **Setup:**
 
 ```bash
-# Sync secrets from GCP Secret Manager (creates .envrc)
-./scripts/sync-secrets.sh
+# Render one reviewed DEV package version (creates mode-0600 .envrc)
+./scripts/sync-secrets.sh --version <dev-numeric-version>
 
 # Copy local overrides template
 cp .envrc.local.example .envrc.local
@@ -96,6 +99,19 @@ cp .envrc.local.example .envrc.local
 # Allow direnv to load variables
 direnv allow
 ```
+
+`sync-secrets.sh` fetches only `INTEXURAOS_SECRET_PACKAGE_DEV`, validates CRC32C,
+schema, environment, and exact membership, then atomically renders the local
+projection. It never reads individual legacy secrets and never accepts
+`latest`. `.envrc.local` is for host-only overrides; do not copy shared secret
+values into it.
+
+Docker receives only the variables declared by Compose. The Pub/Sub emulator
+does not need the package, a service-account JSON file, or Secret Manager IAM.
+Any local container that uses retained Firestore/GCS receives only an explicit
+short-lived or separately managed least-privilege credential, mounted
+read-only. DEV intentionally contains no GCP service-account JSON. Never mount
+`.envrc`, a full package payload, or an operator/provisioner credential.
 
 ## Files
 

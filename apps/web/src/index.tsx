@@ -1,3 +1,7 @@
+// Firebase constructors assign Error.name, so install the host compatibility guard
+// before any application dependency can evaluate Firebase Auth or Firestore.
+import './services/firebaseErrorCompatibility.js';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as Sentry from '@sentry/react';

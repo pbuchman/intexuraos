@@ -208,7 +208,7 @@ resource "google_compute_url_map" "web_app" {
 
 # Random suffix for managed SSL certificate (regenerates when domain changes)
 resource "random_id" "cert_suffix" {
-  count       = var.enable_load_balancer && var.domain != "" && !var.use_custom_certificate ? 1 : 0
+  count       = var.enable_load_balancer && var.domain != "" ? 1 : 0
   byte_length = 4
 
   keepers = {
@@ -216,9 +216,10 @@ resource "random_id" "cert_suffix" {
   }
 }
 
-# Google-managed SSL certificate (used when use_custom_certificate = false)
+# Google-managed SSL certificate. Private certificate material must never be
+# read by Terraform because provider data would persist it in state.
 resource "google_compute_managed_ssl_certificate" "web_app" {
-  count   = var.enable_load_balancer && var.domain != "" && !var.use_custom_certificate ? 1 : 0
+  count   = var.enable_load_balancer && var.domain != "" ? 1 : 0
   name    = "intexuraos-web-${var.environment}-cert-${random_id.cert_suffix[0].hex}"
   project = var.project_id
 
@@ -231,52 +232,13 @@ resource "google_compute_managed_ssl_certificate" "web_app" {
   }
 }
 
-# Read private key from Secret Manager (for custom certificate)
-data "google_secret_manager_secret_version" "ssl_key" {
-  count   = var.use_custom_certificate ? 1 : 0
-  secret  = var.ssl_private_key_secret_id
-  project = var.project_id
-}
-
-# Hash-based suffix for custom certificate - only recreates when cert file actually changes
-resource "random_id" "custom_cert_suffix" {
-  count       = var.enable_load_balancer && var.domain != "" && var.use_custom_certificate ? 1 : 0
-  byte_length = 4
-
-  keepers = {
-    cert_hash = filemd5(var.ssl_certificate_path)
-  }
-}
-
-# Self-managed SSL certificate (used when use_custom_certificate = true)
-# NOTE: private_key is ignored because terraform can't reliably compare sensitive values
-# from Secret Manager across runs, causing false drift. The certificate will still be
-# recreated when the cert file changes (via random_id.custom_cert_suffix keeper).
-# To force key rotation: update the certificate file or taint the resource.
-resource "google_compute_ssl_certificate" "custom" {
-  count       = var.enable_load_balancer && var.domain != "" && var.use_custom_certificate ? 1 : 0
-  name        = "intexuraos-web-${var.environment}-cert-${random_id.custom_cert_suffix[0].hex}"
-  project     = var.project_id
-  certificate = file(var.ssl_certificate_path)
-  private_key = data.google_secret_manager_secret_version.ssl_key[0].secret_data
-
-  lifecycle {
-    create_before_destroy = true
-    ignore_changes        = [private_key]
-  }
-}
-
 # HTTPS proxy
 resource "google_compute_target_https_proxy" "web_app" {
-  count   = var.enable_load_balancer && var.domain != "" ? 1 : 0
-  name    = "intexuraos-web-${var.environment}-https-proxy"
-  project = var.project_id
-  url_map = google_compute_url_map.web_app[0].id
-  ssl_certificates = [
-    var.use_custom_certificate
-    ? google_compute_ssl_certificate.custom[0].id
-    : google_compute_managed_ssl_certificate.web_app[0].id
-  ]
+  count            = var.enable_load_balancer && var.domain != "" ? 1 : 0
+  name             = "intexuraos-web-${var.environment}-https-proxy"
+  project          = var.project_id
+  url_map          = google_compute_url_map.web_app[0].id
+  ssl_certificates = [google_compute_managed_ssl_certificate.web_app[0].id]
 }
 
 # HTTP proxy (for redirect to HTTPS)

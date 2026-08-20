@@ -41,24 +41,26 @@ node scripts/pubsub-publish-test.mjs llm-call
 node scripts/pubsub-publish-test.mjs bookmark-enrich
 node scripts/pubsub-publish-test.mjs bookmark-summarize
 node scripts/pubsub-publish-test.mjs message-digest-run
+node scripts/pubsub-publish-test.mjs runtime-credential-canary
 ```
 
 ## Monitored Topics
 
-| Topic                              | Color        | Event Type                  |
-| ---------------------------------- | ------------ | --------------------------- |
-| `whatsapp-media-cleanup`           | Purple       | Media file deletion         |
-| `whatsapp-send-message`            | Green        | Outbound WhatsApp messages  |
-| `whatsapp-webhook-process`         | Light Purple | WhatsApp webhook processing |
-| `whatsapp-audio-stored`            | Light Green  | Audio transcription input   |
-| `whatsapp-transcription-completed` | Light Green  | Audio transcription result  |
-| `intex-message-ingest`             | Blue         | Intex Agent message routing |
-| `research-process`                 | Blue         | Research task processing    |
-| `llm-analytics`                    | Indigo       | LLM usage analytics         |
-| `llm-call`                         | Purple       | LLM API calls               |
-| `bookmark-enrich`                  | Orange       | Bookmark metadata enriching |
-| `bookmark-summarize`               | Teal         | Bookmark AI summarization   |
-| `message-digest-runs`              | Amber        | Message Digest generation   |
+| Topic                                      | Color        | Event Type                  |
+| ------------------------------------------ | ------------ | --------------------------- |
+| `whatsapp-media-cleanup`                   | Purple       | Media file deletion         |
+| `whatsapp-send-message`                    | Green        | Outbound WhatsApp messages  |
+| `whatsapp-webhook-process`                 | Light Purple | WhatsApp webhook processing |
+| `whatsapp-audio-stored`                    | Light Green  | Audio transcription input   |
+| `whatsapp-transcription-completed`         | Light Green  | Audio transcription result  |
+| `intex-message-ingest`                     | Blue         | Intex Agent message routing |
+| `research-process`                         | Blue         | Research task processing    |
+| `llm-analytics`                            | Indigo       | LLM usage analytics         |
+| `llm-call`                                 | Purple       | LLM API calls               |
+| `bookmark-enrich`                          | Orange       | Bookmark metadata enriching |
+| `bookmark-summarize`                       | Teal         | Bookmark AI summarization   |
+| `message-digest-runs`                      | Amber        | Message Digest generation   |
+| `intexuraos-runtime-credential-canary-dev` | Cyan         | Runtime credential canary   |
 
 ## Architecture
 
@@ -109,6 +111,10 @@ node scripts/pubsub-publish-test.mjs message-digest-run
 - `bookmark-enrich` → `POST /internal/bookmarks/pubsub/enrich` (:8124)
 - `bookmark-summarize` → `POST /internal/bookmarks/pubsub/summarize` (:8124)
 - `message-digest-runs` → `POST /internal/message-digests/pubsub/run` (:8135)
+
+`intexuraos-runtime-credential-canary-dev` has no service endpoint. Its local
+monitor subscription consumes only manual canary events; the Terraform-owned
+production topic deliberately has no subscription.
 
 ## Environment Variables
 

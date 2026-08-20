@@ -28,16 +28,30 @@ module "my_service" {
 }
 ```
 
-### Secret (from Secret Manager)
+### Secret package membership
 
-```hcl
-# terraform/environments/dev/main.tf - service module
-module "my_service" {
-  secrets = merge(local.common_service_secrets, {
-    INTEXURAOS_MY_SECRET = module.secret_manager.secret_ids["INTEXURAOS_MY_SECRET"]
-  })
+Do not create a new Secret Manager container or a per-service Terraform secret
+binding for an application value. Add its logical environment name to the
+appropriate package contract in `config/environments/secret-packages.json`,
+then update its renderer/projection and tests in the same pull request.
+
+```json
+{
+  "packages": {
+    "dev": {
+      "envNames": ["INTEXURAOS_MY_SECRET"]
+    },
+    "prod": {
+      "envNames": ["INTEXURAOS_MY_SECRET"]
+    }
+  }
 }
 ```
+
+The snippet is illustrative; edit the existing complete arrays rather than
+replacing the manifest. Package payload values are published outside Terraform
+and Git. Terraform owns only the two containers, least-privilege IAM, and the
+two documented native transcription exceptions.
 
 ---
 
@@ -52,7 +66,7 @@ const COMMON_SERVICE_URLS = {
 };
 ```
 
-### Common secret (from .envrc.local)
+### Common secret (from the rendered DEV projection)
 
 ```javascript
 // ecosystem.config.cjs - COMMON_SERVICE_ENV
@@ -60,6 +74,17 @@ const COMMON_SERVICE_ENV = {
   INTEXURAOS_NEW_SECRET: process.env.INTEXURAOS_NEW_SECRET,
 };
 ```
+
+The value is populated by `scripts/sync-secrets.sh` from an exact numeric DEV
+package version. `.envrc.local` is for host-only overrides and must not become a
+second shared-secret store. Per-service mappings must filter the rendered
+environment; never pass the full package to every process.
+
+`SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS` selects the dedicated renderer
+only for package sync. `GOOGLE_APPLICATION_CREDENTIALS` in `.envrc.local`
+selects the dedicated home runtime key; the orchestrator generator ignores that
+input and fixes its own Artifact Registry reader key. None of these external
+bootstrap keys is a package member or worker input.
 
 ### Service-specific
 
@@ -80,6 +105,12 @@ The web app is a static Vite bundle served by Hetzner nginx, not Cloud Run. Env 
 baked into the bundle at build time — there is no runtime env surface. Keep the
 manifest, generated files, config consumer, and dev proxy in lockstep or the bundle can
 throw `Missing required environment variable: <name>` at module-load time.
+
+The Firebase browser API key is the intentional exception to the usual
+public-config storage rule: it is supplied from the exact DEV/PROD package to
+the build allowlist so it can be rotated and removed from tracked config. It is
+still visible to every browser by design. Never pass backend package members to
+Vite, and do not treat the browser key as an authorization boundary.
 
 ### 1. `apps/web/src/config.ts` — consumer declaration
 

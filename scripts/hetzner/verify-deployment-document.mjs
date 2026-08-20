@@ -4,10 +4,13 @@ function reject() {
   process.exit(1);
 }
 
-const [expectedCommitSha, expectedWorkflowRunId, headersPath] = process.argv.slice(2);
+const [expectedCommitSha, expectedWorkflowRunId, expectedSecretPackageVersion, headersPath] =
+  process.argv.slice(2);
 if (
   expectedCommitSha === undefined ||
   expectedWorkflowRunId === undefined ||
+  expectedSecretPackageVersion === undefined ||
+  !/^[1-9]\d*$/.test(expectedSecretPackageVersion) ||
   headersPath === undefined
 ) {
   reject();
@@ -26,7 +29,7 @@ if (document === null || typeof document !== 'object' || Array.isArray(document)
   reject();
 }
 
-const expectedKeys = ['commitSha', 'deployedAt', 'workflowRunId'];
+const expectedKeys = ['commitSha', 'deployedAt', 'secretPackageVersion', 'workflowRunId'];
 const actualKeys = Object.keys(document).sort();
 if (
   actualKeys.length !== expectedKeys.length ||
@@ -40,6 +43,7 @@ const deployedAt = document.deployedAt;
 if (
   document.commitSha !== expectedCommitSha ||
   document.workflowRunId !== expectedWorkflowRunId ||
+  document.secretPackageVersion !== expectedSecretPackageVersion ||
   typeof deployedAt !== 'string' ||
   !canonicalTimestampPattern.test(deployedAt)
 ) {
