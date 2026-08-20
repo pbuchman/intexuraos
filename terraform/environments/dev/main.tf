@@ -501,6 +501,7 @@ resource "google_project_service" "apis" {
     "cloudfunctions.googleapis.com",
     "eventarc.googleapis.com",
     "apikeys.googleapis.com",
+    "firebaseappcheck.googleapis.com",
   ])
 
   project            = var.project_id

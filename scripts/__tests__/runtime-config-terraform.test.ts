@@ -842,6 +842,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(apiKeyImport).toContain(
       'id = "projects/intexuraos-dev-pbuchman/locations/global/keys/d8251549-1bde-49c0-82a7-b0525a2fe688"'
     );
+    expect([...terraform.matchAll(/"firebaseappcheck\.googleapis\.com"/gu)]).toHaveLength(1);
     expect(terraform).not.toMatch(
       /output\s+"[^"]+"\s*\{[^}]*google_apikeys_key\.firebase_browser\.(?:key_string|uid)/su
     );
