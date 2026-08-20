@@ -155,6 +155,13 @@ adds an immutable validated version outside Terraform through
 `scripts/secret-package.mjs`. This prevents payload data from entering state.
 It does not authorize direct creation of containers or ad hoc versions.
 
+Disabling an existing Secret Manager version during a reviewed reversible
+cleanup soak is also a controlled data-plane exception. The exact numeric
+versions must come from a frozen metadata-only inventory, and the operation
+must never read or print payloads. Terraform continues to own containers and
+IAM, and must never place `secret_data` in Terraform state. Destruction of
+versions or containers remains a separately reviewed Phase B action.
+
 ---
 
 ## Cloud Build & Deployment

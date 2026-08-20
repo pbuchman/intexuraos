@@ -13,7 +13,7 @@ variable "environment" {
   type        = string
 }
 
-variable "legacy_secret_manager_enabled" {
+variable "legacy_secret_readers_enabled" {
   description = "Keep the legacy project-wide secret accessor during package migration"
   type        = bool
   default     = true

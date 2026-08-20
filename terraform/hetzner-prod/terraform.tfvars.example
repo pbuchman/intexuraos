@@ -10,7 +10,7 @@ domain      = "intexuraos.cloud"
 
 # Migration-safe defaults. Set false only after package rollback proof and at
 # least 72 hours of healthy observation.
-legacy_secret_manager_enabled          = true
+legacy_secret_containers_enabled       = true
 legacy_runtime_sa_bootstrap_enabled    = true
 
 activate_hetzner_async_consumers = true
