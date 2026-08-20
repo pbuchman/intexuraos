@@ -463,7 +463,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
       'var.legacy_secret_containers_enabled ? local.legacy_secret_containers : {}'
     );
     expect(terraform).toMatch(
-      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*false[\s\S]*?\}/u
     );
     expect(terraform).toMatch(
       /variable "legacy_secret_containers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
@@ -471,7 +471,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(terraform).toMatch(
       /check "legacy_secret_reader_container_order" \{[\s\S]*?condition\s*=\s*!var\.legacy_secret_readers_enabled \|\| var\.legacy_secret_containers_enabled[\s\S]*?\}/u
     );
-    expect(devTfvarsExample).toContain('legacy_secret_readers_enabled    = true');
+    expect(devTfvarsExample).toContain('legacy_secret_readers_enabled    = false');
     expect(devTfvarsExample).toContain('legacy_secret_containers_enabled = true');
     expect(terraform).not.toContain('legacy_secret_manager_enabled');
     expect(terraform).not.toContain('resource "google_secret_manager_secret_version"');
