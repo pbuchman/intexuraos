@@ -682,7 +682,13 @@
       "path": "operations/secret-migration-status-report.md",
       "title": "Secret Migration Status Report",
       "category": "operations",
-      "description": "Non-secret completed evidence, active cleanup status, deferred gates, and closure criteria"
+      "description": "Historical non-secret evidence for the secret migration and superseded reversible cleanup gates"
+    },
+    {
+      "path": "operations/secret-exposure-final-cutover-plan.md",
+      "title": "Secret Exposure Final Cutover Plan",
+      "category": "operations",
+      "description": "Authoritative destructive plan for public-secret remediation and final migration cleanup"
     },
     {
       "path": "operations/runtime-configuration.md",

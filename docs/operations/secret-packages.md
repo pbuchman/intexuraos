@@ -1,5 +1,12 @@
 # Secret Packages Operations
 
+> **Final-cutover override:** the owner-approved
+> [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md)
+> is the only execution authority for the current incident cleanup. Its
+> destructive no-rollback decision supersedes the rollback, soak, Phase A/B,
+> and delayed-deletion procedures below for that cutover. Do not replay the
+> historical individual-secret cleanup runbook.
+
 This runbook is the operational source of truth for the two atomic runtime
 secret packages used by IntexuraOS. It covers package construction,
 publication, promotion, rendering, rotation, rollback, emergency access, and
