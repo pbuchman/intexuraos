@@ -1314,10 +1314,13 @@ with exhaustive pagination; `T1 - T0` must be at least 72 continuous hours.
 PASS requires exactly zero events whose resource name is in the frozen set.
 Perform an approved package access at both boundaries and require its audit
 event as a positive control. Record query interval, pages/records inspected,
-legacy count `0`, expected package/native counts by approved principal, and
-positive-control result. Any legacy event or missing positive control resets
-`T0`. Only then remove legacy IAM, disable old versions for the reversible
-window, and later destroy versions/containers through Terraform.
+legacy count `0`, all four DEV/PROD package positive-control counts, zero project
+or organization `SetIamPolicy` events, zero Logging configuration mutations,
+and the final result. Native exceptions are intentionally outside this 34-name
+legacy-read query. Any legacy event, policy or logging-routing mutation, or
+missing positive control resets `T0`. Only then remove legacy IAM, disable old
+versions for the reversible window, and later destroy versions/containers
+through Terraform.
 
 ### Executable 34-name legacy-read gate
 
@@ -1330,25 +1333,136 @@ reference](https://cloud.google.com/secret-manager/docs/audit-logging#accesssecr
 and [Data Access configuration
 guide](https://cloud.google.com/logging/docs/audit/configure-data-access).
 
+The project has the exact organization parent `398419898183` and no folder.
+Project policy alone cannot prove the effective inherited audit configuration.
+T0 remains blocked until the explicitly selected organization reader can attest
+the parent policy, organization audit log, and project private Data Access log
+without reauthentication. A
+permission failure, an interactive reauthentication prompt, a different parent,
+or missing organization/private-log access is a hard STOP before any package
+control or T0 receipt. The currently expired `kontakt@pbuchman.com` reauthentication means
+this runbook is not declaring the live gate T0-ready.
+
+Do not start this gate while home-dev traffic is drained. The final home-dev
+DEV-v2 prior/forward samples must pass, `cloudflared.service is active`, Cloud
+Scheduler is `ENABLED`, there are zero code-worker containers on any image with
+forbidden GCP credential environment, credential file, direct Secret Manager,
+or secret-sync wiring, and one `post-resume package-only canary` must complete
+on the replacement image. Its evidence must show the package-only bootstrap and
+the expected allowlisted projection without a direct Secret Manager path. The
+post-resume canary gate requires a terminal task callback and secret-isolation
+PASS; it does not require model/provider success. Provider usage, quota, or
+entitlement outcomes are outside this secret migration and do not reset T0 when
+the callback is terminal, bootstrap/projection checks pass, and
+authentication/Secret Manager error counts are zero. Only then may the T0
+controls run. Pausing normal traffic, returning to a legacy projection,
+changing the frozen inventory, or deliberately reading a frozen legacy secret
+resets T0.
+
 First freeze the inventory from the fully reviewed 40-character commit, never
 from an uncommitted worktree. Review the resulting names line by line in the
 change approval. This parser accepts only the quoted entries in the exact
 `local.legacy_secret_container_names` block, sorts them, and fails unless there
-are exactly 34 unique names.
+are exactly 34 unique names. The workspace is deliberately persistent and
+private: `/tmp` and an EXIT trap for the whole workspace are forbidden because
+the four boundary receipts must survive separate shells and host restarts
+during the 72-hour interval.
+
+At each boundary, fetch both approved packages at their frozen exact positive
+numeric versions. Use the publisher identities because the migration operator
+has resource-level Token Creator on those identities and each publisher has
+accessor permission only on its own target package. Do not add Token Creator to
+a renderer or copy the Hetzner provisioner credential. Each payload exists only
+as a mode-`0600` temporary file, is checked for non-empty bytes, and is removed
+before its metadata-only receipt is committed. The existing fetcher validates it
+only in process memory; it is never printed, copied or checksummed into
+evidence, or retained after control cleanup. HUP, INT, TERM, and every normal
+exit remove the entire validated scratch directory. After an untrappable stop
+or host restart, the next stage removes any matching stale scratch, receipt
+staging, request, response, and page-token files, then aborts before network or
+secret access; that interruption resets T0. The Logging access token exists
+only in shell memory and curl's stdin configuration pipe and is immediately
+unset; it is never written to a file or placed in an executed process argv.
 
 ```bash
+set -euo pipefail
 set +x
+unset CLOUDSDK_AUTH_ACCESS_TOKEN
+unset CLOUDSDK_AUTH_ACCESS_TOKEN_FILE
+umask 077
 project_id='intexuraos-dev-pbuchman'
 project_number='544224260556'
-reviewed_sha='<40-character lowercase reviewed Git commit SHA>'
+org_id='398419898183'
+org_policy_reader_account='kontakt@pbuchman.com'
+reviewed_sha='c8c24cddfe652995f0d5c69dce0f912b3a2315b8'
+expected_inventory_sha256='6324dca830a96cff486aeff3a1cf3cad9bf2aa42192b1957de6362015e1e5413'
+expected_default_sink_filter='NOT LOG_ID("cloudaudit.googleapis.com/activity") AND NOT LOG_ID("externalaudit.googleapis.com/activity") AND NOT LOG_ID("cloudaudit.googleapis.com/system_event") AND NOT LOG_ID("externalaudit.googleapis.com/system_event") AND NOT LOG_ID("cloudaudit.googleapis.com/access_transparency") AND NOT LOG_ID("externalaudit.googleapis.com/access_transparency")'
+operator_credential_file="${HOME}/.config/gcloud/sa-key.json"
 [[ "${reviewed_sha}" =~ ^[0-9a-f]{40}$ ]]
-git cat-file -e "${reviewed_sha}^{commit}"
+repo_root="$(git rev-parse --show-toplevel)"
+git -C "${repo_root}" cat-file -e "${reviewed_sha}^{commit}"
 
-legacy_gate_dir="$(mktemp -d "${TMPDIR:-/tmp}/legacy-read-gate.XXXXXX")"
+git -C "${repo_root}" diff --quiet "${reviewed_sha}" -- \
+  terraform/environments/dev/main.tf \
+  config/environments/secret-packages.json \
+  scripts/secret-package.mjs \
+  scripts/lib/secret-package.mjs \
+  scripts/lib/dev-secret-sync-lock.mjs
+
+OPERATOR_CREDENTIAL_FILE="${operator_credential_file}" \
+  EXPECTED_PROJECT_ID="${project_id}" node <<'NODE'
+const { lstatSync, readFileSync } = require('node:fs');
+const path = process.env.OPERATOR_CREDENTIAL_FILE;
+const projectId = process.env.EXPECTED_PROJECT_ID;
+if (typeof path !== 'string' || typeof projectId !== 'string') process.exit(1);
+const status = lstatSync(path);
+if (
+  !status.isFile() ||
+  status.isSymbolicLink() ||
+  (status.mode & 0o777) !== 0o600 ||
+  status.uid !== process.getuid()
+) {
+  process.exit(1);
+}
+const metadata = JSON.parse(readFileSync(path, 'utf8'));
+if (
+  metadata.type !== 'service_account' ||
+  metadata.client_email !==
+    'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com' ||
+  metadata.project_id !== projectId ||
+  typeof metadata.private_key_id !== 'string' ||
+  metadata.private_key_id.length === 0
+) {
+  process.exit(2);
+}
+NODE
+
+legacy_gate_parent="${HOME}/.local/state/intexuraos/secret-migration"
+if [[ -e "${legacy_gate_parent}" || -L "${legacy_gate_parent}" ]]; then
+  [[ -d "${legacy_gate_parent}" && ! -L "${legacy_gate_parent}" ]]
+fi
+install -d -m 700 "${legacy_gate_parent}"
+chmod 700 "${legacy_gate_parent}"
+GATE_PARENT="${legacy_gate_parent}" node <<'NODE'
+const { lstatSync, realpathSync } = require('node:fs');
+const parent = process.env.GATE_PARENT;
+if (typeof parent !== 'string' || !parent.startsWith('/')) process.exit(1);
+const status = lstatSync(parent);
+if (
+  realpathSync(parent) !== parent ||
+  !status.isDirectory() ||
+  status.isSymbolicLink() ||
+  (status.mode & 0o777) !== 0o700 ||
+  status.uid !== process.getuid()
+) {
+  process.exit(2);
+}
+NODE
+legacy_gate_dir="$(mktemp -d "${legacy_gate_parent}/legacy-read-gate.XXXXXX")"
 chmod 700 "${legacy_gate_dir}"
-trap 'rm -rf -- "${legacy_gate_dir}"' EXIT
+printf 'export LEGACY_GATE_DIR=%q\n' "${legacy_gate_dir}"
 
-git show "${reviewed_sha}:terraform/environments/dev/main.tf" \
+git -C "${repo_root}" show "${reviewed_sha}:terraform/environments/dev/main.tf" \
   >"${legacy_gate_dir}/reviewed-main.tf"
 chmod 600 "${legacy_gate_dir}/reviewed-main.tf"
 
@@ -1375,93 +1489,1748 @@ NODE
 
 jq -e 'length == 34 and . == (sort | unique)' \
   "${legacy_gate_dir}/legacy-names.json" >/dev/null
-```
 
-At each boundary, fetch one approved package at an exact positive numeric
-version through its least-privilege renderer. The payload is written to a
-mode-`0600` temporary file, checked only for non-empty bytes, and immediately
-removed. It is never printed, parsed, checksummed into evidence, or retained.
-Run `run_package_control t0` immediately after the final package-based consumer
-restart. At least 72 continuous hours later, run `run_package_control t1` and
-make no further direct legacy accesses.
+inventory_sha256="$(node - "${legacy_gate_dir}/legacy-names.json" <<'NODE'
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+process.stdout.write(createHash('sha256').update(readFileSync(process.argv[2])).digest('hex'));
+NODE
+)"
+[[ "${inventory_sha256}" == "${expected_inventory_sha256}" ]]
+rm -f -- "${legacy_gate_dir}/reviewed-main.tf"
 
-```bash
-control_secret='INTEXURAOS_SECRET_PACKAGE_DEV'
-control_version='<positive numeric DEV package version>'
-control_principal='ixos-home-secret-renderer-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
-[[ "${control_version}" =~ ^[1-9][0-9]*$ ]]
+jq -n \
+  --arg reviewedSha "${reviewed_sha}" \
+  --arg inventorySha256 "${inventory_sha256}" \
+  --slurpfile names "${legacy_gate_dir}/legacy-names.json" \
+  '{reviewedSha:$reviewedSha,inventorySha256:$inventorySha256,
+    legacyNameCount:($names[0] | length),legacyNames:$names[0]}' \
+  >"${legacy_gate_dir}/inventory.json"
+chmod 600 "${legacy_gate_dir}/inventory.json"
+dev_control_secret='INTEXURAOS_SECRET_PACKAGE_DEV'
+dev_control_version='2'
+dev_control_principal='ixos-secret-publisher-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+prod_control_secret='INTEXURAOS_SECRET_PACKAGE_PROD'
+prod_control_version='2'
+prod_control_principal='ixos-secret-publisher-prod@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+[[ "${dev_control_version}" =~ ^[1-9][0-9]*$ ]]
+[[ "${prod_control_version}" =~ ^[1-9][0-9]*$ ]]
 
-run_package_control() {
+git -C "${repo_root}" show "${reviewed_sha}:config/environments/secret-packages.json" \
+  >"${legacy_gate_dir}/reviewed-manifest.json"
+chmod 600 "${legacy_gate_dir}/reviewed-manifest.json"
+jq -e \
+  --arg devSecret "${dev_control_secret}" \
+  --arg devVersion "${dev_control_version}" \
+  --arg prodSecret "${prod_control_secret}" \
+  --arg prodVersion "${prod_control_version}" \
+  '.packages.dev.secretId == $devSecret and
+   (.packages.dev.stableVersion | tostring) == $devVersion and
+   .packages.prod.secretId == $prodSecret and
+   (.packages.prod.stableVersion | tostring) == $prodVersion' \
+  "${legacy_gate_dir}/reviewed-manifest.json" >/dev/null
+rm -f -- "${legacy_gate_dir}/reviewed-manifest.json"
+
+verify_inventory_integrity() {
   local boundary="$1"
-  local output_file="${legacy_gate_dir}/control-${boundary}.json"
-  local payload_file=''
-  local before=''
-  local after=''
-  [[ "${boundary}" == 't0' || "${boundary}" == 't1' ]]
+  local actual_inventory_sha256=''
+  local output_file="${legacy_gate_dir}/inventory-check-${boundary}.json"
+  local staging_file="${output_file}.tmp.$$"
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
   [[ ! -e "${output_file}" ]]
 
-  payload_file="${legacy_gate_dir}/control-payload-${boundary}.json"
-  [[ ! -e "${payload_file}" ]]
+  actual_inventory_sha256="$(node - \
+    "${legacy_gate_dir}/legacy-names.json" \
+    "${legacy_gate_dir}/inventory.json" \
+    "${reviewed_sha}" "${expected_inventory_sha256}" <<'NODE'
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+const [namesPath, inventoryPath, reviewedSha, expectedHash] = process.argv.slice(2);
+const namesSource = readFileSync(namesPath);
+const names = JSON.parse(namesSource.toString('utf8'));
+const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+const sorted = Array.isArray(names) ? [...names].sort() : [];
+const validNames =
+  Array.isArray(names) &&
+  names.length === 34 &&
+  new Set(names).size === 34 &&
+  names.every((name, index) =>
+    typeof name === 'string' &&
+    /^INTEXURAOS_[A-Z0-9_]+$/u.test(name) &&
+    name === sorted[index]
+  );
+const actualHash = createHash('sha256').update(namesSource).digest('hex');
+const inventoryMatches =
+  inventory.reviewedSha === reviewedSha &&
+  inventory.inventorySha256 === expectedHash &&
+  inventory.legacyNameCount === 34 &&
+  JSON.stringify(inventory.legacyNames) === JSON.stringify(names);
+if (!validNames || actualHash !== expectedHash || !inventoryMatches) process.exit(1);
+process.stdout.write(actualHash);
+NODE
+  )"
+  [[ "${actual_inventory_sha256}" == "${expected_inventory_sha256}" ]]
+
+  jq -n \
+    --arg boundary "${boundary}" \
+    --arg checkedAt "$(node -e 'process.stdout.write(new Date().toISOString())')" \
+    --arg inventorySha256 "${actual_inventory_sha256}" \
+    '{boundary:$boundary,checkedAt:$checkedAt,
+      inventorySha256:$inventorySha256,result:"PASS"}' >"${staging_file}"
+  chmod 600 "${staging_file}"
+  mv -- "${staging_file}" "${output_file}"
+}
+
+verify_data_read_logging() (
+  set -euo pipefail
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/audit-config-${boundary}.json"
+  local scratch_dir=''
+  local scratch_name=''
+
+  cleanup_audit_config_ephemera() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .audit-config-t0.*|.audit-config-t1.*|.audit-config-query.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_audit_config_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  scratch_dir="$(mktemp -d "${legacy_gate_dir}/.audit-config-${boundary}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud projects describe "${project_id}" --format=json \
+    >"${scratch_dir}/project.json"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud projects get-iam-policy "${project_id}" --format=json \
+    >"${scratch_dir}/project-policy.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet organizations get-iam-policy "${org_id}" \
+      --account="${org_policy_reader_account}" --format=json \
+    >"${scratch_dir}/org-policy.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging read \
+      "logName=\"organizations/${org_id}/logs/cloudaudit.googleapis.com%2Factivity\"" \
+      --organization="${org_id}" --limit=1 --freshness=7d --order=desc \
+      --account="${org_policy_reader_account}" --format=json \
+    >/dev/null
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging read \
+      "logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Fdata_access\"" \
+      --project="${project_id}" --limit=1 --freshness=7d --order=desc \
+      --account="${org_policy_reader_account}" --format=json \
+    >/dev/null
+  chmod 600 "${scratch_dir}"/*.json
+
+  node - \
+    "${scratch_dir}/project.json" \
+    "${scratch_dir}/project-policy.json" \
+    "${scratch_dir}/org-policy.json" \
+    "${boundary}" "${project_id}" "${org_id}" \
+    "${org_policy_reader_account}" "${scratch_dir}/receipt.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  projectPath,
+  projectPolicyPath,
+  orgPolicyPath,
+  boundary,
+  projectId,
+  orgId,
+  orgPolicyReader,
+  outputPath,
+] = process.argv.slice(2);
+const project = JSON.parse(readFileSync(projectPath, 'utf8'));
+const projectPolicy = JSON.parse(readFileSync(projectPolicyPath, 'utf8'));
+const orgPolicy = JSON.parse(readFileSync(orgPolicyPath, 'utf8'));
+if (
+  project.projectId !== projectId ||
+  project.parent?.type !== 'organization' ||
+  String(project.parent?.id) !== orgId
+) {
+  process.exit(1);
+}
+const relevantServices = new Set(['secretmanager.googleapis.com', 'allServices']);
+const collectConfigs = (policy, scope) =>
+  (policy.auditConfigs ?? []).flatMap((auditConfig) => {
+    if (!relevantServices.has(auditConfig.service)) return [];
+    return (auditConfig.auditLogConfigs ?? [])
+      .filter((config) => config.logType === 'DATA_READ')
+      .map((config) => ({
+        scope,
+        service: auditConfig.service,
+        exemptedMembers: [...(config.exemptedMembers ?? [])].sort(),
+      }));
+  });
+const effectiveConfigs = [
+  ...collectConfigs(projectPolicy, `projects/${projectId}`),
+  ...collectConfigs(orgPolicy, `organizations/${orgId}`),
+].sort((left, right) =>
+  `${left.scope}:${left.service}`.localeCompare(`${right.scope}:${right.service}`),
+);
+const exemptedMembers = effectiveConfigs.flatMap((config) => config.exemptedMembers);
+if (effectiveConfigs.length === 0 || exemptedMembers.length !== 0) process.exit(2);
+const receipt = {
+  boundary,
+  checkedAt: new Date().toISOString(),
+  projectParent: { type: 'organization', id: orgId },
+  projectPolicyReader:
+    'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com',
+  orgPolicyReader,
+  orgLogAccessProbe: 'PASS',
+  projectPrivateLogAccessProbe: 'PASS',
+  effectiveConfigs,
+  exemptedMembers: [],
+  result: 'PASS',
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+  mv -- "${scratch_dir}/receipt.json" "${output_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+)
+
+verify_logging_route() (
+  set -euo pipefail
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/logging-route-${boundary}.json"
+  local scratch_dir=''
+  local scratch_name=''
+
+  cleanup_logging_route_ephemera() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .logging-route-t0.*|.logging-route-t1.*|.logging-route-query.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_logging_route_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  scratch_dir="$(mktemp -d "${legacy_gate_dir}/.logging-route-${boundary}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud logging sinks describe _Default --project="${project_id}" --format=json \
+    >"${scratch_dir}/sink.json"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud logging buckets describe _Default --location=global \
+      --project="${project_id}" --format=json >"${scratch_dir}/bucket.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging sinks list --organization="${org_id}" \
+      --account="${org_policy_reader_account}" --format=json \
+    >"${scratch_dir}/org-sinks.json"
+  chmod 600 "${scratch_dir}"/*.json
+
+  EXPECTED_DEFAULT_SINK_FILTER="${expected_default_sink_filter}" node - \
+    "${scratch_dir}/sink.json" "${scratch_dir}/bucket.json" \
+    "${scratch_dir}/org-sinks.json" \
+    "${boundary}" "${project_id}" "${org_id}" \
+    "${org_policy_reader_account}" "${scratch_dir}/receipt.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  sinkPath,
+  bucketPath,
+  orgSinksPath,
+  boundary,
+  projectId,
+  orgId,
+  orgPolicyReader,
+  outputPath,
+] = process.argv.slice(2);
+const sink = JSON.parse(readFileSync(sinkPath, 'utf8'));
+const bucket = JSON.parse(readFileSync(bucketPath, 'utf8'));
+const orgSinks = JSON.parse(readFileSync(orgSinksPath, 'utf8'));
+const expectedFilter = process.env.EXPECTED_DEFAULT_SINK_FILTER;
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const disabled = hasOwn(sink, 'disabled') ? sink.disabled : false;
+const exclusions = hasOwn(sink, 'exclusions') ? sink.exclusions : [];
+const locked = hasOwn(bucket, 'locked') ? bucket.locked : false;
+const expectedDestination =
+  `logging.googleapis.com/projects/${projectId}/locations/global/buckets/_Default`;
+const expectedBucketName = `projects/${projectId}/locations/global/buckets/_Default`;
+if (
+  sink.name !== '_Default' ||
+  sink.destination !== expectedDestination ||
+  sink.filter !== expectedFilter ||
+  typeof disabled !== 'boolean' ||
+  disabled !== false ||
+  !Array.isArray(exclusions) ||
+  exclusions.length !== 0
+) {
+  process.exit(1);
+}
+if (
+  bucket.name !== expectedBucketName ||
+  bucket.lifecycleState !== 'ACTIVE' ||
+  !Number.isInteger(bucket.retentionDays) ||
+  bucket.retentionDays < 30 ||
+  typeof locked !== 'boolean'
+) {
+  process.exit(2);
+}
+if (!Array.isArray(orgSinks)) process.exit(3);
+const booleanField = (object, key) => {
+  if (!hasOwn(object, key)) return false;
+  if (typeof object[key] !== 'boolean') throw new TypeError(`${key} must be boolean`);
+  return object[key];
+};
+const enabledInterceptingSinks = orgSinks.filter(
+  (orgSink) =>
+    !booleanField(orgSink, 'disabled') &&
+    booleanField(orgSink, 'includeChildren') &&
+    booleanField(orgSink, 'interceptChildren'),
+);
+if (enabledInterceptingSinks.length !== 0) process.exit(4);
+const receipt = {
+  boundary,
+  checkedAt: new Date().toISOString(),
+  sink: {
+    name: sink.name,
+    destination: sink.destination,
+    filter: sink.filter,
+    disabled,
+    exclusions: [],
+  },
+  bucket: {
+    name: bucket.name,
+    lifecycleState: bucket.lifecycleState,
+    retentionDays: bucket.retentionDays,
+    locked,
+  },
+  organization: {
+    id: orgId,
+    reader: orgPolicyReader,
+    sinkCount: orgSinks.length,
+    enabledInterceptingSinkCount: 0,
+  },
+  result: 'PASS',
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+  mv -- "${scratch_dir}/receipt.json" "${output_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+)
+
+preflight_no_stale_ephemera() {
+  local stale_path=''
+  local stale_name=''
+  local found=0
+  local candidates=()
+  shopt -s nullglob
+  candidates=(
+    "${legacy_gate_dir}"/.control-t0-dev.*
+    "${legacy_gate_dir}"/.control-t0-prod.*
+    "${legacy_gate_dir}"/.control-t1-dev.*
+    "${legacy_gate_dir}"/.control-t1-prod.*
+    "${legacy_gate_dir}"/control-t0-dev.json.tmp.*
+    "${legacy_gate_dir}"/control-t0-prod.json.tmp.*
+    "${legacy_gate_dir}"/control-t1-dev.json.tmp.*
+    "${legacy_gate_dir}"/control-t1-prod.json.tmp.*
+    "${legacy_gate_dir}"/.audit-config-t0.*
+    "${legacy_gate_dir}"/.audit-config-t1.*
+    "${legacy_gate_dir}"/.audit-config-query.*
+    "${legacy_gate_dir}"/.logging-route-t0.*
+    "${legacy_gate_dir}"/.logging-route-t1.*
+    "${legacy_gate_dir}"/.logging-route-query.*
+  )
+  shopt -u nullglob
+  for stale_path in "${candidates[@]}" \
+    "${legacy_gate_dir}/request.json" \
+    "${legacy_gate_dir}/response.json" \
+    "${legacy_gate_dir}/page-tokens"; do
+    [[ -e "${stale_path}" || -L "${stale_path}" ]] || continue
+    found=1
+    [[ "${stale_path}" == "${legacy_gate_dir}/"* ]]
+    stale_name="${stale_path#"${legacy_gate_dir}/"}"
+    case "${stale_name}" in
+      .control-t0-dev.*|.control-t0-prod.*|.control-t1-dev.*|.control-t1-prod.*|\
+      .audit-config-t0.*|.audit-config-t1.*|.audit-config-query.*|\
+      .logging-route-t0.*|.logging-route-t1.*|.logging-route-query.*)
+        rm -rf -- "${stale_path}"
+        ;;
+      control-t0-dev.json.tmp.*|control-t0-prod.json.tmp.*|\
+      control-t1-dev.json.tmp.*|control-t1-prod.json.tmp.*|\
+      request.json|response.json|page-tokens)
+        rm -f -- "${stale_path}"
+        ;;
+      *)
+        return 2
+        ;;
+    esac
+  done
+  if ((found != 0)); then
+    printf 'Removed stale secret-control ephemera; reset T0 before continuing\n' >&2
+    return 1
+  fi
+}
+
+run_package_control() (
+  set -euo pipefail
+  local boundary="$1"
+  local environment="$2"
+  local control_secret=''
+  local control_version=''
+  local control_principal=''
+  local output_file=''
+  local scratch_dir=''
+  local payload_file=''
+  local staging_file=''
+  local before=''
+  local after=''
+
+  cleanup_control_ephemera() {
+    local rc=$?
+    local scratch_name=''
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .control-t0-dev.*|.control-t0-prod.*|.control-t1-dev.*|.control-t1-prod.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *)
+          rc=1
+          ;;
+      esac
+    fi
+    if [[ -n "${staging_file}" ]]; then
+      [[ "${staging_file}" == "${output_file}.tmp."* ]] || rc=1
+      rm -f -- "${staging_file}" || rc=1
+    fi
+    exit "${rc}"
+  }
+
+  trap cleanup_control_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' ]]
+  case "${environment}" in
+    dev)
+      control_secret="${dev_control_secret}"
+      control_version="${dev_control_version}"
+      control_principal="${dev_control_principal}"
+      ;;
+    prod)
+      control_secret="${prod_control_secret}"
+      control_version="${prod_control_version}"
+      control_principal="${prod_control_principal}"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+  output_file="${legacy_gate_dir}/control-${boundary}-${environment}.json"
+  [[ ! -e "${output_file}" ]]
+  preflight_no_stale_ephemera
+
+  scratch_dir="$(mktemp -d \
+    "${legacy_gate_dir}/.control-${boundary}-${environment}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+  payload_file="${scratch_dir}/payload.json"
+  staging_file="${output_file}.tmp.$$"
   before="$(node -e 'process.stdout.write(new Date().toISOString())')"
-  CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT="${control_principal}" \
-    node scripts/secret-package.mjs fetch \
-      --environment dev \
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT="${control_principal}" \
+    node "${repo_root}/scripts/secret-package.mjs" fetch \
+      --environment "${environment}" \
       --version "${control_version}" \
       --project-id "${project_id}" \
       --output "${payload_file}" >/dev/null
   [[ -s "${payload_file}" ]]
-  rm -f -- "${payload_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
   after="$(node -e 'process.stdout.write(new Date().toISOString())')"
 
   jq -n \
     --arg boundary "${boundary}" \
+    --arg environment "${environment}" \
     --arg before "${before}" \
     --arg after "${after}" \
     --arg secret "${control_secret}" \
     --arg version "${control_version}" \
     --arg principal "${control_principal}" \
-    '{boundary:$boundary,before:$before,after:$after,
+    '{boundary:$boundary,environment:$environment,before:$before,after:$after,
       secret:$secret,version:$version,principal:$principal}' \
-    >"${output_file}"
-  chmod 600 "${output_file}"
+    >"${staging_file}"
+  chmod 600 "${staging_file}"
+  mv -- "${staging_file}" "${output_file}"
+  staging_file=''
+)
+
+# T0 stage: run only after the normal-traffic prerequisites above pass.
+repo_root="$(git rev-parse --show-toplevel)"
+preflight_no_stale_ephemera
+verify_inventory_integrity t0
+verify_data_read_logging t0
+verify_logging_route t0
+run_package_control t0 dev
+run_package_control t0 prod
+audit_t0="$(jq -sr 'map(.before) | min' \
+  "${legacy_gate_dir}/control-t0-dev.json" \
+  "${legacy_gate_dir}/control-t0-prod.json")"
+t0_controls_complete_at="$(jq -sr 'map(.after) | max' \
+  "${legacy_gate_dir}/control-t0-dev.json" \
+  "${legacy_gate_dir}/control-t0-prod.json")"
+
+node - "${audit_t0}" "${t0_controls_complete_at}" \
+  "${legacy_gate_dir}/t0.json" <<'NODE'
+const { writeFileSync, chmodSync } = require('node:fs');
+const [startText, controlsCompleteText, outputPath] = process.argv.slice(2);
+const start = Date.parse(startText);
+const controlsComplete = Date.parse(controlsCompleteText);
+if (!Number.isFinite(start) || !Number.isFinite(controlsComplete)) process.exit(1);
+const receipt = {
+  t0: new Date(start).toISOString(),
+  controlsCompleteAt: new Date(controlsComplete).toISOString(),
+  notBeforeT1: new Date(start + 72 * 60 * 60 * 1000).toISOString(),
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+```
+
+Exit the T0 shell without deleting `legacy_gate_dir` and preserve its printed
+absolute path as `LEGACY_GATE_DIR`. At least 72 continuous hours later, run the
+self-contained T1 block below from the reviewed repository. Its only operator
+input is that recorded path. The block redeclares every fixed value and helper;
+it never sources executable content from the mutable evidence workspace. The
+time check runs before any T1 receipt or package access, so an early attempt
+leaves no partial T1 boundary.
+
+```bash
+# T1 stage
+set -euo pipefail
+set +x
+unset CLOUDSDK_AUTH_ACCESS_TOKEN
+unset CLOUDSDK_AUTH_ACCESS_TOKEN_FILE
+umask 077
+project_id='intexuraos-dev-pbuchman'
+project_number='544224260556'
+org_id='398419898183'
+org_policy_reader_account='kontakt@pbuchman.com'
+reviewed_sha='c8c24cddfe652995f0d5c69dce0f912b3a2315b8'
+expected_inventory_sha256='6324dca830a96cff486aeff3a1cf3cad9bf2aa42192b1957de6362015e1e5413'
+expected_default_sink_filter='NOT LOG_ID("cloudaudit.googleapis.com/activity") AND NOT LOG_ID("externalaudit.googleapis.com/activity") AND NOT LOG_ID("cloudaudit.googleapis.com/system_event") AND NOT LOG_ID("externalaudit.googleapis.com/system_event") AND NOT LOG_ID("cloudaudit.googleapis.com/access_transparency") AND NOT LOG_ID("externalaudit.googleapis.com/access_transparency")'
+operator_credential_file="${HOME}/.config/gcloud/sa-key.json"
+legacy_gate_parent="${HOME}/.local/state/intexuraos/secret-migration"
+legacy_gate_dir="${LEGACY_GATE_DIR:?export LEGACY_GATE_DIR to the exact path printed at T0}"
+repo_root="$(git rev-parse --show-toplevel)"
+dev_control_secret='INTEXURAOS_SECRET_PACKAGE_DEV'
+dev_control_version='2'
+dev_control_principal='ixos-secret-publisher-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+prod_control_secret='INTEXURAOS_SECRET_PACKAGE_PROD'
+prod_control_version='2'
+prod_control_principal='ixos-secret-publisher-prod@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+
+GATE_PARENT="${legacy_gate_parent}" \
+  GATE_DIR="${legacy_gate_dir}" \
+  OPERATOR_CREDENTIAL_FILE="${operator_credential_file}" \
+  EXPECTED_PROJECT_ID="${project_id}" node <<'NODE'
+const { lstatSync, readFileSync, realpathSync } = require('node:fs');
+const { basename, dirname } = require('node:path');
+const parent = process.env.GATE_PARENT;
+const gate = process.env.GATE_DIR;
+const credential = process.env.OPERATOR_CREDENTIAL_FILE;
+const projectId = process.env.EXPECTED_PROJECT_ID;
+if (![parent, gate, credential, projectId].every((value) => typeof value === 'string')) {
+  process.exit(1);
+}
+const parentStatus = lstatSync(parent);
+const gateStatus = lstatSync(gate);
+if (
+  !parent.startsWith('/') ||
+  realpathSync(parent) !== parent ||
+  !parentStatus.isDirectory() ||
+  parentStatus.isSymbolicLink() ||
+  (parentStatus.mode & 0o777) !== 0o700 ||
+  parentStatus.uid !== process.getuid() ||
+  !gate.startsWith('/') ||
+  realpathSync(gate) !== gate ||
+  realpathSync(dirname(gate)) !== realpathSync(parent) ||
+  !/^legacy-read-gate\.[A-Za-z0-9]+$/u.test(basename(gate)) ||
+  !gateStatus.isDirectory() ||
+  gateStatus.isSymbolicLink() ||
+  (gateStatus.mode & 0o777) !== 0o700 ||
+  gateStatus.uid !== process.getuid()
+) {
+  process.exit(2);
+}
+const credentialStatus = lstatSync(credential);
+const metadata = JSON.parse(readFileSync(credential, 'utf8'));
+if (
+  !credentialStatus.isFile() ||
+  credentialStatus.isSymbolicLink() ||
+  (credentialStatus.mode & 0o777) !== 0o600 ||
+  credentialStatus.uid !== process.getuid() ||
+  metadata.type !== 'service_account' ||
+  metadata.client_email !==
+    'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com' ||
+  metadata.project_id !== projectId ||
+  typeof metadata.private_key_id !== 'string' ||
+  metadata.private_key_id.length === 0
+) {
+  process.exit(3);
+}
+NODE
+
+git -C "${repo_root}" cat-file -e "${reviewed_sha}^{commit}"
+git -C "${repo_root}" diff --quiet "${reviewed_sha}" -- \
+  terraform/environments/dev/main.tf \
+  config/environments/secret-packages.json \
+  scripts/secret-package.mjs \
+  scripts/lib/secret-package.mjs \
+  scripts/lib/dev-secret-sync-lock.mjs
+
+verify_inventory_integrity() {
+  local boundary="$1"
+  local actual_inventory_sha256=''
+  local output_file="${legacy_gate_dir}/inventory-check-${boundary}.json"
+  local staging_file="${output_file}.tmp.$$"
+  [[ "${boundary}" == 't1' ]]
+  [[ ! -e "${output_file}" ]]
+  actual_inventory_sha256="$(node - \
+    "${legacy_gate_dir}/legacy-names.json" \
+    "${legacy_gate_dir}/inventory.json" \
+    "${reviewed_sha}" "${expected_inventory_sha256}" <<'NODE'
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+const [namesPath, inventoryPath, reviewedSha, expectedHash] = process.argv.slice(2);
+const namesSource = readFileSync(namesPath);
+const names = JSON.parse(namesSource.toString('utf8'));
+const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+const sorted = Array.isArray(names) ? [...names].sort() : [];
+const validNames =
+  Array.isArray(names) && names.length === 34 && new Set(names).size === 34 &&
+  names.every((name, index) =>
+    typeof name === 'string' && /^INTEXURAOS_[A-Z0-9_]+$/u.test(name) &&
+    name === sorted[index]
+  );
+const actualHash = createHash('sha256').update(namesSource).digest('hex');
+const inventoryMatches =
+  inventory.reviewedSha === reviewedSha &&
+  inventory.inventorySha256 === expectedHash &&
+  inventory.legacyNameCount === 34 &&
+  JSON.stringify(inventory.legacyNames) === JSON.stringify(names);
+if (!validNames || actualHash !== expectedHash || !inventoryMatches) process.exit(1);
+process.stdout.write(actualHash);
+NODE
+  )"
+  [[ "${actual_inventory_sha256}" == "${expected_inventory_sha256}" ]]
+  jq -n \
+    --arg boundary "${boundary}" \
+    --arg checkedAt "$(node -e 'process.stdout.write(new Date().toISOString())')" \
+    --arg inventorySha256 "${actual_inventory_sha256}" \
+    '{boundary:$boundary,checkedAt:$checkedAt,
+      inventorySha256:$inventorySha256,result:"PASS"}' >"${staging_file}"
+  chmod 600 "${staging_file}"
+  mv -- "${staging_file}" "${output_file}"
 }
 
-# Boundary T0: run now, immediately after the last consumer restart.
-run_package_control t0
-audit_t0="$(jq -er '.before' "${legacy_gate_dir}/control-t0.json")"
+verify_data_read_logging() (
+  set -euo pipefail
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/audit-config-${boundary}.json"
+  local scratch_dir=''
+  local scratch_name=''
 
-# Boundary T1: run only after at least 72 continuous hours, in the same
-# protected evidence workspace.
-run_package_control t1
-audit_t1="$(jq -er '.after' "${legacy_gate_dir}/control-t1.json")"
+  cleanup_audit_config_ephemera() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .audit-config-t0.*|.audit-config-t1.*|.audit-config-query.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_audit_config_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
-node - "${audit_t0}" "${audit_t1}" <<'NODE'
-const [startText, endText] = process.argv.slice(2);
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  scratch_dir="$(mktemp -d "${legacy_gate_dir}/.audit-config-${boundary}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud projects describe "${project_id}" --format=json \
+    >"${scratch_dir}/project.json"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud projects get-iam-policy "${project_id}" --format=json \
+    >"${scratch_dir}/project-policy.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet organizations get-iam-policy "${org_id}" \
+      --account="${org_policy_reader_account}" --format=json \
+    >"${scratch_dir}/org-policy.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging read \
+      "logName=\"organizations/${org_id}/logs/cloudaudit.googleapis.com%2Factivity\"" \
+      --organization="${org_id}" --limit=1 --freshness=7d --order=desc \
+      --account="${org_policy_reader_account}" --format=json \
+    >/dev/null
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging read \
+      "logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Fdata_access\"" \
+      --project="${project_id}" --limit=1 --freshness=7d --order=desc \
+      --account="${org_policy_reader_account}" --format=json \
+    >/dev/null
+  chmod 600 "${scratch_dir}"/*.json
+
+  node - \
+    "${scratch_dir}/project.json" \
+    "${scratch_dir}/project-policy.json" \
+    "${scratch_dir}/org-policy.json" \
+    "${boundary}" "${project_id}" "${org_id}" \
+    "${org_policy_reader_account}" "${scratch_dir}/receipt.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  projectPath,
+  projectPolicyPath,
+  orgPolicyPath,
+  boundary,
+  projectId,
+  orgId,
+  orgPolicyReader,
+  outputPath,
+] = process.argv.slice(2);
+const project = JSON.parse(readFileSync(projectPath, 'utf8'));
+const projectPolicy = JSON.parse(readFileSync(projectPolicyPath, 'utf8'));
+const orgPolicy = JSON.parse(readFileSync(orgPolicyPath, 'utf8'));
+if (
+  project.projectId !== projectId ||
+  project.parent?.type !== 'organization' ||
+  String(project.parent?.id) !== orgId
+) {
+  process.exit(1);
+}
+const relevantServices = new Set(['secretmanager.googleapis.com', 'allServices']);
+const collectConfigs = (policy, scope) =>
+  (policy.auditConfigs ?? []).flatMap((auditConfig) => {
+    if (!relevantServices.has(auditConfig.service)) return [];
+    return (auditConfig.auditLogConfigs ?? [])
+      .filter((config) => config.logType === 'DATA_READ')
+      .map((config) => ({
+        scope,
+        service: auditConfig.service,
+        exemptedMembers: [...(config.exemptedMembers ?? [])].sort(),
+      }));
+  });
+const effectiveConfigs = [
+  ...collectConfigs(projectPolicy, `projects/${projectId}`),
+  ...collectConfigs(orgPolicy, `organizations/${orgId}`),
+].sort((left, right) =>
+  `${left.scope}:${left.service}`.localeCompare(`${right.scope}:${right.service}`),
+);
+const exemptedMembers = effectiveConfigs.flatMap((config) => config.exemptedMembers);
+if (effectiveConfigs.length === 0 || exemptedMembers.length !== 0) process.exit(2);
+const receipt = {
+  boundary,
+  checkedAt: new Date().toISOString(),
+  projectParent: { type: 'organization', id: orgId },
+  projectPolicyReader:
+    'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com',
+  orgPolicyReader,
+  orgLogAccessProbe: 'PASS',
+  projectPrivateLogAccessProbe: 'PASS',
+  effectiveConfigs,
+  exemptedMembers: [],
+  result: 'PASS',
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+  mv -- "${scratch_dir}/receipt.json" "${output_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+)
+
+verify_logging_route() (
+  set -euo pipefail
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/logging-route-${boundary}.json"
+  local scratch_dir=''
+  local scratch_name=''
+
+  cleanup_logging_route_ephemera() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .logging-route-t0.*|.logging-route-t1.*|.logging-route-query.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_logging_route_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  scratch_dir="$(mktemp -d "${legacy_gate_dir}/.logging-route-${boundary}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud logging sinks describe _Default --project="${project_id}" --format=json \
+    >"${scratch_dir}/sink.json"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud logging buckets describe _Default --location=global \
+      --project="${project_id}" --format=json >"${scratch_dir}/bucket.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging sinks list --organization="${org_id}" \
+      --account="${org_policy_reader_account}" --format=json \
+    >"${scratch_dir}/org-sinks.json"
+  chmod 600 "${scratch_dir}"/*.json
+
+  EXPECTED_DEFAULT_SINK_FILTER="${expected_default_sink_filter}" node - \
+    "${scratch_dir}/sink.json" "${scratch_dir}/bucket.json" \
+    "${scratch_dir}/org-sinks.json" \
+    "${boundary}" "${project_id}" "${org_id}" \
+    "${org_policy_reader_account}" "${scratch_dir}/receipt.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  sinkPath,
+  bucketPath,
+  orgSinksPath,
+  boundary,
+  projectId,
+  orgId,
+  orgPolicyReader,
+  outputPath,
+] = process.argv.slice(2);
+const sink = JSON.parse(readFileSync(sinkPath, 'utf8'));
+const bucket = JSON.parse(readFileSync(bucketPath, 'utf8'));
+const orgSinks = JSON.parse(readFileSync(orgSinksPath, 'utf8'));
+const expectedFilter = process.env.EXPECTED_DEFAULT_SINK_FILTER;
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const disabled = hasOwn(sink, 'disabled') ? sink.disabled : false;
+const exclusions = hasOwn(sink, 'exclusions') ? sink.exclusions : [];
+const locked = hasOwn(bucket, 'locked') ? bucket.locked : false;
+const expectedDestination =
+  `logging.googleapis.com/projects/${projectId}/locations/global/buckets/_Default`;
+const expectedBucketName = `projects/${projectId}/locations/global/buckets/_Default`;
+if (
+  sink.name !== '_Default' ||
+  sink.destination !== expectedDestination ||
+  sink.filter !== expectedFilter ||
+  typeof disabled !== 'boolean' ||
+  disabled !== false ||
+  !Array.isArray(exclusions) ||
+  exclusions.length !== 0
+) {
+  process.exit(1);
+}
+if (
+  bucket.name !== expectedBucketName ||
+  bucket.lifecycleState !== 'ACTIVE' ||
+  !Number.isInteger(bucket.retentionDays) ||
+  bucket.retentionDays < 30 ||
+  typeof locked !== 'boolean'
+) {
+  process.exit(2);
+}
+if (!Array.isArray(orgSinks)) process.exit(3);
+const booleanField = (object, key) => {
+  if (!hasOwn(object, key)) return false;
+  if (typeof object[key] !== 'boolean') throw new TypeError(`${key} must be boolean`);
+  return object[key];
+};
+const enabledInterceptingSinks = orgSinks.filter(
+  (orgSink) =>
+    !booleanField(orgSink, 'disabled') &&
+    booleanField(orgSink, 'includeChildren') &&
+    booleanField(orgSink, 'interceptChildren'),
+);
+if (enabledInterceptingSinks.length !== 0) process.exit(4);
+const receipt = {
+  boundary,
+  checkedAt: new Date().toISOString(),
+  sink: {
+    name: sink.name,
+    destination: sink.destination,
+    filter: sink.filter,
+    disabled,
+    exclusions: [],
+  },
+  bucket: {
+    name: bucket.name,
+    lifecycleState: bucket.lifecycleState,
+    retentionDays: bucket.retentionDays,
+    locked,
+  },
+  organization: {
+    id: orgId,
+    reader: orgPolicyReader,
+    sinkCount: orgSinks.length,
+    enabledInterceptingSinkCount: 0,
+  },
+  result: 'PASS',
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+  mv -- "${scratch_dir}/receipt.json" "${output_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+)
+
+preflight_no_stale_ephemera() {
+  local stale_path=''
+  local stale_name=''
+  local found=0
+  local candidates=()
+  shopt -s nullglob
+  candidates=(
+    "${legacy_gate_dir}"/.control-t0-dev.*
+    "${legacy_gate_dir}"/.control-t0-prod.*
+    "${legacy_gate_dir}"/.control-t1-dev.*
+    "${legacy_gate_dir}"/.control-t1-prod.*
+    "${legacy_gate_dir}"/control-t0-dev.json.tmp.*
+    "${legacy_gate_dir}"/control-t0-prod.json.tmp.*
+    "${legacy_gate_dir}"/control-t1-dev.json.tmp.*
+    "${legacy_gate_dir}"/control-t1-prod.json.tmp.*
+    "${legacy_gate_dir}"/.audit-config-t0.*
+    "${legacy_gate_dir}"/.audit-config-t1.*
+    "${legacy_gate_dir}"/.audit-config-query.*
+    "${legacy_gate_dir}"/.logging-route-t0.*
+    "${legacy_gate_dir}"/.logging-route-t1.*
+    "${legacy_gate_dir}"/.logging-route-query.*
+  )
+  shopt -u nullglob
+  for stale_path in "${candidates[@]}" \
+    "${legacy_gate_dir}/request.json" \
+    "${legacy_gate_dir}/response.json" \
+    "${legacy_gate_dir}/page-tokens"; do
+    [[ -e "${stale_path}" || -L "${stale_path}" ]] || continue
+    found=1
+    [[ "${stale_path}" == "${legacy_gate_dir}/"* ]]
+    stale_name="${stale_path#"${legacy_gate_dir}/"}"
+    case "${stale_name}" in
+      .control-t0-dev.*|.control-t0-prod.*|.control-t1-dev.*|.control-t1-prod.*|\
+      .audit-config-t0.*|.audit-config-t1.*|.audit-config-query.*|\
+      .logging-route-t0.*|.logging-route-t1.*|.logging-route-query.*)
+        rm -rf -- "${stale_path}"
+        ;;
+      control-t0-dev.json.tmp.*|control-t0-prod.json.tmp.*|\
+      control-t1-dev.json.tmp.*|control-t1-prod.json.tmp.*|\
+      request.json|response.json|page-tokens)
+        rm -f -- "${stale_path}"
+        ;;
+      *)
+        return 2
+        ;;
+    esac
+  done
+  if ((found != 0)); then
+    printf 'Removed stale secret-control ephemera; reset T0 before continuing\n' >&2
+    return 1
+  fi
+}
+
+run_package_control() (
+  set -euo pipefail
+  local boundary="$1"
+  local environment="$2"
+  local control_secret=''
+  local control_version=''
+  local control_principal=''
+  local output_file=''
+  local scratch_dir=''
+  local payload_file=''
+  local staging_file=''
+  local before=''
+  local after=''
+  cleanup_control_ephemera() {
+    local rc=$?
+    local scratch_name=''
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .control-t0-dev.*|.control-t0-prod.*|.control-t1-dev.*|.control-t1-prod.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    if [[ -n "${staging_file}" ]]; then
+      [[ "${staging_file}" == "${output_file}.tmp."* ]] || rc=1
+      rm -f -- "${staging_file}" || rc=1
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_control_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  [[ "${boundary}" == 't1' ]]
+  case "${environment}" in
+    dev)
+      control_secret="${dev_control_secret}"
+      control_version="${dev_control_version}"
+      control_principal="${dev_control_principal}"
+      ;;
+    prod)
+      control_secret="${prod_control_secret}"
+      control_version="${prod_control_version}"
+      control_principal="${prod_control_principal}"
+      ;;
+    *) return 2 ;;
+  esac
+  output_file="${legacy_gate_dir}/control-${boundary}-${environment}.json"
+  [[ ! -e "${output_file}" ]]
+  preflight_no_stale_ephemera
+  scratch_dir="$(mktemp -d \
+    "${legacy_gate_dir}/.control-${boundary}-${environment}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+  payload_file="${scratch_dir}/payload.json"
+  staging_file="${output_file}.tmp.$$"
+  before="$(node -e 'process.stdout.write(new Date().toISOString())')"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT="${control_principal}" \
+    node "${repo_root}/scripts/secret-package.mjs" fetch \
+      --environment "${environment}" \
+      --version "${control_version}" \
+      --project-id "${project_id}" \
+      --output "${payload_file}" >/dev/null
+  [[ -s "${payload_file}" ]]
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+  after="$(node -e 'process.stdout.write(new Date().toISOString())')"
+  jq -n \
+    --arg boundary "${boundary}" \
+    --arg environment "${environment}" \
+    --arg before "${before}" \
+    --arg after "${after}" \
+    --arg secret "${control_secret}" \
+    --arg version "${control_version}" \
+    --arg principal "${control_principal}" \
+    '{boundary:$boundary,environment:$environment,before:$before,after:$after,
+      secret:$secret,version:$version,principal:$principal}' >"${staging_file}"
+  chmod 600 "${staging_file}"
+  mv -- "${staging_file}" "${output_file}"
+  staging_file=''
+)
+
+preflight_no_stale_ephemera
+node - "${legacy_gate_dir}/t0.json" <<'NODE'
+const { readFileSync } = require('node:fs');
+const receipt = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const notBefore = Date.parse(receipt.notBeforeT1);
+if (!Number.isFinite(notBefore) || Date.now() < notBefore) process.exit(1);
+NODE
+
+verify_inventory_integrity t1
+verify_data_read_logging t1
+verify_logging_route t1
+run_package_control t1 dev
+run_package_control t1 prod
+audit_t0="$(jq -er '.t0' "${legacy_gate_dir}/t0.json")"
+audit_t1="$(jq -sr 'map(.after) | max' \
+  "${legacy_gate_dir}/control-t1-dev.json" \
+  "${legacy_gate_dir}/control-t1-prod.json")"
+
+node - "${audit_t0}" "${audit_t1}" "${legacy_gate_dir}/t1.json" <<'NODE'
+const { writeFileSync, chmodSync } = require('node:fs');
+const [startText, endText, outputPath] = process.argv.slice(2);
 const start = Date.parse(startText);
 const end = Date.parse(endText);
 if (!Number.isFinite(start) || !Number.isFinite(end)) process.exit(1);
 if (end - start < 72 * 60 * 60 * 1000) process.exit(2);
-if (Date.now() - end < 15 * 60 * 1000) process.exit(3);
+const receipt = {
+  t0: new Date(start).toISOString(),
+  t1: new Date(end).toISOString(),
+  durationSeconds: Math.floor((end - start) / 1000),
+  query_not_before: new Date(end + 15 * 60 * 1000).toISOString(),
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
 NODE
 ```
 
 Wait at least 15 minutes after `audit_t1` for log ingestion. The exact bounds
 are `timestamp>="${audit_t0}"` and `timestamp<="${audit_t1}"`. Build one filter
-that admits only the frozen 34 legacy resources plus the exact package control.
-Then call Logging `entries.list` until `nextPageToken` is absent—even if an
+that admits only the frozen 34 legacy resources, the two exact package controls,
+project and organization Admin Activity `SetIamPolicy` entries, and project
+`logging.googleapis.com` Admin Activity writes. Run the self-contained query
+block with the same recorded `LEGACY_GATE_DIR`; it redeclares and validates its
+entire context. The explicitly selected organization reader must authorize both
+project and organization `resourceNames`; a permission or reauthentication
+failure is STOP. Then call Logging `entries.list` until `nextPageToken` is absent—even if an
 intermediate page has no entries. The Logging API explicitly requires this
 behavior; see the [`entries.list` REST
 contract](https://cloud.google.com/logging/docs/reference/v2/rest/v2/entries/list).
+All mutation counters use the same closed `[audit_t0,audit_t1]` window and its
+15-minute delivery lag. The query-boundary policy, sink, bucket, and parent
+receipts are a fresh endpoint attestation; this procedure does not claim an
+unlagged exhaustive mutation count from `audit_t1` through query execution.
 Do not pass `--limit` to a `gcloud logging read` fallback; its default is
 unlimited, while a numeric limit would make the zero-read claim incomplete.
+The REST loop itself has a 10,000-page safety bound and rejects a repeated page
+token. Either condition is FAIL, never a truncated PASS.
 
 ```bash
+# Query stage
+set -euo pipefail
+set +x
+unset CLOUDSDK_AUTH_ACCESS_TOKEN
+unset CLOUDSDK_AUTH_ACCESS_TOKEN_FILE
+umask 077
+project_id='intexuraos-dev-pbuchman'
+project_number='544224260556'
+org_id='398419898183'
+org_policy_reader_account='kontakt@pbuchman.com'
+reviewed_sha='c8c24cddfe652995f0d5c69dce0f912b3a2315b8'
+expected_inventory_sha256='6324dca830a96cff486aeff3a1cf3cad9bf2aa42192b1957de6362015e1e5413'
+expected_default_sink_filter='NOT LOG_ID("cloudaudit.googleapis.com/activity") AND NOT LOG_ID("externalaudit.googleapis.com/activity") AND NOT LOG_ID("cloudaudit.googleapis.com/system_event") AND NOT LOG_ID("externalaudit.googleapis.com/system_event") AND NOT LOG_ID("cloudaudit.googleapis.com/access_transparency") AND NOT LOG_ID("externalaudit.googleapis.com/access_transparency")'
+operator_credential_file="${HOME}/.config/gcloud/sa-key.json"
+legacy_gate_parent="${HOME}/.local/state/intexuraos/secret-migration"
+legacy_gate_dir="${LEGACY_GATE_DIR:?export LEGACY_GATE_DIR to the exact path printed at T0}"
+dev_control_secret='INTEXURAOS_SECRET_PACKAGE_DEV'
+dev_control_version='2'
+dev_control_principal='ixos-secret-publisher-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+prod_control_secret='INTEXURAOS_SECRET_PACKAGE_PROD'
+prod_control_version='2'
+prod_control_principal='ixos-secret-publisher-prod@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
+
+GATE_PARENT="${legacy_gate_parent}" \
+  GATE_DIR="${legacy_gate_dir}" \
+  OPERATOR_CREDENTIAL_FILE="${operator_credential_file}" \
+  EXPECTED_PROJECT_ID="${project_id}" node <<'NODE'
+const { lstatSync, readFileSync, realpathSync } = require('node:fs');
+const { basename, dirname } = require('node:path');
+const parent = process.env.GATE_PARENT;
+const gate = process.env.GATE_DIR;
+const credential = process.env.OPERATOR_CREDENTIAL_FILE;
+const projectId = process.env.EXPECTED_PROJECT_ID;
+if (![parent, gate, credential, projectId].every((value) => typeof value === 'string')) {
+  process.exit(1);
+}
+const parentStatus = lstatSync(parent);
+const gateStatus = lstatSync(gate);
+if (
+  !parent.startsWith('/') ||
+  realpathSync(parent) !== parent ||
+  !parentStatus.isDirectory() ||
+  parentStatus.isSymbolicLink() ||
+  (parentStatus.mode & 0o777) !== 0o700 ||
+  parentStatus.uid !== process.getuid() ||
+  !gate.startsWith('/') ||
+  realpathSync(gate) !== gate ||
+  realpathSync(dirname(gate)) !== realpathSync(parent) ||
+  !/^legacy-read-gate\.[A-Za-z0-9]+$/u.test(basename(gate)) ||
+  !gateStatus.isDirectory() ||
+  gateStatus.isSymbolicLink() ||
+  (gateStatus.mode & 0o777) !== 0o700 ||
+  gateStatus.uid !== process.getuid()
+) {
+  process.exit(2);
+}
+const credentialStatus = lstatSync(credential);
+const metadata = JSON.parse(readFileSync(credential, 'utf8'));
+if (
+  !credentialStatus.isFile() ||
+  credentialStatus.isSymbolicLink() ||
+  (credentialStatus.mode & 0o777) !== 0o600 ||
+  credentialStatus.uid !== process.getuid() ||
+  metadata.type !== 'service_account' ||
+  metadata.client_email !==
+    'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com' ||
+  metadata.project_id !== projectId ||
+  typeof metadata.private_key_id !== 'string' ||
+  metadata.private_key_id.length === 0
+) {
+  process.exit(3);
+}
+NODE
+
+verify_inventory_integrity() {
+  local boundary="$1"
+  local actual_inventory_sha256=''
+  local output_file="${legacy_gate_dir}/inventory-check-${boundary}.json"
+  local staging_file="${output_file}.tmp.$$"
+  [[ "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  actual_inventory_sha256="$(node - \
+    "${legacy_gate_dir}/legacy-names.json" \
+    "${legacy_gate_dir}/inventory.json" \
+    "${reviewed_sha}" "${expected_inventory_sha256}" <<'NODE'
+const { createHash } = require('node:crypto');
+const { readFileSync } = require('node:fs');
+const [namesPath, inventoryPath, reviewedSha, expectedHash] = process.argv.slice(2);
+const namesSource = readFileSync(namesPath);
+const names = JSON.parse(namesSource.toString('utf8'));
+const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+const sorted = Array.isArray(names) ? [...names].sort() : [];
+const validNames =
+  Array.isArray(names) && names.length === 34 && new Set(names).size === 34 &&
+  names.every((name, index) =>
+    typeof name === 'string' && /^INTEXURAOS_[A-Z0-9_]+$/u.test(name) &&
+    name === sorted[index]
+  );
+const actualHash = createHash('sha256').update(namesSource).digest('hex');
+const inventoryMatches =
+  inventory.reviewedSha === reviewedSha &&
+  inventory.inventorySha256 === expectedHash &&
+  inventory.legacyNameCount === 34 &&
+  JSON.stringify(inventory.legacyNames) === JSON.stringify(names);
+if (!validNames || actualHash !== expectedHash || !inventoryMatches) process.exit(1);
+process.stdout.write(actualHash);
+NODE
+  )"
+  [[ "${actual_inventory_sha256}" == "${expected_inventory_sha256}" ]]
+  jq -n \
+    --arg boundary "${boundary}" \
+    --arg checkedAt "$(node -e 'process.stdout.write(new Date().toISOString())')" \
+    --arg inventorySha256 "${actual_inventory_sha256}" \
+    '{boundary:$boundary,checkedAt:$checkedAt,
+      inventorySha256:$inventorySha256,result:"PASS"}' >"${staging_file}"
+  chmod 600 "${staging_file}"
+  mv -- "${staging_file}" "${output_file}"
+}
+
+verify_data_read_logging() (
+  set -euo pipefail
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/audit-config-${boundary}.json"
+  local scratch_dir=''
+  local scratch_name=''
+
+  cleanup_audit_config_ephemera() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .audit-config-t0.*|.audit-config-t1.*|.audit-config-query.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_audit_config_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  scratch_dir="$(mktemp -d "${legacy_gate_dir}/.audit-config-${boundary}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud projects describe "${project_id}" --format=json \
+    >"${scratch_dir}/project.json"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud projects get-iam-policy "${project_id}" --format=json \
+    >"${scratch_dir}/project-policy.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet organizations get-iam-policy "${org_id}" \
+      --account="${org_policy_reader_account}" --format=json \
+    >"${scratch_dir}/org-policy.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging read \
+      "logName=\"organizations/${org_id}/logs/cloudaudit.googleapis.com%2Factivity\"" \
+      --organization="${org_id}" --limit=1 --freshness=7d --order=desc \
+      --account="${org_policy_reader_account}" --format=json \
+    >/dev/null
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging read \
+      "logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Fdata_access\"" \
+      --project="${project_id}" --limit=1 --freshness=7d --order=desc \
+      --account="${org_policy_reader_account}" --format=json \
+    >/dev/null
+  chmod 600 "${scratch_dir}"/*.json
+
+  node - \
+    "${scratch_dir}/project.json" \
+    "${scratch_dir}/project-policy.json" \
+    "${scratch_dir}/org-policy.json" \
+    "${boundary}" "${project_id}" "${org_id}" \
+    "${org_policy_reader_account}" "${scratch_dir}/receipt.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  projectPath,
+  projectPolicyPath,
+  orgPolicyPath,
+  boundary,
+  projectId,
+  orgId,
+  orgPolicyReader,
+  outputPath,
+] = process.argv.slice(2);
+const project = JSON.parse(readFileSync(projectPath, 'utf8'));
+const projectPolicy = JSON.parse(readFileSync(projectPolicyPath, 'utf8'));
+const orgPolicy = JSON.parse(readFileSync(orgPolicyPath, 'utf8'));
+if (
+  project.projectId !== projectId ||
+  project.parent?.type !== 'organization' ||
+  String(project.parent?.id) !== orgId
+) {
+  process.exit(1);
+}
+const relevantServices = new Set(['secretmanager.googleapis.com', 'allServices']);
+const collectConfigs = (policy, scope) =>
+  (policy.auditConfigs ?? []).flatMap((auditConfig) => {
+    if (!relevantServices.has(auditConfig.service)) return [];
+    return (auditConfig.auditLogConfigs ?? [])
+      .filter((config) => config.logType === 'DATA_READ')
+      .map((config) => ({
+        scope,
+        service: auditConfig.service,
+        exemptedMembers: [...(config.exemptedMembers ?? [])].sort(),
+      }));
+  });
+const effectiveConfigs = [
+  ...collectConfigs(projectPolicy, `projects/${projectId}`),
+  ...collectConfigs(orgPolicy, `organizations/${orgId}`),
+].sort((left, right) =>
+  `${left.scope}:${left.service}`.localeCompare(`${right.scope}:${right.service}`),
+);
+const exemptedMembers = effectiveConfigs.flatMap((config) => config.exemptedMembers);
+if (effectiveConfigs.length === 0 || exemptedMembers.length !== 0) process.exit(2);
+const receipt = {
+  boundary,
+  checkedAt: new Date().toISOString(),
+  projectParent: { type: 'organization', id: orgId },
+  projectPolicyReader:
+    'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com',
+  orgPolicyReader,
+  orgLogAccessProbe: 'PASS',
+  projectPrivateLogAccessProbe: 'PASS',
+  effectiveConfigs,
+  exemptedMembers: [],
+  result: 'PASS',
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+  mv -- "${scratch_dir}/receipt.json" "${output_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+)
+
+verify_logging_route() (
+  set -euo pipefail
+  local boundary="$1"
+  local output_file="${legacy_gate_dir}/logging-route-${boundary}.json"
+  local scratch_dir=''
+  local scratch_name=''
+
+  cleanup_logging_route_ephemera() {
+    local rc=$?
+    trap - EXIT
+    if [[ -n "${scratch_dir}" ]]; then
+      [[ "${scratch_dir}" == "${legacy_gate_dir}/"* ]] || rc=1
+      scratch_name="${scratch_dir#"${legacy_gate_dir}/"}"
+      case "${scratch_name}" in
+        .logging-route-t0.*|.logging-route-t1.*|.logging-route-query.*)
+          rm -rf -- "${scratch_dir}" || rc=1
+          ;;
+        *) rc=1 ;;
+      esac
+    fi
+    exit "${rc}"
+  }
+  trap cleanup_logging_route_ephemera EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  [[ "${boundary}" == 't0' || "${boundary}" == 't1' || "${boundary}" == 'query' ]]
+  [[ ! -e "${output_file}" ]]
+  scratch_dir="$(mktemp -d "${legacy_gate_dir}/.logging-route-${boundary}.XXXXXX")"
+  chmod 700 "${scratch_dir}"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud logging sinks describe _Default --project="${project_id}" --format=json \
+    >"${scratch_dir}/sink.json"
+  CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="${operator_credential_file}" \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud logging buckets describe _Default --location=global \
+      --project="${project_id}" --format=json >"${scratch_dir}/bucket.json"
+  env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet logging sinks list --organization="${org_id}" \
+      --account="${org_policy_reader_account}" --format=json \
+    >"${scratch_dir}/org-sinks.json"
+  chmod 600 "${scratch_dir}"/*.json
+
+  EXPECTED_DEFAULT_SINK_FILTER="${expected_default_sink_filter}" node - \
+    "${scratch_dir}/sink.json" "${scratch_dir}/bucket.json" \
+    "${scratch_dir}/org-sinks.json" \
+    "${boundary}" "${project_id}" "${org_id}" \
+    "${org_policy_reader_account}" "${scratch_dir}/receipt.json" <<'NODE'
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  sinkPath,
+  bucketPath,
+  orgSinksPath,
+  boundary,
+  projectId,
+  orgId,
+  orgPolicyReader,
+  outputPath,
+] = process.argv.slice(2);
+const sink = JSON.parse(readFileSync(sinkPath, 'utf8'));
+const bucket = JSON.parse(readFileSync(bucketPath, 'utf8'));
+const orgSinks = JSON.parse(readFileSync(orgSinksPath, 'utf8'));
+const expectedFilter = process.env.EXPECTED_DEFAULT_SINK_FILTER;
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const disabled = hasOwn(sink, 'disabled') ? sink.disabled : false;
+const exclusions = hasOwn(sink, 'exclusions') ? sink.exclusions : [];
+const locked = hasOwn(bucket, 'locked') ? bucket.locked : false;
+const expectedDestination =
+  `logging.googleapis.com/projects/${projectId}/locations/global/buckets/_Default`;
+const expectedBucketName = `projects/${projectId}/locations/global/buckets/_Default`;
+if (
+  sink.name !== '_Default' ||
+  sink.destination !== expectedDestination ||
+  sink.filter !== expectedFilter ||
+  typeof disabled !== 'boolean' ||
+  disabled !== false ||
+  !Array.isArray(exclusions) ||
+  exclusions.length !== 0
+) {
+  process.exit(1);
+}
+if (
+  bucket.name !== expectedBucketName ||
+  bucket.lifecycleState !== 'ACTIVE' ||
+  !Number.isInteger(bucket.retentionDays) ||
+  bucket.retentionDays < 30 ||
+  typeof locked !== 'boolean'
+) {
+  process.exit(2);
+}
+if (!Array.isArray(orgSinks)) process.exit(3);
+const booleanField = (object, key) => {
+  if (!hasOwn(object, key)) return false;
+  if (typeof object[key] !== 'boolean') throw new TypeError(`${key} must be boolean`);
+  return object[key];
+};
+const enabledInterceptingSinks = orgSinks.filter(
+  (orgSink) =>
+    !booleanField(orgSink, 'disabled') &&
+    booleanField(orgSink, 'includeChildren') &&
+    booleanField(orgSink, 'interceptChildren'),
+);
+if (enabledInterceptingSinks.length !== 0) process.exit(4);
+const receipt = {
+  boundary,
+  checkedAt: new Date().toISOString(),
+  sink: {
+    name: sink.name,
+    destination: sink.destination,
+    filter: sink.filter,
+    disabled,
+    exclusions: [],
+  },
+  bucket: {
+    name: bucket.name,
+    lifecycleState: bucket.lifecycleState,
+    retentionDays: bucket.retentionDays,
+    locked,
+  },
+  organization: {
+    id: orgId,
+    reader: orgPolicyReader,
+    sinkCount: orgSinks.length,
+    enabledInterceptingSinkCount: 0,
+  },
+  result: 'PASS',
+};
+writeFileSync(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+NODE
+  mv -- "${scratch_dir}/receipt.json" "${output_file}"
+  rm -rf -- "${scratch_dir}"
+  scratch_dir=''
+)
+
+preflight_no_stale_ephemera() {
+  local stale_path=''
+  local stale_name=''
+  local found=0
+  local candidates=()
+  shopt -s nullglob
+  candidates=(
+    "${legacy_gate_dir}"/.control-t0-dev.*
+    "${legacy_gate_dir}"/.control-t0-prod.*
+    "${legacy_gate_dir}"/.control-t1-dev.*
+    "${legacy_gate_dir}"/.control-t1-prod.*
+    "${legacy_gate_dir}"/control-t0-dev.json.tmp.*
+    "${legacy_gate_dir}"/control-t0-prod.json.tmp.*
+    "${legacy_gate_dir}"/control-t1-dev.json.tmp.*
+    "${legacy_gate_dir}"/control-t1-prod.json.tmp.*
+    "${legacy_gate_dir}"/.audit-config-t0.*
+    "${legacy_gate_dir}"/.audit-config-t1.*
+    "${legacy_gate_dir}"/.audit-config-query.*
+    "${legacy_gate_dir}"/.logging-route-t0.*
+    "${legacy_gate_dir}"/.logging-route-t1.*
+    "${legacy_gate_dir}"/.logging-route-query.*
+  )
+  shopt -u nullglob
+  for stale_path in "${candidates[@]}" \
+    "${legacy_gate_dir}/request.json" \
+    "${legacy_gate_dir}/response.json" \
+    "${legacy_gate_dir}/page-tokens"; do
+    [[ -e "${stale_path}" || -L "${stale_path}" ]] || continue
+    found=1
+    [[ "${stale_path}" == "${legacy_gate_dir}/"* ]]
+    stale_name="${stale_path#"${legacy_gate_dir}/"}"
+    case "${stale_name}" in
+      .control-t0-dev.*|.control-t0-prod.*|.control-t1-dev.*|.control-t1-prod.*|\
+      .audit-config-t0.*|.audit-config-t1.*|.audit-config-query.*|\
+      .logging-route-t0.*|.logging-route-t1.*|.logging-route-query.*)
+        rm -rf -- "${stale_path}"
+        ;;
+      control-t0-dev.json.tmp.*|control-t0-prod.json.tmp.*|\
+      control-t1-dev.json.tmp.*|control-t1-prod.json.tmp.*|\
+      request.json|response.json|page-tokens)
+        rm -f -- "${stale_path}"
+        ;;
+      *)
+        return 2
+        ;;
+    esac
+  done
+  if ((found != 0)); then
+    printf 'Removed stale secret-control ephemera; reset T0 before continuing\n' >&2
+    return 1
+  fi
+}
+
+preflight_no_stale_ephemera
+node - "${legacy_gate_dir}/t1.json" <<'NODE'
+const { readFileSync } = require('node:fs');
+const receipt = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const notBefore = Date.parse(receipt.query_not_before);
+if (!Number.isFinite(notBefore) || Date.now() < notBefore) process.exit(1);
+NODE
+
+verify_inventory_integrity query
+verify_data_read_logging query
+verify_logging_route query
+audit_t0="$(jq -er '.t0' "${legacy_gate_dir}/t1.json")"
+audit_t1="$(jq -er '.t1' "${legacy_gate_dir}/t1.json")"
+[[ ! -e "${legacy_gate_dir}/filter.txt" ]]
+[[ ! -e "${legacy_gate_dir}/entries.ndjson" ]]
+[[ ! -e "${legacy_gate_dir}/query.json" ]]
+[[ ! -e "${legacy_gate_dir}/result.json" ]]
+
+cleanup_logging_ephemera() {
+  local rc=$?
+  trap - EXIT
+  unset logging_access_token || true
+  rm -f -- \
+    "${legacy_gate_dir}/request.json" \
+    "${legacy_gate_dir}/response.json" \
+    "${legacy_gate_dir}/page-tokens" || rc=1
+  exit "${rc}"
+}
+remove_logging_ephemera() {
+  unset logging_access_token || true
+  rm -f -- \
+    "${legacy_gate_dir}/request.json" \
+    "${legacy_gate_dir}/response.json" \
+    "${legacy_gate_dir}/page-tokens"
+}
+trap cleanup_logging_ephemera EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+logging_access_token=''
+
 legacy_resource_regex="$(node - \
   "${legacy_gate_dir}/legacy-names.json" \
-  "${project_id}" "${project_number}" <<'NODE'
+  "${project_id}" "${project_number}" \
+  "${expected_inventory_sha256}" <<'NODE'
+const { createHash } = require('node:crypto');
 const { readFileSync } = require('node:fs');
-const [path, projectId, projectNumber] = process.argv.slice(2);
-const names = JSON.parse(readFileSync(path, 'utf8'));
+const [path, projectId, projectNumber, expectedHash] = process.argv.slice(2);
+const namesSource = readFileSync(path);
+const names = JSON.parse(namesSource.toString('utf8'));
+const actualHash = createHash('sha256').update(namesSource).digest('hex');
+if (actualHash !== expectedHash || !Array.isArray(names) || names.length !== 34) {
+  process.exit(1);
+}
 const escapeRe2 = (value) => value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 const alternatives = names.map(escapeRe2).join('|');
 process.stdout.write(
@@ -1471,45 +3240,75 @@ process.stdout.write(
 NODE
 )"
 
-control_resource_regex="^projects/(${project_id}|${project_number})/secrets/${control_secret}/versions/${control_version}$"
-legacy_filter="protoPayload.serviceName=\"secretmanager.googleapis.com\" AND protoPayload.methodName=\"google.cloud.secretmanager.v1.SecretManagerService.AccessSecretVersion\" AND timestamp>=\"${audit_t0}\" AND timestamp<=\"${audit_t1}\" AND (protoPayload.resourceName=~\"${legacy_resource_regex}\" OR protoPayload.resourceName=~\"${control_resource_regex}\")"
-printf '%s' "${legacy_filter}" >"${legacy_gate_dir}/filter.txt"
+control_resource_regex="^projects/(${project_id}|${project_number})/secrets/(${dev_control_secret}/versions/${dev_control_version}|${prod_control_secret}/versions/${prod_control_version})$"
+secret_manager_filter="logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Fdata_access\" AND protoPayload.serviceName=\"secretmanager.googleapis.com\" AND protoPayload.methodName=\"google.cloud.secretmanager.v1.SecretManagerService.AccessSecretVersion\" AND (protoPayload.resourceName=~\"${legacy_resource_regex}\" OR protoPayload.resourceName=~\"${control_resource_regex}\")"
+project_set_iam_policy_filter="logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Factivity\" AND protoPayload.serviceName=\"cloudresourcemanager.googleapis.com\" AND protoPayload.methodName=\"SetIamPolicy\""
+org_set_iam_policy_filter="logName=\"organizations/${org_id}/logs/cloudaudit.googleapis.com%2Factivity\" AND protoPayload.serviceName=\"cloudresourcemanager.googleapis.com\" AND protoPayload.methodName=\"SetIamPolicy\""
+project_hierarchy_mutation_filter="(logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Factivity\" OR logName=\"organizations/${org_id}/logs/cloudaudit.googleapis.com%2Factivity\") AND protoPayload.serviceName=\"cloudresourcemanager.googleapis.com\" AND (protoPayload.resourceName=\"projects/${project_id}\" OR protoPayload.resourceName=\"projects/${project_number}\")"
+project_logging_config_filter="logName=\"projects/${project_id}/logs/cloudaudit.googleapis.com%2Factivity\" AND protoPayload.serviceName=\"logging.googleapis.com\""
+org_logging_config_filter="logName=\"organizations/${org_id}/logs/cloudaudit.googleapis.com%2Factivity\" AND protoPayload.serviceName=\"logging.googleapis.com\""
+logging_config_filter="((${project_logging_config_filter}) OR (${org_logging_config_filter}))"
+audit_filter="timestamp>=\"${audit_t0}\" AND timestamp<=\"${audit_t1}\" AND ((${secret_manager_filter}) OR (${project_set_iam_policy_filter}) OR (${org_set_iam_policy_filter}) OR (${project_hierarchy_mutation_filter}) OR (${logging_config_filter}))"
+printf '%s' "${audit_filter}" >"${legacy_gate_dir}/filter.txt"
 chmod 600 "${legacy_gate_dir}/filter.txt"
 
 page_token=''
 page_count=0
 record_count=0
+max_page_count=10000
 : >"${legacy_gate_dir}/entries.ndjson"
+: >"${legacy_gate_dir}/page-tokens"
 chmod 600 "${legacy_gate_dir}/entries.ndjson"
-legacy_access_token="$(gcloud auth print-access-token)"
-printf 'Authorization: Bearer %s\n' "${legacy_access_token}" \
-  >"${legacy_gate_dir}/logging-auth-header"
-chmod 600 "${legacy_gate_dir}/logging-auth-header"
-unset legacy_access_token
+chmod 600 "${legacy_gate_dir}/page-tokens"
 
 while :; do
+  if ((page_count >= max_page_count)); then
+    printf 'Legacy audit exceeded fail-closed page bound\n' >&2
+    exit 1
+  fi
   jq -n \
     --arg project "projects/${project_id}" \
-    --arg filter "${legacy_filter}" \
+    --arg organization "organizations/${org_id}" \
+    --arg filter "${audit_filter}" \
     --arg token "${page_token}" \
-    '{resourceNames:[$project],filter:$filter,orderBy:"timestamp asc",pageSize:1000}
+    '{resourceNames:[$project,$organization],filter:$filter,
+      orderBy:"timestamp asc",pageSize:1000}
       + if $token == "" then {} else {pageToken:$token} end' \
     >"${legacy_gate_dir}/request.json"
   chmod 600 "${legacy_gate_dir}/request.json"
 
-  curl --fail --silent --show-error \
-    --request POST \
-    --header "@${legacy_gate_dir}/logging-auth-header" \
-    --header 'Content-Type: application/json' \
-    --data-binary "@${legacy_gate_dir}/request.json" \
-    'https://logging.googleapis.com/v2/entries:list' \
-    >"${legacy_gate_dir}/response.json"
+  logging_access_token="$(env -u GOOGLE_APPLICATION_CREDENTIALS \
+    CLOUDSDK_AUTH_ACCESS_TOKEN='' \
+    CLOUDSDK_AUTH_ACCESS_TOKEN_FILE='' \
+    CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE='' \
+    CLOUDSDK_CORE_DISABLE_PROMPTS=1 \
+    CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT='' \
+    gcloud --quiet auth print-access-token \
+      --account="${org_policy_reader_account}")"
+  [[ "${logging_access_token}" =~ ^[A-Za-z0-9._~-]+$ ]]
+  printf 'header = "Authorization: Bearer %s"\n' "${logging_access_token}" |
+    curl --disable --config - --fail --silent --show-error \
+      --connect-timeout 10 \
+      --max-time 60 \
+      --request POST \
+      --header 'Content-Type: application/json' \
+      --data-binary "@${legacy_gate_dir}/request.json" \
+      'https://logging.googleapis.com/v2/entries:list' \
+      >"${legacy_gate_dir}/response.json"
+  unset logging_access_token
   chmod 600 "${legacy_gate_dir}/response.json"
 
+  jq -e '(.error | not) and ((.entries // []) | type == "array")' \
+    "${legacy_gate_dir}/response.json" >/dev/null
   jq -c '.entries[]? | {
     timestamp,insertId,
+    logName,
+    resourceType:.resource.type,
+    serviceName:.protoPayload.serviceName,
+    methodName:.protoPayload.methodName,
     resourceName:.protoPayload.resourceName,
-    principalEmail:.protoPayload.authenticationInfo.principalEmail
+    principalEmail:.protoPayload.authenticationInfo.principalEmail,
+    statusCode:(.protoPayload.status.code // 0)
   }' "${legacy_gate_dir}/response.json" \
     >>"${legacy_gate_dir}/entries.ndjson"
   page_count=$((page_count + 1))
@@ -1518,28 +3317,243 @@ while :; do
   page_token="$(jq -er '.nextPageToken // ""' \
     "${legacy_gate_dir}/response.json")"
   [[ -n "${page_token}" ]] || break
+  if grep -Fqx -- "${page_token}" "${legacy_gate_dir}/page-tokens"; then
+    printf 'Legacy audit returned a repeated page token\n' >&2
+    exit 1
+  fi
+  printf '%s\n' "${page_token}" >>"${legacy_gate_dir}/page-tokens"
 done
+
+query_completed_at="$(node -e 'process.stdout.write(new Date().toISOString())')"
+remove_logging_ephemera
+trap - EXIT HUP INT TERM
+
+query_staging_file="${legacy_gate_dir}/query.json.tmp.$$"
+jq -n \
+  --argjson pages "${page_count}" \
+  --argjson records "${record_count}" \
+  --arg completedAt "${query_completed_at}" \
+  '{pages:$pages,records:$records,completedAt:$completedAt}' >"${query_staging_file}"
+chmod 600 "${query_staging_file}"
+mv -- "${query_staging_file}" "${legacy_gate_dir}/query.json"
 ```
 
-Classify locally against the frozen list and validate both exact-version
-positive controls within their recorded boundary windows. The only emitted
-evidence is counts and PASS/FAIL.
+Classify locally against the frozen list and validate all four exact-version
+positive controls within their recorded boundary windows. Record all four
+DEV/PROD package positive-control counts and no native-secret count, because
+native exceptions are not members of the frozen legacy set. The durable
+artifact contains only the reviewed SHA, inventory names/hash, timestamps,
+resource names, principal emails, page/record counts, control counts, and
+PASS/FAIL. It contains no payload, bearer token, full API response, reversible
+secret digest, or credential path.
 
 ```bash
+# Classification stage
+set -euo pipefail
+set +x
+unset CLOUDSDK_AUTH_ACCESS_TOKEN
+unset CLOUDSDK_AUTH_ACCESS_TOKEN_FILE
+umask 077
+project_id='intexuraos-dev-pbuchman'
+project_number='544224260556'
+org_id='398419898183'
+legacy_gate_parent="${HOME}/.local/state/intexuraos/secret-migration"
+legacy_gate_dir="${LEGACY_GATE_DIR:?export LEGACY_GATE_DIR to the exact path printed at T0}"
+GATE_PARENT="${legacy_gate_parent}" GATE_DIR="${legacy_gate_dir}" node <<'NODE'
+const { lstatSync, realpathSync } = require('node:fs');
+const { basename, dirname } = require('node:path');
+const parent = process.env.GATE_PARENT;
+const gate = process.env.GATE_DIR;
+if (typeof parent !== 'string' || typeof gate !== 'string') process.exit(1);
+const parentStatus = lstatSync(parent);
+const status = lstatSync(gate);
+if (
+  !parent.startsWith('/') ||
+  realpathSync(parent) !== parent ||
+  !parentStatus.isDirectory() ||
+  parentStatus.isSymbolicLink() ||
+  (parentStatus.mode & 0o777) !== 0o700 ||
+  parentStatus.uid !== process.getuid() ||
+  !gate.startsWith('/') ||
+  realpathSync(gate) !== gate ||
+  realpathSync(dirname(gate)) !== realpathSync(parent) ||
+  !/^legacy-read-gate\.[A-Za-z0-9]+$/u.test(basename(gate)) ||
+  !status.isDirectory() ||
+  status.isSymbolicLink() ||
+  (status.mode & 0o777) !== 0o700 ||
+  status.uid !== process.getuid()
+) {
+  process.exit(2);
+}
+NODE
+for stale_path in \
+  "${legacy_gate_dir}/request.json" \
+  "${legacy_gate_dir}/response.json" \
+  "${legacy_gate_dir}/page-tokens"; do
+  [[ ! -e "${stale_path}" && ! -L "${stale_path}" ]]
+done
+if compgen -G "${legacy_gate_dir}/.control-*" >/dev/null || \
+  compgen -G "${legacy_gate_dir}/.audit-config-*" >/dev/null || \
+  compgen -G "${legacy_gate_dir}/.logging-route-*" >/dev/null || \
+  compgen -G "${legacy_gate_dir}/control-*.json.tmp.*" >/dev/null || \
+  compgen -G "${legacy_gate_dir}/query.json.tmp.*" >/dev/null; then
+  printf 'Stale secret-migration ephemera forbids classification\n' >&2
+  exit 1
+fi
+page_count="$(jq -er '.pages | numbers' "${legacy_gate_dir}/query.json")"
+record_count="$(jq -er '.records | numbers' "${legacy_gate_dir}/query.json")"
+query_completed_at="$(jq -er '.completedAt | strings' "${legacy_gate_dir}/query.json")"
 node - \
   "${legacy_gate_dir}/legacy-names.json" \
+  "${legacy_gate_dir}/inventory.json" \
   "${legacy_gate_dir}/entries.ndjson" \
-  "${legacy_gate_dir}/control-t0.json" \
-  "${legacy_gate_dir}/control-t1.json" \
-  "${project_id}" "${project_number}" \
-  "${page_count}" "${record_count}" <<'NODE'
-const { readFileSync } = require('node:fs');
-const [namesPath, entriesPath, t0Path, t1Path, projectId, projectNumber,
-  pagesText, recordsText] = process.argv.slice(2);
-const names = new Set(JSON.parse(readFileSync(namesPath, 'utf8')));
+  "${legacy_gate_dir}/control-t0-dev.json" \
+  "${legacy_gate_dir}/control-t0-prod.json" \
+  "${legacy_gate_dir}/control-t1-dev.json" \
+  "${legacy_gate_dir}/control-t1-prod.json" \
+  "${legacy_gate_dir}/t1.json" \
+  "${legacy_gate_dir}/audit-config-t0.json" \
+  "${legacy_gate_dir}/audit-config-t1.json" \
+  "${legacy_gate_dir}/audit-config-query.json" \
+  "${legacy_gate_dir}/logging-route-t0.json" \
+  "${legacy_gate_dir}/logging-route-t1.json" \
+  "${legacy_gate_dir}/logging-route-query.json" \
+  "${project_id}" "${project_number}" "${org_id}" \
+  "${page_count}" "${record_count}" \
+  "${query_completed_at}" \
+  "${legacy_gate_dir}/result.json" <<'NODE'
+const { createHash } = require('node:crypto');
+const { readFileSync, writeFileSync, chmodSync } = require('node:fs');
+const [
+  namesPath,
+  inventoryPath,
+  entriesPath,
+  t0DevPath,
+  t0ProdPath,
+  t1DevPath,
+  t1ProdPath,
+  intervalPath,
+  auditConfigT0Path,
+  auditConfigT1Path,
+  auditConfigQueryPath,
+  loggingRouteT0Path,
+  loggingRouteT1Path,
+  loggingRouteQueryPath,
+  projectId,
+  projectNumber,
+  orgId,
+  pagesText,
+  recordsText,
+  queryCompletedAtText,
+  outputPath,
+] = process.argv.slice(2);
+const reviewedSha = 'c8c24cddfe652995f0d5c69dce0f912b3a2315b8';
+const expectedInventorySha256 =
+  '6324dca830a96cff486aeff3a1cf3cad9bf2aa42192b1957de6362015e1e5413';
+const namesSource = readFileSync(namesPath);
+const namesArray = JSON.parse(namesSource.toString('utf8'));
+const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
+const sortedNames = Array.isArray(namesArray) ? [...namesArray].sort() : [];
+const actualInventorySha256 = createHash('sha256').update(namesSource).digest('hex');
+const inventoryIntegrity =
+  Array.isArray(namesArray) &&
+  namesArray.length === 34 &&
+  new Set(namesArray).size === 34 &&
+  namesArray.every((name, index) =>
+    typeof name === 'string' &&
+    /^INTEXURAOS_[A-Z0-9_]+$/u.test(name) &&
+    name === sortedNames[index]
+  ) &&
+  actualInventorySha256 === expectedInventorySha256 &&
+  inventory.reviewedSha === reviewedSha &&
+  inventory.inventorySha256 === expectedInventorySha256 &&
+  inventory.legacyNameCount === 34 &&
+  JSON.stringify(inventory.legacyNames) === JSON.stringify(namesArray);
+const names = new Set(Array.isArray(namesArray) ? namesArray : []);
 const lines = readFileSync(entriesPath, 'utf8').split('\n').filter(Boolean);
 const entries = lines.map((line) => JSON.parse(line));
-const controls = [t0Path, t1Path].map((path) => JSON.parse(readFileSync(path, 'utf8')));
+const controls = [t0DevPath, t0ProdPath, t1DevPath, t1ProdPath].map((path) =>
+  JSON.parse(readFileSync(path, 'utf8'))
+);
+const interval = JSON.parse(readFileSync(intervalPath, 'utf8'));
+const auditConfigReceipts = [
+  auditConfigT0Path,
+  auditConfigT1Path,
+  auditConfigQueryPath,
+].map((path) => JSON.parse(readFileSync(path, 'utf8')));
+const loggingRouteReceipts = [
+  loggingRouteT0Path,
+  loggingRouteT1Path,
+  loggingRouteQueryPath,
+].map((path) => JSON.parse(readFileSync(path, 'utf8')));
+const secretManagerService = 'secretmanager.googleapis.com';
+const accessVersionMethod =
+  'google.cloud.secretmanager.v1.SecretManagerService.AccessSecretVersion';
+const dataAccessLogName =
+  `projects/${projectId}/logs/cloudaudit.googleapis.com%2Fdata_access`;
+const projectActivityLogName =
+  `projects/${projectId}/logs/cloudaudit.googleapis.com%2Factivity`;
+const orgActivityLogName =
+  `organizations/${orgId}/logs/cloudaudit.googleapis.com%2Factivity`;
+const expectedDefaultSinkFilter =
+  'NOT LOG_ID("cloudaudit.googleapis.com/activity") AND ' +
+  'NOT LOG_ID("externalaudit.googleapis.com/activity") AND ' +
+  'NOT LOG_ID("cloudaudit.googleapis.com/system_event") AND ' +
+  'NOT LOG_ID("externalaudit.googleapis.com/system_event") AND ' +
+  'NOT LOG_ID("cloudaudit.googleapis.com/access_transparency") AND ' +
+  'NOT LOG_ID("externalaudit.googleapis.com/access_transparency")';
+const expectedBoundaries = ['t0', 't1', 'query'];
+const validCheckedAt = (receipt) => Number.isFinite(Date.parse(receipt.checkedAt));
+const auditConfigEvidencePass = auditConfigReceipts.every((receipt, index) => {
+  const configs = receipt.effectiveConfigs;
+  return (
+    receipt.boundary === expectedBoundaries[index] &&
+    validCheckedAt(receipt) &&
+    receipt.projectParent?.type === 'organization' &&
+    String(receipt.projectParent?.id) === orgId &&
+    receipt.projectPolicyReader ===
+      'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com' &&
+    receipt.orgPolicyReader === 'kontakt@pbuchman.com' &&
+    receipt.orgLogAccessProbe === 'PASS' &&
+    receipt.projectPrivateLogAccessProbe === 'PASS' &&
+    Array.isArray(configs) &&
+    configs.length > 0 &&
+    configs.every(
+      (config) =>
+        (config.scope === `projects/${projectId}` ||
+          config.scope === `organizations/${orgId}`) &&
+        (config.service === secretManagerService || config.service === 'allServices') &&
+        Array.isArray(config.exemptedMembers) &&
+        config.exemptedMembers.length === 0,
+    ) &&
+    Array.isArray(receipt.exemptedMembers) &&
+    receipt.exemptedMembers.length === 0 &&
+    receipt.result === 'PASS'
+  );
+});
+const expectedSinkDestination =
+  `logging.googleapis.com/projects/${projectId}/locations/global/buckets/_Default`;
+const expectedBucketName = `projects/${projectId}/locations/global/buckets/_Default`;
+const loggingRouteEvidencePass = loggingRouteReceipts.every((receipt, index) =>
+  receipt.boundary === expectedBoundaries[index] &&
+  validCheckedAt(receipt) &&
+  receipt.sink?.name === '_Default' &&
+  receipt.sink?.destination === expectedSinkDestination &&
+  receipt.sink?.filter === expectedDefaultSinkFilter &&
+  receipt.sink?.disabled === false &&
+  Array.isArray(receipt.sink?.exclusions) &&
+  receipt.sink.exclusions.length === 0 &&
+  receipt.bucket?.name === expectedBucketName &&
+  receipt.bucket?.lifecycleState === 'ACTIVE' &&
+  Number.isInteger(receipt.bucket?.retentionDays) &&
+  receipt.bucket.retentionDays >= 30 &&
+  receipt.organization?.id === orgId &&
+  receipt.organization?.reader === 'kontakt@pbuchman.com' &&
+  Number.isInteger(receipt.organization?.sinkCount) &&
+  receipt.organization.sinkCount >= 0 &&
+  receipt.organization?.enabledInterceptingSinkCount === 0 &&
+  receipt.result === 'PASS'
+);
 const resourcePattern = new RegExp(
   `^projects/(?:${projectId}|${projectNumber})/secrets/([^/]+)/versions/([^/]+)$`,
   'u',
@@ -1547,37 +3561,176 @@ const resourcePattern = new RegExp(
 let legacyCount = 0;
 for (const entry of entries) {
   const match = resourcePattern.exec(entry.resourceName ?? '');
-  if (match && names.has(match[1])) legacyCount += 1;
+  if (
+    entry.logName === dataAccessLogName &&
+    entry.serviceName === secretManagerService &&
+    entry.methodName === accessVersionMethod &&
+    match &&
+    names.has(match[1])
+  ) {
+    legacyCount += 1;
+  }
 }
+const setIamPolicyEventCount = entries.filter(
+  (entry) =>
+    entry.logName === projectActivityLogName &&
+    entry.serviceName === 'cloudresourcemanager.googleapis.com' &&
+    entry.methodName === 'SetIamPolicy'
+).length;
+const parentPolicyMutationCount = entries.filter(
+  (entry) =>
+    entry.logName === orgActivityLogName &&
+    entry.serviceName === 'cloudresourcemanager.googleapis.com' &&
+    entry.methodName === 'SetIamPolicy'
+).length;
+const loggingConfigMutationCount = entries.filter(
+  (entry) =>
+    (entry.logName === projectActivityLogName || entry.logName === orgActivityLogName) &&
+    entry.serviceName === 'logging.googleapis.com'
+).length;
+const projectHierarchyMutationCount = entries.filter(
+  (entry) =>
+    (entry.logName === projectActivityLogName || entry.logName === orgActivityLogName) &&
+    entry.serviceName === 'cloudresourcemanager.googleapis.com' &&
+    (entry.resourceName === `projects/${projectId}` ||
+      entry.resourceName === `projects/${projectNumber}`)
+).length;
+const controlTuple = (control) =>
+  JSON.stringify([
+    control.boundary,
+    control.environment,
+    control.secret,
+    control.version,
+    control.principal,
+  ]);
+const expectedControlTuples = new Set([
+  ['t0', 'dev', 'INTEXURAOS_SECRET_PACKAGE_DEV', '2',
+    'ixos-secret-publisher-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'],
+  ['t0', 'prod', 'INTEXURAOS_SECRET_PACKAGE_PROD', '2',
+    'ixos-secret-publisher-prod@intexuraos-dev-pbuchman.iam.gserviceaccount.com'],
+  ['t1', 'dev', 'INTEXURAOS_SECRET_PACKAGE_DEV', '2',
+    'ixos-secret-publisher-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'],
+  ['t1', 'prod', 'INTEXURAOS_SECRET_PACKAGE_PROD', '2',
+    'ixos-secret-publisher-prod@intexuraos-dev-pbuchman.iam.gserviceaccount.com'],
+].map((tuple) => JSON.stringify(tuple)));
+const actualControlTuples = controls.map(controlTuple);
+const actualControlTupleSet = new Set(actualControlTuples);
+const controlsExact =
+  controls.length === 4 &&
+  new Set(actualControlTuples).size === 4 &&
+  actualControlTuples.every((tuple) => expectedControlTuples.has(tuple)) &&
+  [...expectedControlTuples].every((tuple) => actualControlTupleSet.has(tuple));
 const controlResults = controls.map((control) => {
   const earliest = Date.parse(control.before) - 60_000;
   const latest = Date.parse(control.after) + 60_000;
   const matches = entries.filter((entry) => {
     const resource = resourcePattern.exec(entry.resourceName ?? '');
     const timestamp = Date.parse(entry.timestamp ?? '');
-    return resource?.[1] === control.secret &&
+    return entry.logName === dataAccessLogName &&
+      entry.serviceName === secretManagerService &&
+      entry.methodName === accessVersionMethod &&
+      entry.statusCode === 0 &&
+      resource?.[1] === control.secret &&
       resource?.[2] === control.version &&
       entry.principalEmail === control.principal &&
       timestamp >= earliest && timestamp <= latest;
   }).length;
-  return { boundary: control.boundary, matches };
+  return { boundary: control.boundary, environment: control.environment, matches };
 });
-const pass = legacyCount === 0 && controlResults.every((result) => result.matches > 0);
-process.stdout.write(`${JSON.stringify({
-  pages: Number(pagesText),
-  records: Number(recordsText),
+const pages = Number(pagesText);
+const records = Number(recordsText);
+const queryExecutedAtMs = Date.parse(queryCompletedAtText);
+const queryExecutedAt = Number.isFinite(queryExecutedAtMs)
+  ? new Date(queryExecutedAtMs).toISOString()
+  : null;
+const timingPass =
+  Date.parse(interval.t1) - Date.parse(interval.t0) >= 72 * 60 * 60 * 1000 &&
+  Number.isFinite(queryExecutedAtMs) &&
+  queryExecutedAtMs >= Date.parse(interval.query_not_before);
+const t0ControlStart = Math.min(
+  ...controls.filter((control) => control.boundary === 't0').map((control) => Date.parse(control.before)),
+);
+const t1ControlStart = Math.min(
+  ...controls.filter((control) => control.boundary === 't1').map((control) => Date.parse(control.before)),
+);
+const evidenceTimes = expectedBoundaries.map((_, index) => [
+  Date.parse(auditConfigReceipts[index]?.checkedAt),
+  Date.parse(loggingRouteReceipts[index]?.checkedAt),
+]);
+const metadataTimingPass =
+  evidenceTimes.flat().every(Number.isFinite) &&
+  evidenceTimes[0].every(
+    (value) => value <= t0ControlStart && value >= t0ControlStart - 15 * 60 * 1000,
+  ) &&
+  evidenceTimes[1].every(
+    (value) => value <= t1ControlStart && value >= t1ControlStart - 15 * 60 * 1000,
+  ) &&
+  evidenceTimes[2].every(
+    (value) =>
+      value >= Date.parse(interval.query_not_before) && value <= queryExecutedAtMs,
+  );
+const pass =
+  inventoryIntegrity &&
+  auditConfigEvidencePass &&
+  loggingRouteEvidencePass &&
+  pages >= 1 &&
+  pages <= 10000 &&
+  records === entries.length &&
+  timingPass &&
+  metadataTimingPass &&
+  legacyCount === 0 &&
+  setIamPolicyEventCount === 0 &&
+  parentPolicyMutationCount === 0 &&
+  loggingConfigMutationCount === 0 &&
+  projectHierarchyMutationCount === 0 &&
+  controlsExact &&
+  controlResults.every((result) => result.matches > 0);
+const result = {
+  t0: interval.t0,
+  t1: interval.t1,
+  queryExecutedAt,
+  pages,
+  records,
+  inventorySha256: actualInventorySha256,
   legacyCount,
+  setIamPolicyEventCount,
+  parentPolicyMutationCount,
+  loggingConfigMutationCount,
+  projectHierarchyMutationCount,
+  boundaryEvidence: {
+    auditConfig: auditConfigEvidencePass,
+    loggingRoute: loggingRouteEvidencePass,
+    timing: metadataTimingPass,
+  },
   controls: controlResults,
   result: pass ? 'PASS' : 'FAIL',
-})}\n`);
+};
+writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`, {
+  encoding: 'utf8',
+  mode: 0o600,
+  flag: 'wx',
+});
+chmodSync(outputPath, 0o600);
+process.stdout.write(`${JSON.stringify(result)}\n`);
 if (!pass) process.exit(1);
 NODE
 ```
 
-PASS is exactly: 34 reviewed names, at least 72 hours, final query after the
-15-minute lag, exhaustive pagination, `legacyCount=0`, and both boundary
-controls present under the approved principal. Any mismatch, legacy read,
-missing page, or missing control resets `T0`; retain legacy IAM and versions.
+PASS is exactly: the reviewed 34-name inventory and exact SHA-256 still match,
+at least 72 hours elapsed, the final query ran after the 15-minute lag,
+pagination exhausted below the fail-closed bound, `legacyCount=0`,
+`setIamPolicyEventCount=0`, `parentPolicyMutationCount=0`,
+`loggingConfigMutationCount=0`, `projectHierarchyMutationCount=0`, every
+T0/T1/query effective-policy and `_Default` sink/bucket receipt passes, every
+organization boundary has zero enabled intercepting sinks, and the four unique
+DEV/PROD T0/T1 controls have a successful (`statusCode=0`) audit entry under
+their approved publishers. Any mismatch, legacy read, project or organization
+`SetIamPolicy` event, project hierarchy mutation, Logging configuration write,
+enabled organization intercepting sink, missing/repeated page, missing control,
+stale secret ephemera, inherited audit-config mismatch, routing/retention
+mismatch, or interruption of normal traffic resets `T0`; retain legacy IAM and
+versions. A failed provider/model result remains outside this decision when the
+terminal callback and secret-isolation conditions above pass.
 
 ## Rollback
 
