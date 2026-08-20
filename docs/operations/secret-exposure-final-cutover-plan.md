@@ -8,17 +8,23 @@ the migration report and package runbook.
 
 ## Autonomous Agent Goal
 
-Create one goal with this objective verbatim:
+After this plan is approved, create one goal from the template below. Replace
+`<APPROVED_PLAN_URL>` with the immutable GitHub blob URL pinned to the exact
+reviewed commit. Never use a branch, pull-request, or mutable `development` URL.
 
-> Implement and deploy the final IntexuraOS secret-exposure cutover end to end
-> in project `intexuraos-dev-pbuchman`: remove the public Vite secret surface,
-> retain only exact authenticated machine paths, make OpenRouter the only
-> application inference provider, rotate or remove every exposed credential,
-> migrate encrypted data offline, publish one new DEV package and one new PROD
-> package, deploy the same reviewed SHA to Home Dev and production, and
-> permanently delete every obsolete version, container, key, IAM binding, and
-> compatibility path. Accept downtime, ask no routine questions, never roll
-> back, and fix forward until every completion gate passes in production.
+> Execute the complete IntexuraOS production security cutover defined in
+> `<APPROVED_PLAN_URL>`. Read that plan in full before taking any action and
+> treat it as the sole execution authority for scope, order, safety gates, and
+> definition of done. Deliver the implementation end to end: code and data
+> migrations, provider/Cloudflare/GCP changes, credential rotation and
+> revocation, Terraform plans and applies, the same reviewed SHA deployed to
+> Home Dev and production, live verification, support-case handling, and final
+> documentation. Accept downtime. Preserve no rollback, backwards
+> compatibility, dual-read path, old key, old version, or soak period. Ask no
+> routine questions and do not stop at analysis, a pull request, or a partial
+> deployment. If a gate fails, leave the affected service stopped, fix forward,
+> and repeat the gate. Finish only when every production completion gate in the
+> linked plan passes and the migration report is `COMPLETE`.
 
 Execution authority:
 
