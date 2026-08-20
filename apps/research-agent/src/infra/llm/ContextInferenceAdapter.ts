@@ -426,7 +426,7 @@ function parseJsonWithZod<T>(
       expectedSchema,
       operation,
     });
-    logger.warn(
+    logger.debug(
       {
         operation,
         errorMessage,
@@ -451,7 +451,7 @@ function parseJsonWithZod<T>(
       expectedSchema,
       operation,
     });
-    logger.warn(
+    logger.debug(
       {
         operation,
         errorMessage,
