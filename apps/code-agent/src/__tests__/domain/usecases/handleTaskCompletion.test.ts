@@ -400,6 +400,105 @@ describe('handleTaskCompletion', () => {
   });
 
   describe('completed path — review agent (remediation decision recorded)', () => {
+    it('records the commit captured by the review task instead of the newer current PR head', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const upsert = vi.fn().mockResolvedValue(ok(undefined));
+      const getOAuthToken = vi.fn().mockResolvedValue(ok({ accessToken: 'token' }));
+      const getPullRequestDetails = vi.fn().mockResolvedValue(ok({ headSha: 'newer-current-head' }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+            reviewCommitSha: 'commit-actually-reviewed',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)) } as never,
+        metricsClient: { incrementTasksCompleted: vi.fn().mockResolvedValue(undefined) } as never,
+        automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+        gitHubPRSummaryRepo: { upsert } as never,
+        userServiceClient: { getOAuthToken } as never,
+        gitHubPRClient: { getPullRequestDetails } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-captured-commit',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '1',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+        repository: 'a/b',
+        pullRequestNumber: 42,
+        lastReviewedCommitSha: 'commit-actually-reviewed',
+      }));
+      expect(getOAuthToken).not.toHaveBeenCalled();
+      expect(getPullRequestDetails).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the current PR head for legacy review tasks without a captured commit', async () => {
+      const update = vi.fn().mockResolvedValue(ok(undefined));
+      const upsert = vi.fn().mockResolvedValue(ok(undefined));
+      const getOAuthToken = vi.fn().mockResolvedValue(ok({ accessToken: 'token' }));
+      const getPullRequestDetails = vi.fn().mockResolvedValue(ok({ headSha: 'legacy-current-head' }));
+
+      setServices({
+        codeTaskRepo: {
+          findById: vi.fn().mockResolvedValue(ok({
+            userId: 'u1',
+            repository: 'a/b',
+            workerType: 'claude-opus',
+            status: 'running',
+            agentType: 'review',
+          })),
+          update,
+          findOriginTaskByPR: vi.fn().mockResolvedValue(ok(null)),
+        } as never,
+        whatsappNotifier: { notifyTaskComplete: vi.fn().mockResolvedValue(ok(undefined)) } as never,
+        metricsClient: { incrementTasksCompleted: vi.fn().mockResolvedValue(undefined) } as never,
+        automationLog: { record: vi.fn().mockResolvedValue(undefined) } as never,
+        gitHubPRSummaryRepo: { upsert } as never,
+        userServiceClient: { getOAuthToken } as never,
+        gitHubPRClient: { getPullRequestDetails } as never,
+        logger: createMockLogger() as never,
+      } as unknown as ServiceContainer);
+
+      const result = await handleTaskCompletion(createMockLogger(), buildInput({
+        taskId: 't-review-legacy-commit',
+        status: 'completed',
+        result: {
+          review_id: 'rev-1',
+          review_comments_posted: '1',
+          review_types: 'code_quality',
+          prUrl: 'https://github.com/a/b/pull/42',
+          needs_remediation: '1',
+        },
+      }));
+
+      expect(result).toEqual({ kind: 'received' });
+      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+        repository: 'a/b',
+        pullRequestNumber: 42,
+        lastReviewedCommitSha: 'legacy-current-head',
+      }));
+      expect(getOAuthToken).toHaveBeenCalledOnce();
+      expect(getPullRequestDetails).toHaveBeenCalledOnce();
+    });
+
     it('persists merge-ready evidence when an execution-origin review passes', async () => {
       const update = vi
         .fn()

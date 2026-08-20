@@ -47,14 +47,15 @@ describe('cancelTaskWithNonce', () => {
 
     codeTaskRepo = {
       create: vi.fn(),
-      findById: vi.fn(),
+      findById: vi.fn().mockResolvedValue(ok(baseTask)),
       findByIdForUser: vi.fn(),
-      update: vi.fn(),
+      update: vi.fn().mockResolvedValue(ok({ ...baseTask, status: 'cancelled' as const })),
+      runInTransaction: vi.fn(async (operation) => await operation({} as never)),
     } as unknown as CodeTaskRepository;
 
     taskDispatcher = {
       dispatch: vi.fn(),
-      cancelOnWorker: vi.fn().mockResolvedValue(ok(undefined)),
+      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
     } as unknown as TaskDispatcherService;
 
     workerSettingsRepo = {
@@ -206,6 +207,7 @@ describe('cancelTaskWithNonce', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('internal_error');
     }
+    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledOnce();
   });
 
   it('successfully cancels task with valid nonce', async () => {
@@ -224,17 +226,26 @@ describe('cancelTaskWithNonce', () => {
       expect(result.value.cancelled).toBe(true);
     }
 
-    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
-      status: 'cancelled',
-      cancelNonce: null,
-      cancelNonceExpiresAt: null,
-    });
+    expect(codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-123',
+      {
+        status: 'cancelled',
+        cancelNonce: null,
+        cancelNonceExpiresAt: null,
+      },
+      { transaction: expect.any(Object) },
+    );
 
     expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', {
       url: 'https://cc-mac.intexuraos.cloud',
       cfAccessClientId: 'test-client-id',
       cfAccessClientSecret: 'test-client-secret',
     });
+    const updateCallOrder = vi.mocked(codeTaskRepo.update).mock.invocationCallOrder[0];
+    if (updateCallOrder === undefined) throw new Error('Expected cancellation update call');
+    expect(vi.mocked(taskDispatcher.cancelOnWorker).mock.invocationCallOrder[0]).toBeLessThan(
+      updateCallOrder,
+    );
   });
 
   it('successfully cancels task in dispatched status', async () => {
@@ -269,11 +280,16 @@ describe('cancelTaskWithNonce', () => {
       expect(result.value.cancelled).toBe(true);
     }
 
-    expect(codeTaskRepo.update).toHaveBeenCalledWith('task-123', {
-      status: 'cancelled',
-      cancelNonce: null,
-      cancelNonceExpiresAt: null,
-    });
+    expect(codeTaskRepo.update).toHaveBeenCalledWith(
+      'task-123',
+      {
+        status: 'cancelled',
+        cancelNonce: null,
+        cancelNonceExpiresAt: null,
+      },
+      { transaction: expect.any(Object) },
+    );
+    expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
   });
 
   it('successfully cancels task when nonce has no expiration time', async () => {
@@ -291,7 +307,7 @@ describe('cancelTaskWithNonce', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('succeeds even if worker notification fails', async () => {
+  it('keeps the task and nonce active if worker cancellation is not confirmed', async () => {
     vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
     vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
       ok({ ...baseTask, status: 'cancelled' as const })
@@ -303,12 +319,16 @@ describe('cancelTaskWithNonce', () => {
       { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
     );
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe('internal_error');
+    }
+    expect(codeTaskRepo.update).not.toHaveBeenCalled();
     expect(logger.warn).toHaveBeenCalled();
   });
 
   describe('worker credentials resolution for cancelOnWorker', () => {
-    it('calls cancelOnWorker without credentials when getSettings returns error', async () => {
+    it('keeps the task active when getSettings returns error', async () => {
       vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
         err({ code: 'internal_error', message: 'Failed to fetch settings' })
       );
@@ -322,11 +342,12 @@ describe('cancelTaskWithNonce', () => {
         { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
       );
 
-      expect(result.ok).toBe(true);
-      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+      expect(result.ok).toBe(false);
+      expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+      expect(codeTaskRepo.update).not.toHaveBeenCalled();
     });
 
-    it('calls cancelOnWorker without credentials when getSettings returns null', async () => {
+    it('keeps the task active when getSettings returns null', async () => {
       vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(ok(null));
       vi.mocked(codeTaskRepo.findById).mockResolvedValueOnce(ok(baseTask));
       vi.mocked(codeTaskRepo.update).mockResolvedValueOnce(
@@ -338,11 +359,12 @@ describe('cancelTaskWithNonce', () => {
         { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
       );
 
-      expect(result.ok).toBe(true);
-      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+      expect(result.ok).toBe(false);
+      expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+      expect(codeTaskRepo.update).not.toHaveBeenCalled();
     });
 
-    it('calls cancelOnWorker without credentials when no worker matches task location', async () => {
+    it('keeps the task active when no worker matches task location', async () => {
       vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
         ok({
           userId: 'user-789',
@@ -361,11 +383,12 @@ describe('cancelTaskWithNonce', () => {
         { taskId: 'task-123', nonce: 'abcd', userId: 'user-789' }
       );
 
-      expect(result.ok).toBe(true);
-      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+      expect(result.ok).toBe(false);
+      expect(taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+      expect(codeTaskRepo.update).not.toHaveBeenCalled();
     });
 
-    it('calls cancelOnWorker without credentials when matching worker is disabled', async () => {
+    it('uses configured credentials to cancel after matching worker is disabled', async () => {
       vi.mocked(workerSettingsRepo.getSettings).mockResolvedValueOnce(
         ok({
           userId: 'user-789',
@@ -394,7 +417,16 @@ describe('cancelTaskWithNonce', () => {
       );
 
       expect(result.ok).toBe(true);
-      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith('task-123', 'home-mac', undefined);
+      expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
+        'task-123',
+        'home-mac',
+        {
+          url: 'https://cc-mac.intexuraos.cloud',
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+        },
+      );
+      expect(codeTaskRepo.update).toHaveBeenCalledOnce();
     });
   });
 

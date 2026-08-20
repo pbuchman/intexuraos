@@ -30,6 +30,10 @@ import { generateWebhookSecret } from '../utils/secrets.js';
 import type { AutomationLog } from '../ports/automationLog.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import {
+  buildGitHubEventTaskId,
+  reserveGitHubEventTask,
+} from '../services/gitHubDispatch/eventTaskReservation.js';
 
 const DEFAULT_LINEAR_FALLBACK_ERROR = 'Linear unavailable';
 
@@ -314,8 +318,10 @@ export async function createTaskForPR(
         return ok({ taskId: existingTaskId, isNew: false });
       }
 
-      // Step 4: Create the task
-      const taskId = `task_${crypto.randomUUID()}`;
+      // Step 4: Create the task using a stable event-derived ID. If triage is
+      // replayed after its lease expires, the transaction returns the original
+      // task instead of overwriting it or creating another code task.
+      const taskId = buildGitHubEventTaskId('pr-dispatch', eventId);
       const webhookSecret = generateWebhookSecret(orchestratorSecret, taskId);
       const taskPrompt = buildTaskPrompt(request);
 
@@ -338,7 +344,11 @@ export async function createTaskForPR(
       };
 
       // Pass the outer transaction to avoid nested transactions
-      const createResult = await codeTaskRepo.create(createInput, { transaction });
+      const createResult = await reserveGitHubEventTask({
+        codeTaskRepo,
+        transaction,
+        taskInput: { ...createInput, id: taskId },
+      });
 
       if (!createResult.ok) {
         logger.error(
@@ -350,6 +360,14 @@ export async function createTaskForPR(
           message: createResult.error.message,
           ...('existingTaskId' in createResult.error && { existingTaskId: createResult.error.existingTaskId }),
         });
+      }
+
+      if (!createResult.value.created) {
+        logger.info(
+          { repository, prNumber, taskId, eventId },
+          'GitHub event task already exists; skipping duplicate enqueue',
+        );
+        return ok({ taskId, isNew: false });
       }
 
       // Write lock document within the transaction

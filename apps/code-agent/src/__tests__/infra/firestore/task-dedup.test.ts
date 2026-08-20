@@ -111,7 +111,7 @@ describe('checkDedupLayers', () => {
   /** Run checkDedupLayers inside a transaction and return the result. */
   async function runCheck(
     input: CreateTaskInput,
-    opts?: { dedupKey?: string; now?: Date }
+    opts?: { dedupKey?: string; now?: Date; skipPromptDedup?: boolean }
   ): Promise<ReturnType<typeof checkDedupLayers> extends Promise<infer R> ? R : never> {
     const dedupKey = opts?.dedupKey ?? generateDedupKey(input.userId, input.prompt, input.linearIssueId);
     const now = opts?.now ?? new Date('2025-06-01T00:00:00Z');
@@ -120,7 +120,14 @@ describe('checkDedupLayers', () => {
         transaction as unknown as FirestoreTransaction,
         collection,
         input,
-        { logger, dedupKey, now }
+        {
+          logger,
+          dedupKey,
+          now,
+          ...(opts?.skipPromptDedup !== undefined && {
+            skipPromptDedup: opts.skipPromptDedup,
+          }),
+        }
       );
     });
   }
@@ -199,6 +206,25 @@ describe('checkDedupLayers', () => {
         { dedupKey, now }
       );
       expect(result.ok).toBe(true);
+    });
+
+    it('skips prompt dedup when deterministic reservation already owns idempotency', async () => {
+      const now = new Date('2025-06-01T00:05:00Z');
+      const dedupKey = generateDedupKey('u1', 'hello');
+      await seed('task_active_review', {
+        userId: 'u1',
+        status: 'running',
+        agentType: 'review',
+        dedupKey,
+        createdAt: Timestamp.fromDate(new Date('2025-06-01T00:02:00Z')),
+      });
+
+      const result = await runCheck(
+        baseInput({ agentType: 'review' }),
+        { dedupKey, now, skipPromptDedup: true },
+      );
+
+      expect(result).toEqual({ ok: true, value: null });
     });
   });
 

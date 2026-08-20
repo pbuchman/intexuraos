@@ -75,7 +75,7 @@ export async function checkDedupLayers(
   transaction: FirestoreTransaction,
   collection: CollectionReference,
   input: CreateTaskInput,
-  deps: { logger: Logger; dedupKey: string; now: Date }
+  deps: { logger: Logger; dedupKey: string; now: Date; skipPromptDedup?: boolean }
 ): Promise<Result<null, DedupError>> {
   const { logger, dedupKey, now } = deps;
   const dedupWindowStart = new Date(now.getTime() - DEDUP_WINDOW_MS);
@@ -83,7 +83,8 @@ export async function checkDedupLayers(
   // Layer 1: dedupKey within 5-minute window
   if (
     input.retriedFrom === undefined &&
-    input.followUpReason !== 'execution_implement'
+    input.followUpReason !== 'execution_implement' &&
+    deps.skipPromptDedup !== true
   ) {
     const dedupQuery = collection
       .where('dedupKey', '==', dedupKey)

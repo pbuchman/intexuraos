@@ -21,7 +21,10 @@ import nock from 'nock';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function pushEnvelope(event: Partial<PRTriageEvent>): Record<string, unknown> {
+function pushEnvelope(
+  event: Partial<PRTriageEvent>,
+  messageId = 'msg-1',
+): Record<string, unknown> {
   const payload: PRTriageEvent = {
     type: 'code.pr.triage.requested',
     eventId: 'will-override',
@@ -34,7 +37,7 @@ function pushEnvelope(event: Partial<PRTriageEvent>): Record<string, unknown> {
   return {
     message: {
       data: Buffer.from(JSON.stringify(payload)).toString('base64'),
-      messageId: 'msg-1',
+      messageId,
       publishTime: new Date().toISOString(),
     },
     subscription: 'projects/p/subscriptions/intexuraos-pr-triage-dev-push',
@@ -125,6 +128,33 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     nock.cleanAll();
   });
 
+  async function saveEvent(deliveryId: string): Promise<string> {
+    const savedResult = await gitHubPREventRepo.save({
+      githubEventId: 12345,
+      deliveryId,
+      repository: 'pbuchman/intexuraos',
+      repositoryId: 999,
+      pullRequestNumber: 9999,
+      pullRequestId: 111,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'user1',
+      senderId: 42,
+      senderType: 'User',
+      prAuthorLogin: 'author1',
+      title: 'Test PR',
+      body: 'Test body',
+      state: 'open',
+      isDraft: false,
+      baseBranch: 'development',
+      mergedAt: null,
+      createdAt: new Date('2024-01-01T00:00:00Z'),
+      payload: {},
+    });
+    if (!savedResult.ok) throw new Error('save failed');
+    return savedResult.value.id;
+  }
+
   // -------------------------------------------------------------------------
   // 1. Happy path
   // -------------------------------------------------------------------------
@@ -169,6 +199,57 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     expect(calledWith.id).toBe(eventId);
   });
 
+  it('lets only one parallel delivery evaluate and returns retryable 5xx to the active foreign lease', async () => {
+    const eventId = await saveEvent('delivery-parallel');
+    let releaseEvaluation: (() => void) | undefined;
+    const evaluationGate = new Promise<void>((resolve) => {
+      releaseEvaluation = resolve;
+    });
+    evaluateMock.mockImplementationOnce(async () => await evaluationGate);
+
+    const firstRequest = server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-owner'),
+    });
+    await vi.waitFor(() => expect(evaluateMock).toHaveBeenCalledOnce());
+
+    const competingResponse = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-competitor'),
+    });
+
+    expect(competingResponse.statusCode).toBe(500);
+    expect(evaluateMock).toHaveBeenCalledOnce();
+    releaseEvaluation?.();
+    const ownerResponse = await firstRequest;
+    expect(ownerResponse.statusCode).toBe(200);
+  });
+
+  it('acks a completed redelivery without evaluating twice', async () => {
+    const eventId = await saveEvent('delivery-completed-redelivery');
+
+    const firstResponse = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-first'),
+    });
+    const redeliveryResponse = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-redelivery'),
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(redeliveryResponse.statusCode).toBe(200);
+    expect(evaluateMock).toHaveBeenCalledOnce();
+  });
+
   // -------------------------------------------------------------------------
   // 2. Unauthorized
   // -------------------------------------------------------------------------
@@ -202,13 +283,12 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
   // -------------------------------------------------------------------------
   // 4. Firestore error
   // -------------------------------------------------------------------------
-  it('should return 500 when findById returns a Firestore error', async () => {
-    // Override gitHubPREventRepo.findById to return an error
+  it('should return 500 when acquireTriage returns a Firestore error', async () => {
     const services = getServices();
     const originalRepo = services.gitHubPREventRepo;
     services.gitHubPREventRepo = {
       ...originalRepo,
-      findById: vi.fn().mockResolvedValue(err({
+      acquireTriage: vi.fn().mockResolvedValue(err({
         code: 'FIRESTORE_ERROR',
         message: 'Simulated Firestore failure',
       })),
@@ -265,6 +345,60 @@ describe('POST /internal/code/pubsub/pr-triage', () => {
     });
 
     expect(response.statusCode).toBe(500);
+
+    const retryResponse = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-evaluator-retry'),
+    });
+    expect(retryResponse.statusCode).toBe(200);
+    expect(evaluateMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns 500 when a successful evaluation cannot complete its lease', async () => {
+    const eventId = await saveEvent('delivery-completion-error');
+    const services = getServices();
+    services.gitHubPREventRepo = {
+      ...services.gitHubPREventRepo,
+      completeTriage: vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'completion unavailable',
+      })),
+    };
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-completion-error'),
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(evaluateMock).toHaveBeenCalledOnce();
+  });
+
+  it('keeps evaluator failure retryable when releasing the lease also fails', async () => {
+    const eventId = await saveEvent('delivery-failure-release-error');
+    evaluateMock.mockRejectedValueOnce(new Error('Evaluator exploded'));
+    const services = getServices();
+    services.gitHubPREventRepo = {
+      ...services.gitHubPREventRepo,
+      failTriage: vi.fn().mockResolvedValue(err({
+        code: 'FIRESTORE_ERROR',
+        message: 'release unavailable',
+      })),
+    };
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/internal/code/pubsub/pr-triage',
+      headers: { from: 'noreply@google.com', 'content-type': 'application/json' },
+      payload: pushEnvelope({ eventId }, 'msg-release-error'),
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(evaluateMock).toHaveBeenCalledOnce();
   });
 
   // -------------------------------------------------------------------------

@@ -381,29 +381,21 @@ describe('processSentryWebhook', () => {
   });
 
   it.each([
-    ['active task', createFakeTask({ id: 'task_linked', status: 'running', agentType: 'sentry' })],
-    ['open PR URL', createFakeTask({
+    ['failed', createFakeTask({ id: 'task_linked', status: 'failed', agentType: 'sentry' })],
+    ['cancelled', createFakeTask({ id: 'task_linked', status: 'cancelled', agentType: 'sentry' })],
+    ['interrupted', createFakeTask({ id: 'task_linked', status: 'interrupted', agentType: 'sentry' })],
+    ['implemented with a merged PR', createFakeTask({
       id: 'task_linked',
       status: 'implemented',
       agentType: 'sentry',
-      result: { sentry_outcome: 'fixed', prUrl: 'https://github.com/pbuchman/intexuraos/pull/123' },
-    })],
-    ['open PR number', createFakeTask({
-      id: 'task_linked',
-      status: 'reviewed',
-      agentType: 'review',
       prNumber: 123,
+      prMergedAt: Timestamp.fromDate(new Date('2026-07-29T01:00:00.000Z')),
     })],
-  ])('keeps a linked %s blocking for a later event', async (_label, task) => {
+  ])('keeps the issue-level task tombstone when the linked task is %s', async (_label, linkedTask) => {
     resetServices();
-    mocks = installMocks({
-      sentryIssueEventRepo: {
-        acquire: vi.fn().mockResolvedValue(inspectResult('task_linked')),
-      },
-      codeTaskRepo: {
-        findById: vi.fn().mockResolvedValue(ok(task)),
-      },
-    });
+    const acquire = vi.fn().mockResolvedValue(inspectResult('task_linked'));
+    const findById = vi.fn().mockResolvedValue(ok(linkedTask));
+    mocks = installMocks({ sentryIssueEventRepo: { acquire }, codeTaskRepo: { findById } });
 
     const result = await processSentryWebhook(buildInput());
 
@@ -413,117 +405,9 @@ describe('processSentryWebhook', () => {
       message: 'Sentry issue already has a code task',
       codeTaskId: 'task_linked',
     });
-    expect(mocks.sentryIssueEventRepo.acquire).toHaveBeenCalledTimes(1);
+    expect(acquire).toHaveBeenCalledTimes(1);
+    expect(findById).not.toHaveBeenCalled();
     expect(mocks.codeTaskRepo.create).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['merged PR', createFakeTask({
-      id: 'task_linked',
-      status: 'implemented',
-      agentType: 'sentry',
-      prNumber: 123,
-      prMergedAt: Timestamp.fromDate(new Date('2026-07-29T01:00:00.000Z')),
-    })],
-    ['closed PR', createFakeTask({
-      id: 'task_linked',
-      status: 'implemented',
-      agentType: 'sentry',
-      result: { prUrl: 'https://github.com/pbuchman/intexuraos/pull/123' },
-      prClosedAt: Timestamp.fromDate(new Date('2026-07-29T01:00:00.000Z')),
-    })],
-    ['archived task', createFakeTask({ id: 'task_linked', status: 'archived', agentType: 'sentry' })],
-    ['failed task', createFakeTask({ id: 'task_linked', status: 'failed', agentType: 'sentry' })],
-  ])('permits a later event after a linked %s', async (_label, linkedTask) => {
-    resetServices();
-    const acquire = vi.fn()
-      .mockResolvedValueOnce(inspectResult('task_linked'))
-      .mockImplementationOnce(async (input: AcquireSentryTaskReservationInput) => acquiredResult(input));
-    const findById = vi.fn()
-      .mockResolvedValueOnce(ok(linkedTask))
-      .mockResolvedValueOnce(err({ code: 'NOT_FOUND', message: 'replacement not created yet' }));
-    mocks = installMocks({ sentryIssueEventRepo: { acquire }, codeTaskRepo: { findById } });
-
-    const result = await processSentryWebhook(buildInput());
-
-    expect(result.ok && result.outcome).toBe('processed');
-    expect(acquire).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      replaceLinkedCodeTaskId: 'task_linked',
-    }));
-    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
-  });
-
-  it('permits a later event when the linked task was deleted', async () => {
-    resetServices();
-    const acquire = vi.fn()
-      .mockResolvedValueOnce(inspectResult('task_deleted'))
-      .mockImplementationOnce(async (input: AcquireSentryTaskReservationInput) => acquiredResult(input));
-    mocks = installMocks({ sentryIssueEventRepo: { acquire } });
-
-    const result = await processSentryWebhook(buildInput());
-
-    expect(result.ok && result.outcome).toBe('processed');
-    expect(acquire).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns an inspection lookup error without attempting replacement', async () => {
-    resetServices();
-    mocks = installMocks({
-      sentryIssueEventRepo: { acquire: vi.fn().mockResolvedValue(inspectResult('task_linked')) },
-      codeTaskRepo: {
-        findById: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR', message: 'lookup failed' })),
-      },
-    });
-
-    expect(await processSentryWebhook(buildInput())).toEqual({
-      ok: false,
-      reason: 'internal_error',
-      message: 'lookup failed',
-    });
-    expect(mocks.sentryIssueEventRepo.acquire).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns an error when atomic replacement acquisition fails', async () => {
-    resetServices();
-    const acquire = vi.fn()
-      .mockResolvedValueOnce(inspectResult('task_deleted'))
-      .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR', message: 'replace failed' }));
-    mocks = installMocks({ sentryIssueEventRepo: { acquire } });
-
-    expect(await processSentryWebhook(buildInput())).toEqual({
-      ok: false,
-      reason: 'internal_error',
-      message: 'replace failed',
-    });
-  });
-
-  it('returns the winning duplicate when replacement loses a concurrent race', async () => {
-    resetServices();
-    const acquire = vi.fn()
-      .mockResolvedValueOnce(inspectResult('task_deleted'))
-      .mockResolvedValueOnce(ok({ kind: 'duplicate', codeTaskId: 'task_winner' }));
-    mocks = installMocks({ sentryIssueEventRepo: { acquire } });
-
-    expect(await processSentryWebhook(buildInput())).toEqual({
-      ok: true,
-      outcome: 'duplicate',
-      message: 'Sentry issue already has a code task',
-      codeTaskId: 'task_winner',
-    });
-  });
-
-  it('returns retryable when replacement loses to a lease without a task', async () => {
-    resetServices();
-    const acquire = vi.fn()
-      .mockResolvedValueOnce(inspectResult('task_deleted'))
-      .mockResolvedValueOnce(ok({ kind: 'retryable' }));
-    mocks = installMocks({ sentryIssueEventRepo: { acquire } });
-
-    expect(await processSentryWebhook(buildInput())).toEqual({
-      ok: false,
-      reason: 'retryable',
-      message: 'Sentry issue processing is already in progress',
-    });
   });
 
   it('recovers a task created before reservation completion without creating another', async () => {

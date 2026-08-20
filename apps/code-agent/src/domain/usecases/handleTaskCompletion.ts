@@ -1398,24 +1398,34 @@ export async function handleTaskCompletion(
         // Best-effort: update PR summary when review completes
         if (resolvedStatus === 'reviewed' && prNumber !== undefined) {
           try {
-            const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
-            if (tokenResult.ok) {
-              const parsed = parseOwnerRepo(task.repository);
-              /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
-              if (parsed !== null) {
-              /* v8 ignore stop @preserve */
-                const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
-                if (detailsResult.ok) {
-                  await gitHubPRSummaryRepo.upsert({
-                    repository: task.repository,
-                    pullRequestNumber: prNumber,
-                    lastActivityAt: new Date(),
-                    lastReviewedCommitSha: detailsResult.value.headSha,
-                    lastReviewNeedsRemediation: result?.needs_remediation ?? null,
-                  });
-                  requestLog.info({ taskId, prNumber, headSha: detailsResult.value.headSha }, 'Updated lastReviewedCommitSha on PR summary');
+            let reviewCommitSha: string | undefined = task.reviewCommitSha;
+
+            // Legacy tasks did not capture their review target. Preserve the old
+            // best-effort lookup for those documents only.
+            if (reviewCommitSha === undefined) {
+              const tokenResult = await userServiceClient.getOAuthToken(task.userId, 'github');
+              if (tokenResult.ok) {
+                const parsed = parseOwnerRepo(task.repository);
+                /* v8 ignore start -- ts-type: parseOwnerRepo cannot return null for valid task.repository (always owner/repo format) @preserve */
+                if (parsed !== null) {
+                /* v8 ignore stop @preserve */
+                  const detailsResult = await gitHubPRClient.getPullRequestDetails(tokenResult.value.accessToken, parsed.owner, parsed.repo, prNumber);
+                  if (detailsResult.ok) {
+                    reviewCommitSha = detailsResult.value.headSha;
+                  }
                 }
               }
+            }
+
+            if (reviewCommitSha !== undefined) {
+              await gitHubPRSummaryRepo.upsert({
+                repository: task.repository,
+                pullRequestNumber: prNumber,
+                lastActivityAt: new Date(),
+                lastReviewedCommitSha: reviewCommitSha,
+                lastReviewNeedsRemediation: result?.needs_remediation ?? null,
+              });
+              requestLog.info({ taskId, prNumber, headSha: reviewCommitSha }, 'Updated lastReviewedCommitSha on PR summary');
             }
           } catch (reviewShaError: unknown) {
             requestLog.warn({ error: reviewShaError, taskId, prNumber }, 'Failed to update lastReviewedCommitSha (best-effort)');

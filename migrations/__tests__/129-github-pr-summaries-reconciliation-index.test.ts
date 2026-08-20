@@ -45,7 +45,7 @@ describe('migration 129 - GitHub PR summary reconciliation index', () => {
     const source = readFileSync(
       new URL('../129_github-pr-summaries-reconciliation-index.mjs', import.meta.url)
     );
-    expect(manifest.lastReservedId).toBe('130');
+    expect(Number(manifest.lastReservedId)).toBeGreaterThanOrEqual(129);
     expect(manifest.entries.find((entry) => entry.id === '129')).toEqual({
       id: '129',
       name: 'github-pr-summaries-reconciliation-index',

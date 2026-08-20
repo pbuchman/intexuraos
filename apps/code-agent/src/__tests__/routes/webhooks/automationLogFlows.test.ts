@@ -107,6 +107,23 @@ describe('Automation log integration flows', () => {
         processedAt: new Date(),
         payload: input.payload ?? {},
       })),
+      acquireTriage: vi.fn().mockImplementation(async () => {
+        const saveCall = vi.mocked(mockEventRepo.save).mock.results.at(-1);
+        if (saveCall?.type !== 'return') {
+          return ok({ kind: 'not_found' as const });
+        }
+        const saveResult = await saveCall.value;
+        if (!saveResult.ok) {
+          return ok({ kind: 'not_found' as const });
+        }
+        return ok({
+          kind: 'acquired' as const,
+          event: saveResult.value,
+          leaseToken: 'automation-log-flow-lease',
+        });
+      }),
+      completeTriage: vi.fn().mockResolvedValue(ok(undefined)),
+      failTriage: vi.fn().mockResolvedValue(ok(undefined)),
       findById: vi.fn().mockResolvedValue(ok(null)),
       findByPullRequest: vi.fn().mockResolvedValue(ok([])),
       findByRepository: vi.fn().mockResolvedValue(ok([])),

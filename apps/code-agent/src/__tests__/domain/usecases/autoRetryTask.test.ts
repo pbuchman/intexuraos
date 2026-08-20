@@ -247,6 +247,28 @@ describe('autoRetryTask', () => {
       expect(mockCodeTaskRepo.create.mock.calls[0]?.[0]?.sentryIssue).toEqual(sentryIssue);
     });
 
+    it('preserves the review target and requested review types on an auto-retry', async () => {
+      const failedTask = buildTask({
+        id: 'task-review-failed',
+        agentType: 'review',
+        reviewTypes: ['code_quality', 'security'],
+        reviewCommitSha: 'commit-that-was-reviewed',
+      });
+
+      await autoRetryTask(buildDeps(), {
+        failedTask,
+        failedWorkerLocation: 'home-mac',
+        reason: 'worker_crashed',
+      });
+
+      expect(mockCodeTaskRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reviewTypes: ['code_quality', 'security'],
+          reviewCommitSha: 'commit-that-was-reviewed',
+        }),
+      );
+    });
+
     it('enqueues the retry task for dispatch', async () => {
       const failedTask = buildTask({ id: 'task_orig' });
 

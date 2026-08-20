@@ -5,7 +5,7 @@
  * Instead, each dispatch call receives credentials via workerCredentials.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Logger } from '@intexuraos/common-core';
+import { err, type Logger } from '@intexuraos/common-core';
 import type {
   TaskDispatcherDeps,
   DispatchWorkerCredentials,
@@ -592,11 +592,13 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
-    it('returns error for non-503 HTTP errors during dispatch', async () => {
+    it.each([500, 501, 599])(
+      'treats non-contractual HTTP %i after POST as an unknown outcome',
+      async (status) => {
       const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: false,
-        status: 500,
+        status,
         json: async () => ({ error: 'Internal server error' }),
       } as Response);
 
@@ -616,9 +618,14 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('dispatch_failed');
-        expect(result.error.message).toContain('HTTP 500');
+        expect(result.error).toMatchObject({
+          code: 'network_error',
+          outcomeUnknown: true,
+          workerLocation: 'home-mac',
+        });
+        expect(result.error.message).toContain(`HTTP ${String(status)}`);
       }
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('returns error for 401 unauthorized from worker', async () => {
@@ -650,7 +657,7 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
-    it('returns dispatch_failed when worker returns invalid JSON', async () => {
+    it('retains the claim when a successful worker POST returns invalid JSON', async () => {
       const service = createTaskDispatcherService(baseDeps);
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
@@ -679,9 +686,74 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('dispatch_failed');
+        expect(result.error).toMatchObject({
+          code: 'network_error',
+          outcomeUnknown: true,
+          workerLocation: 'home-mac',
+        });
         expect(result.error.message).toContain('invalid JSON');
       }
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains the claim when a successful worker POST returns an unknown response shape', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ queued: true }),
+      } as unknown as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result).toEqual(err({
+        code: 'network_error',
+        message: 'Worker returned an unknown response after the dispatch POST',
+        outcomeUnknown: true,
+        workerLocation: 'home-mac',
+      }));
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('retains the claim when a successful worker POST returns a non-object body', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      vi.mocked(global.fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => null,
+      } as unknown as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-123',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result).toEqual(err({
+        code: 'network_error',
+        message: 'Worker returned an unknown response after the dispatch POST',
+        outcomeUnknown: true,
+        workerLocation: 'home-mac',
+      }));
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
     it('returns error when dispatchSigningSecret is empty', async () => {
@@ -763,7 +835,7 @@ describe('taskDispatcherImpl', () => {
       }
     });
 
-    it('falls back to next worker when first returns 502', async () => {
+    it('does not fall back after an ambiguous 502 response to the worker POST', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -794,14 +866,18 @@ describe('taskDispatcherImpl', () => {
         hasChildren: false,
       });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.workerLocation).toBe('cloud-vm');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'network_error',
+          outcomeUnknown: true,
+        });
+        expect(result.error.message).toContain('HTTP 502');
       }
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to next worker when first returns 504', async () => {
+    it('does not fall back after an ambiguous 504 response to the worker POST', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -830,14 +906,15 @@ describe('taskDispatcherImpl', () => {
         hasChildren: false,
       });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.workerLocation).toBe('cloud-vm');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('network_error');
+        expect(result.error.message).toContain('HTTP 504');
       }
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('returns worker_unavailable when all workers return 502', async () => {
+    it('stops after the first worker returns ambiguous 502', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -860,11 +937,12 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.code).toBe('network_error');
       }
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('returns at_capacity when one worker returns 503 and other returns 502', async () => {
+    it('stops on ambiguous 502 after a definite capacity rejection', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -889,11 +967,11 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('at_capacity');
+        expect(result.error.code).toBe('network_error');
       }
     });
 
-    it('returns at_capacity when one worker returns 503 and other returns 504', async () => {
+    it('stops on ambiguous 504 after a definite capacity rejection', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -918,11 +996,11 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('at_capacity');
+        expect(result.error.code).toBe('network_error');
       }
     });
 
-    it('falls back to next worker when first returns 530 (Cloudflare)', async () => {
+    it('does not fall back after an ambiguous Cloudflare 530 response', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -953,14 +1031,15 @@ describe('taskDispatcherImpl', () => {
         hasChildren: false,
       });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.workerLocation).toBe('cloud-vm');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('network_error');
+        expect(result.error.message).toContain('HTTP 530');
       }
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to next worker when first returns 520 (Cloudflare edge)', async () => {
+    it('does not fall back after an ambiguous Cloudflare 520 response', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -991,14 +1070,15 @@ describe('taskDispatcherImpl', () => {
         hasChildren: false,
       });
 
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.workerLocation).toBe('cloud-vm');
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe('network_error');
+        expect(result.error.message).toContain('HTTP 520');
       }
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('returns worker_unavailable when all workers return Cloudflare 530', async () => {
+    it('stops after the first worker returns ambiguous Cloudflare 530', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -1021,11 +1101,12 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('worker_unavailable');
+        expect(result.error.code).toBe('network_error');
       }
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('returns at_capacity when one worker returns 503 and other returns 530', async () => {
+    it('stops on ambiguous Cloudflare 530 after a definite capacity rejection', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
@@ -1050,7 +1131,7 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('at_capacity');
+        expect(result.error.code).toBe('network_error');
       }
     });
 
@@ -1400,10 +1481,85 @@ describe('taskDispatcherImpl', () => {
 
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.error.code).toBe('network_error');
+        expect(result.error).toMatchObject({
+          code: 'network_error',
+          outcomeUnknown: true,
+          workerLocation: 'home-mac',
+        });
         expect(result.error.message).toContain('Network error');
         expect(result.error.message).toContain('Network connection failed');
       }
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not treat transport error text containing 503 as a safe capacity rejection', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      mockFetch.mockRejectedValueOnce(new Error('socket closed by upstream node worker-503'));
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-transport-503-text',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result).toEqual(err({
+        code: 'network_error',
+        message: 'Network error: socket closed by upstream node worker-503',
+        outcomeUnknown: true,
+        workerLocation: 'home-mac',
+      }));
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not fall back after a worker POST times out', async () => {
+      const service = createTaskDispatcherService(baseDeps);
+      const mockFetch = vi.mocked(global.fetch);
+      const timeoutError = Object.assign(new Error('The operation was aborted due to timeout'), {
+        name: 'TimeoutError',
+      });
+      mockFetch.mockRejectedValueOnce(timeoutError);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'accepted' }),
+      } as Response);
+
+      const result = await service.dispatch({
+        taskId: 'task-timeout',
+        prompt: 'Test',
+        systemPromptHash: 'abc123',
+        repository: 'test/repo',
+        baseBranch: 'main',
+        workerType: 'opus',
+        webhookUrl: 'https://example.com/webhook',
+        webhookSecret: 'whsec_test',
+        workerCredentials: testWorkerCredentials,
+        linearIssueLabels: [],
+        hasChildren: false,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toMatchObject({
+          code: 'network_error',
+          outcomeUnknown: true,
+          workerLocation: 'home-mac',
+        });
+        expect(result.error.message).toContain('timeout');
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('uses empty string for missing CF credentials', async () => {
@@ -1735,11 +1891,13 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
-    it('skips cancellation when no credentials provided', async () => {
+    it('rejects cancellation when no credentials are provided', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
 
-      await service.cancelOnWorker('task-123', 'mac');
+      await expect(service.cancelOnWorker('task-123', 'mac')).rejects.toThrow(
+        'Worker cancellation credentials unavailable',
+      );
 
       expect(mockFetch).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalledWith(
@@ -1748,7 +1906,7 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
-    it('logs warning on cancellation failure', async () => {
+    it('logs and rejects on cancellation transport failure', async () => {
       const service = createTaskDispatcherService(baseDeps);
       const mockFetch = vi.mocked(global.fetch);
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
@@ -1760,7 +1918,9 @@ describe('taskDispatcherImpl', () => {
         dispatchSigningSecret: 'test-dispatch-secret',
       };
 
-      await service.cancelOnWorker('task-123', 'mac', credentials);
+      await expect(service.cancelOnWorker('task-123', 'mac', credentials)).rejects.toThrow(
+        'Network error',
+      );
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({

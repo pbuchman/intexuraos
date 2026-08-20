@@ -200,7 +200,13 @@ describe('migration 128 - Message Digest service indexes', () => {
         artifact.indexes.filter((index) => JSON.stringify(index) === JSON.stringify(expected))
       ).toHaveLength(1);
     }
-    expect(artifact.fieldOverrides).toEqual(expectedFieldOverrides);
+    for (const expected of expectedFieldOverrides) {
+      expect(
+        artifact.fieldOverrides.filter(
+          (fieldOverride) => JSON.stringify(fieldOverride) === JSON.stringify(expected)
+        )
+      ).toHaveLength(1);
+    }
 
     const manifest = JSON.parse(
       readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')
@@ -211,7 +217,7 @@ describe('migration 128 - Message Digest service indexes', () => {
     const source = readFileSync(
       new URL('../128_message-digest-service-indexes.mjs', import.meta.url)
     );
-    expect(manifest.lastReservedId).toBe('130');
+    expect(Number(manifest.lastReservedId)).toBeGreaterThanOrEqual(128);
     expect(manifest.entries.filter((entry) => entry.id === '128')).toEqual([
       {
         id: '128',

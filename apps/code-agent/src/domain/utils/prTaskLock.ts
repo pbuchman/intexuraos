@@ -1,5 +1,5 @@
 import type { Logger } from '@intexuraos/common-core';
-import type { DocumentReference } from '@google-cloud/firestore';
+import type { DocumentReference, Transaction } from '@google-cloud/firestore';
 import { MERGE_CONFLICT_SYSTEM_PROMPT_HASH } from '../models/codeTask.js';
 
 export interface LockCleanupInfo { repository: string; prNumber: number }
@@ -42,5 +42,62 @@ export async function deletePRTaskLock(
     logger.info({ lockDocPath, repository, prNumber }, 'Deleted PR task lock');
   } catch (error) {
     logger.warn({ lockDocPath, error }, 'Failed to delete PR task lock (best-effort)');
+  }
+}
+
+export async function deletePRTaskLockIfOwned(
+  firestore: {
+    doc: (path: string) => DocumentReference;
+    runTransaction: <T>(operation: (transaction: Transaction) => Promise<T>) => Promise<T>;
+  },
+  repository: string,
+  prNumber: number,
+  expectedTaskId: string,
+  logger: Logger,
+): Promise<void> {
+  const lockDocPath = buildLockDocPath(repository, prNumber);
+  try {
+    const outcome = await firestore.runTransaction(async (transaction) => {
+      const lockRef = firestore.doc(lockDocPath);
+      const snapshot = await transaction.get(lockRef);
+      const lockData = snapshot.data() as Record<string, unknown> | undefined;
+      const currentTaskId = snapshot.exists
+        ? lockData?.['taskId']
+        : undefined;
+
+      if (currentTaskId !== expectedTaskId) {
+        return {
+          deleted: false,
+          currentTaskId: typeof currentTaskId === 'string' ? currentTaskId : undefined,
+        } as const;
+      }
+
+      transaction.delete(lockRef);
+      return { deleted: true } as const;
+    });
+
+    if (outcome.deleted) {
+      logger.info(
+        { lockDocPath, repository, prNumber, expectedTaskId },
+        'Deleted owned PR task lock',
+      );
+      return;
+    }
+
+    logger.info(
+      {
+        lockDocPath,
+        repository,
+        prNumber,
+        expectedTaskId,
+        ...(outcome.currentTaskId !== undefined && { currentTaskId: outcome.currentTaskId }),
+      },
+      'Skipped PR task lock deletion because ownership changed',
+    );
+  } catch (error) {
+    logger.warn(
+      { lockDocPath, expectedTaskId, error },
+      'Failed to conditionally delete PR task lock (best-effort)',
+    );
   }
 }

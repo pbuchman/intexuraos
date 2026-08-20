@@ -1527,7 +1527,7 @@ describe('codeRoutes', () => {
         sanitizedPrompt: 'fix bug',
         systemPromptHash: 'abc123',
         workerType: 'opus',
-        workerLocation: 'vm',
+        workerLocation: 'home-mac',
         repository: 'test/repo',
         baseBranch: 'main',
         traceId: 'trace-123',
@@ -2839,6 +2839,14 @@ describe('codeRoutes', () => {
         status: 'running',
         cancelNonce: 'abcd',
         cancelNonceExpiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      });
+
+      await getServices().workerSettingsRepo.addWorker('user-123', {
+        name: 'mac',
+        url: 'https://cc-mac.intexuraos.cloud',
+        cfAccessClientId: 'test-client-id',
+        cfAccessClientSecret: 'test-client-secret',
+        dispatchSigningSecret: 'test-dispatch-secret',
       });
 
       const response = await server.inject({

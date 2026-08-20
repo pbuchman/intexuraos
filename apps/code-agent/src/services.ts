@@ -141,7 +141,7 @@ export function initServices(config: ServiceConfig): void {
     evaluateEvent: (event: GitHubPREvent, correctionContext?: string): Promise<Result<GitHubAgentEvalResult, GitHubAgentError>> =>
       evaluateEvent({ logger, gitHubPRClient, resolveToolCallingClient, userServiceClient, allowedBots: ALLOWED_BOTS }, event, correctionContext),
     createReviewTask: (taskLogger, request) => createReviewTask({
-      logger: taskLogger, codeTaskRepo: repos.codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService,
+      logger: taskLogger, firestore, codeTaskRepo: repos.codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService,
       linearAgentClient, gitHubPRClient, userServiceClient, workerSettingsRepo: repos.workerSettingsRepo,
       orchestratorSecret: config.orchestratorSecret, automationLog, gitHubPRSummaryRepo: repos.gitHubPRSummaryRepo,
     }, request),

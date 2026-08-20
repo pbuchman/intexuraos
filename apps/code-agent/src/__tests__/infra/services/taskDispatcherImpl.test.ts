@@ -1164,14 +1164,14 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
-    it('logs warning and returns when worker returns non-OK status', async () => {
+    it('rejects when worker returns a non-OK status', async () => {
       const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-cancel-fail')
         .reply(500, 'Internal Server Error');
 
-      await service.cancelOnWorker(
+      await expect(service.cancelOnWorker(
         'task-cancel-fail',
         'test-worker',
         {
@@ -1179,7 +1179,7 @@ describe('taskDispatcherImpl', () => {
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
         }
-      );
+      )).rejects.toThrow('Worker cancellation failed with HTTP 500');
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-cancel-fail', location: 'test-worker', status: 500 }),
@@ -1187,14 +1187,14 @@ describe('taskDispatcherImpl', () => {
       );
     });
 
-    it('completes without throwing when worker returns 404', async () => {
+    it('rejects when the worker cannot find the task', async () => {
       const service = createTaskDispatcherService(deps);
 
       nock(WORKER_URL)
         .delete('/tasks/task-not-found')
         .reply(404, 'Not Found');
 
-      await service.cancelOnWorker(
+      await expect(service.cancelOnWorker(
         'task-not-found',
         'test-worker',
         {
@@ -1202,11 +1202,48 @@ describe('taskDispatcherImpl', () => {
           cfAccessClientId: 'test-client-id',
           cfAccessClientSecret: 'test-client-secret',
         }
-      );
+      )).rejects.toThrow('Worker cancellation failed with HTTP 404');
 
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ taskId: 'task-not-found', location: 'test-worker', status: 404 }),
         'Worker cancellation request failed'
+      );
+    });
+
+    it('rejects before transport when worker credentials are unavailable', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      await expect(service.cancelOnWorker(
+        'task-no-credentials',
+        'test-worker',
+      )).rejects.toThrow('Worker cancellation credentials unavailable');
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-no-credentials', location: 'test-worker' }),
+        'No credentials provided for cancellation, skipping worker notification',
+      );
+    });
+
+    it('rejects when cancellation transport fails', async () => {
+      const service = createTaskDispatcherService(deps);
+
+      nock(WORKER_URL)
+        .delete('/tasks/task-network-error')
+        .replyWithError('socket reset');
+
+      await expect(service.cancelOnWorker(
+        'task-network-error',
+        'test-worker',
+        {
+          url: WORKER_URL,
+          cfAccessClientId: 'test-client-id',
+          cfAccessClientSecret: 'test-client-secret',
+        },
+      )).rejects.toThrow();
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ taskId: 'task-network-error', location: 'test-worker' }),
+        'Failed to notify worker of cancellation',
       );
     });
   });

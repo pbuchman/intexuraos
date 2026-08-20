@@ -248,6 +248,12 @@ export function toFirestoreDoc(
   if (input.agentType !== undefined) {
     taskData.agentType = input.agentType;
   }
+  if (input.queuedAt !== undefined) {
+    const queuedAt = toTimestamp(input.queuedAt);
+    if (queuedAt !== undefined) {
+      taskData.queuedAt = queuedAt;
+    }
+  }
   if (input.planningPrBranch !== undefined) {
     taskData.planningPrBranch = input.planningPrBranch;
   }
@@ -259,6 +265,9 @@ export function toFirestoreDoc(
   }
   if (input.reviewTypes !== undefined) {
     taskData.reviewTypes = input.reviewTypes;
+  }
+  if (input.reviewCommitSha !== undefined) {
+    taskData.reviewCommitSha = input.reviewCommitSha;
   }
   if (input.executionMemoryContext !== undefined) {
     taskData.executionMemoryContext = serializeExecutionMemoryContext(
