@@ -6,6 +6,7 @@
 
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   buildSourceMap,
   validateSynthesisAttributions,
@@ -563,8 +564,8 @@ async function generateCoverImage(
   }
 
   // All providers failed
-  logger.error(
-    { errors },
+  logger.warn(
+    { errors, [SKIP_SENTRY_KEY]: true },
     `[4.4.4] Cover image generation failed — all ${String(pipelines.length)} provider(s) exhausted. HTML will be generated without a cover image.`
   );
   return null;
