@@ -1,127 +1,77 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { IntexuraOSError } from '@intexuraos/common-core';
 import {
   fetchGitHubKeys,
-  GITHUB_APP_PRIVATE_KEY_SECRET,
-  CACHE_MAX_AGE_MS,
+  GITHUB_APP_PRIVATE_KEY_PATH,
   type SecretManagerDeps,
 } from '../../bootstrap/secret-manager.js';
 
 function makeDeps(overrides: Partial<SecretManagerDeps> = {}): SecretManagerDeps {
   return {
-    existsSync: () => false,
-    statSync: () => ({ mtimeMs: 0 }),
-    readFileSync: () => '',
-    execSync: () => Buffer.from(''),
-    now: () => 1_000_000,
+    existsSync: () => true,
+    statSync: () => ({ mode: 0o100600 }),
+    readFileSync: () => '-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----\n',
     ...overrides,
   };
 }
 
 describe('fetchGitHubKeys', () => {
-  it('returns the env override verbatim without touching gcloud', () => {
-    const execSync = vi.fn();
-    const deps = makeDeps({ execSync });
+  it('loads the host-rendered package file without invoking Secret Manager', () => {
     const key = fetchGitHubKeys(
-      { projectId: 'proj', cachePath: '/tmp/github-app.pem', override: 'PEM-KEY' },
-      deps
+      { privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem' },
+      makeDeps()
     );
-    expect(key).toBe('PEM-KEY');
-    expect(execSync).not.toHaveBeenCalled();
+
+    expect(key).toContain('BEGIN PRIVATE KEY');
+    expect(GITHUB_APP_PRIVATE_KEY_PATH).toBe('INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH');
   });
 
-  it('returns a fresh cached key without hitting gcloud', () => {
-    const execSync = vi.fn();
-    const deps = makeDeps({
-      existsSync: () => true,
-      statSync: () => ({ mtimeMs: 999_500 }),
-      readFileSync: () => 'CACHED-KEY',
-      now: () => 1_000_000,
-      execSync,
-    });
-    const key = fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/github-app.pem' }, deps);
-    expect(key).toBe('CACHED-KEY');
-    expect(execSync).not.toHaveBeenCalled();
+  it('fails closed when the package projection does not exist', () => {
+    expect(() =>
+      fetchGitHubKeys(
+        { privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem' },
+        makeDeps({ existsSync: () => false })
+      )
+    ).toThrow(/rendered GitHub App private key file is missing/iu);
   });
 
-  it('refetches when the cache is stale', () => {
-    const execSync = vi.fn(() => 'FRESH-KEY\n');
-    const deps = makeDeps({
-      existsSync: () => true,
-      statSync: () => ({ mtimeMs: 0 }),
-      now: () => CACHE_MAX_AGE_MS + 1,
-      execSync,
-    });
-    const key = fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/github-app.pem' }, deps);
-    expect(key).toBe('FRESH-KEY');
-    expect(execSync).toHaveBeenCalledOnce();
+  it('rejects a private-key projection with group or world permissions', () => {
+    expect(() =>
+      fetchGitHubKeys(
+        { privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem' },
+        makeDeps({ statSync: () => ({ mode: 0o100640 }) })
+      )
+    ).toThrow(/mode 0600/iu);
   });
 
-  it('fetches from Secret Manager when no cache exists', () => {
-    const execSync: SecretManagerDeps['execSync'] = vi.fn(() => '  PEM-FROM-GCLOUD  \n');
-    const deps = makeDeps({ execSync });
-    const key = fetchGitHubKeys({ projectId: 'my-proj', cachePath: '/tmp/x.pem' }, deps);
-    expect(key).toBe('PEM-FROM-GCLOUD');
-    const firstCall = vi.mocked(execSync).mock.calls[0];
-    expect(firstCall).toBeDefined();
-    expect(firstCall?.[0]).toContain(GITHUB_APP_PRIVATE_KEY_SECRET);
-    expect(firstCall?.[0]).toContain('my-proj');
+  it('rejects a malformed rendered private key', () => {
+    expect(() =>
+      fetchGitHubKeys(
+        { privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem' },
+        makeDeps({ readFileSync: () => 'not-a-private-key' })
+      )
+    ).toThrow(/valid PEM private key/iu);
   });
 
-  it('throws with the secret name when Secret Manager returns 404 / errors', () => {
-    const deps = makeDeps({
-      execSync: () => {
-        throw new Error('NOT_FOUND: secret not found');
-      },
-    });
-    expect(() => fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem' }, deps)).toThrow(
-      new RegExp(`'${GITHUB_APP_PRIVATE_KEY_SECRET}'`)
-    );
-  });
+  it('redacts filesystem read error details', () => {
+    const sentinel = 'private-value-that-must-not-be-logged';
+    let thrown: unknown;
 
-  it('includes the underlying error detail in the thrown message', () => {
-    const deps = makeDeps({
-      execSync: () => {
-        throw new Error('NOT_FOUND: secret missing');
-      },
-    });
-    expect(() => fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem' }, deps)).toThrow(
-      /NOT_FOUND: secret missing/
-    );
-  });
-
-  it('renders non-Error throwables from gcloud as strings in the thrown message', () => {
-    const deps = makeDeps({
-      execSync: () => {
-        throw 'gcloud: permission denied';
-      },
-    });
-    expect(() => fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem' }, deps)).toThrow(
-      /gcloud: permission denied/
-    );
-  });
-
-  it('ignores an empty-string override and falls through to Secret Manager', () => {
-    const execSync = vi.fn(() => 'PEM-FROM-GCLOUD');
-    const deps = makeDeps({ execSync });
-    const key = fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem', override: '' }, deps);
-    expect(key).toBe('PEM-FROM-GCLOUD');
-    expect(execSync).toHaveBeenCalledOnce();
-  });
-
-  // INT-1565 acceptance: bootstrap failures must be typed `IntexuraOSError`s.
-  it('throws an IntexuraOSError with code MISCONFIGURED on Secret Manager failure', () => {
-    const deps = makeDeps({
-      execSync: () => {
-        throw new Error('NOT_FOUND: secret missing');
-      },
-    });
     try {
-      fetchGitHubKeys({ projectId: 'proj', cachePath: '/tmp/x.pem' }, deps);
-      throw new Error('expected fetchGitHubKeys to throw');
-    } catch (err) {
-      expect(err).toBeInstanceOf(IntexuraOSError);
-      expect((err as IntexuraOSError).code).toBe('MISCONFIGURED');
+      fetchGitHubKeys(
+        { privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem' },
+        makeDeps({
+          readFileSync: () => {
+            throw new Error(sentinel);
+          },
+        })
+      );
+    } catch (error) {
+      thrown = error;
     }
+
+    expect(thrown).toBeInstanceOf(IntexuraOSError);
+    expect((thrown as IntexuraOSError).code).toBe('MISCONFIGURED');
+    expect((thrown as Error).message).not.toContain(sentinel);
   });
 });

@@ -145,7 +145,6 @@ RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
 # Set environment
 ENV HOME=/home/claude
 ENV NODE_ENV=production
-ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 # Playwright: use system Chromium installed via apk, skip browser download
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1

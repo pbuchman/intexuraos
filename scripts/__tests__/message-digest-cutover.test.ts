@@ -1455,6 +1455,7 @@ WORKFLOW_RUN_ID_VALUE="123456"
 RELEASE_MANIFEST_HASH="${'d'.repeat(64)}"
 REMOTE_TERRAFORM_BIN_DIR="/opt/intexuraos/.deployment-tools/terraform/1.5.0"
 run_remote() { printf '%s\n' "$1"; }
+read_remote_cutover_status() { printf complete; }
 run_message_digest_cutover
 `,
       { HCLOUD_TOKEN: '' }
@@ -1615,11 +1616,13 @@ cleanup() { :; }
 require_command() { :; }
 validate_inputs() { :; }
 resolve_commit_metadata() { trace resolve-commit; }
+verify_repository_secret_package_version_pins() { trace verify-package-pins; }
 prepare_sync_source() { trace prepare-local-verification; }
 setup_ssh() { trace setup-ssh; }
 resolve_activation_context() { ACTIVATION_MODE="cutover_complete"; trace resolve-context; }
 sync_repo() { trace sync-repo; }
 verify_remote_release_manifest() { trace verify-release; }
+verify_active_secret_projection_version() { trace verify-package; }
 cleanup_retired_remote_paths() { trace cleanup-retired; }
 prepare_runtime_dependencies() { trace prepare-runtime; }
 run_message_digest_cutover() { trace cutover; }
@@ -1640,10 +1643,12 @@ cat "$TRACE_FILE"
       expect(result.status, result.stderr).toBe(0);
       expect(result.stdout.trim().split('\n')).toEqual([
         'resolve-commit',
+        'verify-package-pins',
         'prepare-local-verification',
         'setup-ssh',
         'resolve-context',
         'verify-release',
+        'verify-package',
         'verify-backend',
         'verify-code',
         'verify-runtime',

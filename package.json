@@ -53,6 +53,8 @@
     "verify:endpoints": "node scripts/verify-required-endpoints.mjs",
     "verify:hash-routing": "node scripts/verify-hash-routing.mjs",
     "verify:terraform-secrets": "node scripts/verify-terraform-secrets.mjs",
+    "verify:secret-packages": "node scripts/verify-secret-packages.mjs",
+    "verify:credential-files": "node scripts/verify-credential-files.mjs",
     "verify:pubsub": "node scripts/verify-pubsub.mjs",
     "verify:logging": "node scripts/verify-logging.mjs",
     "verify:incoming-request-logging": "node scripts/verify-incoming-request-logging.mjs",

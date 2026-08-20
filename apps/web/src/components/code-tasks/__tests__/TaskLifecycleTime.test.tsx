@@ -4,15 +4,17 @@
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/utils/scheduledDispatch', () => ({
+  getBrowserTimezone: (): string => 'Europe/Warsaw',
+}));
+
 import { TaskLifecycleTime } from '../TaskLifecycleTime.js';
 
 describe('TaskLifecycleTime', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-07-27T14:35:00.000Z'));
-    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockReturnValue({
-      timeZone: 'Europe/Warsaw',
-    } as Intl.ResolvedDateTimeFormatOptions);
   });
 
   afterEach(() => {

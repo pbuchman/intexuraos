@@ -10,6 +10,7 @@ import * as jose from 'jose';
 import { clearJwksCache } from '@intexuraos/common-http';
 import { err, ok, type Result } from '@intexuraos/common-core';
 import { OPENROUTER_ALLOWED_MODELS } from '@intexuraos/infra-openrouter';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   createOpenRouterModelId,
   DEFAULT_PLATFORM_LLM_MODEL,
@@ -4993,6 +4994,7 @@ describe('Internal Routes', () => {
         notionExporter: createFakeNotionExporter(),
       };
       setServices(services);
+      const warnSpy = vi.spyOn(app.log, 'warn');
 
       const response = await app.inject({
         method: 'POST',
@@ -5015,6 +5017,14 @@ describe('Internal Routes', () => {
       const result = updatedResearch?.llmResults[0];
       expect(result?.status).toBe('failed');
       expect(result?.error).toBe('LLM API error');
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          rawError: 'LLM API error',
+          [SKIP_SENTRY_KEY]: true,
+        }),
+        '[3.3] LLM research call failed'
+      );
 
       // Verify notification was sent for the failure
       const failures = fakeNotificationSender.getSentFailures();

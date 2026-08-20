@@ -243,7 +243,7 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
     );
 
     it(
-      'mounts secrets at /secrets with read-only access',
+      'mounts only the task allowlist and no GCP credential',
       async () => {
         const taskId = `e2e-mount-secrets-${Date.now()}`;
         const config = createTestConfig(taskId, 'file-test');
@@ -253,6 +253,8 @@ describe.skipIf(skipIfNoDocker)('E2E Container Tests', () => {
 
         const logs = await provider.getWorkerLogs(taskId);
         expect(logs).toContain('[claude-stub] /secrets: READ-ONLY (good)');
+        expect(logs).toContain('[claude-stub] GCP credential env: ABSENT (good)');
+        expect(logs).toContain('[claude-stub] GCP service-account file: ABSENT (good)');
       },
       TEST_TIMEOUT
     );

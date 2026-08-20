@@ -8,6 +8,7 @@ REMOTE_USER="${REMOTE_USER:-deploy}"
 REMOTE_REPO_DIR="${REMOTE_REPO_DIR:-/opt/intexuraos}"
 REMOTE_RELEASES_DIR="${REMOTE_REPO_DIR%/}/releases"
 REMOTE_RELEASE_DIR=""
+REMOTE_SECRET_CANARY_CONFIG=""
 REMOTE_CUTOVER_STATE_PATH="${REMOTE_REPO_DIR%/}/.deployment-state/message-digests/state.json"
 TERRAFORM_VERSION="1.5.0"
 TERRAFORM_ARCHIVE_SHA256="9ae1bcfef088e9aaabeaf6fdc6cce01187dc4936f1564899ee6fa6baec5ad19c"
@@ -17,6 +18,10 @@ REMOTE_TERRAFORM_BIN_DIR=""
 PUBLIC_DOMAIN="${PUBLIC_DOMAIN:-intexuraos.cloud}"
 SSH_PORT="${SSH_PORT:-22}"
 DEPLOY_NGINX="${DEPLOY_NGINX:-true}"
+SECRET_PACKAGE_VERSION="${SECRET_PACKAGE_VERSION:-}"
+SECRET_CANARY_TIMEOUT_SECONDS="${SECRET_CANARY_TIMEOUT_SECONDS:-120}"
+WEB_RELEASES_ROOT="${WEB_RELEASES_ROOT:-/var/www/intexuraos/web/releases}"
+WEB_CURRENT_LINK="${WEB_CURRENT_LINK:-/var/www/intexuraos/web/current}"
 DEPLOYMENT_JSON_PATH="/var/www/intexuraos/web/current/deployment.json"
 LEGACY_DEPLOYMENT_JSON_PATH="${LEGACY_DEPLOYMENT_JSON_PATH:-/var/www/intexuraos/web/dist/deployment.json}"
 KEY_FILE=""
@@ -37,6 +42,16 @@ RELEASE_MANIFEST_HASH=""
 TESTED_TREE_VALUE=""
 DEPLOYMENT_METADATA_PUBLISHED="false"
 DEPLOYMENT_ATTESTATION_VERIFIED="false"
+STAGED_SECRET_PROJECTION=""
+PREVIOUS_SECRET_PROJECTION=""
+SECRET_PROJECTION_ACTIVATION_ATTEMPTED="false"
+SECRET_PROJECTION_ACTIVATED="false"
+SECRET_PROJECTION_COMPENSATED="false"
+CUTOVER_ADMISSION_IRREVERSIBLE="false"
+PREVIOUS_WEB_RELEASE=""
+WEB_AND_EDGE_MUTATION_STARTED="false"
+WEB_AND_EDGE_COMPENSATED="false"
+DEPLOYMENT_COMPLETED="false"
 RETIRED_REMOTE_PATHS=(
   "packages/infra-otel"
 )
@@ -44,30 +59,6 @@ RETIRED_REMOTE_PATHS=(
 fail() {
   printf 'ERROR: %s\n' "$1" >&2
   exit 1
-}
-
-cleanup() {
-  local exit_status=$?
-
-  set +e
-  if [[ "${DEPLOYMENT_METADATA_PUBLISHED}" == "true" && "${DEPLOYMENT_ATTESTATION_VERIFIED}" != "true" ]]; then
-    if ! withdraw_deployment_metadata; then
-      printf 'ERROR: Could not withdraw unverified deployment attestation\n' >&2
-    fi
-  fi
-  [[ -n "${KEY_FILE}" ]] && rm -f "${KEY_FILE}"
-  [[ -n "${KNOWN_HOSTS_FILE}" ]] && rm -f "${KNOWN_HOSTS_FILE}"
-  [[ -n "${DEPLOYMENT_RESPONSE_HEADERS_FILE}" ]] && rm -f "${DEPLOYMENT_RESPONSE_HEADERS_FILE}"
-  [[ -n "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}"
-  [[ -n "${CODE_HEALTH_RESPONSE_BODY_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_BODY_FILE}"
-  [[ -n "${RELEASE_ATTESTATION_FILE}" ]] && rm -f "${RELEASE_ATTESTATION_FILE}"
-  if [[ -n "${TERRAFORM_TOOL_DIR}" && -d "${TERRAFORM_TOOL_DIR}" ]]; then
-    rm -rf -- "${TERRAFORM_TOOL_DIR}"
-  fi
-  if [[ -n "${SYNC_SOURCE_DIR}" && -d "${SYNC_SOURCE_DIR}" ]]; then
-    rm -rf -- "${SYNC_SOURCE_DIR}"
-  fi
-  return "${exit_status}"
 }
 
 require_command() {
@@ -104,6 +95,10 @@ validate_inputs() {
   [[ -n "${REMOTE_USER}" ]] || fail "REMOTE_USER is required"
   [[ -n "${REMOTE_REPO_DIR}" ]] || fail "REMOTE_REPO_DIR is required"
   [[ "${SSH_PORT}" =~ ^[0-9]+$ ]] || fail "SSH_PORT must be numeric"
+  [[ "${SECRET_PACKAGE_VERSION}" =~ ^[1-9][0-9]*$ ]] \
+    || fail "SECRET_PACKAGE_VERSION must be an exact positive numeric version"
+  [[ "${SECRET_CANARY_TIMEOUT_SECONDS}" =~ ^[1-9][0-9]*$ ]] \
+    || fail "SECRET_CANARY_TIMEOUT_SECONDS must be a positive integer"
 
   case "${DEPLOY_NGINX}" in
     true|false) ;;
@@ -127,6 +122,7 @@ resolve_commit_metadata() {
 
   COMMIT_SHA_VALUE="${GITHUB_SHA:-${LOCAL_COMMIT_SHA_VALUE}}"
   REMOTE_RELEASE_DIR="${REMOTE_REPO_DIR%/}/releases/${COMMIT_SHA_VALUE}"
+  REMOTE_SECRET_CANARY_CONFIG="${REMOTE_REPO_DIR%/}/.deployment-state/secret-canary-${COMMIT_SHA_VALUE}.json"
   COMMIT_MESSAGE_VALUE="${GITHUB_COMMIT_MESSAGE:-}"
   if [[ -n "${GITHUB_RUN_ID:-}" ]]; then
     WORKFLOW_RUN_ID_VALUE="${GITHUB_RUN_ID}"
@@ -141,6 +137,14 @@ resolve_commit_metadata() {
   [[ "${COMMIT_SHA_VALUE}" =~ ^[0-9a-f]{40}$ ]] || fail "COMMIT_SHA must be a 40-character lowercase hexadecimal SHA"
   [[ "${WORKFLOW_RUN_ID_VALUE}" == "manual" || "${WORKFLOW_RUN_ID_VALUE}" =~ ^[0-9]+$ ]] \
     || fail "GITHUB_RUN_ID must be numeric"
+}
+
+verify_repository_secret_package_version_pins() {
+  node scripts/hetzner/verify-secret-package-version-pins.mjs \
+    "${SECRET_PACKAGE_VERSION}" \
+    config/environments/secret-packages.json \
+    terraform/hetzner-prod/prod.auto.tfvars.json >/dev/null \
+    || fail 'PROD secret package version pins are inconsistent'
 }
 
 prepare_sync_source() {
@@ -439,8 +443,11 @@ cleanup_retired_remote_paths() {
 
 withdraw_deployment_metadata() {
   local deployment_path_quoted=""
+  local candidate_deployment_path="${WEB_RELEASES_ROOT%/}/${COMMIT_SHA_VALUE}/deployment.json"
 
-  printf -v deployment_path_quoted '%q' "${DEPLOYMENT_JSON_PATH}"
+  [[ "${COMMIT_SHA_VALUE}" =~ ^[0-9a-f]{40}$ ]] \
+    || fail 'Candidate deployment metadata path requires an exact commit SHA'
+  printf -v deployment_path_quoted '%q' "${candidate_deployment_path}"
   run_remote "rm -f -- ${deployment_path_quoted}"
 }
 
@@ -454,10 +461,215 @@ run_remote_deploy_web() {
 }
 
 prepare_runtime_dependencies() {
-  run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh'
-  run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
-  run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh'
+  local secret_package_version_quoted=""
+  local commit_sha_quoted=""
+  local staged_output=""
+  local staged_projection_quoted=""
+  printf -v secret_package_version_quoted '%q' "${SECRET_PACKAGE_VERSION}"
+  printf -v commit_sha_quoted '%q' "${COMMIT_SHA_VALUE}"
   run_remote 'CI=true pnpm install --frozen-lockfile'
+  staged_output="$(run_remote \
+    "sudo -n INTEXURAOS_COMMIT_SHA=${commit_sha_quoted} INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --version ${secret_package_version_quoted} --stage-only")"
+  PREVIOUS_SECRET_PROJECTION="$(printf '%s\n' "${staged_output}" \
+    | sed -n 's/^PREVIOUS_PROJECTION_RELEASE_NAME=//p')"
+  [[ "${PREVIOUS_SECRET_PROJECTION}" =~ ^(legacy-pre-packages|prod-v[1-9][0-9]*-[0-9a-f]{8}-[0-9a-f]{40})$ ]] \
+    || fail 'Remote previous secret projection name is invalid'
+  STAGED_SECRET_PROJECTION="$(printf '%s\n' "${staged_output}" \
+    | sed -n 's/^STAGED_PROJECTION_RELEASE_NAME=//p')"
+  [[ "${STAGED_SECRET_PROJECTION}" =~ ^prod-v[1-9][0-9]*-[0-9a-f]{8}-${COMMIT_SHA_VALUE}$ ]] \
+    || fail 'Remote staged secret projection name is invalid'
+  printf -v staged_projection_quoted '%q' "${STAGED_SECRET_PROJECTION}"
+  run_remote \
+    "sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --preflight ${staged_projection_quoted}"
+  run_remote 'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/install-pm2-logrotate.sh'
+}
+
+activate_secret_projection() {
+  local staged_projection_quoted=""
+  local activation_status=0
+  [[ -n "${STAGED_SECRET_PROJECTION}" ]] || fail 'Staged secret projection is unresolved'
+  printf -v staged_projection_quoted '%q' "${STAGED_SECRET_PROJECTION}"
+  SECRET_PROJECTION_ACTIVATION_ATTEMPTED="true"
+  if run_remote \
+    "sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --activate ${staged_projection_quoted}"
+  then
+    activation_status=0
+  else
+    activation_status=$?
+  fi
+  [[ "${activation_status}" -eq 0 ]] || return "${activation_status}"
+  SECRET_PROJECTION_ACTIVATED="true"
+}
+
+reload_alloy_for_active_projection() {
+  run_remote \
+    'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
+}
+
+run_secret_projection_canary() {
+  local commit_sha_quoted=""
+  local canary_config_quoted=""
+  local canary_config_dir_quoted=""
+  printf -v commit_sha_quoted '%q' "${COMMIT_SHA_VALUE}"
+  printf -v canary_config_quoted '%q' "${REMOTE_SECRET_CANARY_CONFIG}"
+  printf -v canary_config_dir_quoted '%q' "$(dirname "${REMOTE_SECRET_CANARY_CONFIG}")"
+  run_remote \
+    "install -d -m 700 ${canary_config_dir_quoted}; INTEXURAOS_COMMIT_SHA=${commit_sha_quoted} INTEXURAOS_ENVIRONMENT=prod node -e 'const { chmodSync, writeFileSync } = require(\"node:fs\"); const { resolve } = require(\"node:path\"); const config = require(resolve(process.argv[1])); if (!config || !Array.isArray(config.apps)) process.exit(1); writeFileSync(process.argv[2], JSON.stringify(config), { encoding: \"utf8\", mode: 0o600 }); chmodSync(process.argv[2], 0o600);' ecosystem.config.prod.cjs ${canary_config_quoted}; pm2 start ${canary_config_quoted} --only code-agent --update-env"
+  wait_for_code_agent_canary
+}
+
+cleanup_remote_secret_canary_config() {
+  local canary_config_quoted=""
+  [[ -n "${REMOTE_SECRET_CANARY_CONFIG}" ]] || return 0
+  printf -v canary_config_quoted '%q' "${REMOTE_SECRET_CANARY_CONFIG}"
+  run_remote "rm -f -- ${canary_config_quoted}"
+}
+
+reload_alloy_for_previous_projection() {
+  run_remote_at "${PREVIOUS_RELEASE_DIR}" \
+    'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/observability/install-grafana-alloy.sh'
+}
+
+reload_previous_runtime() {
+  local current_link_quoted=""
+  local previous_dir_quoted=""
+  local previous_sha_quoted=""
+  printf -v current_link_quoted '%q' "${REMOTE_REPO_DIR%/}/current"
+  printf -v previous_dir_quoted '%q' "${PREVIOUS_RELEASE_DIR}"
+  printf -v previous_sha_quoted '%q' "${PREVIOUS_RELEASE_SHA}"
+  run_remote_at "${PREVIOUS_RELEASE_DIR}" \
+    "INTEXURAOS_COMMIT_SHA=${previous_sha_quoted} INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/reload-pm2.sh" \
+    || return 1
+  run_remote_at "${REMOTE_REPO_DIR}" \
+    "ln -sfn ${previous_dir_quoted} ${current_link_quoted}"
+}
+
+restore_previous_web_and_edge() {
+  local previous_web_quoted=""
+  local current_web_quoted=""
+  [[ "${WEB_AND_EDGE_MUTATION_STARTED}" == "true" ]] || return 0
+  [[ "${WEB_AND_EDGE_COMPENSATED}" != "true" ]] || return 0
+  [[ "${PREVIOUS_WEB_RELEASE}" == "${WEB_RELEASES_ROOT%/}/${PREVIOUS_RELEASE_SHA}" ]] \
+    || return 1
+  printf -v previous_web_quoted '%q' "${PREVIOUS_WEB_RELEASE}"
+  printf -v current_web_quoted '%q' "${WEB_CURRENT_LINK}"
+  run_remote \
+    "test -d ${previous_web_quoted} && test -f ${previous_web_quoted}/index.html; next_link=\$(mktemp ${current_web_quoted}.rollback.XXXXXX); rm -f -- \"\${next_link}\"; trap 'rm -f -- \"\${next_link}\"' EXIT; ln -s ${previous_web_quoted} \"\${next_link}\"; mv -Tf \"\${next_link}\" ${current_web_quoted}; trap - EXIT" \
+    || return 1
+  if [[ "${DEPLOY_NGINX}" == "true" ]]; then
+    run_remote_at "${PREVIOUS_RELEASE_DIR}" \
+      'sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh --message-digests-public' \
+      || return 1
+  fi
+  WEB_AND_EDGE_COMPENSATED="true"
+}
+
+compensate_secret_projection() {
+  local previous_projection_quoted=""
+  local compensation_failed=0
+  local active_projection=""
+  local previous_projection_was_already_active="false"
+  local observed_after_rollback=""
+  local rollback_status=0
+  [[ "${SECRET_PROJECTION_ACTIVATED}" == "true" || "${SECRET_PROJECTION_ACTIVATION_ATTEMPTED}" == "true" ]] \
+    || return 0
+  [[ "${SECRET_PROJECTION_COMPENSATED}" != "true" ]] || return 0
+  [[ -n "${PREVIOUS_SECRET_PROJECTION}" ]] || return 1
+  [[ -n "${STAGED_SECRET_PROJECTION}" ]] || return 1
+
+  if ! active_projection="$(run_remote \
+    'sudo -n SKIP_RUNTIME_CREDENTIAL_SMOKE=1 INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --current-release')"
+  then
+    printf 'ERROR: Could not reconcile the active production secret projection\n' >&2
+    return 1
+  fi
+
+  if [[ "${active_projection}" != "${STAGED_SECRET_PROJECTION}" && "${active_projection}" != "${PREVIOUS_SECRET_PROJECTION}" ]]; then
+    printf 'ERROR: Active production secret projection is neither the candidate nor recorded previous release\n' >&2
+    return 1
+  fi
+  if [[ "${active_projection}" == "${PREVIOUS_SECRET_PROJECTION}" \
+    && "${SECRET_PROJECTION_ACTIVATED}" != "true" ]]; then
+    previous_projection_was_already_active="true"
+  fi
+
+  printf -v previous_projection_quoted '%q' "${PREVIOUS_SECRET_PROJECTION}"
+  printf 'Compensating failed deployment with prior production release\n' >&2
+  if run_remote \
+    "sudo -n INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --rollback ${previous_projection_quoted}"
+  then
+    rollback_status=0
+  else
+    rollback_status=$?
+  fi
+  if ! observed_after_rollback="$(run_remote \
+    'sudo -n SKIP_RUNTIME_CREDENTIAL_SMOKE=1 INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/load-secrets.sh --current-release')"
+  then
+    printf 'ERROR: Could not verify the production secret projection after rollback\n' >&2
+    return 1
+  fi
+  if [[ "${observed_after_rollback}" != "${PREVIOUS_SECRET_PROJECTION}" ]]; then
+    printf 'ERROR: Production secret projection rollback did not restore the recorded previous release\n' >&2
+    return 1
+  fi
+  if [[ "${rollback_status}" -ne 0 ]]; then
+    printf 'ERROR: Offline projection rollback/recovery did not complete successfully\n' >&2
+    return 1
+  fi
+  if [[ "${previous_projection_was_already_active}" == "true" ]]; then
+    SECRET_PROJECTION_ACTIVATION_ATTEMPTED="false"
+    SECRET_PROJECTION_COMPENSATED="true"
+    return 0
+  fi
+  reload_alloy_for_previous_projection || compensation_failed=1
+  reload_previous_runtime || compensation_failed=1
+  restore_previous_web_and_edge || compensation_failed=1
+  verify_backend_readiness || compensation_failed=1
+  verify_runtime_readiness || compensation_failed=1
+  cleanup_remote_secret_canary_config || compensation_failed=1
+  if [[ "${compensation_failed}" -eq 0 ]]; then
+    SECRET_PROJECTION_ACTIVATION_ATTEMPTED="false"
+    SECRET_PROJECTION_ACTIVATED="false"
+    SECRET_PROJECTION_COMPENSATED="true"
+  fi
+  return "${compensation_failed}"
+}
+
+cleanup() {
+  local exit_status=$?
+
+  set +e
+  if [[ "${DEPLOYMENT_COMPLETED}" != "true" &&
+    "${CUTOVER_ADMISSION_IRREVERSIBLE}" != "true" &&
+    ( "${SECRET_PROJECTION_ACTIVATED}" == "true" || "${SECRET_PROJECTION_ACTIVATION_ATTEMPTED}" == "true" )
+  ]]; then
+    if ! compensate_secret_projection; then
+      printf 'ERROR: Could not restore the prior secret projection, runtime, Web, and edge\n' >&2
+    fi
+  elif [[ "${CUTOVER_ADMISSION_IRREVERSIBLE}" == "true" && "${DEPLOYMENT_COMPLETED}" != "true" ]]; then
+    printf 'Irreversible Message Digest admission recorded; external release compensation is disabled\n' >&2
+  fi
+  if [[ "${DEPLOYMENT_METADATA_PUBLISHED}" == "true" && "${DEPLOYMENT_ATTESTATION_VERIFIED}" != "true" ]]; then
+    if ! withdraw_deployment_metadata; then
+      printf 'ERROR: Could not withdraw unverified deployment attestation\n' >&2
+    fi
+  fi
+  if [[ -n "${KEY_FILE}" && -n "${REMOTE_RELEASE_DIR}" && -n "${REMOTE_SECRET_CANARY_CONFIG}" ]]; then
+    cleanup_remote_secret_canary_config >/dev/null 2>&1 || true
+  fi
+  [[ -n "${KEY_FILE}" ]] && rm -f "${KEY_FILE}"
+  [[ -n "${KNOWN_HOSTS_FILE}" ]] && rm -f "${KNOWN_HOSTS_FILE}"
+  [[ -n "${DEPLOYMENT_RESPONSE_HEADERS_FILE}" ]] && rm -f "${DEPLOYMENT_RESPONSE_HEADERS_FILE}"
+  [[ -n "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}"
+  [[ -n "${CODE_HEALTH_RESPONSE_BODY_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_BODY_FILE}"
+  [[ -n "${RELEASE_ATTESTATION_FILE}" ]] && rm -f "${RELEASE_ATTESTATION_FILE}"
+  if [[ -n "${TERRAFORM_TOOL_DIR}" && -d "${TERRAFORM_TOOL_DIR}" ]]; then
+    rm -rf -- "${TERRAFORM_TOOL_DIR}"
+  fi
+  if [[ -n "${SYNC_SOURCE_DIR}" && -d "${SYNC_SOURCE_DIR}" ]]; then
+    rm -rf -- "${SYNC_SOURCE_DIR}"
+  fi
+  return "${exit_status}"
 }
 
 deploy_runtime() {
@@ -468,6 +680,9 @@ deploy_runtime() {
 
 run_message_digest_cutover() {
   local cutover_start=""
+  local cutover_exit_status=0
+  local admission_state_status=0
+  local durable_status=""
   local remote_terraform_bin_dir_quoted=""
   local release_dir_quoted=""
   local previous_dir_quoted=""
@@ -488,8 +703,36 @@ run_message_digest_cutover() {
   printf -v deployment_id_quoted '%q' "${WORKFLOW_RUN_ID_VALUE}"
   printf -v manifest_hash_quoted '%q' "${RELEASE_MANIFEST_HASH}"
   printf -v cutover_start_quoted '%q' "${cutover_start}"
-  run_remote \
+  if run_remote \
     "PATH=${remote_terraform_bin_dir_quoted}:\$PATH RELEASE_DIR=${release_dir_quoted} PREVIOUS_RELEASE_DIR=${previous_dir_quoted} PREVIOUS_RELEASE_SHA=${previous_sha_quoted} MERGE_SHA=${merge_sha_quoted} TESTED_TREE=${tested_tree_quoted} DEPLOYMENT_ID=${deployment_id_quoted} RELEASE_MANIFEST_HASH=${manifest_hash_quoted} CUTOVER_START=${cutover_start_quoted} bash scripts/hetzner/cutover-message-digests.sh"
+  then
+    cutover_exit_status=0
+  else
+    cutover_exit_status=$?
+  fi
+
+  if durable_status="$(read_remote_cutover_status)"; then
+    case "${durable_status}" in
+      admitting|admitted|complete)
+        CUTOVER_ADMISSION_IRREVERSIBLE="true"
+        ;;
+      absent|in_progress|compensating|compensated)
+        CUTOVER_ADMISSION_IRREVERSIBLE="false"
+        ;;
+      *)
+        CUTOVER_ADMISSION_IRREVERSIBLE="true"
+        admission_state_status=1
+        ;;
+    esac
+  else
+    admission_state_status=$?
+    CUTOVER_ADMISSION_IRREVERSIBLE="true"
+  fi
+
+  if [[ "${cutover_exit_status}" -ne 0 ]]; then
+    return "${cutover_exit_status}"
+  fi
+  return "${admission_state_status}"
 }
 
 point_current_release() {
@@ -500,7 +743,19 @@ point_current_release() {
   run_remote_at "${REMOTE_REPO_DIR}" "ln -sfn ${release_dir_quoted} ${current_link_quoted}"
 }
 
+snapshot_previous_web_release() {
+  local previous_web_quoted=""
+  local current_web_quoted=""
+  PREVIOUS_WEB_RELEASE="${WEB_RELEASES_ROOT%/}/${PREVIOUS_RELEASE_SHA}"
+  printf -v previous_web_quoted '%q' "${PREVIOUS_WEB_RELEASE}"
+  printf -v current_web_quoted '%q' "${WEB_CURRENT_LINK}"
+  run_remote \
+    "test -L ${current_web_quoted}; observed_web=\$(readlink -f ${current_web_quoted}); [[ \"\${observed_web}\" == ${previous_web_quoted} ]]; test -f ${previous_web_quoted}/index.html"
+}
+
 deploy_web_and_edge() {
+  snapshot_previous_web_release
+  WEB_AND_EDGE_MUTATION_STARTED="true"
   run_remote_deploy_web
 
   if [[ "${DEPLOY_NGINX}" == "true" ]]; then
@@ -508,7 +763,47 @@ deploy_web_and_edge() {
   fi
 }
 
-verify_code_agent_health() {
+verify_active_secret_projection_version() {
+  local active_version=""
+  local remote_verify_command=""
+  IFS= read -r -d '' remote_verify_command <<'REMOTE_COMMAND' || true
+sudo -n node --input-type=module <<'NODE'
+import { lstatSync, readFileSync, readlinkSync } from 'node:fs';
+const root = '/var/lib/intexuraos/secret-projections/prod';
+const current = `${root}/current`;
+const status = lstatSync(current);
+if (!status.isSymbolicLink()) process.exit(1);
+const release = readlinkSync(current);
+const match = /^prod-v([1-9][0-9]*)-[0-9a-f]{8}-[0-9a-f]{40}$/.exec(release);
+if (match === null) process.exit(1);
+const metadata = JSON.parse(readFileSync(`${current}/metadata.json`, 'utf8'));
+if (
+  metadata?.schemaVersion !== 1 ||
+  metadata.environment !== 'prod' ||
+  metadata.secretId !== 'INTEXURAOS_SECRET_PACKAGE_PROD' ||
+  typeof metadata.version !== 'string' ||
+  !/^[1-9][0-9]*$/.test(metadata.version) ||
+  metadata.version !== match[1]
+) process.exit(1);
+process.stdout.write(metadata.version);
+NODE
+REMOTE_COMMAND
+  active_version="$(run_remote "${remote_verify_command}")" \
+    || fail 'Unable to verify active PROD secret package metadata'
+  [[ "${active_version}" =~ ^[1-9][0-9]*$ ]] \
+    || fail 'Active PROD secret package metadata returned an invalid version'
+  [[ "${active_version}" == "${SECRET_PACKAGE_VERSION}" ]] \
+    || fail 'The active PROD secret package version does not match SECRET_PACKAGE_VERSION'
+}
+
+clear_code_agent_health_files() {
+  [[ -n "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}"
+  [[ -n "${CODE_HEALTH_RESPONSE_BODY_FILE}" ]] && rm -f "${CODE_HEALTH_RESPONSE_BODY_FILE}"
+  CODE_HEALTH_RESPONSE_HEADERS_FILE=""
+  CODE_HEALTH_RESPONSE_BODY_FILE=""
+}
+
+probe_code_agent_health() {
   local label="$1"
   local url="$2"
   local status=""
@@ -516,20 +811,45 @@ verify_code_agent_health() {
 
   CODE_HEALTH_RESPONSE_HEADERS_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-code-health-headers.XXXXXX")"
   CODE_HEALTH_RESPONSE_BODY_FILE="$(mktemp "${TMPDIR:-/tmp}/intexuraos-code-health-body.XXXXXX")"
-  status="$(curl --silent --show-error --max-time 15 \
-    --dump-header "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" \
-    --output "${CODE_HEALTH_RESPONSE_BODY_FILE}" \
-    --write-out '%{http_code}' \
-    "$@" "${url}")"
+  if ! status="$(curl --silent --show-error --max-time 15 \
+      --dump-header "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" \
+      --output "${CODE_HEALTH_RESPONSE_BODY_FILE}" \
+      --write-out '%{http_code}' \
+      "$@" "${url}")"; then
+    clear_code_agent_health_files
+    return 1
+  fi
 
   if ! node scripts/hetzner/verify-code-agent-health.mjs \
     "${status}" "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" < "${CODE_HEALTH_RESPONSE_BODY_FILE}"; then
-    fail "Code-agent semantic health contract failed through ${label}"
+    clear_code_agent_health_files
+    return 1
   fi
 
-  rm -f "${CODE_HEALTH_RESPONSE_HEADERS_FILE}" "${CODE_HEALTH_RESPONSE_BODY_FILE}"
-  CODE_HEALTH_RESPONSE_HEADERS_FILE=""
-  CODE_HEALTH_RESPONSE_BODY_FILE=""
+  clear_code_agent_health_files
+}
+
+verify_code_agent_health() {
+  local label="$1"
+  local url="$2"
+  shift 2
+  if ! probe_code_agent_health "${label}" "${url}" "$@"; then
+    fail "Code-agent semantic health contract failed through ${label}"
+  fi
+}
+
+wait_for_code_agent_canary() {
+  local deadline=$((SECONDS + SECRET_CANARY_TIMEOUT_SECONDS))
+  while ((SECONDS < deadline)); do
+    if probe_code_agent_health \
+      "candidate direct origin" \
+      "https://${PUBLIC_DOMAIN}/api/code/health" \
+      --resolve "${PUBLIC_DOMAIN}:443:${HETZNER_PROD_HOST}"; then
+      return 0
+    fi
+    sleep 5
+  done
+  fail 'Candidate code-agent did not pass semantic health with Firestore'
 }
 
 verify_code_agent_readiness() {
@@ -582,10 +902,11 @@ publish_deployment_metadata() {
 
   deployed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   printf -v deployment_json \
-    '{"commitSha":"%s","workflowRunId":"%s","deployedAt":"%s"}' \
+    '{"commitSha":"%s","workflowRunId":"%s","deployedAt":"%s","secretPackageVersion":"%s"}' \
     "${COMMIT_SHA_VALUE}" \
     "${WORKFLOW_RUN_ID_VALUE}" \
-    "${deployed_at}"
+    "${deployed_at}" \
+    "${SECRET_PACKAGE_VERSION}"
   printf -v deployment_json_quoted '%q' "${deployment_json}"
   printf -v deployment_path_quoted '%q' "${DEPLOYMENT_JSON_PATH}"
 
@@ -633,6 +954,7 @@ verify_deployment_document() {
   if ! node scripts/hetzner/verify-deployment-document.mjs \
     "${COMMIT_SHA_VALUE}" \
     "${WORKFLOW_RUN_ID_VALUE}" \
+    "${SECRET_PACKAGE_VERSION}" \
     "${DEPLOYMENT_RESPONSE_HEADERS_FILE}" <<< "${response}"; then
     fail "Deployment attestation or response headers did not match the exact release contract through ${label}"
   fi
@@ -693,6 +1015,7 @@ main() {
   require_command unzip
   validate_inputs
   resolve_commit_metadata
+  verify_repository_secret_package_version_pins
   prepare_sync_source
   setup_ssh
   resolve_activation_context
@@ -701,6 +1024,7 @@ main() {
   fi
   if [[ "${ACTIVATION_MODE}" == "cutover_complete" ]]; then
     verify_remote_release_manifest
+    verify_active_secret_projection_version
     verify_backend_readiness
   else
     sync_repo
@@ -708,6 +1032,10 @@ main() {
     cleanup_retired_remote_paths
     prepare_remote_web_layout
     prepare_runtime_dependencies
+    activate_secret_projection
+    verify_active_secret_projection_version
+    reload_alloy_for_active_projection
+    run_secret_projection_canary
     if [[ "${ACTIVATION_MODE}" == "cutover" ]]; then
       run_message_digest_cutover
       verify_backend_readiness
@@ -716,6 +1044,7 @@ main() {
       verify_backend_readiness
       deploy_web_and_edge
     fi
+    cleanup_remote_secret_canary_config
   fi
   verify_code_agent_readiness
   verify_runtime_readiness
@@ -725,6 +1054,7 @@ main() {
   publish_deployment_metadata
   verify_deployment_attestation
   DEPLOYMENT_ATTESTATION_VERIFIED="true"
+  DEPLOYMENT_COMPLETED="true"
 
   printf 'Hetzner production deployment completed for %s\n' "${PUBLIC_DOMAIN}"
 }

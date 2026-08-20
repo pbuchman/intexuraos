@@ -6,6 +6,7 @@
 
 import { LlmModels } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import {
   buildSourceMap,
   validateSynthesisAttributions,
@@ -381,7 +382,13 @@ export async function runSynthesis(
       };
       logger.info({}, `[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
     } else {
-      logger.error({}, '[4.5.3] HTML upload failed');
+      logger.error(
+        {
+          errorCode: uploadResult.error.code,
+          errorMessage: uploadResult.error.message,
+        },
+        '[4.5.3] HTML upload failed'
+      );
     }
   }
 
@@ -563,8 +570,8 @@ async function generateCoverImage(
   }
 
   // All providers failed
-  logger.error(
-    { errors },
+  logger.warn(
+    { errors, [SKIP_SENTRY_KEY]: true },
     `[4.4.4] Cover image generation failed — all ${String(pipelines.length)} provider(s) exhausted. HTML will be generated without a cover image.`
   );
   return null;

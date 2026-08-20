@@ -62,7 +62,6 @@ RUN rm -f /usr/bin/wget /usr/bin/nc 2>/dev/null || true
 # Set environment
 ENV HOME=/home/claude
 ENV NODE_ENV=test
-ENV GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcp-sa.json
 
 # Switch to non-root user
 USER claude

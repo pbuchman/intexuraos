@@ -1,95 +1,151 @@
-# Runbook — Internal Service-to-Service Auth Token Rotation
+# Runbook — Internal Service-to-Service Auth Rotation
 
-## Purpose
+IntexuraOS services authenticate internal requests with
+`INTEXURAOS_INTERNAL_AUTH_TOKEN` in `x-internal-auth`. The value is:
 
-IntexuraOS services authenticate to each other via the shared
-`INTEXURAOS_INTERNAL_AUTH_TOKEN` (sent in the `x-internal-auth` header).
-Rotating this secret on a regular cadence limits the blast radius of a
-leaked token.
+- an env member of the DEV package;
+- an env member of the PROD package;
+- a native Secret Manager secret pinned numerically into the retained Gen2
+  transcription function.
 
-`validateInternalAuth` (`@intexuraos/common-http`) supports a **dual-token
-rotation window**: while both `INTEXURAOS_INTERNAL_AUTH_TOKEN` (current)
-and `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` (previous) are configured,
-either is accepted. This lets services be redeployed in any order without
-a coordinated cut-over.
+The current strict package contract does not contain a previous-token member,
+and runtimes do not accept two internal-auth tokens. Rotation is therefore a
+coordinated maintenance cutover with a tested package-wide rollback. Adding a
+dual-token window would require a separate application, manifest, projection,
+test, and deployment change before using such a procedure.
 
-## Rotation Procedure
+Never paste a token into commands, Git, Terraform, logs, evidence, chat, or
+this runbook. Follow
+[Secret Packages Operations](../operations/secret-packages.md) for secure
+publication, exact numeric pins, rendering, audit, retention, and break glass.
 
-### 1. Generate a new token
+## Preconditions
 
-```bash
-openssl rand -hex 32
-```
+1. Obtain change approval and a maintenance window. Freeze unrelated package
+   changes and deployments.
+2. Record the current verified DEV and PROD numeric package versions and the
+   transcription native numeric version. These are rollback pins; record no
+   value or digest.
+3. Inventory every caller and validator, including local/home-dev and
+   production PM2, nginx-injected internal routes, Pub/Sub bridges, Scheduler
+   callers, orchestrator, code workers, and retained transcription.
+4. Confirm the previous DEV/PROD packages can still be fetched, validated, and
+   rendered. Confirm the prior native version is enabled and deployable.
+5. Prepare controls to stop new internal work and drain in-flight requests.
+   Use the documented deployment/Terraform control plane; do not create ad hoc
+   persistent resources.
+6. Confirm Secret Manager Data Access audit logs and internal `401`/health
+   telemetry are visible without request bodies or headers.
 
-The output is the **new current** token. Keep the **old current** value
-on hand — it becomes the **previous** token in the next step.
+Stop if any consumer, rollback version, staging path, permission, or monitoring
+gate is unknown.
 
-### 2. Set `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` = old token
+## Prepare Candidates
 
-In Secret Manager (or the equivalent for the target environment), for
-**every** service that calls `validateInternalAuth` or sends
-`x-internal-auth`, add the secret:
+1. Generate the replacement token with an approved cryptographically secure
+   tool into a protected input channel or mode-`0600` ephemeral file. Do not
+   display it or leave it in shell history.
+2. Build complete DEV and PROD candidates. Change only
+   `INTEXURAOS_INTERNAL_AUTH_TOKEN`; copy every other member from explicitly
+   selected numeric sources.
+3. Validate exact schema/membership, size, file formats, and CRC32C. Publish
+   each candidate outside Terraform and record the returned numeric versions.
+4. Fetch both returned versions by number into different mode-`0600` staging
+   paths and validate again.
+5. Run HMAC shadow comparison. It must report `MISMATCH` for the package as a
+   whole because the token intentionally changed. Confirm from the candidate
+   build record that every other member came from the same explicitly pinned
+   source as the active package. Never persist HMACs or values.
+6. Publish the same replacement as a new version of the native
+   `INTEXURAOS_INTERNAL_AUTH_TOKEN` container. Record its numeric version. Do
+   not yet change the function injection.
+7. Stage all DEV and PROD projections, including nginx's
+   `/etc/intexuraos/internal-auth-token`. Validate owner/mode and process
+   allowlists without activating or printing them.
+8. Prepare reviewed deployment changes that pin DEV, PROD, and transcription
+   to the three new numeric versions. Publishing is not promotion.
 
-- Name: `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS`
-- Value: the **old** `INTEXURAOS_INTERNAL_AUTH_TOKEN`
+## Coordinated Cutover
 
-Do not touch `INTEXURAOS_INTERNAL_AUTH_TOKEN` yet.
+There is no safe mixed-token steady state. Keep the maintenance window active
+until all callers and validators are on the same replacement or rollback is
+complete.
 
-### 3. Set `INTEXURAOS_INTERNAL_AUTH_TOKEN` = new token
+1. Stop accepting new internal jobs and drain in-flight calls. Confirm queues,
+   workers, and scheduled paths are at the approved cutover boundary.
+2. Activate the staged DEV projection and reload home-dev PM2, nginx/bridges if
+   applicable, orchestrator, and workers as one controlled wave. Run local
+   internal caller/validator smoke checks.
+3. Activate the staged PROD projection and reload production PM2 and nginx as
+   one controlled wave. Verify an invalid token returns `401` and approved
+   internal health/callback flows pass.
+4. Deploy the retained transcription function pinned to the prepared native
+   numeric version. Verify a bounded real transcription callback flow.
+5. Resume ingress, Pub/Sub/Scheduler paths, and worker dispatch gradually.
+6. Verify cross-runtime flows, `401` telemetry, PM2/nginx/function health, and
+   Secret Manager audit principals. Any unexpected authentication failure
+   triggers immediate rollback; do not attempt a per-service token edit.
+7. Update reviewed `stableVersion` pins and deployment attestations with the
+   exact numeric versions after verification. Evidence contains no value.
 
-For the **same** services, update:
+DEV and PROD may be staged independently, but they are not declared promoted
+until their complete consumer inventories pass. If local developer processes
+can call shared endpoints during the window, stop or update them before ingress
+resumes.
 
-- Name: `INTEXURAOS_INTERNAL_AUTH_TOKEN`
-- Value: the **new** token from step 1
+## Observation And Closure
 
-### 4. Deploy ALL services
+Monitor internal authentication failures, task callbacks, Pub/Sub/Scheduler
+delivery, transcription, and audit logs for the approved observation period.
+Keep the prior DEV/PROD and native versions enabled for rollback.
 
-Redeploy every service. Order does not matter — during the rotation
-window, both tokens are accepted, so a caller running with the new
-token can still reach a callee that hasn't redeployed yet (and vice
-versa).
+After the observation and rollback-drill gates pass:
 
-### 5. Wait 24h and verify rotation traffic has stopped
-
-Every time the previous token is accepted, services emit a
-warn-level log:
-
-```
-Internal auth: PREVIOUS token accepted (rotation window active)
-```
-
-After 24 hours, query logs (Cloud Logging in prod, PM2 logs in dev) for
-that exact phrase. **Zero hits over a 1h sample = safe to remove the
-previous token.** Non-zero hits = a service is still running the old
-deployment; investigate before proceeding.
-
-### 6. Remove `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS`
-
-Delete the `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` secret from every
-service and redeploy. Once removed, presenting the old token returns
-`401 UNAUTHORIZED`.
-
-## Cadence
-
-Rotate **quarterly** at minimum. Also rotate on demand if a token leak
-is suspected.
+1. disable obsolete native/package versions for the approved reversible
+   window;
+2. confirm zero reads of those versions;
+3. destroy them according to retention policy, because disabled Secret Manager
+   versions remain active/billable;
+4. securely remove all ephemeral candidate/render files.
 
 ## Rollback
 
-If the new token causes incidents (e.g. bad value, deploy regression):
+Rollback is coordinated and package-wide:
 
-1. Leave `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` in place.
-2. Revert `INTEXURAOS_INTERNAL_AUTH_TOKEN` to the **old** value.
-3. Redeploy all services.
+1. Re-enter maintenance, stop new internal work, and drain in-flight calls.
+2. Fetch, CRC-check, validate, and stage the recorded prior numeric DEV and
+   PROD versions. Do not reuse old staging files.
+3. Atomically promote the complete prior projections and reload all DEV/PROD
+   callers and validators.
+4. Redeploy transcription pinned to its prior native numeric version.
+5. Run invalid-token, internal API, nginx, Pub/Sub/Scheduler, orchestrator,
+   worker, and transcription smoke tests.
+6. Resume traffic only when every consumer is aligned to the prior token.
+7. Record versions, timestamps, reason, and redacted results. Preserve the
+   failed candidate's metadata for investigation.
 
-The dual-token window means rollback also tolerates partial deploys.
+Never roll back by editing one rendered field, selecting `latest`, mixing
+package members, or leaving transcription on a different token.
 
-## Reference
+If the old or new token may be compromised, do not roll back to the compromised
+value. Generate another replacement, keep ingress paused, publish complete new
+packages/native version, and perform an accelerated coordinated cutover. Invoke
+the incident process and review audit/application logs.
 
-- Implementation: `packages/common-http/src/auth/internalAuth.ts`
-- Tests: `packages/common-http/src/__tests__/internalAuth.dualToken.test.ts`
+## Cadence And Evidence
+
+Rotate at least quarterly and immediately after suspected exposure, excessive
+access, owner departure, or a failed repository scanner.
+
+Evidence contains environment, package/native secret IDs, exact numeric
+versions, commit/deployment, timestamp, principal, member counts, CRC32C and
+validation status, smoke results, authentication-error counts, maintenance
+start/end, and rollback pins. It must not contain token values, digests,
+payload JSON, request headers, rendered files, or command environments.
+
+## References
+
 - Header: `x-internal-auth`
-- Env vars:
-  - `INTEXURAOS_INTERNAL_AUTH_TOKEN` (current, required)
-  - `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` (previous, optional —
-    only set during a rotation window)
+- Current env: `INTEXURAOS_INTERNAL_AUTH_TOKEN`
+- Package manifest: `config/environments/secret-packages.json`
+- Package operations: `docs/operations/secret-packages.md`

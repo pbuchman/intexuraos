@@ -11,11 +11,16 @@ region = "europe-central2"
 # Environment name
 environment = "dev"
 
-# GitHub owner (your username or organization)
-github_owner = "your-github-username"
+# Exact GitHub repository identity accepted by Workload Identity Federation
+github_owner               = "pbuchman"
+github_repository_owner_id = "368465"
 
 # GitHub repository name
-github_repo = "intexuraos"
+github_repo          = "intexuraos"
+github_repository_id = "1118959310"
+
+# Exact Git ref accepted by Workload Identity Federation
+github_ref = "refs/heads/development"
 
 # GitHub branch to trigger builds
 github_branch = "development"

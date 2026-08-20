@@ -25,7 +25,6 @@ const COMMON_CONFIG_NAMES = [
   'INTEXURAOS_AUTH_ISSUER',
   'INTEXURAOS_AUTH_JWKS_URL',
   'INTEXURAOS_CLOUDFLARE_ACCOUNT_ID',
-  'INTEXURAOS_FIREBASE_API_KEY',
   'INTEXURAOS_FIREBASE_AUTH_DOMAIN',
   'INTEXURAOS_FIREBASE_PROJECT_ID',
   'INTEXURAOS_GITHUB_APP_ID',
@@ -59,7 +58,7 @@ afterEach(() => {
 });
 
 describe('versioned runtime configuration', () => {
-  it('loads 23 common values plus environment-specific Matrix URLs and the dev Sentry DSN', () => {
+  it('loads 22 common values plus environment-specific Matrix URLs and the dev Sentry DSN', () => {
     const prod = loadRuntimeConfig({ environment: 'prod', configRoot });
     const dev = loadRuntimeConfig({ environment: 'dev', configRoot });
 
@@ -91,7 +90,7 @@ describe('versioned runtime configuration', () => {
     expect(policy.migrationRollbackSecretNames).toEqual([]);
     expect(policy.deleteOnlyNames).toEqual([...DELETE_ONLY_NAMES]);
     expect(overlap).toEqual([]);
-    expect(policy.sensitiveConfigNameAllowlist).toEqual(['INTEXURAOS_FIREBASE_API_KEY']);
+    expect(policy.sensitiveConfigNameAllowlist).toEqual([]);
   });
 
   it('retains removed Google AI credentials and OAuth redirect as permanent tombstones', () => {
@@ -161,8 +160,8 @@ describe('versioned runtime configuration', () => {
 
     expect(shell.endsWith('\n')).toBe(true);
     expect(dotenv.endsWith('\n')).toBe(true);
-    expect(shell.split('\n').filter(Boolean)).toHaveLength(25);
-    expect(dotenv.split('\n').filter(Boolean)).toHaveLength(25);
+    expect(shell.split('\n').filter(Boolean)).toHaveLength(24);
+    expect(dotenv.split('\n').filter(Boolean)).toHaveLength(24);
     expect(Object.keys(parseDotenv(dotenv)).sort()).toEqual(Object.keys(dev).sort());
     expect(digest(parseDotenv(dotenv)['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY'] ?? '')).toBe(
       digest(dev['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY'])
@@ -254,9 +253,29 @@ describe('versioned runtime configuration', () => {
     const fixture = makeFixture();
     const policyPath = resolve(fixture, 'policy.json');
     const policy = loadRuntimePolicy({ configRoot: fixture });
+    const sensitiveName = 'INTEXURAOS_FIREBASE_API_KEY';
     writeFileSync(
       policyPath,
-      `${JSON.stringify({ ...policy, sensitiveConfigNameAllowlist: [] }, null, 2)}\n`
+      `${JSON.stringify(
+        {
+          ...policy,
+          scopes: {
+            ...policy.scopes,
+            common: [...policy.scopes.common, sensitiveName].sort(),
+          },
+          sensitiveConfigNameAllowlist: [],
+        },
+        null,
+        2
+      )}\n`
+    );
+    writeFileSync(
+      resolve(fixture, 'common.json'),
+      `${JSON.stringify(
+        { ...makeSyntheticCommonConfig(), [sensitiveName]: `AIza${'a'.repeat(35)}` },
+        null,
+        2
+      )}\n`
     );
 
     expect(() => loadRuntimeConfig({ environment: 'prod', configRoot: fixture })).toThrow(
@@ -304,7 +323,6 @@ function makeSyntheticCommonConfig(): Record<string, unknown> {
   config['INTEXURAOS_AUTH_ISSUER'] = 'https://tenant.example.invalid/';
   config['INTEXURAOS_AUTH_JWKS_URL'] = 'https://tenant.example.invalid/.well-known/jwks.json';
   config['INTEXURAOS_AUTH_AUDIENCE'] = 'https://api.example.invalid';
-  config['INTEXURAOS_FIREBASE_API_KEY'] = `AIza${'a'.repeat(35)}`;
   config['INTEXURAOS_FIREBASE_AUTH_DOMAIN'] = 'project.firebaseapp.com';
   config['INTEXURAOS_GRAFANA_CLOUD_GRAFANA_URL'] = 'https://grafana.example.invalid';
   config['INTEXURAOS_GRAFANA_CLOUD_LOKI_URL'] = 'https://loki.example.invalid/push';
