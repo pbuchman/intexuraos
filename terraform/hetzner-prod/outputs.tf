@@ -20,7 +20,7 @@ output "retained_firestore_database_id" {
 
 output "cloudflare_dns_api_token_secret_id" {
   description = "Retained GCP Secret Manager secret ID for the Cloudflare DNS API token."
-  value       = var.legacy_secret_manager_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null
+  value       = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null
 }
 
 output "retained_gcp_inventory" {

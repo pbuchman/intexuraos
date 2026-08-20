@@ -37,8 +37,8 @@ variable "source_environment" {
   }
 }
 
-variable "legacy_secret_manager_enabled" {
-  description = "Keep legacy individual secret inventory during package cutover and rollback soak; disable only after verified rollback and at least 72 healthy hours"
+variable "legacy_secret_containers_enabled" {
+  description = "Keep legacy individual secret inventory through the reversible disable soak; disable only in Phase B after at least seven healthy days"
   type        = bool
   default     = true
 }

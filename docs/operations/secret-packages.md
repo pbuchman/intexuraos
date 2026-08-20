@@ -3732,6 +3732,67 @@ mismatch, or interruption of normal traffic resets `T0`; retain legacy IAM and
 versions. A failed provider/model result remains outside this decision when the
 terminal callback and secret-isolation conditions above pass.
 
+### Accelerated reversible Phase A
+
+The passive 72-hour legacy-read gate above gives the strongest proof that no
+legacy reader remains. A reviewed fast-track may instead start the reversible
+disable soak immediately when all package projections, rollback drills,
+package-only worker canaries, recovery/escrow reconstruction, break-glass
+design, and current health matrices pass. This choice deliberately abandons
+the active passive-observation receipt: record that decision, do not later cite
+the shortened window as a 72-hour PASS, and use the active disable soak below
+as the cleanup evidence.
+
+Terraform exposes two independent controls:
+
+- Phase A uses `legacy_secret_readers_enabled=false` and
+  `legacy_secret_containers_enabled=true`;
+- Phase B uses `legacy_secret_readers_enabled=false` and
+  `legacy_secret_containers_enabled=false`.
+
+The root check rejects readers without containers. Phase A and Phase B must
+never share a saved plan. A Phase A plan may delete only the reviewed legacy
+IAM reader addresses; it must contain zero container/version deletes and zero
+App Check, provider, package, native-secret, or unrelated changes. Reject the
+plan if any action falls outside the saved address/action allowlist.
+
+After applying the exact Phase A IAM plan:
+
+1. prove live that all frozen legacy resource-level and broad reader bindings
+   are absent while all 34 frozen containers, the separate empty DNS-token
+   container, both packages, and both native exceptions still exist;
+2. enumerate metadata only for the frozen 34 containers, including every
+   positive numeric version and state; do not access a payload;
+3. disable each version whose state is `ENABLED` through the approved Secret
+   Manager API/CLI data-plane exception, one exact resource at a time;
+4. re-enumerate until every frozen version is `DISABLED` or `DESTROYED`, every
+   container remains present, and no payload was printed or stored;
+5. define `D_legacy` as the latest successful disable audit timestamp, then run
+   the complete local, home-dev, worker, direct-origin, and public health and
+   package-only canary matrices.
+
+Retain this state for seven complete, non-overlapping 24-hour intervals. Record
+eight boundary snapshots from `D_legacy` through `D_legacy+168h`. Every
+snapshot must prove containers present, legacy readers absent, versions still
+disabled/destroyed, package/native versions healthy, and no re-enable event.
+Every daily interval must also have successful package-only canaries and zero
+new operational credential, authorization, Secret Manager denial, or semantic
+health failures after the documented log-delivery lag.
+
+Phase A rollback is allowed only when the disabled material is confirmed not
+compromised. Re-enable the exact previously enabled numeric versions first,
+restore `legacy_secret_readers_enabled=true` through a reviewed saved Terraform
+plan, and repeat the complete health matrix. If compromise is possible, never
+re-enable; reconstruct or rotate the package member and roll forward.
+
+Phase B starts only after the `D_legacy+168h` boundary, all seven intervals,
+recovery/escrow, break-glass, and health evidence pass. Set
+`legacy_secret_containers_enabled=false`, require a separately saved plan whose
+allowlist contains only the obsolete legacy containers, and apply it without
+payload access. Deleting a Secret Manager container irreversibly deletes its
+versions; rollback then means provider reconstruction and package rotation, not
+Terraform recreation of the old values.
+
 ## Rollback
 
 Rollback is package-wide.
