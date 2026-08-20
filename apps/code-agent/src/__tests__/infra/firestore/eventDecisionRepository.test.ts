@@ -153,10 +153,16 @@ describe('createFirestoreEventDecisionRepository', () => {
       expect(mockDocRef.set).toHaveBeenCalledTimes(2);
     });
 
-    it('should retry a failed write once before returning success', async () => {
+    it.each([
+      ['numeric DEADLINE_EXCEEDED', 4],
+      ['numeric UNAVAILABLE', 14],
+      ['named DEADLINE_EXCEEDED', 'DEADLINE_EXCEEDED'],
+      ['named UNAVAILABLE', 'UNAVAILABLE'],
+    ])('should retry a transient %s write once before returning success', async (_label, code) => {
+      const transientError = Object.assign(new Error('Temporary Firestore failure'), { code });
       const mockDocRef = {
         set: vi.fn()
-          .mockRejectedValueOnce(new Error('Temporary Firestore failure'))
+          .mockRejectedValueOnce(transientError)
           .mockResolvedValueOnce(undefined),
       };
 
@@ -175,9 +181,38 @@ describe('createFirestoreEventDecisionRepository', () => {
       expect(mockDocRef.set).toHaveBeenCalledTimes(2);
     });
 
-    it('should return FIRESTORE_ERROR on failure', async () => {
+    it.each([
+      ['a permanent Firestore error', Object.assign(new Error('Permission denied'), { code: 7 })],
+      ['an error without a Firestore code', new Error('Invalid event decision')],
+      ['a primitive rejection', 'Invalid event decision'],
+      ['a null rejection', null],
+    ])('should not retry %s', async (_label, writeError) => {
       const mockDocRef = {
-        set: vi.fn().mockRejectedValue(new Error('Firestore unavailable')),
+        set: vi.fn().mockRejectedValue(writeError),
+      };
+
+      const mockCollection = {
+        doc: vi.fn().mockReturnValue(mockDocRef),
+      };
+
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn().mockReturnValue(mockCollection),
+      } as never);
+
+      const repo = createFirestoreEventDecisionRepository({ logger: mockLogger });
+      const result = await repo.save(createDecisionInput());
+
+      expect(result.ok).toBe(false);
+      expect(mockDocRef.set).toHaveBeenCalledTimes(1);
+      if (!result.ok) {
+        expect(result.error.code).toBe('FIRESTORE_ERROR');
+      }
+    });
+
+    it('should return FIRESTORE_ERROR after exhausting one transient retry', async () => {
+      const transientError = Object.assign(new Error('Firestore unavailable'), { code: 14 });
+      const mockDocRef = {
+        set: vi.fn().mockRejectedValue(transientError),
       };
 
       const mockCollection = {
@@ -194,8 +229,10 @@ describe('createFirestoreEventDecisionRepository', () => {
       expect(result.ok).toBe(false);
       expect(mockDocRef.set).toHaveBeenCalledTimes(2);
       if (!result.ok) {
-        expect(result.error.code).toBe('FIRESTORE_ERROR');
-        expect(result.error.message).toContain('Firestore unavailable');
+        expect(result.error).toEqual({
+          code: 'FIRESTORE_ERROR',
+          message: 'Firestore unavailable',
+        });
       }
     });
 
