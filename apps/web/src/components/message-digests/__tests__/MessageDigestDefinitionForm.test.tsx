@@ -103,14 +103,14 @@ describe('MessageDigestDefinitionForm', () => {
     expect(screen.getByText('Fix 2 fields before saving.')).toHaveAttribute('role', 'alert');
     expect(screen.getByLabelText('Digest name')).toHaveFocus();
 
-    await user.type(screen.getByLabelText('Digest name'), 'Morning digest');
+    fireEvent.change(screen.getByLabelText('Digest name'), {
+      target: { value: 'Morning digest' },
+    });
     expect(screen.getByText('Fix 1 field before saving.')).toHaveAttribute('role', 'alert');
 
-    await user.clear(screen.getByLabelText('Summary instructions'));
-    await user.type(
-      screen.getByLabelText('Summary instructions'),
-      'Summarize decisions, open questions, and important facts.'
-    );
+    fireEvent.change(screen.getByLabelText('Summary instructions'), {
+      target: { value: 'Summarize decisions, open questions, and important facts.' },
+    });
     expect(screen.queryByText(/fields? before saving\./u)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create digest' })).toBeEnabled();
   });
@@ -162,7 +162,11 @@ describe('MessageDigestDefinitionForm', () => {
     const editor = screen.getByLabelText('Summary instructions');
 
     await user.click(editor);
-    await user.keyboard('{End}{Enter}A second line');
+    fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' });
+    expect(onSubmit).not.toHaveBeenCalled();
+    fireEvent.change(editor, {
+      target: { value: `${validValue().instructions.text}\nA second line` },
+    });
     expect(editor).toHaveValue(`${validValue().instructions.text}\nA second line`);
     expect(onSubmit).not.toHaveBeenCalled();
 
@@ -224,7 +228,7 @@ describe('MessageDigestDefinitionForm', () => {
 
       await user.click(screen.getByRole('button', { name: 'Choose conversation' }));
       await user.click(await screen.findByRole('button', { name: new RegExp(conversationName) }));
-      await user.click(screen.getByRole('button', { name: 'Use conversation' }));
+      await user.click(await screen.findByRole('button', { name: 'Use conversation' }));
 
       expect(screen.getByText(conversationName)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: templateLabel })).toHaveAttribute(
@@ -478,7 +482,7 @@ describe('MessageDigestDefinitionForm', () => {
     expect(screen.getByRole('heading', { name: 'Today on the water' })).toBeInTheDocument();
     expect(screen.getByText('Two plans')).toBeInTheDocument();
     expect(screen.getByText(/17 messages/)).toBeInTheDocument();
-    expect(screen.getByText(/Jul 27, 2026/)).toBeInTheDocument();
+    expect(within(previewDialog).getByText(/Jul 27, 2026/)).toBeInTheDocument();
     expect(mocks.previewMessageDigest).toHaveBeenCalledWith(
       'test-token',
       {

@@ -138,7 +138,15 @@ describe('reporting/recordDecision', () => {
       } as unknown as EventDecisionRepository,
     });
     await recordDecision(deps, createFakeEvent(), { decidedBy: 'hard_rules', decision: 'skip', reason: 'X' }, 0, logger);
-    expect(logger.error).toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'evt-1',
+        auditEventId: 'audit-evt-1',
+        error: { code: 'FIRESTORE', message: 'fail' },
+        _skipSentry: true,
+      }),
+      'Failed to save event decision audit record',
+    );
     expect(deps.gitHubEventLogEntryRepo?.complete).not.toHaveBeenCalled();
   });
 
