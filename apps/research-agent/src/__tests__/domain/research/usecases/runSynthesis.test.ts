@@ -5,6 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ok, err } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { SynthesisContext } from '@intexuraos/llm-prompts';
 import { LlmModels, LlmProviders } from '@intexuraos/llm-contract';
 import type { Logger } from '@intexuraos/common-core';
@@ -2284,7 +2285,7 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       );
     });
 
-    it('returns null when the OpenAI pipeline fails and logs the error', async () => {
+    it('keeps provider exhaustion in logs without reporting the handled fallback to Sentry', async () => {
       const research = createTestResearch({ synthesisModel: LlmModels.GPT54 });
       deps.mockRepo.findById.mockResolvedValue(ok(research));
 
@@ -2301,12 +2302,17 @@ Attribution: Primary=S1; Secondary=S2; Constraints=; UNK=false`;
       expect(result).toEqual({ ok: true });
       expect(fakeImageClient.generatePrompt).toHaveBeenCalledTimes(1);
       expect(fakeImageClient.generateImage).not.toHaveBeenCalled();
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
+          [SKIP_SENTRY_KEY]: true,
           errors: expect.arrayContaining([
             expect.objectContaining({ provider: 'OpenRouter' }),
           ]),
         }),
+        expect.stringContaining('all 1 provider(s) exhausted')
+      );
+      expect(mockLogger.error).not.toHaveBeenCalledWith(
+        expect.anything(),
         expect.stringContaining('all 1 provider(s) exhausted')
       );
     });
