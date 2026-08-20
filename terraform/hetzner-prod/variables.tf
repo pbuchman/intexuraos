@@ -37,6 +37,12 @@ variable "source_environment" {
   }
 }
 
+variable "legacy_secret_manager_enabled" {
+  description = "Keep legacy individual secret inventory during package cutover and rollback soak; disable only after verified rollback and at least 72 healthy hours"
+  type        = bool
+  default     = true
+}
+
 variable "domain" {
   description = "Public production domain served by the Hetzner VM."
   type        = string
@@ -143,6 +149,26 @@ variable "runtime_sa_key_path" {
   validation {
     condition     = length(trimspace(var.runtime_sa_key_path)) > 0
     error_message = "runtime_sa_key_path must be non-empty."
+  }
+}
+
+variable "legacy_runtime_sa_bootstrap_enabled" {
+  description = "Copy the legacy runtime service-account key during additive package migration. Disable only after the package renderer owns the verified credential file and at least 72 healthy hours."
+  type        = bool
+  default     = true
+}
+
+variable "prod_secret_package_version" {
+  description = "Exact positive numeric PROD secret-package version used during a full VM bootstrap. Keep aligned with the protected GitHub Actions PROD_SECRET_PACKAGE_VERSION variable."
+  type        = number
+  default     = 1
+
+  validation {
+    condition = (
+      var.prod_secret_package_version >= 1 &&
+      floor(var.prod_secret_package_version) == var.prod_secret_package_version
+    )
+    error_message = "prod_secret_package_version must be a positive integer."
   }
 }
 

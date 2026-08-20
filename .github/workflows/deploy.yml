@@ -41,10 +41,11 @@ jobs:
       HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
       HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
       DEPLOY_NGINX: ${{ github.event_name == 'push' && 'true' || inputs.deploy_nginx }}
+      SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Deploy via Hetzner runtime scripts
         run: bash scripts/hetzner/github-actions-deploy.sh
@@ -57,13 +58,13 @@ jobs:
 
     steps:
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
 
       - name: Trigger retained Cloud Build target
         id: trigger

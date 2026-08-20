@@ -37,24 +37,6 @@ variable "domain" {
   default     = ""
 }
 
-variable "use_custom_certificate" {
-  description = "Use custom SSL certificate instead of Google-managed"
-  type        = bool
-  default     = false
-}
-
-variable "ssl_certificate_path" {
-  description = "Path to SSL certificate file (fullchain.pem) - required if use_custom_certificate is true"
-  type        = string
-  default     = ""
-}
-
-variable "ssl_private_key_secret_id" {
-  description = "Secret Manager secret ID containing SSL private key - required if use_custom_certificate is true"
-  type        = string
-  default     = ""
-}
-
 variable "shared_content_bucket_name" {
   description = "Name of the shared content bucket for /share/* path routing"
   type        = string
@@ -66,4 +48,3 @@ variable "images_bucket_name" {
   type        = string
   default     = ""
 }
-

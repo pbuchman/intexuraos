@@ -2,38 +2,262 @@
 
 Build, deployment, and utility scripts.
 
-## sync-secrets.sh
+## build-secret-package.mjs
 
-Single entrypoint for local secrets workflow.
+Builds a complete DEV or PROD candidate in one of three modes: initial migration
+from the exact legacy numeric versions declared in the tracked, non-secret
+`config/environments/secret-package-sources.json` manifest, or ongoing rotation
+from one exact numeric version of the active package plus explicit private
+member overrides, or lost-container recovery from the complete authoritative
+private-file member set. It never reads `latest` and never prints source values
+or payloads.
 
 ```bash
-# Run from repository root
-./scripts/sync-secrets.sh [environment]
-
-# Examples:
-./scripts/sync-secrets.sh                  # sync only (non-interactive)
-./scripts/sync-secrets.sh dev              # explicit environment
-./scripts/sync-secrets.sh --add-new        # sync + prompt for missing values
-./scripts/sync-secrets.sh dev --add-new    # env-specific add-new mode
+node scripts/build-secret-package.mjs \
+  --environment dev --project-id <project-id> \
+  --output <mode-0600-candidate> \
+  --firebase-api-key-file <mode-0600-file>
 ```
 
-Mode 1: default (non-interactive)
+The PROD command additionally requires its two PROD-only external files:
 
-1. Reads Terraform-defined `INTEXURAOS_*` secrets from `terraform/environments/<env>/main.tf`
-2. Syncs readable/exportable secrets from GCP Secret Manager into `.envrc`
-3. Prints missing/unreadable secrets (no prompts)
+```bash
+node scripts/build-secret-package.mjs \
+  --environment prod --project-id <project-id> \
+  --output <mode-0600-candidate> \
+  --firebase-api-key-file <mode-0600-file> \
+  --runtime-gcp-service-account-file <mode-0600-file> \
+  --cloudflare-dns-api-token-file <mode-0600-file>
+```
 
-Mode 2: `--add-new` (interactive)
+Firebase is an external input for both environments. The runtime service-account
+JSON and Cloudflare DNS token are external PROD-only inputs; supplying them for
+DEV is rejected. The DEV GitHub App PEM comes from exact version `1` of
+`INTEXURAOS_GITHUB_APP_PRIVATE_KEY`, while the PROD TLS PEM comes from exact
+version `1` of `INTEXURAOS_SSL_PRIVATE_KEY`. All other legacy mappings and their
+numeric versions are defined explicitly in the source manifest.
 
-1. Runs the same sync flow as default mode
-2. Prompts only for missing secret values (no overwrite flow)
-3. Re-syncs `.envrc` after successful additions
+After the first complete package has been promoted, build later rotations from
+that package even after legacy containers are removed. Pin the reviewed base
+version and pass at least one override as a private file path; repeat either
+override option to rotate more members:
+
+```bash
+node scripts/build-secret-package.mjs \
+  --environment dev --project-id <project-id> \
+  --output <mode-0600-candidate> \
+  --base-version <numeric-version> \
+  --override-env INTEXURAOS_OPENAI_APP_API_KEY=<mode-0600-file> \
+  --override-file githubAppPrivateKeyPemBase64=<mode-0600-file>
+```
+
+`--override-env` accepts only an exact `envNames` member and
+`--override-file` only an exact `files` member from the package manifest. The
+builder validates the base package's server CRC32C and complete membership,
+applies the named replacements, then validates the complete candidate again.
+Base mode rejects `latest`, non-canonical versions such as `01`, duplicate or
+unknown members, empty override sets, and all legacy external-input flags.
+
+If the target package container and all package versions are unavailable, omit
+`--base-version` and pass every manifest member exactly once with the same
+repeatable `--override-env NAME=FILE` and `--override-file NAME=FILE` options.
+This full-recovery mode performs no Secret Manager read and fails closed for a
+missing, extra, duplicate, or unknown member. The private inputs must be
+reconstructed by the owners from the exact source/method recorded in the
+schema-v2 recovery inventory; CI rejects missing, unknown, or unused sources.
+Partial recovery never falls back to deleted legacy sources.
+
+Every external or override input must be a non-symlink regular file with no
+group/other permission bits and at most 64 KiB. The builder verifies source
+CRC32C, creates the payload deterministically, runs the complete package
+validator, and atomically installs the candidate with mode `0600`. Standard
+output contains only validation metadata and counts. Optional
+`--manifest <path>` and `--sources-manifest <path>` overrides are intended for
+isolated verification and tests.
+
+## secret-package.mjs
+
+The single safe interface for validating, fetching, publishing, rendering, and
+shadow-comparing the DEV/PROD package contracts in
+`config/environments/secret-packages.json`.
+
+```bash
+node scripts/secret-package.mjs validate \
+  --environment <dev-or-prod> --payload-file <mode-0600-candidate>
+node scripts/secret-package.mjs publish \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <mode-0600-candidate> \
+  --receipt-file <private-receipt>
+node scripts/secret-package.mjs publish-resume \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <mode-0600-candidate> \
+  --receipt-file <private-receipt>
+node scripts/secret-package.mjs publish-reconcile \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --payload-file <mode-0600-candidate> \
+  --receipt-file <private-receipt> \
+  --version <exact-recovery-version>
+node scripts/secret-package.mjs publish-unlock \
+  --environment <dev-or-prod> --project-id <project-id> \
+  --receipt-file <private-receipt>
+node scripts/secret-package.mjs fetch \
+  --environment <dev-or-prod> --version <numeric-version> \
+  --project-id <project-id> --output <mode-0600-path>
+node scripts/secret-package.mjs render \
+  --environment <dev-or-prod> --version <numeric-version> \
+  --project-id <project-id> --output-dir <private-directory>
+node scripts/secret-package.mjs dual-compare \
+  --environment <dev-or-prod> --left-payload-file <candidate-a> \
+  --right-payload-file <candidate-b> --hmac-key-file <ephemeral-key>
+```
+
+`render` may use `--payload-file <already-fetched-file>` for offline validated
+rendering. Otherwise it fetches the requested exact version. Never substitute
+`latest`. The CLI enforces schema version, environment, exact env/file
+membership, string values, base64/PEM/service-account JSON shape, 64 KiB
+maximum payload, positive numeric versions, CRC32C, restrictive staging modes,
+and atomic promotion. It invokes `gcloud` without logging payload data. Shadow
+comparison uses an ephemeral HMAC and emits only package-level
+`MATCH`/`MISMATCH`.
+
+`publish` requires a new receipt path under one canonical private journal parent
+on a local filesystem that supports durable directory `fsync` and hard links.
+Its mode-`0600` lock is package-scoped by project and secret ID, so different
+receipt filenames in that parent still serialize. A different parent or host is
+outside the lock domain; use one parent and one publisher/freeze for each
+package operation.
+
+Under the lock, `publish` first lists only target-package version metadata and
+records the largest ID as `prePublishMaxVersion`. It writes and synchronizes a
+complete private temporary inode, hard-links it to the final receipt pathname
+with no replacement, then synchronizes the parent. Only after that durable
+reservation may it call `addVersion`. A crash therefore leaves either no final
+receipt before any add, or a complete schema-v2 receipt in state `publishing`
+with `version: null`, never a partially written final inode. The receipt also
+binds a UUID-v4 `operationId` and canonical UTC `startedAt`; it contains only
+those fields plus schema/operation, state, environment, project ID, package
+secret ID, watermark, and numeric version. It never contains the candidate,
+member values, checksums, digests, credentials, or private paths.
+
+As soon as `addVersion` returns the exact numeric version, and before readback,
+the receipt becomes `pending-verification`. Successful server CRC32C and exact
+byte-for-byte readback changes it to `verified`. Preserve the exact candidate
+and receipt after any interruption. Run `publish-resume` only for a
+`pending-verification` or `verified` receipt; it reads the already recorded
+version and has no `addVersion` or version-selection path.
+
+For an ambiguous state `publishing` receipt, run `publish-reconcile` with
+`--version <exact-recovery-version>`. Before any payload access it lists only
+metadata and requires exactly one observed version ID greater than
+`prePublishMaxVersion`; that version must equal the argument and its creation
+time must not predate `startedAt`. It then verifies only that exact version's
+server CRC32C and bytes. An old byte-identical version is rejected, and zero or
+multiple post-watermark versions leave the receipt unchanged and blocked.
+
+There is no supported `publish-abort`: even zero currently observed candidates
+is not treated as sufficiently robust proof that no version committed. Stop and
+escalate instead of deleting/replacing the receipt, selecting a second journal
+parent, or publishing again. The operator must not run `publish` again when a
+receipt exists.
+
+After a hard crash, use `publish-unlock` only on the same host and only after
+confirming the recorded PID no longer exists. A result of `publishing` must be
+followed by `publish-reconcile`; `pending-verification` or `verified` must be
+followed by `publish-resume`. The result `unreserved` proves the process stopped
+before the synchronized receipt reservation and therefore before `addVersion`;
+only that result permits a new `publish` at the same canonical path and parent.
+The dedicated publishers receive resource-level target-package metadata viewer
+access for their own environment only; neither can inspect the opposite package.
+
+Rendering creates an immutable `<env>-v<N>-<crc32c-hex>/` release under the
+output directory, then atomically switches `current`. Every release has
+`environment.env` and `metadata.json`. DEV also has
+`github-app-private-key.pem`; PROD has `cloudflare-dns-api-token`,
+`runtime-gcp-service-account.json`, and `tls-private-key.pem`. All files and the
+`current` target are implementation artifacts; consumer installers copy only
+their allowlisted projection.
+
+Candidates and rendered staging artifacts live outside the repository, use
+mode `0600`, and are removed immediately. Terraform owns the containers and IAM
+but not versions or values.
+
+Run repository policy verification with the command below. It validates both
+tracked manifests and prints names/counts only, never source versions or values.
+
+```bash
+pnpm run verify:secret-packages
+```
+
+See [Secret Packages Operations](../docs/operations/secret-packages.md) for the
+candidate, promotion, rotation, rollback, and evidence procedure.
+
+## sync-secrets.sh
+
+Local/home-dev renderer for one exact DEV package version.
+
+```bash
+SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
+  ./scripts/sync-secrets.sh --version <dev-numeric-version>
+```
+
+It merges repository-backed DEV configuration with the validated package
+projection, writes an immutable release under
+`${HOME}/.config/intexuraos/secret-packages/dev`, atomically switches `current`,
+and writes mode-`0600` `.envrc`. It fetches no individual legacy secrets and
+has no add-new mode. `.envrc.local` is sourced last for host-only overrides and
+must not be used as shared secret storage.
+The package `current` link, `.envrc`, and GitHub App PEM are transactional: any
+failure after rendering restores the prior set, or removes the new set when no
+prior projection existed.
+
+That directory is the DEV projection root and must never be passed to generic
+`secret-package render`; generic renders use a separate private scratch root
+whose three-file `current` contract is intentionally different. The sync CLI
+keeps its public `--package-output-dir`/`--output-dir` aliases, but both select
+only the projection root. Generic render and projection sync take the same
+root-local writer lock; after sync installs the durable marker, generic `render`
+rejects the managed root before it can create or switch a release.
+`SECRET_PACKAGE_RENDER_DIR` is not a sync input;
+`INTEXURAOS_SECRET_PACKAGE_PROJECTION_DIR` is the explicit environment override.
+
+Concurrent syncs and generic renders serialize through unique mode-`0700`
+claims in `.sync-lock`. A generic scratch root may retain an empty lock directory;
+only the durable marker classifies a DEV projection root.
+Each claim binds a random token to hostname, boot identity, PID, process start,
+and the sync command. A stopped or PID-reused owner permits deletion of only
+its unrepeatable claim and matching work directory; no contender removes a
+shared lock name. The lock directory stays present and empty after cleanup.
+
+## observability/load-grafana-cloud-env.sh
+
+Builds the home-dev Grafana/Alloy projection without GCP access. It reads only
+`INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN` from
+`${SECRET_PACKAGE_RENDER_DIR}/current/environment.env`; the default render root
+is `${HOME}/.config/intexuraos/secret-packages/dev`. It merges that token with
+the tracked Loki URL and username and atomically installs `OUTPUT_FILE` as mode
+`0600`. A missing render, token, or tracked value leaves the previous output
+untouched.
+
+Under sudo/systemd on home-dev, select the deployment user's render explicitly;
+root's `HOME` is not the package owner:
+
+```bash
+sudo -n env \
+  HOME=/home/pbuchman \
+  SECRET_PACKAGE_RENDER_DIR=/home/pbuchman/.config/intexuraos/secret-packages/dev \
+  INTEXURAOS_ENVIRONMENT=dev \
+  bash scripts/observability/load-grafana-cloud-env.sh
+```
 
 Prerequisites:
 
-- gcloud CLI installed and authenticated
-- Project configured (or provided with `--project-id`)
-- Terraform applied (secret resources must exist before adding versions)
+- `gcloud` installed;
+- an explicitly selected operator/renderer identity authorized only for the DEV
+  package (`ixos-home-secret-renderer-dev`; home-dev transitional key at
+  `/home/pbuchman/.config/intexuraos/secret-renderer-sa-key.json`, mode `0600`,
+  selected only for the sync command; local Mac prefers ADC impersonation);
+- the Terraform-managed package container/IAM already applied;
+- an approved positive numeric version.
 
 ## verify-connections.sh
 

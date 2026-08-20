@@ -31,8 +31,8 @@ resource "google_cloudfunctions2_function" "function" {
       content {
         key        = secret_environment_variables.key
         project_id = var.project_id
-        secret     = secret_environment_variables.value
-        version    = "latest"
+        secret     = secret_environment_variables.value.secret_id
+        version    = tostring(secret_environment_variables.value.version)
       }
     }
 

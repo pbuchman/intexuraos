@@ -24,13 +24,15 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   description                        = "OIDC provider for GitHub Actions"
 
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.actor"      = "assertion.actor"
-    "attribute.repository" = "assertion.repository"
-    "attribute.ref"        = "assertion.ref"
+    "google.subject"                = "assertion.sub"
+    "attribute.actor"               = "assertion.actor"
+    "attribute.repository"          = "assertion.repository"
+    "attribute.repository_owner_id" = "assertion.repository_owner_id"
+    "attribute.repository_id"       = "assertion.repository_id"
+    "attribute.ref"                 = "assertion.ref"
   }
 
-  attribute_condition = "assertion.repository == '${var.github_owner}/${var.github_repo}'"
+  attribute_condition = "assertion.repository_owner_id == '${var.github_repository_owner_id}' && assertion.repository_id == '${var.github_repository_id}' && assertion.repository == '${var.github_owner}/${var.github_repo}' && assertion.ref == '${var.github_ref}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -44,5 +46,5 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account_iam_member" "github_wif_cloudbuild" {
   service_account_id = var.cloud_build_service_account_name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_owner}/${var.github_repo}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_id/${var.github_repository_id}"
 }

@@ -77,10 +77,11 @@ describe('Grafana Alloy PM2 log collection', () => {
     expect(installScript).toContain('setfacl');
     expect(installScript).toContain('u:alloy');
 
-    expect(loadEnvScript).toContain('GRAFANA_CLOUD_COLLECTOR_SECRETS=(');
-    expect(loadEnvScript).toMatch(
-      /GRAFANA_CLOUD_COLLECTOR_SECRETS=\(\s*INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN\s*\)/u
+    expect(loadEnvScript).toContain('GRAFANA_CLOUD_COLLECTOR_CONFIG=(');
+    expect(loadEnvScript).toContain(
+      'GRAFANA_CLOUD_COLLECTOR_TOKEN="INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN"'
     );
+    expect(loadEnvScript).toContain('SECRET_PACKAGE_RENDER_DIR');
     expect(loadEnvScript).toContain('render-runtime-config.mjs');
     expect(loadEnvScript).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_URL');
     expect(loadEnvScript).toContain('INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME');

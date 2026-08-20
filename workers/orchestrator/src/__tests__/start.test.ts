@@ -29,6 +29,7 @@ vi.mock('../bootstrap/env-config.js', () => ({
       usageWebhookUrl: 'https://usage.test',
       githubAppId: '1',
       githubInstallationId: '2',
+      githubPrivateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
       projectId: 'proj',
       gcpSaKeyPath: '/tmp/sa.json',
       port: 19199,
@@ -236,6 +237,7 @@ describe('start() — full bootstrap happy path', () => {
       usageWebhookUrl: 'https://usage.test',
       githubAppId: '1',
       githubInstallationId: '2',
+      githubPrivateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
       projectId: 'proj',
       gcpSaKeyPath: '/tmp/sa.json',
       port: 19199,
@@ -321,9 +323,8 @@ describe('start() — full bootstrap happy path', () => {
     );
   });
 
-  it('forwards env overrides for repoPath, private-key, and git identity', async () => {
+  it('forwards env overrides for repoPath and git identity', async () => {
     // Drive the truthy arms of `env.repoPath ?? defaultRepoPath`,
-    // `env.githubPrivateKeyOverride !== undefined ? ... : {}`, and
     // `env.gitUserNameOverride ?? readHostGitConfig(...)` /
     // `env.gitUserEmailOverride ?? readHostGitConfig(...)` inside start().
     // Without these, the default mock env leaves only the falsy arms covered.
@@ -336,6 +337,7 @@ describe('start() — full bootstrap happy path', () => {
       usageWebhookUrl: 'https://usage.test',
       githubAppId: '1',
       githubInstallationId: '2',
+      githubPrivateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
       projectId: 'proj',
       gcpSaKeyPath: '/tmp/sa.json',
       port: 19199,
@@ -346,7 +348,6 @@ describe('start() — full bootstrap happy path', () => {
       keepContainersAlive: false,
       workerForensicsMode: false,
       preserveWorkerContainers: true,
-      githubPrivateKeyOverride: 'INLINE-PEM',
       linearApiKey: 'lin',
       errorHubHost: 'home-dev.example.ts.net:8443',
       minimaxApiKey: 'm',
@@ -362,11 +363,9 @@ describe('start() — full bootstrap happy path', () => {
 
     await start();
 
-    // fetchGitHubKeys must receive the inline override so the truthy arm of
-    // the spread ternary runs.
-    expect(fetchGitHubKeys).toHaveBeenCalledWith(
-      expect.objectContaining({ override: 'INLINE-PEM' })
-    );
+    expect(fetchGitHubKeys).toHaveBeenCalledWith({
+      privateKeyPath: '/run/intexuraos/dev/current/github-app-private-key.pem',
+    });
 
     // With both git-identity env vars set, readHostGitConfig is never called.
     const { readHostGitConfig } = await import('../bootstrap/git-identity.js');
