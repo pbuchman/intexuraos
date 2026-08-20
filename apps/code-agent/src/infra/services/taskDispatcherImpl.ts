@@ -39,6 +39,15 @@ function isRetryableInfraStatus(status: number): boolean {
     || (status >= 520 && status <= 530);
 }
 
+/**
+ * A gateway response after POST cannot prove whether the worker accepted the task.
+ * Retrying on another worker can therefore execute one task twice. HTTP 503 remains
+ * the explicit capacity contract and is safe to fall through to the next worker.
+ */
+function isAmbiguousDispatchStatus(status: number): boolean {
+  return status >= 500 && status <= 599 && status !== 503;
+}
+
 /** Extract human-readable error message from a response body (may be JSON `{"error":"..."}` or plain text). */
 function extractErrorMessage(text: string): string {
   try {
@@ -88,6 +97,12 @@ interface WorkerTaskRequest {
 interface WorkerTaskResponse {
   status: 'accepted' | 'rejected';
   reason?: string;
+}
+
+function isWorkerTaskResponse(value: unknown): value is WorkerTaskResponse {
+  if (typeof value !== 'object' || value === null) return false;
+  const status = (value as { status?: unknown }).status;
+  return status === 'accepted' || status === 'rejected';
 }
 
 /**
@@ -295,7 +310,7 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   }
 
   /**
-   * Attempt to dispatch to a worker, with fallback on 502/503/504 and Cloudflare 520-530.
+   * Attempt to dispatch to a worker, with fallback only on definite rejection/capacity.
    * Uses per-request worker credentials for user isolation.
    */
   private async dispatchToWorker(
@@ -360,26 +375,24 @@ class TaskDispatcherImpl implements TaskDispatcherService {
           'Failed to dispatch to worker'
         );
 
-        if (error instanceof Error && error.message.includes('503')) {
+        if (
+          error instanceof Error
+          && (error as Error & { code?: unknown }).code === '503'
+        ) {
           sawCapacity503 = true;
-          continue;
-        }
-
-        // Same range as isRetryableInfraStatus, minus 503 (handled above for capacity tracking)
-        const cfPattern = /\b(502|504|52[0-9]|530)\b/;
-        if (error instanceof Error && cfPattern.test(error.message)) {
           continue;
         }
 
         return err({
           code: 'network_error',
           message: `Network error: ${getErrorMessage(error)}`,
+          outcomeUnknown: true,
+          workerLocation: worker.location,
         });
       }
     }
 
     // INT-619/INT-624: Distinguish capacity-related failures from other failures.
-    // Infrastructure errors (502/504/520-530) are neutral — they don't count for or against capacity.
     if (sawCapacity503 && !sawExplicitRejection) {
       return err({
         code: 'at_capacity',
@@ -436,11 +449,20 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         'Worker dispatch request failed'
       );
 
-      // 502/503/504 and Cloudflare 520-530 are transient infrastructure errors — retry via worker fallback
-      if (isRetryableInfraStatus(response.status)) {
+      // 503 is the worker's definite capacity response, so another worker is safe.
+      if (response.status === 503) {
         const error = new Error(`HTTP ${String(response.status)}`) as Error & { code?: string };
         error.code = String(response.status);
         throw error;
+      }
+
+      if (isAmbiguousDispatchStatus(response.status)) {
+        return err({
+          code: 'network_error',
+          message: `Worker dispatch outcome is ambiguous (HTTP ${String(response.status)}); refusing multi-worker fallback`,
+          outcomeUnknown: true,
+          workerLocation: worker.location,
+        });
       }
 
       const errorText = typeof response.text === 'function'
@@ -457,13 +479,24 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       });
     }
 
-    let data: WorkerTaskResponse;
+    let data: unknown;
     try {
-      data = (await response.json()) as WorkerTaskResponse;
+      data = await response.json();
     } catch {
       return err({
-        code: 'dispatch_failed',
+        code: 'network_error',
         message: 'Worker returned invalid JSON response',
+        outcomeUnknown: true,
+        workerLocation: worker.location,
+      });
+    }
+
+    if (!isWorkerTaskResponse(data)) {
+      return err({
+        code: 'network_error',
+        message: 'Worker returned an unknown response after the dispatch POST',
+        outcomeUnknown: true,
+        workerLocation: worker.location,
       });
     }
 
@@ -574,13 +607,14 @@ class TaskDispatcherImpl implements TaskDispatcherService {
   async cancelOnWorker(taskId: string, location: string, credentials?: { url: string; cfAccessClientId: string; cfAccessClientSecret: string }): Promise<void> {
     this.logger.info({ taskId, location }, 'Sending cancellation request to worker');
 
-if (credentials === undefined) {
+    if (credentials === undefined) {
       this.logger.warn({ taskId, location }, 'No credentials provided for cancellation, skipping worker notification');
-      return;
+      throw new Error(`Worker cancellation credentials unavailable for ${location}`);
     }
 
+    let response: Response;
     try {
-      const response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}`, {
+      response = await this.fetchWithTimeout(`${credentials.url}/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
           'CF-Access-Client-Id': credentials.cfAccessClientId,
@@ -589,26 +623,28 @@ if (credentials === undefined) {
         signal: AbortSignal.timeout(10000),
       });
 
-      if (!response.ok) {
-        if (response.status === 409) {
-          this.logger.warn(
-            { taskId, location, status: response.status, [SKIP_SENTRY_KEY]: true },
-            'Worker cancellation target already completed'
-          );
-          return;
-        }
+    } catch (error) {
+      this.logger.warn({ taskId, location, error: getErrorMessage(error) }, 'Failed to notify worker of cancellation');
+      throw error;
+    }
 
+    if (!response.ok) {
+      if (response.status === 409) {
         this.logger.warn(
-          { taskId, location, status: response.status },
-          'Worker cancellation request failed'
+          { taskId, location, status: response.status, [SKIP_SENTRY_KEY]: true },
+          'Worker cancellation target already completed'
         );
         return;
       }
 
-      this.logger.info({ taskId, location }, 'Worker cancellation request successful');
-    } catch (error) {
-      this.logger.warn({ taskId, location, error: getErrorMessage(error) }, 'Failed to notify worker of cancellation');
+      this.logger.warn(
+        { taskId, location, status: response.status },
+        'Worker cancellation request failed'
+      );
+      throw new Error(`Worker cancellation failed with HTTP ${String(response.status)}`);
     }
+
+    this.logger.info({ taskId, location }, 'Worker cancellation request successful');
   }
 }
 

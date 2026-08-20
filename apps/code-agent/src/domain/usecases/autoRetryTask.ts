@@ -121,6 +121,10 @@ export async function autoRetryTask(
     ...(failedTask.sentryIssue !== undefined && { sentryIssue: failedTask.sentryIssue }),
     ...(failedTask.prNumber !== undefined && { prNumber: failedTask.prNumber }),
     ...(failedTask.prBranch !== undefined && { prBranch: failedTask.prBranch }),
+    ...(failedTask.reviewTypes !== undefined && { reviewTypes: failedTask.reviewTypes }),
+    ...(failedTask.reviewCommitSha !== undefined && {
+      reviewCommitSha: failedTask.reviewCommitSha,
+    }),
     ...(cooloffSchedule !== undefined && {
       dispatchSchedule: {
         notBeforeAt: cooloffSchedule.notBeforeAt,

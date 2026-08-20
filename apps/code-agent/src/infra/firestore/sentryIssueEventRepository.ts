@@ -439,26 +439,21 @@ export function createFirestoreSentryIssueEventRepository(deps: {
 
         const linkedCodeTaskId = issueReservation?.codeTaskId;
         const exactKnownTask = exactTransition?.codeTaskId;
-        const linkedTaskBelongsToExactTransition =
-          linkedCodeTaskId !== undefined && linkedCodeTaskId === exactKnownTask;
-        if (
-          issueReservation !== undefined
-          && linkedCodeTaskId !== undefined
-          && !linkedTaskBelongsToExactTransition
-          && input.replaceLinkedCodeTaskId !== linkedCodeTaskId
-        ) {
+        if (linkedCodeTaskId !== undefined && issueReservation !== undefined) {
+          if (exactTransition !== undefined) {
+            persistExisting(transitionKey, 'transition', exactTransition);
+          }
           persistExisting(issueKey, 'issue', issueReservation);
-          return ok({
-            kind: 'inspect_linked_task' as const,
-            codeTaskId: linkedCodeTaskId,
-            transitionKey,
-            issueKey,
-          });
+          return ok({ kind: 'duplicate' as const, codeTaskId: linkedCodeTaskId });
+        }
+        if (exactKnownTask !== undefined && exactTransition !== undefined) {
+          persistExisting(transitionKey, 'transition', exactTransition);
+          persistExisting(issueKey, 'issue', exactTransition, transitionKey);
+          return ok({ kind: 'duplicate' as const, codeTaskId: exactKnownTask });
         }
         const proposedCodeTaskId = exactTransition?.proposedCodeTaskId
-          ?? (issueReservation?.state === 'reserved'
-            ? issueReservation.proposedCodeTaskId
-            : input.proposedCodeTaskId);
+          ?? issueReservation?.proposedCodeTaskId
+          ?? input.proposedCodeTaskId;
         const leaseToken = randomUUID();
         const leaseExpiresAt = new Date(input.receivedAt.getTime() + input.leaseDurationMs);
         const baseReservation: ReservationView = exactTransition ?? {
@@ -475,7 +470,7 @@ export function createFirestoreSentryIssueEventRepository(deps: {
           failureReason: undefined,
           eventId: input.event.eventId,
         };
-        const linearIssueId = exactTransition?.linearIssueId;
+        const linearIssueId = exactTransition?.linearIssueId ?? issueReservation?.linearIssueId;
         const reservedFields = {
           transitionKey,
           event: input.event,

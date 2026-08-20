@@ -11,6 +11,11 @@ region = "europe-central2"
 # Environment name
 environment = "dev"
 
+# Phase A removes legacy readers while retaining every legacy container.
+# Phase B may set both false only after the seven-day reversible soak passes.
+legacy_secret_readers_enabled    = true
+legacy_secret_containers_enabled = true
+
 # Exact GitHub repository identity accepted by Workload Identity Federation
 github_owner               = "pbuchman"
 github_repository_owner_id = "368465"

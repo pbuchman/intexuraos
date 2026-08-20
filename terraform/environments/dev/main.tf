@@ -53,10 +53,23 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "legacy_secret_manager_enabled" {
-  description = "Keep legacy individual secret containers and accessors during package cutover and rollback soak. Disable only after verified rollback and at least 72 hours of healthy observation."
+variable "legacy_secret_readers_enabled" {
+  description = "Keep legacy individual Secret Manager readers during package cutover. Disable for Phase A only after package-only consumers and recovery evidence pass."
   type        = bool
   default     = true
+}
+
+variable "legacy_secret_containers_enabled" {
+  description = "Keep legacy individual Secret Manager containers during the reversible disable soak. Disable only in Phase B after at least seven healthy days."
+  type        = bool
+  default     = true
+}
+
+check "legacy_secret_reader_container_order" {
+  assert {
+    condition     = !var.legacy_secret_readers_enabled || var.legacy_secret_containers_enabled
+    error_message = "Legacy Secret Manager readers cannot remain enabled after legacy containers are disabled."
+  }
 }
 
 variable "github_owner" {
@@ -412,14 +425,14 @@ locals {
       local.secret_package_dev_legacy_source_names,
       local.secret_package_native_source_names
     ),
-    var.legacy_secret_manager_enabled ? local.secret_package_dev_legacy_source_names : toset([])
+    var.legacy_secret_readers_enabled ? local.secret_package_dev_legacy_source_names : toset([])
   )
   secret_package_prod_active_source_names = setunion(
     setintersection(
       local.secret_package_prod_legacy_source_names,
       local.secret_package_native_source_names
     ),
-    var.legacy_secret_manager_enabled ? local.secret_package_prod_legacy_source_names : toset([])
+    var.legacy_secret_readers_enabled ? local.secret_package_prod_legacy_source_names : toset([])
   )
 
   hetzner_runtime_secret_names = toset([
@@ -488,6 +501,7 @@ resource "google_project_service" "apis" {
     "cloudfunctions.googleapis.com",
     "eventarc.googleapis.com",
     "apikeys.googleapis.com",
+    "firebaseappcheck.googleapis.com",
   ])
 
   project            = var.project_id
@@ -709,7 +723,7 @@ module "secret_manager" {
 
   secrets = merge(
     local.target_secret_containers,
-    var.legacy_secret_manager_enabled ? local.legacy_secret_containers : {}
+    var.legacy_secret_containers_enabled ? local.legacy_secret_containers : {}
   )
 
   depends_on = [google_project_service.apis]
@@ -721,7 +735,7 @@ moved {
 }
 
 resource "google_secret_manager_secret" "cloudflare_dns_api_token" {
-  count = var.legacy_secret_manager_enabled ? 1 : 0
+  count = var.legacy_secret_containers_enabled ? 1 : 0
 
   secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
   labels    = local.common_labels
@@ -879,7 +893,7 @@ resource "google_storage_bucket_iam_member" "home_dev_runtime_bucket_object_admi
 }
 
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
-  for_each = var.legacy_secret_manager_enabled ? local.hetzner_runtime_secret_names : toset([])
+  for_each = var.legacy_secret_readers_enabled ? local.hetzner_runtime_secret_names : toset([])
 
   secret_id = module.secret_manager.secret_ids[each.value]
   role      = "roles/secretmanager.secretAccessor"
@@ -892,7 +906,7 @@ moved {
 }
 
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudflare_dns" {
-  count = var.legacy_secret_manager_enabled ? 1 : 0
+  count = var.legacy_secret_readers_enabled ? 1 : 0
 
   secret_id = google_secret_manager_secret.cloudflare_dns_api_token[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
@@ -905,7 +919,7 @@ moved {
 }
 
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_ssl_private_key" {
-  count = var.legacy_secret_manager_enabled ? 1 : 0
+  count = var.legacy_secret_readers_enabled ? 1 : 0
 
   secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
   role      = "roles/secretmanager.secretAccessor"
@@ -945,7 +959,7 @@ resource "google_service_account_iam_member" "hetzner_provisioner_scheduler_user
 }
 
 resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
-  for_each = var.legacy_secret_manager_enabled ? local.hetzner_runtime_secret_names : toset([])
+  for_each = var.legacy_secret_readers_enabled ? local.hetzner_runtime_secret_names : toset([])
 
   secret_id = module.secret_manager.secret_ids[each.value]
   role      = "roles/secretmanager.secretAccessor"
@@ -1000,7 +1014,7 @@ module "iam" {
   environment = var.environment
   services    = local.services
 
-  legacy_secret_manager_enabled = var.legacy_secret_manager_enabled
+  legacy_secret_readers_enabled = var.legacy_secret_readers_enabled
   secret_ids = {
     for name, secret_id in module.secret_manager.secret_ids : name => secret_id
     if contains(local.legacy_cloud_run_secret_names, name) &&
@@ -1454,7 +1468,7 @@ module "cloud_build" {
   github_branch              = var.github_branch
   github_connection_name     = var.github_connection_name
 
-  legacy_secret_manager_enabled = var.legacy_secret_manager_enabled
+  legacy_secret_readers_enabled = var.legacy_secret_readers_enabled
 
   artifact_registry_url   = module.artifact_registry.repository_url
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name

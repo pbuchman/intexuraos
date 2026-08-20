@@ -4,16 +4,25 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { ok, err, type Logger } from '@intexuraos/common-core';
-import type { CodeTaskRepository } from '../../domain/repositories/codeTaskRepository.js';
+import { Timestamp } from '@google-cloud/firestore';
+import type { CodeTask } from '../../domain/models/codeTask.js';
+import type {
+  CodeTaskRepository,
+  CreateTaskInput,
+} from '../../domain/repositories/codeTaskRepository.js';
 import type { UserLookupService } from '../../domain/ports/userLookupService.js';
 import type { TaskDispatcherService } from '../../domain/services/taskDispatcher.js';
 import type { TaskEnqueueService } from '../../domain/services/taskEnqueueService.js';
 import type { LinearAgentClient } from '../../domain/ports/linearAgentClient.js';
-import type { GitHubPRClient } from '../../domain/ports/gitHubPRClient.js';
+import type {
+  GitHubPRClient,
+  GitHubPullRequestDetails,
+} from '../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WorkerSettingsRepository } from '../../domain/ports/workerSettingsRepository.js';
 import type { GitHubPRSummaryRepository } from '../../domain/repositories/gitHubPRSummaryRepository.js';
 import { createReviewTask, type CreateReviewTaskDeps } from '../../domain/usecases/createReviewTask.js';
+import { buildReviewTaskId } from '../../domain/usecases/reserveReviewTask.js';
 
 function createFakeLogger(): Logger {
   return {
@@ -42,6 +51,25 @@ function createFakeLinearAgentClient(): LinearAgentClient {
   } as unknown as LinearAgentClient;
 }
 
+function buildPullRequestDetails(
+  overrides: Partial<GitHubPullRequestDetails> = {},
+): GitHubPullRequestDetails {
+  return {
+    number: 42,
+    title: 'Review target',
+    body: null,
+    state: 'open',
+    authorLogin: 'dev-user',
+    baseBranch: 'main',
+    headBranch: 'task_existing_pr_branch',
+    mergeable: true,
+    mergeableState: 'clean',
+    headSha: 'head-sha-at-creation',
+    createdAt: '2026-08-20T12:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function createFakeGitHubPRClient(): GitHubPRClient {
   return {
     updatePRTitle: vi.fn().mockResolvedValue(ok(undefined)),
@@ -51,6 +79,7 @@ function createFakeGitHubPRClient(): GitHubPRClient {
     getPullRequestStatus: vi.fn().mockResolvedValue(
       ok({ state: 'open', mergedAt: null, headRef: 'task_existing_pr_branch' })
     ),
+    getPullRequestDetails: vi.fn().mockResolvedValue(ok(buildPullRequestDetails())),
     postPRComment: vi.fn().mockResolvedValue(ok({ commentId: 42 })),
   } as unknown as GitHubPRClient;
 }
@@ -124,18 +153,138 @@ function createFakeTaskEnqueueService(): TaskEnqueueService {
   };
 }
 
+function createReviewTaskRecord(overrides: Partial<CodeTask> = {}): CodeTask {
+  return {
+    id: 'task-review-existing',
+    traceId: 'event-existing',
+    userId: 'user-1',
+    workerType: 'auto',
+    workerLocation: 'queued',
+    status: 'queued',
+    prompt: 'review prompt',
+    sanitizedPrompt: 'review prompt',
+    systemPromptHash: 'review-auto',
+    repository: 'intexuraos/intexuraos',
+    baseBranch: 'main',
+    prNumber: 42,
+    prBranch: 'feature/fix',
+    agentType: 'review',
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    callbackReceived: false,
+    dedupKey: 'review-dedup',
+    ...overrides,
+  };
+}
+
+function createFakeFirestore(options: {
+  slot?: Record<string, unknown>;
+  legacyQueuedTaskIds?: string[];
+  queueSize?: number;
+  tasks?: Map<string, CodeTask>;
+} = {}): CreateReviewTaskDeps['firestore'] {
+  const documents = new Map<string, Record<string, unknown>>();
+  interface FakeQuery {
+    kind: 'query';
+    filters: { field: string; value: unknown }[];
+    maxResults?: number;
+    where(field: string, operator: string, value: unknown): FakeQuery;
+    limit(maxResults: number): FakeQuery;
+  }
+  function createQuery(
+    filters: { field: string; value: unknown }[] = [],
+    maxResults?: number,
+  ): FakeQuery {
+    return {
+      kind: 'query',
+      filters,
+      ...(maxResults !== undefined && { maxResults }),
+      where(field, operator, value): FakeQuery {
+        if (operator !== '==') throw new Error(`Unsupported fake query operator: ${operator}`);
+        return createQuery([...filters, { field, value }], maxResults);
+      },
+      limit(nextMaxResults): FakeQuery {
+        return createQuery(filters, nextMaxResults);
+      },
+    };
+  }
+  return {
+    doc: vi.fn((path: string) => ({ path })),
+    collection: vi.fn(() => createQuery()),
+    runTransaction: vi.fn(async <T>(operation: (transaction: never) => Promise<T>): Promise<T> => {
+      const transaction = {
+        get: vi.fn(async (ref: {
+          path?: string;
+          kind?: string;
+          filters?: { field: string; value: unknown }[];
+          maxResults?: number;
+        }) => {
+          if (ref.kind === 'query') {
+            const isLegacyReviewQuery = (ref.filters ?? [])
+              .some(({ field }) => field === 'repository');
+            const ids = isLegacyReviewQuery
+              ? options.legacyQueuedTaskIds ?? []
+              : Array.from({ length: options.queueSize ?? 0 }, (_, index) => `queued-${String(index)}`);
+            const limited = ids.slice(0, ref.maxResults);
+            return {
+              empty: limited.length === 0,
+              docs: limited.map((id) => ({ id })),
+            };
+          }
+          const isSlotDocument = ref.path?.startsWith('code_review_task_slots/') === true
+            && !ref.path.includes('/code_review_events/');
+          const stored = ref.path === undefined ? undefined : documents.get(ref.path);
+          return {
+            exists: stored !== undefined || (isSlotDocument && options.slot !== undefined),
+            data: (): Record<string, unknown> | undefined =>
+              stored ?? (isSlotDocument ? options.slot : undefined),
+          };
+        }),
+        set: vi.fn((ref: { path: string }, data: Record<string, unknown>) => {
+          documents.set(ref.path, data);
+        }),
+        update: vi.fn((ref: { path: string }, data: Record<string, unknown>) => {
+          if (!ref.path.startsWith('code_tasks/')) return;
+          const taskId = ref.path.slice('code_tasks/'.length);
+          const task = options.tasks?.get(taskId);
+          if (task !== undefined) {
+            options.tasks?.set(taskId, { ...task, ...data } as CodeTask);
+          }
+        }),
+      };
+      return await operation(transaction as never);
+    }),
+  } as unknown as CreateReviewTaskDeps['firestore'];
+}
+
 function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateReviewTaskDeps {
+  const tasks = new Map<string, CodeTask>();
+  const codeTaskRepo = overrides.codeTaskRepo ?? {
+    create: vi.fn(async (input: CreateTaskInput) => {
+      const task = createReviewTaskRecord({
+        ...(input as unknown as Partial<CodeTask>),
+        id: input.id ?? 'task-review-1',
+        status: input.initialStatus ?? 'queued',
+      });
+      tasks.set(task.id, task);
+      return ok(task);
+    }),
+    findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+    findByPR: vi.fn().mockResolvedValue(ok(null)),
+    findById: vi.fn(async (taskId: string) => {
+      const task = tasks.get(taskId);
+      return task === undefined
+        ? err({ code: 'NOT_FOUND' as const, message: 'not found' })
+        : ok(task);
+    }),
+    findByUser: vi.fn().mockResolvedValue(ok([])),
+    update: vi.fn().mockResolvedValue(ok(undefined)),
+    countQueued: vi.fn().mockResolvedValue(ok(0)),
+  } as unknown as CodeTaskRepository;
   return {
     logger: createFakeLogger(),
-    codeTaskRepo: {
-      create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
-      findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
-      findByPR: vi.fn().mockResolvedValue(ok(null)),
-      findById: vi.fn().mockResolvedValue(ok(null)),
-      findByUser: vi.fn().mockResolvedValue(ok([])),
-      update: vi.fn().mockResolvedValue(ok(undefined)),
-      countQueued: vi.fn().mockResolvedValue(ok(0)),
-    } as unknown as CodeTaskRepository,
+    firestore: overrides.firestore ?? createFakeFirestore({ tasks }),
+    codeTaskRepo,
     userLookupService: {
       resolveByGitHubUsername: vi.fn().mockResolvedValue(ok({
         userId: 'user-1',
@@ -169,7 +318,62 @@ function createFakeDeps(overrides: Partial<CreateReviewTaskDeps> = {}): CreateRe
 }
 
 describe('createReviewTask', () => {
-  it('creates task with agentType review and enqueues', async () => {
+  it('does not depend on a post-reservation enqueue call', async () => {
+    const enqueue = vi.fn().mockRejectedValue(new Error('must not run after reservation'));
+    const deps = createFakeDeps({
+      taskEnqueueService: { enqueue } as unknown as TaskEnqueueService,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-atomic-reservation',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it('does not report a failed task from an exact-event retry as queued', async () => {
+    const eventId = 'evt-failed-exact-retry';
+    const failedTask = createReviewTaskRecord({
+      id: buildReviewTaskId(eventId),
+      traceId: eventId,
+      status: 'failed',
+      error: { code: 'queue_full', message: 'Queue was full' },
+    });
+    const deps = createFakeDeps({
+      codeTaskRepo: {
+        create: vi.fn(),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn(async (taskId: string) =>
+          taskId === failedTask.id
+            ? ok(failedTask)
+            : err({ code: 'NOT_FOUND' as const, message: 'not found' })
+        ),
+        update: vi.fn().mockResolvedValue(ok(undefined)),
+      } as unknown as CodeTaskRepository,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId,
+    });
+
+    expect(result).toEqual(err({
+      code: 'task_creation_failed',
+      message: 'Existing review task is failed',
+      taskId: failedTask.id,
+    }));
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('creates and atomically admits a task with agentType review', async () => {
     const deps = createFakeDeps();
     const result = await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
@@ -182,404 +386,114 @@ describe('createReviewTask', () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.status).toBe('queued');
-      expect(result.value.taskId).toBe('task-review-1');
+      expect(result.value.taskId).toBe(buildReviewTaskId('evt-1'));
     }
 
-    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalledWith({
-      taskId: 'task-review-1',
-      userId: 'user-1',
-    });
-  });
-
-  it('cancels and replaces active review task, returning queued with new task ID', async () => {
-    const gitHubPRClient = createFakeGitHubPRClient();
-    const taskDispatcher = {
-      dispatch: vi.fn().mockResolvedValue(ok({
-        dispatched: true,
-        workerLocation: 'worker-1',
-      })),
-      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TaskDispatcherService;
-    const taskEnqueueService = createFakeTaskEnqueueService();
-    vi.mocked(taskEnqueueService.enqueue).mockResolvedValue(ok({
-      taskId: 'task-review-new',
-      queuePosition: 1,
-    }));
-    const deps = createFakeDeps({
-      gitHubPRClient,
-      taskDispatcher,
-      taskEnqueueService,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'auto',
-          workerLocation: 'worker-1',
-          status: 'dispatched',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'intexuraos/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-replace',
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    // Always returns queued with new task ID
-    expect(result.value).toEqual({
-      status: 'queued',
-      taskId: 'task-review-new',
-      workerType: 'auto',
-    });
-
-    // Verify replacement was recorded in automation log
-    expect(deps.automationLog.record).toHaveBeenCalledWith(
-      { repository: 'intexuraos/intexuraos', prNumber: 42 },
-      expect.objectContaining({
-        type: 'review_replaced',
-        replacedTaskId: 'task-review-existing',
-        replacedWorkerType: 'auto',
-      }),
-      'user-existing',
-    );
-
-    // Verify old task was cancelled locally
-    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-      'task-review-existing',
-      expect.objectContaining({
-        status: 'cancelled',
-        error: expect.objectContaining({ code: 'review_replaced' }),
-      })
-    );
-
-    // Verify worker cancellation was attempted (best-effort)
-    expect(taskDispatcher.cancelOnWorker).toHaveBeenCalledWith(
-      'task-review-existing',
-      'worker-1',
-      expect.objectContaining({ url: 'https://worker.example.com' })
-    );
-
-    // Verify new task was created and enqueued
-    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
-  });
-
-  it('returns error if local cancel fails and does not create new task', async () => {
-    const deps = createFakeDeps({
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'auto',
-          workerLocation: 'worker-1',
-          status: 'running',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn()
-          .mockResolvedValueOnce(err({ code: 'FIRESTORE_ERROR' as const, message: 'Update failed' }))
-          .mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'intexuraos/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-cancel-fail',
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-
-    expect(result.error.code).toBe('task_creation_failed');
-
-    // Verify new task was NOT created
-    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
-  it('creates new review task even if worker cancellation fails', async () => {
-    const taskDispatcher = {
-      dispatch: vi.fn().mockResolvedValue(ok({
-        dispatched: true,
-        workerLocation: 'worker-1',
-      })),
-      cancelOnWorker: vi.fn().mockRejectedValue(new Error('Worker unreachable')),
-    } as unknown as TaskDispatcherService;
-    const deps = createFakeDeps({
-      taskDispatcher,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'qwen',
-          workerLocation: 'worker-1',
-          status: 'dispatched',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'intexuraos/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-worker-cancel-fail',
-    });
-
-    // Should still succeed
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.status).toBe('queued');
-    expect(result.value.taskId).toBe('task-review-new');
-
-    // Verify new task was still created
-    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
-  });
-
-  it('creates new review task when worker settings are null', async () => {
-    const deps = createFakeDeps({
-      workerSettingsRepo: {
-        getSettings: vi.fn().mockResolvedValue(ok(null)),
-        saveSettings: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as WorkerSettingsRepository,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'auto',
-          workerLocation: 'worker-1',
-          status: 'dispatched',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'intexuraos/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-null-settings',
-    });
-
-    // Should still succeed
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.status).toBe('queued');
-    expect(result.value.taskId).toBe('task-review-new');
-
-    // Verify new task was still created
-    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
-  });
-
-  it('creates new review task even if replacement comment fails to post', async () => {
-    const gitHubPRClient = createFakeGitHubPRClient();
-    vi.mocked(gitHubPRClient.postPRComment).mockRejectedValue(new Error('GitHub API down'));
-    const deps = createFakeDeps({
-      gitHubPRClient,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'auto',
-          workerLocation: 'worker-1',
-          status: 'dispatched',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'intexuraos/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-comment-fail',
-    });
-
-    // Should still succeed - fresh-start rule holds
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.status).toBe('queued');
-
-    // Verify new task was still created
-    expect(deps.codeTaskRepo.create).toHaveBeenCalled();
-  });
-
-  it('creates replacement when existing task owner token is unavailable', async () => {
-    const gitHubPRClient = createFakeGitHubPRClient();
-    const userServiceClient = createFakeUserServiceClient();
-    // Return null for existing task owner's token
-    vi.mocked(userServiceClient.getOAuthToken).mockImplementation(async (userId: string) => {
-      if (userId === 'user-existing') {
-        return err({ code: 'CONNECTION_NOT_FOUND', message: 'No GitHub connection' }) as never;
-      }
-      return ok({ accessToken: 'ghp_sender_token', email: 'test@example.com' });
-    });
-    const deps = createFakeDeps({
-      gitHubPRClient,
-      userServiceClient,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'auto',
-          workerLocation: 'worker-1',
-          status: 'dispatched',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-token-unavailable',
-    });
-
-    // Should still succeed - replacement comment is best-effort
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.status).toBe('queued');
-    expect(result.value.taskId).toBe('task-review-new');
-
-    // Verify cancel still happened even without posting replacement comment
-    expect(deps.codeTaskRepo.update).toHaveBeenCalledWith(
-      'task-review-existing',
-      expect.objectContaining({ status: 'cancelled' })
+  it('transactionally adopts a valid legacy queued review without using the preflight lookup', async () => {
+    const existingTask = createReviewTaskRecord();
+    const findActiveReviewForPR = vi.fn().mockResolvedValue(
+      err({ code: 'FIRESTORE_ERROR' as const, message: 'deprecated lookup must not run' }),
     );
-  });
-
-  it('posts replacement comment, cancels locally, then creates new task in correct order', async () => {
-    const gitHubPRClient = createFakeGitHubPRClient();
-    const taskDispatcher = {
-      dispatch: vi.fn().mockResolvedValue(ok({
-        dispatched: true,
-        workerLocation: 'worker-1',
-      })),
-      cancelOnWorker: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TaskDispatcherService;
+    const codeTaskRepo = {
+      create: vi.fn().mockResolvedValue(ok(createReviewTaskRecord({ id: 'unexpected-new-task' }))),
+      findActiveReviewForPR,
+      findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findById: vi.fn(async (taskId: string) =>
+        taskId === existingTask.id
+          ? ok(existingTask)
+          : err({ code: 'NOT_FOUND' as const, message: 'not found' })
+      ),
+      findByUser: vi.fn().mockResolvedValue(ok([])),
+      update: vi.fn().mockResolvedValue(ok(undefined)),
+    } as unknown as CodeTaskRepository;
     const deps = createFakeDeps({
-      gitHubPRClient,
-      taskDispatcher,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'auto',
-          workerLocation: 'worker-1',
-          status: 'dispatched',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
+      firestore: createFakeFirestore({ legacyQueuedTaskIds: [existingTask.id] }),
+      codeTaskRepo,
     });
 
-    await createReviewTask(deps, {
+    const result = await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['code_quality'],
-      eventId: 'evt-call-order',
+      eventId: 'evt-adopt-legacy',
     });
 
-    // Verify call order using invocationCallOrder
-    const commentCallOrder = vi.mocked(gitHubPRClient.postPRComment).mock.invocationCallOrder[0] ?? 0;
-    const cancelCallOrder = vi.mocked(deps.codeTaskRepo.update).mock.invocationCallOrder[0] ?? 0;
-    const createCallOrder = vi.mocked(deps.codeTaskRepo.create).mock.invocationCallOrder[0] ?? 0;
-
-    // Verify sequence: comment -> cancel -> create
-    expect(commentCallOrder).toBeLessThan(cancelCallOrder);
-    expect(cancelCallOrder).toBeLessThan(createCallOrder);
+    expect(result).toEqual(ok({
+      status: 'queued',
+      taskId: existingTask.id,
+      workerType: existingTask.workerType,
+    }));
+    expect(findActiveReviewForPR).not.toHaveBeenCalled();
+    expect(codeTaskRepo.create).not.toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
-  it('replaces review task when existing task has no workerType', async () => {
-    const gitHubPRClient = createFakeGitHubPRClient();
-    const deps = createFakeDeps({
-      gitHubPRClient,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          // No workerType - simulates legacy task
-          workerLocation: 'worker-1',
-          status: 'running',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
+  it('creates an atomically queued successor when the review slot points at a running task', async () => {
+    const eventId = 'evt-running-successor';
+    const runningTask = createReviewTaskRecord({
+      id: 'task-review-running',
+      status: 'running',
+      workerLocation: 'worker-1',
     });
-
-    const result = await createReviewTask(deps, {
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-no-worker-type',
+    const successorTask = createReviewTaskRecord({
+      id: buildReviewTaskId(eventId),
+      traceId: eventId,
+      workerType: 'qwen',
     });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-
-    expect(result.value.status).toBe('queued');
-    expect(result.value.taskId).toBe('task-review-new');
-
-    // Verify replacement was recorded in automation log without worker type
-    expect(deps.automationLog.record).toHaveBeenCalledWith(
-      { repository: 'pbuchman/intexuraos', prNumber: 42 },
-      expect.objectContaining({
-        type: 'review_replaced',
-        replacedTaskId: 'task-review-existing',
+    let successorCreated = false;
+    const findActiveReviewForPR = vi.fn().mockResolvedValue(ok(runningTask));
+    const codeTaskRepo = {
+      create: vi.fn(async () => {
+        successorCreated = true;
+        return ok(successorTask);
       }),
-      'user-existing',
+      findActiveReviewForPR,
+      findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findById: vi.fn(async (taskId: string) =>
+        taskId === runningTask.id
+          ? ok(runningTask)
+          : successorCreated && taskId === successorTask.id
+            ? ok(successorTask)
+          : err({ code: 'NOT_FOUND' as const, message: 'not found' })
+      ),
+      findByUser: vi.fn().mockResolvedValue(ok([])),
+      update: vi.fn().mockResolvedValue(ok(undefined)),
+    } as unknown as CodeTaskRepository;
+    const deps = createFakeDeps({
+      firestore: createFakeFirestore({ slot: { taskId: runningTask.id } }),
+      codeTaskRepo,
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      workerType: 'qwen',
+      eventId,
+    });
+
+    expect(result).toEqual(ok({
+      status: 'queued',
+      taskId: successorTask.id,
+      workerType: 'qwen',
+    }));
+    expect(findActiveReviewForPR).not.toHaveBeenCalled();
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: successorTask.id,
+        repository: 'intexuraos/intexuraos',
+        prNumber: 42,
+        agentType: 'review',
+      }),
+      expect.any(Object),
     );
+    expect(deps.taskDispatcher.cancelOnWorker).not.toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('returns worker type in result', async () => {
@@ -599,7 +513,7 @@ describe('createReviewTask', () => {
 
     expect(result.value).toEqual({
       status: 'queued',
-      taskId: 'task-review-1',
+      taskId: buildReviewTaskId('evt-worker-type-result'),
       workerType: 'qwen',
     });
   });
@@ -620,83 +534,9 @@ describe('createReviewTask', () => {
 
     expect(result.value).toEqual({
       status: 'queued',
-      taskId: 'task-review-1',
+      taskId: buildReviewTaskId('evt-auto-worker'),
       workerType: 'auto',
     });
-  });
-
-  it('records replacement in automation log with existing task details', async () => {
-    const gitHubPRClient = createFakeGitHubPRClient();
-    const userServiceClient = createFakeUserServiceClient();
-    const deps = createFakeDeps({
-      gitHubPRClient,
-      userServiceClient,
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-new' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(ok({
-          id: 'task-review-existing',
-          userId: 'user-existing',
-          workerType: 'claude-code',
-          workerLocation: 'office-mac',
-          status: 'running',
-        })),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    await createReviewTask(deps, {
-      repository: 'pbuchman/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-replacement-comment',
-    });
-
-    // Verify replacement was recorded in automation log with existing task owner
-    expect(deps.automationLog.record).toHaveBeenCalledWith(
-      { repository: 'pbuchman/intexuraos', prNumber: 42 },
-      expect.objectContaining({
-        type: 'review_replaced',
-        replacedTaskId: 'task-review-existing',
-        replacedWorkerType: 'claude-code',
-      }),
-      'user-existing',
-    );
-  });
-
-  it('returns task_creation_failed when active review lookup fails', async () => {
-    const deps = createFakeDeps({
-      codeTaskRepo: {
-        create: vi.fn().mockResolvedValue(ok({ id: 'task-review-2' })),
-        findActiveReviewForPR: vi.fn().mockResolvedValue(
-          err({ code: 'FIRESTORE_ERROR' as const, message: 'Lookup failed' })
-        ),
-        findByPR: vi.fn().mockResolvedValue(ok(null)),
-        findById: vi.fn().mockResolvedValue(ok(null)),
-        findByUser: vi.fn().mockResolvedValue(ok([])),
-        update: vi.fn().mockResolvedValue(ok(undefined)),
-      } as unknown as CodeTaskRepository,
-    });
-
-    const result = await createReviewTask(deps, {
-      repository: 'intexuraos/intexuraos',
-      prNumber: 42,
-      senderLogin: 'dev-user',
-      reviewTypes: ['code_quality'],
-      eventId: 'evt-active-review-error',
-    });
-
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-
-    expect(result.error.code).toBe('task_creation_failed');
-    expect(result.error.message).toBe('Lookup failed');
-    expect(deps.userLookupService.resolveByGitHubUsername).not.toHaveBeenCalled();
-    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
-    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('creates task with agentType review', async () => {
@@ -714,6 +554,7 @@ describe('createReviewTask', () => {
     if (createCall !== undefined) {
       expect(createCall[0].agentType).toBe('review');
       expect(createCall[0].systemPromptHash).toBe('review-auto');
+      expect(createCall[0].reviewCommitSha).toBe('head-sha-at-creation');
     }
   });
 
@@ -754,7 +595,7 @@ describe('createReviewTask', () => {
       expect(createCall[0].workerType).toBe('qwen');
     }
 
-    expect(deps.taskEnqueueService.enqueue).toHaveBeenCalled();
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   it('includes review request comment in prompt when provided', async () => {
@@ -808,6 +649,10 @@ describe('createReviewTask', () => {
           err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
         ),
         findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
+        findByPR: vi.fn().mockResolvedValue(ok(null)),
+        findById: vi.fn().mockResolvedValue(
+          err({ code: 'NOT_FOUND' as const, message: 'not found' }),
+        ),
       } as unknown as CodeTaskRepository,
     });
 
@@ -823,6 +668,8 @@ describe('createReviewTask', () => {
     if (!result.ok) {
       expect(result.error.code).toBe('task_creation_failed');
     }
+    expect(deps.linearAgentClient?.generateTitle).not.toHaveBeenCalled();
+    expect(deps.linearAgentClient?.createIssue).not.toHaveBeenCalled();
   });
 
   it('returns no_workers_configured when user lookup returns NO_ENABLED_WORKER', async () => {
@@ -848,13 +695,13 @@ describe('createReviewTask', () => {
     }
   });
 
-  it('uses provided baseBranch as fallback when PR base branch fetch fails', async () => {
+  it('does not create an unpinned review when PR details fail despite a base fallback', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
-    vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
+    vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
       err({ code: 'API_ERROR' as const, message: 'GitHub unavailable' })
     );
     const deps = createFakeDeps({ gitHubPRClient });
-    await createReviewTask(deps, {
+    const result = await createReviewTask(deps, {
       repository: 'intexuraos/intexuraos',
       prNumber: 42,
       senderLogin: 'dev-user',
@@ -863,14 +710,12 @@ describe('createReviewTask', () => {
       baseBranch: 'development',
     });
 
-    const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
-    expect(createCall).toBeDefined();
-    if (createCall !== undefined) {
-      expect(createCall[0].baseBranch).toBe('development');
-    }
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('pr_branch_unavailable');
+    expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
   });
 
-  it('returns error when enqueue fails with internal_error', async () => {
+  it('does not call the legacy enqueue service after atomic admission', async () => {
     const gitHubPRClient = createFakeGitHubPRClient();
     const deps = createFakeDeps({
       gitHubPRClient,
@@ -889,13 +734,8 @@ describe('createReviewTask', () => {
       eventId: 'evt-5',
     });
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe('internal_error');
-      expect(result.error.taskId).toBe('task-review-1');
-    }
-
-    // TaskEnqueueService handles task failure marking — usecase only returns error
+    expect(result.ok).toBe(true);
+    expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
   });
 
   describe('PR notification after dispatch', () => {
@@ -1050,7 +890,7 @@ describe('createReviewTask', () => {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(ok({ id: 'task-existing', linearIssueId: 'INT-100' })),
-          findById: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
           findByUser: vi.fn().mockResolvedValue(ok([])),
           update: vi.fn().mockResolvedValue(ok(undefined)),
         } as unknown as CodeTaskRepository,
@@ -1212,13 +1052,11 @@ describe('createReviewTask', () => {
         userId: 'user-1',
         title: 'Generated',
         description: expect.stringContaining('Review created automatically by code-agent'),
+        idempotencyKey: expect.stringMatching(/^review:code_review_task_slots\//),
       });
 
-      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
-      expect(createCall).toBeDefined();
-      if (createCall !== undefined) {
-        expect(createCall[0].linearIssueId).toBe('INT-300');
-      }
+      const storedTask = await deps.codeTaskRepo.findById(buildReviewTaskId('evt-link-3'));
+      expect(storedTask).toMatchObject(ok({ linearIssueId: 'INT-300' }));
     });
 
     it('proceeds without linearIssueId when linearAgentClient not provided', async () => {
@@ -1247,12 +1085,19 @@ describe('createReviewTask', () => {
       vi.mocked(linearAgentClient.createIssue).mockResolvedValue(
         err({ code: 'UNAVAILABLE' as const, message: 'Service down' })
       );
+      const reservedTask = createReviewTaskRecord({ id: buildReviewTaskId('evt-link-5') });
+      let reservedTaskCreated = false;
       const deps = createFakeDeps({
         codeTaskRepo: {
-          create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          create: vi.fn(async () => {
+            reservedTaskCreated = true;
+            return ok(reservedTask);
+          }),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(err({ code: 'FIRESTORE_ERROR' as const, message: 'DB error' })),
-          findById: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn(async (taskId: string) => reservedTaskCreated && taskId === reservedTask.id
+            ? ok(reservedTask)
+            : err({ code: 'NOT_FOUND' as const, message: 'not found' })),
           findByUser: vi.fn().mockResolvedValue(ok([])),
           update: vi.fn().mockResolvedValue(ok(undefined)),
         } as unknown as CodeTaskRepository,
@@ -1281,12 +1126,15 @@ describe('createReviewTask', () => {
       vi.mocked(linearAgentClient.createIssue).mockResolvedValue(
         err({ code: 'UNAVAILABLE' as const, message: 'Usage limit exceeded' })
       );
+      const reservedTask = createReviewTaskRecord({ id: buildReviewTaskId('evt-linear-fail-1') });
       const deps = createFakeDeps({
         codeTaskRepo: {
-          create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
+          create: vi.fn().mockResolvedValue(ok(reservedTask)),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(ok(null)),
-          findById: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn(async (taskId: string) => taskId === reservedTask.id
+            ? ok(reservedTask)
+            : err({ code: 'NOT_FOUND' as const, message: 'not found' })),
           findByUser: vi.fn().mockResolvedValue(ok([])),
           update: vi.fn().mockResolvedValue(ok(undefined)),
         } as unknown as CodeTaskRepository,
@@ -1315,7 +1163,7 @@ describe('createReviewTask', () => {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockRejectedValue(new Error('Unexpected crash')),
-          findById: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
           findByUser: vi.fn().mockResolvedValue(ok([])),
           update: vi.fn().mockResolvedValue(ok(undefined)),
         } as unknown as CodeTaskRepository,
@@ -1343,7 +1191,7 @@ describe('createReviewTask', () => {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-review-1' })),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockRejectedValue(new Error('Unexpected crash')),
-          findById: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
           findByUser: vi.fn().mockResolvedValue(ok([])),
           update: vi.fn().mockResolvedValue(ok(undefined)),
         } as unknown as CodeTaskRepository,
@@ -1385,6 +1233,7 @@ describe('createReviewTask', () => {
         userId: 'user-1',
         title: 'Generated',
         description: expect.stringContaining('Review created automatically by code-agent'),
+        idempotencyKey: expect.stringMatching(/^review:code_review_task_slots\//),
       });
     });
 
@@ -1638,9 +1487,10 @@ describe('createReviewTask', () => {
     });
   });
 
-  describe('enqueue error handling', () => {
-    it('returns queue_full when enqueue returns queue_full', async () => {
+  describe('atomic queue admission', () => {
+    it('returns queue_full before task creation when the persistent queue is full', async () => {
       const deps = createFakeDeps({
+        firestore: createFakeFirestore({ queueSize: 50 }),
         taskEnqueueService: {
           enqueue: vi.fn().mockResolvedValue(err({ code: 'queue_full', message: 'Queue is full' })),
         } as unknown as TaskEnqueueService,
@@ -1648,6 +1498,7 @@ describe('createReviewTask', () => {
           create: vi.fn().mockResolvedValue(ok({ id: 'task-full-1' })),
           findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
           findByPR: vi.fn().mockResolvedValue(ok(null)),
+          findById: vi.fn().mockResolvedValue(err({ code: 'NOT_FOUND', message: 'not found' })),
           update: vi.fn().mockResolvedValue(ok(undefined)),
         } as unknown as CodeTaskRepository,
       });
@@ -1663,13 +1514,13 @@ describe('createReviewTask', () => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.error.code).toBe('queue_full');
-        expect(result.error.taskId).toBe('task-full-1');
+        expect(result.error.taskId).toBeUndefined();
       }
-
-      // TaskEnqueueService handles task failure marking — usecase only returns error
+      expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
+      expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
     });
 
-    it('returns internal_error when enqueue returns internal_error', async () => {
+    it('does not surface failures from the unused legacy enqueue dependency', async () => {
       const deps = createFakeDeps({
         taskEnqueueService: {
           enqueue: vi.fn().mockResolvedValue(err({ code: 'internal_error', message: 'Something went wrong' })),
@@ -1684,13 +1535,8 @@ describe('createReviewTask', () => {
         eventId: 'evt-internal-1',
       });
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('internal_error');
-        expect(result.error.message).toBe('Something went wrong');
-      }
-
-      // TaskEnqueueService handles task failure marking — usecase only returns error
+      expect(result.ok).toBe(true);
+      expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
     });
   });
 
@@ -1841,13 +1687,12 @@ describe('createReviewTask', () => {
       expect(linearAgentClient.createIssue).toHaveBeenCalled();
       expect(linearAgentClient.getIssueDescription).not.toHaveBeenCalled();
 
-      const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
-      expect(createCall).toBeDefined();
-      if (createCall !== undefined) {
-        // The fallback description from buildLinearIssueDescription should be embedded
-        expect(createCall[0].prompt).toContain('### Issue Requirements');
-        expect(createCall[0].prompt).toContain('## PR Review: Fix auth bug');
-        expect(createCall[0].prompt).toContain('This PR fixes the authentication bypass.');
+      const storedTask = await deps.codeTaskRepo.findById(buildReviewTaskId('evt-desc-fallback'));
+      expect(storedTask.ok).toBe(true);
+      if (storedTask.ok) {
+        expect(storedTask.value.prompt).toContain('### Issue Requirements');
+        expect(storedTask.value.prompt).toContain('## PR Review: Fix auth bug');
+        expect(storedTask.value.prompt).toContain('This PR fixes the authentication bypass.');
       }
     });
 
@@ -2010,10 +1855,10 @@ describe('createReviewTask', () => {
   });
 
   describe('PR branch resolution (INT-1258)', () => {
-    it('sets prBranch from PR headRef via getPullRequestStatus', async () => {
+    it('sets prBranch from the PR details head branch', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
-      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
-        ok({ state: 'open' as const, mergedAt: null, headRef: 'fix/INT-123-auth' })
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        ok(buildPullRequestDetails({ headBranch: 'fix/INT-123-auth' })),
       );
       const deps = createFakeDeps({ gitHubPRClient });
 
@@ -2033,9 +1878,11 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('sets baseBranch from PR baseRefName via getPullRequestBaseBranch', async () => {
+    it('sets baseBranch from the PR details base branch', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
-      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(ok('development'));
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        ok(buildPullRequestDetails({ baseBranch: 'development' })),
+      );
       const deps = createFakeDeps({ gitHubPRClient });
 
       const result = await createReviewTask(deps, {
@@ -2054,13 +1901,10 @@ describe('createReviewTask', () => {
       }
     });
 
-    it('fails with pr_branch_unavailable when getPullRequestStatus fails', async () => {
+    it('fails with pr_branch_unavailable when getPullRequestDetails fails', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
-      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
-        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
-      );
-      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
-        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
+      vi.mocked(gitHubPRClient.getPullRequestDetails).mockResolvedValue(
+        err({ code: 'API_ERROR' as const, message: 'GitHub down' }),
       );
       const deps = createFakeDeps({ gitHubPRClient });
 
@@ -2083,12 +1927,6 @@ describe('createReviewTask', () => {
 
     it('fails with pr_branch_unavailable when GitHub token is unavailable', async () => {
       const gitHubPRClient = createFakeGitHubPRClient();
-      vi.mocked(gitHubPRClient.getPullRequestStatus).mockResolvedValue(
-        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
-      );
-      vi.mocked(gitHubPRClient.getPullRequestBaseBranch).mockResolvedValue(
-        err({ code: 'API_ERROR' as const, message: 'GitHub down' })
-      );
       const userServiceClient = createFakeUserServiceClient();
       vi.mocked(userServiceClient.getOAuthToken).mockResolvedValue(
         err({ code: 'CONNECTION_NOT_FOUND', message: 'No token' }) as never
@@ -2109,5 +1947,70 @@ describe('createReviewTask', () => {
       }
       expect(deps.codeTaskRepo.create).not.toHaveBeenCalled();
     });
+  });
+
+  it('adds a plan section when a newly created Linear description contains a plan reference', async () => {
+    const deps = createFakeDeps();
+    const eventId = 'evt-created-linear-plan';
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId,
+      prTitle: 'Implement planned feature',
+      prBody: 'Plan document: docs/plans/2026-08-20-planned-feature.md',
+    });
+
+    expect(result.ok).toBe(true);
+    const stored = await deps.codeTaskRepo.findById(buildReviewTaskId(eventId));
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    expect(stored.value.prompt).toContain('### Plan Document');
+    expect(stored.value.prompt).toContain('docs/plans/2026-08-20-planned-feature.md');
+  });
+
+  it('fails closed when the reserved task cannot be finalized after Linear creation', async () => {
+    const tasks = new Map<string, CodeTask>();
+    let findCount = 0;
+    const codeTaskRepo = {
+      create: vi.fn(async (input: CreateTaskInput) => {
+        const task = createReviewTaskRecord({
+          ...(input as unknown as Partial<CodeTask>),
+          id: input.id ?? 'task-review-finalize-error',
+          status: 'queued',
+        });
+        tasks.set(task.id, task);
+        return ok(task);
+      }),
+      findByPR: vi.fn().mockResolvedValue(ok(null)),
+      findById: vi.fn(async () => {
+        findCount += 1;
+        return findCount === 1
+          ? err({ code: 'NOT_FOUND' as const, message: 'not found' })
+          : err({ code: 'FIRESTORE_ERROR' as const, message: 'finalization read failed' });
+      }),
+      update: vi.fn().mockResolvedValue(ok(undefined)),
+    } as unknown as CodeTaskRepository;
+    const deps = createFakeDeps({
+      codeTaskRepo,
+      firestore: createFakeFirestore({ tasks }),
+    });
+
+    const result = await createReviewTask(deps, {
+      repository: 'intexuraos/intexuraos',
+      prNumber: 42,
+      senderLogin: 'dev-user',
+      reviewTypes: ['code_quality'],
+      eventId: 'evt-finalization-error',
+      prTitle: 'Create Linear before finalization',
+    });
+
+    expect(result).toEqual(err({
+      code: 'task_creation_failed',
+      message: 'finalization read failed',
+      taskId: buildReviewTaskId('evt-finalization-error'),
+    }));
   });
 });

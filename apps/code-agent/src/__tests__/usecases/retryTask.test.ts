@@ -1037,14 +1037,23 @@ describe('retryTask use case', () => {
 
     it('should preserve review agentType from original task on retry', async () => {
       // Review tasks have no Linear issue — agentType must be preserved from original
-      const mockTask = createMockTask({ completedAt: sixMinutesAgo, agentType: 'review' });
+      const mockTask = createMockTask({
+        completedAt: sixMinutesAgo,
+        agentType: 'review',
+        reviewTypes: ['code_quality', 'security'],
+        reviewCommitSha: 'reviewed-head-sha',
+      });
       const taskRecord = mockTask as unknown as Record<string, unknown>;
       delete taskRecord['linearIssueId'];
       mockCodeTaskRepo.findByIdForUser.mockResolvedValue(ok(mockTask));
 
       let createInputAgentType: unknown;
+      let createInputReviewTypes: unknown;
+      let createInputReviewCommitSha: unknown;
       mockCodeTaskRepo.create.mockImplementation((input: Record<string, unknown>) => {
         createInputAgentType = input['agentType'];
+        createInputReviewTypes = input['reviewTypes'];
+        createInputReviewCommitSha = input['reviewCommitSha'];
         const agentTypeValue = input['agentType'] as CodeTask['agentType'];
         const newTask: CodeTask = {
           id: retryTaskId,
@@ -1074,6 +1083,8 @@ describe('retryTask use case', () => {
 
       expect(result.ok).toBe(true);
       expect(createInputAgentType).toBe('review');
+      expect(createInputReviewTypes).toEqual(['code_quality', 'security']);
+      expect(createInputReviewCommitSha).toBe('reviewed-head-sha');
       expect(mockTaskEnqueueService.enqueue).toHaveBeenCalled();
     });
 

@@ -679,6 +679,12 @@
       "description": "Atomic DEV/PROD secret package publication, promotion, rotation, rollback, audit, and recovery"
     },
     {
+      "path": "operations/secret-migration-status-report.md",
+      "title": "Secret Migration Status Report",
+      "category": "operations",
+      "description": "Non-secret completed evidence, active cleanup status, deferred gates, and closure criteria"
+    },
+    {
       "path": "operations/runtime-configuration.md",
       "title": "Runtime Configuration And Secret Package Policy",
       "category": "operations",

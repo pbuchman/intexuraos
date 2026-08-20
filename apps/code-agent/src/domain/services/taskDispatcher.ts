@@ -109,9 +109,13 @@ export interface DispatchError {
     | 'worker_busy'
     | 'at_capacity'       // All workers returned 503 (INT-619)
     | 'dispatch_failed'
-      | 'network_error'
-      | 'invalid_response';
+    | 'network_error'
+    | 'invalid_response';
   message: string;
+  /** The worker POST may have reached the worker, so releasing the dispatch claim is unsafe. */
+  outcomeUnknown?: boolean;
+  /** Worker that received the POST, retained so an ambiguous dispatch can still be cancelled. */
+  workerLocation?: WorkerLocation;
   blocker?: Extract<CodeTaskDispatchability, { dispatchable: false }>;
 }
 
@@ -152,8 +156,9 @@ export interface TaskDispatcherService {
    * Cancel a running task on a worker.
    *
    * Sends a DELETE request to the worker to stop task execution.
-   * This is a best-effort notification - the task status in Firestore
-   * is the source of truth and should be updated before calling this.
+   * Resolves only after the worker confirms the stop (or reports the task was
+   * already terminal). Rejects when credentials, transport, or the worker
+   * response cannot confirm cancellation.
    *
    * @param taskId - The task ID to cancel
    * @param location - The worker location where the task is running

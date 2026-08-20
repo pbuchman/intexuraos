@@ -276,6 +276,10 @@ ${additionalContext.trim()}
     agentType,
     ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     ...(originalTask.sentryIssue !== undefined && { sentryIssue: originalTask.sentryIssue }),
+    ...(originalTask.reviewTypes !== undefined && { reviewTypes: originalTask.reviewTypes }),
+    ...(originalTask.reviewCommitSha !== undefined && {
+      reviewCommitSha: originalTask.reviewCommitSha,
+    }),
     ...(continuationPr !== null && { prNumber: continuationPr.prNumber }),
     ...(continuationPr !== null && { prBranch: continuationPr.prBranch }),
   };

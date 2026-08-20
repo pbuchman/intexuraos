@@ -163,11 +163,20 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       const mockQuery = {
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),
-        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([existingDoc])),
+        doc: vi.fn(() => ({ id: 'unused' })),
+      };
+      const mockTransaction = {
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'unused', exists: false, data: () => undefined })
+          .mockResolvedValueOnce(createMockQuerySnapshot([existingDoc])),
+        set: vi.fn(),
       };
 
       mockGetFirestore.mockReturnValue({
         collection: vi.fn(() => mockQuery),
+        runTransaction: vi.fn(async (
+          callback: (transaction: typeof mockTransaction) => Promise<unknown>,
+        ) => await callback(mockTransaction)),
       } as never);
 
       const repository = createFirestoreGitHubPREventsRepository({
@@ -182,6 +191,8 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(result.error.code).toBe('DUPLICATE_EVENT');
         expect(result.error.message).toContain('abc-123');
       }
+      expect(mockTransaction.get).toHaveBeenNthCalledWith(1, expect.objectContaining({ id: 'unused' }));
+      expect(mockTransaction.get).toHaveBeenNthCalledWith(2, mockQuery);
     });
 
     it('should save when deliveryId is non-null but no duplicate exists', async () => {
@@ -193,12 +204,20 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       const mockQuery = {
         where: vi.fn().mockReturnThis(),
         limit: vi.fn().mockReturnThis(),
-        get: vi.fn().mockResolvedValue(createMockQuerySnapshot([])),
         doc: vi.fn(() => mockDocRef),
+      };
+      const mockTransaction = {
+        get: vi.fn()
+          .mockResolvedValueOnce({ id: 'new-event-id', exists: false, data: () => undefined })
+          .mockResolvedValueOnce(createMockQuerySnapshot([])),
+        set: vi.fn(),
       };
 
       mockGetFirestore.mockReturnValue({
         collection: vi.fn(() => mockQuery),
+        runTransaction: vi.fn(async (
+          callback: (transaction: typeof mockTransaction) => Promise<unknown>,
+        ) => await callback(mockTransaction)),
       } as never);
 
       const repository = createFirestoreGitHubPREventsRepository({
@@ -211,9 +230,10 @@ describe('createFirestoreGitHubPREventsRepository', () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.value.deliveryId).toBe('unique-delivery-id');
-        expect(mockDocRef.set).toHaveBeenCalled();
-        // Verify dedup query was executed
+        expect(mockTransaction.set).toHaveBeenCalledWith(mockDocRef, expect.any(Object));
         expect(mockQuery.where).toHaveBeenCalledWith('deliveryId', '==', 'unique-delivery-id');
+        expect(mockTransaction.get).toHaveBeenNthCalledWith(1, mockDocRef);
+        expect(mockTransaction.get).toHaveBeenNthCalledWith(2, mockQuery);
       }
     });
 
@@ -278,6 +298,25 @@ describe('createFirestoreGitHubPREventsRepository', () => {
         expect(result.error.message).toContain('Firestore connection failed');
         expect(mockLogger.error).toHaveBeenCalled();
       }
+    });
+  });
+
+  describe('findById()', () => {
+    it('should handle Firestore errors', async () => {
+      const mockDocRef = {
+        get: vi.fn().mockRejectedValue(new Error('Firestore connection failed')),
+      };
+      mockGetFirestore.mockReturnValue({
+        collection: vi.fn(() => ({ doc: vi.fn(() => mockDocRef) })),
+      } as never);
+      const repository = createFirestoreGitHubPREventsRepository({ logger: mockLogger });
+
+      const result = await repository.findById('event-1');
+
+      expect(result).toEqual({
+        ok: false,
+        error: { code: 'FIRESTORE_ERROR', message: 'Firestore connection failed' },
+      });
     });
   });
 

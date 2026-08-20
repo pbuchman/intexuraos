@@ -300,10 +300,10 @@ describe('versioned runtime configuration Terraform cutover', () => {
       /secret_package_native_source_names\s*=\s*toset\(\[[\s\S]*?INTEXURAOS_INTERNAL_AUTH_TOKEN[\s\S]*?INTEXURAOS_SPEECHMATICS_APP_API_KEY[\s\S]*?\]\)/u
     );
     expect(terraform).toMatch(
-      /secret_package_dev_active_source_names\s*=\s*setunion\([\s\S]*?setintersection\([\s\S]*?secret_package_dev_legacy_source_names[\s\S]*?secret_package_native_source_names[\s\S]*?var\.legacy_secret_manager_enabled \? local\.secret_package_dev_legacy_source_names : toset\(\[\]\)[\s\S]*?\)/u
+      /secret_package_dev_active_source_names\s*=\s*setunion\([\s\S]*?setintersection\([\s\S]*?secret_package_dev_legacy_source_names[\s\S]*?secret_package_native_source_names[\s\S]*?var\.legacy_secret_readers_enabled \? local\.secret_package_dev_legacy_source_names : toset\(\[\]\)[\s\S]*?\)/u
     );
     expect(terraform).toMatch(
-      /secret_package_prod_active_source_names\s*=\s*setunion\([\s\S]*?setintersection\([\s\S]*?secret_package_prod_legacy_source_names[\s\S]*?secret_package_native_source_names[\s\S]*?var\.legacy_secret_manager_enabled \? local\.secret_package_prod_legacy_source_names : toset\(\[\]\)[\s\S]*?\)/u
+      /secret_package_prod_active_source_names\s*=\s*setunion\([\s\S]*?setintersection\([\s\S]*?secret_package_prod_legacy_source_names[\s\S]*?secret_package_native_source_names[\s\S]*?var\.legacy_secret_readers_enabled \? local\.secret_package_prod_legacy_source_names : toset\(\[\]\)[\s\S]*?\)/u
     );
     expect(expectedPackageSources('dev')).toHaveLength(35);
     expect(expectedPackageSources('dev')).toEqual(
@@ -460,18 +460,27 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(legacyIds).toEqual(legacyApplicationSecretIds);
     expect(secretManagerSection).toContain('local.target_secret_containers');
     expect(secretManagerSection).toContain(
-      'var.legacy_secret_manager_enabled ? local.legacy_secret_containers : {}'
+      'var.legacy_secret_containers_enabled ? local.legacy_secret_containers : {}'
     );
     expect(terraform).toMatch(
-      /variable "legacy_secret_manager_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
     );
+    expect(terraform).toMatch(
+      /variable "legacy_secret_containers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+    );
+    expect(terraform).toMatch(
+      /check "legacy_secret_reader_container_order" \{[\s\S]*?condition\s*=\s*!var\.legacy_secret_readers_enabled \|\| var\.legacy_secret_containers_enabled[\s\S]*?\}/u
+    );
+    expect(devTfvarsExample).toContain('legacy_secret_readers_enabled    = true');
+    expect(devTfvarsExample).toContain('legacy_secret_containers_enabled = true');
+    expect(terraform).not.toContain('legacy_secret_manager_enabled');
     expect(terraform).not.toContain('resource "google_secret_manager_secret_version"');
     expect(terraform).not.toMatch(/\bsecret_data\s*=/u);
     expect(terraform).toContain(
       'from = google_secret_manager_secret.cloudflare_dns_api_token\n  to   = google_secret_manager_secret.cloudflare_dns_api_token[0]'
     );
     expect(terraform).toContain(
-      'resource "google_secret_manager_secret" "cloudflare_dns_api_token" {\n  count = var.legacy_secret_manager_enabled ? 1 : 0'
+      'resource "google_secret_manager_secret" "cloudflare_dns_api_token" {\n  count = var.legacy_secret_containers_enabled ? 1 : 0'
     );
   });
 
@@ -540,10 +549,10 @@ describe('versioned runtime configuration Terraform cutover', () => {
       ...terraform.matchAll(/google_service_account\.home_dev_secret_renderer/gu),
     ]).toHaveLength(3);
     expect(terraform).toContain(
-      'for_each = var.legacy_secret_manager_enabled ? local.hetzner_runtime_secret_names : toset([])'
+      'for_each = var.legacy_secret_readers_enabled ? local.hetzner_runtime_secret_names : toset([])'
     );
     expect(iamModule).toContain(
-      'legacy_secret_manager_enabled = var.legacy_secret_manager_enabled'
+      'legacy_secret_readers_enabled = var.legacy_secret_readers_enabled'
     );
     expect(iamModule).toContain('contains(local.legacy_cloud_run_secret_names, name)');
     expect(terraform).toContain('output "home_dev_secret_renderer_service_account_email" {');
@@ -551,11 +560,12 @@ describe('versioned runtime configuration Terraform cutover', () => {
       'value       = google_service_account.home_dev_secret_renderer.email'
     );
     expect(iamTerraform).toContain(
-      'for_each = var.legacy_secret_manager_enabled ? var.secret_ids : {}'
+      'for_each = var.legacy_secret_readers_enabled ? var.secret_ids : {}'
     );
     expect(iamVariables).toMatch(
-      /variable "legacy_secret_manager_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
     );
+    expect(iamVariables).not.toContain('legacy_secret_manager_enabled');
   });
 
   it('gives the dedicated home orchestrator only repository pull access and narrow key bootstrap', () => {
@@ -684,7 +694,11 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(cloudBuildTerraform).toContain(
       'from = google_project_iam_member.cloud_build_secret_accessor\n  to   = google_project_iam_member.cloud_build_secret_accessor[0]'
     );
-    expect(cloudBuildTerraform).toContain('count = var.legacy_secret_manager_enabled ? 1 : 0');
+    expect(cloudBuildTerraform).toContain('count = var.legacy_secret_readers_enabled ? 1 : 0');
+    expect(cloudBuildVariables).toMatch(
+      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+    );
+    expect(cloudBuildVariables).not.toContain('legacy_secret_manager_enabled');
     expect(cloudBuildTerraform).toContain('roles/secretmanager.secretAccessor');
     expect(cloudBuildTerraform).toContain('resource "google_cloudbuildv2_connection" "github" {');
     expect(cloudBuildTerraform).toContain('github_config {}');
@@ -733,14 +747,22 @@ describe('versioned runtime configuration Terraform cutover', () => {
 
     expect(targetRetainedIds).toEqual(physicalSecretIds);
     expect(retainedGcpTerraform).toContain(
-      'var.legacy_secret_manager_enabled ? local.retained_gcp_legacy_secret_ids : toset([])'
+      'var.legacy_secret_containers_enabled ? local.retained_gcp_legacy_secret_ids : toset([])'
     );
     expect(retainedGcpTerraform).toContain(
-      'cloudflare_dns_api_token_name = var.legacy_secret_manager_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null'
+      'cloudflare_dns_api_token_name = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null'
     );
     expect(hetznerOutputs).toContain(
-      'value       = var.legacy_secret_manager_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null'
+      'value       = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null'
     );
+    expect(hetznerVariables).toMatch(
+      /variable "legacy_secret_containers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+    );
+    expect(hetznerAutoTfvars).toContain('"legacy_secret_containers_enabled": true');
+    expect(hetznerTfvarsExample).toContain('legacy_secret_containers_enabled       = true');
+    expect(
+      [retainedGcpTerraform, hetznerVariables, hetznerOutputs, hetznerAutoTfvars].join('\n')
+    ).not.toContain('legacy_secret_manager_enabled');
     expect(hetznerBootstrap).toContain('provisioner_sa_key_path');
     const primaryBootstrap = hetznerBootstrap.split(
       'resource "terraform_data" "legacy_runtime_sa_bootstrap" {'
@@ -820,6 +842,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(apiKeyImport).toContain(
       'id = "projects/intexuraos-dev-pbuchman/locations/global/keys/d8251549-1bde-49c0-82a7-b0525a2fe688"'
     );
+    expect([...terraform.matchAll(/"firebaseappcheck\.googleapis\.com"/gu)]).toHaveLength(1);
     expect(terraform).not.toMatch(
       /output\s+"[^"]+"\s*\{[^}]*google_apikeys_key\.firebase_browser\.(?:key_string|uid)/su
     );

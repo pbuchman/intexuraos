@@ -18,6 +18,7 @@ describe('Firestore TTL policies', () => {
       'github-webhook-audit-events',
       'github-pr-events',
       'github-event-log-entries',
+      'code_review_events',
       'logs',
       'log_lines',
       'turn_metrics',

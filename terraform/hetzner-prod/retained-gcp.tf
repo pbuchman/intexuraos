@@ -107,7 +107,7 @@ locals {
 
   retained_gcp_secret_ids = setunion(
     local.retained_gcp_target_secret_ids,
-    var.legacy_secret_manager_enabled ? local.retained_gcp_legacy_secret_ids : toset([])
+    var.legacy_secret_containers_enabled ? local.retained_gcp_legacy_secret_ids : toset([])
   )
 
   retained_gcp_inventory = {
@@ -122,6 +122,6 @@ locals {
     cloud_build_triggers          = local.retained_gcp_cloud_build_triggers
     service_accounts              = local.retained_gcp_service_accounts
     secret_ids                    = local.retained_gcp_secret_ids
-    cloudflare_dns_api_token_name = var.legacy_secret_manager_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null
+    cloudflare_dns_api_token_name = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null
   }
 }

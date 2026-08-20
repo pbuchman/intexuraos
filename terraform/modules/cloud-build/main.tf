@@ -86,7 +86,7 @@ moved {
 # Retained only for the additive migration stage. The active GitHub connection
 # token is Google-managed and does not depend on this custom service account role.
 resource "google_project_iam_member" "cloud_build_secret_accessor" {
-  count = var.legacy_secret_manager_enabled ? 1 : 0
+  count = var.legacy_secret_readers_enabled ? 1 : 0
 
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"

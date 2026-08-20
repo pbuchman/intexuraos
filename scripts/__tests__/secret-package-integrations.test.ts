@@ -182,6 +182,30 @@ describe('secret package runtime integrations', () => {
     expect(goal).toContain('four-hour recovery time objective');
   });
 
+  it('documents a reversible two-phase legacy cleanup without Terraform-managed payloads', () => {
+    const operations = read('docs/operations/secret-packages.md').replace(/\s+/gu, ' ');
+    const terraformReadme = read('terraform/README.md').replace(/\s+/gu, ' ');
+    const infrastructureRules = read('.claude/reference/infrastructure.md').replace(/\s+/gu, ' ');
+
+    for (const required of [
+      'Accelerated reversible Phase A',
+      '`legacy_secret_readers_enabled=false`',
+      '`legacy_secret_containers_enabled=true`',
+      '`D_legacy`',
+      'seven complete, non-overlapping 24-hour intervals',
+      'Phase B',
+      '`legacy_secret_containers_enabled=false`',
+    ]) {
+      expect(operations, required).toContain(required);
+    }
+    expect(operations).toContain('Phase A and Phase B must never share a saved plan');
+    expect(terraformReadme).toContain('Phase A removes readers while retaining containers');
+    expect(terraformReadme).toContain('Phase B removes containers only after the reversible soak');
+    expect(infrastructureRules).toContain('Disabling an existing Secret Manager version');
+    expect(infrastructureRules).toContain('controlled data-plane exception');
+    expect(infrastructureRules).toContain('must never place `secret_data` in Terraform state');
+  });
+
   it('documents executable and bounded rollout soak queries', () => {
     const operations = read('docs/operations/secret-packages.md');
 

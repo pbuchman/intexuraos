@@ -295,6 +295,8 @@ export interface CodeTask {
 
   // Task state
   status: TaskStatus;
+  /** Internal fence for the per-user dispatch lease. Never supplied by clients. */
+  dispatchToken?: string;
 
   // Prompt data
   prompt: string;               // Original user request
@@ -367,6 +369,7 @@ export interface CodeTask {
 
   // Review task metadata
   reviewTypes?: string[];        // Review types requested (e.g., ['code_quality', 'security'])
+  reviewCommitSha?: string;      // PR head SHA captured when this review task was created
   executionMemoryContext?: ExecutionMemoryContext;
   executionMemoryPostRun?: ExecutionMemoryPostRun;
 

@@ -15,6 +15,7 @@ import type { TaskEnqueueService } from '../../../domain/services/taskEnqueueSer
 import type { GitHubPRClient } from '../../../domain/ports/gitHubPRClient.js';
 import type { UserServiceClient } from '@intexuraos/internal-clients';
 import type { WhatsAppNotifier } from '../../../domain/services/whatsappNotifier.js';
+import { buildGitHubEventTaskId } from '../../../domain/services/gitHubDispatch/eventTaskReservation.js';
 
 const logger = pino({ level: 'silent' }) as unknown as Logger;
 
@@ -102,6 +103,9 @@ function createMockCodeTaskRepo(): CodeTaskRepository {
       return ok({ hasActive: false });
     },
     async claimForDispatch(): ReturnType<CodeTaskRepository['claimForDispatch']> {
+      return ok({ kind: 'claimed', dispatchToken: 'test-dispatch-token' });
+    },
+    async rollbackDispatch(): ReturnType<CodeTaskRepository['rollbackDispatch']> {
       return ok(true);
     },
     async deleteTask(): ReturnType<CodeTaskRepository['deleteTask']> {
@@ -352,12 +356,43 @@ describe('createTaskForPR', () => {
   });
 
   it('creates a task and enqueues it successfully', async () => {
+    const createSpy = vi.spyOn(deps.codeTaskRepo, 'create');
     const result = await createTaskForPR(deps, request);
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.taskId).toMatch(/^task_/);
+      expect(result.value.taskId).toBe(buildGitHubEventTaskId('pr-dispatch', request.eventId));
     }
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: buildGitHubEventTaskId('pr-dispatch', request.eventId) }),
+      expect.objectContaining({ transaction: expect.anything() }),
+    );
+  });
+
+  it('returns the deterministic event task without enqueueing again on triage replay', async () => {
+    const taskId = buildGitHubEventTaskId('pr-dispatch', request.eventId);
+    const createSpy = vi.fn();
+    const enqueueSpy = vi.fn();
+    deps.codeTaskRepo = {
+      ...createMockCodeTaskRepo(),
+      findById: vi.fn().mockResolvedValue(ok({
+        id: taskId,
+        userId: 'user-123',
+        traceId: request.eventId,
+        systemPromptHash: 'pr-comment-auto',
+        status: 'running',
+      } as never)),
+      create: createSpy,
+    };
+    deps.taskEnqueueService = {
+      enqueue: enqueueSpy,
+    } as never;
+
+    const result = await createTaskForPR(deps, request);
+
+    expect(result).toEqual(ok({ taskId }));
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(enqueueSpy).not.toHaveBeenCalled();
   });
 
   it('persists only linearIssueId from linearResult in createInput', async () => {

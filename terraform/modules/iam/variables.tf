@@ -19,7 +19,7 @@ variable "services" {
   }))
 }
 
-variable "legacy_secret_manager_enabled" {
+variable "legacy_secret_readers_enabled" {
   description = "Keep legacy per-service Secret Manager bindings during package migration"
   type        = bool
   default     = true

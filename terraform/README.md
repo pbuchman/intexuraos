@@ -72,6 +72,13 @@ The Google-managed Cloud Build GitHub connection token remains provider-owned.
 All former per-application containers and broad accessor bindings are legacy
 and are removed after the audit/rollback observation gates.
 
+Legacy cleanup is deliberately split. Phase A removes readers while retaining
+containers (`legacy_secret_readers_enabled=false` and
+`legacy_secret_containers_enabled=true`), then disables existing versions
+outside Terraform so the change remains reversible. Phase B removes containers
+only after the reversible soak and recovery gates pass. Terraform rejects the
+inverse state in which readers remain enabled while containers are absent.
+
 Package payloads are complete immutable JSON documents declared by
 `config/environments/secret-packages.json`. An authorized operator publishes a
 validated version outside Terraform through `scripts/secret-package.mjs`; this

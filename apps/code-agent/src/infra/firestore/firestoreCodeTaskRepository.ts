@@ -11,12 +11,15 @@ import type {
   Transaction as FirestoreTransaction,
 } from '@google-cloud/firestore';
 import { FieldValue, Timestamp } from '@google-cloud/firestore';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Logger, Result } from '@intexuraos/common-core';
 import { ok, err } from '@intexuraos/common-core';
 import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { CodeTask } from '../../domain/models/codeTask.js';
-import { resolveTaskLifecycleTime } from '../../domain/models/taskLifecycleTime.js';
+import {
+  isTerminalTaskStatus,
+  resolveTaskLifecycleTime,
+} from '../../domain/models/taskLifecycleTime.js';
 import type {
   CodeTaskRepository, CreateTaskInput, ListTasksInput, ListTasksOutput, RepositoryError, UpdateTaskInput,
 } from '../../domain/repositories/codeTaskRepository.js';
@@ -43,6 +46,18 @@ const OWNER_LINEAR_SCAN_PAGE_SIZE = 50;
 const OWNER_LINEAR_SCAN_MAX_PAGES = 10;
 const OWNER_LINEAR_SCAN_MAX_RESULTS = 50;
 
+function userDispatchLeaseId(userId: string): string {
+  return createHash('sha256').update(userId).digest('hex');
+}
+
+function hasWorkerExecutionEvidence(task: CodeTask): boolean {
+  return task.status === 'running'
+    || task.dispatchToken !== undefined
+    || task.lastHeartbeat !== undefined
+    || task.dispatchedAt !== undefined
+    || task.cancelNonce !== undefined;
+}
+
 function needsCompletedStatusCompatibility(input: ListTasksInput): boolean {
   return input.status?.some(
     (status) => status === 'planned' || status === 'reviewed' || status === 'implemented',
@@ -68,6 +83,7 @@ export const createFirestoreCodeTaskRepository = (deps: {
 }): CodeTaskRepository => {
   const { firestore, logger } = deps;
   const collection = firestore.collection('code_tasks');
+  const userLeaseCollection = firestore.collection('code_task_user_leases');
   type PendingLifecycleTransition = {
     existingTask: CodeTask;
     updatedTask: CodeTask;
@@ -132,8 +148,13 @@ export const createFirestoreCodeTaskRepository = (deps: {
   const runCreate = async (
     input: CreateTaskInput, transaction: FirestoreTransaction,
     ctx: { taskId: string; dedupKey: string; now: Date },
+    skipPromptDedup: boolean,
   ): Promise<Result<CodeTask, RepositoryError>> => {
-    const d = await checkDedupLayers(transaction, collection, input, { logger, ...ctx });
+    const d = await checkDedupLayers(transaction, collection, input, {
+      logger,
+      ...ctx,
+      ...(skipPromptDedup && { skipPromptDedup: true }),
+    });
     if (!d.ok) return err(d.error);
     const taskData = toFirestoreDoc(input, ctx);
     transaction.set(collection.doc(ctx.taskId), taskData);
@@ -147,10 +168,12 @@ export const createFirestoreCodeTaskRepository = (deps: {
         dedupKey: generateDedupKey(input.userId, input.prompt, input.linearIssueId),
         now: new Date(),
       };
+      const skipPromptDedup = options?.skipPromptDedup === true && input.agentType === 'review';
       return guarded<CodeTask>(
         () => options?.transaction !== undefined
-          ? runCreate(input, options.transaction, ctx)
-          : firestore.runTransaction((t: FirestoreTransaction) => runCreate(input, t, ctx)),
+          ? runCreate(input, options.transaction, ctx, skipPromptDedup)
+          : firestore.runTransaction((t: FirestoreTransaction) =>
+            runCreate(input, t, ctx, skipPromptDedup)),
         {}, 'Failed to create task', true,
       );
     },
@@ -216,9 +239,9 @@ export const createFirestoreCodeTaskRepository = (deps: {
         }
         const existingTask = fromFirestoreDoc(doc);
         const updateData = buildUpdateData(existingTask, input, new Date());
-        const merged = mergeUpdateForTransaction(doc.data()!, updateData);
-        const updatedTask = fromFirestoreDoc({ id: taskId, data: () => merged });
-        const statusChanged = existingTask.status !== updatedTask.status;
+        const initialMerged = mergeUpdateForTransaction(doc.data()!, updateData);
+        const initialUpdatedTask = fromFirestoreDoc({ id: taskId, data: () => initialMerged });
+        const statusChanged = existingTask.status !== initialUpdatedTask.status;
         if (statusChanged && transitionSink === null) {
           return {
             kind: 'not_updated',
@@ -228,7 +251,31 @@ export const createFirestoreCodeTaskRepository = (deps: {
             }),
           };
         }
+
+        let matchingLeaseRef: ReturnType<typeof userLeaseCollection.doc> | undefined;
+        if (
+          input.status !== undefined
+          && isTerminalTaskStatus(input.status)
+          && existingTask.dispatchToken !== undefined
+        ) {
+          const leaseRef = userLeaseCollection.doc(userDispatchLeaseId(existingTask.userId));
+          const lease = await transaction.get(leaseRef);
+          if (
+            lease.exists
+            && lease.get('taskId') === taskId
+            && lease.get('dispatchToken') === existingTask.dispatchToken
+          ) {
+            matchingLeaseRef = leaseRef;
+          }
+          updateData['dispatchToken'] = FieldValue.delete();
+        }
+
+        const merged = mergeUpdateForTransaction(doc.data()!, updateData);
+        const updatedTask = fromFirestoreDoc({ id: taskId, data: () => merged });
         transaction.update(docRef, updateData);
+        if (matchingLeaseRef !== undefined) {
+          transaction.delete(matchingLeaseRef);
+        }
         if (statusChanged && transitionSink !== undefined && transitionSink !== null) {
           transitionSink.push({ existingTask, updatedTask, input });
         }
@@ -350,14 +397,28 @@ export const createFirestoreCodeTaskRepository = (deps: {
       () => firstOrNull(latestAskAgentForUser(collection, userId, NON_ARCHIVED_STATUSES)),
       { userId }, 'Failed to find latest ask-agent task',
     ),
-    deleteTask: (taskId, userId) => guarded<void>(async () => {
-      const doc = await collection.doc(taskId).get();
-      if (!doc.exists || doc.data()?.['userId'] !== userId) {
-        return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
-      }
-      await collection.doc(taskId).delete();
-      return ok(undefined);
-    }, { taskId }, 'Failed to delete task', true),
+    deleteTask: (taskId, userId) => guarded<void>(
+      () => firestore.runTransaction(async (transaction) => {
+        const docRef = collection.doc(taskId);
+        const doc = await transaction.get(docRef);
+        if (!doc.exists || doc.data()?.['userId'] !== userId) {
+          return err({ code: 'NOT_FOUND', message: `Task ${taskId} not found` });
+        }
+        const task = fromFirestoreDoc(doc);
+        if (task.status === 'dispatched' || task.status === 'running') {
+          return err({
+            code: 'ACTIVE_TASK_EXISTS',
+            message: 'Cancel active task before deleting it',
+            existingTaskId: taskId,
+          });
+        }
+        transaction.delete(docRef);
+        return ok(undefined);
+      }),
+      { taskId },
+      'Failed to delete task',
+      true,
+    ),
     // Order by createdAt (not queuedAt) — queuedAt is optional on pre-migration tasks.
     listQueuedByAge: (limit) => guarded(
       () => docsToTasks(queuedOrderedByAge(collection, limit)),
@@ -533,14 +594,98 @@ export const createFirestoreCodeTaskRepository = (deps: {
         const docRef = collection.doc(taskId);
         const snap = await txn.get(docRef);
         if (!snap.exists || snap.get('status') !== 'queued') {
-          return { claimed: false } as const;
+          return { kind: 'task_not_queued' } as const;
         }
         const existingTask = fromFirestoreDoc(snap);
+        const leaseRef = userLeaseCollection.doc(userDispatchLeaseId(existingTask.userId));
+        const lease = await txn.get(leaseRef);
+
+        if (lease.exists) {
+          const leasedTaskId = lease.get('taskId');
+          if (typeof leasedTaskId === 'string' && leasedTaskId.length > 0) {
+            const leasedTaskSnapshot = leasedTaskId === taskId
+              ? snap
+              : await txn.get(collection.doc(leasedTaskId));
+            if (leasedTaskSnapshot.exists) {
+              const leasedTask = fromFirestoreDoc(leasedTaskSnapshot);
+              if (
+                leasedTask.userId === existingTask.userId
+                && (leasedTask.status === 'dispatched' || leasedTask.status === 'running')
+              ) {
+                const transitionTimestamp = Timestamp.fromDate(new Date());
+                const leaseToken = lease.get('dispatchToken');
+                const dispatchToken = leasedTask.dispatchToken
+                  ?? (typeof leaseToken === 'string' && leaseToken.length > 0
+                    ? leaseToken
+                    : randomUUID());
+                const taskRepair: Record<string, unknown> = {};
+                if (leasedTask.dispatchToken !== dispatchToken) {
+                  taskRepair['dispatchToken'] = dispatchToken;
+                }
+                if (leasedTask.lastHeartbeat === undefined) {
+                  taskRepair['lastHeartbeat'] = transitionTimestamp;
+                }
+                if (Object.keys(taskRepair).length > 0) {
+                  txn.update(collection.doc(leasedTaskId), taskRepair);
+                }
+                if (leaseToken !== dispatchToken) {
+                  txn.set(leaseRef, {
+                    taskId: leasedTaskId,
+                    dispatchToken,
+                    acquiredAt: lease.get('acquiredAt') ?? transitionTimestamp,
+                  });
+                }
+                return {
+                  kind: 'user_busy',
+                  activeTaskId: leasedTaskId,
+                } as const;
+              }
+            }
+          }
+        }
+
+        const activeSnapshot = await txn.get(
+          collection
+            .where('userId', '==', existingTask.userId)
+            .where('status', 'in', ['dispatched', 'running'])
+            .orderBy('createdAt', 'desc'),
+        );
+        const activeTaskSnapshot = activeSnapshot.docs.find((candidate) =>
+          hasWorkerExecutionEvidence(fromFirestoreDoc(candidate)),
+        );
+        if (activeTaskSnapshot !== undefined) {
+          const activeTask = fromFirestoreDoc(activeTaskSnapshot);
+          const transitionTimestamp = Timestamp.fromDate(new Date());
+          const dispatchToken = activeTask.dispatchToken ?? randomUUID();
+          const taskRepair: Record<string, unknown> = {};
+          if (activeTask.dispatchToken === undefined) {
+            taskRepair['dispatchToken'] = dispatchToken;
+          }
+          if (activeTask.lastHeartbeat === undefined) {
+            taskRepair['lastHeartbeat'] = transitionTimestamp;
+          }
+          if (Object.keys(taskRepair).length > 0) {
+            txn.update(collection.doc(activeTask.id), taskRepair);
+          }
+          txn.set(leaseRef, {
+            taskId: activeTask.id,
+            dispatchToken,
+            acquiredAt: transitionTimestamp,
+          });
+          return {
+            kind: 'user_busy',
+            activeTaskId: activeTask.id,
+          } as const;
+        }
+
+        const dispatchToken = randomUUID();
         const transitionTimestamp = Timestamp.fromDate(new Date());
         const updateData = {
           status: 'dispatched',
+          dispatchToken,
           statusChangedAt: transitionTimestamp,
           dispatchedAt: transitionTimestamp,
+          lastHeartbeat: transitionTimestamp,
           updatedAt: transitionTimestamp,
           completedAt: FieldValue.delete(),
           dispatchStatus: FieldValue.delete(),
@@ -548,19 +693,74 @@ export const createFirestoreCodeTaskRepository = (deps: {
           schemaUpdatedAt: transitionTimestamp,
         };
         txn.update(docRef, updateData);
+        txn.set(leaseRef, {
+          taskId,
+          dispatchToken,
+          acquiredAt: transitionTimestamp,
+        });
         const merged = mergeUpdateForTransaction(snap.data()!, updateData);
         return {
-          claimed: true,
+          kind: 'claimed',
+          dispatchToken,
           existingTask,
           updatedTask: fromFirestoreDoc({ id: taskId, data: () => merged }),
         } as const;
       });
-      if (!outcome.claimed) return false;
+      if (outcome.kind !== 'claimed') return outcome;
       logLifecycleTransition(outcome.existingTask, outcome.updatedTask);
-      return true;
+      return {
+        kind: outcome.kind,
+        dispatchToken: outcome.dispatchToken,
+      };
     },
       { taskId },
       'Failed to claim task for dispatch',
+    ),
+    rollbackDispatch: (taskId, dispatchToken, dispatchStatus) => guarded(async () => {
+      const outcome = await firestore.runTransaction(async (txn) => {
+        const docRef = collection.doc(taskId);
+        const taskSnapshot = await txn.get(docRef);
+        if (!taskSnapshot.exists) return { rolledBack: false } as const;
+
+        const existingTask = fromFirestoreDoc(taskSnapshot);
+        if (
+          existingTask.status !== 'dispatched'
+          || existingTask.dispatchToken !== dispatchToken
+        ) {
+          return { rolledBack: false } as const;
+        }
+
+        const leaseRef = userLeaseCollection.doc(userDispatchLeaseId(existingTask.userId));
+        const lease = await txn.get(leaseRef);
+        if (
+          !lease.exists
+          || lease.get('taskId') !== taskId
+          || lease.get('dispatchToken') !== dispatchToken
+        ) {
+          return { rolledBack: false } as const;
+        }
+
+        const updateData = buildUpdateData(existingTask, {
+          status: 'queued',
+          ...(dispatchStatus !== undefined && { dispatchStatus }),
+        }, new Date());
+        updateData['dispatchToken'] = FieldValue.delete();
+        const merged = mergeUpdateForTransaction(taskSnapshot.data()!, updateData);
+        const updatedTask = fromFirestoreDoc({ id: taskId, data: () => merged });
+        txn.update(docRef, updateData);
+        txn.delete(leaseRef);
+        return { rolledBack: true, existingTask, updatedTask } as const;
+      });
+
+      if (!outcome.rolledBack) return false;
+      logLifecycleTransition(outcome.existingTask, outcome.updatedTask, {
+        status: 'queued',
+        ...(dispatchStatus !== undefined && { dispatchStatus }),
+      });
+      return true;
+    },
+      { taskId },
+      'Failed to roll back dispatch claim',
     ),
   };
 };
