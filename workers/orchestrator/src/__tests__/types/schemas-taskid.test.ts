@@ -16,6 +16,22 @@ describe('CreateTaskRequestSchema.taskId', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts the deterministic review task ID reported by worker dispatch', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      ...baseRequest,
+      taskId: 'task_review_3575a69848b633cd68c25a0688a6c6d1',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts deterministic GitHub event task IDs', () => {
+    const result = CreateTaskRequestSchema.safeParse({
+      ...baseRequest,
+      taskId: 'task_github_0123456789abcdef0123456789abcdef01234567',
+    });
+    expect(result.success).toBe(true);
+  });
+
   it('rejects empty string', () => {
     const result = CreateTaskRequestSchema.safeParse({ ...baseRequest, taskId: '' });
     expect(result.success).toBe(false);

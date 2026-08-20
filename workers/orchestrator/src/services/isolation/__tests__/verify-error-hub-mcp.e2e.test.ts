@@ -19,6 +19,7 @@ const scriptPath = resolve(
   dirname(new URL(import.meta.url).pathname),
   '../../../../scripts/verify-error-hub-mcp.mjs'
 );
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 
 function commandSucceeds(command: string, args: string[]): boolean {
   try {
@@ -44,7 +45,7 @@ describe.skipIf(!prerequisitesAvailable)('Error Hub MCP worker image verificatio
 
   beforeAll(async () => {
     assertWorkerNetworkContract();
-    directory = mkdtempSync(join(tmpdir(), 'error-hub-mcp-e2e-'));
+    directory = mkdtempSync(join(executableTemporaryDirectory, 'error-hub-mcp-e2e-'));
     const tlsDirectory = join(directory, 'tls');
     const trustDirectory = join(directory, 'trust');
     mkdirSync(tlsDirectory);

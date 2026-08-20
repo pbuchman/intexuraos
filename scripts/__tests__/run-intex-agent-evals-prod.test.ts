@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const repositoryRoot = process.cwd();
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 const wrapperPath = resolve(repositoryRoot, 'scripts/run-intex-agent-evals-prod.sh');
 const usage =
   'usage: run-intex-agent-evals-prod.sh matrix-corpus [--agent-model=or:minimax/minimax-m3]\n';
@@ -34,7 +35,9 @@ describe('production Intex Agent Matrix corpus wrapper', () => {
   });
 
   it('delegates the single canonical selector to the hardened Home Dev transport', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'intex-agent-evals-prod-wrapper-'));
+    const directory = mkdtempSync(
+      join(executableTemporaryDirectory, 'intex-agent-evals-prod-wrapper-')
+    );
     temporaryDirectories.push(directory);
     const wrapper = join(directory, 'run-intex-agent-evals-prod.sh');
     const transport = join(directory, 'run-intex-agent-evals-home-dev.sh');
@@ -51,7 +54,9 @@ describe('production Intex Agent Matrix corpus wrapper', () => {
   });
 
   it('delegates the explicit MiniMax M3 selector without rewriting it', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'intex-agent-evals-prod-wrapper-'));
+    const directory = mkdtempSync(
+      join(executableTemporaryDirectory, 'intex-agent-evals-prod-wrapper-')
+    );
     temporaryDirectories.push(directory);
     const wrapper = join(directory, 'run-intex-agent-evals-prod.sh');
     const transport = join(directory, 'run-intex-agent-evals-home-dev.sh');

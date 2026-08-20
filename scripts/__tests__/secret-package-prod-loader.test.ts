@@ -20,6 +20,7 @@ import { parse } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const runbookPath = resolve(repoRoot, 'docs/operations/hetzner-prod-runbook.md');
 const manifest = JSON.parse(
@@ -91,7 +92,7 @@ function packagePayload(marker: string): Record<string, unknown> {
 }
 
 function fixture(marker = 'candidate'): Fixture {
-  const root = mkdtempSync(join(tmpdir(), 'intexuraos-prod-package-'));
+  const root = mkdtempSync(join(executableTemporaryDirectory, 'intexuraos-prod-package-'));
   const fakeBin = join(root, 'bin');
   const payloadPath = join(root, 'payload.json');
   const outputPath = join(root, 'stable', '.env.prod');

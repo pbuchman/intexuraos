@@ -133,6 +133,7 @@ set -e
 finish "$cli_status"`;
 
 const tempDirectories: string[] = [];
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : os.tmpdir();
 
 interface PackageManifest {
   scripts?: Record<string, string>;
@@ -167,7 +168,9 @@ interface SshGenericEnvironment {
 }
 
 function createTempDirectory(): string {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'intex-agent-evals-wrapper-test-'));
+  const directory = fs.mkdtempSync(
+    path.join(executableTemporaryDirectory, 'intex-agent-evals-wrapper-test-')
+  );
   tempDirectories.push(directory);
   return directory;
 }

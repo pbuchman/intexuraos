@@ -72,8 +72,8 @@ export const CreateTaskRequestSchema = z.object({
   taskId: z
     .string()
     .regex(
-      /^task_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-      'taskId must match /^task_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/'
+      /^task_(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|review_[0-9a-f]{32}|github_[0-9a-f]{40})$/i,
+      'taskId must be a canonical task UUID or a deterministic review/GitHub event task ID'
     ),
   workerType: WorkerTypeSchema,
   prompt: z.string().min(1),

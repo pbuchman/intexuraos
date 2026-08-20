@@ -14,6 +14,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 const validatorPath = resolve(repoRoot, 'scripts/hetzner/validate-prod-secret-candidate.sh');
 const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const terraformPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
@@ -38,7 +39,7 @@ interface Fixture {
 }
 
 function fixture(): Fixture {
-  const root = mkdtempSync(join(tmpdir(), 'prod-candidate-canary-'));
+  const root = mkdtempSync(join(executableTemporaryDirectory, 'prod-candidate-canary-'));
   const fakeBin = join(root, 'bin');
   const attestationDirectory = join(root, 'attestations');
   const runtimeCredentialPath = join(root, 'runtime-sa-key.json');

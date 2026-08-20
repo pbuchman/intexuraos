@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 const packageJsonPath = resolve(repoRoot, 'package.json');
 const nginxConfigPath = resolve(repoRoot, 'scripts/hetzner/nginx/intexuraos.conf');
 const messageDigestPublicIngressPath = resolve(
@@ -962,25 +963,35 @@ describe('Hetzner web asset deployment', () => {
   });
 
   it('fails closed when a manual web deploy omits or supplies a non-exact release SHA', () => {
-    const run = (commitSha: string | undefined): ReturnType<typeof spawnSync> =>
-      spawnSync('bash', [deployWebPath], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          INTEXURAOS_ENVIRONMENT: 'prod',
-          COMMIT_MESSAGE: commitSha === undefined ? undefined : 'manual release',
-          COMMIT_SHA: commitSha,
-        },
-      });
+    const directory = mkdtempSync(resolve(executableTemporaryDirectory, 'intexuraos-web-deploy-'));
+    writeFileSync(resolve(directory, 'rsync'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
 
-    const missing = run(undefined);
-    const invalid = run('ABCDEF1234567890abcdef1234567890abcdef12');
+    try {
+      const run = (commitSha: string | undefined): ReturnType<typeof spawnSync> =>
+        spawnSync('bash', [deployWebPath], {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            INTEXURAOS_ENVIRONMENT: 'prod',
+            COMMIT_MESSAGE: commitSha === undefined ? undefined : 'manual release',
+            COMMIT_SHA: commitSha,
+            PATH: `${directory}:${process.env.PATH ?? ''}`,
+          },
+        });
 
-    expect(missing.status).not.toBe(0);
-    expect(missing.stderr).toContain('COMMIT_SHA is required');
-    expect(invalid.status).not.toBe(0);
-    expect(invalid.stderr).toContain('COMMIT_SHA must be a 40-character lowercase hexadecimal SHA');
+      const missing = run(undefined);
+      const invalid = run('ABCDEF1234567890abcdef1234567890abcdef12');
+
+      expect(missing.status).not.toBe(0);
+      expect(missing.stderr).toContain('COMMIT_SHA is required');
+      expect(invalid.status).not.toBe(0);
+      expect(invalid.stderr).toContain(
+        'COMMIT_SHA must be a 40-character lowercase hexadecimal SHA'
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('documents exact-SHA deployment evidence and the manual checkout fallback', () => {
@@ -2399,7 +2410,9 @@ describe('Hetzner secret loader', () => {
 
 describe('Hetzner Matrix corpus runtime verification', () => {
   it('verifies the effective PM2 app configuration instead of sourcing the secret file', () => {
-    const directory = mkdtempSync(resolve(tmpdir(), 'intexuraos-corpus-runtime-'));
+    const directory = mkdtempSync(
+      resolve(executableTemporaryDirectory, 'intexuraos-corpus-runtime-')
+    );
     const renderedConfigPath = resolve(directory, 'ecosystem.json');
     const curlPath = resolve(directory, 'curl');
     const runtimeEnv = {

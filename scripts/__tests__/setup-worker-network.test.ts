@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 const setupScript = resolve(repoRoot, 'scripts/setup-worker-network.sh');
 const temporaryDirectories: string[] = [];
 
@@ -40,7 +41,7 @@ function runSetup(
   networkState: NetworkState,
   overrides: Readonly<Record<string, string>> = {}
 ): RunResult {
-  const directory = mkdtempSync(join(tmpdir(), 'setup-worker-network-'));
+  const directory = mkdtempSync(join(executableTemporaryDirectory, 'setup-worker-network-'));
   temporaryDirectories.push(directory);
   const dockerPath = join(directory, 'docker');
   const createArgsPath = join(directory, 'create-args');

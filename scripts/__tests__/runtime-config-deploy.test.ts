@@ -20,6 +20,7 @@ import { parse } from 'dotenv';
 import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(__dirname, '..', '..');
+const executableTemporaryDirectory = platform() === 'linux' ? '/var/tmp' : tmpdir();
 const syncSecretsPath = resolve(repoRoot, 'scripts/sync-secrets.sh');
 const secretPackageCliPath = resolve(repoRoot, 'scripts/secret-package.mjs');
 const devSecretProjectionPath = resolve(repoRoot, 'scripts/lib/dev-secret-projection.mjs');
@@ -28,6 +29,13 @@ const deployWebPath = resolve(repoRoot, 'scripts/hetzner/deploy-web.sh');
 const loadGrafanaEnvPath = resolve(repoRoot, 'scripts/observability/load-grafana-cloud-env.sh');
 const generateOrchestratorEnvPath = resolve(repoRoot, 'scripts/generate-orchestrator-env.mjs');
 const localEnvExamplePath = resolve(repoRoot, '.envrc.local.example');
+
+function createNoopFlockDirectory(root: string): string {
+  const fakeBin = join(root, 'bin');
+  mkdirSync(fakeBin, { recursive: true, mode: 0o700 });
+  writeFileSync(join(fakeBin, 'flock'), '#!/bin/sh\nexit 0\n', { mode: 0o700 });
+  return fakeBin;
+}
 
 function makeDevSecretPackagePayload(): {
   payload: Record<string, unknown>;
@@ -1508,7 +1516,10 @@ describe('runtime configuration cutover', () => {
     'renders and atomically publishes a complete offline PROD package projection',
     { timeout: 30_000 },
     () => {
-      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-package-'));
+      const tempRoot = mkdtempSync(
+        join(executableTemporaryDirectory, 'runtime-config-prod-package-')
+      );
+      const fakeBin = createNoopFlockDirectory(tempRoot);
       const outputPath = join(tempRoot, '.env.prod');
       const renderDir = join(tempRoot, 'package-render');
       const projectionDir = join(tempRoot, 'projections');
@@ -1545,6 +1556,7 @@ describe('runtime configuration cutover', () => {
             ...process.env,
             INTEXURAOS_ENVIRONMENT: 'prod',
             INTEXURAOS_COMMIT_SHA: 'a'.repeat(40),
+            PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
             SKIP_OWNERSHIP: '1',
             SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
             PROVISIONER_SA_KEY_FILE: join(tempRoot, 'missing-provisioner-key.json'),
@@ -1607,7 +1619,10 @@ describe('runtime configuration cutover', () => {
   );
 
   it('preserves every stable production artifact when package validation fails', () => {
-    const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-prod-package-failure-'));
+    const tempRoot = mkdtempSync(
+      join(executableTemporaryDirectory, 'runtime-config-prod-package-failure-')
+    );
+    const fakeBin = createNoopFlockDirectory(tempRoot);
     const outputPath = join(tempRoot, '.env.prod');
     const runtimeKeyPath = join(tempRoot, 'runtime-sa-key.json');
     const internalAuthTokenPath = join(tempRoot, 'internal-auth-token');
@@ -1650,6 +1665,7 @@ describe('runtime configuration cutover', () => {
           ...process.env,
           INTEXURAOS_ENVIRONMENT: 'prod',
           INTEXURAOS_COMMIT_SHA: 'a'.repeat(40),
+          PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
           SKIP_OWNERSHIP: '1',
           SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
           PROVISIONER_SA_KEY_FILE: join(tempRoot, 'missing-provisioner-key.json'),

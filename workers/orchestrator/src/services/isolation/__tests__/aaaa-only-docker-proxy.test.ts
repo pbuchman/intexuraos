@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createAaaaOnlyDockerProxy } from './aaaa-only-docker-proxy.js';
 
 const temporaryDirectories: string[] = [];
+const executableTemporaryDirectory = process.platform === 'linux' ? '/var/tmp' : tmpdir();
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -15,7 +16,7 @@ afterEach(() => {
 
 describe('createAaaaOnlyDockerProxy', () => {
   it('injects one IPv6-only hosts entry before the verifier image argument', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'aaaa-only-docker-proxy-'));
+    const directory = mkdtempSync(join(executableTemporaryDirectory, 'aaaa-only-docker-proxy-'));
     temporaryDirectories.push(directory);
     const argumentsPath = join(directory, 'arguments');
     const realDockerPath = join(directory, 'real-docker');
@@ -48,7 +49,7 @@ describe('createAaaaOnlyDockerProxy', () => {
   });
 
   it('passes non-run Docker commands through unchanged', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'aaaa-only-docker-proxy-'));
+    const directory = mkdtempSync(join(executableTemporaryDirectory, 'aaaa-only-docker-proxy-'));
     temporaryDirectories.push(directory);
     const argumentsPath = join(directory, 'arguments');
     const realDockerPath = join(directory, 'real-docker');
