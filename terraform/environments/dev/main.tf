@@ -56,7 +56,7 @@ variable "environment" {
 variable "legacy_secret_readers_enabled" {
   description = "Keep legacy individual Secret Manager readers during package cutover. Disable for Phase A only after package-only consumers and recovery evidence pass."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "legacy_secret_containers_enabled" {
