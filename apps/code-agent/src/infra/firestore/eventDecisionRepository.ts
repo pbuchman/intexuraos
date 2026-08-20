@@ -16,6 +16,21 @@ import type {
 import { getFirestore } from '@intexuraos/infra-firestore';
 
 const COLLECTION_NAME = 'event_decisions';
+const RETRYABLE_FIRESTORE_ERROR_CODES = new Set<unknown>([
+  4, // DEADLINE_EXCEEDED
+  14, // UNAVAILABLE
+  'DEADLINE_EXCEEDED',
+  'UNAVAILABLE',
+]);
+
+function isRetryableFirestoreError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    RETRYABLE_FIRESTORE_ERROR_CODES.has(error.code)
+  );
+}
 
 function toDate(value: unknown): Date {
   if (value instanceof Date) {
@@ -67,7 +82,16 @@ export function createFirestoreEventDecisionRepository(deps: {
           decisionLatencyMs: input.decisionLatencyMs,
         };
 
-        await docRef.set(data);
+        // The deterministic document ID makes a retry safe even when the first
+        // commit succeeded server-side but its acknowledgement was interrupted.
+        try {
+          await docRef.set(data);
+        } catch (error) {
+          if (!isRetryableFirestoreError(error)) {
+            throw error;
+          }
+          await docRef.set(data);
+        }
 
         return ok({
           id,
