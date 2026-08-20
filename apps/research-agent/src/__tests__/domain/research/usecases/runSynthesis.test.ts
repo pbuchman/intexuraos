@@ -1380,7 +1380,7 @@ describe('runSynthesis', () => {
       const mockShareStorage: ShareStoragePort = {
         upload: vi
           .fn()
-          .mockResolvedValue(err({ code: 'STORAGE_ERROR' as const, message: 'Upload failed' })),
+          .mockResolvedValue(err({ code: 'UPLOAD_FAILED', message: 'Upload failed' })),
         delete: vi.fn().mockResolvedValue(ok(undefined)),
       };
 
@@ -1391,6 +1391,10 @@ describe('runSynthesis', () => {
       });
 
       expect(result).toEqual({ ok: true });
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        { errorCode: 'UPLOAD_FAILED', errorMessage: 'Upload failed' },
+        '[4.5.3] HTML upload failed'
+      );
       expect(deps.mockRepo.update).toHaveBeenLastCalledWith('research-1', {
         status: 'completed',
         synthesizedResult: expect.stringContaining('Synthesized result'),

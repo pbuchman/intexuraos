@@ -28,6 +28,7 @@ export class GcsShareStorageAdapter implements ShareStoragePort {
 
       await file.save(htmlContent, {
         contentType: 'text/html; charset=utf-8',
+        resumable: false,
         metadata: {
           cacheControl: 'public, max-age=3600',
         },

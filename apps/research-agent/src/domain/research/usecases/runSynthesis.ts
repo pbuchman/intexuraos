@@ -382,7 +382,13 @@ export async function runSynthesis(
       };
       logger.info({}, `[4.5.3] HTML uploaded successfully (path: ${uploadResult.value.gcsPath})`);
     } else {
-      logger.error({}, '[4.5.3] HTML upload failed');
+      logger.error(
+        {
+          errorCode: uploadResult.error.code,
+          errorMessage: uploadResult.error.message,
+        },
+        '[4.5.3] HTML upload failed'
+      );
     }
   }
 
