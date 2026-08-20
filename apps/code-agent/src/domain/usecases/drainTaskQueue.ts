@@ -76,6 +76,17 @@ function groupTasksByPR(tasks: CodeTask[]): Map<string, CodeTask[]> {
   return groups;
 }
 
+function groupReviewTasksByOwnerAndPR(tasks: CodeTask[]): Map<string, CodeTask[]> {
+  const groups = new Map<string, CodeTask[]>();
+  for (const task of tasks) {
+    const key = `${task.userId}:${task.repository}:${String(task.prNumber)}`;
+    const group = groups.get(key) ?? [];
+    group.push(task);
+    groups.set(key, group);
+  }
+  return groups;
+}
+
 function findAffectedDispatchTasks(candidates: readonly CodeTask[], task: CodeTask): CodeTask[] {
   return candidates.filter(
     (candidate) => candidate.userId === task.userId && candidate.workerType === task.workerType
@@ -216,24 +227,50 @@ async function rollbackTaskForRecoverableDispatchProblem(
   task: CodeTask,
   problem: DispatchProblem,
   affectedTaskCount: number,
+  dispatchToken?: string,
 ): Promise<Result<void, DrainTaskQueueError>> {
   const dispatchStatus = buildDispatchStatusForProblem({
     task,
     problem,
   });
-  const rollbackResult = await deps.codeTaskRepo.update(task.id, {
-    status: 'queued',
-    dispatchStatus,
-  });
-  if (!rollbackResult.ok) {
-    deps.logger.warn(
-      { taskId: task.id, error: rollbackResult.error },
-      'Failed to roll back claim after retryable dispatch error',
+  if (dispatchToken !== undefined) {
+    const rollbackResult = await deps.codeTaskRepo.rollbackDispatch(
+      task.id,
+      dispatchToken,
+      dispatchStatus,
     );
-    return err({
-      code: 'internal_error',
-      message: 'Failed to persist recoverable dispatch status',
+    if (!rollbackResult.ok) {
+      deps.logger.warn(
+        { taskId: task.id, error: rollbackResult.error },
+        'Failed to roll back claim after retryable dispatch error',
+      );
+      return err({
+        code: 'internal_error',
+        message: 'Failed to persist recoverable dispatch status',
+      });
+    }
+    if (!rollbackResult.value) {
+      deps.logger.info(
+        { taskId: task.id },
+        'Skipped stale dispatch rollback because the task or user lease moved on',
+      );
+      return ok(undefined);
+    }
+  } else {
+    const updateResult = await deps.codeTaskRepo.update(task.id, {
+      status: 'queued',
+      dispatchStatus,
     });
+    if (!updateResult.ok) {
+      deps.logger.warn(
+        { taskId: task.id, error: updateResult.error },
+        'Failed to persist task-level recoverable dispatch status',
+      );
+      return err({
+        code: 'internal_error',
+        message: 'Failed to persist recoverable dispatch status',
+      });
+    }
   }
   await reportOrNotifyDispatchProblem(deps, task, dispatchStatus, problem, affectedTaskCount, 'waiting');
   return ok(undefined);
@@ -243,6 +280,7 @@ async function rollbackAffectedTasksForRecoverableDispatchProblem(
   deps: Pick<DrainTaskQueueDeps, 'logger' | 'codeTaskRepo' | 'whatsappNotifier' | 'logLineRepo' | 'automationLog' | 'codeTaskDispatchNotificationRepo'>,
   tasks: readonly CodeTask[],
   problem: DispatchProblem,
+  claim: { taskId: string; dispatchToken: string },
 ): Promise<Result<void, DrainTaskQueueError>> {
   const affectedTaskCount = tasks.length;
   for (const affectedTask of tasks) {
@@ -251,6 +289,7 @@ async function rollbackAffectedTasksForRecoverableDispatchProblem(
       affectedTask,
       problem,
       affectedTaskCount,
+      affectedTask.id === claim.taskId ? claim.dispatchToken : undefined,
     );
     if (!rollbackResult.ok) {
       return rollbackResult;
@@ -434,12 +473,12 @@ export async function drainTaskQueue(
     }
 
     // Step 1b: Merge duplicate queued review tasks per PR (INT-1014)
-    // At most 1 queued review per PR is allowed — cancel all but the newest (by createdAt)
+    // At most 1 queued review per owner and PR is allowed — cancel all but the newest.
     const reviewCandidates = candidates.filter(
       (c) => c.agentType === 'review' && c.prNumber !== undefined
     );
 
-    const reviewGroups = groupTasksByPR(reviewCandidates);
+    const reviewGroups = groupReviewTasksByOwnerAndPR(reviewCandidates);
 
     // Remove cancelled reviews from candidates so they are not considered for dispatch
     const cancelledReviewIds = new Set<string>();
@@ -487,7 +526,9 @@ export async function drainTaskQueue(
     }
 
     const activeCandidates = candidates.filter((c) => !cancelledReviewIds.has(c.id));
+    const userBusyIds = new Set<string>();
 
+    for (const _dispatchPass of activeCandidates) {
     // Round-robin: group PR-bound candidates by PR, pick first from each group,
     // then merge with non-PR tasks sorted by age so older work is never starved.
     const prBoundCandidates = activeCandidates.filter((c) => c.prNumber !== undefined);
@@ -516,6 +557,8 @@ export async function drainTaskQueue(
     let activeResourceBlockedCount = 0;
     let nextEligibleAt: Date | undefined;
     for (const candidate of roundRobinCandidates) {
+      if (userBusyIds.has(candidate.userId)) continue;
+
       // INT-1463: schedule-aware skip — if the task is not yet eligible for dispatch,
       // skip BEFORE the PR-lock check and BEFORE the TTL check. Do not touch queuedAt
       // (TTL must remain independent of the schedule wait — see notBeforeAt branch below).
@@ -699,7 +742,19 @@ export async function drainTaskQueue(
         logger.error({ taskId: task.id, error: claimResult.error }, 'Failed to claim task for dispatch');
         return ok({ action: 'still_busy', taskId: task.id });
       }
-      if (!claimResult.value) {
+      if (claimResult.value.kind === 'user_busy') {
+        userBusyIds.add(task.userId);
+        logger.info(
+          {
+            taskId: task.id,
+            userId: task.userId,
+            activeTaskId: claimResult.value.activeTaskId,
+          },
+          'Skipping queued task because the user dispatch lease is busy',
+        );
+        continue;
+      }
+      if (claimResult.value.kind === 'task_not_queued') {
         logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
         return ok({ action: 'still_busy', taskId: task.id });
       }
@@ -921,10 +976,23 @@ export async function drainTaskQueue(
       logger.error({ taskId: task.id, error: claimResult.error }, 'Failed to claim task for dispatch');
       return ok({ action: 'still_busy', taskId: task.id });
     }
-    if (!claimResult.value) {
+    if (claimResult.value.kind === 'user_busy') {
+      userBusyIds.add(task.userId);
+      logger.info(
+        {
+          taskId: task.id,
+          userId: task.userId,
+          activeTaskId: claimResult.value.activeTaskId,
+        },
+        'Skipping queued task because the user dispatch lease is busy',
+      );
+      continue;
+    }
+    if (claimResult.value.kind === 'task_not_queued') {
       logger.info({ taskId: task.id }, 'Skipped — claimed by another instance or no longer queued');
       return ok({ action: 'still_busy', taskId: task.id });
     }
+    const dispatchToken = claimResult.value.dispatchToken;
 
     // Step 5: Attempt dispatch
     const webhookUrl = buildTaskCompleteWebhookUrl(config.codeTaskCallbackBaseUrl);
@@ -966,6 +1034,31 @@ export async function drainTaskQueue(
       const dispatchError = dispatchResult.error;
       const dispatchProblem = dispatchProblemFromError(dispatchError);
 
+      if (dispatchError.outcomeUnknown === true) {
+        const dispatchStatus = buildDispatchStatusForProblem({ task, problem: dispatchProblem });
+        const updateResult = await codeTaskRepo.update(task.id, {
+          dispatchStatus,
+          ...(dispatchError.workerLocation !== undefined && {
+            workerLocation: dispatchError.workerLocation,
+          }),
+        });
+        if (!updateResult.ok) {
+          logger.warn(
+            { taskId: task.id, error: updateResult.error },
+            'Failed to persist unknown dispatch outcome while retaining the claim',
+          );
+          return err({
+            code: 'internal_error',
+            message: 'Failed to persist unknown dispatch outcome',
+          });
+        }
+        logger.warn(
+          { taskId: task.id, dispatchToken, error: dispatchError },
+          'Worker POST outcome is unknown; retaining the dispatch claim and user lease',
+        );
+        return ok({ action: 'still_busy', taskId: task.id });
+      }
+
       const affectedTasks = dispatchError.blocker !== undefined
         ? findAffectedDispatchTasks(activeCandidates, task)
         : [task];
@@ -985,6 +1078,7 @@ export async function drainTaskQueue(
           deps,
           affectedTasks,
           dispatchProblem,
+          { taskId: task.id, dispatchToken },
         );
         if (!rollbackResult.ok) {
           return err(rollbackResult.error);
@@ -1065,6 +1159,9 @@ export async function drainTaskQueue(
 
     logger.info({ taskId: task.id, workerLocation: dispatchResult.value.workerLocation }, 'Queued task dispatched');
     return ok({ action: 'dispatched', taskId: task.id });
+    }
+
+    return ok({ action: 'still_busy' });
 
   } finally {
     isDraining = false;

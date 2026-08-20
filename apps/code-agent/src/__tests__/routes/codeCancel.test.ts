@@ -110,7 +110,6 @@ describe('POST /code/cancel', () => {
 
     // Spy on cancelOnWorker to verify it's called
     cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker') as ReturnType<typeof vi.fn>;
-    cancelOnWorkerSpy = vi.spyOn(taskDispatcher, 'cancelOnWorker') as ReturnType<typeof vi.fn>;
     cancelOnWorkerSpy.mockResolvedValue(undefined);
 
     setServices({
@@ -365,7 +364,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not in a cancellable state');
+      expect(body.error.message).toBe('Task is implemented, cannot cancel');
     });
 
     it('returns 409 for already cancelled task', async () => {
@@ -403,7 +402,7 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not in a cancellable state');
+      expect(body.error.message).toBe('Task is cancelled, cannot cancel');
     });
 
     it('returns 409 for failed task', async () => {
@@ -441,13 +440,13 @@ describe('POST /code/cancel', () => {
       const body = JSON.parse(response.body);
       expect(body.success).toBe(false);
       expect(body.error.code).toBe('CONFLICT');
-      expect(body.error.message).toBe('Task is not in a cancellable state');
+      expect(body.error.message).toBe('Task is failed, cannot cancel');
     });
   });
 
   describe('successful cancellation', () => {
-    it('successfully cancels a dispatched task', async () => {
-      // Create a dispatched task
+    it('successfully cancels a queued task without contacting a worker', async () => {
+      // Newly created tasks are queued until the dispatcher claims them.
       const createResult = await codeTaskRepo.create({
         userId: 'test-user-id',
         prompt: 'Fix the bug',
@@ -480,13 +479,9 @@ describe('POST /code/cancel', () => {
       expect(body.success).toBe(true);
       expect(body.data.status).toBe('cancelled');
 
-      // Verify worker was notified
-      expect(cancelOnWorkerSpy).toHaveBeenCalledTimes(1);
-      if (!cancelOnWorkerSpy) throw new Error('cancelOnWorkerSpy not initialized');
-      expect(cancelOnWorkerSpy).toHaveBeenCalledWith(taskId, 'home-mac', expect.objectContaining({
-        url: 'https://cc-mac.intexuraos.cloud',
-        cfAccessClientId: 'test-client-id',
-      }));
+      // Queued cancellation is an atomic Firestore transition and must not
+      // contact a worker that never accepted the task.
+      expect(cancelOnWorkerSpy).not.toHaveBeenCalled();
 
       // Verify task status in Firestore
       const getResult = await codeTaskRepo.findById(taskId);
@@ -627,7 +622,7 @@ describe('POST /code/cancel', () => {
       updateSpy.mockRestore();
     });
 
-    it('continues cancellation even when worker notification fails', async () => {
+    it('keeps the task active when worker cancellation is not confirmed', async () => {
       // Create a running task with the same userId as the JWT mock returns
       const createResult = await codeTaskRepo.create({
         userId: 'test-user-id',
@@ -664,17 +659,19 @@ describe('POST /code/cancel', () => {
         },
       });
 
-      // Should still succeed - the task is cancelled in Firestore
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.status).toBe('cancelled');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe(
+        'Worker cancellation could not be confirmed; task remains active'
+      );
 
-      // Verify task was still marked cancelled in Firestore
+      // Never claim cancellation while the worker may still be executing.
       const getResult = await codeTaskRepo.findById(taskId);
       expect(getResult.ok).toBe(true);
       if (getResult.ok) {
-        expect(getResult.value.status).toBe('cancelled');
+        expect(getResult.value.status).toBe('running');
       }
     });
 

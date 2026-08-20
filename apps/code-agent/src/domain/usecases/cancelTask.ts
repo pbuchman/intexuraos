@@ -6,12 +6,9 @@
  * internal `cancelTaskWithNonce` path. The route handler becomes: parse body →
  * call use case → map result to reply.
  *
- * Workflow:
- *   1. Fetch task by ID
- *   2. Verify the requesting user owns the task
- *   3. Check the task is in a cancellable state (`dispatched`, `running`, `queued`)
- *   4. Update Firestore status to `cancelled` (source of truth)
- *   5. Notify the worker to stop (best effort — failures are logged, not fatal)
+ * Queued tasks are cancelled atomically. Dispatched/running tasks stay active
+ * until their worker confirms the stop request, then the matching dispatch is
+ * terminalized in a fenced transaction.
  */
 
 import { err, ok, type Result } from '@intexuraos/common-core';
@@ -19,6 +16,8 @@ import type { Logger } from '@intexuraos/common-core';
 import type { CodeTaskRepository } from '../repositories/codeTaskRepository.js';
 import type { TaskDispatcherService } from '../services/taskDispatcher.js';
 import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository.js';
+import { cancelActiveTask } from './cancelActiveTask.js';
+import { buildLockCleanups, type LockCleanupInfo } from '../utils/prTaskLock.js';
 
 export interface CancelTaskRequest {
   taskId: string;
@@ -45,65 +44,25 @@ export interface CancelTaskDeps {
   workerSettingsRepo: WorkerSettingsRepository;
 }
 
-const CANCELLABLE_STATUSES = ['dispatched', 'running', 'queued'] as const;
-
 export async function cancelTask(
   deps: CancelTaskDeps,
   request: CancelTaskRequest
-): Promise<Result<{ cancelled: true }, CancelTaskError>> {
-  const { logger, codeTaskRepo, taskDispatcher, workerSettingsRepo } = deps;
+): Promise<Result<{ cancelled: true; locksToCleanup: LockCleanupInfo[] }, CancelTaskError>> {
+  const { logger } = deps;
   const { taskId, userId, traceId } = request;
 
-  // Step 1: Fetch task
-  const taskResult = await codeTaskRepo.findById(taskId);
-  if (!taskResult.ok) {
-    logger.warn({ taskId, errorCode: taskResult.error.code }, 'Task not found for cancellation');
-    return err({ code: 'task_not_found', message: 'Task not found' });
-  }
-  const task = taskResult.value;
-
-  // Step 2: Verify ownership
-  if (task.userId !== userId) {
-    logger.warn(
-      { taskId, taskUserId: task.userId, requestUserId: userId },
-      'Cancellation forbidden - not task owner'
-    );
-    return err({ code: 'not_owner', message: 'Not authorized to cancel this task' });
-  }
-
-  // Step 3: Check task is cancellable
-  if (!CANCELLABLE_STATUSES.includes(task.status as (typeof CANCELLABLE_STATUSES)[number])) {
-    logger.info({ taskId, status: task.status }, 'Cannot cancel task - not in cancellable state');
-    return err({ code: 'task_not_cancellable', message: 'Task is not in a cancellable state' });
-  }
-
-  // Step 4: Update Firestore status to cancelled (source of truth)
-  const updateResult = await codeTaskRepo.update(taskId, { status: 'cancelled' });
-  if (!updateResult.ok) {
-    logger.error({ taskId, error: updateResult.error }, 'Failed to update task status to cancelled');
-    return err({ code: 'internal_error', message: 'Failed to cancel task' });
-  }
-
-  // Step 5: Notify worker to stop (best effort)
-  try {
-    const settingsResult = await workerSettingsRepo.getSettings(userId);
-    let workerCreds: { url: string; cfAccessClientId: string; cfAccessClientSecret: string } | undefined;
-    if (settingsResult.ok && settingsResult.value !== null) {
-      const settings = settingsResult.value;
-      const workerConfig = settings.workers.find((w) => w.name === task.workerLocation);
-      if (workerConfig?.enabled === true) {
-        workerCreds = {
-          url: workerConfig.url,
-          cfAccessClientId: workerConfig.cfAccessClientId,
-          cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-        };
-      }
-    }
-    await taskDispatcher.cancelOnWorker(taskId, task.workerLocation, workerCreds);
-  } catch (error) {
-    logger.warn({ taskId, error }, 'Failed to notify worker of cancellation');
+  const cancellationResult = await cancelActiveTask(deps, { taskId, userId });
+  if (!cancellationResult.ok) {
+    const error = cancellationResult.error;
+    // This entry point never supplies a nonce, so the shared cancellation core
+    // cannot produce either nonce-specific error variant.
+    const publicCode = error.code as CancelTaskErrorCode;
+    return err({ code: publicCode, message: error.message });
   }
 
   logger.info({ taskId, traceId }, 'Code task cancelled successfully');
-  return ok({ cancelled: true });
+  return ok({
+    cancelled: true,
+    locksToCleanup: buildLockCleanups(cancellationResult.value.task),
+  });
 }

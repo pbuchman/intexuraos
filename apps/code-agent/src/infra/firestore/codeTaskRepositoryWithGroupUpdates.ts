@@ -64,7 +64,11 @@ export function withGroupUpdates(
 
     create: async (input, options): ReturnType<CodeTaskRepository['create']> => {
       const result = await inner.create(input, options);
-      if (result.ok && result.value.agentType !== 'ask_agent') {
+      if (
+        result.ok
+        && options?.transaction === undefined
+        && result.value.agentType !== 'ask_agent'
+      ) {
         scheduleGroupMaintenance(
           result.value,
           () => groupSummaryRepo.updateAfterCreate(result.value),

@@ -89,31 +89,39 @@ describe('POST /webhooks/github', () => {
     const logger = pino({ name: 'test', level: 'silent' }) as unknown as Logger;
 
     // Create mock repo that returns a valid event object with an id
+    const savedEvent: GitHubPREvent = {
+      id: 'test-event-id',
+      githubEventId: 123,
+      deliveryId: null,
+      repository: 'test/intexuraos',
+      repositoryId: 456,
+      pullRequestNumber: 789,
+      pullRequestId: 101,
+      eventType: 'pull_request',
+      action: 'opened',
+      senderLogin: 'testuser',
+      senderId: 999,
+      senderType: 'User',
+      prAuthorLogin: null,
+      title: 'Test PR',
+      body: 'Test description',
+      state: 'open',
+      isDraft: null,
+      baseBranch: null,
+      mergedAt: null,
+      createdAt: new Date(),
+      processedAt: new Date(),
+      payload: {},
+    };
     mockEventRepo = {
-      save: (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok({
-        id: 'test-event-id',
-        githubEventId: 123,
-        deliveryId: null,
-        repository: 'test/intexuraos',
-        repositoryId: 456,
-        pullRequestNumber: 789,
-        pullRequestId: 101,
-        eventType: 'pull_request' as const,
-        action: 'opened' as const,
-        senderLogin: 'testuser',
-        senderId: 999,
-        senderType: 'User',
-        prAuthorLogin: null,
-        title: 'Test PR',
-        body: 'Test description',
-        state: 'open',
-        isDraft: null,
-        baseBranch: null,
-        mergedAt: null,
-        createdAt: new Date(),
-        processedAt: new Date(),
-        payload: {},
+      save: (): Promise<ReturnType<typeof ok<GitHubPREvent>>> => Promise.resolve(ok(savedEvent)),
+      acquireTriage: vi.fn().mockResolvedValue(ok({
+        kind: 'acquired' as const,
+        event: savedEvent,
+        leaseToken: 'webhook-inline-lease',
       })),
+      completeTriage: vi.fn().mockResolvedValue(ok(undefined)),
+      failTriage: vi.fn().mockResolvedValue(ok(undefined)),
       findById: (): Promise<ReturnType<typeof ok<GitHubPREvent | null>>> => Promise.resolve(ok(null)),
       findByPullRequest: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
       findByRepository: (): Promise<ReturnType<typeof ok<GitHubPREvent[]>>> => Promise.resolve(ok([])),
@@ -137,7 +145,11 @@ describe('POST /webhooks/github', () => {
       findActiveReviewForPR: vi.fn().mockResolvedValue(ok(null)),
       hasDispatchedOrRunningForPR: vi.fn().mockResolvedValue(ok({ hasActive: false })),
       hasOtherDispatchedOrRunningForLinearIssue: vi.fn().mockResolvedValue(ok({ hasActive: false })),
-      claimForDispatch: vi.fn().mockResolvedValue(ok(true)),
+      claimForDispatch: vi.fn().mockResolvedValue(ok({
+        kind: 'claimed',
+        dispatchToken: 'test-dispatch-token',
+      })),
+      rollbackDispatch: vi.fn().mockResolvedValue(ok(true)),
       deleteTask: vi.fn().mockResolvedValue(ok(undefined)),
       listQueuedByAge: vi.fn().mockResolvedValue(ok([])),
       listQueued: vi.fn().mockResolvedValue(ok([])),
@@ -2109,7 +2121,7 @@ describe('POST /webhooks/github', () => {
       expect(mockServices.prTriagePublisher.publishPRTriage).not.toHaveBeenCalled();
     });
 
-    it('should acknowledge and log error for non-duplicate save failures', async () => {
+    it('should request redelivery and log error for non-duplicate save failures', async () => {
       // Override save to return a generic FIRESTORE_ERROR
       mockEventRepo.save = vi.fn().mockResolvedValue(
         err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' })
@@ -2156,10 +2168,10 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.message).toBe('acknowledged');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
       expect(mockEventDecisionRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({
           eventId: 'audit-1',
@@ -2599,7 +2611,7 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       await vi.waitFor(() => {
         expect(mockEventDecisionRepo.findByEventIds).toHaveBeenCalledWith(['audit-1']);
       });
@@ -2608,7 +2620,7 @@ describe('POST /webhooks/github', () => {
   });
 
   describe('v8 ignore block coverage', () => {
-    it('acknowledges event when gitHubPREventRepo.save() returns FIRESTORE_ERROR', async () => {
+    it('returns 500 when gitHubPREventRepo.save() returns FIRESTORE_ERROR', async () => {
       mockEventRepo.save = (): Promise<ReturnType<typeof err<{ code: 'FIRESTORE_ERROR'; message: string }>>> =>
         Promise.resolve(err({ code: 'FIRESTORE_ERROR' as const, message: 'Firestore unavailable' }));
 
@@ -2631,10 +2643,10 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.success).toBe(true);
-      expect(body.data.message).toBe('acknowledged');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
     });
 
     it('processes event but warns when gitHubPRSummaryRepo.upsert() fails', async () => {
@@ -3339,7 +3351,7 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
 
       // The fallback decision should have been saved since findByEventIds is undefined
       // and the code skips the duplicate check
@@ -3368,9 +3380,10 @@ describe('POST /webhooks/github', () => {
         body: payload,
       });
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode).toBe(500);
       const body = JSON.parse(response.body);
-      expect(body.data.message).toBe('acknowledged');
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
 
       await waitForDetachedAsync(() => vi.mocked(mockServices.automationLog.record).mock.calls.length >= 2);
 

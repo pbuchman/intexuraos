@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { getErrorMessage } from '@intexuraos/common-core';
 import type { PromptBuilder } from '@intexuraos/llm-prompts';
 import type { CreateTaskInput } from '../../repositories/codeTaskRepository.js';
@@ -8,6 +7,10 @@ import type {
   CIFailureDispatchResult,
   WebhookDispatchServiceDeps,
 } from './types.js';
+import {
+  buildGitHubEventTaskId,
+  reserveGitHubEventTask,
+} from './eventTaskReservation.js';
 
 export interface CIFixPromptInput {
   repository: string;
@@ -77,24 +80,7 @@ export async function executeCIFailureDispatch(
     const checkSuiteUrl = typeof payload?.['checkSuiteUrl'] === 'string' ? payload['checkSuiteUrl'] : undefined;
     /* v8 ignore stop @preserve */
 
-    // Record ci_failure_detected in automation log
     const prUrl = `https://github.com/${event.repository}/pull/${String(event.pullRequestNumber)}`;
-    await deps.automationLog.record(
-      { repository: event.repository, prNumber: event.pullRequestNumber },
-      {
-        type: 'ci_failure_detected',
-        checkName,
-        conclusion: 'failure',
-        headBranch,
-        headSha,
-        checkSuiteId,
-        prUrl,
-      },
-      originalTask.userId,
-    ).catch((error: unknown) => {
-      logger.warn({ error }, 'Failed to record ci_failure_detected in automation log');
-    });
-
     // Build follow-up task prompt
     const fixPrompt = ciFixPrompt.build({
       repository: event.repository,
@@ -106,7 +92,7 @@ export async function executeCIFailureDispatch(
     });
 
     // Create follow-up task
-    const taskId = `task_${randomUUID()}`;
+    const taskId = buildGitHubEventTaskId('ci-fix', event.id);
     const webhookSecret = generateWebhookSecret(deps.orchestratorSecret, taskId);
     const createInput: CreateTaskInput = {
       id: taskId,
@@ -129,7 +115,12 @@ export async function executeCIFailureDispatch(
       ...(originalTask.linearIssueId !== undefined && { linearIssueId: originalTask.linearIssueId }),
     };
 
-    const createResult = await deps.codeTaskRepo.create(createInput);
+    const createResult = await deps.firestore.runTransaction(async (transaction) =>
+      await reserveGitHubEventTask({
+        codeTaskRepo: deps.codeTaskRepo,
+        transaction,
+        taskInput: { ...createInput, id: taskId },
+      }));
 
     if (!createResult.ok) {
       logger.error(
@@ -139,7 +130,37 @@ export async function executeCIFailureDispatch(
       return { success: false, fixTaskCreated: false, error: `Failed to create task: ${createResult.error.message}` };
     }
 
-    const fixTaskId = createResult.value.id;
+    const fixTaskId = createResult.value.task.id;
+
+    if (!createResult.value.created) {
+      logger.info(
+        { eventId: event.id, fixTaskId, originalTaskId: originalTask.id },
+        'CI failure event already owns a task; skipping duplicate side effects',
+      );
+      return {
+        success: true,
+        fixTaskCreated: true,
+        parentTaskId: originalTask.id,
+        fixTaskId,
+      };
+    }
+
+    // Record ci_failure_detected only for the first reservation of this event.
+    await deps.automationLog.record(
+      { repository: event.repository, prNumber: event.pullRequestNumber },
+      {
+        type: 'ci_failure_detected',
+        checkName,
+        conclusion: 'failure',
+        headBranch,
+        headSha,
+        checkSuiteId,
+        prUrl,
+      },
+      originalTask.userId,
+    ).catch((error: unknown) => {
+      logger.warn({ error }, 'Failed to record ci_failure_detected in automation log');
+    });
 
     // Record fix_task_dispatched in automation log
     await deps.automationLog.record(

@@ -125,7 +125,7 @@ describe('migration 130 - Gemini 3.6 Flash model migration', () => {
     });
   });
 
-  it('is the reserved migration and tracks its immutable checksum', () => {
+  it('tracks its immutable checksum in the current migration manifest', () => {
     const manifest = JSON.parse(
       readFileSync(new URL('../manifest.json', import.meta.url), 'utf8')
     ) as {
@@ -136,7 +136,7 @@ describe('migration 130 - Gemini 3.6 Flash model migration', () => {
       new URL('../130_gemini-36-flash-model-migration.mjs', import.meta.url)
     );
 
-    expect(manifest.lastReservedId).toBe('130');
+    expect(Number(manifest.lastReservedId)).toBeGreaterThanOrEqual(130);
     expect(manifest.entries.find((entry) => entry.id === '130')).toEqual({
       id: '130',
       name: 'gemini-36-flash-model-migration',

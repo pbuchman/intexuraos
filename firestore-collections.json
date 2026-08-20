@@ -285,6 +285,17 @@
       "subcollections": ["logs", "log_lines", "turn_metrics", "compliance_reports"],
       "scanPaths": ["apps/code-agent/src/infra/firestore", "apps/code-agent/src/scripts"]
     },
+    "code_review_task_slots": {
+      "owner": "code-agent",
+      "description": "Atomic per-user pull-request slot that coalesces concurrent automated review requests into one active code task",
+      "subcollections": ["code_review_events"],
+      "scanPaths": ["apps/code-agent/src/domain/usecases"]
+    },
+    "code_task_user_leases": {
+      "owner": "code-agent",
+      "description": "Deterministic per-user single-flight leases fencing code task dispatch and rollback",
+      "scanPaths": ["apps/code-agent/src/infra/firestore"]
+    },
     "code_task_lifecycle_maintenance_locks": {
       "owner": "code-agent",
       "description": "Owner-fenced, release-bound maintenance lease for reversible code task lifecycle backfill batches",

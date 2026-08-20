@@ -312,10 +312,12 @@ describe('toFirestoreDoc', () => {
         parentTaskId: 'task_parent',
         followUpReason: 'pr_comment',
         agentType: 'review',
+        queuedAt: new Date('2025-01-01T00:01:00.000Z'),
         planningPrBranch: 'plan-br',
         planningPrUrl: 'https://example/plan',
         trackingCommentId: 'tc1',
         reviewTypes: ['security'],
+        reviewCommitSha: 'reviewed-commit-sha',
         executionMemoryContext: { status: 'matched', matchedAt: memCtxMatchedAt },
         executionMemoryPostRun: {
           status: 'pending',
@@ -350,10 +352,13 @@ describe('toFirestoreDoc', () => {
     expect(doc.parentTaskId).toBe('task_parent');
     expect(doc.followUpReason).toBe('pr_comment');
     expect(doc.agentType).toBe('review');
+    expect(doc.queuedAt).toBeInstanceOf(Timestamp);
+    expect(doc.queuedAt?.toDate().toISOString()).toBe('2025-01-01T00:01:00.000Z');
     expect(doc.planningPrBranch).toBe('plan-br');
     expect(doc.planningPrUrl).toBe('https://example/plan');
     expect(doc.trackingCommentId).toBe('tc1');
     expect(doc.reviewTypes).toEqual(['security']);
+    expect(doc.reviewCommitSha).toBe('reviewed-commit-sha');
     expect(doc.executionMemoryContext?.matchedAt).toBe(memCtxMatchedAt);
     expect(doc.executionMemoryPostRun?.lastAttemptAt).toBe(memPostLastAttempt);
     expect(doc.failedWorkerLocation).toBe('vm-prev');
@@ -391,10 +396,12 @@ describe('toFirestoreDoc', () => {
     expect(doc.parentTaskId).toBeUndefined();
     expect(doc.followUpReason).toBeUndefined();
     expect(doc.agentType).toBeUndefined();
+    expect(doc.queuedAt).toBeUndefined();
     expect(doc.planningPrBranch).toBeUndefined();
     expect(doc.planningPrUrl).toBeUndefined();
     expect(doc.trackingCommentId).toBeUndefined();
     expect(doc.reviewTypes).toBeUndefined();
+    expect(doc.reviewCommitSha).toBeUndefined();
     expect(doc.executionMemoryContext).toBeUndefined();
     expect(doc.executionMemoryPostRun).toBeUndefined();
     expect(doc.failedWorkerLocation).toBeUndefined();
@@ -402,6 +409,12 @@ describe('toFirestoreDoc', () => {
     expect(doc.dispatchSchedule).toBeUndefined();
     expect(doc.timeoutHours).toBeUndefined();
     expect(doc.sentryIssue).toBeUndefined();
+  });
+
+  it('omits a malformed queuedAt value at the serialization boundary', () => {
+    const doc = toFirestoreDoc({ ...baseCreate(), queuedAt: 'invalid' as never }, opts);
+
+    expect(doc.queuedAt).toBeUndefined();
   });
 });
 

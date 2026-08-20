@@ -1840,6 +1840,29 @@ describe('codeRoutes branch coverage', () => {
   // DELETE /code/tasks/:taskId - non-NOT_FOUND error (line 1891 false branch)
   // ============================================================
   describe('DELETE /code/tasks/:taskId internal error', () => {
+    it('returns CONFLICT when an active task must be cancelled first', async () => {
+      const mockRepo = {
+        ...getServices().codeTaskRepo,
+        deleteTask: vi.fn().mockResolvedValue(err({
+          code: 'ACTIVE_TASK_EXISTS',
+          message: 'Cancel active task before deleting it',
+          existingTaskId: 'task-active',
+        })),
+      } as unknown as CodeTaskRepository;
+
+      setServices({ ...getServices(), codeTaskRepo: mockRepo } as never);
+
+      const response = await server.inject({
+        method: 'DELETE',
+        url: '/tasks/task-active',
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(response.statusCode).toBe(409);
+      const body = JSON.parse(response.body);
+      expect(body.error.code).toBe('CONFLICT');
+    });
+
     it('returns INTERNAL_ERROR when delete fails with non-NOT_FOUND error', async () => {
       const mockRepo = {
         ...getServices().codeTaskRepo,
@@ -1891,10 +1914,10 @@ describe('codeRoutes branch coverage', () => {
   });
 
   // ============================================================
-  // POST /code/cancel - worker settings null (line 2133 false branch)
+  // POST /code/cancel - worker settings unavailable
   // ============================================================
   describe('POST /code/cancel with no worker settings', () => {
-    it('cancels task without worker creds when settings lookup returns null', async () => {
+    it('keeps a running task active when settings lookup returns null', async () => {
       const repo = createFirestoreCodeTaskRepository({
         firestore: fakeFirestore as unknown as Firestore,
         logger,
@@ -1937,13 +1960,20 @@ describe('codeRoutes branch coverage', () => {
         payload: { taskId: created.value.id },
       });
 
-      expect(response.statusCode).toBe(200);
-      // cancelOnWorker should have been called with undefined creds
-      expect(cancelOnWorker).toHaveBeenCalledWith(
-        created.value.id,
-        'home-mac',
-        undefined
+      expect(response.statusCode).toBe(500);
+      const body = JSON.parse(response.body);
+      expect(body.success).toBe(false);
+      expect(body.error.code).toBe('INTERNAL_ERROR');
+      expect(body.error.message).toBe(
+        'Worker cancellation could not be confirmed; task remains active'
       );
+      expect(cancelOnWorker).not.toHaveBeenCalled();
+
+      const current = await repo.findById(created.value.id);
+      expect(current.ok).toBe(true);
+      if (current.ok) {
+        expect(current.value.status).toBe('running');
+      }
     });
   });
 

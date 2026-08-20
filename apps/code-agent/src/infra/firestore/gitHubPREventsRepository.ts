@@ -2,6 +2,7 @@
  * Firestore repository for GitHub PR events.
  */
 
+import { createHash, randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { Result } from '@intexuraos/common-core';
 import { err, ok, getErrorMessage } from '@intexuraos/common-core';
@@ -10,6 +11,10 @@ import type {
   CreateGitHubPREventInput,
 } from '../../domain/models/gitHubPREvent.js';
 import type {
+  AcquireGitHubPRTriageInput,
+  AcquireGitHubPRTriageResult,
+  CompleteGitHubPRTriageInput,
+  FailGitHubPRTriageInput,
   GitHubPREventRepository,
   RepositoryError,
 } from '../../domain/repositories/gitHubPREventRepository.js';
@@ -58,6 +63,21 @@ export function readIsDraft(data: Record<string, unknown>): boolean | null {
 
 const COLLECTION_NAME = 'github-pr-events';
 
+export function createGitHubDeliveryEventId(deliveryId: string): string {
+  const digest = createHash('sha256').update(deliveryId).digest('hex');
+  return `github-delivery-${digest}`;
+}
+
+function triageLeaseIsActive(data: Record<string, unknown>, acquiredAt: Date): boolean {
+  if (data['triageState'] !== 'processing') return false;
+  return toDate(data['triageLeaseExpiresAt']).getTime() > acquiredAt.getTime();
+}
+
+const TRIAGE_LEASE_NOT_OWNED: RepositoryError = {
+  code: 'TRIAGE_LEASE_NOT_OWNED',
+  message: 'GitHub PR triage lease is no longer owned by this delivery',
+};
+
 function mapDocToEvent(
   doc: FirestoreDocSnapshot
 ): GitHubPREvent {
@@ -87,33 +107,62 @@ export function createFirestoreGitHubPREventsRepository(deps: {
   const firestore = getFirestore();
   const collection = firestore.collection(COLLECTION_NAME);
 
+  async function updateTriage(
+    input: CompleteGitHubPRTriageInput | FailGitHubPRTriageInput,
+  ): Promise<Result<void, RepositoryError>> {
+    try {
+      return await firestore.runTransaction(async (transaction) => {
+        const docRef = collection.doc(input.eventId);
+        const snapshot = await transaction.get(docRef);
+        const data = snapshot.data() as Record<string, unknown> | undefined;
+        if (
+          data?.['triageState'] !== 'processing'
+          || data['triageLeaseToken'] !== input.leaseToken
+        ) {
+          return err(TRIAGE_LEASE_NOT_OWNED);
+        }
+
+        const clearedLease = {
+          triageLeaseToken: null,
+          triageLeaseOwner: null,
+          triageLeaseExpiresAt: null,
+        };
+        if ('completedAt' in input) {
+          transaction.update(docRef, {
+            ...clearedLease,
+            triageState: 'completed',
+            triageCompletedAt: input.completedAt,
+            triageFailedAt: null,
+            triageFailureReason: null,
+          });
+        } else {
+          transaction.update(docRef, {
+            ...clearedLease,
+            triageState: 'pending',
+            triageFailedAt: input.failedAt,
+            triageFailureReason: input.reason,
+          });
+        }
+        return ok(undefined);
+      });
+    } catch (error) {
+      logger.error({ error, eventId: input.eventId }, 'Failed to update GitHub PR triage lease');
+      return err({
+        code: 'FIRESTORE_ERROR',
+        message: getErrorMessage(error, 'Unknown error'),
+      });
+    }
+  }
+
   return {
     async save(
       input: CreateGitHubPREventInput
     ): Promise<Result<GitHubPREvent, RepositoryError>> {
       try {
-        // Dedup on deliveryId (X-GitHub-Delivery header)
-        if (input.deliveryId !== null) {
-          const deliveryQuery = collection
-            .where('deliveryId', '==', input.deliveryId)
-            .limit(1);
-          const deliverySnapshot = await deliveryQuery.get();
-          if (!deliverySnapshot.empty) {
-            logger.debug(
-              { deliveryId: input.deliveryId },
-              'Duplicate webhook delivery, skipping'
-            );
-            return err({
-              code: 'DUPLICATE_EVENT',
-              message: `Duplicate delivery: ${input.deliveryId}`,
-            });
-          }
-        }
-
-        // Create new event document
-        const eventId = crypto.randomUUID();
+        const eventId = input.deliveryId === null
+          ? randomUUID()
+          : createGitHubDeliveryEventId(input.deliveryId);
         const docRef = collection.doc(eventId);
-
         const now = new Date();
         const eventData: Omit<GitHubPREvent, 'id'> & {
           createdAt: unknown;
@@ -143,10 +192,7 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           processedAt: now,
           payload: input.payload,
         };
-
-        await docRef.set({ ...eventData, expireAt: computeExpireAt(RETENTION_24H_MS) });
-
-        return ok({
+        const event: GitHubPREvent = {
           id: eventId,
           ...(eventData.auditEventId !== undefined && { auditEventId: eventData.auditEventId }),
           githubEventId: eventData.githubEventId,
@@ -170,6 +216,38 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           createdAt: eventData.createdAt,
           processedAt: eventData.processedAt,
           payload: eventData.payload,
+        };
+        const writeData = { ...eventData, expireAt: computeExpireAt(RETENTION_24H_MS) };
+
+        if (input.deliveryId === null) {
+          await docRef.set(writeData);
+          return ok(event);
+        }
+
+        const deliveryId = input.deliveryId;
+        const deliveryQuery = collection.where('deliveryId', '==', deliveryId).limit(1);
+        return await firestore.runTransaction(async (transaction) => {
+          // Read the deterministic receipt directly so concurrent first deliveries
+          // contend on one document even when the legacy delivery query is empty.
+          const deterministicSnapshot = await transaction.get(docRef);
+          const deliverySnapshot = await transaction.get(deliveryQuery);
+          const existingDoc = deterministicSnapshot.exists
+            ? deterministicSnapshot
+            : deliverySnapshot.docs[0];
+          if (existingDoc !== undefined) {
+            logger.debug(
+              { deliveryId, eventId: existingDoc.id },
+              'Duplicate webhook delivery, skipping'
+            );
+            return err({
+              code: 'DUPLICATE_EVENT' as const,
+              message: `Duplicate delivery: ${deliveryId}`,
+              eventId: existingDoc.id,
+            });
+          }
+
+          transaction.set(docRef, writeData);
+          return ok(event);
         });
       } catch (error) {
         logger.error({ error }, 'Failed to save GitHub PR event');
@@ -178,6 +256,58 @@ export function createFirestoreGitHubPREventsRepository(deps: {
           message: getErrorMessage(error, 'Unknown error'),
         });
       }
+    },
+
+    async acquireTriage(
+      input: AcquireGitHubPRTriageInput,
+    ): Promise<Result<AcquireGitHubPRTriageResult, RepositoryError>> {
+      try {
+        return await firestore.runTransaction(async (transaction) => {
+          const docRef = collection.doc(input.eventId);
+          const snapshot = await transaction.get(docRef);
+          if (!snapshot.exists) return ok({ kind: 'not_found' as const });
+
+          const data = snapshot.data() as Record<string, unknown>;
+          if (data['triageState'] === 'completed') {
+            return ok({ kind: 'completed' as const });
+          }
+          if (triageLeaseIsActive(data, input.acquiredAt)) {
+            return ok({ kind: 'busy' as const });
+          }
+
+          const leaseToken = randomUUID();
+          transaction.update(docRef, {
+            triageState: 'processing',
+            triageLeaseToken: leaseToken,
+            triageLeaseOwner: input.leaseOwner,
+            triageLeaseExpiresAt: new Date(input.acquiredAt.getTime() + input.leaseDurationMs),
+            triageFailureReason: null,
+          });
+          return ok({
+            kind: 'acquired' as const,
+            event: mapDocToEvent(snapshot),
+            leaseToken,
+          });
+        });
+      } catch (error) {
+        logger.error({ error, eventId: input.eventId }, 'Failed to acquire GitHub PR triage lease');
+        return err({
+          code: 'FIRESTORE_ERROR',
+          message: getErrorMessage(error, 'Unknown error'),
+        });
+      }
+    },
+
+    async completeTriage(
+      input: CompleteGitHubPRTriageInput,
+    ): Promise<Result<void, RepositoryError>> {
+      return await updateTriage(input);
+    },
+
+    async failTriage(
+      input: FailGitHubPRTriageInput,
+    ): Promise<Result<void, RepositoryError>> {
+      return await updateTriage(input);
     },
 
     async findById(

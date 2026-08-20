@@ -25,7 +25,10 @@ import { cancelTaskWithNonce } from '../../domain/usecases/cancelTaskWithNonce.j
 import { retryTask } from '../../domain/usecases/retryTask.js';
 import { submitToExecutionAgent } from '../../domain/usecases/submitToExecutionAgent.js';
 import { backLinkPlanningTask } from '../../domain/usecases/backLinkPlanningTask.js';
-import { deletePRTaskLock } from '../../domain/utils/prTaskLock.js';
+import {
+  deletePRTaskLock,
+  deletePRTaskLockIfOwned,
+} from '../../domain/utils/prTaskLock.js';
 import { getWorkerTypeFromLabels, hasCodeTaskLabel } from '../../domain/utils/labelUtils.js';
 import { resolveDefaultWorkerType } from '../../domain/utils/defaultWorkerTypeResolution.js';
 import { sanitizePrompt } from '../../domain/utils/promptSanitization.js';
@@ -981,7 +984,13 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
 
       if (result.ok) {
         for (const lock of result.value.locksToCleanup) { // @allow-result-access -- narrowed by result.ok check
-          await deletePRTaskLock(services.firestore, lock.repository, lock.prNumber, request.log);
+          await deletePRTaskLockIfOwned(
+            services.firestore,
+            lock.repository,
+            lock.prNumber,
+            taskId,
+            request.log,
+          );
         }
       }
 
@@ -2102,6 +2111,9 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
           if (deleteResult.error.code === 'NOT_FOUND') {
             return await reply.fail('NOT_FOUND', `Task ${taskId} not found`);
           }
+          if (deleteResult.error.code === 'ACTIVE_TASK_EXISTS') {
+            return await reply.fail('CONFLICT', deleteResult.error.message);
+          }
           logger.error({ error: deleteResult.error, taskId }, 'Failed to delete code task');
           return await reply.fail('INTERNAL_ERROR', deleteResult.error.message);
         }
@@ -2316,6 +2328,16 @@ export const taskRoutes: FastifyPluginCallback<CodeRoutesOptions> = (fastify, op
         if (!result.ok) {
           const errorCode = CANCEL_TASK_ERROR_CODE_MAP[result.error.code];
           return await reply.fail(errorCode, result.error.message);
+        }
+
+        for (const lock of result.value.locksToCleanup) {
+          await deletePRTaskLockIfOwned(
+            getServices().firestore,
+            lock.repository,
+            lock.prNumber,
+            taskId,
+            request.log,
+          );
         }
 
         return await reply.ok({ status: 'cancelled' });

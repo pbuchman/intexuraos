@@ -4,7 +4,7 @@
  * Standalone use case — NOT a wrapper around createTaskForPR.
  * Key differences:
  * - No pr-comment label (would route to wrong prompt)
- * - PR-scoped review dedup (reuse active review task for the same PR)
+ * - PR-scoped review slot (coalesce queued work; queue a successor behind in-flight work)
  * - Best-effort Linear issue linking for UI grouping
  * - Sets agentType: 'review' on dispatch
  * - systemPromptHash: 'review-auto'
@@ -24,7 +24,15 @@ import type { WorkerSettingsRepository } from '../ports/workerSettingsRepository
 import type { GitHubPRSummaryRepository } from '../repositories/gitHubPRSummaryRepository.js';
 
 import { createHmac } from 'node:crypto';
+import { Timestamp, type Firestore } from '@google-cloud/firestore';
+import { loadConfig } from '../../config.js';
 import type { AutomationLog } from '../ports/automationLog.js';
+import {
+  buildReviewTaskId,
+  buildReviewTaskSlotPath,
+  reserveReviewTask,
+  type ReviewPromptPriority,
+} from './reserveReviewTask.js';
 import { updatePRTitleWithLinearTag } from '../utils/updatePRTitleWithLinearTag.js';
 import { extractIntIssueId, extractLinearIdentifierFromText } from '../utils/linearIdentifierParser.js';
 import { fetchGitHubToken } from '../utils/gitHubTokenResolver.js';
@@ -53,6 +61,7 @@ export interface CreateReviewTaskResult { status: 'created' | 'queued'; taskId: 
 
 export interface CreateReviewTaskDeps {
   logger: Logger;
+  firestore: Firestore;
   codeTaskRepo: CodeTaskRepository;
   userLookupService: UserLookupService;
   taskDispatcher: TaskDispatcherService;
@@ -71,12 +80,13 @@ interface ResolvedLinearIssue {
   createdDescription?: string;
 }
 
-async function resolveLinearIssueId(
-  deps: Pick<CreateReviewTaskDeps, 'logger' | 'codeTaskRepo'> & { linearAgentClient: LinearAgentClient },
+const REVIEW_LINEAR_PREPARATION_TIMEOUT_MS = 10 * 60 * 1000;
+
+async function resolveExistingLinearIssueId(
+  deps: Pick<CreateReviewTaskDeps, 'logger' | 'codeTaskRepo'>,
   request: CreateReviewTaskRequest,
-  userId: string,
-): Promise<Result<ResolvedLinearIssue, string>> {
-  const { logger, codeTaskRepo, linearAgentClient } = deps;
+): Promise<ResolvedLinearIssue> {
+  const { logger, codeTaskRepo } = deps;
   const { repository, prNumber, prTitle } = request;
 
   // Tier 1: Find existing task for this PR
@@ -85,7 +95,7 @@ async function resolveLinearIssueId(
     const existingTask = existingResult.value; // @allow-result-access -- narrowed by existingResult.ok
     if (existingTask?.linearIssueId !== undefined) {
       logger.info({ linearIssueId: existingTask.linearIssueId, prNumber }, 'Copied linearIssueId from existing PR task');
-      return ok({ identifier: existingTask.linearIssueId });
+      return { identifier: existingTask.linearIssueId };
     }
   } else {
     logger.warn({ error: existingResult.error, prNumber }, 'Failed to look up existing PR task for Linear linking');
@@ -95,7 +105,7 @@ async function resolveLinearIssueId(
   const titleIssueId = extractIntIssueId(prTitle);
   if (titleIssueId !== null) {
     logger.info({ linearIssueId: titleIssueId, prNumber }, 'Extracted linearIssueId from PR title');
-    return ok({ identifier: titleIssueId });
+    return { identifier: titleIssueId };
   }
 
   // Tier 2b: Extract INT-XXX from PR body
@@ -103,7 +113,7 @@ async function resolveLinearIssueId(
   const bodyIssueId = extractIntIssueId(prBody);
   if (bodyIssueId !== null) {
     logger.info({ linearIssueId: bodyIssueId, prNumber }, 'Extracted linearIssueId from PR body');
-    return ok({ identifier: bodyIssueId });
+    return { identifier: bodyIssueId };
   }
 
   // Tier 2c: Extract from Linear URL in PR body
@@ -111,11 +121,20 @@ async function resolveLinearIssueId(
     const linearUrlId = extractLinearIdentifierFromText(prBody);
     if (linearUrlId !== null) {
       logger.info({ linearIssueId: linearUrlId, prNumber }, 'Extracted linearIssueId from Linear URL in PR body');
-      return ok({ identifier: linearUrlId });
+      return { identifier: linearUrlId };
     }
   }
 
-  // Tier 3: Create new Linear issue with LLM-generated title
+  return {};
+}
+
+async function createLinearIssueForReview(
+  deps: Pick<CreateReviewTaskDeps, 'logger'> & { linearAgentClient: LinearAgentClient },
+  request: CreateReviewTaskRequest,
+  userId: string,
+): Promise<Result<ResolvedLinearIssue, string>> {
+  const { logger, linearAgentClient } = deps;
+  const { repository, prNumber, prTitle } = request;
   const titleContext = buildTitleContext(request);
   const titleResult = await linearAgentClient.generateTitle({ userId, description: titleContext });
 
@@ -131,7 +150,12 @@ async function resolveLinearIssueId(
   }
 
   const description = buildLinearIssueDescription(request);
-  const createResult = await linearAgentClient.createIssue({ userId, title, description });
+  const createResult = await linearAgentClient.createIssue({
+    userId,
+    title,
+    description,
+    idempotencyKey: `review:${buildReviewTaskSlotPath(repository, prNumber, userId)}`,
+  });
   if (createResult.ok) {
     const created = createResult.value; // @allow-result-access -- narrowed by createResult.ok
     logger.info({ linearIssueId: created.issueIdentifier, prNumber }, 'Created new Linear issue for review task');
@@ -286,7 +310,7 @@ export async function createReviewTask(
   deps: CreateReviewTaskDeps,
   request: CreateReviewTaskRequest
 ): Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>> {
-  const { logger, codeTaskRepo, userLookupService, taskDispatcher, taskEnqueueService, linearAgentClient, orchestratorSecret, workerSettingsRepo } = deps;
+  const { logger, codeTaskRepo, userLookupService, linearAgentClient, orchestratorSecret, workerSettingsRepo } = deps;
   const { repository, prNumber, senderLogin, eventId } = request;
 
   logger.info(
@@ -294,75 +318,10 @@ export async function createReviewTask(
     'Creating review task'
   );
 
-  const activeReviewResult = await codeTaskRepo.findActiveReviewForPR(repository, prNumber);
-  if (!activeReviewResult.ok) {
-    logger.error(
-      { repository, prNumber, error: activeReviewResult.error },
-      'Failed to check for active review task'
-    );
-    return err({ code: 'task_creation_failed', message: activeReviewResult.error.message });
-  }
-
-  // Resolve requested worker type for early logging
+  // Resolve requested worker type before building the successor candidate.
+  // Existing queued reviews are selected authoritatively inside reserveReviewTask's
+  // Firestore transaction so this path cannot race an in-flight dispatch.
   const requestedWorkerType = request.workerType ?? 'auto';
-
-  if (activeReviewResult.value !== null) {
-    const existingTask = activeReviewResult.value;
-    logger.info(
-      { repository, prNumber, taskId: existingTask.id, requestedWorkerType },
-      'Active review task exists for PR, replacing with fresh review'
-    );
-
-    deps.automationLog.record(
-      { repository, prNumber },
-      {
-        type: 'review_replaced',
-        replacedTaskId: existingTask.id,
-        replacedWorkerType: existingTask.workerType,
-      },
-      existingTask.userId,
-    ).catch((error: unknown) => {
-      logger.warn({ error, taskId: existingTask.id }, 'Failed to record automation log for review replacement');
-    });
-
-    // Cancel the old task locally (authoritative)
-    const cancelResult = await codeTaskRepo.update(existingTask.id, {
-      status: 'cancelled',
-      completedAt: new Date(),
-      error: {
-        code: 'review_replaced',
-        message: 'Review task was cancelled because a fresh review was requested',
-      },
-    });
-
-    if (!cancelResult.ok) {
-      logger.error(
-        { taskId: existingTask.id, error: cancelResult.error },
-        'Failed to cancel existing review task - aborting replacement'
-      );
-      return err({ code: 'task_creation_failed', message: 'Failed to cancel existing review task' });
-    }
-
-    // Best-effort: notify worker to cancel
-    try {
-      const settingsResult = await workerSettingsRepo.getSettings(existingTask.userId);
-      if (settingsResult.ok && settingsResult.value !== null) {
-        const settings = settingsResult.value;
-        const workerConfig = settings.workers.find((w) => w.name === existingTask.workerLocation);
-        if (workerConfig?.enabled === true) {
-          await taskDispatcher.cancelOnWorker(existingTask.id, existingTask.workerLocation, {
-            url: workerConfig.url,
-            cfAccessClientId: workerConfig.cfAccessClientId,
-            cfAccessClientSecret: workerConfig.cfAccessClientSecret,
-          });
-        }
-      }
-    } catch (error) {
-      logger.warn({ taskId: existingTask.id, error }, 'Worker cancellation failed (best-effort)');
-    }
-
-    // Continue with creating a new review task (fall through to normal creation flow)
-  }
 
   // Resolve user
   const userResult = await userLookupService.resolveByGitHubUsername(senderLogin);
@@ -388,24 +347,36 @@ export async function createReviewTask(
   }
 
   const parsed = parseOwnerRepo(repository);
-  const prBranchPromise = (async (): Promise<{ headBranch?: string; baseBranch?: string }> => {
+  const prBranchPromise = (async (): Promise<{
+    headBranch?: string;
+    baseBranch?: string;
+    headSha?: string;
+  }> => {
     if (parsed === null) return {};
     const token = await fetchGitHubToken(deps.userServiceClient, userId, logger);
     if (token === null) return {};
-    const [statusResult, baseResult] = await Promise.all([
-      deps.gitHubPRClient.getPullRequestStatus(token, parsed.owner, parsed.repo, prNumber),
-      deps.gitHubPRClient.getPullRequestBaseBranch(token, parsed.owner, parsed.repo, prNumber),
-    ]);
+    const detailsResult = await deps.gitHubPRClient.getPullRequestDetails(
+      token,
+      parsed.owner,
+      parsed.repo,
+      prNumber,
+    );
+    if (!detailsResult.ok) return {};
     return {
-      ...(statusResult.ok && { headBranch: statusResult.value.headRef }),
-      ...(baseResult.ok && { baseBranch: baseResult.value }),
+      headBranch: detailsResult.value.headBranch,
+      baseBranch: detailsResult.value.baseBranch,
+      headSha: detailsResult.value.headSha,
     };
-  })().catch((error: unknown): { headBranch?: string; baseBranch?: string } => {
+  })().catch((error: unknown): {
+    headBranch?: string;
+    baseBranch?: string;
+    headSha?: string;
+  } => {
     logger.warn({ error, prNumber }, 'PR branch resolution failed (best-effort)');
     return {};
   });
 
-  // Run re-review detection and Linear issue linking in parallel — they are independent
+  // Run re-review detection and read-only Linear issue linking in parallel.
   const reReviewPromise = (async (): Promise<string | undefined> => {
     if (deps.gitHubPRSummaryRepo === undefined) return undefined;
     try {
@@ -420,26 +391,18 @@ export async function createReviewTask(
     return undefined;
   })();
 
-  const linearPromise = (async (): Promise<{ linearIssueId?: string; createdDescription?: string }> => {
+  const linearPromise = (async (): Promise<{ linearIssueId?: string }> => {
     if (linearAgentClient === undefined) return {};
     try {
-      const linearResult = await resolveLinearIssueId({ logger, codeTaskRepo, linearAgentClient }, request, userId);
-      if (linearResult.ok) {
-        const resolved = linearResult.value; // @allow-result-access -- narrowed by linearResult.ok
-        return {
-          ...(resolved.identifier !== undefined && { linearIssueId: resolved.identifier }),
-          ...(resolved.createdDescription !== undefined && { createdDescription: resolved.createdDescription }),
-        };
-      }
-      deps.automationLog.record(
-        { repository, prNumber },
-        { type: 'linear_issue_failed', error: linearResult.error },
-        userId,
-      ).catch((logError: unknown) => {
-        logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
-      });
+      const resolved = await resolveExistingLinearIssueId(
+        { logger, codeTaskRepo },
+        request,
+      );
+      return {
+        ...(resolved.identifier !== undefined && { linearIssueId: resolved.identifier }),
+      };
     } catch (error: unknown) {
-      logger.warn({ error, prNumber }, 'Unexpected error resolving Linear issue for review task');
+      logger.warn({ error, prNumber }, 'Unexpected error resolving existing Linear issue for review task');
       deps.automationLog.record(
         { repository, prNumber },
         { type: 'linear_issue_failed', error: getErrorMessage(error, 'Unknown error') },
@@ -451,29 +414,26 @@ export async function createReviewTask(
     return {};
   })();
 
-  const [reReviewCommitSha, { linearIssueId, createdDescription }, resolvedPrBranches] = await Promise.all([reReviewPromise, linearPromise, prBranchPromise]);
+  const [reReviewCommitSha, { linearIssueId }, resolvedPrBranches] = await Promise.all([
+    reReviewPromise,
+    linearPromise,
+    prBranchPromise,
+  ]);
 
   // Best-effort: fetch issue description for review requirements context
   let issueDescription: string | undefined;
   let planDocumentPath: string | undefined;
   if (linearIssueId !== undefined && linearAgentClient !== undefined) {
-    if (createdDescription !== undefined) {
-      // Tier 3 path: we just created this issue — skip the HTTP round-trip
-      // since the Linear webhook cache won't have populated yet (~6s delay)
-      issueDescription = createdDescription;
-    } else {
-      // Tier 1/2 path: issue already existed — fetch its description
-      try {
-        const descResult = await linearAgentClient.getIssueDescription({
-          userId,
-          identifier: linearIssueId,
-        });
-        if (descResult.ok) {
-          issueDescription = descResult.value;
-        }
-      } catch (error: unknown) {
-        logger.warn({ error, linearIssueId }, 'Failed to fetch issue description for review context');
+    try {
+      const descResult = await linearAgentClient.getIssueDescription({
+        userId,
+        identifier: linearIssueId,
+      });
+      if (descResult.ok) {
+        issueDescription = descResult.value;
       }
+    } catch (error: unknown) {
+      logger.warn({ error, linearIssueId }, 'Failed to fetch issue description for review context');
     }
 
     if (issueDescription !== undefined) {
@@ -502,6 +462,12 @@ export async function createReviewTask(
     return err({ code: 'pr_branch_unavailable', message: `Failed to resolve head branch for PR #${String(prNumber)}` });
   }
 
+  const promptPriority: ReviewPromptPriority = request.reviewComment !== undefined
+    ? 'review_comment'
+    : issueDescription !== undefined
+      ? 'linear_context'
+      : 'ordinary';
+  const linearIssueCreationPending = linearAgentClient !== undefined && linearIssueId === undefined;
   const taskInput: CreateTaskInput = {
     userId,
     prompt,
@@ -518,43 +484,172 @@ export async function createReviewTask(
     ...(linearIssueId !== undefined && { linearIssueId }),
     prBranch: resolvedPrBranches.headBranch,
     reviewTypes: request.reviewTypes,
+    ...(resolvedPrBranches.headSha !== undefined && {
+      reviewCommitSha: resolvedPrBranches.headSha,
+    }),
+    ...(linearIssueCreationPending && {
+      dispatchSchedule: {
+        notBeforeAt: Timestamp.fromMillis(Date.now() + REVIEW_LINEAR_PREPARATION_TIMEOUT_MS),
+        source: 'retry_cooloff',
+        derivedBy: 'fallback',
+        derivedFromTaskId: buildReviewTaskId(eventId),
+      },
+    }),
   };
 
-  const createResult = await codeTaskRepo.create(taskInput);
-  if (!createResult.ok) {
-    logger.error({ error: createResult.error }, 'Failed to create review task');
-    return err({ code: 'task_creation_failed', message: createResult.error.message });
+  const reservationResult = await reserveReviewTask(
+    { firestore: deps.firestore, codeTaskRepo },
+    {
+      repository,
+      prNumber,
+      eventId,
+      taskInput,
+      promptPriority,
+      maxQueueSize: loadConfig().queue.maxSize,
+    },
+  );
+  if (!reservationResult.ok) {
+    logger.error({ error: reservationResult.error }, 'Failed to reserve review task');
+    if (reservationResult.error.code === 'QUEUE_FULL') {
+      return err({ code: 'queue_full', message: reservationResult.error.message });
+    }
+    return err({ code: 'task_creation_failed', message: reservationResult.error.message });
   }
 
-  const task = createResult.value; // @allow-result-access -- narrowed by !createResult.ok
+  let { task } = reservationResult.value; // @allow-result-access -- narrowed by !reservationResult.ok
+  const { created } = reservationResult.value;
 
-  // Enqueue for dispatch
-  const enqueueResult = await taskEnqueueService.enqueue({
-    taskId: task.id,
-    userId,
-  });
+  if (
+    task.status === 'failed'
+    || task.status === 'interrupted'
+    || task.status === 'cancelled'
+    || task.status === 'archived'
+  ) {
+    return err({
+      code: 'task_creation_failed',
+      message: `Existing review task is ${task.status}`,
+      taskId: task.id,
+    });
+  }
 
-  if (!enqueueResult.ok) {
-    const enqueueError = enqueueResult.error;
-    logger.error({ taskId: task.id, error: enqueueError }, 'Failed to enqueue review task');
-
-    // TaskEnqueueService already marks the task as failed for queue_full
-    if (enqueueError.code === 'queue_full') {
-      return err({ code: 'queue_full', message: enqueueError.message, taskId: task.id });
+  if (
+    linearIssueCreationPending
+    && task.status === 'queued'
+    && (created || task.id === buildReviewTaskId(eventId))
+  ) {
+    let finalizedLinearIssueId: string | undefined;
+    let finalizedIssueDescription: string | undefined;
+    try {
+      const createLinearResult = await createLinearIssueForReview(
+        { logger, linearAgentClient },
+        request,
+        userId,
+      );
+      if (createLinearResult.ok) {
+        finalizedLinearIssueId = createLinearResult.value.identifier;
+        finalizedIssueDescription = createLinearResult.value.createdDescription;
+      } else {
+        deps.automationLog.record(
+          { repository, prNumber },
+          { type: 'linear_issue_failed', error: createLinearResult.error },
+          userId,
+        ).catch((logError: unknown) => {
+          logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
+        });
+      }
+    } catch (error: unknown) {
+      logger.warn({ error, prNumber }, 'Unexpected error creating Linear issue for review task');
+      deps.automationLog.record(
+        { repository, prNumber },
+        { type: 'linear_issue_failed', error: getErrorMessage(error, 'Unknown error') },
+        userId,
+      ).catch((logError: unknown) => {
+        logger.warn({ error: logError, prNumber }, 'Failed to record Linear failure in automation log');
+      });
     }
-    return err({ code: 'internal_error', message: enqueueError.message, taskId: task.id });
+
+    const finalizedPlanDocumentPath = finalizedIssueDescription === undefined
+      ? undefined
+      : resolvePlanDocumentPathFromLinearContext({
+        description: finalizedIssueDescription,
+        comments: [],
+      });
+    const finalizedPrompt = buildReviewPrompt({
+      ...request,
+      workerType: effectiveWorkerType,
+      ...(finalizedIssueDescription !== undefined && {
+        issueDescription: finalizedIssueDescription,
+      }),
+      ...(finalizedPlanDocumentPath !== undefined && {
+        planDocumentPath: finalizedPlanDocumentPath,
+      }),
+      ...(reReviewCommitSha !== undefined && { reReviewCommitSha }),
+    });
+    const finalizedTaskInput: CreateTaskInput = {
+      ...taskInput,
+      prompt: finalizedPrompt,
+      sanitizedPrompt: finalizedPrompt,
+      ...(finalizedLinearIssueId !== undefined && {
+        linearIssueId: finalizedLinearIssueId,
+      }),
+      dispatchSchedule: {
+        notBeforeAt: Timestamp.now(),
+        source: 'retry_cooloff',
+        derivedBy: 'fallback',
+        derivedFromTaskId: task.id,
+      },
+    };
+    const finalizedReservation = await reserveReviewTask(
+      { firestore: deps.firestore, codeTaskRepo },
+      {
+        repository,
+        prNumber,
+        eventId,
+        taskInput: finalizedTaskInput,
+        promptPriority: request.reviewComment !== undefined
+          ? 'review_comment'
+          : finalizedIssueDescription !== undefined
+            ? 'linear_context'
+            : 'ordinary',
+        maxQueueSize: loadConfig().queue.maxSize,
+      },
+    );
+    if (!finalizedReservation.ok) {
+      logger.error(
+        { error: finalizedReservation.error, taskId: task.id },
+        'Failed to finalize reserved review task',
+      );
+      return err({
+        code: 'task_creation_failed',
+        message: finalizedReservation.error.message,
+        taskId: task.id,
+      });
+    }
+    task = finalizedReservation.value.task;
+  }
+
+  if (!created) {
+    logger.info(
+      { taskId: task.id, repository, prNumber, eventId },
+      'Review request coalesced into an existing task slot',
+    );
+    return ok({
+      status: 'queued',
+      taskId: task.id,
+      workerType: task.workerType,
+    });
   }
 
   logger.info(
-    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner: parsed?.owner, queuePosition: enqueueResult.value.queuePosition },
-    'Review task created and enqueued'
+    { taskId: task.id, repository, prNumber, reviewTypes: request.reviewTypes, owner: parsed?.owner },
+    'Review task created and admitted to the queue atomically'
   );
 
   // Best-effort: update PR title with Linear issue tag
   const titleAlreadyTagged = extractIntIssueId(request.prTitle) !== null;
   await updatePRTitleWithLinearTag(deps, {
     repository, prNumber, userId,
-    ...(linearIssueId !== undefined && { linearIssueId }),
+    ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     ...(request.prTitle !== undefined && { prTitle: request.prTitle }),
     titleAlreadyTagged,
   });
@@ -564,14 +659,14 @@ export async function createReviewTask(
     {
       type: 'task_dispatched',
       taskId: task.id,
-      workerType: effectiveWorkerType,
+      workerType: task.workerType,
       agentType: 'review',
-      ...(linearIssueId !== undefined && { linearIssueId }),
+      ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
     },
     userId,
   ).catch((error: unknown) => {
     logger.warn({ error, taskId: task.id }, 'Failed to record automation log for review task dispatch');
   });
 
-  return ok({ status: 'queued' as const, taskId: task.id, workerType: effectiveWorkerType });
+  return ok({ status: 'queued' as const, taskId: task.id, workerType: task.workerType });
 }

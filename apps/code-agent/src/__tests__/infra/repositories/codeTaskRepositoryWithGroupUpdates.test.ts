@@ -74,6 +74,7 @@ function createFakeInnerRepo(): CodeTaskRepository {
     hasDispatchedOrRunningForPR: vi.fn(),
     hasOtherDispatchedOrRunningForLinearIssue: vi.fn(),
     claimForDispatch: vi.fn(),
+    rollbackDispatch: vi.fn(),
     findLatestExecutionTaskByPR: vi.fn(),
     findOriginTaskByPR: vi.fn(),
     findRecentTasksByLinearIssue: vi.fn(),
@@ -188,6 +189,20 @@ describe('withGroupUpdates decorator', () => {
 
       await decorated.create(baseInput);
 
+      await Promise.resolve();
+      expect(updateAfterCreateSpy).not.toHaveBeenCalled();
+    });
+
+    it('defers create-side group maintenance when the outer transaction is not committed yet', async () => {
+      const task = makeTask();
+      const transaction = {} as FirebaseFirestore.Transaction;
+      vi.mocked(inner.create).mockResolvedValue(ok(task));
+      const updateAfterCreateSpy = vi.spyOn(groupSummaryRepo, 'updateAfterCreate');
+
+      const result = await decorated.create(baseInput, { transaction });
+
+      expect(result).toEqual(ok(task));
+      expect(inner.create).toHaveBeenCalledWith(baseInput, { transaction });
       await Promise.resolve();
       expect(updateAfterCreateSpy).not.toHaveBeenCalled();
     });
