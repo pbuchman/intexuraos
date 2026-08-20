@@ -9,6 +9,7 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { validateInternalAuth, logIncomingRequest } from '@intexuraos/common-http';
 import { getErrorMessage, ServiceErrorCodes } from '@intexuraos/common-core';
+import { SKIP_SENTRY_KEY } from '@intexuraos/infra-sentry';
 import type { ServiceFeedback } from '@intexuraos/common-core';
 import type { Logger } from 'pino';
 import {
@@ -998,6 +999,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
               model: event.model,
               rawError,
               durationMs,
+              [SKIP_SENTRY_KEY]: true,
             },
             '[3.3] LLM research call failed'
           );
