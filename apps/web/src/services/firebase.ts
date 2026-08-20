@@ -1,3 +1,6 @@
+// This must run before Firebase Auth or Firestore evaluate their error constructors.
+import './firebaseErrorCompatibility.js';
+
 /**
  * Firebase SDK initialization with cost optimizations.
  *
