@@ -12,7 +12,11 @@ const EXPECTED_MACHINE_ROUTES = [
   ['POST', '/api/code/internal/logs', 'per-task-hmac-timestamp'],
   ['POST', '/api/code/internal/turn-metrics', 'per-task-hmac-timestamp'],
   ['POST', '/api/code/internal/webhooks/task-event', 'per-task-hmac-timestamp'],
-  ['POST', '/api/code/internal/webhooks/compliance-report', 'per-task-hmac-timestamp-internal-auth'],
+  [
+    'POST',
+    '/api/code/internal/webhooks/compliance-report',
+    'per-task-hmac-timestamp-internal-auth',
+  ],
   ['PATCH', '/api/code/internal/code-tasks/status', 'task-or-orchestrator-hmac'],
   ['POST', '/api/linear/webhooks', 'linear-signature'],
   ['POST', '/api/notifications/webhooks', 'mobile-signature'],
@@ -46,7 +50,8 @@ describe('DEV edge manifest', () => {
     });
 
     expect(output).toContain('dev.intexuraos.cloud:80');
-    expect(output).toContain('root * /home/pbuchman/deploy/intexuraos/apps/web/dist');
+    expect(output).toContain('handle @forbidden {\n    respond "Not Found" 404\n  }');
+    expect(output).toContain('handle {\n    root * /home/pbuchman/deploy/intexuraos/apps/web/dist');
     expect(output).toContain('file_server');
     expect(output).toContain('format json');
     expect(output).not.toContain('localhost:3000');

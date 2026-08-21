@@ -79,10 +79,14 @@ lines.push(
   '  @forbidden {',
   '    path /src/* /@vite/* /@fs/* /.env* *.map /webhook',
   '  }',
-  '  respond @forbidden "Not Found" 404',
-  `  root * ${manifest.staticRoot}`,
-  '  try_files {path} /index.html',
-  '  file_server',
+  '  handle @forbidden {',
+  '    respond "Not Found" 404',
+  '  }',
+  '  handle {',
+  `    root * ${manifest.staticRoot}`,
+  '    try_files {path} /index.html',
+  '    file_server',
+  '  }',
   '}',
   ''
 );
