@@ -2,11 +2,6 @@ export const CODE_TASK_WORKER_TYPES = [
   'auto',
   'opus',
   'sonnet',
-  'minimax',
-  'mimo-pro',
-  'glm',
-  'qwen',
-  'kimi',
   'codex',
   'codex-xhigh',
   'openrouter-free',
@@ -20,12 +15,7 @@ export function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType
   return CODE_TASK_WORKER_TYPE_SET.has(value);
 }
 
-export type CodeTaskApiKeyEnvVar =
-  | 'MINIMAX_API_KEY'
-  | 'MIMO_API_KEY'
-  | 'DASHSCOPE_API_KEY'
-  | 'KIMI_API_KEY'
-  | 'OPENROUTER_API_KEY';
+export type CodeTaskApiKeyEnvVar = 'OPENROUTER_API_KEY';
 
 export type CodeTaskAuthRequirement =
   | { readonly kind: 'codex' }
@@ -60,41 +50,6 @@ export const CODE_TASK_WORKER_CAPABILITIES: Record<CodeTaskWorkerType, CodeTaskW
     displayName: 'Claude Sonnet',
     runtimeFamily: 'claude',
     auth: { kind: 'claude' },
-    requiresDocker: true,
-  },
-  minimax: {
-    workerType: 'minimax',
-    displayName: 'MiniMax',
-    runtimeFamily: 'provider',
-    auth: { kind: 'api_key', envVar: 'MINIMAX_API_KEY' },
-    requiresDocker: true,
-  },
-  'mimo-pro': {
-    workerType: 'mimo-pro',
-    displayName: 'MiMo Pro 2.5',
-    runtimeFamily: 'provider',
-    auth: { kind: 'api_key', envVar: 'MIMO_API_KEY' },
-    requiresDocker: true,
-  },
-  glm: {
-    workerType: 'glm',
-    displayName: 'GLM',
-    runtimeFamily: 'provider',
-    auth: { kind: 'api_key', envVar: 'DASHSCOPE_API_KEY' },
-    requiresDocker: true,
-  },
-  qwen: {
-    workerType: 'qwen',
-    displayName: 'Qwen',
-    runtimeFamily: 'provider',
-    auth: { kind: 'api_key', envVar: 'DASHSCOPE_API_KEY' },
-    requiresDocker: true,
-  },
-  kimi: {
-    workerType: 'kimi',
-    displayName: 'Kimi',
-    runtimeFamily: 'provider',
-    auth: { kind: 'api_key', envVar: 'KIMI_API_KEY' },
     requiresDocker: true,
   },
   codex: {

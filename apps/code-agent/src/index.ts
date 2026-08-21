@@ -14,7 +14,6 @@ import {
 const REQUIRED_ENV = [
   'INTEXURAOS_GCP_PROJECT_ID',
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-  'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
   'INTEXURAOS_TOKEN_ENCRYPTION_KEY', // For per-user worker credentials encryption (has dev fallback)
   'INTEXURAOS_ORCHESTRATOR_SECRET', // For HMAC signature validation from orchestrator
   'INTEXURAOS_GITHUB_WEBHOOK_SECRET', // For GitHub webhook signature verification
@@ -80,7 +79,6 @@ async function main(): Promise<void> {
     whatsappSendTopic: config.whatsappSendTopic,
     prTriageTopic: config.prTriageTopic,
     linearAgentUrl: config.linearAgentUrl,
-    webhookVerifySecret: config.webhookVerifySecret,
     orchestratorSecret: config.orchestratorSecret,
     serviceUrl: config.serviceUrl,
     codeTaskCallbackBaseUrl: config.codeTaskCallbackBaseUrl,

@@ -470,7 +470,7 @@ describe('dispatchCommentAgent', () => {
         capturedPromptType = params.promptType;
         const requestReview = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
         if (requestReview !== undefined) {
-          await requestReview.run({ review_type: 'architecture', worker_type: 'qwen' });
+          await requestReview.run({ review_type: 'architecture', worker_type: 'openrouter-free' });
         }
         return ok({
           content: 'Done.',
@@ -492,7 +492,7 @@ describe('dispatchCommentAgent', () => {
     expect(result.ok).toBe(true);
     if (result.ok && result.value.kind === 'comment-llm') {
       expect(result.value.state.reviewTypes).toEqual(['architecture']);
-      expect(result.value.state.reviewWorkerType).toBe('qwen');
+      expect(result.value.state.reviewWorkerType).toBe('openrouter-free');
     }
     expect(capturedTools.map((t) => t.name).sort()).toEqual(['request_review', 'skip']);
     expect(capturedPromptType).toBe('github-agent-comment-triage');
@@ -503,7 +503,7 @@ describe('dispatchCommentAgent', () => {
       async run(params): ReturnType<ToolCallingClient['run']> {
         const tool = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
         if (tool !== undefined) {
-          await tool.run({ review_type: 'bogus', worker_type: 'qwen' });
+          await tool.run({ review_type: 'bogus', worker_type: 'openrouter-free' });
         }
         return ok({
           content: 'Invalid.',
@@ -766,7 +766,7 @@ describe('dispatchCommentAgent', () => {
       async run(params): ReturnType<ToolCallingClient['run']> {
         const tool = params.tools.find((t: ToolDefinition) => t.name === 'request_review');
         if (tool !== undefined) {
-          await tool.run({ review_type: 'architecture', worker_type: 'qwen' });
+          await tool.run({ review_type: 'architecture', worker_type: 'openrouter-free' });
           await tool.run({ review_type: 'security', worker_type: 'opus' });
         }
         return ok({
@@ -789,7 +789,7 @@ describe('dispatchCommentAgent', () => {
     expect(result.ok).toBe(true);
     if (result.ok && result.value.kind === 'comment-llm') {
       expect(result.value.state.reviewTypes).toEqual(['architecture']);
-      expect(result.value.state.reviewWorkerType).toBe('qwen');
+      expect(result.value.state.reviewWorkerType).toBe('openrouter-free');
     }
   });
 

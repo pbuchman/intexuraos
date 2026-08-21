@@ -129,7 +129,6 @@ export interface ServiceConfig {
   whatsappPhoneNumberId: string;
   webAgentUrl: string;
   internalAuthToken: string;
-  internalAuthTokenPrevious?: string;
   llmUsageServiceUrl: string;
   userServiceUrl: string;
   platformOpenRouterApiKey: string;
@@ -228,9 +227,6 @@ export function getServices(): ServiceContainer {
   const privateWhatsAppRepository = createPrivateWhatsAppRepository();
   const privateDigestSourceTokens = createPrivateDigestSourceTokenCodec({
     currentKey: tokenKey(serviceConfig.internalAuthToken),
-    ...(serviceConfig.internalAuthTokenPrevious === undefined
-      ? {}
-      : { previousKeys: [tokenKey(serviceConfig.internalAuthTokenPrevious)] }),
   });
   const llmClientFactory = createConversationAssistantLlmClientFactory(serviceConfig);
   const telemetryLogger = createAppLogger({

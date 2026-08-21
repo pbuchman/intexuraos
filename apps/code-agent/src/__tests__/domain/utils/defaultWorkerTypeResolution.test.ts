@@ -6,9 +6,9 @@ describe('resolveDefaultWorkerType', () => {
     const settings = {
       defaultPlanningWorkerType: 'sonnet' as const,
       defaultExecutionWorkerType: 'codex' as const,
-      defaultPullRequestWorkerType: 'qwen' as const,
-      defaultReviewWorkerType: 'glm' as const,
-      defaultRemediationWorkerType: 'kimi' as const,
+      defaultPullRequestWorkerType: 'openrouter-free' as const,
+      defaultReviewWorkerType: 'openrouter-free' as const,
+      defaultRemediationWorkerType: 'openrouter-free' as const,
       defaultSentryWorkerType: 'codex-xhigh' as const,
     };
 
@@ -34,7 +34,7 @@ describe('resolveDefaultWorkerType', () => {
         requestWorkerType: 'auto',
         settings,
       })
-    ).toMatchObject({ workerType: 'qwen', source: 'default' });
+    ).toMatchObject({ workerType: 'openrouter-free', source: 'default' });
 
     expect(
       resolveDefaultWorkerType({
@@ -42,7 +42,7 @@ describe('resolveDefaultWorkerType', () => {
         requestWorkerType: 'auto',
         settings,
       })
-    ).toMatchObject({ workerType: 'glm', source: 'default' });
+    ).toMatchObject({ workerType: 'openrouter-free', source: 'default' });
 
     expect(
       resolveDefaultWorkerType({
@@ -50,7 +50,7 @@ describe('resolveDefaultWorkerType', () => {
         requestWorkerType: 'auto',
         settings,
       })
-    ).toMatchObject({ workerType: 'kimi', source: 'default' });
+    ).toMatchObject({ workerType: 'openrouter-free', source: 'default' });
 
     expect(
       resolveDefaultWorkerType({

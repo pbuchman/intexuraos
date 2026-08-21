@@ -1,8 +1,6 @@
 name: Deploy
 
 on:
-  push:
-    branches: [development]
   workflow_dispatch:
     inputs:
       target:
@@ -27,20 +25,20 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: deploy-${{ github.event_name == 'push' && 'hetzner-prod' || inputs.target }}
+  group: deploy-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
   deploy-hetzner-prod:
     name: Deploy Hetzner Production
-    if: ${{ github.event_name == 'push' || inputs.target == 'hetzner-prod' }}
+    if: ${{ inputs.target == 'hetzner-prod' }}
     runs-on: ubuntu-latest
     timeout-minutes: 210
     env:
       GH_TOKEN: ${{ github.token }}
       HETZNER_DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_PRIVATE_KEY }}
       HETZNER_PROD_HOST: ${{ vars.HETZNER_PROD_HOST || '162.55.210.48' }}
-      DEPLOY_NGINX: ${{ github.event_name == 'push' && 'true' || inputs.deploy_nginx }}
+      DEPLOY_NGINX: ${{ inputs.deploy_nginx }}
       SECRET_PACKAGE_VERSION: ${{ vars.PROD_SECRET_PACKAGE_VERSION }}
 
     steps:

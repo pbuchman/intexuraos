@@ -98,10 +98,6 @@ export interface IsolationConfig {
     ANTHROPIC_API_KEY: string;
     LINEAR_API_KEY: string;
     ERROR_HUB_HOST: string;
-    MINIMAX_API_KEY: string;
-    MIMO_API_KEY: string;
-    DASHSCOPE_API_KEY: string;
-    KIMI_API_KEY: string;
     OPENROUTER_API_KEY: string;
   };
   gcpSaKeyPath: string;

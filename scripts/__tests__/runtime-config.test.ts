@@ -35,11 +35,18 @@ const COMMON_CONFIG_NAMES = [
   'INTEXURAOS_GRAFANA_CLOUD_LOKI_URL',
   'INTEXURAOS_GRAFANA_CLOUD_LOKI_USERNAME',
   'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
   'INTEXURAOS_REPOSITORY_URL',
+  'INTEXURAOS_SENTRY_AUTOMATION_USER_ID',
   'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_SENTRY_DSN_WEB',
+  'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
+  'INTEXURAOS_WHATSAPP_WABA_ID',
 ] as const;
 
 const DEV_CONFIG_NAMES = [
@@ -49,7 +56,16 @@ const DEV_CONFIG_NAMES = [
 const PROD_CONFIG_NAMES = ['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] as const;
 const DEAD_GEMINI_KEY_NAME = 'INTEXURAOS_GEMINI_APP_API_KEY';
 const DEAD_REDIRECT_NAME = 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI';
-const DELETE_ONLY_NAMES = [DEAD_GEMINI_KEY_NAME, DEAD_REDIRECT_NAME] as const;
+const DELETE_ONLY_NAMES = [
+  'INTEXURAOS_DASHSCOPE_APP_API_KEY',
+  DEAD_GEMINI_KEY_NAME,
+  DEAD_REDIRECT_NAME,
+  'INTEXURAOS_KIMI_APP_API_KEY',
+  'INTEXURAOS_MIMO_APP_API_KEY',
+  'INTEXURAOS_MINIMAX_APP_API_KEY',
+  'INTEXURAOS_OPENAI_APP_API_KEY',
+  'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
+] as const;
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -58,7 +74,7 @@ afterEach(() => {
 });
 
 describe('versioned runtime configuration', () => {
-  it('loads 22 common values plus environment-specific Matrix URLs and the dev Sentry DSN', () => {
+  it('loads 29 common values plus environment-specific Matrix URLs and the dev Sentry DSN', () => {
     const prod = loadRuntimeConfig({ environment: 'prod', configRoot });
     const dev = loadRuntimeConfig({ environment: 'dev', configRoot });
 
@@ -93,7 +109,7 @@ describe('versioned runtime configuration', () => {
     expect(policy.sensitiveConfigNameAllowlist).toEqual([]);
   });
 
-  it('retains removed Google AI credentials and OAuth redirect as permanent tombstones', () => {
+  it('retains all removed provider credentials and OAuth redirect as permanent tombstones', () => {
     const policy = loadRuntimePolicy({ configRoot });
     const activeNames = [
       ...policy.scopes.common,
@@ -160,8 +176,8 @@ describe('versioned runtime configuration', () => {
 
     expect(shell.endsWith('\n')).toBe(true);
     expect(dotenv.endsWith('\n')).toBe(true);
-    expect(shell.split('\n').filter(Boolean)).toHaveLength(24);
-    expect(dotenv.split('\n').filter(Boolean)).toHaveLength(24);
+    expect(shell.split('\n').filter(Boolean)).toHaveLength(31);
+    expect(dotenv.split('\n').filter(Boolean)).toHaveLength(31);
     expect(Object.keys(parseDotenv(dotenv)).sort()).toEqual(Object.keys(dev).sort());
     expect(digest(parseDotenv(dotenv)['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY'] ?? '')).toBe(
       digest(dev['INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY'])

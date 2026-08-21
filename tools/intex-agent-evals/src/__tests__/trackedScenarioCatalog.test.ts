@@ -1053,7 +1053,7 @@ describe('tracked scenario catalog', () => {
     const execution = findRequiredToolCall(scenario, 'create_code_task');
 
     expect(messageText(scenario, 0)).toBe(
-      'Create a MiniMax planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.'
+      'Create an OpenRouter planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.'
     );
     expect(
       request === undefined
@@ -1062,7 +1062,7 @@ describe('tracked scenario catalog', () => {
             request,
             'confirmation_requested',
             'argsSummary.workerType',
-            'minimax'
+            'openrouter-free'
           )
     ).toBe(true);
     expect(
@@ -1090,7 +1090,7 @@ describe('tracked scenario catalog', () => {
     ).toBe(true);
     expect(execution.argumentAssertions).toEqual(
       expect.arrayContaining([
-        { path: 'workerType', operator: 'equals', value: 'minimax' },
+        { path: 'workerType', operator: 'equals', value: 'openrouter-free' },
         { path: 'taskMode', operator: 'equals', value: 'planning' },
         { path: 'hasLinearIssueId', operator: 'absent' },
       ])
@@ -1169,7 +1169,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '095ab74530b58eb1658bdb04788f0f36f53898cb22e28bb3735413ec7119438d'
+      '47df465089fee3ff50711922d999b808820925c3964f7c9d92a6bc14f7ee148c'
     );
   });
 });

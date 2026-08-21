@@ -47,6 +47,32 @@ resource "google_logging_metric" "whatsapp_webhook_errors" {
   }
 }
 
+resource "google_logging_metric" "gemini_security_changes" {
+  name        = "gemini-security-changes"
+  description = "Generative Language API enablement or API-key lifecycle changes"
+  filter      = <<-EOT
+    log_id("cloudaudit.googleapis.com/activity")
+    (
+      (
+        protoPayload.serviceName="serviceusage.googleapis.com"
+        protoPayload.methodName=~"ServiceUsage.EnableService$"
+        protoPayload.request.name:"services/generativelanguage.googleapis.com"
+      )
+      OR
+      (
+        protoPayload.serviceName="apikeys.googleapis.com"
+        protoPayload.methodName=~"(CreateKey|UndeleteKey|UpdateKey)$"
+      )
+    )
+  EOT
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+    unit        = "1"
+  }
+}
+
 # =============================================================================
 # CUSTOM METRIC DESCRIPTORS - Code Tasks
 # =============================================================================
@@ -61,7 +87,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_submitted" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 
   labels {
@@ -81,7 +107,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_completed" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 
   labels {
@@ -101,7 +127,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_duration_seconds" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 }
 
@@ -143,7 +169,7 @@ resource "google_monitoring_metric_descriptor" "code_tasks_cost_dollars" {
   labels {
     key         = "worker_type"
     value_type  = "STRING"
-    description = "Type of worker (opus, auto, glm)"
+    description = "Type of worker (for example opus, auto, or openrouter-free)"
   }
 
   labels {
@@ -604,6 +630,41 @@ resource "google_monitoring_alert_policy" "llm_errors" {
 
   documentation {
     content   = "LLM provider errors are elevated. Check research-agent logs for details."
+    mime_type = "text/markdown"
+  }
+}
+
+resource "google_monitoring_alert_policy" "gemini_security_changes" {
+  count        = var.alert_email != null ? 1 : 0
+  display_name = "Gemini API Or API Key Security Change"
+
+  combiner = "OR"
+  conditions {
+    display_name = "Generative Language API or API key changed"
+    condition_threshold {
+      filter          = "metric.type=\"logging.googleapis.com/user/${google_logging_metric.gemini_security_changes.name}\" resource.type=\"audited_resource\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = 0
+      duration        = "0s"
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.email[0].name]
+
+  alert_strategy {
+    auto_close = "3600s"
+  }
+
+  documentation {
+    content   = "Security-sensitive Gemini/API-key configuration changed. Keep generativelanguage.googleapis.com disabled and investigate the matching Admin Activity entry."
     mime_type = "text/markdown"
   }
 }

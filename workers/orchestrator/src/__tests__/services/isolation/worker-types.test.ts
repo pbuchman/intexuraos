@@ -16,12 +16,7 @@ describe('[INT-1461] WORKER_TYPES telemetryExpectation', () => {
     expect(WORKER_TYPES.auto.telemetryExpectation).toBe('required');
   });
 
-  it('weaker models are optional', () => {
-    expect(WORKER_TYPES.glm.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.qwen.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.kimi.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES.minimax.telemetryExpectation).toBe('optional');
-    expect(WORKER_TYPES['mimo-pro'].telemetryExpectation).toBe('optional');
+  it('provider and Codex workers are optional', () => {
     expect(WORKER_TYPES['openrouter-free'].telemetryExpectation).toBe('optional');
     expect(WORKER_TYPES.codex.telemetryExpectation).toBe('optional');
     expect(WORKER_TYPES['codex-xhigh'].telemetryExpectation).toBe('optional');

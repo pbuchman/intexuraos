@@ -198,7 +198,7 @@ describe('Automation log integration flows', () => {
     mockDispatchService = { dispatch: vi.fn().mockResolvedValue({ success: true, dispatched: false }) };
     mockEvaluateEvent = vi.fn<(event: GitHubPREvent) => Promise<Result<GitHubAgentEvalResult, GitHubAgentError>>>();
     mockCreateReviewTask = vi.fn<(logger: CoreLogger, request: CreateReviewTaskRequest) => Promise<Result<CreateReviewTaskResult, CreateReviewTaskError>>>()
-      .mockResolvedValue(ok({ status: 'created' as const, taskId: 'task-review-1', workerType: 'qwen' as const }));
+      .mockResolvedValue(ok({ status: 'created' as const, taskId: 'task-review-1', workerType: 'openrouter-free' as const }));
 
     // Rules include ProtectedBaseBranchRule to test hard-rule skip flows
     const webhookRules = createWebhookRulesService([
@@ -636,7 +636,7 @@ describe('Automation log integration flows', () => {
         triage: {
           action: 'request_review',
           reviewTypes: ['code_review'],
-          workerType: 'qwen' as const,
+          workerType: 'openrouter-free' as const,
         },
         usage: { costUsd: 0.004, toolCalls: [{ tool: 'get_pr_diff', args: { prNumber: 42 } }] },
         reasoning: 'Draft PR is ready for automated review',
@@ -644,7 +644,7 @@ describe('Automation log integration flows', () => {
       mockCreateReviewTask.mockResolvedValueOnce(ok({
         status: 'created' as const,
         taskId: 'task-review-ready',
-        workerType: 'qwen' as const,
+        workerType: 'openrouter-free' as const,
       }));
 
       const { statusCode } = await sendWebhook(
@@ -661,7 +661,7 @@ describe('Automation log integration flows', () => {
       expect(triageDispatch?.event).toMatchObject({
         type: 'triage_dispatch',
         reviewTypes: ['code_review'],
-        workerType: 'qwen',
+        workerType: 'openrouter-free',
         cost: 0.004,
         reasoning: 'Draft PR is ready for automated review',
       });

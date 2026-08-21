@@ -49,7 +49,7 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
       prompt: 'Fix the bug',
       sanitizedPrompt: 'Fix the bug',
       systemPromptHash: 'hash-1',
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       workerLocation: 'home-mac',
       repository: 'intexuraos/test',
       baseBranch: 'main',
@@ -163,7 +163,7 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
     expect(body.repository).toBe('intexuraos/test');
     expect(body.baseBranch).toBe('main');
     expect(body.agentType).toBe('execution');
-    expect(body.workerType).toBe('qwen');
+    expect(body.workerType).toBe('openrouter-free');
     expect(body.linearIssueId).toBe('INT-999');
     expect(body.webhookSecret).toBe('secret-abc');
     expect(body.prNumber).toBe(42);
@@ -179,7 +179,7 @@ describe('GET /internal/tasks/:taskId/dispatch-metadata', () => {
       prompt: 'Minimal task',
       sanitizedPrompt: 'Minimal task',
       systemPromptHash: 'hash-2',
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       workerLocation: 'home-mac',
       repository: 'intexuraos/minimal',
       baseBranch: 'development',

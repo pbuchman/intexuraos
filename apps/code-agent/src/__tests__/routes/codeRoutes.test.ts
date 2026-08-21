@@ -4220,7 +4220,7 @@ describe('codeRoutes', () => {
         method: 'POST',
         url: `/tasks/${created.value.id}/implement`,
         headers: { authorization: 'Bearer test-token' },
-        body: { workerType: 'kimi' },
+        body: { workerType: 'openrouter-free' },
       });
 
       // Must NOT return 400 validation error — schema must accept kimi
@@ -4234,7 +4234,7 @@ describe('codeRoutes', () => {
       const executionTask = await repo.findById(body.data.codeTaskId);
       expect(executionTask.ok).toBe(true);
       if (!executionTask.ok) return;
-      expect(executionTask.value.workerType).toBe('kimi');
+      expect(executionTask.value.workerType).toBe('openrouter-free');
     });
   });
 

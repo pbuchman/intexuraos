@@ -1,5 +1,5 @@
 /**
- * PATCH /internal/code-tasks/:id/status
+ * PATCH /internal/code-tasks/status
  *
  * Dedicated, minimal endpoint for the orchestrator to commit terminal task
  * status directly to Firestore. Authed with either:
@@ -50,7 +50,7 @@ const TERMINAL_STATUSES = new Set<string>([
 ]);
 
 async function validateTaskWebhookStatusAuth(
-  request: FastifyRequest<{ Params: { id: string }; Body: UpdateTaskStatusBody }>,
+  request: FastifyRequest<{ Body: UpdateTaskStatusBody }>,
   task: CodeTask
 ): Promise<boolean> {
   const signatureResult = await validateWebhookSignature(request, {
@@ -64,7 +64,7 @@ async function validateTaskWebhookStatusAuth(
 }
 
 function validateInternalStatusAuth(
-  request: FastifyRequest<{ Params: { id: string }; Body: UpdateTaskStatusBody }>
+  request: FastifyRequest<{ Body: UpdateTaskStatusBody }>
 ): boolean {
   const authResult = validateInternalAuth(request);
   if (!authResult.valid) {
@@ -101,8 +101,8 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
 
   fastify.setValidatorCompiler(({ schema }) => strictAjv.compile(schema));
 
-  fastify.patch<{ Params: { id: string }; Body: UpdateTaskStatusBody }>(
-    '/internal/code-tasks/:id/status',
+  fastify.patch<{ Body: UpdateTaskStatusBody }>(
+    '/internal/code-tasks/status',
     {
       schema: {
         operationId: 'updateCodeTaskStatus',
@@ -111,14 +111,6 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
           'Dedicated endpoint for the orchestrator to commit terminal task status. ' +
           'Authed with orchestratorSecret HMAC. Strict body schema so HMAC is stable.',
         tags: ['internal'],
-        params: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['id'],
-          properties: {
-            id: { type: 'string' },
-          },
-        },
         body: {
           type: 'object',
           additionalProperties: false,
@@ -153,22 +145,14 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
       },
     },
     async (
-      request: FastifyRequest<{ Params: { id: string }; Body: UpdateTaskStatusBody }>,
+      request: FastifyRequest<{ Body: UpdateTaskStatusBody }>,
       reply: FastifyReply
     ) => {
       logIncomingRequest(request, {
-        message: 'Received request to PATCH /internal/code-tasks/:id/status',
+        message: 'Received request to PATCH /internal/code-tasks/status',
       });
 
-      const { id } = request.params;
       const { taskId, status, completedAt, error, result } = request.body;
-
-      if (taskId !== id) {
-        return await reply.fail(
-          'INVALID_REQUEST',
-          'taskId in body does not match :id path parameter'
-        );
-      }
 
       const { codeTaskRepo, logger, codeTaskCallbackBaseUrl } = getServices();
 
@@ -246,7 +230,7 @@ const updateTaskStatusRoute: FastifyPluginCallback = (fastify, _opts, done) => {
 
       logger.info(
         { taskId, requestedStatus: status, resolvedStatus, agentType: task.agentType },
-        'Task status committed via /internal/code-tasks/:id/status'
+        'Task status committed via /internal/code-tasks/status'
       );
       return await reply.ok({ received: true });
     }

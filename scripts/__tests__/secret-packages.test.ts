@@ -143,7 +143,7 @@ describe('secret package manifest', () => {
         'secretId',
         'stableVersion',
       ]);
-      expect(definition.stableVersion).toBe(2);
+      expect(definition.stableVersion).toBe(3);
       expect(definition.envNames).toEqual([...definition.envNames].sort());
       expect(new Set(definition.envNames).size).toBe(definition.envNames.length);
       expect(definition.envNames).toContain('INTEXURAOS_FIREBASE_API_KEY');
@@ -406,7 +406,7 @@ describe('Secret Manager adapter boundary', () => {
     const payload = makePayload('dev', manifest);
     let data = Buffer.alloc(0);
     for (let nonce = 0; nonce < 100; nonce += 1) {
-      payload.env.INTEXURAOS_OPENAI_APP_API_KEY = `fake-secret-boundary-${nonce}`;
+      payload.env.INTEXURAOS_OPENROUTER_APP_API_KEY = `fake-secret-boundary-${nonce}`;
       data = Buffer.from(JSON.stringify(payload), 'utf8');
       if (crc32c(data) > 0x7fffffff) break;
     }

@@ -5,7 +5,7 @@ import { buildTaskCallbackUrl } from './callback-url.js';
 
 /**
  * Orchestrator-side HTTP client that commits a terminal task status to code-agent
- * via `PATCH /internal/code-tasks/:id/status`.
+ * via `PATCH /internal/code-tasks/status`.
  *
  * Signing scheme is `HMAC-SHA256(secret, timestamp + "." + rawBody)`, with
  * `X-Request-Timestamp`, `X-Request-Signature`, and `X-Internal-Auth` headers.
@@ -89,7 +89,6 @@ export class StatusUpdateClient {
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const outcome = await this.deliver(
-        payload.taskId,
         rawBody,
         payload.webhookUrl,
         payload.webhookSecret
@@ -146,7 +145,6 @@ export class StatusUpdateClient {
   }
 
   private async deliver(
-    taskId: string,
     rawBody: string,
     webhookUrl: string | undefined, // @allow-undefined-type -- function parameter, not optional property
     webhookSecret: string | undefined // @allow-undefined-type -- function parameter, not optional property
@@ -160,7 +158,7 @@ export class StatusUpdateClient {
     const url = buildTaskCallbackUrl(
       webhookUrl,
       this.codeAgentUrl,
-      `/internal/code-tasks/${encodeURIComponent(taskId)}/status`
+      '/internal/code-tasks/status'
     );
 
     const controller = new AbortController();

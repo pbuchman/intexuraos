@@ -53,7 +53,6 @@ const RELEASE_NAME =
 const FAILPOINTS = new Set([
   '',
   'candidate-durable',
-  'compatibility-active',
   'envrc-link-installed',
   'github-link-installed',
   'before-activation',
@@ -392,28 +391,6 @@ function atomicSwitchCurrent(packageOutputDir, releaseName) {
   }
 }
 
-function validateLegacyProjection({ currentPath, envrcOutput, githubKeyOutput }) {
-  validateDirectory(currentPath, PACKAGE_FILES);
-  const packageProjection = validateRenderedDevPackage(currentPath);
-  const metadata = packageProjection.metadata;
-  const envrcBytes = readPrivateFile(envrcOutput);
-  const githubBytes = readPrivateFile(githubKeyOutput);
-  if (!sameBytes(githubBytes, packageProjection.githubKeyBytes)) fail();
-  let envrc;
-  try {
-    envrc = parseDotenv(envrcBytes);
-  } catch {
-    fail();
-  }
-  if (
-    String(metadata.version) !== envrc.INTEXURAOS_SECRET_PACKAGE_VERSION ||
-    Object.entries(packageProjection.environment).some(([name, value]) => envrc[name] !== value)
-  ) {
-    fail();
-  }
-  return String(metadata.version);
-}
-
 function ensureEndpoint({ expectedBytes, outputPath, privateParent = false, targetPath }) {
   mkdirSync(dirname(outputPath), { recursive: true, mode: 0o700 });
   if (privateParent) chmodSync(dirname(outputPath), 0o700);
@@ -450,6 +427,17 @@ function triggerFailpoint(name) {
   } finally {
     process.kill(process.pid, 'SIGKILL');
   }
+}
+
+function deleteObsoleteReleases(packageOutputDir, retainedReleaseName) {
+  for (const name of readdirSync(packageOutputDir)) {
+    if (name === retainedReleaseName || !RELEASE_NAME.test(name)) continue;
+    const path = join(packageOutputDir, name);
+    const status = lstatSync(path);
+    if (!status.isDirectory() || status.isSymbolicLink()) fail();
+    rmSync(path, { recursive: true });
+  }
+  syncDirectory(packageOutputDir);
 }
 
 export function promoteDevSecretProjection(options) {
@@ -492,30 +480,8 @@ export function promoteDevSecretProjection(options) {
 
   let current = readCurrent(packageOutputDir);
   if (current !== undefined) {
-    const currentNames = readdirSync(current.releasePath).sort();
-    if (JSON.stringify(currentNames) === JSON.stringify([...PACKAGE_FILES].sort())) {
-      const previousVersion = validateLegacyProjection({
-        currentPath: current.releasePath,
-        envrcOutput,
-        githubKeyOutput,
-      });
-      const compatibilityRelease = stageProjection({
-        packageOutputDir,
-        sources: {
-          '.envrc': envrcOutput,
-          'environment.env': join(current.releasePath, 'environment.env'),
-          'github-app-private-key.pem': githubKeyOutput,
-          'metadata.json': join(current.releasePath, 'metadata.json'),
-        },
-        version: previousVersion,
-      });
-      atomicSwitchCurrent(packageOutputDir, compatibilityRelease);
-      current = readCurrent(packageOutputDir);
-      triggerFailpoint('compatibility-active');
-    } else {
-      const currentMetadata = readMetadata(join(current.releasePath, 'metadata.json'));
-      validateCompleteProjection(current.releasePath, currentMetadata.version);
-    }
+    const currentMetadata = readMetadata(join(current.releasePath, 'metadata.json'));
+    validateCompleteProjection(current.releasePath, currentMetadata.version);
   }
 
   const envrcTarget = join(packageOutputDir, 'current', '.envrc');
@@ -538,6 +504,7 @@ export function promoteDevSecretProjection(options) {
   triggerFailpoint('before-activation');
   atomicSwitchCurrent(packageOutputDir, candidateRelease);
   triggerFailpoint('after-activation');
+  deleteObsoleteReleases(packageOutputDir, candidateRelease);
 }
 
 function main() {

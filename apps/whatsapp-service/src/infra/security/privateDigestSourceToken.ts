@@ -30,7 +30,6 @@ export interface PrivateDigestSourceTokenKey {
 
 export interface PrivateDigestSourceTokenConfig {
   currentKey: PrivateDigestSourceTokenKey;
-  previousKeys?: PrivateDigestSourceTokenKey[] | undefined;
   now?: (() => number) | undefined;
   ttlMs?: number | undefined;
 }
@@ -118,9 +117,7 @@ export function createPrivateDigestSourceTokenCodec(
   const now = config.now ?? Date.now;
   const ttlMs = config.ttlMs ?? DEFAULT_TTL_MS;
   validateTokenConfig(config, ttlMs);
-  const allKeys = [config.currentKey, ...(config.previousKeys ?? [])];
-  const keys = new Map(allKeys.map((key) => [key.version, deriveTokenKey(key)]));
-  const current = keys.get(config.currentKey.version) as DerivedTokenKey;
+  const current = deriveTokenKey(config.currentKey);
 
   return {
     issueSourceRevision(
@@ -173,11 +170,10 @@ export function createPrivateDigestSourceTokenCodec(
       try {
         const tokenParts = parseTokenParts(input.token);
         if (tokenParts === undefined) return invalidCursor();
-        const key = keys.get(tokenParts.keyVersion);
-        if (key === undefined) return invalidCursor();
+        if (tokenParts.keyVersion !== current.version) return invalidCursor();
         const plaintext = decryptToken(
           tokenParts.encrypted,
-          key.cursor,
+          current.cursor,
           cursorAad(input.binding)
         );
         if (plaintext === undefined) return invalidCursor();
@@ -219,13 +215,9 @@ function deriveTokenKey(key: PrivateDigestSourceTokenKey): DerivedTokenKey {
 }
 
 function validateTokenConfig(config: PrivateDigestSourceTokenConfig, ttlMs: number): void {
-  const keys = [config.currentKey, ...(config.previousKeys ?? [])];
   if (
-    keys.length === 0 ||
-    keys.some(
-      (key) => !/^[A-Za-z0-9_-]{1,32}$/u.test(key.version) || key.secret.length === 0
-    ) ||
-    new Set(keys.map((key) => key.version)).size !== keys.length ||
+    !/^[A-Za-z0-9_-]{1,32}$/u.test(config.currentKey.version) ||
+    config.currentKey.secret.length === 0 ||
     !Number.isInteger(ttlMs) ||
     ttlMs <= 0 ||
     ttlMs > MAX_TTL_MS

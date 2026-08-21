@@ -131,7 +131,7 @@ describe('CreateTaskRequestSchema — retriedFrom', () => {
 describe('CreateTaskRequestSchema — reviewTypes', () => {
   const baseRequest = {
     taskId: 'task_00000000-0000-0000-0000-0000000000c1',
-    workerType: 'mimo-pro',
+    workerType: 'openrouter-free',
     prompt: 'Review PR documentation and code quality',
     webhookUrl: 'https://intexuraos.cloud/api/code/internal/task-hook',
     webhookSecret: 'sec',

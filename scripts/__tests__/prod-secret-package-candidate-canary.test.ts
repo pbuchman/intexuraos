@@ -379,16 +379,17 @@ describe('PROD package candidate credential canary', () => {
     expect(readdirSync(input.root)).not.toContain('trace.jsonl');
   });
 
-  it('is wired into every package preflight while retaining explicit offline test skips', () => {
+  it('validates the complete candidate before publishing while retaining explicit offline test skips', () => {
     const loader = readFileSync(loaderPath, 'utf8');
 
     expect(loader).toContain('validate-prod-secret-candidate.sh');
-    expect(loader).toContain('validate_candidate_credentials');
+    expect(loader).toContain('PROD_CANDIDATE_VALIDATOR');
     expect(loader).toContain('SKIP_RUNTIME_CREDENTIAL_SMOKE');
     expect(loader).toContain('SKIP_CLOUDFLARE_CREDENTIAL_SMOKE');
-    expect(loader.indexOf('validate_candidate_credentials')).toBeLessThan(
-      loader.indexOf('activate_current_projection "${release_name}"')
+    expect(loader.indexOf('PROD_CANDIDATE_VALIDATOR')).toBeLessThan(
+      loader.indexOf('publish_candidate')
     );
+    expect(loader).not.toMatch(/^\s*--(?:activate|rollback)(?:\)|\s)/mu);
   });
 
   it('defines a production topic without a subscription and registers its local emulator alias', () => {
@@ -414,14 +415,15 @@ describe('PROD package candidate credential canary', () => {
     expect(pubsubPublishTest).toContain(`topic: '${topic}'`);
   });
 
-  it('documents the non-mutating Cloudflare limitation and the fail-safe attestation procedure', () => {
+  it('documents exact-version publication and fix-forward failure handling', () => {
     const operations = readFileSync(operationsPath, 'utf8').replace(/\s+/gu, ' ');
 
-    expect(operations).toContain('Cloudflare DNS Edit attestation');
-    expect(operations).toContain('cannot distinguish `DNS Read` from `DNS Edit`');
-    expect(operations).toContain('prod-v<VERSION>.json');
-    expect(operations).toContain('must stop before activation');
-    expect(operations).toContain('24 hours');
-    expect(operations).toContain('five minutes in the future');
+    expect(operations).toContain('Every runtime uses an exact positive numeric version');
+    expect(operations).toContain('stopped, fix forward, and repeat the failed verification');
+    expect(operations).toContain('Old package versions');
+    expect(operations).toContain(
+      'contains no rollback, legacy-read, dual-package, recovery, or soak procedure'
+    );
+    expect(operations).not.toMatch(/\b(?:wait|sleep)\s+(?:24|72|168)\b/iu);
   });
 });

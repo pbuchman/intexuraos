@@ -45,7 +45,7 @@ compatibility. Project, release, and environment tags provide the retained filte
 
 Home-dev PM2 must force `INTEXURAOS_ENVIRONMENT=dev` even if the shell exports older values such as `development`. The home-dev orchestrator systemd env file at `~/.code-orchestrator/env` must also set `INTEXURAOS_ENVIRONMENT=dev`, `INTEXURAOS_RUNTIME=dev`, and the private `.ts.net:8443` `INTEXURAOS_ERROR_HUB_HOST`. Production receives the SentryBox DSNs from versioned runtime configuration via `scripts/hetzner/load-secrets.sh`; the web DSN is baked into the static bundle by `scripts/hetzner/deploy-web.sh`.
 
-The retained transcription Cloud Function receives its runtime `INTEXURAOS_SENTRY_DSN` as a plain environment variable from `config/environments/dev.json`. The old `INTEXURAOS_SENTRY_DSN_DEV` container and accessor binding remain temporarily only for migration rollback and must not be read by any runtime.
+The retained transcription Cloud Function receives its runtime `INTEXURAOS_SENTRY_DSN` as a plain environment variable from `config/environments/dev.json`.
 
 ## Runtime Configuration And Secret Packages
 
@@ -74,15 +74,11 @@ public in the compiled SPA, but is not tracked so it can be rotated coherently.
 | dev         | the same pinned four-file DEV projection root on home-dev; PM2, observability, and orchestrator receive separate allowlisted projections                              |
 | prod        | exact PROD version fetched by the external Hetzner provisioner, validated and atomically projected to `/etc/intexuraos/.env.prod` and protected files                 |
 
-The DEV path in the table is a reserved four-file projection root. A generic
-`secret-package render` must use a separate private scratch root because its
-three-file `current` release is not a valid local/home-dev projection.
-
 Renderers may access only their environment package. Runtime services,
 orchestrator processes, and code workers do not receive Secret Manager access.
 The provisioner/bootstrap credential always remains outside the package it
 opens. See [Secret Packages Operations](../../docs/operations/secret-packages.md)
-for publication, promotion, rotation, rollback, audit, and disaster recovery.
+for one-shot publication, rendering, rotation, and verification.
 
 Local and dev PM2 services must not inherit `FIRESTORE_EMULATOR_HOST` or `STORAGE_EMULATOR_HOST`; they must use real retained GCP Firestore/Storage. Local and dev PM2 services must set `PUBSUB_EMULATOR_HOST=localhost:8102` against their own host-local Pub/Sub emulator.
 

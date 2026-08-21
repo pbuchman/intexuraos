@@ -127,7 +127,6 @@ describe('loadEnvConfig', () => {
       '/run/intexuraos/dev/current/github-app-private-key.pem'
     );
     expect(config.linearApiKey).toBe('lin-key');
-    expect(config.kimiApiKey).toBe('ABCDEFG');
     expect(config.port).toBe(DEFAULT_PORT);
     expect(config.capacity).toBe(DEFAULT_CAPACITY);
     expect(config.completionMaxAttempts).toBe(DEFAULT_COMPLETION_MAX_ATTEMPTS);

@@ -2,13 +2,13 @@
   "schemaVersion": "1",
   "id": "intex-eval-014",
   "title": "Create a planning code task",
-  "description": "Confirms and creates a synthetic MiniMax planning code task with structural argument evidence.",
+  "description": "Confirms and creates a synthetic OpenRouter planning code task with structural argument evidence.",
   "currentDateTime": "2026-07-16T10:00:00+02:00",
   "timeZone": "Europe/Warsaw",
   "turns": [
     {
       "kind": "message",
-      "text": "Create a MiniMax planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.",
+      "text": "Create an OpenRouter planning code task to investigate synthetic cache behavior. Keep both exact markers INTEX-EVAL-014 and INTEX-EVAL-014-F01 in the task prompt as synthetic test markers only. They are not Linear issue IDs, and the task must not be associated with Linear.",
       "sourceType": "whatsapp_text"
     },
     {
@@ -83,7 +83,7 @@
                 {
                   "path": "argsSummary.workerType",
                   "operator": "equals",
-                  "value": "minimax"
+                  "value": "openrouter-free"
                 },
                 {
                   "path": "argsSummary.taskMode",
@@ -134,7 +134,7 @@
               {
                 "path": "workerType",
                 "operator": "equals",
-                "value": "minimax"
+                "value": "openrouter-free"
               },
               {
                 "path": "taskMode",

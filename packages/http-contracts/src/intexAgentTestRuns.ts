@@ -444,7 +444,7 @@ export const safeToolFactNameV1Schema = z.enum([
 const safeToolFactValueV1Schema = z.union([
   safeIntegerSchema,
   z.boolean(),
-  z.enum(['list', 'count', 'codex', 'codex-xhigh', 'minimax', 'planning', 'execution']),
+  z.enum(['list', 'count', 'codex', 'codex-xhigh', 'openrouter-free', 'planning', 'execution']),
 ]);
 export const safeToolFactV1Schema = z
   .object({

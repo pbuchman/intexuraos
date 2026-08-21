@@ -86,26 +86,14 @@ describe('contracts — canonical field table', () => {
   });
 
   it('tier table covers every known WorkerType', () => {
-    const workerTypes = [
-      'opus',
-      'sonnet',
-      'auto',
-      'glm',
-      'minimax',
-      'codex',
-      'codex-xhigh',
-      'kimi',
-      'qwen',
-      'mimo-pro',
-      'openrouter-free',
-    ] as const;
+    const workerTypes = ['opus', 'sonnet', 'auto', 'codex', 'codex-xhigh', 'openrouter-free'] as const;
     for (const w of workerTypes) {
       expect(TIER_BY_WORKER[w], `missing tier for ${w}`).toMatch(/^(required|optional)$/);
     }
     expect(TIER_BY_WORKER.opus).toBe('required');
     expect(TIER_BY_WORKER.sonnet).toBe('required');
     expect(TIER_BY_WORKER.auto).toBe('required');
-    expect(TIER_BY_WORKER.glm).toBe('optional');
+    expect(TIER_BY_WORKER['openrouter-free']).toBe('optional');
   });
 
   it('execution contract accepts `execution_memory_*` aliases for dual-read compatibility', () => {

@@ -17,8 +17,8 @@ function functionBody(script: string, name: string, nextName: string): string {
   return script.slice(script.indexOf(`${name}() {`), script.indexOf(`\n}\n\n${nextName}()`));
 }
 
-describe('fresh-host PROD secret-package bootstrap', () => {
-  it('installs locked workspace dependencies before provisioning invokes the package loader', () => {
+describe('fresh-host PROD secret package', () => {
+  it('installs locked dependencies before provisioning loads the exact package version', () => {
     const provision = read(provisionPath);
     const dependencyInstaller = functionBody(
       provision,
@@ -28,16 +28,16 @@ describe('fresh-host PROD secret-package bootstrap', () => {
     const main = provision.slice(provision.indexOf('main() {'));
 
     expect(dependencyInstaller).toContain('pnpm install --frozen-lockfile');
-    expect(dependencyInstaller).toContain('DEPLOY_USER');
     expect(main.indexOf('install_workspace_dependencies')).toBeGreaterThan(
       main.indexOf('install_node_22')
     );
     expect(main.indexOf('install_workspace_dependencies')).toBeLessThan(
       main.indexOf('load-secrets.sh')
     );
+    expect(main).toContain('--version "${SECRET_PACKAGE_VERSION}"');
   });
 
-  it('pins the bootstrap package projection to the exact candidate commit', () => {
+  it('pins bootstrap provisioning to one clean commit and numeric package version', () => {
     const bootstrap = read(bootstrapPath);
     const provisionLine =
       bootstrap
@@ -54,70 +54,36 @@ describe('fresh-host PROD secret-package bootstrap', () => {
     expect(provisionLine).toContain('--version ${var.prod_secret_package_version}');
   });
 
-  it('installs dependencies before the ordinary deploy invokes the package loader', () => {
+  it('installs the immutable release before the ordinary deploy loads secrets', () => {
     const deploy = read(deployPath);
-    const runtimeDependencies = functionBody(
-      deploy,
-      'prepare_runtime_dependencies',
-      'deploy_runtime'
-    );
+    const deployment = functionBody(deploy, 'deploy_release', 'publish_deployment_metadata');
 
-    expect(runtimeDependencies.indexOf('CI=true pnpm install --frozen-lockfile')).toBeLessThan(
-      runtimeDependencies.indexOf('scripts/hetzner/load-secrets.sh')
+    expect(deployment.indexOf('CI=true pnpm install --frozen-lockfile')).toBeLessThan(
+      deployment.indexOf('scripts/hetzner/load-secrets.sh --version')
     );
-    expect(runtimeDependencies).toContain('INTEXURAOS_COMMIT_SHA=${commit_sha_quoted}');
+    expect(deployment).toContain('REMOTE_RELEASE_DIR');
   });
-});
 
-describe('PROD projection commit identity', () => {
-  it('makes the exact candidate SHA mandatory in the provisioner and loader', () => {
-    const provision = read(provisionPath);
+  it('validates the exact numeric version before accessing an offline payload', () => {
     const loader = read(loaderPath);
-    const provisionMain = provision.slice(provision.indexOf('main() {'));
-    const loaderPreconditions = functionBody(loader, 'require_preconditions', 'render_package');
-    const publishProjection = functionBody(loader, 'publish_projection', 'main');
+    const preconditions = functionBody(loader, 'require_preconditions', 'acquire_lock');
 
-    expect(provision).toContain('INTEXURAOS_COMMIT_SHA');
-    expect(provision).toContain('^[0-9a-f]{40}$');
-    expect(provisionMain).toContain(
-      'INTEXURAOS_COMMIT_SHA="${INTEXURAOS_COMMIT_SHA}" "${SCRIPT_DIR}/load-secrets.sh"'
+    expect(preconditions).toContain('SECRET_PACKAGE_VERSION');
+    expect(preconditions).toContain('^[1-9][0-9]*$');
+    expect(preconditions.indexOf('SECRET_PACKAGE_VERSION')).toBeLessThan(
+      preconditions.indexOf('Offline payload is unreadable')
     );
-    expect(loaderPreconditions).toContain('INTEXURAOS_COMMIT_SHA');
-    expect(loaderPreconditions).toContain('^[0-9a-f]{40}$');
-    expect(publishProjection).not.toContain('git -C');
-    expect(publishProjection).not.toContain("commit='manual'");
   });
 
-  it.each(['', 'manual', 'A'.repeat(40), 'a'.repeat(39), `${'a'.repeat(40)}-dirty`])(
-    'rejects invalid candidate SHA %s before privileged provisioning work',
-    (commitSha) => {
-      const result = spawnSync('bash', [provisionPath, '--version', '7', '--skip-certbot'], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        env: {
-          ...process.env,
-          INTEXURAOS_COMMIT_SHA: commitSha,
-          INTEXURAOS_ENVIRONMENT: 'prod',
-        },
-      });
-
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain(
-        'INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA'
-      );
-      expect(result.stdout).not.toContain('Installing');
-    }
-  );
-
-  it.each(['', 'manual', 'A'.repeat(40), 'a'.repeat(39), `${'a'.repeat(40)}-dirty`])(
-    'fails closed before package access for invalid candidate SHA %s',
-    (commitSha) => {
+  it.each(['', 'latest', '0', '01', '-1', '1.0'])(
+    'fails closed for non-canonical package version %s before payload access',
+    (version) => {
       const result = spawnSync(
         'bash',
         [
           loaderPath,
           '--version',
-          '7',
+          version,
           '--project-id',
           'intexuraos-dev-pbuchman',
           '--payload-file',
@@ -128,7 +94,6 @@ describe('PROD projection commit identity', () => {
           encoding: 'utf8',
           env: {
             ...process.env,
-            INTEXURAOS_COMMIT_SHA: commitSha,
             INTEXURAOS_ENVIRONMENT: 'prod',
             SKIP_OWNERSHIP: '1',
             SKIP_RUNTIME_CREDENTIAL_SMOKE: '1',
@@ -138,9 +103,16 @@ describe('PROD projection commit identity', () => {
 
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain(
-        'INTEXURAOS_COMMIT_SHA must be a 40-character lowercase hexadecimal SHA'
+        'SECRET_PACKAGE_VERSION must be an exact positive numeric version'
       );
-      expect(result.stderr).not.toContain('Offline payload file is unreadable');
+      expect(result.stderr).not.toContain('Offline payload is unreadable');
     }
   );
+
+  it('contains no rollback or previous-release loader mode', () => {
+    const loader = read(loaderPath);
+
+    expect(loader).toContain('This loader has no rollback, previous-release, or legacy mode');
+    expect(loader).not.toMatch(/--rollback|--activate|--stage-only/u);
+  });
 });

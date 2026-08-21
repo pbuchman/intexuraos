@@ -543,12 +543,12 @@ describe('UnifiedEvaluator', () => {
           triage: {
             action: 'request_review',
             reviewTypes: ['architecture'],
-            workerType: 'qwen',
+            workerType: 'openrouter-free',
           },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'The comment explicitly requested architecture review with qwen.',
         })),
-        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'qwen' })),
+        createReviewTask: vi.fn().mockResolvedValue(ok({ status: 'created', taskId: 'task-review-comment-1', workerType: 'openrouter-free' })),
       });
       const evaluator = createUnifiedEvaluator(deps);
       const event = createFakeEvent({
@@ -563,7 +563,7 @@ describe('UnifiedEvaluator', () => {
         logger,
         expect.objectContaining({
           reviewTypes: ['architecture'],
-          workerType: 'qwen',
+          workerType: 'openrouter-free',
           reviewComment: '@review architecture',
         })
       );
@@ -573,7 +573,7 @@ describe('UnifiedEvaluator', () => {
           dispatchParams: expect.objectContaining({
             taskId: 'task-review-comment-1',
             reviewTypes: ['architecture'],
-            workerType: 'qwen',
+            workerType: 'openrouter-free',
           }),
         })
       );
@@ -967,7 +967,7 @@ describe('UnifiedEvaluator', () => {
           evaluate: vi.fn().mockReturnValue({ action: 'needs_triage', reason: 'TRIAGE_REQUIRED' }),
         } as unknown as WebhookRulesService,
         evaluateEvent: vi.fn().mockResolvedValue(ok({
-          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'qwen' },
+          triage: { action: 'request_review', reviewTypes: ['architecture'], workerType: 'openrouter-free' },
           usage: { costUsd: 0.002, toolCalls: [] },
           reasoning: 'Architecture review requested.',
         })),

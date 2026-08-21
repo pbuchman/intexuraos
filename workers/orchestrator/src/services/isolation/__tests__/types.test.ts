@@ -48,22 +48,6 @@ describe('WORKER_TYPES configuration', () => {
     expect(WORKER_TYPES.sonnet.model).toBe('sonnet');
   });
 
-  it('uses qwen as the worker key and preserves qwen3.5-plus as the provider model id', () => {
-    expect(WORKER_TYPES.qwen.model).toBe('qwen3.5-plus');
-  });
-
-  it('routes mimo-pro to MiMo Pro 2.5 provider model id', () => {
-    expect(WORKER_TYPES['mimo-pro'].model).toBe('mimo-v2.5-pro');
-  });
-
-  it('routes kimi to native Kimi Code API using stable coding model with thinking enabled', () => {
-    expect(WORKER_TYPES.kimi.runtime).toBe('claude');
-    expect(WORKER_TYPES.kimi.apiBaseUrl).toBe('https://api.kimi.com/coding');
-    expect(WORKER_TYPES.kimi.apiKeyEnvVar).toBe('KIMI_API_KEY');
-    expect(WORKER_TYPES.kimi.model).toBe('kimi-for-coding');
-    expect(WORKER_TYPES.kimi.effort).toBe('high');
-  });
-
   it('does not set a model for auto worker type', () => {
     expect(WORKER_TYPES.auto.model).toBeUndefined();
   });
@@ -120,10 +104,6 @@ describe('WORKER_TYPES configuration', () => {
     const workerSecretsKeys: ReadonlySet<string> = new Set<keyof WorkerSecrets>([
       'ANTHROPIC_API_KEY',
       'LINEAR_API_KEY',
-      'MINIMAX_API_KEY',
-      'MIMO_API_KEY',
-      'DASHSCOPE_API_KEY',
-      'KIMI_API_KEY',
       'OPENROUTER_API_KEY',
     ]);
 

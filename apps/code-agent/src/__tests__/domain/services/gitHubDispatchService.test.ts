@@ -363,17 +363,17 @@ describe('GitHubDispatchService', () => {
     });
 
     it('should route @worker directive to createTaskForPR with workerType', async () => {
-      const workerCommentEvent = { ...mockEvent, body: 'Fix this @worker minimax' };
-      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-minimax' }));
+      const workerCommentEvent = { ...mockEvent, body: 'Fix this @worker openrouter-free' };
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-worker-openrouter-free' }));
 
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch({ ...context, event: workerCommentEvent });
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-worker-minimax');
+      expect(result.taskId).toBe('task-worker-openrouter-free');
       expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
         expect.any(Object),
-        expect.objectContaining({ workerType: 'minimax', prNumber: 42 }),
+        expect.objectContaining({ workerType: 'openrouter-free', prNumber: 42 }),
       );
     });
 
@@ -456,18 +456,18 @@ describe('GitHubDispatchService', () => {
         ...mockEvent,
         eventType: 'pull_request_review',
         action: 'submitted',
-        body: 'Fix this @worker minimax',
+        body: 'Fix this @worker openrouter-free',
       };
-      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-review-worker-minimax' }));
+      mockedCreateTaskForPR.mockResolvedValue(ok({ taskId: 'task-review-worker-openrouter-free' }));
 
       const service = createWebhookDispatchService(deps);
       const result = await service.dispatch({ ...context, event: reviewEvent });
 
       expect(result.success).toBe(true);
-      expect(result.taskId).toBe('task-review-worker-minimax');
+      expect(result.taskId).toBe('task-review-worker-openrouter-free');
       expect(mockedCreateTaskForPR).toHaveBeenCalledWith(
         expect.any(Object),
-        expect.objectContaining({ workerType: 'minimax' }),
+        expect.objectContaining({ workerType: 'openrouter-free' }),
       );
     });
   });

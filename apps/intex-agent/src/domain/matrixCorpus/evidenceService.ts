@@ -714,7 +714,7 @@ const SAFE_FACT_ENUMS = new Set<SafeToolFactV1['value']>([
   'count',
   'codex',
   'codex-xhigh',
-  'minimax',
+  'openrouter-free',
   'planning',
   'execution',
 ]);

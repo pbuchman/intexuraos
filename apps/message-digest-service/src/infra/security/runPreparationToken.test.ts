@@ -54,7 +54,7 @@ describe('run preparation token', () => {
     ).toEqual(invalidToken());
   });
 
-  it('enforces expiry, issued-at skew, key rotation, and token version', () => {
+  it('rejects tokens issued by a previous key and enforces expiry, skew, and version', () => {
     let now = NOW_MS;
     const oldTokens = codec({ now: () => now, secret: 'old-secret' });
     const issued = oldTokens.issue(claims);
@@ -64,18 +64,20 @@ describe('run preparation token', () => {
       now: () => now,
       version: 'key-v2',
       secret: 'new-secret',
-      previousKeys: [{ version: 'key-v1', secret: 'old-secret' }],
     });
-    expect(rotated.read({ token: issued.value, binding })).toEqual({ ok: true, value: claims });
+    expect(rotated.read({ token: issued.value, binding })).toEqual(invalidToken());
+
+    const currentIssued = rotated.issue(claims);
+    if (!currentIssued.ok) throw new Error(currentIssued.error.message);
 
     now = NOW_MS + 5 * 60 * 1000 + 1;
-    expect(rotated.read({ token: issued.value, binding })).toEqual(invalidToken());
-    expect(rotated.read({ token: issued.value.replace(/^mdp1\./u, 'mdp2.'), binding })).toEqual(
-      invalidToken()
-    );
+    expect(rotated.read({ token: currentIssued.value, binding })).toEqual(invalidToken());
+    expect(
+      rotated.read({ token: currentIssued.value.replace(/^mdp1\./u, 'mdp2.'), binding })
+    ).toEqual(invalidToken());
 
     now = NOW_MS - 31_000;
-    expect(rotated.read({ token: issued.value, binding })).toEqual(invalidToken());
+    expect(rotated.read({ token: currentIssued.value, binding })).toEqual(invalidToken());
   });
 
   it('derives a domain-separated 256-bit key and rejects unsafe configuration', () => {
@@ -166,13 +168,7 @@ describe('run preparation token', () => {
     expect(reader.read({ token: normalIssued.value, binding })).toEqual(invalidToken());
   });
 
-  it('rejects duplicate keys and every invalid TTL configuration boundary', () => {
-    expect(() =>
-      createRunPreparationTokenCodec({
-        currentKey: { version: 'key-v1', secret: 'secret' },
-        previousKeys: [{ version: 'key-v1', secret: 'old-secret' }],
-      })
-    ).toThrow('Invalid run preparation token configuration');
+  it('rejects every invalid TTL configuration boundary', () => {
     for (const ttlMs of [0, -1, 1.5, 10 * 60 * 1000 + 1]) {
       expect(() =>
         createRunPreparationTokenCodec({
@@ -183,7 +179,7 @@ describe('run preparation token', () => {
     }
   });
 
-  it('supports omitted rotation and TTL configuration on token issuance', () => {
+  it('supports omitted TTL configuration on token issuance', () => {
     const tokens = createRunPreparationTokenCodec({
       currentKey: { version: 'key-v1', secret: 'synthetic-internal-secret' },
       now: () => NOW_MS,
@@ -198,7 +194,6 @@ function codec(
     now?: () => number;
     version?: string;
     secret?: string;
-    previousKeys?: { version: string; secret: string }[];
   } = {}
 ): RunPreparationTokenCodec {
   return createRunPreparationTokenCodec({
@@ -206,7 +201,6 @@ function codec(
       version: options.version ?? 'key-v1',
       secret: options.secret ?? 'synthetic-internal-secret',
     },
-    previousKeys: options.previousKeys ?? [],
     now: options.now ?? ((): number => NOW_MS),
     ttlMs: 5 * 60 * 1000,
   });

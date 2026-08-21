@@ -27,6 +27,7 @@ import {
   type Auth,
 } from 'firebase/auth';
 import { config } from '@/config';
+import { readPublicWebEnv } from '@/publicEnv';
 
 let firebaseApp: FirebaseApp | null = null;
 let firestoreClient: Firestore | null = null;
@@ -61,7 +62,7 @@ export function initializeFirebase(): void {
 
   firebaseAuth = getAuth(firebaseApp);
 
-  const useEmulators = import.meta.env['INTEXURAOS_USE_FIREBASE_EMULATORS'] === 'true';
+  const useEmulators = readPublicWebEnv().INTEXURAOS_USE_FIREBASE_EMULATORS === 'true';
 
   if (useEmulators) {
     connectFirestoreEmulator(firestoreClient, 'localhost', 8101);

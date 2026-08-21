@@ -45,17 +45,17 @@ const MATRIX_CORPUS_ENV_NAMES = [
 const MATRIX_CORPUS_RUNTIME_ONLY_NAMES = MATRIX_CORPUS_ENV_NAMES.slice(0, 3);
 const MATRIX_CORPUS_VERSIONED_CONFIG_NAMES = [
   'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY_VERSION',
+  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
+  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_KEY_VERSION',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_PUBLIC_KEY',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
+  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
 ] as const;
 const MATRIX_CORPUS_SECRET_MANAGER_NAMES = [
   'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
   'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
-  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
-  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
   'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
-  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
-  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
 ] as const;
 const TEST_RUNS_READ_FLAG = 'INTEXURAOS_INTEX_AGENT_TEST_RUNS_READ_ENABLED' as const;
 const COMMON_RUNTIME_CONFIG = JSON.parse(
@@ -64,9 +64,6 @@ const COMMON_RUNTIME_CONFIG = JSON.parse(
 const SECRET_PACKAGE_MANIFEST = JSON.parse(
   readFileSync('config/environments/secret-packages.json', 'utf8')
 ) as { packages: { dev: { envNames: string[] } } };
-const SECRET_PACKAGE_SOURCES = JSON.parse(
-  readFileSync('config/environments/secret-package-sources.json', 'utf8')
-) as { packages: { dev: { legacyEnvNames: string[] } } };
 
 function loadDevConfig(extraEnv: Record<string, string> = {}): DevConfigSummary {
   const stdout = execFileSync(
@@ -261,15 +258,10 @@ describe('ecosystem.config.cjs', () => {
 
   it('keeps public Matrix corpus metadata in repo config and private material in the DEV package', () => {
     const packageEnvNames = SECRET_PACKAGE_MANIFEST.packages.dev.envNames;
-    const legacyEnvNames = SECRET_PACKAGE_SOURCES.packages.dev.legacyEnvNames;
 
     for (const name of MATRIX_CORPUS_SECRET_MANAGER_NAMES) {
       expect(
         packageEnvNames.filter((candidate) => candidate === name),
-        name
-      ).toHaveLength(1);
-      expect(
-        legacyEnvNames.filter((candidate) => candidate === name),
         name
       ).toHaveLength(1);
       expect(COMMON_RUNTIME_CONFIG[name], name).toBeUndefined();
@@ -277,12 +269,10 @@ describe('ecosystem.config.cjs', () => {
     for (const name of MATRIX_CORPUS_VERSIONED_CONFIG_NAMES) {
       expect(COMMON_RUNTIME_CONFIG[name], name).toBeDefined();
       expect(packageEnvNames, name).not.toContain(name);
-      expect(legacyEnvNames, name).not.toContain(name);
     }
     for (const name of MATRIX_CORPUS_RUNTIME_ONLY_NAMES) {
       expect(COMMON_RUNTIME_CONFIG[name], name).toBeUndefined();
       expect(packageEnvNames, name).not.toContain(name);
-      expect(legacyEnvNames, name).not.toContain(name);
     }
   });
 
@@ -442,7 +432,7 @@ describe('ecosystem.config.cjs', () => {
       names.indexOf('llm-usage-service')
     );
     expect(names.indexOf('message-digest-service')).toBeLessThan(names.indexOf('api-docs-hub'));
-    expect(names.indexOf('message-digest-service')).toBeLessThan(names.indexOf('web'));
+    expect(names).not.toContain('web');
   });
 
   it('does not inherit NODE_OPTIONS into PM2 service environments', () => {

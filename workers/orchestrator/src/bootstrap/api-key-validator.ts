@@ -5,7 +5,7 @@
  *   1. `validateWorkerApiKey(name, value)` — pure synchronous format check,
  *      throws on empty / whitespace-only values. Tested in isolation.
  *   2. `validateWorkerApiKeys(...)` — orchestrates live validation against
- *      upstream providers (Anthropic, OpenRouter, DashScope, etc.). It
+ *      OpenRouter. It
  *      *warns* but never throws, so a single provider outage never blocks
  *      the orchestrator from starting.
  */
@@ -225,10 +225,6 @@ export function logWorkerAuthStartupStatus(
 
 /** Third-party keys validated at startup (live network requests). */
 export interface WorkerApiKeysForValidation {
-  minimaxKey: string;
-  mimoKey: string;
-  dashscopeKey: string;
-  kimiKey: string;
   openRouterKey: string;
 }
 
@@ -276,22 +272,9 @@ export async function validateWorkerApiKeys(
     logger.warn({ state: codexState, _skipSentry: true }, 'Codex worker auth not ready at startup');
   }
 
-  // Validate all third-party API keys in parallel.
-  // GLM and Qwen use the DashScope API key; Kimi uses its own native Kimi Code key.
+  // OpenRouter is the only provider API used by code workers.
   /* v8 ignore start -- module-init: validateThirdPartyApiKey fan-out issues live HTTPS probes that cannot be exercised without real sockets; the inner function carries its own ignore and the per-key empty-guard branches short-circuit during unit tests before any network call @preserve */
   await Promise.all([
-    keys.minimaxKey !== ''
-      ? validateThirdPartyApiKey('minimax', keys.minimaxKey, logger)
-      : Promise.resolve(),
-    keys.mimoKey !== ''
-      ? validateThirdPartyApiKey('mimo-pro', keys.mimoKey, logger)
-      : Promise.resolve(),
-    keys.dashscopeKey !== ''
-      ? validateThirdPartyApiKey('qwen', keys.dashscopeKey, logger)
-      : Promise.resolve(),
-    keys.kimiKey !== ''
-      ? validateThirdPartyApiKey('kimi', keys.kimiKey, logger)
-      : Promise.resolve(),
     keys.openRouterKey !== ''
       ? validateThirdPartyApiKey('openrouter-free', keys.openRouterKey, logger)
       : Promise.resolve(),

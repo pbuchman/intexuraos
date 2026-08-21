@@ -4,14 +4,9 @@ export const WORKER_TYPE_METADATA: Record<CodeTaskWorkerType, { name: string; de
   auto: { name: 'Auto', description: 'Automatically select the best available model for the task' },
   opus: { name: 'Opus', description: 'Anthropic\'s most capable model for complex reasoning and coding tasks' },
   sonnet: { name: 'Sonnet', description: 'Anthropic\'s daily coding model with the best balance of speed and intelligence' },
-  minimax: { name: 'MiniMax', description: 'MiniMax\'s coding and agent model with strong reasoning at lower cost' },
-  'mimo-pro': { name: 'MiMo Pro 2.5', description: 'Xiaomi\'s MiMo Pro 2.5 reasoning model via Anthropic-compatible API' },
-  glm: { name: 'GLM', description: 'Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks' },
-  qwen: { name: 'Qwen', description: 'Advanced Qwen model with thinking enabled' },
-  kimi: { name: 'Kimi', description: 'Moonshot\'s latest recommended model with image understanding' },
   codex: { name: 'Codex', description: 'OpenAI Codex runtime for code-task execution with persisted thread resume' },
   'codex-xhigh': { name: 'Codex XHigh', description: 'High-effort Codex preset for deeper reviews, investigations, and complex implementation tasks' },
-  'openrouter-free': { name: 'OpenRouter Free', description: 'Free-tier model via OpenRouter (Qwen 3.6 Plus) with zero API cost' },
+  'openrouter-free': { name: 'OpenRouter Free', description: 'Free-tier code worker routed only through OpenRouter' },
 };
 
 export const WORKER_TYPE_LABELS: Record<CodeTaskWorkerType, string> = Object.fromEntries(

@@ -1,12 +1,18 @@
 # Secret Migration Status Report
 
+> **Execution authority:**
+> [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).
+> The owner-approved destructive cutover supersedes the rollback, compatibility,
+> soak, and delayed-cleanup gates recorded below. This report remains historical
+> evidence and must not be used as an execution runbook.
+
 Last updated: 2026-08-20 UTC
 
 This report records only non-secret operational metadata. It contains no
 credential values, package payloads, private-key material, reversible value
 fingerprints, rendered environment data, or private evidence paths.
 
-## Executive Status
+## Historical Executive Status
 
 The DEV and PROD package cutovers are complete on package version `2`.
 Production is healthy on the reviewed `development` release, and local,
@@ -77,7 +83,10 @@ cleanup is scheduled during the reversible soak with a connection canary.
 The broad admin count is exactly `2`; the removed custom Cloud Build accessor
 and removed technical-account admin both have live count `0`.
 
-## Required Later Work
+## Superseded Deferred Work
+
+The following table records the prior reversible strategy. Do not execute it;
+use the final cutover plan linked above.
 
 | Earliest gate | Required action | PASS condition | Why it is deferred |
 | --- | --- | --- | --- |
@@ -89,7 +98,10 @@ and removed technical-account admin both have live count `0`.
 | During the reversible soak | Reduce retained Cloud Build connection IAM to its exact secret-level dependency. | Connection remains complete, source-reference canary passes before and after, project-level Secret Manager admin count is zero, final plan is clean. | Requires separate Terraform adoption and an exact two-delete plan; it must not be mixed with container destruction. |
 | After every cleanup gate | Reconcile Terraform and documentation. | Clean full plans, full CI, current package/version/production attestations, no stale acceptance items. | Final closure must reflect live state rather than planned state. |
 
-## Explicitly Forbidden Shortcuts
+## Superseded Safety Constraints
+
+These constraints belonged to the prior rollback strategy and are retained only
+as historical evidence.
 
 - Do not delete the legacy containers during Phase A.
 - Do not delete the previous runtime key before its complete seven-day gate.
@@ -100,9 +112,6 @@ and removed technical-account admin both have live count `0`.
 - Do not treat an interrupted or shortened passive legacy-read window as a
   72-hour PASS.
 
-## Closure Definition
+## Superseded Closure Definition
 
-The migration is complete only when Firebase cleanup, both runtime-key delete
-gates, legacy Phase B, Cloud Build least-privilege cleanup, final clean
-Terraform plans, full CI, runtime health, audit evidence, and this report all
-agree with the live environment.
+The active completion definition is in the final cutover plan linked above.

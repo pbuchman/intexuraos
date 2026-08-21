@@ -190,7 +190,7 @@ Handled reliability-path noise is reduced in Sentry. Expected HTTP 4xx route log
 
 ### v3.6.0 Release
 
-Key changes since v3.5.0: Execution memory pipeline simplification (memory_acknowledgment downgraded to soft warning), robust memory_acknowledgment recovery for stalled code-review tasks, log cap raised to 8MB, the default task timeout extended to 5 hours with per-task overrides, StatusUpdateClient for redundant terminal status delivery, Docker RFC3339 timestamp stripping fix, validation model chain support for resume summaries and compliance review, mimo-pro worker type, test_quality review scope, inactivity restart tracking, and `retriedFrom` field on task schema.
+Key changes since v3.5.0: execution memory pipeline simplification, robust memory-acknowledgment recovery, an 8MB log cap, a five-hour default task timeout, redundant status delivery, validation model chain support, the `test_quality` review scope, inactivity restart tracking, and `retriedFrom` on the task schema.
 
 ### Execution Memory Pipeline Simplification (INT-1403)
 
@@ -206,7 +206,7 @@ The log forwarding cap was raised from 4MB to 8MB per task to prevent log trunca
 
 ### StatusUpdateClient (INT-1413)
 
-A new `StatusUpdateClient` commits terminal task status directly to code-agent via `PATCH /internal/code-tasks/:id/status` as a secondary delivery path alongside webhook-based completion. This provides redundancy when webhook delivery encounters transient network issues. The client uses the same HMAC signing scheme as the heartbeat manager, retries with exponential backoff (1s, 3s, 9s), and surfaces 4xx errors immediately without retry.
+A new `StatusUpdateClient` commits terminal task status directly to code-agent via `PATCH /internal/code-tasks/status` as a secondary delivery path alongside webhook-based completion. The body carries `taskId`. The client uses the same HMAC signing scheme as the heartbeat manager, retries with exponential backoff (1s, 3s, 9s), and surfaces 4xx errors immediately without retry.
 
 ### Docker RFC3339 Timestamp Stripping (INT-1411)
 
@@ -219,10 +219,6 @@ Resume-summary extraction and Agent Compliance Validation use the configured Ope
 ### Validation Client Usage Mapping (INT-1369)
 
 Validation model clients use `HttpWebhookUsageSink` for LLM usage reporting, sending usage data to code-agent via the usage webhook URL for cost tracking and analytics.
-
-### Worker Type Addition: mimo-pro
-
-Added `mimo-pro` worker type routing through Xiaomi MiMo Pro 2.5's Anthropic-compatible API at `token-plan-sgp.xiaomimimo.com/anthropic` with model `mimo-v2.5-pro`. Uses a dedicated `MIMO_API_KEY` credential validated at startup.
 
 ### Review Scope Addition: test_quality
 
@@ -275,7 +271,7 @@ Verification rejects requests with timestamps older than 5 minutes and replayed 
 ```typescript
 {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   prompt: string;
   repository?: string;
   baseBranch?: string;
@@ -343,7 +339,7 @@ stateDiagram-v2
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   runtime?: 'claude' | 'codex';
   runtimeSessionId?: string;
   prompt: string;
@@ -680,10 +676,6 @@ Collects per-task resource and token metrics after completion:
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
 | `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
 | `INTEXURAOS_ERROR_HUB_HOST`                 | Yes      | -                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
-| `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
-| `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
 | `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash` |

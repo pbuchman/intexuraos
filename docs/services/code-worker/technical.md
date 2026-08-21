@@ -202,20 +202,14 @@ Network: `code-worker-net` (dual-stack bridge driver, fixed Linux bridge `code-w
 
 ## Worker Types
 
-| Type              | Runtime  | API Base URL                                                | API Key Env Var       | Model Override           | Effort  |
-| ----------------- | -------- | ----------------------------------------------------------- | --------------------- | ------------------------ | ------- |
-| `auto`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | None                     | —       |
-| `opus`            | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `opus`                   | high    |
-| `sonnet`          | claude   | `https://api.anthropic.com`                                 | `ANTHROPIC_API_KEY`   | `sonnet`                 | —       |
-| `minimax`         | claude   | `https://api.minimax.io/anthropic`                          | `MINIMAX_API_KEY`     | `MiniMax-M3`             | —       |
-| `glm`             | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `glm-5`                  | —       |
-| `qwen`            | claude   | `https://coding-intl.dashscope.aliyuncs.com/apps/anthropic` | `DASHSCOPE_API_KEY`   | `qwen3.5-plus`           | —       |
-| `kimi`            | claude   | `https://api.kimi.com/coding`                               | `KIMI_API_KEY`        | `kimi-for-coding`        | high    |
-| `codex`           | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | —       |
-| `codex-xhigh`     | codex    | `https://api.openai.com`                                    | shared `auth.json`    | runtime default          | xhigh   |
-| `openrouter-free` | claude   | `https://openrouter.ai/api`                                 | `OPENROUTER_API_KEY`  | `qwen/qwen3.6-plus:free` | high    |
-
-GLM-5 and Qwen are accessed via Alibaba Cloud Model Studio (DashScope) and share `DASHSCOPE_API_KEY`. Kimi uses the native Kimi Code API with `KIMI_API_KEY` and the stable `kimi-for-coding` model ID.
+| Type              | Runtime | Authentication           | Model override           | Effort |
+| ----------------- | ------- | ------------------------ | ------------------------ | ------ |
+| `auto`            | claude  | Claude subscription      | runtime default          | —      |
+| `opus`            | claude  | Claude subscription      | `opus`                   | high   |
+| `sonnet`          | claude  | Claude subscription      | `sonnet`                 | —      |
+| `codex`           | codex   | Codex subscription       | runtime default          | —      |
+| `codex-xhigh`     | codex   | Codex subscription       | runtime default          | xhigh  |
+| `openrouter-free` | claude  | `OPENROUTER_API_KEY`     | `qwen/qwen3.6-plus:free` | high   |
 
 The `openrouter-free` type routes through OpenRouter's free tier with experimental betas disabled.
 

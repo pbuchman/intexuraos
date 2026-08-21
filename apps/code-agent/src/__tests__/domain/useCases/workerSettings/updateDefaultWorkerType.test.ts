@@ -42,14 +42,14 @@ describe('updateDefaultWorkerType use case', () => {
       userId: 'u1',
       field: 'defaultReviewWorkerType',
       label: 'review',
-      workerType: 'glm',
+      workerType: 'openrouter-free',
     });
 
     expect(result.ok).toBe(true);
     expect(repo.updateDefaultWorkerType).toHaveBeenCalledWith(
       'u1',
       'defaultReviewWorkerType',
-      'glm'
+      'openrouter-free'
     );
     expect(repo.clearDefaultWorkerType).not.toHaveBeenCalled();
   });

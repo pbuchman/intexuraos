@@ -100,11 +100,7 @@ and the DEV package's GitHub App PEM is rendered to a protected host path.
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`    | DEV projection            | Service-to-service auth                                                                                            |
 | `INTEXURAOS_LINEAR_API_KEY`         | DEV projection            | Linear API key (passed only to eligible workers)                                                                   |
 | `INTEXURAOS_ERROR_HUB_HOST`         | `.envrc.local`            | Private SentryBox `.ts.net:8443` host for workers                                                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`    | DEV projection            | MiniMax worker API key                                                                                             |
-| `INTEXURAOS_MIMO_APP_API_KEY`       | DEV projection            | MiMo worker API key                                                                                                |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`  | DEV projection            | Dashscope worker API key                                                                                           |
-| `INTEXURAOS_KIMI_APP_API_KEY`       | DEV projection            | Kimi Code worker API key                                                                                           |
-| `INTEXURAOS_OPENROUTER_APP_API_KEY` | DEV projection            | OpenRouter validation API key                                                                                      |
+| `INTEXURAOS_OPENROUTER_APP_API_KEY` | DEV projection            | OpenRouter worker and validation API key                                                                           |
 | `GITHUB_APP_PRIVATE_KEY_PATH`       | rendered DEV file         | Mode-`0600` GitHub App PEM path                                                                                    |
 | `GOOGLE_APPLICATION_CREDENTIALS`    | generator-fixed host path | `${HOME}/.config/intexuraos/home-orchestrator-sa-key.json`; dedicated Artifact Registry reader, never a DEV member |
 

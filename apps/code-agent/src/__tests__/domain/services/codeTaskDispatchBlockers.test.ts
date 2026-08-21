@@ -176,7 +176,7 @@ describe('classifyCodeTaskDispatchability', () => {
     },
     {
       name: 'provider auth unavailable',
-      workerType: 'glm',
+      workerType: 'openrouter-free',
       workers: [worker('home-dev')],
       health: {
         'home-dev': healthy({

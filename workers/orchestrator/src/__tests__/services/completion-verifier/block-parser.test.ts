@@ -456,7 +456,7 @@ describe('verifyCompletion summary boundaries', () => {
     const verdict = verifyCompletion({
       transcript,
       agentType: 'review',
-      workerType: 'kimi',
+      workerType: 'openrouter-free',
       executionMemoryContext: undefined,
       lastExitCode: undefined,
     });

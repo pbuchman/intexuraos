@@ -4,8 +4,6 @@ import { constants, closeSync, fstatSync, lstatSync, openSync, readFileSync } fr
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  crc32c,
-  crc32cBase64,
   createGcloudSecretManagerAdapter,
   fetchSecretPackage,
   loadSecretPackageManifest,
@@ -25,19 +23,8 @@ const DEFAULT_SOURCES_PATH = resolve(
 );
 const ENVIRONMENTS = ['dev', 'prod'];
 const ENVIRONMENT_SET = new Set(ENVIRONMENTS);
-const SOURCE_MANIFEST_KEYS = ['legacySecretVersions', 'packages', 'schemaVersion'];
-const SOURCE_PACKAGE_KEYS = [
-  'basePackageSecretId',
-  'externalEnvFiles',
-  'externalFiles',
-  'legacyEnvNames',
-  'legacyFiles',
-];
-const EXTERNAL_INPUT_OPTIONS = [
-  'cloudflare-dns-api-token-file',
-  'firebase-api-key-file',
-  'runtime-gcp-service-account-file',
-];
+const SOURCE_MANIFEST_KEYS = ['packages', 'schemaVersion'];
+const SOURCE_PACKAGE_KEYS = ['basePackageSecretId'];
 const COMMON_CLI_OPTIONS = [
   'base-version',
   'environment',
@@ -48,25 +35,7 @@ const COMMON_CLI_OPTIONS = [
 ];
 const REPEATABLE_CLI_OPTIONS = ['override-env', 'override-file'];
 const PROJECT_ID_PATTERN = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u;
-const ENV_NAME_PATTERN = /^INTEXURAOS_[A-Z0-9_]+$/u;
-const FILE_MEMBER_PATTERN = /^[a-z][A-Za-z0-9]+Base64$/u;
-const CLI_OPTION_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*-file$/u;
 const MAX_SOURCE_BYTES = 65_536;
-const EXPECTED_EXTERNAL_ENV_FILES = {
-  dev: { INTEXURAOS_FIREBASE_API_KEY: 'firebase-api-key-file' },
-  prod: { INTEXURAOS_FIREBASE_API_KEY: 'firebase-api-key-file' },
-};
-const EXPECTED_EXTERNAL_FILES = {
-  dev: {},
-  prod: {
-    cloudflareDnsApiTokenBase64: 'cloudflare-dns-api-token-file',
-    runtimeGcpServiceAccountJsonBase64: 'runtime-gcp-service-account-file',
-  },
-};
-const EXPECTED_LEGACY_FILES = {
-  dev: { githubAppPrivateKeyPemBase64: 'INTEXURAOS_GITHUB_APP_PRIVATE_KEY' },
-  prod: { tlsPrivateKeyPemBase64: 'INTEXURAOS_SSL_PRIVATE_KEY' },
-};
 
 /**
  * Load and validate the tracked, non-secret candidate-source manifest.
@@ -101,28 +70,12 @@ export function validateSecretPackageSources(candidate, manifestCandidate) {
   const manifest = validateSecretPackageManifest(manifestCandidate);
   assertPlainObject(candidate, 'must be an object');
   assertExactKeys(candidate, SOURCE_MANIFEST_KEYS, 'has invalid top-level keys');
-  if (candidate.schemaVersion !== 2) {
+  if (candidate.schemaVersion !== 3) {
     throw sourceManifestError('schemaVersion is unsupported');
-  }
-
-  assertPlainObject(candidate.legacySecretVersions, 'legacy versions must be an object');
-  const legacyVersionNames = Object.keys(candidate.legacySecretVersions);
-  assertSortedUnique(legacyVersionNames, 'legacy version names');
-  const legacySecretVersions = {};
-  for (const secretId of legacyVersionNames) {
-    if (!ENV_NAME_PATTERN.test(secretId)) {
-      throw sourceManifestError('legacy version map contains an invalid secret ID');
-    }
-    const version = candidate.legacySecretVersions[secretId];
-    if (!Number.isSafeInteger(version) || version < 1) {
-      throw sourceManifestError('legacy versions must be exact positive numeric versions');
-    }
-    legacySecretVersions[secretId] = version;
   }
 
   assertPlainObject(candidate.packages, 'packages must be an object');
   assertExactKeys(candidate.packages, ENVIRONMENTS, 'must define exactly dev and prod');
-  const referencedLegacySecrets = new Set();
   const packages = {};
 
   for (const environment of ENVIRONMENTS) {
@@ -134,110 +87,22 @@ export function validateSecretPackageSources(candidate, manifestCandidate) {
       throw sourceManifestError(`${environment} base package container is invalid`);
     }
 
-    const legacyEnvNames = readSortedNames(
-      definition.legacyEnvNames,
-      `${environment} legacy env names`
-    );
-    const externalEnvFiles = readStringMap(
-      definition.externalEnvFiles,
-      ENV_NAME_PATTERN,
-      `${environment} external env files`
-    );
-    const legacyFiles = readStringMap(
-      definition.legacyFiles,
-      FILE_MEMBER_PATTERN,
-      `${environment} legacy files`
-    );
-    const externalFiles = readStringMap(
-      definition.externalFiles,
-      FILE_MEMBER_PATTERN,
-      `${environment} external files`
-    );
-
-    assertExactMap(
-      externalEnvFiles,
-      EXPECTED_EXTERNAL_ENV_FILES[environment],
-      `${environment} external env mapping is invalid`
-    );
-    assertExactMap(
-      legacyFiles,
-      EXPECTED_LEGACY_FILES[environment],
-      `${environment} legacy file mapping is invalid`
-    );
-    assertExactMap(
-      externalFiles,
-      EXPECTED_EXTERNAL_FILES[environment],
-      `${environment} external file mapping is invalid`
-    );
-
-    const externalEnvNames = Object.keys(externalEnvFiles);
-    const envNames = [...legacyEnvNames, ...externalEnvNames].sort();
-    if (!sameItems(envNames, packageDefinition.envNames)) {
-      throw sourceManifestError(`${environment} env source coverage does not match the package`);
-    }
-    if (legacyEnvNames.some((name) => externalEnvNames.includes(name))) {
-      throw sourceManifestError(`${environment} env source classifications overlap`);
-    }
-
-    const legacyFileNames = Object.keys(legacyFiles);
-    const externalFileNames = Object.keys(externalFiles);
-    const fileNames = [...legacyFileNames, ...externalFileNames].sort();
-    if (!sameItems(fileNames, packageDefinition.files)) {
-      throw sourceManifestError(`${environment} file source coverage does not match the package`);
-    }
-    if (legacyFileNames.some((name) => externalFileNames.includes(name))) {
-      throw sourceManifestError(`${environment} file source classifications overlap`);
-    }
-
-    for (const envName of legacyEnvNames) {
-      if (!Object.hasOwn(legacySecretVersions, envName)) {
-        throw sourceManifestError(`${environment} legacy env source has no numeric version`);
-      }
-      referencedLegacySecrets.add(envName);
-    }
-    for (const secretId of Object.values(legacyFiles)) {
-      if (!ENV_NAME_PATTERN.test(secretId) || !Object.hasOwn(legacySecretVersions, secretId)) {
-        throw sourceManifestError(`${environment} legacy file source has no numeric version`);
-      }
-      referencedLegacySecrets.add(secretId);
-    }
-
-    const externalOptions = [...Object.values(externalEnvFiles), ...Object.values(externalFiles)];
-    if (
-      new Set(externalOptions).size !== externalOptions.length ||
-      externalOptions.some(
-        (option) => !CLI_OPTION_PATTERN.test(option) || !EXTERNAL_INPUT_OPTIONS.includes(option)
-      )
-    ) {
-      throw sourceManifestError(`${environment} external input options are invalid`);
-    }
-
     packages[environment] = {
       basePackageSecretId: definition.basePackageSecretId,
-      legacyEnvNames,
-      externalEnvFiles,
-      legacyFiles,
-      externalFiles,
     };
   }
 
-  if (!sameItems([...referencedLegacySecrets].sort(), legacyVersionNames)) {
-    throw sourceManifestError('legacy version map has missing or unused sources');
-  }
-
-  return { schemaVersion: 2, legacySecretVersions, packages };
+  return { schemaVersion: 3, packages };
 }
 
 /**
- * Build one complete package payload from exact legacy sources, from one exact
- * base-package version plus explicit member overrides, or from the complete
- * authoritative private-file set during lost-container recovery.
+ * Build one complete package payload from one exact base-package version plus
+ * explicit member overrides, or from one complete explicit member set.
  *
  * @param {{
  *   adapter?: { accessVersion: Function },
  *   baseVersion?: number | string,
  *   environment: 'dev' | 'prod',
- *   externalInputs?: Record<string, Buffer | Uint8Array>,
  *   manifest?: ReturnType<typeof validateSecretPackageManifest>,
  *   overrides?: {
  *     env?: Record<string, Buffer | Uint8Array>,
@@ -257,12 +122,8 @@ export async function buildSecretPackageCandidate(options) {
     : loadSecretPackageSources({ manifest });
   const projectId = readProjectId(options?.projectId);
 
-  const sourceDefinition = sources.packages[environment];
   const packageDefinition = manifest.packages[environment];
   if (options?.baseVersion !== undefined) {
-    if (options.externalInputs !== undefined) {
-      throw new Error('Secret package candidate cannot mix base-package and legacy inputs');
-    }
     requireAccessAdapter(options?.adapter);
     const baseVersion = readExactNumericVersion(options.baseVersion);
     const overrides = validateOverrides(options.overrides, packageDefinition);
@@ -292,17 +153,12 @@ export async function buildSecretPackageCandidate(options) {
       metadata,
       sourceMode: 'base-package',
       baseVersion,
-      legacySourceCount: 0,
-      externalSourceCount: 0,
       overrideEnvCount: Object.keys(overrides.env).length,
       overrideFileCount: Object.keys(overrides.files).length,
     };
   }
   if (options?.overrides !== undefined) {
-    if (options.externalInputs !== undefined) {
-      throw new Error('Secret package candidate cannot mix full recovery and legacy inputs');
-    }
-    const overrides = validateFullRecoveryOverrides(options.overrides, packageDefinition);
+    const overrides = validateFullExplicitOverrides(options.overrides, packageDefinition);
     const env = Object.fromEntries(
       packageDefinition.envNames.map((name) => [
         name,
@@ -317,57 +173,14 @@ export async function buildSecretPackageCandidate(options) {
     return {
       payload,
       metadata,
-      sourceMode: 'full-recovery',
-      legacySourceCount: 0,
-      externalSourceCount: 0,
+      sourceMode: 'full-explicit',
       overrideEnvCount: Object.keys(overrides.env).length,
       overrideFileCount: Object.keys(overrides.files).length,
     };
   }
-  requireAccessAdapter(options?.adapter);
-  const externalInputs = validateExternalInputs(options?.externalInputs, sourceDefinition);
-  const legacyCache = new Map();
-  const readLegacy = async (secretId) => {
-    if (legacyCache.has(secretId)) return legacyCache.get(secretId);
-    const data = await accessLegacyVersion({
-      adapter: options.adapter,
-      projectId,
-      secretId,
-      version: sources.legacySecretVersions[secretId],
-    });
-    legacyCache.set(secretId, data);
-    return data;
-  };
-
-  const env = {};
-  for (const name of packageDefinition.envNames) {
-    if (Object.hasOwn(sourceDefinition.externalEnvFiles, name)) {
-      env[name] = decodeEnvUtf8(
-        externalInputs[sourceDefinition.externalEnvFiles[name]],
-        'external env input'
-      );
-    } else {
-      env[name] = decodeEnvUtf8(await readLegacy(name), 'legacy env source');
-    }
-  }
-
-  const files = {};
-  for (const name of packageDefinition.files) {
-    const data = Object.hasOwn(sourceDefinition.externalFiles, name)
-      ? externalInputs[sourceDefinition.externalFiles[name]]
-      : await readLegacy(sourceDefinition.legacyFiles[name]);
-    files[name] = data.toString('base64');
-  }
-
-  const payload = { schemaVersion: 1, environment, env, files };
-  const metadata = validateSecretPackagePayload({ environment, manifest, payload });
-  return {
-    payload,
-    metadata,
-    sourceMode: 'legacy',
-    legacySourceCount: legacyCache.size,
-    externalSourceCount: Object.keys(externalInputs).length,
-  };
+  throw new Error(
+    'Secret package candidate requires --base-version or the complete explicit member set'
+  );
 }
 
 /**
@@ -385,7 +198,7 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
   const stdout = dependencies.stdout ?? ((line) => process.stdout.write(`${line}\n`));
   if (argv.length === 1 && argv[0] === '--help') {
     stdout(
-      'Usage: build-secret-package.mjs --environment dev|prod --project-id ID --output FILE (--firebase-api-key-file FILE [...] | --base-version N (--override-env NAME=FILE | --override-file NAME=FILE) [...] | complete --override-env/--override-file member set)'
+      'Usage: build-secret-package.mjs --environment dev|prod --project-id ID --output FILE (--base-version N with optional --override-env/--override-file entries, or the complete explicit --override-env/--override-file member set)'
     );
     return 0;
   }
@@ -406,19 +219,12 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
       });
   const environment = readEnvironment(cliOptions.environment);
   const packageDefinition = manifest.packages[environment];
-  const externalOptionNames = requiredExternalOptionNames(sources.packages[environment]);
-  const suppliedExternalOptionNames = EXTERNAL_INPUT_OPTIONS.filter(
-    (name) => cliOptions[name] !== undefined
-  );
   const baseMode = cliOptions['base-version'] !== undefined;
   const overrideMode =
     (cliOptions['override-env']?.length ?? 0) > 0 || (cliOptions['override-file']?.length ?? 0) > 0;
   const adapter = dependencies.adapter ?? createGcloudSecretManagerAdapter();
   let result;
   if (baseMode) {
-    if (suppliedExternalOptionNames.length > 0) {
-      throw new Error('Secret package candidate cannot mix base-package and legacy inputs');
-    }
     const overrides = {
       env: readCliOverrides(cliOptions['override-env'], packageDefinition.envNames, 'env'),
       files: readCliOverrides(cliOptions['override-file'], packageDefinition.files, 'file'),
@@ -433,9 +239,6 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
       sources,
     });
   } else if (overrideMode) {
-    if (suppliedExternalOptionNames.length > 0) {
-      throw new Error('Secret package candidate cannot mix full recovery and legacy inputs');
-    }
     const overrides = {
       env: readCliOverrides(cliOptions['override-env'], packageDefinition.envNames, 'env'),
       files: readCliOverrides(cliOptions['override-file'], packageDefinition.files, 'file'),
@@ -448,20 +251,9 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
       sources,
     });
   } else {
-    if (!sameItems([...suppliedExternalOptionNames].sort(), externalOptionNames)) {
-      throw new Error('Secret package candidate requires the exact external input file set');
-    }
-    const externalInputs = Object.fromEntries(
-      externalOptionNames.map((name) => [name, readPrivateInput(cliOptions[name])])
+    throw new Error(
+      'Secret package candidate requires --base-version or the complete explicit member set'
     );
-    result = await buildSecretPackageCandidate({
-      adapter,
-      environment,
-      externalInputs,
-      manifest,
-      projectId: cliOptions['project-id'],
-      sources,
-    });
   }
   const output = resolve(cliOptions.output);
   writeSecretPackagePayload(output, result.payload, packageDefinition);
@@ -473,9 +265,7 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
       byteLength: result.metadata.byteLength,
       crc32c: result.metadata.crc32c,
       sourceMode: result.sourceMode,
-      legacySourceCount: result.legacySourceCount,
-      externalSourceCount: result.externalSourceCount,
-      ...(['base-package', 'full-recovery'].includes(result.sourceMode)
+      ...(['base-package', 'full-explicit'].includes(result.sourceMode)
         ? {
             ...(result.baseVersion === undefined ? {} : { baseVersion: result.baseVersion }),
             overrideEnvCount: result.overrideEnvCount,
@@ -488,11 +278,7 @@ export async function runBuildSecretPackageCli(argv, dependencies = {}) {
 }
 
 function parseArguments(argv) {
-  const allowedOptions = new Set([
-    ...COMMON_CLI_OPTIONS,
-    ...EXTERNAL_INPUT_OPTIONS,
-    ...REPEATABLE_CLI_OPTIONS,
-  ]);
+  const allowedOptions = new Set([...COMMON_CLI_OPTIONS, ...REPEATABLE_CLI_OPTIONS]);
   const options = {};
   for (let index = 0; index < argv.length; index += 2) {
     const token = argv[index];
@@ -528,60 +314,6 @@ function parseArguments(argv) {
   return options;
 }
 
-async function accessLegacyVersion({ adapter, projectId, secretId, version }) {
-  if (!Number.isSafeInteger(version) || version < 1) {
-    throw new Error('Secret package candidate legacy version is not numeric');
-  }
-  let response;
-  try {
-    response = await adapter.accessVersion({
-      projectId,
-      secretId,
-      version: String(version),
-    });
-  } catch {
-    throw new Error(`Secret package candidate could not read legacy source ${secretId}`);
-  }
-  if (!isPlainObject(response)) {
-    throw new Error(`Secret package candidate legacy source response is invalid for ${secretId}`);
-  }
-  const data = toBuffer(response.data);
-  if (data.byteLength === 0 || data.byteLength > MAX_SOURCE_BYTES) {
-    throw new Error(`Secret package candidate legacy source size is invalid for ${secretId}`);
-  }
-  if (!checksumMatches(response.dataCrc32c, data)) {
-    throw new Error(`Secret package candidate legacy source CRC32C failed for ${secretId}`);
-  }
-  return data;
-}
-
-function checksumMatches(expected, data) {
-  if (typeof expected === 'bigint') return expected === BigInt(crc32c(data));
-  if (typeof expected === 'number' && Number.isSafeInteger(expected)) {
-    return expected === crc32c(data);
-  }
-  if (typeof expected === 'string') return expected === crc32cBase64(data);
-  return false;
-}
-
-function validateExternalInputs(candidate, sourceDefinition) {
-  assertPlainObjectCandidate(candidate, 'external inputs must be an object');
-  const expectedNames = requiredExternalOptionNames(sourceDefinition);
-  const actualNames = Object.keys(candidate).sort();
-  if (!sameItems(actualNames, expectedNames)) {
-    throw new Error('Secret package candidate is missing a required external input');
-  }
-  return Object.fromEntries(
-    expectedNames.map((name) => {
-      const data = toBuffer(candidate[name]);
-      if (data.byteLength === 0 || data.byteLength > MAX_SOURCE_BYTES) {
-        throw new Error('Secret package candidate external input size is invalid');
-      }
-      return [name, data];
-    })
-  );
-}
-
 function validateOverrides(candidate, packageDefinition) {
   assertPlainObjectCandidate(candidate, 'overrides must be an object');
   if (
@@ -602,13 +334,13 @@ function validateOverrides(candidate, packageDefinition) {
   return { env, files };
 }
 
-function validateFullRecoveryOverrides(candidate, packageDefinition) {
+function validateFullExplicitOverrides(candidate, packageDefinition) {
   const overrides = validateOverrides(candidate, packageDefinition);
   if (!sameItems(Object.keys(overrides.env), packageDefinition.envNames)) {
-    throw new Error('Secret package candidate full recovery requires the exact env member set');
+    throw new Error('Secret package candidate explicit build requires the exact env member set');
   }
   if (!sameItems(Object.keys(overrides.files), packageDefinition.files)) {
-    throw new Error('Secret package candidate full recovery requires the exact file member set');
+    throw new Error('Secret package candidate explicit build requires the exact file member set');
   }
   return overrides;
 }
@@ -659,13 +391,6 @@ function readCliOverrides(specifications, allowedNames, kind) {
   );
 }
 
-function requiredExternalOptionNames(sourceDefinition) {
-  return [
-    ...Object.values(sourceDefinition.externalEnvFiles),
-    ...Object.values(sourceDefinition.externalFiles),
-  ].sort();
-}
-
 function readPrivateInput(path) {
   if (typeof path !== 'string' || path.length === 0 || path.includes('\0')) {
     throw new Error('Secret package candidate input must be a private regular file');
@@ -702,11 +427,8 @@ function readPrivateInput(path) {
 
 function decodeEnvUtf8(data, label) {
   try {
-    // The legacy shell loaders used command substitution, which removes every
-    // trailing line ending produced by `gcloud secrets versions access` while
-    // preserving the actual value. Keep that runtime behavior during package
-    // consolidation, but leave embedded line breaks for the payload validator
-    // to reject as malformed env material.
+    // Env members are single-line strings; explicit trailing line endings from
+    // private input files are not part of the runtime value.
     const value = new TextDecoder('utf-8', { fatal: true }).decode(data).replace(/[\r\n]+$/u, '');
     if (value.length === 0) throw new Error('empty');
     return value;
@@ -739,43 +461,6 @@ function readExactNumericVersion(version) {
     throw new Error('Secret package candidate base must use an exact positive numeric version');
   }
   return value;
-}
-
-function readSortedNames(candidate, label) {
-  if (
-    !Array.isArray(candidate) ||
-    candidate.some((name) => typeof name !== 'string' || !ENV_NAME_PATTERN.test(name))
-  ) {
-    throw sourceManifestError(`${label} are invalid`);
-  }
-  assertSortedUnique(candidate, label);
-  return [...candidate];
-}
-
-function readStringMap(candidate, keyPattern, label) {
-  assertPlainObject(candidate, `${label} must be an object`);
-  const keys = Object.keys(candidate);
-  assertSortedUnique(keys, `${label} keys`);
-  const entries = keys.map((key) => {
-    const value = candidate[key];
-    if (!keyPattern.test(key) || typeof value !== 'string') {
-      throw sourceManifestError(`${label} contains an invalid mapping`);
-    }
-    return [key, value];
-  });
-  return Object.fromEntries(entries);
-}
-
-function assertExactMap(actual, expected, message) {
-  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-    throw sourceManifestError(message);
-  }
-}
-
-function assertSortedUnique(values, label) {
-  if (new Set(values).size !== values.length || !sameItems(values, [...values].sort())) {
-    throw sourceManifestError(`${label} must be sorted and unique`);
-  }
 }
 
 function assertExactKeys(candidate, expected, message) {

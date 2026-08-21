@@ -587,7 +587,7 @@ const testRunSafeToolFactJsonSchema = closedJsonObject(['name', 'value'], ['name
       { type: 'boolean' },
       {
         type: 'string',
-        enum: ['list', 'count', 'codex', 'codex-xhigh', 'minimax', 'planning', 'execution'],
+        enum: ['list', 'count', 'codex', 'codex-xhigh', 'openrouter-free', 'planning', 'execution'],
       },
     ],
   },
@@ -630,7 +630,7 @@ const testRunSafeExpectedToolFactJsonSchema = closedJsonObject(
         { type: 'boolean' },
         {
           type: 'string',
-          enum: ['list', 'count', 'codex', 'codex-xhigh', 'minimax', 'planning', 'execution'],
+          enum: ['list', 'count', 'codex', 'codex-xhigh', 'openrouter-free', 'planning', 'execution'],
         },
       ],
     },
@@ -1389,7 +1389,7 @@ const safeToolFactJsonSchema = closedJsonObject(
         { type: 'boolean' },
         {
           type: 'string',
-          enum: ['list', 'count', 'codex', 'codex-xhigh', 'minimax', 'planning', 'execution'],
+          enum: ['list', 'count', 'codex', 'codex-xhigh', 'openrouter-free', 'planning', 'execution'],
         },
       ],
     },

@@ -27,13 +27,7 @@ export type WorkerType = CodeTaskWorkerType;
 export interface WorkerTypeConfig {
   runtime: WorkerRuntime;
   apiBaseUrl: string;
-  apiKeyEnvVar?:
-    | 'ANTHROPIC_API_KEY'
-    | 'MINIMAX_API_KEY'
-    | 'MIMO_API_KEY'
-    | 'DASHSCOPE_API_KEY'
-    | 'KIMI_API_KEY'
-    | 'OPENROUTER_API_KEY';
+  apiKeyEnvVar?: 'ANTHROPIC_API_KEY' | 'OPENROUTER_API_KEY';
   model?: string;
   effort?: 'low' | 'medium' | 'high' | 'max' | 'xhigh';
   disableExperimentalBetas?: boolean;
@@ -68,42 +62,6 @@ export const WORKER_TYPES: Record<WorkerType, WorkerTypeConfig> = {
     model: 'sonnet',
     telemetryExpectation: 'required',
   },
-  minimax: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://api.minimax.io/anthropic',
-    apiKeyEnvVar: 'MINIMAX_API_KEY',
-    model: 'MiniMax-M3',
-    telemetryExpectation: 'optional',
-  },
-  'mimo-pro': {
-    runtime: 'claude',
-    apiBaseUrl: 'https://token-plan-sgp.xiaomimimo.com/anthropic',
-    apiKeyEnvVar: 'MIMO_API_KEY',
-    model: 'mimo-v2.5-pro',
-    telemetryExpectation: 'optional',
-  },
-  glm: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'glm-5',
-    telemetryExpectation: 'optional',
-  },
-  qwen: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://coding-intl.dashscope.aliyuncs.com/apps/anthropic',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    model: 'qwen3.5-plus',
-    telemetryExpectation: 'optional',
-  },
-  kimi: {
-    runtime: 'claude',
-    apiBaseUrl: 'https://api.kimi.com/coding',
-    apiKeyEnvVar: 'KIMI_API_KEY',
-    model: 'kimi-for-coding',
-    effort: 'high',
-    telemetryExpectation: 'optional',
-  },
   codex: {
     runtime: 'codex',
     apiBaseUrl: 'https://api.openai.com',
@@ -131,10 +89,6 @@ export interface WorkerSecrets {
   LINEAR_API_KEY: string;
   /** Non-secret private routing target, carried with the worker environment values. */
   ERROR_HUB_HOST: string;
-  MINIMAX_API_KEY: string;
-  MIMO_API_KEY: string;
-  DASHSCOPE_API_KEY: string;
-  KIMI_API_KEY: string;
   OPENROUTER_API_KEY: string;
 }
 

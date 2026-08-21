@@ -57,7 +57,7 @@ describe('taskAdminRoutes (internal) via buildServer', () => {
       prompt: 'Do the thing',
       sanitizedPrompt: 'Do the thing',
       systemPromptHash: 'hash-1',
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       workerLocation: 'home-mac',
       repository: 'intexuraos/test',
       baseBranch: 'main',

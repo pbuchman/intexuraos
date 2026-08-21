@@ -4,20 +4,19 @@
 
 Design doc — not yet implemented.
 
-This builds on **INT-1531** (Phase 1: shared HTTP client primitive, Google OIDC verifier
-for Cloud Scheduler ingress, dual-token rotation for `INTEXURAOS_INTERNAL_AUTH_TOKEN`).
+This builds on **INT-1531** (Phase 1: shared HTTP client primitive and Google OIDC
+verifier for Cloud Scheduler ingress).
 Phase 2 is the long-term target architecture.
 
 ## Context
 
-After INT-1531, internal service-to-service auth uses **two** mechanisms:
+Internal service-to-service auth uses **two** mechanisms:
 
 1. **Cloud Scheduler → service** — verified Google OIDC bearer
    (`createGoogleOidcVerifier({ audience: <own Cloud Run URL> })`).
-2. **Service → service** — static `X-Internal-Auth` shared secret with optional
-   PREVIOUS token for zero-downtime rotation
-   (`validateInternalAuth` reads `INTEXURAOS_INTERNAL_AUTH_TOKEN` and
-   `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS`).
+2. **Service → service** — one static `X-Internal-Auth` shared secret
+   (`validateInternalAuth` reads only `INTEXURAOS_INTERNAL_AUTH_TOKEN`). Rotation is
+   an offline hard cutover with no fallback token.
 
 Even with rotation, the shared secret is a **single point of failure**:
 
@@ -36,8 +35,7 @@ URL. Each callee verifies the token using the existing
 After full migration:
 
 - Delete the `X-Internal-Auth` header.
-- Delete `validateInternalAuth` and `INTEXURAOS_INTERNAL_AUTH_TOKEN` /
-  `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` from Secret Manager.
+- Delete `validateInternalAuth` and `INTEXURAOS_INTERNAL_AUTH_TOKEN` from Secret Manager.
 - Per-service IAM (`roles/run.invoker`) becomes the authoritative allow-list:
   caller A is granted `run.invoker` on callee B only when A is allowed to call B.
 
@@ -108,9 +106,7 @@ Once every call site has been on `oidc` for >= 2 weeks with zero rejection logs:
 
 1. Remove `validateInternalAuth` from every route's auth chain (replace with
    `createGoogleOidcVerifier`).
-2. Delete the `INTEXURAOS_INTERNAL_AUTH_TOKEN` and
-   `INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS` secrets from Secret Manager and
-   Terraform.
+2. Delete `INTEXURAOS_INTERNAL_AUTH_TOKEN` from Secret Manager and Terraform.
 3. Delete the env vars from `apps/*/src/index.ts` `REQUIRED_ENV` arrays and
    from `ecosystem.config.cjs`.
 4. Delete the `X-Internal-Auth` header logic from `createInternalHttpClient`.

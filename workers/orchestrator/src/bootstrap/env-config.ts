@@ -48,10 +48,6 @@ export interface BootstrapEnvConfig {
   preserveWorkerContainers: boolean;
   linearApiKey: string;
   errorHubHost: string;
-  minimaxApiKey: string;
-  mimoApiKey: string;
-  dashscopeApiKey: string;
-  kimiApiKey: string;
   openRouterApiKey: string;
   gitUserNameOverride?: string;
   gitUserEmailOverride?: string;
@@ -214,10 +210,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     getOptionalEnv('INTEXURAOS_PRESERVE_WORKER_CONTAINERS', '1', env) !== '0';
 
   const linearApiKey = getRequiredEnv('INTEXURAOS_LINEAR_API_KEY', env);
-  const minimaxApiKey = getRequiredEnv('INTEXURAOS_MINIMAX_APP_API_KEY', env);
-  const mimoApiKey = getRequiredEnv('INTEXURAOS_MIMO_APP_API_KEY', env);
-  const dashscopeApiKey = getRequiredEnv('INTEXURAOS_DASHSCOPE_APP_API_KEY', env);
-  const kimiApiKey = getRequiredEnv('INTEXURAOS_KIMI_APP_API_KEY', env);
   const openRouterApiKey = getRequiredEnv('INTEXURAOS_OPENROUTER_APP_API_KEY', env);
 
   const logLevel = getOptionalEnv('LOG_LEVEL', 'info', env);
@@ -265,10 +257,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     preserveWorkerContainers,
     linearApiKey,
     errorHubHost,
-    minimaxApiKey,
-    mimoApiKey,
-    dashscopeApiKey,
-    kimiApiKey,
     openRouterApiKey,
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
     ...(gitUserEmailOverride !== undefined ? { gitUserEmailOverride } : {}),

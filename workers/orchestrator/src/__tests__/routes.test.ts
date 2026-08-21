@@ -99,8 +99,6 @@ describe('Routes', () => {
       workerAuthRegistry,
       isolationProvider,
       {
-        MINIMAX_API_KEY: { configured: true },
-        DASHSCOPE_API_KEY: { configured: false },
       }
     );
     await app.ready();
@@ -549,7 +547,7 @@ describe('Routes', () => {
     it('forwards documentation reviewTypes to dispatcher.submitTask', async () => {
       const payload = {
         taskId: 'task_00000000-0000-0000-0000-00000000d0c5',
-        workerType: 'mimo-pro',
+        workerType: 'openrouter-free',
         prompt: 'Review documentation changes',
         webhookUrl: 'https://intexuraos.cloud/api/code/internal/task-hook',
         webhookSecret: 'sec',
@@ -797,8 +795,6 @@ describe('Routes', () => {
         refreshSupported: true,
       });
       expect(json.providerApiKeys).toEqual({
-        MINIMAX_API_KEY: { configured: true },
-        DASHSCOPE_API_KEY: { configured: false },
       });
     });
 

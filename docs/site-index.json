@@ -676,13 +676,19 @@
       "path": "operations/secret-packages.md",
       "title": "Secret Packages Operations",
       "category": "operations",
-      "description": "Atomic DEV/PROD secret package publication, promotion, rotation, rollback, audit, and recovery"
+      "description": "One-shot DEV/PROD package publication, rendering, rotation, and verification"
     },
     {
       "path": "operations/secret-migration-status-report.md",
       "title": "Secret Migration Status Report",
       "category": "operations",
-      "description": "Non-secret completed evidence, active cleanup status, deferred gates, and closure criteria"
+      "description": "Historical non-secret evidence for the secret migration and superseded reversible cleanup gates"
+    },
+    {
+      "path": "operations/secret-exposure-final-cutover-plan.md",
+      "title": "Secret Exposure Final Cutover Plan",
+      "category": "operations",
+      "description": "Authoritative destructive plan for public-secret remediation and final migration cleanup"
     },
     {
       "path": "operations/runtime-configuration.md",
@@ -694,13 +700,7 @@
       "path": "operations/hetzner-prod-runbook.md",
       "title": "Hetzner Production Runtime Runbook",
       "category": "operations",
-      "description": "Production bootstrap, exact-version package cutover, verification, and rollback"
-    },
-    {
-      "path": "operations/runtime-secret-manager-cleanup.md",
-      "title": "Runtime Secret Manager Cleanup — Historical / Completed",
-      "category": "operations",
-      "description": "Historical record of the completed individual-secret cleanup; not an active runbook"
+      "description": "Manual exact-SHA production deployment, one-shot package loading, and fix-forward verification"
     },
     {
       "path": "runbooks/internal-auth-rotation.md",

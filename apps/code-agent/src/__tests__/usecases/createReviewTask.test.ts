@@ -442,7 +442,7 @@ describe('createReviewTask', () => {
     const successorTask = createReviewTaskRecord({
       id: buildReviewTaskId(eventId),
       traceId: eventId,
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
     });
     let successorCreated = false;
     const findActiveReviewForPR = vi.fn().mockResolvedValue(ok(runningTask));
@@ -473,14 +473,14 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['code_quality'],
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       eventId,
     });
 
     expect(result).toEqual(ok({
       status: 'queued',
       taskId: successorTask.id,
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
     }));
     expect(findActiveReviewForPR).not.toHaveBeenCalled();
     expect(codeTaskRepo.create).toHaveBeenCalledWith(
@@ -504,7 +504,7 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       eventId: 'evt-worker-type-result',
     });
 
@@ -514,7 +514,7 @@ describe('createReviewTask', () => {
     expect(result.value).toEqual({
       status: 'queued',
       taskId: buildReviewTaskId('evt-worker-type-result'),
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
     });
   });
 
@@ -585,14 +585,14 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       eventId: 'evt-worker-type',
     });
 
     const createCall = vi.mocked(deps.codeTaskRepo.create).mock.calls[0];
     expect(createCall).toBeDefined();
     if (createCall !== undefined) {
-      expect(createCall[0].workerType).toBe('qwen');
+      expect(createCall[0].workerType).toBe('openrouter-free');
     }
 
     expect(deps.taskEnqueueService.enqueue).not.toHaveBeenCalled();
@@ -606,7 +606,7 @@ describe('createReviewTask', () => {
       prNumber: 42,
       senderLogin: 'dev-user',
       reviewTypes: ['architecture'],
-      workerType: 'qwen',
+      workerType: 'openrouter-free',
       reviewComment: '@review architecture',
       eventId: 'evt-review-comment',
     });
@@ -1378,7 +1378,7 @@ describe('createReviewTask', () => {
               dispatchSigningSecret: 'dispatch-secret',
               enabled: true,
             }],
-            defaultReviewWorkerType: 'glm',
+            defaultReviewWorkerType: 'openrouter-free',
           })),
         } as unknown as WorkerSettingsRepository,
       });
@@ -1411,7 +1411,7 @@ describe('createReviewTask', () => {
               dispatchSigningSecret: 'dispatch-secret',
               enabled: true,
             }],
-            defaultReviewWorkerType: 'glm',
+            defaultReviewWorkerType: 'openrouter-free',
           })),
         } as unknown as WorkerSettingsRepository,
       });
@@ -1426,7 +1426,7 @@ describe('createReviewTask', () => {
 
       expect(result.ok).toBe(true);
       if (result.ok) {
-        expect(result.value.workerType).toBe('glm');
+        expect(result.value.workerType).toBe('openrouter-free');
       }
     });
 

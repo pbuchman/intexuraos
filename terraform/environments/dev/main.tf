@@ -53,25 +53,6 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "legacy_secret_readers_enabled" {
-  description = "Keep legacy individual Secret Manager readers during package cutover. Disable for Phase A only after package-only consumers and recovery evidence pass."
-  type        = bool
-  default     = false
-}
-
-variable "legacy_secret_containers_enabled" {
-  description = "Keep legacy individual Secret Manager containers during the reversible disable soak. Disable only in Phase B after at least seven healthy days."
-  type        = bool
-  default     = true
-}
-
-check "legacy_secret_reader_container_order" {
-  assert {
-    condition     = !var.legacy_secret_readers_enabled || var.legacy_secret_containers_enabled
-    error_message = "Legacy Secret Manager readers cannot remain enabled after legacy containers are disabled."
-  }
-}
-
 variable "github_owner" {
   description = "GitHub repository owner"
   type        = string
@@ -351,133 +332,6 @@ locals {
     "INTEXURAOS_SPEECHMATICS_APP_API_KEY" = "Speechmatics API key for transcription Cloud Function"
   }
 
-  legacy_secret_container_names = toset([
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    "INTEXURAOS_DASHSCOPE_APP_API_KEY",
-    "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_KIMI_APP_API_KEY",
-    "INTEXURAOS_LINEAR_API_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
-    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
-    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
-    "INTEXURAOS_MIMO_APP_API_KEY",
-    "INTEXURAOS_MINIMAX_APP_API_KEY",
-    "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_OPENROUTER_APP_API_KEY",
-    "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
-    "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
-    "INTEXURAOS_SSL_PRIVATE_KEY",
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
-    "INTEXURAOS_WHATSAPP_APP_SECRET",
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
-    "INTEXURAOS_WHATSAPP_WABA_ID",
-  ])
-
-  legacy_secret_containers = {
-    for name in local.legacy_secret_container_names :
-    name => "Legacy individual application secret retained during package migration"
-  }
-
-  # Preserve the exact pre-migration Cloud Run IAM address set during the
-  # additive stage. The two native exceptions are target containers, but their
-  # legacy broad bindings are removed only when the migration flag is disabled.
-  legacy_cloud_run_secret_names = setunion(
-    local.legacy_secret_container_names,
-    toset([
-      "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-      "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
-    ])
-  )
-
-  # The tracked source manifest is the single inventory for package builds.
-  # Only legacyEnvNames and legacyFiles are Secret Manager containers; all
-  # external file inputs are supplied out-of-band and receive no IAM binding.
-  secret_package_source_manifest = jsondecode(file("${path.module}/../../../config/environments/secret-package-sources.json"))
-  secret_package_dev_legacy_source_names = setunion(
-    toset(local.secret_package_source_manifest.packages.dev.legacyEnvNames),
-    toset(values(local.secret_package_source_manifest.packages.dev.legacyFiles))
-  )
-  secret_package_prod_legacy_source_names = setunion(
-    toset(local.secret_package_source_manifest.packages.prod.legacyEnvNames),
-    toset(values(local.secret_package_source_manifest.packages.prod.legacyFiles))
-  )
-  secret_package_native_source_names = toset([
-    "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-    "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
-  ])
-  secret_package_dev_active_source_names = setunion(
-    setintersection(
-      local.secret_package_dev_legacy_source_names,
-      local.secret_package_native_source_names
-    ),
-    var.legacy_secret_readers_enabled ? local.secret_package_dev_legacy_source_names : toset([])
-  )
-  secret_package_prod_active_source_names = setunion(
-    setintersection(
-      local.secret_package_prod_legacy_source_names,
-      local.secret_package_native_source_names
-    ),
-    var.legacy_secret_readers_enabled ? local.secret_package_prod_legacy_source_names : toset([])
-  )
-
-  hetzner_runtime_secret_names = toset([
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_INTERNAL_AUTH_TOKEN",
-    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
-    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
-    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
-    "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_OPENROUTER_APP_API_KEY",
-    "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
-    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
-    "INTEXURAOS_WHATSAPP_APP_SECRET",
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
-    "INTEXURAOS_WHATSAPP_WABA_ID",
-  ])
-
-  cloud_run_secret_manager_excluded_names = toset([
-    "INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN",
-    "INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN",
-    "INTEXURAOS_KIMI_APP_API_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID",
-    "INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY",
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING",
-    "INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING",
-    "INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN",
-  ])
 }
 
 # -----------------------------------------------------------------------------
@@ -520,51 +374,7 @@ resource "google_project_iam_audit_config" "secret_manager_data_read" {
   depends_on = [google_project_service.apis]
 }
 
-resource "google_apikeys_key" "firebase_browser" {
-  name         = "d8251549-1bde-49c0-82a7-b0525a2fe688"
-  project      = var.project_id
-  display_name = "Browser key (auto created by Firebase)"
-
-  restrictions {
-    browser_key_restrictions {
-      allowed_referrers = [
-        "https://intexuraos.cloud/*",
-        "https://dev.intexuraos.cloud/*",
-        "http://localhost:3000/*",
-      ]
-    }
-
-    api_targets {
-      service = "firestore.googleapis.com"
-    }
-
-    api_targets {
-      service = "identitytoolkit.googleapis.com"
-    }
-
-    api_targets {
-      service = "securetoken.googleapis.com"
-    }
-
-    api_targets {
-      service = "firebaseinstallations.googleapis.com"
-    }
-  }
-
-  lifecycle {
-    prevent_destroy = true
-  }
-
-  depends_on = [google_project_service.apis]
-}
-
-import {
-  to = google_apikeys_key.firebase_browser
-  id = "projects/intexuraos-dev-pbuchman/locations/global/keys/d8251549-1bde-49c0-82a7-b0525a2fe688"
-}
-
-# Additive rotation target for the browser API key exposed in Firebase web
-# configuration. The imported key remains active until dev and prod verification.
+# Restricted browser API key used by the versioned public web configuration.
 resource "google_apikeys_key" "firebase_browser_replacement" {
   name         = "intexuraos-firebase-browser-2026"
   project      = var.project_id
@@ -721,28 +531,7 @@ module "secret_manager" {
   environment = var.environment
   labels      = local.common_labels
 
-  secrets = merge(
-    local.target_secret_containers,
-    var.legacy_secret_containers_enabled ? local.legacy_secret_containers : {}
-  )
-
-  depends_on = [google_project_service.apis]
-}
-
-moved {
-  from = google_secret_manager_secret.cloudflare_dns_api_token
-  to   = google_secret_manager_secret.cloudflare_dns_api_token[0]
-}
-
-resource "google_secret_manager_secret" "cloudflare_dns_api_token" {
-  count = var.legacy_secret_containers_enabled ? 1 : 0
-
-  secret_id = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
-  labels    = local.common_labels
-
-  replication {
-    auto {}
-  }
+  secrets = local.target_secret_containers
 
   depends_on = [google_project_service.apis]
 }
@@ -843,22 +632,6 @@ resource "google_secret_manager_secret_iam_member" "secret_package_prod_publishe
   member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "secret_package_dev_publisher_source_accessor" {
-  for_each = local.secret_package_dev_active_source_names
-
-  secret_id = module.secret_manager.secret_ids[each.value]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.secret_package_dev_publisher.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "secret_package_prod_publisher_source_accessor" {
-  for_each = local.secret_package_prod_active_source_names
-
-  secret_id = module.secret_manager.secret_ids[each.value]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.secret_package_prod_publisher.email}"
-}
-
 resource "google_artifact_registry_repository_iam_member" "home_dev_orchestrator_reader" {
   project    = var.project_id
   location   = var.region
@@ -892,40 +665,6 @@ resource "google_storage_bucket_iam_member" "home_dev_runtime_bucket_object_admi
   member = "serviceAccount:${google_service_account.home_dev_runtime.email}"
 }
 
-resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_runtime_secrets" {
-  for_each = var.legacy_secret_readers_enabled ? local.hetzner_runtime_secret_names : toset([])
-
-  secret_id = module.secret_manager.secret_ids[each.value]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
-}
-
-moved {
-  from = google_secret_manager_secret_iam_member.hetzner_provisioner_cloudflare_dns
-  to   = google_secret_manager_secret_iam_member.hetzner_provisioner_cloudflare_dns[0]
-}
-
-resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_cloudflare_dns" {
-  count = var.legacy_secret_readers_enabled ? 1 : 0
-
-  secret_id = google_secret_manager_secret.cloudflare_dns_api_token[0].secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
-}
-
-moved {
-  from = google_secret_manager_secret_iam_member.hetzner_provisioner_ssl_private_key
-  to   = google_secret_manager_secret_iam_member.hetzner_provisioner_ssl_private_key[0]
-}
-
-resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_ssl_private_key" {
-  count = var.legacy_secret_readers_enabled ? 1 : 0
-
-  secret_id = module.secret_manager.secret_ids["INTEXURAOS_SSL_PRIVATE_KEY"]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
-}
-
 resource "google_storage_bucket_iam_member" "hetzner_provisioner_terraform_state" {
   bucket = "${var.project_id}-terraform-state"
   role   = "roles/storage.objectAdmin"
@@ -956,14 +695,6 @@ resource "google_service_account_iam_member" "hetzner_provisioner_scheduler_user
   service_account_id = google_service_account.cloud_scheduler.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.hetzner_provisioner.email}"
-}
-
-resource "google_secret_manager_secret_iam_member" "hetzner_runtime_secrets" {
-  for_each = var.legacy_secret_readers_enabled ? local.hetzner_runtime_secret_names : toset([])
-
-  secret_id = module.secret_manager.secret_ids[each.value]
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.hetzner_runtime.email}"
 }
 
 resource "google_project_iam_member" "hetzner_runtime_project_roles" {
@@ -1013,13 +744,6 @@ module "iam" {
   project_id  = var.project_id
   environment = var.environment
   services    = local.services
-
-  legacy_secret_readers_enabled = var.legacy_secret_readers_enabled
-  secret_ids = {
-    for name, secret_id in module.secret_manager.secret_ids : name => secret_id
-    if contains(local.legacy_cloud_run_secret_names, name) &&
-    !contains(local.cloud_run_secret_manager_excluded_names, name)
-  }
 
   depends_on = [
     google_project_service.apis,
@@ -1468,8 +1192,6 @@ module "cloud_build" {
   github_branch              = var.github_branch
   github_connection_name     = var.github_connection_name
 
-  legacy_secret_readers_enabled = var.legacy_secret_readers_enabled
-
   artifact_registry_url   = module.artifact_registry.repository_url
   functions_source_bucket = google_storage_bucket.cloud_functions_source.name
 
@@ -1479,6 +1201,14 @@ module "cloud_build" {
     module.static_assets,
     google_storage_bucket.cloud_functions_source,
   ]
+}
+
+# The Cloud Build service agent needs access only to the Google-managed GitHub
+# connection OAuth token. Project-wide Secret Manager roles are forbidden.
+resource "google_secret_manager_secret_iam_member" "cloud_build_connection_oauth_accessor" {
+  secret_id = "projects/${var.project_id}/secrets/pbuchman-github-github-oauthtoken-8b04fa"
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:service-${local.project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"
 }
 
 # -----------------------------------------------------------------------------
@@ -1614,11 +1344,11 @@ locals {
   transcription_native_secrets = {
     INTEXURAOS_INTERNAL_AUTH_TOKEN = {
       secret_id = module.secret_manager.secret_ids["INTEXURAOS_INTERNAL_AUTH_TOKEN"]
-      version   = 2
+      version   = 3
     }
     INTEXURAOS_SPEECHMATICS_APP_API_KEY = {
       secret_id = module.secret_manager.secret_ids["INTEXURAOS_SPEECHMATICS_APP_API_KEY"]
-      version   = 1
+      version   = 2
     }
   }
 }

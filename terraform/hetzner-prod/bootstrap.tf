@@ -28,10 +28,7 @@ resource "terraform_data" "bootstrap_prod" {
     bootstrap_source_hash = local.bootstrap_source_hash
   }
 
-  depends_on = [
-    hcloud_server.prod,
-    terraform_data.legacy_runtime_sa_bootstrap,
-  ]
+  depends_on = [hcloud_server.prod]
 
   connection {
     type        = "ssh"
@@ -113,40 +110,6 @@ resource "terraform_data" "bootstrap_prod" {
   provisioner "remote-exec" {
     inline = [
       "cd /opt/intexuraos && INTEXURAOS_ENVIRONMENT=prod bash scripts/hetzner/deploy-nginx.sh",
-    ]
-  }
-}
-
-# Transitional copy with a separate address lets the additive migration keep
-# the current runtime credential in place. Disable only after the package
-# renderer has atomically installed and verified its replacement.
-resource "terraform_data" "legacy_runtime_sa_bootstrap" {
-  count = var.hetzner_bootstrap_enabled && var.legacy_runtime_sa_bootstrap_enabled ? 1 : 0
-
-  triggers_replace = {
-    server_id = hcloud_server.prod.id
-  }
-
-  depends_on = [hcloud_server.prod]
-
-  connection {
-    type        = "ssh"
-    user        = "root"
-    host        = hcloud_primary_ip.prod_ipv4.ip_address
-    private_key = file(pathexpand(var.deploy_ssh_private_key_path))
-    timeout     = "10m"
-  }
-
-  provisioner "file" {
-    source      = pathexpand(var.runtime_sa_key_path)
-    destination = "/tmp/intexuraos-runtime-sa-key.json"
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "cloud-init status --wait || true",
-      "install -m 600 -o deploy -g deploy /tmp/intexuraos-runtime-sa-key.json /home/deploy/runtime-sa-key.json",
-      "rm -f /tmp/intexuraos-runtime-sa-key.json",
     ]
   }
 }
