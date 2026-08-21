@@ -98,5 +98,5 @@
     }
   ],
   "schemaVersion": 1,
-  "staticRoot": "/home/pbuchman/deploy/intexuraos/apps/web/dist"
+  "staticRoot": "/var/www/intexuraos-dev/current"
 }

@@ -125,6 +125,9 @@ fix-forward repair.
 
 - `generate-dev-caddy.mjs`: generates exact DEV edge routes from the tracked
   method/path/guard manifest.
+- `install-dev-static-web.sh`: verifies and publishes an exact-SHA Home Dev
+  static build under `/var/www/intexuraos-dev/current` with Caddy-readable
+  permissions.
 - `verify-final-cutover-plan.mjs`: checks saved Terraform plan JSON against the
   frozen exact address/action allowlist.
 - `security/final-cutover-data.mjs`: one-time offline encrypted-data and
