@@ -80,11 +80,12 @@ export function createTestToolExecutor(input: CreateTestToolExecutorInput): Inte
     },
     async updateCalendarEvent(args: UpdateCalendarEventToolArgs): Promise<string> {
       requireCalendarUpdateSnapshot(args);
+      const attendeesAdded = args.changes?.attendeesToAdd ?? args.attendeesToAdd;
       return await execute('update_calendar_event', { ...args }, {
         status: 'completed',
         eventId: args.eventId,
         summary: args.eventSummary,
-        attendeesAdded: args.attendeesToAdd,
+        ...(attendeesAdded !== undefined ? { attendeesAdded } : {}),
         htmlLink: 'https://calendar.google.com/calendar/event?eid=mock',
       });
     },

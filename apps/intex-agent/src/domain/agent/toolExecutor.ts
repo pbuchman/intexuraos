@@ -9,6 +9,7 @@ import type {
   CreateResearchDraftRequest,
   CreatedCalendarEvent,
   ListCalendarEventsRequest,
+  UpdateCalendarEventRequest,
   SubmitTaskError,
   SubmitTaskResponse,
 } from '@intexuraos/internal-clients';
@@ -38,13 +39,7 @@ export interface CalendarToolClient {
   listEvents(input: ListCalendarEventsRequest): Promise<
     Result<{ events: CalendarQueryEvent[]; truncated: boolean }>
   >;
-  updateEventAttendees(input: {
-    userId: string;
-    eventId: string;
-    calendarId: string;
-    expectedEtag: string;
-    attendeesToAdd: { email: string }[];
-  }): Promise<Result<CreatedCalendarEvent>>;
+  updateEvent(input: UpdateCalendarEventRequest): Promise<Result<CreatedCalendarEvent>>;
 }
 
 interface CalendarQueryEvent {
@@ -162,11 +157,25 @@ export function createIntexAgentToolExecutor(
 
     async updateCalendarEvent(args): Promise<string> {
       const snapshot = requireCalendarUpdateSnapshot(args);
-      const result = await deps.calendarClient.updateEventAttendees({
+      const changes = args.changes ??
+        (args.attendeesToAdd === undefined ? undefined : { attendeesToAdd: args.attendeesToAdd });
+      if (changes === undefined) {
+        throw new Error('Calendar event changes are missing');
+      }
+      const { attendeesToAdd, attendeesToRemove, ...ordinaryChanges } = changes;
+      const result = await deps.calendarClient.updateEvent({
         userId: deps.userId,
         eventId: args.eventId,
         ...snapshot,
-        attendeesToAdd: args.attendeesToAdd.map((email) => ({ email })),
+        changes: {
+          ...ordinaryChanges,
+          ...(attendeesToAdd !== undefined
+            ? { attendeesToAdd: attendeesToAdd.map((email) => ({ email })) }
+            : {}),
+          ...(attendeesToRemove !== undefined
+            ? { attendeesToRemove: attendeesToRemove.map((email) => ({ email })) }
+            : {}),
+        },
       });
 
       if (!result.ok) {
@@ -177,7 +186,9 @@ export function createIntexAgentToolExecutor(
         status: 'completed',
         eventId: result.value.id, // @allow-result-access -- guarded by !result.ok check above
         summary: result.value.summary, // @allow-result-access -- guarded by !result.ok check above
-        attendeesAdded: args.attendeesToAdd,
+        ...(attendeesToAdd !== undefined
+          ? { attendeesAdded: attendeesToAdd }
+          : {}),
         ...(result.value.htmlLink !== undefined ? { htmlLink: result.value.htmlLink } : {}), // @allow-result-access -- guarded by !result.ok check above
       });
     },

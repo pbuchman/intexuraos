@@ -83,25 +83,24 @@ describe('createIntexAgentToolDefinitions', () => {
     });
   });
 
-  it('describes attendee updates for existing calendar events', () => {
+  it('describes general updates for existing calendar events', () => {
     const calendarUpdateTool = createIntexAgentToolDefinitions(createExecutor()).find(
       (tool) => tool.name === 'update_calendar_event'
     );
 
     expect(calendarUpdateTool?.description).toContain('existing');
+    expect(calendarUpdateTool?.description).toContain('title');
+    expect(calendarUpdateTool?.description).toContain('time');
+    expect(calendarUpdateTool?.description).toContain('location');
+    expect(calendarUpdateTool?.description).toContain('description');
     expect(calendarUpdateTool?.description).toContain('attendee');
     expect(calendarUpdateTool?.description).toContain('query_calendar_events');
     expect(calendarUpdateTool?.description).toContain('confirmation');
-    expect(calendarUpdateTool?.parameters['required']).toEqual([
-      'eventId',
-      'eventSummary',
-      'attendeesToAdd',
-    ]);
+    expect(calendarUpdateTool?.parameters['required']).toEqual(['eventId', 'eventSummary', 'changes']);
     expect(calendarUpdateTool?.parameters['properties']).toMatchObject({
-      attendeesToAdd: {
-        type: 'array',
-        minItems: 1,
-        items: { type: 'string', format: 'email' },
+      changes: {
+        type: 'object',
+        additionalProperties: false,
       },
     });
   });
@@ -457,6 +456,71 @@ describe('createIntexAgentToolDefinitions', () => {
         eventEnd: { date: '2026-06-26' },
       },
     ]);
+  });
+
+  it('delegates a general existing-event update to the injected executor', async () => {
+    const executor = createExecutor();
+    const calendarUpdateTool = createIntexAgentToolDefinitions(executor).find(
+      (tool) => tool.name === 'update_calendar_event'
+    );
+
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-photos',
+        eventSummary: 'Google Photos od 04.2019',
+        changes: {
+          summary: 'Google Photos archive',
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+          location: null,
+          description: 'Cleanup',
+          attendeesToAdd: ['new@example.com'],
+          attendeesToRemove: ['old@example.com'],
+        },
+      })
+    ).resolves.toBe('calendar-updated');
+    expect(executor.calendarUpdateArgs).toEqual([
+      {
+        eventId: 'event-photos',
+        eventSummary: 'Google Photos od 04.2019',
+        changes: {
+          summary: 'Google Photos archive',
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+          location: null,
+          description: 'Cleanup',
+          attendeesToAdd: ['new@example.com'],
+          attendeesToRemove: ['old@example.com'],
+        },
+      },
+    ]);
+  });
+
+  it.each([
+    { changes: null, error: 'calendar event changes object' },
+    { changes: [], error: 'calendar event changes object' },
+    { changes: { unknown: true }, error: 'unsupported field' },
+    { changes: { summary: 42 }, error: 'summary must be a string' },
+    { changes: { description: 42 }, error: 'description must be a string or null' },
+    { changes: { start: 'tomorrow', end: 'later' }, error: 'start must be a calendar date-time object' },
+    { changes: {}, error: 'valid calendar event update' },
+    { changes: { start: { date: '2026-08-22' } }, error: 'valid calendar event update' },
+    {
+      changes: { attendeesToRemove: ['not-an-email'] },
+      error: 'attendeesToRemove must contain valid email addresses',
+    },
+  ])('rejects malformed general calendar changes: $changes', async ({ changes, error }) => {
+    const calendarUpdateTool = createIntexAgentToolDefinitions(createExecutor()).find(
+      (tool) => tool.name === 'update_calendar_event'
+    );
+
+    await expect(
+      calendarUpdateTool?.run({
+        eventId: 'event-photos',
+        eventSummary: 'Google Photos',
+        changes,
+      })
+    ).rejects.toThrow(error);
   });
 
   it('rejects an attendee update without a target or attendees', async () => {

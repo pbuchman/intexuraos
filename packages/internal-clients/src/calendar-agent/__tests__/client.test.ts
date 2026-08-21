@@ -338,7 +338,9 @@ describe('createCalendarAgentServiceClient', () => {
       .patch('/internal/calendar/events/event%2Fwith%20spaces%3F', {
         userId: 'user-1',
         ...attendeeUpdateSnapshot,
-        attendeesToAdd: [{ email: 'karol@example.com' }, { email: 'anna@example.com' }],
+        changes: {
+          attendeesToAdd: [{ email: 'karol@example.com' }, { email: 'anna@example.com' }],
+        },
       })
       .matchHeader('x-internal-auth', 'secret')
       .matchHeader('x-request-id', 'req-update-123')
@@ -440,6 +442,86 @@ describe('createCalendarAgentServiceClient', () => {
           },
         ],
       },
+    });
+  });
+
+  it('updates general calendar event fields through the singular patch endpoint', async () => {
+    const scope = nock(BASE_URL)
+      .patch('/internal/calendar/events/event-photos', {
+        userId: 'user-1',
+        calendarId: 'primary',
+        expectedEtag: '"event-photos-v1"',
+        changes: {
+          summary: 'Google Photos archive',
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+        },
+      })
+      .reply(200, {
+        success: true,
+        data: {
+          event: {
+            id: 'event-photos',
+            summary: 'Google Photos archive',
+            start: { date: '2026-08-22' },
+            end: { date: '2026-08-23' },
+          },
+        },
+      });
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.updateEvent({
+      eventId: 'event-photos',
+      userId: 'user-1',
+      calendarId: 'primary',
+      expectedEtag: '"event-photos-v1"',
+      changes: {
+        summary: 'Google Photos archive',
+        start: { date: '2026-08-22' },
+        end: { date: '2026-08-23' },
+      },
+    });
+
+    expect(scope.isDone()).toBe(true);
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        id: 'event-photos',
+        summary: 'Google Photos archive',
+        start: { date: '2026-08-22' },
+        end: { date: '2026-08-23' },
+      },
+    });
+  });
+
+  it('returns general calendar event update errors from the singular patch endpoint', async () => {
+    nock(BASE_URL)
+      .patch('/internal/calendar/events/event-photos')
+      .reply(503, {
+        success: false,
+        error: { message: 'Google Calendar unavailable' },
+      });
+    const client = createCalendarAgentServiceClient({
+      baseUrl: BASE_URL,
+      internalAuthToken: 'secret',
+      logger,
+    });
+
+    const result = await client.updateEvent({
+      eventId: 'event-photos',
+      userId: 'user-1',
+      calendarId: 'primary',
+      expectedEtag: '"event-photos-v1"',
+      changes: { summary: 'Renamed' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: new Error('Google Calendar unavailable'),
     });
   });
 

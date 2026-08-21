@@ -272,7 +272,7 @@ describe('createIntexAgentToolExecutor', () => {
         eventId: 'event-bagrowa',
         calendarId: 'primary',
         expectedEtag: '"event-bagrowa-v1"',
-        attendeesToAdd: [{ email: 'patryk@example.com' }],
+        changes: { attendeesToAdd: [{ email: 'patryk@example.com' }] },
       },
     ]);
     expect(JSON.parse(result)).toEqual({
@@ -300,6 +300,104 @@ describe('createIntexAgentToolExecutor', () => {
         eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
       })
     ).rejects.toThrow('Failed to update calendar event: calendar update unavailable');
+  });
+
+  it('updates general existing calendar event fields through the calendar client', async () => {
+    const calendarClient = new FakeCalendarClient();
+    calendarClient.updateResult = ok({
+      id: 'event-photos',
+      summary: 'Google Photos archive',
+      start: { date: '2026-08-22' },
+      end: { date: '2026-08-23' },
+    });
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+
+    const result = await executor.updateCalendarEvent({
+      eventId: 'event-photos',
+      eventSummary: 'Google Photos od 04.2019',
+      calendarId: 'primary',
+      expectedEtag: '"event-photos-v1"',
+      eventStart: { date: '2026-08-13' },
+      eventEnd: { date: '2026-08-14' },
+      changes: {
+        summary: 'Google Photos archive',
+        start: { date: '2026-08-22' },
+        end: { date: '2026-08-23' },
+        location: null,
+        description: 'Cleanup',
+        attendeesToAdd: ['new@example.com'],
+        attendeesToRemove: ['old@example.com'],
+      },
+    });
+
+    expect(calendarClient.updateCalls).toEqual([
+      {
+        userId: 'user-1',
+        eventId: 'event-photos',
+        calendarId: 'primary',
+        expectedEtag: '"event-photos-v1"',
+        changes: {
+          summary: 'Google Photos archive',
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+          location: null,
+          description: 'Cleanup',
+          attendeesToAdd: [{ email: 'new@example.com' }],
+          attendeesToRemove: [{ email: 'old@example.com' }],
+        },
+      },
+    ]);
+    expect(JSON.parse(result)).toEqual({
+      status: 'completed',
+      eventId: 'event-photos',
+      summary: 'Google Photos archive',
+      attendeesAdded: ['new@example.com'],
+    });
+  });
+
+  it('updates a non-attendee field without reporting attendee additions', async () => {
+    const calendarClient = new FakeCalendarClient();
+    calendarClient.updateResult = ok({
+      id: 'event-photos',
+      summary: 'Google Photos archive',
+      start: { date: '2026-08-22' },
+      end: { date: '2026-08-23' },
+    });
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+
+    const result = await executor.updateCalendarEvent({
+      eventId: 'event-photos',
+      eventSummary: 'Google Photos od 04.2019',
+      calendarId: 'primary',
+      expectedEtag: '"event-photos-v1"',
+      eventStart: { date: '2026-08-13' },
+      eventEnd: { date: '2026-08-14' },
+      changes: { summary: 'Google Photos archive' },
+    });
+
+    expect(calendarClient.updateCalls[0]?.changes).toEqual({ summary: 'Google Photos archive' });
+    expect(JSON.parse(result)).toEqual({
+      status: 'completed',
+      eventId: 'event-photos',
+      summary: 'Google Photos archive',
+    });
+  });
+
+  it('rejects an update with no general or legacy changes', async () => {
+    const calendarClient = new FakeCalendarClient();
+    const executor = createIntexAgentToolExecutor(createExecutorDeps({ calendarClient }));
+
+    await expect(
+      executor.updateCalendarEvent({
+        eventId: 'event-photos',
+        eventSummary: 'Google Photos od 04.2019',
+        calendarId: 'primary',
+        expectedEtag: '"event-photos-v1"',
+        eventStart: { date: '2026-08-13' },
+        eventEnd: { date: '2026-08-14' },
+      })
+    ).rejects.toThrow('Calendar event changes are missing');
+    expect(calendarClient.updateCalls).toEqual([]);
   });
 
   it('omits the calendar link when an attendee update response has none', async () => {
@@ -1258,7 +1356,7 @@ class FakeCodeTaskClient implements CodeTaskToolClient {
 class FakeCalendarClient implements CalendarToolClient {
   readonly calls: Parameters<CalendarToolClient['createEvent']>[0][] = [];
   readonly listCalls: ListCalendarEventsRequest[] = [];
-  readonly updateCalls: Parameters<CalendarToolClient['updateEventAttendees']>[0][] = [];
+  readonly updateCalls: Parameters<CalendarToolClient['updateEvent']>[0][] = [];
   result: Result<CreatedCalendarEvent> = ok({
     id: 'calendar-event-1',
     summary: 'Dentist appointment',
@@ -1292,8 +1390,8 @@ class FakeCalendarClient implements CalendarToolClient {
     return Promise.resolve(this.listResult);
   }
 
-  updateEventAttendees(
-    input: Parameters<CalendarToolClient['updateEventAttendees']>[0]
+  updateEvent(
+    input: Parameters<CalendarToolClient['updateEvent']>[0]
   ): Promise<Result<CreatedCalendarEvent>> {
     this.updateCalls.push(input);
     return Promise.resolve(this.updateResult);

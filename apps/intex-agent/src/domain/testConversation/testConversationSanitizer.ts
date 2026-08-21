@@ -44,7 +44,9 @@ const TOOL_ARG_SAFE_INTEGER_KEYS = [
   'descriptionLength',
   'attendeesCount',
   'eventSummaryLength',
+  'changeFieldCount',
   'attendeesToAddCount',
+  'attendeesToRemoveCount',
   'contentLength',
   'titleLength',
   'tagsCount',
@@ -353,6 +355,12 @@ export function summarizeArgs(
   } else if (toolName === 'update_calendar_event') {
     copySummaryStringLength(args, summary, 'eventSummary');
     copySummaryArrayCount(args, summary, 'attendeesToAdd');
+    const changes = args['changes'];
+    if (isPlainRecord(changes)) {
+      summary['changeFieldCount'] = Object.keys(changes).length;
+      copySummaryArrayCount(changes, summary, 'attendeesToAdd');
+      copySummaryArrayCount(changes, summary, 'attendeesToRemove');
+    }
     copySummaryPresence(args, summary, 'eventId');
     copySummaryPresence(args, summary, 'calendarId');
     copySummaryPresence(args, summary, 'expectedEtag');

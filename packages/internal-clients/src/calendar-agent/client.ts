@@ -22,6 +22,7 @@ import type {
   GeneratePreviewRequest,
   ListCalendarEventsRequest,
   ProcessCalendarRequest,
+  UpdateCalendarEventRequest,
   UpdateCalendarEventAttendeesRequest,
 } from './types.js';
 
@@ -193,7 +194,12 @@ async function updateEventAttendees(
   const result = await httpClient.request<{ event: ContractCalendarCreatedEvent }>({
     path: `/internal/calendar/events/${encodeURIComponent(eventId)}`,
     method: 'PATCH',
-    body,
+    body: {
+      userId: body.userId,
+      calendarId: body.calendarId,
+      expectedEtag: body.expectedEtag,
+      changes: { attendeesToAdd: body.attendeesToAdd },
+    },
     timeoutMs: resolveTimeoutMs(UPDATE_EVENT_ATTENDEES_TIMEOUT_MS, config, options),
     requestId: options?.requestId,
   });
@@ -203,6 +209,25 @@ async function updateEventAttendees(
   }
 
   return err(mapCalendarHttpError(result.error, 'Failed to update calendar event attendees'));
+}
+
+async function updateEvent(
+  config: CalendarAgentServiceConfig,
+  httpClient: InternalHttpClient,
+  request: UpdateCalendarEventRequest,
+  options: CalendarAgentRequestOptions | undefined
+): Promise<Result<CreatedCalendarEvent>> {
+  const { eventId, ...body } = request;
+  const result = await httpClient.request<{ event: ContractCalendarCreatedEvent }>({
+    path: `/internal/calendar/events/${encodeURIComponent(eventId)}`,
+    method: 'PATCH',
+    body,
+    timeoutMs: resolveTimeoutMs(UPDATE_EVENT_ATTENDEES_TIMEOUT_MS, config, options),
+    requestId: options?.requestId,
+  });
+
+  if (result.ok) return ok(toCreatedCalendarEvent(result.value.event));
+  return err(mapCalendarHttpError(result.error, 'Failed to update calendar event'));
 }
 
 async function readPreviewResponse(
@@ -260,6 +285,13 @@ export function createCalendarAgentServiceClient(
       options?: CalendarAgentRequestOptions
     ): Promise<Result<CreatedCalendarEvent>> {
       return await updateEventAttendees(config, httpClient, request, options);
+    },
+
+    async updateEvent(
+      request: UpdateCalendarEventRequest,
+      options?: CalendarAgentRequestOptions
+    ): Promise<Result<CreatedCalendarEvent>> {
+      return await updateEvent(config, httpClient, request, options);
     },
 
     async processAction(

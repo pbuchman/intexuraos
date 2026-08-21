@@ -217,7 +217,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('26.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -7005,7 +7005,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('26.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
     expect(client.calls[0]?.tools).toEqual([]);
@@ -7750,6 +7750,28 @@ describe('createIntexAgentRunner', () => {
   );
 
   describe('calendar attendee email precondition', () => {
+    it.each([
+      'Musimy przenieść istniejące wydarzenia Google Photos.',
+      'Zmienić im daty tak, żeby następowały dzień po dniu.',
+      'Ustaw datę istniejącego wydarzenia na 22 sierpnia.',
+    ])('does not ask for an attendee email for a non-attendee update: %s', async (message) => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
+    });
+
     const emailClarification = {
       outcome: 'needs_clarification',
       reply: 'Jaki jest adres e-mail uczestnika?',
@@ -8984,6 +9006,392 @@ describe('createIntexAgentRunner', () => {
       expect(confirmedArgs).toEqual(preview.toolArgs);
     }
   );
+
+  it.each([
+    {
+      language: 'Polish',
+      message: 'Przenieś oba wydarzenia Photos kolejno na 22 i 23 sierpnia.',
+      intro: 'Czy wykonać 2 zmiany wydarzeń w kalendarzu?',
+      startLabel: 'Początek po zmianie',
+      endLabel: 'Koniec po zmianie',
+    },
+    {
+      language: 'English',
+      message: 'Move both Photos events to August 22 and 23, respectively.',
+      intro: 'Apply 2 calendar event updates?',
+      startLabel: 'New start',
+      endLabel: 'New end',
+    },
+  ])('stages multiple singular calendar updates behind one $language confirmation', async ({
+    message,
+    intro,
+    startLabel,
+    endLabel,
+  }) => {
+    const queryResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      truncated: false,
+      events: [
+        {
+          id: 'event-2019',
+          etag: '"event-2019-v1"',
+          summary: 'Google Photos od 04.2019',
+          calendarId: 'primary',
+          start: { date: '2026-08-13' },
+          end: { date: '2026-08-14' },
+        },
+        {
+          id: 'event-2018',
+          etag: '"event-2018-v1"',
+          summary: 'Wyczyścić Photos 2018',
+          calendarId: 'primary',
+          start: { date: '2026-08-14' },
+          end: { date: '2026-08-15' },
+        },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-13T00:00:00+02:00',
+            timeMax: '2026-08-15T00:00:00+02:00',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-2019',
+            eventSummary: 'Google Photos od 04.2019',
+            changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-2018',
+            eventSummary: 'Wyczyścić Photos 2018',
+            changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
+          },
+        },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message,
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: [
+        {
+          toolName: 'update_calendar_event',
+          toolArgs: {
+            eventId: 'event-2019',
+            eventSummary: 'Google Photos od 04.2019',
+            calendarId: 'primary',
+            expectedEtag: '"event-2019-v1"',
+            eventStart: { date: '2026-08-13' },
+            eventEnd: { date: '2026-08-14' },
+            changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          toolArgs: {
+            eventId: 'event-2018',
+            eventSummary: 'Wyczyścić Photos 2018',
+            calendarId: 'primary',
+            expectedEtag: '"event-2018-v1"',
+            eventStart: { date: '2026-08-14' },
+            eventEnd: { date: '2026-08-15' },
+            changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
+          },
+        },
+      ],
+    });
+    expect(result.reply).toContain('Google Photos od 04.2019');
+    expect(result.reply).toContain('Wyczyścić Photos 2018');
+    expect(result.reply).toContain(intro);
+    expect(result.reply).toContain(startLabel);
+    expect(result.reply).toContain(endLabel);
+  });
+
+  it.each([
+    {
+      language: 'Polish',
+      message:
+        'Zmień Google Photos na „Archiwum Google Photos”, przenieś na 22 sierpnia, dodaj patryk@example.com i usuń old@example.com.',
+      intro: 'Czy zaktualizować istniejące wydarzenie w kalendarzu?',
+      titleLabel: 'Nowy tytuł',
+      startLabel: 'Początek po zmianie',
+      attendeeLabel: 'Uczestnicy do dodania',
+      removeLabel: 'Uczestnicy do usunięcia',
+    },
+    {
+      language: 'English',
+      message:
+        'Rename Google Photos to “Google Photos archive”, move it to August 22, add patryk@example.com, and remove old@example.com.',
+      intro: 'Update this existing calendar event?',
+      titleLabel: 'New title',
+      startLabel: 'New start',
+      attendeeLabel: 'Attendees to add',
+      removeLabel: 'Attendees to remove',
+    },
+  ])('previews every general update field in $language', async ({
+    message,
+    intro,
+    titleLabel,
+    startLabel,
+    attendeeLabel,
+    removeLabel,
+  }) => {
+    const queryResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      truncated: false,
+      events: [
+        {
+          id: 'event-photos',
+          etag: '"event-photos-v1"',
+          summary: 'Google Photos od 04.2019',
+          calendarId: 'primary',
+          start: { date: '2026-08-13' },
+          end: { date: '2026-08-14' },
+        },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-13T00:00:00+02:00',
+            timeMax: '2026-08-14T00:00:00+02:00',
+            query: 'Google Photos od 04.2019',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-photos',
+            eventSummary: 'Google Photos od 04.2019',
+            changes: {
+              summary: 'Google Photos archive',
+              description: 'Cleanup archive',
+              location: 'Home',
+              start: { date: '2026-08-22' },
+              end: { date: '2026-08-23' },
+              attendeesToAdd: ['patryk@example.com'],
+              attendeesToRemove: ['old@example.com'],
+            },
+          },
+        },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message,
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'update_calendar_event',
+      toolArgs: {
+        eventId: 'event-photos',
+        eventSummary: 'Google Photos od 04.2019',
+        calendarId: 'primary',
+        expectedEtag: '"event-photos-v1"',
+        changes: {
+          attendeesToAdd: ['patryk@example.com'],
+          attendeesToRemove: ['old@example.com'],
+        },
+      },
+    });
+    expect(result.reply).toContain(intro);
+    expect(result.reply).toContain(titleLabel);
+    expect(result.reply).toContain(startLabel);
+    expect(result.reply).toContain(attendeeLabel);
+    expect(result.reply).toContain(removeLabel);
+  });
+
+  it.each([
+    {
+      label: 'a different explicit email',
+      message: 'Zaproś Patryka (patryk@example.com) na Bagrową jutro.',
+    },
+    {
+      label: 'no attendee email at all',
+      message: 'Rename the Bagrowa event without changing attendees.',
+    },
+  ])('rejects a general attendee addition with $label', async ({ message }) => {
+    const queryResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 1,
+      truncated: false,
+      events: [
+        {
+          id: 'event-bagrowa',
+          etag: '"event-bagrowa-v1"',
+          summary: 'Bagrowa',
+          calendarId: 'primary',
+          start: { dateTime: '2026-06-25T18:00:00+02:00' },
+          end: { dateTime: '2026-06-25T20:30:00+02:00' },
+        },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-06-25T00:00:00+02:00',
+            timeMax: '2026-06-26T00:00:00+02:00',
+            query: 'Bagrowa',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-bagrowa',
+            eventSummary: 'Bagrowa',
+            changes: { attendeesToAdd: ['someone-else@example.com'] },
+          },
+        },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+    });
+  });
+
+  it('rejects a multi-update plan when any proposed target is absent from the complete lookup', async () => {
+    const queryResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      truncated: false,
+      events: [
+        {
+          id: 'event-2019',
+          etag: '"event-2019-v1"',
+          summary: 'Google Photos od 04.2019',
+          calendarId: 'primary',
+          start: { date: '2026-08-13' },
+          end: { date: '2026-08-14' },
+        },
+        {
+          id: 'event-2018',
+          etag: '"event-2018-v1"',
+          summary: 'Wyczyścić Photos 2018',
+          calendarId: 'primary',
+          start: { date: '2026-08-14' },
+          end: { date: '2026-08-15' },
+        },
+      ],
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        {
+          toolName: 'query_calendar_events',
+          args: {
+            mode: 'list',
+            timeMin: '2026-08-13T00:00:00+02:00',
+            timeMax: '2026-08-15T00:00:00+02:00',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'event-2019',
+            eventSummary: 'Google Photos od 04.2019',
+            changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: 'invented-event',
+            eventSummary: 'Wyczyścić Photos 2018',
+            changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
+          },
+        },
+      ],
+      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
+    );
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move both Photos events to August 22 and 23.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+    });
+  });
 
   it('keeps the event dates and attendees visible when the matched calendar title is very long', async () => {
     const summary = 'Bagrowa '.repeat(300).trim();
@@ -10835,6 +11243,176 @@ describe('createIntexAgentRunner', () => {
     }
     expect(result.ctaUrl).toEqual(testCase.expectedCtaUrl);
     expect(client.calls).toEqual([]);
+  });
+
+  it('executes a confirmed plan as independent update_calendar_event operations', async () => {
+    const calls: Record<string, unknown>[] = [];
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        updateCalendarEvent: async (args): Promise<string> => {
+          calls.push(structuredClone({ ...args }));
+          return JSON.stringify({
+            status: 'completed',
+            eventId: args.eventId,
+            summary: args.eventSummary,
+          });
+        },
+      }),
+    });
+    const operations = [
+      {
+        toolName: 'update_calendar_event' as const,
+        toolArgs: {
+          eventId: 'event-2019',
+          eventSummary: 'Google Photos od 04.2019',
+          calendarId: 'primary',
+          expectedEtag: '"event-2019-v1"',
+          eventStart: { date: '2026-08-13' },
+          eventEnd: { date: '2026-08-14' },
+          changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+        },
+      },
+      {
+        toolName: 'update_calendar_event' as const,
+        toolArgs: {
+          eventId: 'event-2018',
+          eventSummary: 'Wyczyścić Photos 2018',
+          calendarId: 'primary',
+          expectedEtag: '"event-2018-v1"',
+          eventStart: { date: '2026-08-14' },
+          eventEnd: { date: '2026-08-15' },
+          changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
+        },
+      },
+    ];
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        operations,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Updated 2 of 2 calendar events.',
+      operationResults: [
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolResult: {
+            status: 'completed',
+            eventId: 'event-2019',
+            summary: 'Google Photos od 04.2019',
+          },
+        },
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolResult: {
+            status: 'completed',
+            eventId: 'event-2018',
+            summary: 'Wyczyścić Photos 2018',
+          },
+        },
+      ],
+    });
+    expect(calls).toEqual(operations.map((operation) => operation.toolArgs));
+  });
+
+  it('continues a confirmed calendar plan after one operation fails and reports the partial result', async () => {
+    let callCount = 0;
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        updateCalendarEvent: async (args): Promise<string> => {
+          callCount += 1;
+          if (callCount === 1) throw new Error('CONFLICT: event changed');
+          return JSON.stringify({ status: 'completed', eventId: args.eventId });
+        },
+      }),
+    });
+    const operation = (
+      eventId: string
+    ): { toolName: 'update_calendar_event'; toolArgs: Record<string, unknown> } => ({
+      toolName: 'update_calendar_event' as const,
+      toolArgs: {
+        eventId,
+        eventSummary: eventId,
+        calendarId: 'primary',
+        expectedEtag: `"${eventId}-v1"`,
+        eventStart: { date: '2026-08-13' },
+        eventEnd: { date: '2026-08-14' },
+        changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+      },
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        operations: [operation('event-1'), operation('event-2')],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Updated 1 of 2 calendar events.',
+      operationResults: [
+        {
+          toolName: 'update_calendar_event',
+          status: 'failed',
+          error: 'CONFLICT: event changed',
+        },
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolResult: { status: 'completed', eventId: 'event-2' },
+        },
+      ],
+    });
+    expect(callCount).toBe(2);
+  });
+
+  it('localizes a mixed confirmed plan and records results without parsed tool JSON', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor({
+        updateCalendarEvent: async (): Promise<string> => 'updated without JSON',
+      }),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: [event('user_message', { text: 'Zaktualizuj te wydarzenia.' })],
+        operations: [
+          {
+            toolName: 'update_calendar_event',
+            toolArgs: {
+              eventId: 'event-1',
+              eventSummary: 'Wydarzenie 1',
+              calendarId: 'primary',
+              expectedEtag: '"event-1-v1"',
+              eventStart: { date: '2026-08-13' },
+              eventEnd: { date: '2026-08-14' },
+              changes: { summary: 'Nowy tytuł' },
+            },
+          },
+          { toolName: 'query_calendar_events', toolArgs: {} },
+        ],
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'completed',
+      reply: 'Zaktualizowano 1 z 2 wydarzeń w kalendarzu.',
+      operationResults: [
+        { toolName: 'update_calendar_event', status: 'completed' },
+        {
+          toolName: 'query_calendar_events',
+          status: 'failed',
+          error: 'Confirmed calendar operation could not be executed',
+        },
+      ],
+    });
   });
 
   it('localizes CTA labels for Polish confirmed tool completions', async () => {

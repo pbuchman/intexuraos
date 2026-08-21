@@ -30,7 +30,7 @@ const NEW_SESSION_READY_REPLY = [
   'What would you like me to help with? I can help with:',
   '- summarize and reason over the current session',
   '- create notes',
-  '- create and look up calendar events',
+  '- create, look up, and update calendar events',
   '- create research drafts',
   '- save bookmarks',
   '- create code tasks for planning or execution',
@@ -40,7 +40,7 @@ const POLISH_NEW_SESSION_READY_REPLY = [
   'W czym mogę pomóc? Mogę pomóc z:',
   '- podsumowywaniem i analizowaniem bieżącej sesji',
   '- tworzeniem notatek',
-  '- tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
+  '- tworzeniem, sprawdzaniem i aktualizowaniem wydarzeń w kalendarzu',
   '- tworzeniem szkiców researchu',
   '- zapisywaniem bookmarków',
   '- tworzeniem zadań programistycznych do planowania lub wykonania',
@@ -198,6 +198,28 @@ describe('handleIncomingMessage', () => {
 
     expect(resolveRuntimeSettings).not.toHaveBeenCalled();
     expect(runner.calls).toHaveLength(1);
+  });
+
+  it('persists every staged operation in one confirmation request', async () => {
+    const repo = new FakeSessionRepository();
+    const replies = new FakeReplyPublisher();
+    const operations = [
+      { toolName: 'update_calendar_event' as const, toolArgs: { eventId: 'event-1' } },
+      { toolName: 'update_calendar_event' as const, toolArgs: { eventId: 'event-2' } },
+    ];
+    const runner = new FakeRunner([
+      {
+        outcome: 'needs_confirmation',
+        reply: 'Apply 2 calendar event updates?',
+        toolName: 'update_calendar_event',
+        toolArgs: operations[0]?.toolArgs ?? {},
+        operations,
+      },
+    ]);
+
+    await handleIncomingMessage(message(), deps(repo, runner, replies));
+
+    expect(eventPayloads(repo, 'confirmation_requested')[0]).toMatchObject({ operations });
   });
 
   it('turns runtime resolution failure into one localized fallback without running the provider', async () => {
@@ -780,6 +802,188 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe(
       'Nie udało się wykonać tej akcji: downstream denied it. Spróbuj ponownie później.'
     );
+  });
+
+  it('executes every individually staged operation after one confirmation', async () => {
+    const repo = new FakeSessionRepository();
+    repo.seedSession({
+      id: 'session-existing',
+      userId: 'user-1',
+      channel: 'whatsapp',
+      status: 'waiting_for_user',
+      startedAt: '2026-08-21T14:55:00.000Z',
+      lastUserMessageAt: '2026-08-21T14:56:00.000Z',
+      lastAssistantMessageAt: '2026-08-21T14:57:00.000Z',
+      startReason: 'previous_expired',
+      activeTool: 'update_calendar_event',
+    });
+    const operations = [
+      {
+        toolName: 'update_calendar_event' as const,
+        toolArgs: {
+          eventId: 'event-2019',
+          eventSummary: 'Google Photos od 04.2019',
+          changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+        },
+      },
+      {
+        toolName: 'update_calendar_event' as const,
+        toolArgs: {
+          eventId: 'event-2018',
+          eventSummary: 'Wyczyścić Photos 2018',
+          changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
+        },
+      },
+    ];
+    repo.seedEvent('session-existing', 'confirmation_requested', {
+      confirmationId: 'confirm-plan-1',
+      operations,
+      message: 'Przenieść dwa wydarzenia?',
+      sourceMessageId: 'wamid-original',
+    });
+    const runner = new FakeRunner([], [{ outcome: 'completed', reply: 'Zaktualizowano 2 wydarzenia.' }]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-plan-confirmation',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-plan-1:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.executeConfirmedCalls).toHaveLength(1);
+    expect(runner.executeConfirmedCalls[0]).toMatchObject({ operations });
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toMatchObject({
+      confirmationId: 'confirm-plan-1',
+      resolution: 'accepted',
+    });
+    expect(replies.messages[0]?.message).toBe('Zaktualizowano 2 wydarzenia.');
+  });
+
+  it('records completed and failed operations from one confirmed plan separately', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-plan-results',
+      toolName: 'update_calendar_event',
+      toolArgs: { eventId: 'event-1' },
+      operations: [
+        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-1' } },
+        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-2' } },
+        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-3' } },
+        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-4' } },
+      ],
+    });
+    const runner = new FakeRunner([], [
+      {
+        outcome: 'completed',
+        reply: 'Zaktualizowano 1 z 2 wydarzeń w kalendarzu.',
+        operationResults: [
+          {
+            toolName: 'update_calendar_event',
+            status: 'completed',
+            toolResult: { eventId: 'event-1' },
+          },
+          {
+            toolName: 'update_calendar_event',
+            status: 'failed',
+            error: 'event changed',
+          },
+          {
+            toolName: 'update_calendar_event',
+            status: 'completed',
+          },
+          {
+            toolName: 'update_calendar_event',
+            status: 'failed',
+          },
+        ],
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-plan-results',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-plan-results:yes',
+          buttonTitle: 'Tak',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(eventPayloads(repo, 'tool_call_completed')).toContainEqual({
+      toolName: 'update_calendar_event',
+      result: { eventId: 'event-1' },
+    });
+    expect(eventPayloads(repo, 'tool_call_failed')).toContainEqual({
+      toolName: 'update_calendar_event',
+      error: 'event changed',
+    });
+    expect(eventPayloads(repo, 'tool_call_completed')).toContainEqual({
+      toolName: 'update_calendar_event',
+    });
+    expect(eventPayloads(repo, 'tool_call_failed')).toContainEqual({
+      toolName: 'update_calendar_event',
+      error: 'Unknown tool execution error',
+    });
+    expect(replies.messages[0]?.message).toBe('Zaktualizowano 1 z 2 wydarzeń w kalendarzu.');
+  });
+
+  it.each([
+    { name: 'a non-object operation', operations: [null] },
+    {
+      name: 'an operation for a non-confirmable tool',
+      operations: [{ toolName: 'query_calendar_events', toolArgs: {} }],
+    },
+  ])('falls back to the valid legacy confirmation when operations contain $name', async ({ operations }) => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-malformed-operations',
+      toolName: 'create_note',
+      toolArgs: { content: 'Keep the legacy action.' },
+    });
+    const confirmation = eventPayloads(repo, 'confirmation_requested')[0];
+    if (confirmation === undefined) throw new Error('Expected seeded confirmation');
+    confirmation['operations'] = operations;
+    const runner = new FakeRunner([], [
+      {
+        outcome: 'completed',
+        reply: 'Done.',
+        toolName: 'create_note',
+        toolResult: { status: 'completed' },
+      },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({
+        messageId: 'wamid-malformed-operations',
+        text: '',
+        sourceType: 'whatsapp_button',
+        buttonResponse: {
+          buttonId: 'intex_confirm:confirm-malformed-operations:yes',
+          buttonTitle: 'Yes',
+          replyToWamid: 'wamid-confirmation-message',
+        },
+      }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.executeConfirmedCalls[0]).toMatchObject({
+      toolName: 'create_note',
+      toolArgs: { content: 'Keep the legacy action.' },
+    });
   });
 
   it('records a failed confirmed execution without optional failure metadata', async () => {
@@ -2612,6 +2816,10 @@ function seedPendingConfirmation(
     confirmationId: string;
     toolName: IntexAgentToolName;
     toolArgs: Record<string, unknown>;
+    operations?: readonly {
+      toolName: IntexAgentToolName;
+      toolArgs: Record<string, unknown>;
+    }[];
   }
 ): void {
   repo.seedSession({
@@ -2631,6 +2839,7 @@ function seedPendingConfirmation(
     toolArgs: pending.toolArgs,
     message: 'Czy wykonać tę akcję?',
     sourceMessageId: 'wamid-original',
+    ...(pending.operations !== undefined ? { operations: pending.operations } : {}),
   });
 }
 
@@ -2720,13 +2929,7 @@ class FakeRunner implements IntexAgentRunner {
     sourceUrl?: string;
     currentDateTime: string;
   }[] = [];
-  readonly executeConfirmedCalls: {
-    session: IntexAgentSession;
-    toolName: IntexAgentToolName;
-    toolArgs: Record<string, unknown>;
-    currentDateTime: string;
-    messageId?: string;
-  }[] = [];
+  readonly executeConfirmedCalls: Parameters<IntexAgentRunner['executeConfirmed']>[0][] = [];
 
   constructor(
     private readonly results: IntexAgentRunnerResult[],

@@ -1,7 +1,7 @@
 export const INTEX_AGENT_CAPABILITIES = [
   'summarize and reason over the current session',
   'create notes',
-  'create and look up calendar events',
+  'create, look up, and update calendar events',
   'create research drafts',
   'save bookmarks',
   'create code tasks for planning or execution',
@@ -20,7 +20,7 @@ export interface IntexAgentLanguageMessage {
 const POLISH_INTEX_AGENT_CAPABILITIES = [
   'podsumowywaniem i analizowaniem bieżącej sesji',
   'tworzeniem notatek',
-  'tworzeniem i sprawdzaniem wydarzeń w kalendarzu',
+  'tworzeniem, sprawdzaniem i aktualizowaniem wydarzeń w kalendarzu',
   'tworzeniem szkiców researchu',
   'zapisywaniem bookmarków',
   'tworzeniem zadań programistycznych do planowania lub wykonania',

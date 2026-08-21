@@ -2,6 +2,7 @@ import type { ToolDefinition } from '@intexuraos/llm-contract';
 import {
   calendarEventDateTimeSchema,
   calendarListEventsRequestSchema,
+  calendarUpdateEventChangesSchema,
   calendarUpdateEventAttendeesRequestSchema,
 } from '@intexuraos/http-contracts';
 
@@ -34,11 +35,23 @@ export interface QueryCalendarEventsToolArgs {
 export interface UpdateCalendarEventToolArgs {
   eventId: string;
   eventSummary: string;
-  attendeesToAdd: string[];
+  changes?: UpdateCalendarEventChanges;
+  // Legacy shape retained for confirmations created before the general update contract.
+  attendeesToAdd?: string[];
   calendarId?: string;
   expectedEtag?: string;
   eventStart?: CalendarEventDateTimeSnapshot;
   eventEnd?: CalendarEventDateTimeSnapshot;
+}
+
+export interface UpdateCalendarEventChanges {
+  summary?: string;
+  description?: string | null;
+  location?: string | null;
+  start?: CalendarEventDateTimeSnapshot;
+  end?: CalendarEventDateTimeSnapshot;
+  attendeesToAdd?: string[];
+  attendeesToRemove?: string[];
 }
 
 export interface CalendarEventDateTimeSnapshot {
@@ -114,6 +127,43 @@ function toolDescription(parts: ToolDescriptionParts): string {
     `Result: ${parts.result}`,
     `Errors: ${parts.errors}`,
   ].join('\n');
+}
+
+function calendarEventChangesToolSchema(): Record<string, unknown> {
+  const eventDateTime = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      date: { type: 'string', description: 'All-day date in YYYY-MM-DD format.' },
+      dateTime: { type: 'string', description: 'Timed event instant as an ISO date-time.' },
+      timeZone: { type: 'string', description: 'Optional IANA timezone for dateTime.' },
+    },
+  };
+  const attendeeEmails = {
+    type: 'array',
+    minItems: 1,
+    items: { type: 'string', format: 'email' },
+  };
+  return {
+    type: 'object',
+    additionalProperties: false,
+    minProperties: 1,
+    properties: {
+      summary: { type: 'string', minLength: 1, description: 'New event title.' },
+      description: { type: ['string', 'null'], description: 'New description; null clears it.' },
+      location: { type: ['string', 'null'], description: 'New location; null clears it.' },
+      start: eventDateTime,
+      end: eventDateTime,
+      attendeesToAdd: {
+        ...attendeeEmails,
+        description: 'Attendee emails to add without replacing retained attendees.',
+      },
+      attendeesToRemove: {
+        ...attendeeEmails,
+        description: 'Attendee emails to remove without replacing retained attendees.',
+      },
+    },
+  };
 }
 
 export interface IntexAgentToolExecutor {
@@ -288,25 +338,25 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
     {
       name: 'update_calendar_event',
       description: toolDescription({
-        purpose: 'Add one or more attendees to one existing calendar event.',
+        purpose: 'Update one existing calendar event.',
         useFor:
-          '"Invite Patryk to the existing Bagrowa event", "add anna@example.com to tomorrow\'s planning meeting".',
+          'changing an existing event title, time, location, description, or attendees, including rescheduling one event.',
         doNotUseFor:
-          'creating a new event, changing its title, time, description, or location, deleting it, or updating an event that was not identified from calendar results.',
+          'creating or deleting an event, or updating an event that was not identified from calendar results.',
         requiredInput:
-          'eventId, eventSummary, and a non-empty attendeesToAdd email list are required. calendarId is optional.',
+          'eventId, eventSummary, and changes are required. changes must include at least one supported field: title, start and end time, location, description, attendees to add, or attendees to remove.',
         boundary:
-          'Use query_calendar_events first to identify exactly one existing event and reuse its calendarId when specified. If no event or multiple events match, ask a targeted clarification. This mutating action always requires confirmation and preserves every other event detail.',
+          'Use query_calendar_events first and copy the exact event ID. Call this tool once per event. Several singular updates may share one confirmation, but remain independent operations. If a target is ambiguous, ask a targeted clarification. This mutating action always requires confirmation and preserves unspecified fields.',
         examples:
-          'Positive: after one query result, add pat@example.com to that event. Negative: "Create dinner with Pat tomorrow".',
-        result: 'Returns status, event ID, summary, added attendees, and an optional calendar link.',
+          'Positive: after a calendar query, move one event to 2026-08-22 or add pat@example.com. Negative: "Create dinner with Pat tomorrow".',
+        result: 'Returns status, event ID, updated summary, and an optional calendar link.',
         errors:
-          'Validation covers a missing event ID or empty attendee list; permission/configuration covers calendar access problems.',
+          'Validation covers missing targets, empty changes, invalid time pairs, and invalid attendee emails; permission/configuration covers calendar access problems.',
       }),
       parameters: {
         type: 'object',
         additionalProperties: false,
-        required: ['eventId', 'eventSummary', 'attendeesToAdd'],
+        required: ['eventId', 'eventSummary', 'changes'],
         properties: {
           eventId: {
             type: 'string',
@@ -316,12 +366,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
             type: 'string',
             description: 'Exact event summary returned by query_calendar_events for confirmation.',
           },
-          attendeesToAdd: {
-            type: 'array',
-            minItems: 1,
-            items: { type: 'string', format: 'email' },
-            description: 'Attendee email addresses to add without replacing existing attendees.',
-          },
+          changes: calendarEventChangesToolSchema(),
           calendarId: {
             type: 'string',
             description: 'Optional calendar identifier. Omit to use the default calendar.',
@@ -879,21 +924,72 @@ function toQueryCalendarEventsArgs(args: Record<string, unknown>): QueryCalendar
 function toUpdateCalendarEventArgs(args: Record<string, unknown>): UpdateCalendarEventToolArgs {
   const eventId = requiredString(args, 'eventId');
   const eventSummary = requiredString(args, 'eventSummary');
-  const attendeesToAdd = requiredEmailArray(args, 'attendeesToAdd');
   const calendarId = optionalString(args, 'calendarId');
   const expectedEtag = optionalString(args, 'expectedEtag');
   const eventStart = optionalCalendarDateTimeSnapshot(args, 'eventStart');
   const eventEnd = optionalCalendarDateTimeSnapshot(args, 'eventEnd');
 
-  return {
+  const common = {
     eventId,
     eventSummary,
-    attendeesToAdd,
     ...(calendarId !== undefined ? { calendarId } : {}),
     ...(expectedEtag !== undefined ? { expectedEtag } : {}),
     ...(eventStart !== undefined ? { eventStart } : {}),
     ...(eventEnd !== undefined ? { eventEnd } : {}),
   };
+  if (args['changes'] !== undefined) {
+    return { ...common, changes: toCalendarEventChanges(args['changes']) };
+  }
+  return { ...common, attendeesToAdd: requiredEmailArray(args, 'attendeesToAdd') };
+}
+
+function toCalendarEventChanges(value: unknown): UpdateCalendarEventChanges {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Tool argument changes must be a calendar event changes object');
+  }
+  const record = value as Record<string, unknown>;
+  const supportedKeys = new Set([
+    'summary',
+    'description',
+    'location',
+    'start',
+    'end',
+    'attendeesToAdd',
+    'attendeesToRemove',
+  ]);
+  if (Object.keys(record).some((key) => !supportedKeys.has(key))) {
+    throw new Error('Tool argument changes contains an unsupported field');
+  }
+
+  const summary = optionalString(record, 'summary');
+  const description = optionalNullableString(record, 'description');
+  const location = optionalNullableString(record, 'location');
+  const start = optionalCalendarDateTimeSnapshot(record, 'start');
+  const end = optionalCalendarDateTimeSnapshot(record, 'end');
+  const attendeesToAdd = optionalEmailArray(record, 'attendeesToAdd');
+  const attendeesToRemove = optionalEmailArray(record, 'attendeesToRemove');
+  const changes: UpdateCalendarEventChanges = {
+    ...(summary !== undefined ? { summary } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(location !== undefined ? { location } : {}),
+    ...(start !== undefined ? { start } : {}),
+    ...(end !== undefined ? { end } : {}),
+    ...(attendeesToAdd !== undefined ? { attendeesToAdd } : {}),
+    ...(attendeesToRemove !== undefined ? { attendeesToRemove } : {}),
+  };
+  const parsed = calendarUpdateEventChangesSchema.safeParse({
+    ...changes,
+    ...(attendeesToAdd !== undefined
+      ? { attendeesToAdd: attendeesToAdd.map((email) => ({ email })) }
+      : {}),
+    ...(attendeesToRemove !== undefined
+      ? { attendeesToRemove: attendeesToRemove.map((email) => ({ email })) }
+      : {}),
+  });
+  if (!parsed.success) {
+    throw new Error('Tool argument changes must contain a valid calendar event update');
+  }
+  return changes;
 }
 
 function toCreateResearchArgs(args: Record<string, unknown>): CreateResearchToolArgs {
@@ -1051,6 +1147,18 @@ function optionalString(args: Record<string, unknown>, key: string): string | un
   return value;
 }
 
+function optionalNullableString(
+  args: Record<string, unknown>,
+  key: string
+): string | null | undefined {
+  const value = args[key];
+  if (value === undefined || value === null) return value;
+  if (typeof value !== 'string') {
+    throw new Error(`Tool argument ${key} must be a string or null`);
+  }
+  return value;
+}
+
 function optionalPositiveInteger(
   args: Record<string, unknown>,
   key: string,
@@ -1109,6 +1217,11 @@ function requiredEmailArray(args: Record<string, unknown>, key: string): string[
     throw new Error(`Tool argument ${key} must contain valid email addresses`);
   }
   return value;
+}
+
+function optionalEmailArray(args: Record<string, unknown>, key: string): string[] | undefined {
+  if (args[key] === undefined) return undefined;
+  return requiredEmailArray(args, key);
 }
 
 function optionalCalendarDateTimeSnapshot(
