@@ -1,117 +1,79 @@
 # Secret Migration Status Report
 
-> **Execution authority:**
-> [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).
-> The owner-approved destructive cutover supersedes the rollback, compatibility,
-> soak, and delayed-cleanup gates recorded below. This report remains historical
-> evidence and must not be used as an execution runbook.
+Status: **COMPLETE**
 
-Last updated: 2026-08-20 UTC
+Completed: 2026-08-21 UTC
 
-This report records only non-secret operational metadata. It contains no
-credential values, package payloads, private-key material, reversible value
-fingerprints, rendered environment data, or private evidence paths.
+Production release: `b303eb5e000a265d3c029382036e6cd2616c425c`
 
-## Historical Executive Status
+This report contains metadata only. It does not contain secret values,
+reversible fingerprints, rendered environments, or private evidence paths.
 
-The DEV and PROD package cutovers are complete on package version `2`.
-Production is healthy on the reviewed `development` release, and local,
-home-dev, worker, direct-origin, and public verification have passed. The
-remaining migration work is cleanup and observation, not a runtime cutover.
+## Result
 
-The cleanup is intentionally split:
+The IntexuraOS secret migration and the security cutover described in the
+[final cutover plan](./secret-exposure-final-cutover-plan.md) are complete.
+DEV and PROD run only on the final configuration. There is no rollback,
+dual-read, compatibility, or retained legacy-secret path.
 
-- Phase A removes legacy readers and disables legacy versions while retaining
-  every container, so rollback remains possible;
-- Phase B destroys the obsolete containers only after seven complete days of
-  healthy Phase A evidence.
+| Area | Final state |
+| --- | --- |
+| Application release | Home Dev and PROD run exact SHA `b303eb5e000a265d3c029382036e6cd2616c425c`. |
+| Secret packages | DEV `v3`, PROD `v3`, internal-auth `v3`, Speechmatics `v2`; all earlier versions destroyed. |
+| Legacy Secret Manager | `35` obsolete containers absent: `34` legacy application containers plus the empty Cloudflare DNS token container. |
+| Remaining application secrets | Exactly four package/native containers remain. Six additional containers are Google-managed GitHub connection OAuth tokens. |
+| Firebase | Old key UID `d8251549-1bde-49c0-82a7-b0525a2fe688` absent. Restricted replacement UID `e062efa4-59bc-4dd5-8d93-54375943463a` remains. GitHub secret-scanning alert `#1` is resolved as revoked. |
+| Runtime service account | Old key `ecd947dfc08351f186efc8f23c04c10b2d3c482a` absent. Replacement key `4bf7371e272b2c67b6d0bd59cd52cae7daf18efc` remains. |
+| Cloud Build | Project-level Secret Manager admin bindings: `0`. Exact Google-managed OAuth-secret accessor: `1`. GitHub connection is `COMPLETE`. |
+| Direct LLM providers | Removed. Application inference uses OpenRouter. Subscription-authenticated Claude and Codex CLI code-task runners are the only exception. |
+| Gemini | Generative Language API disabled. The exposed Gemini key is absent. Security-change logging and alerting are enabled. |
+| DEV edge | Cloudflare Access protects the browser surface. Only the frozen, authenticated webhook allowlist bypasses Access. Home Dev serves a static build; Vite internals and source maps are not public. |
+| Deployment automation | Production deployment is manual-only. The legacy Home Dev webhook service is disabled and masked. |
 
-Phase A was applied on 2026-08-20. Its reversible observation window began at
-`D_legacy=2026-08-20T16:41:14.034606179Z`. The earliest possible Phase B
-boundary is therefore `2026-08-27T16:41:14.034606179Z`; reaching that time is
-not sufficient by itself, because every daily health and audit gate must also
-pass.
+## Verification
 
-## Completed Evidence
+- Home Dev: PM2 `19/19`, backend health `19/19`, orchestrator ready,
+  Alloy ready and healthy, static web healthy.
+- PROD: workflow run `32461543306`, PM2 `19/19`, backend health `19/19`,
+  nginx and Alloy healthy, public and direct-origin checks pass.
+- Transcription: workflow run `32462497079`, Cloud Build
+  `3376a7b7-8b7e-4d52-b53d-57cfa9a8d2c0`, revision
+  `intexuraos-transcription-dev-00020-viz` active, exact two-secret reads,
+  zero read errors.
+- Anonymous DEV requests to `/`, `/src/*`, `/@vite/*`, `/@fs/*`, `.env`,
+  source maps, and the retired deployment webhook are blocked by Access.
+- The final targeted Terraform reconciliation for removed resources reports
+  zero resource and output changes. Unrelated provider drift was not applied.
 
-| Area | Status | Non-secret result |
-| --- | --- | --- |
-| DEV and PROD packages | PASS | Both environments use exact numeric package version `2`. |
-| Production rollout | PASS | Exact release attestation, PM2 `19/19`, semantic health, direct-origin and public matrices passed. |
-| home-dev and workers | PASS | Atomic projections, package-only runtime, replacement worker image, terminal callback, and secret-isolation checks passed. |
-| Rollback drill | PASS | Prior and forward package projections passed the required sampled observation. |
-| Recovery and escrow | PASS | Two independent encrypted provider copies and eight offline reconstruction paths passed with zero Secret Manager reads. |
-| Break-glass review | PASS | Two-person, exact-version, resource-level, maximum-60-minute design passed; no emergency grant was created. |
-| Abandoned runtime key | COMPLETE | The disabled, never-used staged key was deleted on 2026-08-20 at 14:40 UTC; the active and disabled rollback keys were unchanged. |
-| Phase A implementation | PASS | PRs `#2480` and `#2481` merged the reversible reader/container split and made `readers=false, containers=true` the authoritative Terraform desired state. |
-| Phase A IAM removal | PASS | The saved-plan allowlist covered exactly `569` approved Terraform deletes and no create/update/container/App Check action. A credential self-removal interrupted the first apply after `191` deletes; an independent owner resumed only the exact `378` remaining deletes. The final targeted plan is clean. |
-| Unmanaged legacy drift | PASS | Ten PromptVault resource accessors were removed after metadata-only proof of zero Secret Manager version access during the preceding 30 days. |
-| Legacy version disable | PASS | All `34` frozen legacy containers remain. Their version inventory is `0 ENABLED`, `35 DISABLED`, and `7 DESTROYED`; resource-level accessor count is `0`. The separate empty DNS-token container also remains with zero accessors. |
-| Post-Phase A runtime | PASS | PROD exact release/package attestation, `14/14` direct/public checks, PM2 `19/19`, and a non-activating package preflight passed. home-dev PM2 `22/22`, application package v2 `20/20`, orchestrator, Alloy, tunnel, and scheduler also passed. |
-| Remaining Terraform drift | DEFERRED | The full, untargeted plan contains exactly two pre-existing App Check service-config deletes and no Secret Manager or project-service change. They were not applied or mixed into Phase A. |
+## Terraform execution record
 
-## Phase A Applied Result
+All destructive plans were generated and applied sequentially. Each saved plan
+was checked against an exact address/action allowlist before apply.
 
-The reviewed implementation was merged to `development` and deployed before
-the infrastructure change. The follow-up release attests exact application
-SHA `ad7440fd63afb0cac89162616cabbc4a5f047229`, workflow run `32390862324`, and
-secret package version `2`.
+| Plan | Applied result |
+| --- | --- |
+| Cloud Build project-admin cleanup | `0` add, `0` change, `2` destroy |
+| DEV obsolete resources | `0` add, `0` change, `36` destroy: 35 obsolete secret containers plus the old Firebase key |
+| Hetzner legacy bootstrap | Already absent; targeted plan no-op |
+| Old package/native versions | DEV `v1-v2`, PROD `v1-v2`, internal-auth `v2`, Speechmatics `v1` destroyed |
+| Old runtime key | Deleted |
 
-The first saved Terraform plan contained exactly `569` allowlisted legacy IAM
-deletes. It contained zero additions, updates, Secret Manager containers,
-secret versions, or App Check resources. The execution account's own broad
-Secret Manager admin role was one of those deletes, so the first apply removed
-`191` entries and then failed closed on `378` permission denials. No
-out-of-scope resource changed. A fresh plan under an independent owner account
-contained exactly those `378` remaining deletes; its apply passed, and the
-same targeted plan now reports zero changes.
+## Separate billing follow-up
 
-Live IAM inspection then found ten unmanaged PromptVault accessors outside the
-Terraform state. The service account had zero `AccessSecretVersion` events in
-the preceding 30 days, so those ten bindings were removed directly and the
-resource-level legacy accessor count reached zero. Cloud Audit Log records
-`35/35` successful `DisableSecretVersion` operations between
-`2026-08-20T16:40:27.147626224Z` and
-`2026-08-20T16:41:14.034606179Z`. No version or container was destroyed by
-Phase A.
+The security migration is not blocked by the Google billing dispute. The
+existing `20 PLN` budget is alert-only and is not a hard spending cap.
 
-The prior passive 72-hour legacy-read window was intentionally superseded by
-this accelerated reversible path and must not be cited as a completed gate.
-Two known Cloud Build P4SA project-level Secret Manager admin bindings remain
-separately tracked; the legacy versions are disabled, and their least-privilege
-cleanup is scheduled during the reversible soak with a connection canary.
-The broad admin count is exactly `2`; the removed custom Cloud Build accessor
-and removed technical-account admin both have live count `0`.
+The support response for case `#74312245` has been prepared with the verified
+incident totals (`237.691246 PLN`, `1,068` calls) and remediation evidence, but
+delivery and any billing credit remain external Google-account actions. They
+must not be represented as completed by this migration report until Google
+confirms receipt and resolution.
 
-## Superseded Deferred Work
+## Terminal state
 
-The following table records the prior reversible strategy. Do not execute it;
-use the final cutover plan linked above.
-
-| Earliest gate | Required action | PASS condition | Why it is deferred |
-| --- | --- | --- | --- |
-| 2026-08-21 13:33 UTC | Close the Firebase 24-hour observation query. | Old-key request count `0`, replacement traffic positive, exhaustive query, DEV/PROD browser smokes remain healthy. | Recent old-key traffic proved cached clients still existed; deleting now could break sign-in or token refresh. |
-| After Firebase observation PASS | Remove the old Firebase key through reviewed Terraform and close the matching secret-scanning alert as revoked. | Exact old resource absent, replacement restrictions unchanged, browser smokes PASS, alert resolved. | Deletion before the observation gate is unnecessary availability risk. |
-| Daily through 2026-08-27 | Continue the disabled runtime-key soak. | Eight state snapshots, seven non-overlapping 24-hour intervals, replacement use positive, health/canary PASS, no re-enable or credential failures. | The disabled key is the only immediate rollback for a previously active credential. |
-| No earlier than 2026-08-27 16:06 UTC | Delete the previous runtime key. | All seven windows pass after the required logging lag. | Earlier deletion would remove the rollback before rare consumers are excluded. |
-| No earlier than 2026-08-27 16:41:14 UTC | Run legacy Phase B. | Seven complete Phase A intervals PASS; recovery, break-glass, health, IAM, and version-state evidence PASS; saved plan contains only obsolete container deletes. | Container deletion irreversibly deletes its versions. |
-| During the reversible soak | Reduce retained Cloud Build connection IAM to its exact secret-level dependency. | Connection remains complete, source-reference canary passes before and after, project-level Secret Manager admin count is zero, final plan is clean. | Requires separate Terraform adoption and an exact two-delete plan; it must not be mixed with container destruction. |
-| After every cleanup gate | Reconcile Terraform and documentation. | Clean full plans, full CI, current package/version/production attestations, no stale acceptance items. | Final closure must reflect live state rather than planned state. |
-
-## Superseded Safety Constraints
-
-These constraints belonged to the prior rollback strategy and are retained only
-as historical evidence.
-
-- Do not delete the legacy containers during Phase A.
-- Do not delete the previous runtime key before its complete seven-day gate.
-- Do not delete the old Firebase key before the mature 24-hour query passes.
-- Do not put secret values or secret-version payloads in Terraform state.
-- Do not combine unrelated App Check, provider, package, or native-secret
-  changes with either cleanup phase.
-- Do not treat an interrupted or shortened passive legacy-read window as a
-  72-hour PASS.
-
-## Superseded Closure Definition
-
-The active completion definition is in the final cutover plan linked above.
+- No legacy reader, container, package version, provider key, Firebase key, or
+  runtime key listed for deletion remains active.
+- No production rollback or compatibility path is retained.
+- Future defects are handled by fix-forward while the affected service remains
+  stopped.
+- This report and live infrastructure describe the same final state.
