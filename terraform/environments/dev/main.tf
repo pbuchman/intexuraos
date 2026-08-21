@@ -137,6 +137,19 @@ variable "alert_email" {
   default     = null
 }
 
+variable "whatsapp_private_recovery_operator_email" {
+  description = "Reviewed human operator allowed to impersonate the private WhatsApp recovery reader"
+  type        = string
+
+  validation {
+    condition = (
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+$", var.whatsapp_private_recovery_operator_email)) &&
+      !can(regex("\\.gserviceaccount\\.com$", var.whatsapp_private_recovery_operator_email))
+    )
+    error_message = "whatsapp_private_recovery_operator_email must identify one human user, not a service account."
+  }
+}
+
 variable "slack_auth_token" {
   description = "Slack bot OAuth token (xoxb-...) for the monitoring Slack notification channel. Leave null to skip provisioning the Slack channel."
   type        = string
@@ -584,6 +597,12 @@ resource "google_service_account" "whatsapp_private_sync" {
   description  = "External bridge caller identity for private WhatsApp sync ingestion"
 }
 
+resource "google_service_account" "whatsapp_private_recovery_reader" {
+  account_id   = "wa-private-recovery-reader-${var.environment}"
+  display_name = "Private WhatsApp Recovery Reader (${var.environment})"
+  description  = "Keyless, read-only verification identity for private WhatsApp recovery"
+}
+
 resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_prod_package" {
   secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]
   role      = "roles/secretmanager.secretAccessor"
@@ -716,10 +735,39 @@ resource "google_service_account_iam_member" "hetzner_runtime_token_creator" {
   member             = "serviceAccount:${google_service_account.hetzner_runtime.email}"
 }
 
-resource "google_service_account_iam_member" "whatsapp_private_sync_token_creator" {
+moved {
+  from = google_service_account_iam_member.whatsapp_private_sync_token_creator
+  to   = google_service_account_iam_member.whatsapp_private_sync_openid_token_creator
+}
+
+resource "google_service_account_iam_member" "whatsapp_private_sync_openid_token_creator" {
   service_account_id = google_service_account.whatsapp_private_sync.name
-  role               = "roles/iam.serviceAccountTokenCreator"
+  role               = "roles/iam.serviceAccountOpenIdTokenCreator"
   member             = "serviceAccount:${google_service_account.whatsapp_private_sync.email}"
+}
+
+resource "google_project_iam_member" "whatsapp_private_recovery_reader_firestore" {
+  project = var.project_id
+  role    = "roles/datastore.viewer"
+  member  = "serviceAccount:${google_service_account.whatsapp_private_recovery_reader.email}"
+}
+
+resource "google_storage_bucket_iam_member" "whatsapp_private_recovery_reader_storage" {
+  bucket = module.whatsapp_media_bucket.bucket_name
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.whatsapp_private_recovery_reader.email}"
+
+  condition {
+    title       = "private_whatsapp_prefix_only"
+    description = "Limit recovery verification reads to private WhatsApp objects"
+    expression  = "resource.name.startsWith(\"projects/_/buckets/${module.whatsapp_media_bucket.bucket_name}/objects/whatsapp/private/\")"
+  }
+}
+
+resource "google_service_account_iam_member" "whatsapp_private_recovery_operator_token_creator" {
+  service_account_id = google_service_account.whatsapp_private_recovery_reader.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "user:${var.whatsapp_private_recovery_operator_email}"
 }
 
 resource "google_storage_bucket_iam_member" "hetzner_runtime_bucket_object_admin" {
@@ -1597,6 +1645,11 @@ output "secret_package_prod_publisher_service_account_email" {
 output "whatsapp_private_sync_service_account" {
   description = "Service account email allowed to call production private WhatsApp sync ingest"
   value       = google_service_account.whatsapp_private_sync.email
+}
+
+output "whatsapp_private_recovery_reader_service_account" {
+  description = "Keyless read-only identity used to verify private WhatsApp recovery"
+  value       = google_service_account.whatsapp_private_recovery_reader.email
 }
 
 output "static_assets_bucket_name" {

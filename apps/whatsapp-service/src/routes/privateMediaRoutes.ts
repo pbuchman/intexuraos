@@ -45,6 +45,10 @@ interface PublicPrivateMediaAccessTokenPayload {
 }
 
 const PUBLIC_MEDIA_TOKEN_SIGNATURE_BYTES = 8;
+type PrivateMediaFailureReason =
+  | 'original_gcs_upload_failed'
+  | 'thumbnail_generation_failed'
+  | 'thumbnail_gcs_upload_failed';
 
 function privateMediaErrorResponse(description: string): Record<string, unknown> {
   return {
@@ -57,6 +61,20 @@ function privateMediaErrorResponse(description: string): Record<string, unknown>
     },
     required: ['success', 'error'],
   };
+}
+
+async function replyForPrivateMediaStageFailure(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  reason: PrivateMediaFailureReason
+): Promise<FastifyReply> {
+  request.log.error({ reason }, 'Private WhatsApp media pipeline stage failed');
+  return await reply.fail(
+    'DOWNSTREAM_ERROR',
+    'Private WhatsApp media pipeline failed',
+    undefined,
+    { reason }
+  );
 }
 
 function sanitizeMediaId(value: string): string {
@@ -84,7 +102,12 @@ function isVideoMimeType(mimeType: string): boolean {
 }
 
 function isSupportedUploadMimeType(mimeType: string): boolean {
-  return isImageMimeType(mimeType) || isAudioMimeType(mimeType) || isVideoMimeType(mimeType);
+  return (
+    isImageMimeType(mimeType) ||
+    isAudioMimeType(mimeType) ||
+    isVideoMimeType(mimeType) ||
+    mimeType === 'application/octet-stream'
+  );
 }
 
 function privateAccountGeneration(account: PrivateWhatsAppAccount): string {
@@ -475,7 +498,7 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
         if (mimeType === undefined || !isSupportedUploadMimeType(mimeType)) {
           return await reply.fail(
             'INVALID_REQUEST',
-            'mimeType must be an image, audio, or video MIME type'
+            'mimeType must be image, audio, video, or generic binary media'
           );
         }
 
@@ -506,7 +529,11 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           mimeType
         );
         if (!uploadResult.ok) {
-          return await reply.fail('DOWNSTREAM_ERROR', uploadResult.error.message);
+          return await replyForPrivateMediaStageFailure(
+            request,
+            reply,
+            'original_gcs_upload_failed'
+          );
         }
 
         const originalFence = await verifyPrivateMediaUploadFence({
@@ -529,7 +556,11 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             if (!cleaned) {
               return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp media cleanup failed');
             }
-            return await reply.fail('DOWNSTREAM_ERROR', thumbnailResult.error.message);
+            return await replyForPrivateMediaStageFailure(
+              request,
+              reply,
+              'thumbnail_generation_failed'
+            );
           }
 
           const thumbnailUploadResult = await services.mediaStorage.uploadPrivateThumbnail(
@@ -547,7 +578,11 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             if (!cleaned) {
               return await reply.fail('INTERNAL_ERROR', 'Private WhatsApp media cleanup failed');
             }
-            return await reply.fail('DOWNSTREAM_ERROR', thumbnailUploadResult.error.message);
+            return await replyForPrivateMediaStageFailure(
+              request,
+              reply,
+              'thumbnail_gcs_upload_failed'
+            );
           }
           thumbnailGcsPath = thumbnailUploadResult.value.gcsPath;
 
