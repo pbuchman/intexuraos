@@ -203,6 +203,29 @@ describe('Private WhatsApp Media Routes', () => {
     expect(body.data.media.thumbnailGcsPath).toBeUndefined();
   });
 
+  it('uploads Matrix file originals with the observed generic binary MIME type', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24file&mxcUri=mxc%3A%2F%2Fhome-dev%2Ffile&mimeType=application%2Foctet-stream&fileName=document.bin&mediaId=home-dev-file',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('file-bytes'),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body) as {
+      data: { media: { gcsPath: string; storedMimeType: string; thumbnailGcsPath?: string } };
+    };
+    const messageId = createPrivateWhatsAppMessageId('private-source-123', '$file');
+    expect(body.data.media.gcsPath).toBe(
+      `whatsapp/private/user-123/${messageId}/home-dev-file.bin`
+    );
+    expect(body.data.media.storedMimeType).toBe('application/octet-stream');
+    expect(body.data.media.thumbnailGcsPath).toBeUndefined();
+  });
+
   it('uses the source account id as the upload fence for legacy accounts without a generation id', async () => {
     ctx.privateWhatsAppRepository.setAccount({
       id: 'user-123',
@@ -511,7 +534,7 @@ describe('Private WhatsApp Media Routes', () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it('rejects uploads when mimeType is not image, audio, or video', async () => {
+  it('rejects unsupported private media MIME types', async () => {
     const response = await ctx.app.inject({
       method: 'POST',
       url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=application%2Fpdf&fileName=image.pdf&mediaId=image',
@@ -581,6 +604,9 @@ describe('Private WhatsApp Media Routes', () => {
     });
 
     expect(response.statusCode).toBe(502);
+    expect(JSON.parse(response.body).error.details).toEqual({
+      reason: 'original_gcs_upload_failed',
+    });
   });
 
   it('returns 502 when thumbnail generation fails', async () => {
@@ -602,6 +628,9 @@ describe('Private WhatsApp Media Routes', () => {
     });
 
     expect(response.statusCode).toBe(502);
+    expect(JSON.parse(response.body).error.details).toEqual({
+      reason: 'thumbnail_generation_failed',
+    });
   });
 
   it('returns 502 when thumbnail upload fails', async () => {
@@ -618,6 +647,9 @@ describe('Private WhatsApp Media Routes', () => {
     });
 
     expect(response.statusCode).toBe(502);
+    expect(JSON.parse(response.body).error.details).toEqual({
+      reason: 'thumbnail_gcs_upload_failed',
+    });
   });
 
   it.each(['generation', 'upload'] as const)(

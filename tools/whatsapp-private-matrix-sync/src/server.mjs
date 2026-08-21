@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const DEFAULT_PORT = 8099;
@@ -24,6 +25,11 @@ export function defaultMediaBackfillUrl(ingestUrl) {
   return ingestUrl.replace(/\/events$/, '/media/backfill');
 }
 
+export function defaultPrivateMediaStatusBaseUrl(ingestUrl) {
+  if (typeof ingestUrl !== 'string' || ingestUrl === '') return '';
+  return ingestUrl.replace(/\/events$/, '/messages');
+}
+
 export function createConfig(env = process.env) {
   return {
     port: Number(env.PORT ?? DEFAULT_PORT),
@@ -39,16 +45,22 @@ export function createConfig(env = process.env) {
     mediaBackfillUrl:
       env.INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_BACKFILL_URL ??
       defaultMediaBackfillUrl(env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? ''),
+    mediaStatusBaseUrl:
+      env.INTEXURAOS_WHATSAPP_PRIVATE_MEDIA_STATUS_BASE_URL ??
+      defaultPrivateMediaStatusBaseUrl(env.INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL ?? ''),
     googleApplicationCredentialsFile:
       env.INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE ??
       env.GOOGLE_APPLICATION_CREDENTIALS ??
       '',
     oidcAudience: env.INTEXURAOS_OIDC_AUDIENCE ?? 'https://intexuraos.cloud',
     oidcImpersonateServiceAccount: env.INTEXURAOS_OIDC_IMPERSONATE_SERVICE_ACCOUNT ?? '',
+    expectedGoogleServiceAccount: env.INTEXURAOS_EXPECTED_GOOGLE_SERVICE_ACCOUNT ?? '',
     sourceAccountId: env.INTEXURAOS_SOURCE_ACCOUNT_ID ?? '',
     userId: env.INTEXURAOS_USER_ID ?? '',
     ownWhatsAppPhoneNumber: normalizePhoneNumber(env.SOURCE_WHATSAPP_PHONE_NUMBER ?? ''),
     stateFile: env.WHATSAPP_SYNC_STATE_FILE ?? '/data/state.json',
+    pendingMediaFile: env.WHATSAPP_SYNC_PENDING_MEDIA_FILE ?? '/data/pending-media.json',
+    maintenanceFenceFile: env.WHATSAPP_SYNC_MAINTENANCE_FENCE_FILE ?? '/data/recovery-required',
     pollTimeoutMs: Number(env.WHATSAPP_SYNC_POLL_TIMEOUT_MS ?? DEFAULT_POLL_TIMEOUT_MS),
     initialSyncTimeoutMs: Number(
       env.WHATSAPP_SYNC_INITIAL_TIMEOUT_MS ?? DEFAULT_INITIAL_SYNC_TIMEOUT_MS
@@ -67,7 +79,7 @@ export function buildHealthPayload(config, readiness) {
   }
 
   const payload = {
-    ok: state !== 'error',
+    ok: state !== 'error' && state !== 'recovery_required',
     state,
     homeserverUrl: config.homeserverUrl,
     matrixUserId: config.matrixUserId,
@@ -83,12 +95,12 @@ export function buildHealthPayload(config, readiness) {
   return payload;
 }
 
-export function buildIngestPayload(config, events) {
+export function buildIngestPayload(config, events, deliveryMode = 'live') {
   const payload = {
     sourceAccountId: config.sourceAccountId,
     // This adapter only streams live events after the initial Matrix checkpoint.
     // Backfill callers should use separate deterministic replay tooling.
-    deliveryMode: 'live',
+    deliveryMode,
     events,
   };
   if (typeof config.userId === 'string' && config.userId !== '') {
@@ -103,24 +115,26 @@ export function createProcessingPlan(syncResponse, config, options) {
       ? syncResponse.next_batch
       : undefined;
 
+  const limitedTimelineCount = syncRoomEntries(syncResponse).filter(
+    ([, room]) => isRecord(room) && room.timeline?.limited === true
+  ).length;
+  const hasLimitedTimeline = limitedTimelineCount > 0;
+
   return {
     nextBatch,
     events:
-      options.hasStoredBatch === true
+      options.hasStoredBatch === true && !hasLimitedTimeline
         ? collectPrivateWhatsAppEvents(syncResponse, config, options.roomContexts)
         : [],
-    shouldPersistNextBatch: nextBatch !== undefined,
+    shouldPersistNextBatch: nextBatch !== undefined && !hasLimitedTimeline,
+    hasLimitedTimeline,
+    limitedTimelineCount,
   };
 }
 
 export function collectPrivateWhatsAppEvents(syncResponse, config, roomContexts = {}) {
-  const joinedRooms = syncResponse?.rooms?.join;
-  if (!isRecord(joinedRooms)) {
-    return [];
-  }
-
   const events = [];
-  for (const [roomId, room] of Object.entries(joinedRooms)) {
+  for (const [roomId, room] of syncRoomEntries(syncResponse)) {
     if (!isRecord(room)) {
       continue;
     }
@@ -139,13 +153,8 @@ export function collectPrivateWhatsAppEvents(syncResponse, config, roomContexts 
 }
 
 export function extractRoomContexts(syncResponse, existingRoomContexts = {}) {
-  const joinedRooms = syncResponse?.rooms?.join;
-  if (!isRecord(joinedRooms)) {
-    return existingRoomContexts;
-  }
-
   const roomContexts = { ...existingRoomContexts };
-  for (const [roomId, room] of Object.entries(joinedRooms)) {
+  for (const [roomId, room] of syncRoomEntries(syncResponse)) {
     if (!isRecord(room)) {
       continue;
     }
@@ -177,13 +186,11 @@ export async function ensureRoomContextsForIncomingEvents(
   config,
   fetchRoomState
 ) {
-  const joinedRooms = syncResponse?.rooms?.join;
-  if (!isRecord(joinedRooms)) {
-    return existingRoomContexts;
-  }
-
   const roomContexts = { ...existingRoomContexts };
-  for (const [roomId, room] of Object.entries(joinedRooms)) {
+  const leftRooms = new Set(
+    isRecord(syncResponse?.rooms?.leave) ? Object.keys(syncResponse.rooms.leave) : []
+  );
+  for (const [roomId, room] of syncRoomEntries(syncResponse)) {
     if (!isRecord(room)) {
       continue;
     }
@@ -191,6 +198,10 @@ export async function ensureRoomContextsForIncomingEvents(
     let context = roomContexts[roomId] ?? { memberDisplayNames: {} };
     const incomingSenders = incomingWhatsAppSendersFromRoom(room, config);
     if (incomingSenders.length === 0) {
+      continue;
+    }
+    if (leftRooms.has(roomId)) {
+      roomContexts[roomId] = context;
       continue;
     }
 
@@ -292,6 +303,54 @@ export function matrixEventToPrivateWhatsAppEvent(roomId, event, roomContext, co
   return mapped;
 }
 
+export function classifyMatrixEventForRecovery(roomId, event, roomContext, config) {
+  if (!isRecord(event)) {
+    return { classification: 'error', reason: 'malformed_event' };
+  }
+  if (typeof event.state_key === 'string') {
+    return { classification: 'policy_skip', reason: 'state_context_event' };
+  }
+
+  const type = readString(event, 'type');
+  if (type === 'm.bridge' || type === 'uk.half-shot.bridge') {
+    return { classification: 'policy_skip', reason: 'bridge_control_event' };
+  }
+  const content = isRecord(event.content) ? event.content : {};
+  if (type === 'm.room.message' && readString(content, 'msgtype') === 'm.notice') {
+    return { classification: 'policy_skip', reason: 'matrix_notice' };
+  }
+  if (type === 'm.room.encrypted') {
+    return { classification: 'error', reason: 'encrypted_event' };
+  }
+
+  const sender = readString(event, 'sender');
+  if (sender === undefined) {
+    return { classification: 'error', reason: 'malformed_message_like_event' };
+  }
+  const bridgeBotUsers = config.bridgeBotUsers ?? defaultBridgeBotUsers;
+  const senderPhone = normalizePhoneNumber(phoneNumberFromWhatsAppMxid(sender) ?? '');
+  const isOwnSender =
+    sender === config.matrixUserId ||
+    (config.ownWhatsAppPhoneNumber !== '' && senderPhone === config.ownWhatsAppPhoneNumber);
+  if (bridgeBotUsers.has(sender) || (!isOwnSender && !isWhatsAppMatrixUserId(sender))) {
+    return { classification: 'policy_skip', reason: 'explicit_non_whatsapp_sender' };
+  }
+
+  const mapped = matrixEventToPrivateWhatsAppEvent(roomId, event, roomContext, config);
+  if (mapped !== null) {
+    return { classification: 'mapped', event: mapped };
+  }
+  if (
+    type === 'm.room.message' ||
+    type === 'm.reaction' ||
+    type === 'm.sticker' ||
+    type === 'm.room.redaction'
+  ) {
+    return { classification: 'error', reason: 'malformed_message_like_event' };
+  }
+  return { classification: 'error', reason: 'unsupported_event_type' };
+}
+
 export function isIncomingWhatsAppMatrixEvent(event, config) {
   return getWhatsAppMatrixEventDirection(event, config) === 'incoming';
 }
@@ -356,9 +415,10 @@ export async function runSyncLoop(config, runtime) {
     try {
       await runSyncIteration(config, runtime);
     } catch (error) {
-      runtime.state = 'error';
+      const safeError = sanitizeError(error);
+      runtime.state = safeError === 'matrix_timeline_limited' ? 'recovery_required' : 'error';
       runtime.counters.errors = (runtime.counters.errors ?? 0) + 1;
-      runtime.lastError = sanitizeError(error);
+      runtime.lastError = safeError;
       console.error(
         JSON.stringify({
           event: 'whatsapp_sync_loop_error',
@@ -371,6 +431,7 @@ export async function runSyncLoop(config, runtime) {
 }
 
 export async function runSyncIteration(config, runtime, deps = {}) {
+  const hasMaintenanceFenceFn = deps.hasMaintenanceFence ?? hasMaintenanceFence;
   const readAccessTokenFn = deps.readAccessToken ?? readAccessToken;
   const hasNonEmptyFileFn = deps.hasNonEmptyFile ?? hasNonEmptyFile;
   const readSyncStateFn = deps.readSyncState ?? readSyncState;
@@ -380,8 +441,15 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   const joinMatrixRoomFn = deps.joinMatrixRoom ?? joinMatrixRoom;
   const postEventsInBatchesFn = deps.postEventsInBatches ?? postEventsInBatches;
   const uploadPrivateMediaFn = deps.uploadPrivateMedia ?? uploadPrivateMedia;
+  const checkPrivateMediaStoredFn = deps.checkPrivateMediaStored ?? checkPrivateMediaStored;
+  const postPrivateMediaBackfillFn = deps.postPrivateMediaBackfill ?? postPrivateMediaBackfill;
   const writeSyncStateFn = deps.writeSyncState ?? writeSyncState;
   const nowISOString = deps.nowISOString ?? (() => new Date().toISOString());
+
+  if (hasMaintenanceFenceFn(config.maintenanceFenceFile)) {
+    runtime.state = 'recovery_required';
+    return;
+  }
 
   const matrixAccessToken = readAccessTokenFn(config.matrixAccessTokenFile);
   const hasOidcCredentials = hasNonEmptyFileFn(config.googleApplicationCredentialsFile);
@@ -392,6 +460,12 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   if (!hasOidcCredentials) {
     runtime.state = 'waiting_for_intexuraos_oidc_credentials';
     return;
+  }
+  if (config.expectedGoogleServiceAccount !== '') {
+    validateGoogleCredentialIdentity(
+      config,
+      fs.readFileSync(config.googleApplicationCredentialsFile, 'utf8')
+    );
   }
 
   const state = await readSyncStateFn(config.stateFile);
@@ -418,6 +492,18 @@ export async function runSyncIteration(config, runtime, deps = {}) {
   }
 
   let roomContexts = extractRoomContexts(syncResponse, state.roomContexts ?? {});
+  let plan = createProcessingPlan(syncResponse, config, {
+    hasStoredBatch,
+    roomContexts,
+  });
+  runtime.counters.syncResponses = (runtime.counters.syncResponses ?? 0) + syncResponseCount;
+
+  if (plan.hasLimitedTimeline) {
+    runtime.counters.limitedTimelines = plan.limitedTimelineCount;
+    runtime.state = 'recovery_required';
+    throw new Error('matrix_timeline_limited');
+  }
+
   if (hasStoredBatch) {
     roomContexts = await ensureRoomContextsForIncomingEvents(
       syncResponse,
@@ -426,20 +512,21 @@ export async function runSyncIteration(config, runtime, deps = {}) {
       (roomId, stateType, stateKey) =>
         fetchMatrixRoomStateFn(config, matrixAccessToken, roomId, stateType, stateKey)
     );
+    plan = createProcessingPlan(syncResponse, config, {
+      hasStoredBatch,
+      roomContexts,
+    });
   }
-  const plan = createProcessingPlan(syncResponse, config, {
-    hasStoredBatch,
-    roomContexts,
-  });
-  runtime.counters.syncResponses = (runtime.counters.syncResponses ?? 0) + syncResponseCount;
 
   if (plan.events.length > 0) {
-    const preparedEvents = await prepareEventsForIngest(config, matrixAccessToken, plan.events, {
-      fetchMatrixMedia: fetchMatrixMediaFn,
-      uploadPrivateMedia: uploadPrivateMediaFn,
-    });
-    await postEventsInBatchesFn(config, preparedEvents);
-    runtime.counters.postedEvents = (runtime.counters.postedEvents ?? 0) + preparedEvents.length;
+    await postEventsInBatchesFn(config, plan.events);
+    await enqueuePendingMedia(
+      config.pendingMediaFile,
+      config.sourceAccountId,
+      plan.events,
+      nowISOString()
+    );
+    runtime.counters.postedEvents = (runtime.counters.postedEvents ?? 0) + plan.events.length;
   }
 
   if (plan.shouldPersistNextBatch) {
@@ -450,8 +537,22 @@ export async function runSyncIteration(config, runtime, deps = {}) {
     });
   }
 
-  runtime.state = 'running';
-  delete runtime.lastError;
+  const mediaResult = await drainPendingMedia(config, matrixAccessToken, {
+    fetchMatrixMedia: fetchMatrixMediaFn,
+    uploadPrivateMedia: uploadPrivateMediaFn,
+    checkPrivateMediaStored: checkPrivateMediaStoredFn,
+    postPrivateMediaBackfill: postPrivateMediaBackfillFn,
+    nowISOString,
+  });
+  runtime.counters.mediaPending = mediaResult.pending;
+  runtime.counters.mediaStored = (runtime.counters.mediaStored ?? 0) + mediaResult.stored;
+  runtime.counters.mediaFailures = (runtime.counters.mediaFailures ?? 0) + mediaResult.failed;
+  runtime.state = mediaResult.pending > 0 ? 'media_degraded' : 'running';
+  if (mediaResult.pending > 0) {
+    runtime.lastError = `pending_private_media_${mediaResult.pending}`;
+  } else {
+    delete runtime.lastError;
+  }
 }
 
 export async function prepareEventsForIngest(config, matrixAccessToken, events, deps) {
@@ -494,6 +595,131 @@ export async function prepareEventsForIngest(config, matrixAccessToken, events, 
   return prepared;
 }
 
+export async function enqueuePendingMedia(pendingMediaFile, sourceAccountId, events, queuedAt) {
+  const queue = await readPendingMediaQueue(pendingMediaFile);
+  const knownKeys = new Set(queue.items.map((item) => `${item.messageId}\0${item.mediaKind}`));
+  let changed = false;
+
+  for (const event of events) {
+    const media = event?.message?.media;
+    if (
+      !isPrivateMediaUploadMessageType(event?.message?.type) ||
+      typeof media?.mxcUri !== 'string' ||
+      media.mxcUri === '' ||
+      media.gcsPath !== undefined ||
+      typeof event.matrixEventId !== 'string'
+    ) {
+      continue;
+    }
+    const messageId = createPrivateWhatsAppMessageId(sourceAccountId, event.matrixEventId);
+    const key = `${messageId}\0${event.message.type}`;
+    if (knownKeys.has(key)) {
+      continue;
+    }
+    queue.items.push({
+      messageId,
+      mediaKind: event.message.type,
+      matrixEventId: event.matrixEventId,
+      media,
+      queuedAt,
+      attempts: 0,
+    });
+    knownKeys.add(key);
+    changed = true;
+  }
+
+  if (changed) {
+    await writePendingMediaQueue(pendingMediaFile, queue);
+  }
+  return queue.items.length;
+}
+
+export async function drainPendingMedia(config, matrixAccessToken, deps) {
+  const queue = await readPendingMediaQueue(config.pendingMediaFile);
+  if (queue.items.length === 0) {
+    return { stored: 0, failed: 0, pending: 0 };
+  }
+  const remaining = [];
+  let stored = 0;
+  let failed = 0;
+
+  for (const item of queue.items) {
+    try {
+      const checkPrivateMediaStoredFn = deps.checkPrivateMediaStored ?? checkPrivateMediaStored;
+      if (await checkPrivateMediaStoredFn(config, item.messageId)) {
+        stored += 1;
+        continue;
+      }
+      const downloaded = await deps.fetchMatrixMedia(config, matrixAccessToken, item.media.mxcUri);
+      const storedMedia = await deps.uploadPrivateMedia(
+        config,
+        { matrixEventId: item.matrixEventId },
+        item.media,
+        downloaded
+      );
+      await deps.postPrivateMediaBackfill(config, {
+        sourceAccountId: config.sourceAccountId,
+        messageId: item.messageId,
+        media: {
+          ...item.media,
+          ...storedMedia,
+        },
+      });
+      stored += 1;
+    } catch (error) {
+      remaining.push({
+        ...item,
+        attempts: item.attempts + 1,
+        lastAttemptAt: deps.nowISOString(),
+        lastError: sanitizeError(error),
+      });
+      failed += 1;
+    }
+  }
+
+  await writePendingMediaQueue(config.pendingMediaFile, {
+    version: 1,
+    items: remaining,
+  });
+  return { stored, failed, pending: remaining.length };
+}
+
+export async function checkPrivateMediaStored(config, messageId) {
+  if (config.mediaStatusBaseUrl === '') {
+    throw new Error('missing_private_media_status_url');
+  }
+  const authorization = await createGoogleIdentityAuthorizationHeader(config);
+  const url = new URL(`${config.mediaStatusBaseUrl}/${encodeURIComponent(messageId)}/media`);
+  url.searchParams.set('sourceAccountId', config.sourceAccountId);
+  const response = await fetch(url, {
+    headers: {
+      authorization,
+      'user-agent': 'home-dev-whatsapp-sync/1.0',
+    },
+  });
+  if (response.status === 404) {
+    return false;
+  }
+  if (!response.ok) {
+    throw new Error(`intexuraos_private_media_status_failed_${response.status}`);
+  }
+  const body = await response.json();
+  if (
+    !isRecord(body) ||
+    body.success !== true ||
+    !isRecord(body.data) ||
+    !isRecord(body.data.media) ||
+    typeof body.data.media.gcsPath !== 'string'
+  ) {
+    throw new Error('intexuraos_private_media_status_invalid_response');
+  }
+  return true;
+}
+
+export function createPrivateWhatsAppMessageId(sourceAccountId, matrixEventId) {
+  return createHash('sha256').update(`${sourceAccountId}\0${matrixEventId}`).digest('hex');
+}
+
 export async function backfillPrivateMedia(config, input, deps = {}) {
   const readAccessTokenFn = deps.readAccessToken ?? readAccessToken;
   const fetchMatrixMediaFn = deps.fetchMatrixMedia ?? fetchMatrixMedia;
@@ -530,7 +756,13 @@ export async function backfillPrivateMedia(config, input, deps = {}) {
 }
 
 function isPrivateMediaUploadMessageType(messageType) {
-  return messageType === 'image' || messageType === 'audio' || messageType === 'video';
+  return (
+    messageType === 'image' ||
+    messageType === 'audio' ||
+    messageType === 'video' ||
+    messageType === 'file' ||
+    messageType === 'sticker'
+  );
 }
 
 export function createHealthServer(config, runtime) {
@@ -547,7 +779,9 @@ export function createHealthServer(config, runtime) {
           lastError: runtime.lastError,
         });
 
-        writeJson(response, 200, payload);
+        const status =
+          payload.state === 'error' || payload.state === 'recovery_required' ? 503 : 200;
+        writeJson(response, status, payload);
         return;
       }
 
@@ -638,6 +872,20 @@ export function start(config = createConfig()) {
   return { server, runtime };
 }
 
+function syncRoomEntries(syncResponse) {
+  const rooms = new Map();
+  for (const membership of ['join', 'leave']) {
+    const section = syncResponse?.rooms?.[membership];
+    if (!isRecord(section)) {
+      continue;
+    }
+    for (const [roomId, room] of Object.entries(section)) {
+      rooms.set(roomId, room);
+    }
+  }
+  return [...rooms.entries()];
+}
+
 function extractRoomContext(room) {
   const context = {
     memberDisplayNames: {},
@@ -650,30 +898,37 @@ function extractRoomContext(room) {
   ];
 
   for (const event of stateEvents) {
-    if (!isRecord(event) || typeof event.state_key !== 'string') {
-      const type = isRecord(event) ? readString(event, 'type') : undefined;
-      if (type === 'm.room.name' && isRecord(event.content)) {
-        const name = readString(event.content, 'name');
-        if (name !== undefined) {
-          context.displayName = name;
-        }
+    if (!isRecord(event)) {
+      continue;
+    }
+    const type = readString(event, 'type');
+    if (type === 'm.room.name' && isRecord(event.content)) {
+      const name = readString(event.content, 'name');
+      if (name !== undefined) {
+        context.displayName = name;
       }
-      if (type === 'm.room.topic' && isRecord(event.content)) {
-        const topic = readString(event.content, 'topic');
-        if (topic !== undefined) {
-          context.chatType = chatTypeFromTopic(topic);
-        }
+      continue;
+    }
+    if (type === 'm.room.topic' && isRecord(event.content)) {
+      const topic = readString(event.content, 'topic');
+      if (topic !== undefined) {
+        context.chatType = chatTypeFromTopic(topic);
       }
-      if (type === 'm.room.avatar' && isRecord(event.content)) {
-        const avatarMxcUri = readString(event.content, 'url');
-        if (avatarMxcUri !== undefined) {
-          context.avatarMxcUri = avatarMxcUri;
-        }
+      continue;
+    }
+    if (type === 'm.room.avatar' && isRecord(event.content)) {
+      const avatarMxcUri = readString(event.content, 'url');
+      if (avatarMxcUri !== undefined) {
+        context.avatarMxcUri = avatarMxcUri;
       }
       continue;
     }
 
-    if (event.type === 'm.room.member' && isRecord(event.content)) {
+    if (
+      type === 'm.room.member' &&
+      typeof event.state_key === 'string' &&
+      isRecord(event.content)
+    ) {
       if (isActiveWhatsAppMember(event)) {
         whatsappMemberIds.add(event.state_key);
       }
@@ -834,6 +1089,10 @@ function matrixEventToMessage(event, direction) {
     return null;
   }
 
+  if (isRedactedMessageTombstone(event, content)) {
+    return { direction, type: 'unknown' };
+  }
+
   const relatesTo = isRecord(content['m.relates_to']) ? content['m.relates_to'] : {};
   if (readString(relatesTo, 'rel_type') === 'm.replace') {
     const targetMatrixEventId = readString(relatesTo, 'event_id');
@@ -881,6 +1140,22 @@ function matrixEventToMessage(event, direction) {
   }
 
   return withMediaFromContent(message, content);
+}
+
+function isRedactedMessageTombstone(event, content) {
+  if (Object.keys(content).length !== 0 || !isRecord(event.unsigned)) {
+    return false;
+  }
+  const redactedBy = readString(event.unsigned, 'redacted_by');
+  const redactedBecause = isRecord(event.unsigned.redacted_because)
+    ? event.unsigned.redacted_because
+    : undefined;
+  return (
+    redactedBy !== undefined &&
+    redactedBecause !== undefined &&
+    readString(redactedBecause, 'type') === 'm.room.redaction' &&
+    readString(redactedBecause, 'event_id') === redactedBy
+  );
 }
 
 function withOptionalText(message, text) {
@@ -942,6 +1217,8 @@ function messageTypeFromMatrixMsgtype(msgtype) {
       return 'video';
     case 'm.file':
       return 'file';
+    case 'm.location':
+      return 'unknown';
     default:
       return undefined;
   }
@@ -992,7 +1269,7 @@ function isActiveWhatsAppMember(event) {
   return isWhatsAppMatrixUserId(event.state_key) && membership !== 'leave' && membership !== 'ban';
 }
 
-function isWhatsAppMatrixUserId(value) {
+export function isWhatsAppMatrixUserId(value) {
   return typeof value === 'string' && /^@whatsapp_(?:[0-9]+|lid-[A-Za-z0-9_-]+):/.test(value);
 }
 
@@ -1281,14 +1558,16 @@ async function joinMatrixRoom(config, accessToken, roomId) {
   return await response.json();
 }
 
-async function postEventsInBatches(config, events) {
+export async function postEventsInBatches(config, events, deliveryMode = 'live') {
+  const results = [];
   for (let index = 0; index < events.length; index += MAX_EVENTS_PER_INGEST_REQUEST) {
     const batch = events.slice(index, index + MAX_EVENTS_PER_INGEST_REQUEST);
-    await postEvents(config, batch);
+    results.push(await postEvents(config, batch, deliveryMode));
   }
+  return results;
 }
 
-async function postEvents(config, events) {
+export async function postEvents(config, events, deliveryMode = 'live') {
   const authorization = await createGoogleIdentityAuthorizationHeader(config);
   const response = await fetch(config.ingestUrl, {
     method: 'POST',
@@ -1297,11 +1576,58 @@ async function postEvents(config, events) {
       'content-type': 'application/json',
       'user-agent': 'home-dev-whatsapp-sync/1.0',
     },
-    body: JSON.stringify(buildIngestPayload(config, events)),
+    body: JSON.stringify(buildIngestPayload(config, events, deliveryMode)),
   });
 
   if (!response.ok) {
     throw new Error(`intexuraos_ingest_failed_${response.status}`);
+  }
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    throw new Error('intexuraos_ingest_invalid_response');
+  }
+  validateIngestResponse(body, events);
+  return body.data;
+}
+
+export function validateIngestResponse(body, events) {
+  const data = isRecord(body) && body.success === true && isRecord(body.data) ? body.data : null;
+  if (
+    data === null ||
+    !Number.isInteger(data.accepted) ||
+    !Number.isInteger(data.duplicates) ||
+    data.rejected !== 0 ||
+    !Array.isArray(data.messages) ||
+    data.messages.length !== events.length
+  ) {
+    throw new Error('intexuraos_ingest_invalid_response');
+  }
+
+  const expected = events.map((event) => event?.matrixEventId).sort();
+  const actual = [];
+  let created = 0;
+  let duplicates = 0;
+  for (const message of data.messages) {
+    if (
+      !isRecord(message) ||
+      typeof message.matrixEventId !== 'string' ||
+      (message.outcome !== 'created' && message.outcome !== 'duplicate')
+    ) {
+      throw new Error('intexuraos_ingest_invalid_response');
+    }
+    actual.push(message.matrixEventId);
+    created += message.outcome === 'created' ? 1 : 0;
+    duplicates += message.outcome === 'duplicate' ? 1 : 0;
+  }
+  actual.sort();
+  if (
+    created !== data.accepted ||
+    duplicates !== data.duplicates ||
+    expected.some((eventId, index) => eventId !== actual[index])
+  ) {
+    throw new Error('intexuraos_ingest_invalid_response');
   }
 }
 
@@ -1333,10 +1659,15 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
     },
     body: downloaded.buffer,
   });
-  if (!response.ok) {
-    throw new Error(`intexuraos_private_media_upload_failed_${response.status}`);
+  let body;
+  try {
+    body = await response.json();
+  } catch {
+    body = undefined;
   }
-  const body = await response.json();
+  if (!response.ok) {
+    throw new Error(privateMediaUploadFailureCode(response.status, body));
+  }
   if (
     !isRecord(body) ||
     body.success !== true ||
@@ -1346,6 +1677,18 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
     throw new Error('intexuraos_private_media_upload_invalid_response');
   }
   return body.data.media;
+}
+
+export function privateMediaUploadFailureCode(status, body) {
+  const reason = body?.error?.details?.reason;
+  const safeReasons = new Set([
+    'original_gcs_upload_failed',
+    'thumbnail_generation_failed',
+    'thumbnail_gcs_upload_failed',
+  ]);
+  return `intexuraos_private_media_upload_failed_${status}${
+    safeReasons.has(reason) ? `_${reason}` : ''
+  }`;
 }
 
 export async function postPrivateMediaBackfill(config, payload) {
@@ -1451,10 +1794,68 @@ async function readSyncState(stateFile) {
 }
 
 async function writeSyncState(stateFile, state) {
-  await fsp.mkdir(path.dirname(stateFile), { recursive: true });
-  const tempFile = `${stateFile}.tmp`;
-  await fsp.writeFile(tempFile, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-  await fsp.rename(tempFile, stateFile);
+  await writeDurablePrivateJson(stateFile, state);
+}
+
+async function readPendingMediaQueue(pendingMediaFile) {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8'));
+    if (
+      !isRecord(parsed) ||
+      parsed.version !== 1 ||
+      !Array.isArray(parsed.items) ||
+      parsed.items.some(
+        (item) =>
+          !isRecord(item) ||
+          typeof item.messageId !== 'string' ||
+          typeof item.mediaKind !== 'string' ||
+          typeof item.matrixEventId !== 'string' ||
+          !isRecord(item.media) ||
+          typeof item.media.mxcUri !== 'string' ||
+          !Number.isInteger(item.attempts)
+      )
+    ) {
+      throw new Error('invalid_pending_media_queue');
+    }
+    return parsed;
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return { version: 1, items: [] };
+    }
+    throw error;
+  }
+}
+
+async function writePendingMediaQueue(pendingMediaFile, queue) {
+  await writeDurablePrivateJson(pendingMediaFile, queue);
+}
+
+async function writeDurablePrivateJson(filePath, value) {
+  const directory = path.dirname(filePath);
+  await fsp.mkdir(directory, { recursive: true, mode: 0o700 });
+  const tempFile = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  let handle;
+  try {
+    handle = await fsp.open(tempFile, 'wx', 0o600);
+    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, 'utf8');
+    await handle.sync();
+    await handle.close();
+    handle = undefined;
+    await fsp.rename(tempFile, filePath);
+    await fsp.chmod(filePath, 0o600);
+    const directoryHandle = await fsp.open(directory, 'r');
+    try {
+      await directoryHandle.sync();
+    } finally {
+      await directoryHandle.close();
+    }
+  } catch (error) {
+    if (handle !== undefined) {
+      await handle.close().catch(() => {});
+    }
+    await fsp.unlink(tempFile).catch(() => {});
+    throw error;
+  }
 }
 
 function readAccessToken(filePath) {
@@ -1468,6 +1869,28 @@ function readAccessToken(filePath) {
   }
 }
 
+export function validateGoogleCredentialIdentity(config, credentialJson) {
+  if (config.expectedGoogleServiceAccount === '') {
+    return;
+  }
+  if (config.oidcImpersonateServiceAccount !== config.expectedGoogleServiceAccount) {
+    throw new Error('google_credential_impersonation_target_mismatch');
+  }
+  let credential;
+  try {
+    credential = JSON.parse(credentialJson);
+  } catch {
+    throw new Error('google_credential_identity_mismatch');
+  }
+  if (
+    !isRecord(credential) ||
+    credential.type !== 'service_account' ||
+    credential.client_email !== config.expectedGoogleServiceAccount
+  ) {
+    throw new Error('google_credential_identity_mismatch');
+  }
+}
+
 function hasNonEmptyFile(filePath) {
   if (filePath === '') {
     return false;
@@ -1475,6 +1898,17 @@ function hasNonEmptyFile(filePath) {
   try {
     const stat = fs.statSync(filePath);
     return stat.isFile() && stat.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+function hasMaintenanceFence(filePath) {
+  if (filePath === '') {
+    return false;
+  }
+  try {
+    return fs.statSync(filePath).isFile();
   } catch {
     return false;
   }

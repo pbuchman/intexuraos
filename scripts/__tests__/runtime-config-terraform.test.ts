@@ -151,6 +151,69 @@ function sectionBetween(start: string, end: string): string {
 }
 
 describe('versioned runtime configuration Terraform cutover', () => {
+  it('uses scoped identities for private WhatsApp sync and recovery verification', () => {
+    const privateSyncSelfBinding = sectionBetween(
+      'resource "google_service_account_iam_member" "whatsapp_private_sync_openid_token_creator" {',
+      '\n}\n'
+    );
+    const recoveryReader = sectionBetween(
+      'resource "google_service_account" "whatsapp_private_recovery_reader" {',
+      '\n}\n'
+    );
+    const recoveryFirestore = sectionBetween(
+      'resource "google_project_iam_member" "whatsapp_private_recovery_reader_firestore" {',
+      '\n}\n'
+    );
+    const recoveryStorage = sectionBetween(
+      'resource "google_storage_bucket_iam_member" "whatsapp_private_recovery_reader_storage" {',
+      '\n}\n'
+    );
+    const recoveryOperator = sectionBetween(
+      'resource "google_service_account_iam_member" "whatsapp_private_recovery_operator_token_creator" {',
+      '\n}\n'
+    );
+
+    expect(privateSyncSelfBinding).toContain(
+      'role               = "roles/iam.serviceAccountOpenIdTokenCreator"'
+    );
+    expect(privateSyncSelfBinding).toContain(
+      'member             = "serviceAccount:${google_service_account.whatsapp_private_sync.email}"'
+    );
+    expect(terraform).toContain(
+      'from = google_service_account_iam_member.whatsapp_private_sync_token_creator'
+    );
+    expect(terraform).toContain(
+      'to   = google_service_account_iam_member.whatsapp_private_sync_openid_token_creator'
+    );
+    expect(recoveryReader).toContain(
+      'account_id   = "wa-private-recovery-reader-${var.environment}"'
+    );
+    expect(recoveryFirestore).toContain('role    = "roles/datastore.viewer"');
+    expect(recoveryStorage).toContain('role   = "roles/storage.objectViewer"');
+    expect(recoveryStorage).toContain(
+      'resource.name.startsWith(\\"projects/_/buckets/${module.whatsapp_media_bucket.bucket_name}/objects/whatsapp/private/\\")'
+    );
+    expect(recoveryOperator).toContain(
+      'service_account_id = google_service_account.whatsapp_private_recovery_reader.name'
+    );
+    expect(recoveryOperator).toContain(
+      'role               = "roles/iam.serviceAccountTokenCreator"'
+    );
+    expect(recoveryOperator).toContain(
+      'member             = "user:${var.whatsapp_private_recovery_operator_email}"'
+    );
+
+    const projectIamBlocks = [
+      ...terraform.matchAll(/resource "google_project_iam_member" "[^"]+" \{[\s\S]*?\n\}/gu),
+    ].map((match) => match[0]);
+    expect(projectIamBlocks).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/roles\/iam\.serviceAccountTokenCreator/u)])
+    );
+    expect(terraform).not.toContain(
+      'resource "google_service_account_key" "whatsapp_private_sync"'
+    );
+  });
+
   it('pins GitHub WIF to immutable repository claims and the development ref', () => {
     const provider = githubWifTerraform.match(
       /resource "google_iam_workload_identity_pool_provider" "github" \{[\s\S]*?\n\}/u

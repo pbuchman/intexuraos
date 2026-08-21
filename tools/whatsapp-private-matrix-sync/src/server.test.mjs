@@ -10,17 +10,23 @@ import {
   buildHealthPayload,
   buildImpersonatedIdTokenRequest,
   buildIngestPayload,
+  classifyMatrixEventForRecovery,
   collectWhatsAppInviteRoomIds,
   collectPrivateWhatsAppEvents,
   createConfig,
   createHealthServer,
   createProcessingPlan,
+  drainPendingMedia,
+  enqueuePendingMedia,
   ensureRoomContextsForIncomingEvents,
   extractRoomContexts,
   fetchMatrixMedia,
   isIncomingWhatsAppMatrixEvent,
   prepareEventsForIngest,
+  privateMediaUploadFailureCode,
   runSyncIteration,
+  validateGoogleCredentialIdentity,
+  validateIngestResponse,
 } from './server.mjs';
 
 const config = createConfig({
@@ -69,6 +75,46 @@ test('buildImpersonatedIdTokenRequest requests email-bearing identity tokens for
       }),
     },
   });
+});
+
+test('OIDC minting requires the private-sync credential to target its exact self binding', () => {
+  const expected = 'intexuraos-wa-private-sync-dev@example.iam.gserviceaccount.com';
+  assert.doesNotThrow(() =>
+    validateGoogleCredentialIdentity(
+      {
+        expectedGoogleServiceAccount: expected,
+        oidcImpersonateServiceAccount: expected,
+      },
+      JSON.stringify({ type: 'service_account', client_email: expected })
+    )
+  );
+  assert.throws(
+    () =>
+      validateGoogleCredentialIdentity(
+        {
+          expectedGoogleServiceAccount: expected,
+          oidcImpersonateServiceAccount: expected,
+        },
+        JSON.stringify({
+          type: 'service_account',
+          client_email: 'admin@example.iam.gserviceaccount.com',
+        })
+      ),
+    /google_credential_identity_mismatch/
+  );
+  for (const target of ['', 'other@example.iam.gserviceaccount.com']) {
+    assert.throws(
+      () =>
+        validateGoogleCredentialIdentity(
+          {
+            expectedGoogleServiceAccount: expected,
+            oidcImpersonateServiceAccount: target,
+          },
+          JSON.stringify({ type: 'service_account', client_email: expected })
+        ),
+      /google_credential_impersonation_target_mismatch/
+    );
+  }
 });
 
 test('collectPrivateWhatsAppEvents maps incoming Matrix WhatsApp text messages to production ingest events', () => {
@@ -1123,6 +1169,232 @@ test('collectWhatsAppInviteRoomIds returns only WhatsApp bridge invites', () => 
   );
 });
 
+test('collectPrivateWhatsAppEvents maps WhatsApp events from joined and left rooms', () => {
+  const syncResponse = {
+    rooms: {
+      join: {
+        '!joined:home-dev': {
+          state: { events: [] },
+          timeline: { events: [matrixMessage({ event_id: '$joined' })] },
+        },
+      },
+      leave: {
+        '!left:home-dev': {
+          state: { events: [] },
+          timeline: { events: [matrixMessage({ event_id: '$left' })] },
+        },
+      },
+    },
+  };
+
+  assert.deepEqual(
+    collectPrivateWhatsAppEvents(syncResponse, config).map((event) => event.matrixEventId),
+    ['$joined', '$left']
+  );
+});
+
+test('createProcessingPlan refuses to advance across a limited joined or left timeline', () => {
+  for (const membership of ['join', 'leave']) {
+    const plan = createProcessingPlan(
+      {
+        next_batch: `s-${membership}`,
+        rooms: {
+          [membership]: {
+            '!limited:home-dev': {
+              state: { events: [] },
+              timeline: {
+                limited: true,
+                prev_batch: 'older-events-exist',
+                events: [matrixMessage({ event_id: `$${membership}` })],
+              },
+            },
+          },
+        },
+      },
+      config,
+      { hasStoredBatch: true, roomContexts: {} }
+    );
+
+    assert.equal(plan.hasLimitedTimeline, true);
+    assert.equal(plan.limitedTimelineCount, 1);
+    assert.equal(plan.shouldPersistNextBatch, false);
+    assert.deepEqual(plan.events, []);
+  }
+});
+
+test('validateIngestResponse requires one successful result for every requested event', () => {
+  const events = [{ matrixEventId: '$one' }, { matrixEventId: '$two' }];
+
+  assert.doesNotThrow(() =>
+    validateIngestResponse(
+      {
+        success: true,
+        data: {
+          accepted: 1,
+          duplicates: 1,
+          rejected: 0,
+          messages: [
+            { matrixEventId: '$one', outcome: 'created' },
+            { matrixEventId: '$two', outcome: 'duplicate' },
+          ],
+        },
+      },
+      events
+    )
+  );
+
+  for (const body of [
+    {
+      success: true,
+      data: {
+        accepted: 1,
+        duplicates: 0,
+        rejected: 1,
+        messages: [
+          { matrixEventId: '$one', outcome: 'created' },
+          { matrixEventId: '$two', outcome: 'rejected' },
+        ],
+      },
+    },
+    {
+      success: true,
+      data: {
+        accepted: 1,
+        duplicates: 0,
+        rejected: 0,
+        messages: [{ matrixEventId: '$one', outcome: 'created' }],
+      },
+    },
+    {
+      success: true,
+      data: {
+        accepted: 2,
+        duplicates: 0,
+        rejected: 0,
+        messages: [
+          { matrixEventId: '$one', outcome: 'created' },
+          { matrixEventId: '$unexpected', outcome: 'created' },
+        ],
+      },
+    },
+  ]) {
+    assert.throws(() => validateIngestResponse(body, events), /intexuraos_ingest_invalid_response/);
+  }
+});
+
+test('private media upload failures retain only the safe typed API stage', () => {
+  assert.equal(
+    privateMediaUploadFailureCode(502, {
+      success: false,
+      error: { details: { reason: 'thumbnail_gcs_upload_failed' } },
+    }),
+    'intexuraos_private_media_upload_failed_502_thumbnail_gcs_upload_failed'
+  );
+  assert.equal(
+    privateMediaUploadFailureCode(502, {
+      success: false,
+      error: { details: { reason: 'raw-private-id-must-not-pass' } },
+    }),
+    'intexuraos_private_media_upload_failed_502'
+  );
+});
+
+test('recovery classifier uses closed skip predicates and fails on malformed message-like events', () => {
+  const roomContext = { memberDisplayNames: {} };
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      { type: 'm.room.name', state_key: '', content: { name: 'Private chat' } },
+      roomContext,
+      config
+    ),
+    { classification: 'policy_skip', reason: 'state_context_event' }
+  );
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      { type: 'm.bridge', sender: '@whatsappbot:home-dev', content: {} },
+      roomContext,
+      config
+    ),
+    { classification: 'policy_skip', reason: 'bridge_control_event' }
+  );
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      matrixMessage({ content: { msgtype: 'm.notice', body: 'bridge control' } }),
+      roomContext,
+      config
+    ),
+    { classification: 'policy_skip', reason: 'matrix_notice' }
+  );
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      matrixMessage({ sender: '@ordinary:home-dev' }),
+      roomContext,
+      config
+    ),
+    { classification: 'policy_skip', reason: 'explicit_non_whatsapp_sender' }
+  );
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      matrixMessage({ type: 'm.room.encrypted' }),
+      roomContext,
+      config
+    ),
+    { classification: 'error', reason: 'encrypted_event' }
+  );
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
+      matrixMessage({ content: { body: 'missing msgtype' } }),
+      roomContext,
+      config
+    ),
+    { classification: 'error', reason: 'malformed_message_like_event' }
+  );
+  const mapped = classifyMatrixEventForRecovery(
+    '!room:home-dev',
+    matrixMessage({ event_id: '$mapped' }),
+    roomContext,
+    config
+  );
+  assert.equal(mapped.classification, 'mapped');
+  assert.equal(mapped.event.matrixEventId, '$mapped');
+
+  const location = classifyMatrixEventForRecovery(
+    '!room:home-dev',
+    matrixMessage({
+      event_id: '$location',
+      content: { msgtype: 'm.location', body: 'Shared location', geo_uri: 'geo:0,0' },
+    }),
+    roomContext,
+    config
+  );
+  assert.equal(location.classification, 'mapped');
+  assert.equal(location.event.message.type, 'unknown');
+  assert.equal(location.event.message.text, 'Shared location');
+
+  const redactedTombstone = classifyMatrixEventForRecovery(
+    '!room:home-dev',
+    matrixMessage({
+      event_id: '$redacted-original',
+      content: {},
+      unsigned: {
+        redacted_by: '$redaction',
+        redacted_because: { type: 'm.room.redaction', event_id: '$redaction' },
+      },
+    }),
+    roomContext,
+    config
+  );
+  assert.equal(redactedTombstone.classification, 'mapped');
+  assert.equal(redactedTombstone.event.message.type, 'unknown');
+  assert.equal(redactedTombstone.event.message.text, undefined);
+});
+
 test('runSyncIteration joins WhatsApp invite rooms before processing joined timelines', async () => {
   const runtime = { state: 'starting', counters: {} };
   const joinedRoomIds = [];
@@ -1209,19 +1481,65 @@ test('runSyncIteration joins WhatsApp invite rooms before processing joined time
   assert.equal(runtime.counters.postedEvents, 1);
 });
 
-test('runSyncIteration uploads new Matrix images before posting ingest events', async () => {
+test('runSyncIteration processes a room joined and left between syncs without post-leave state reads', async () => {
+  const runtime = { state: 'starting', counters: {} };
+  const posted = [];
+  const writtenStates = [];
+
+  await runSyncIteration(config, runtime, {
+    readAccessToken: () => 'matrix-token',
+    hasNonEmptyFile: () => true,
+    readSyncState: async () => ({ nextBatch: 's0', roomContexts: {} }),
+    fetchMatrixSync: async () => ({
+      next_batch: 's1',
+      rooms: {
+        leave: {
+          '!joined-and-left:home-dev': {
+            state: {
+              events: [
+                { type: 'm.room.name', content: { name: 'Recovered leave room' } },
+                { type: 'm.room.topic', content: { topic: 'WhatsApp private chat' } },
+              ],
+            },
+            timeline: {
+              limited: false,
+              events: [matrixMessage({ event_id: '$final-before-leave' })],
+            },
+          },
+        },
+      },
+    }),
+    fetchMatrixRoomState: async () =>
+      assert.fail('state must not be fetched after the Matrix user left the room'),
+    postEventsInBatches: async (_config, events) => posted.push(...events),
+    writeSyncState: async (_stateFile, state) => writtenStates.push(state),
+    nowISOString: () => '2026-08-21T17:00:00.000Z',
+  });
+
+  assert.deepEqual(
+    posted.map((event) => event.matrixEventId),
+    ['$final-before-leave']
+  );
+  assert.equal(posted[0]?.chat.displayName, 'Recovered leave room');
+  assert.equal(writtenStates.length, 1);
+  assert.equal(writtenStates[0]?.nextBatch, 's1');
+});
+
+test('runSyncIteration persists metadata and cursor while retaining failed media for retry', async () => {
   const stateFile = await createTempStateFile({
     nextBatch: 'batch-1',
     roomContexts: {},
   });
+  const pendingMediaFile = path.join(path.dirname(stateFile), 'pending-media.json');
   const postedBatches = [];
-  const uploadedMedia = [];
+  const writtenStates = [];
   const runtime = { state: 'starting', counters: {} };
 
   await runSyncIteration(
     {
       ...config,
       stateFile,
+      pendingMediaFile,
       mediaUploadUrl: 'https://intexuraos.cloud/internal/whatsapp/private/media',
     },
     runtime,
@@ -1252,48 +1570,61 @@ test('runSyncIteration uploads new Matrix images before posting ingest events', 
         },
       }),
       fetchMatrixRoomState: async () => ({}),
-      fetchMatrixMedia: async (_config, accessToken, mxcUri) => {
-        assert.equal(accessToken, 'matrix-token');
-        assert.equal(mxcUri, 'mxc://home-dev/image');
-        return {
-          buffer: Buffer.from('image-bytes'),
-          contentType: 'image/jpeg',
-        };
-      },
-      uploadPrivateMedia: async (_config, event, media, downloaded) => {
-        uploadedMedia.push({ event, media, downloaded });
-        return {
-          mxcUri: media.mxcUri,
-          mimeType: 'image/jpeg',
-          fileName: 'image.jpg',
-          sizeBytes: downloaded.buffer.length,
-          storageStatus: 'stored',
-          gcsPath: 'whatsapp/private/user/message/image.jpg',
-          thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
-          storedMimeType: 'image/jpeg',
-          storedSizeBytes: downloaded.buffer.length,
-          storedAt: '2026-06-26T10:00:00.000Z',
-        };
-      },
       postEventsInBatches: async (_config, events) => {
         postedBatches.push(events);
+      },
+      fetchMatrixMedia: async () => {
+        throw new Error('matrix_media_download_failed_404');
+      },
+      checkPrivateMediaStored: async () => false,
+      writeSyncState: async (_stateFile, state) => {
+        writtenStates.push(state);
       },
     }
   );
 
-  assert.equal(uploadedMedia.length, 1);
-  assert.deepEqual(postedBatches[0]?.[0]?.message.media, {
-    mxcUri: 'mxc://home-dev/image',
-    mimeType: 'image/jpeg',
-    fileName: 'image.jpg',
-    sizeBytes: 'image-bytes'.length,
-    storageStatus: 'stored',
-    gcsPath: 'whatsapp/private/user/message/image.jpg',
-    thumbnailGcsPath: 'whatsapp/private/user/message/image_thumb.jpg',
-    storedMimeType: 'image/jpeg',
-    storedSizeBytes: 'image-bytes'.length,
-    storedAt: '2026-06-26T10:00:00.000Z',
+  assert.equal(postedBatches.length, 1);
+  assert.equal(postedBatches[0]?.[0]?.matrixEventId, '$image');
+  assert.equal(postedBatches[0]?.[0]?.message.media.storageStatus, undefined);
+  assert.equal(writtenStates[0]?.nextBatch, 'batch-2');
+  const pending = JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8'));
+  assert.equal(pending.items.length, 1);
+  assert.equal(pending.items[0]?.matrixEventId, '$image');
+  assert.equal(pending.items[0]?.attempts, 1);
+  assert.equal(pending.items[0]?.lastError, 'matrix_media_download_failed_404');
+  assert.equal(runtime.state, 'media_degraded');
+});
+
+test('pending media retry skips deterministic messages whose media is already stored', async () => {
+  const stateFile = await createTempStateFile({ nextBatch: 's0' });
+  const pendingMediaFile = path.join(path.dirname(stateFile), 'pending-media.json');
+  const event = {
+    matrixEventId: '$stored-media',
+    message: {
+      type: 'image',
+      media: { mxcUri: 'mxc://home-dev/stored-media', mimeType: 'image/jpeg' },
+    },
+  };
+  await enqueuePendingMedia(
+    pendingMediaFile,
+    config.sourceAccountId,
+    [event],
+    '2026-08-21T00:00:00.000Z'
+  );
+
+  const result = await drainPendingMedia({ ...config, pendingMediaFile }, 'matrix-token', {
+    checkPrivateMediaStored: async (_config, messageId) => {
+      assert.equal(messageId.length, 64);
+      return true;
+    },
+    fetchMatrixMedia: async () => assert.fail('stored media must not be downloaded'),
+    uploadPrivateMedia: async () => assert.fail('stored media must not be uploaded'),
+    postPrivateMediaBackfill: async () => assert.fail('stored media must not be patched'),
+    nowISOString: () => '2026-08-21T00:00:01.000Z',
   });
+
+  assert.deepEqual(result, { stored: 1, failed: 0, pending: 0 });
+  assert.deepEqual(JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8')).items, []);
 });
 
 test('prepareEventsForIngest uploads new Matrix audio before posting ingest events', async () => {
@@ -1521,68 +1852,42 @@ test('backfillPrivateMedia uploads Matrix media and posts stored metadata to Int
   ]);
 });
 
-test('runSyncIteration does not persist Matrix state when image upload fails', async () => {
+test('runSyncIteration does not call Matrix or IntexuraOS while the recovery fence exists', async () => {
   const stateFile = await createTempStateFile({
     nextBatch: 'batch-1',
     roomContexts: {},
   });
   const runtime = { state: 'starting', counters: {} };
 
-  await assert.rejects(
-    runSyncIteration(
-      {
-        ...config,
-        stateFile,
-        mediaUploadUrl: 'https://intexuraos.cloud/internal/whatsapp/private/media',
+  let externalCall = false;
+  await runSyncIteration(
+    { ...config, stateFile, maintenanceFenceFile: '/data/recovery-required' },
+    runtime,
+    {
+      hasMaintenanceFence: () => true,
+      readAccessToken: () => {
+        externalCall = true;
+        return 'matrix-token';
       },
-      runtime,
-      {
-        readAccessToken: () => 'matrix-token',
-        hasNonEmptyFile: () => true,
-        fetchMatrixSync: async () => ({
-          next_batch: 'batch-2',
-          rooms: {
-            join: {
-              '!room:home-dev': {
-                state: { events: [] },
-                timeline: {
-                  events: [
-                    matrixMessage({
-                      event_id: '$image',
-                      content: {
-                        msgtype: 'm.image',
-                        body: 'image.jpg',
-                        url: 'mxc://home-dev/image',
-                        info: { mimetype: 'image/jpeg' },
-                      },
-                    }),
-                  ],
-                },
-              },
-            },
-          },
-        }),
-        fetchMatrixRoomState: async () => ({}),
-        fetchMatrixMedia: async () => {
-          throw new Error('matrix_media_download_failed_404');
-        },
-      }
-    ),
-    /matrix_media_download_failed_404/
+      fetchMatrixSync: async () => {
+        externalCall = true;
+        return {};
+      },
+    }
   );
 
-  const state = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
-  assert.equal(state.nextBatch, 'batch-1');
+  assert.equal(externalCall, false);
+  assert.equal(runtime.state, 'recovery_required');
 });
 
-test('runSyncIteration does not persist Matrix state when Matrix media exceeds the adapter byte limit', async () => {
+test('runSyncIteration never posts or advances a limited timeline', async () => {
   const stateFile = await createTempStateFile({
     nextBatch: 'batch-1',
     roomContexts: {},
   });
   const runtime = { state: 'starting', counters: {} };
   let postedEvents = false;
-  let uploadedMedia = false;
+  let wroteState = false;
 
   await assert.rejects(
     runSyncIteration(
@@ -1598,46 +1903,33 @@ test('runSyncIteration does not persist Matrix state when Matrix media exceeds t
         fetchMatrixSync: async () => ({
           next_batch: 'batch-2',
           rooms: {
-            join: {
+            leave: {
               '!room:home-dev': {
                 state: { events: [] },
                 timeline: {
-                  events: [
-                    matrixMessage({
-                      event_id: '$image-too-large',
-                      content: {
-                        msgtype: 'm.image',
-                        body: 'image.jpg',
-                        url: 'mxc://home-dev/image-too-large',
-                        info: { mimetype: 'image/jpeg', size: 25 * 1024 * 1024 + 1 },
-                      },
-                    }),
-                  ],
+                  events: [matrixMessage({ event_id: '$limited' })],
+                  limited: true,
+                  prev_batch: 'older-events-exist',
                 },
               },
             },
           },
         }),
-        fetchMatrixRoomState: async () => ({}),
-        fetchMatrixMedia: async () => {
-          throw new Error('matrix_media_too_large');
-        },
-        uploadPrivateMedia: async () => {
-          uploadedMedia = true;
-          throw new Error('should_not_upload_media');
-        },
+        fetchMatrixRoomState: async () =>
+          assert.fail('limited timelines must stop before Matrix room-state reads'),
         postEventsInBatches: async () => {
           postedEvents = true;
         },
+        writeSyncState: async () => {
+          wroteState = true;
+        },
       }
     ),
-    /matrix_media_too_large/
+    /matrix_timeline_limited/
   );
 
-  const state = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
-  assert.equal(state.nextBatch, 'batch-1');
-  assert.equal(uploadedMedia, false);
   assert.equal(postedEvents, false);
+  assert.equal(wroteState, false);
 });
 
 test('runSyncIteration surfaces Matrix sync, ingest API, and corrupted state errors', async () => {
@@ -1722,6 +2014,8 @@ test('createProcessingPlan skips historical events on first sync but posts later
     nextBatch: 's1',
     events: [],
     shouldPersistNextBatch: true,
+    hasLimitedTimeline: false,
+    limitedTimelineCount: 0,
   });
 
   const laterPlan = createProcessingPlan(syncResponse, config, { hasStoredBatch: true });
@@ -1872,6 +2166,27 @@ async function createServerHarness(configOverrides = {}) {
     },
   };
 }
+
+test('health returns 503 with safe counts while recovery is required', async () => {
+  const accessTokenFile = await createTempFile('matrix-access-token.txt', 'token\n');
+  const credentialFile = await createTempFile('private-sync.json', '{}\n');
+  const harness = await createServerHarness({
+    matrixAccessTokenFile: accessTokenFile,
+    googleApplicationCredentialsFile: credentialFile,
+  });
+  harness.runtime.state = 'recovery_required';
+  harness.runtime.counters = { limitedTimelines: 2 };
+
+  try {
+    const response = await harness.request('/health');
+    assert.equal(response.status, 503);
+    assert.equal(response.body.ok, false);
+    assert.equal(response.body.state, 'recovery_required');
+    assert.deepEqual(response.body.counters, { limitedTimelines: 2 });
+  } finally {
+    await harness.close();
+  }
+});
 
 test('matrix outbound readiness requires adapter auth', async () => {
   const harness = await createServerHarness();
