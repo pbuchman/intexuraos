@@ -322,6 +322,10 @@ export function classifyMatrixEventForRecovery(roomId, event, roomContext, confi
   if (type === 'm.room.encrypted') {
     return { classification: 'error', reason: 'encrypted_event' };
   }
+  if (type === 'm.reaction' && isRedactedMessageTombstone(event, content)) {
+    // The separate redaction event retains the removal semantics; this tombstone has no target or emoji.
+    return { classification: 'policy_skip', reason: 'redacted_reaction_tombstone' };
+  }
 
   const sender = readString(event, 'sender');
   if (sender === undefined) {

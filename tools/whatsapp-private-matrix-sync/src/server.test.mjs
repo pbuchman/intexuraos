@@ -1334,6 +1334,26 @@ test('recovery classifier uses closed skip predicates and fails on malformed mes
   assert.deepEqual(
     classifyMatrixEventForRecovery(
       '!room:home-dev',
+      matrixMessage({
+        type: 'm.reaction',
+        event_id: '$redacted-reaction',
+        content: {},
+        unsigned: {
+          redacted_by: '$reaction-redaction',
+          redacted_because: {
+            type: 'm.room.redaction',
+            event_id: '$reaction-redaction',
+          },
+        },
+      }),
+      roomContext,
+      config
+    ),
+    { classification: 'policy_skip', reason: 'redacted_reaction_tombstone' }
+  );
+  assert.deepEqual(
+    classifyMatrixEventForRecovery(
+      '!room:home-dev',
       matrixMessage({ sender: '@ordinary:home-dev' }),
       roomContext,
       config
