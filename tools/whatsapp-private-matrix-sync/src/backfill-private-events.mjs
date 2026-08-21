@@ -20,6 +20,8 @@ import {
 } from './server.mjs';
 
 const MAX_INGEST_BATCH = 100;
+const MAX_TRANSIENT_INGEST_ATTEMPTS = 5;
+const INITIAL_TRANSIENT_INGEST_DELAY_MS = 1_000;
 const RETAINED_PROJECT_ID = 'intexuraos-dev-pbuchman';
 const DEFAULT_ANCHOR_BEFORE = Date.parse('2026-08-09T22:00:00.000Z');
 
@@ -213,7 +215,10 @@ export async function applyRecoverySegment(segment, deps) {
 
   for (let index = 0; index < segment.events.length; index += MAX_INGEST_BATCH) {
     const batch = segment.events.slice(index, index + MAX_INGEST_BATCH);
-    const result = await deps.postBatch(batch, 'backfill');
+    const result = await retryTransientIngest(
+      () => deps.postBatch(batch, 'backfill'),
+      deps.waitBeforeRetry
+    );
     if (
       !isRecord(result) ||
       !Number.isInteger(result.accepted) ||
@@ -235,6 +240,33 @@ export async function applyRecoverySegment(segment, deps) {
   summary.mediaStored = media.stored;
   summary.mediaPending = media.pending;
   return summary;
+}
+
+async function retryTransientIngest(operation, waitBeforeRetry = delay) {
+  for (let attempt = 1; attempt <= MAX_TRANSIENT_INGEST_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === MAX_TRANSIENT_INGEST_ATTEMPTS || !isTransientIngestError(error)) {
+        throw error;
+      }
+      await waitBeforeRetry(INITIAL_TRANSIENT_INGEST_DELAY_MS * 2 ** (attempt - 1));
+    }
+  }
+  throw new Error('recovery_apply_transient_retry_exhausted');
+}
+
+function isTransientIngestError(error) {
+  if (error instanceof TypeError) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  const match = /^intexuraos_ingest_failed_([0-9]{3})$/u.exec(message);
+  if (match === null) return false;
+  const status = Number(match[1]);
+  return status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599);
+}
+
+function delay(delayMs) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 export async function verifyRecoveryEvidence(segment, sourceAccountId, expectedUserId, deps) {
