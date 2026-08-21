@@ -49,6 +49,8 @@ describe('createMatrixOutboundAdapterClient', () => {
     const client = createMatrixOutboundAdapterClient({
       baseUrl: 'https://matrix.example.test/',
       authToken: 'secret',
+      cloudflareAccessClientId: 'cf-client-id',
+      cloudflareAccessClientSecret: 'cf-client-secret',
       fetchImpl,
     });
 
@@ -87,8 +89,62 @@ describe('createMatrixOutboundAdapterClient', () => {
     );
     expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
       method: 'GET',
-      headers: { authorization: 'Bearer secret' },
+      headers: {
+        authorization: 'Bearer secret',
+        'CF-Access-Client-Id': 'cf-client-id',
+        'CF-Access-Client-Secret': 'cf-client-secret',
+      },
     });
+  });
+
+  it('fails closed for HTTPS endpoints without a complete Cloudflare service token', async () => {
+    const fetchImpl = vi.fn<typeof fetch>();
+    const missingToken = createMatrixOutboundAdapterClient({
+      baseUrl: 'https://matrix.example.test',
+      authToken: 'matrix-token',
+      fetchImpl,
+    });
+    const incompleteToken = createMatrixOutboundAdapterClient({
+      baseUrl: 'https://matrix.example.test',
+      authToken: 'matrix-token',
+      cloudflareAccessClientId: 'cf-client-id',
+      fetchImpl,
+    });
+
+    await expect(
+      missingToken.getDeliveryReadiness({ sourceAccountId: 'source-123', target: 'intex_agent' })
+    ).resolves.toEqual({
+      status: 'setup_required',
+      reason: 'Matrix outbound adapter is not configured',
+    });
+    await expect(
+      incompleteToken.sendMessage({
+        sourceAccountId: 'source-123',
+        target: 'intex_agent',
+        text: 'hello',
+      })
+    ).resolves.toEqual({
+      status: 'setup_required',
+      reason: 'Matrix outbound adapter is not configured',
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps loopback DEV requests independent from Cloudflare Access', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValueOnce(jsonResponse({ status: 'ready' }));
+    const client = createMatrixOutboundAdapterClient({
+      baseUrl: 'http://127.0.0.1:8099',
+      authToken: 'matrix-token',
+      fetchImpl,
+    });
+
+    await expect(
+      client.getDeliveryReadiness({ sourceAccountId: 'source-123', target: 'intex_agent' })
+    ).resolves.toEqual({ status: 'ready' });
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      headers: { authorization: 'Bearer matrix-token' },
+    });
+    expect(fetchImpl.mock.calls[0]?.[1]?.headers).not.toHaveProperty('CF-Access-Client-Id');
   });
 
   it('sends messages with optional idempotency keys and maps send responses', async () => {
@@ -102,6 +158,8 @@ describe('createMatrixOutboundAdapterClient', () => {
     const client = createMatrixOutboundAdapterClient({
       baseUrl: 'https://matrix.example.test',
       authToken: 'secret',
+      cloudflareAccessClientId: 'cf-client-id',
+      cloudflareAccessClientSecret: 'cf-client-secret',
       fetchImpl,
     });
 

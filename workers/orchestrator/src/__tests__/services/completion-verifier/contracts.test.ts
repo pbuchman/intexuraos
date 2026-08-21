@@ -86,7 +86,14 @@ describe('contracts — canonical field table', () => {
   });
 
   it('tier table covers every known WorkerType', () => {
-    const workerTypes = ['opus', 'sonnet', 'auto', 'codex', 'codex-xhigh', 'openrouter-free'] as const;
+    const workerTypes = [
+      'opus',
+      'sonnet',
+      'auto',
+      'codex',
+      'codex-xhigh',
+      'openrouter-free',
+    ] as const;
     for (const w of workerTypes) {
       expect(TIER_BY_WORKER[w], `missing tier for ${w}`).toMatch(/^(required|optional)$/);
     }

@@ -176,9 +176,7 @@ describe('StatusUpdateClient', () => {
 
   it('returns ok on eventual 200 after 5xx retries', async () => {
     nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(500, 'boom');
-    nock(codeAgentUrl)
-      .patch('/internal/code-tasks/status')
-      .reply(200, { success: true });
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(200, { success: true });
 
     const { client, calls } = makeClient({ retryDelaysMs: [1, 1] });
     const result = await client.commit({
@@ -271,10 +269,7 @@ describe('StatusUpdateClient', () => {
   });
 
   it('returns timeout error when request exceeds requestTimeoutMs', async () => {
-    nock(codeAgentUrl)
-      .patch('/internal/code-tasks/status')
-      .delay(50)
-      .reply(200, { success: true });
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').delay(50).reply(200, { success: true });
 
     const { client, calls } = makeClient({
       retryDelaysMs: [],
@@ -355,9 +350,7 @@ describe('StatusUpdateClient', () => {
   });
 
   it('uses default retry delays and timeout when not supplied', async () => {
-    nock(codeAgentUrl)
-      .patch('/internal/code-tasks/status')
-      .reply(200, { success: true });
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(200, { success: true });
 
     const { logger } = makeLogger();
     const client = new StatusUpdateClient({

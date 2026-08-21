@@ -136,6 +136,8 @@ export interface ServiceConfig {
   conversationAssistantModel: ConversationAssistantModel;
   matrixOutboundAdapterBaseUrl: string;
   matrixOutboundAdapterAuthToken: string;
+  matrixOutboundCloudflareAccessClientId?: string | undefined;
+  matrixOutboundCloudflareAccessClientSecret?: string | undefined;
   intexAgentBaseUrl: string;
   matrixCorpus: WhatsAppMatrixCorpusConfig;
 }
@@ -275,6 +277,8 @@ export function getServices(): ServiceContainer {
     matrixOutboundGateway: createMatrixOutboundAdapterClient({
       baseUrl: serviceConfig.matrixOutboundAdapterBaseUrl,
       authToken: serviceConfig.matrixOutboundAdapterAuthToken,
+      cloudflareAccessClientId: serviceConfig.matrixOutboundCloudflareAccessClientId,
+      cloudflareAccessClientSecret: serviceConfig.matrixOutboundCloudflareAccessClientSecret,
     }),
     mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
     eventPublisher,

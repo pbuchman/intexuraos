@@ -7,6 +7,7 @@ import { useWorkersStatus, usePruneCandidateStatus } from '@/hooks';
 import { ChevronDown, LogOut, Moon, Sun, User, RefreshCw, RotateCcw, Server, Trash2 } from 'lucide-react';
 import { VersionInfoModal } from './VersionInfoModal.js';
 import type { WorkerStatus } from '@/types';
+import { clearOfflineStateAndReload } from '@/utils/forceRefresh.js';
 
 /**
  * Get display text and color for worker status.
@@ -167,26 +168,13 @@ export function Header(): React.JSX.Element {
     setIsRefreshing(true);
     setIsMenuOpen(false);
 
-    // Clear service worker caches and reload
-    if ('caches' in window) {
-      void caches.keys().then((names) => {
-        for (const name of names) {
-          void caches.delete(name);
-        }
-      });
-    }
-
-    // Unregister service worker and reload
-    if ('serviceWorker' in navigator) {
-      void navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (const registration of registrations) {
-          void registration.unregister();
-        }
+    void clearOfflineStateAndReload({
+      ...('caches' in window ? { cacheStorage: window.caches } : {}),
+      ...('serviceWorker' in navigator ? { serviceWorker: navigator.serviceWorker } : {}),
+      reload: () => {
         window.location.reload();
-      });
-    } else {
-      window.location.reload();
-    }
+      },
+    });
   };
 
   useEffect(() => {

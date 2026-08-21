@@ -345,6 +345,14 @@ export function validateConfigEnv(): string[] {
     'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL',
     'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN',
   ];
+  if (
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']?.startsWith('https://') === true
+  ) {
+    required.push(
+      'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID',
+      'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'
+    );
+  }
   if (process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED']?.trim() === 'true') {
     required.push('INTEXURAOS_ENVIRONMENT', ...MATRIX_CORPUS_WHATSAPP_REQUIRED_ENV);
   }

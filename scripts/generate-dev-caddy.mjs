@@ -17,7 +17,15 @@ const exactKeys = (value, expected, label) => {
 
 exactKeys(
   manifest,
-  ['browserIdentity', 'browserRoutes', 'host', 'machineRoutes', 'schemaVersion', 'staticRoot'],
+  [
+    'browserIdentity',
+    'browserRoutes',
+    'host',
+    'machineRoutes',
+    'schemaVersion',
+    'serviceRoutes',
+    'staticRoot',
+  ],
   'DEV edge manifest'
 );
 if (manifest.schemaVersion !== 1 || manifest.host !== 'dev.intexuraos.cloud') {
@@ -38,6 +46,14 @@ const lines = [
   '    }',
   '    format json',
   '  }',
+  '  @noCache {',
+  '    path / /index.html /sw.js /manifest.webmanifest',
+  '  }',
+  '  header @noCache Cache-Control "no-cache, no-store, must-revalidate"',
+  '  @immutableAssets {',
+  '    path /assets/* /workbox-*.js',
+  '  }',
+  '  header @immutableAssets Cache-Control "public, max-age=31536000, immutable"',
 ];
 
 for (const [index, route] of manifest.machineRoutes.entries()) {
@@ -67,6 +83,22 @@ for (const route of manifest.browserRoutes) {
   exactKeys(route, ['pathPrefix', 'port'], 'browser route');
   if (!/^\/api\/[a-z0-9-]+$/u.test(route.pathPrefix)) {
     throw new Error('Browser route prefix is invalid');
+  }
+  lines.push(
+    `  handle_path ${route.pathPrefix}/* {`,
+    `    reverse_proxy 127.0.0.1:${route.port}`,
+    '  }'
+  );
+}
+
+for (const route of manifest.serviceRoutes) {
+  exactKeys(route, ['guard', 'pathPrefix', 'port'], 'service route');
+  if (
+    route.guard !== 'cloudflare-service-auth-and-matrix-bearer' ||
+    route.pathPrefix !== '/api/matrix-outbound' ||
+    route.port !== 8099
+  ) {
+    throw new Error('Service route must be the exact Matrix outbound contract');
   }
   lines.push(
     `  handle_path ${route.pathPrefix}/* {`,

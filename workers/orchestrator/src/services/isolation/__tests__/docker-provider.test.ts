@@ -1573,7 +1573,6 @@ describe('DockerProvider', () => {
       );
       expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
-
   });
 
   describe('git identity passthrough', () => {

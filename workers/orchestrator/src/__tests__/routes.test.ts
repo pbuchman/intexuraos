@@ -98,8 +98,7 @@ describe('Routes', () => {
       undefined,
       workerAuthRegistry,
       isolationProvider,
-      {
-      }
+      {}
     );
     await app.ready();
   });
@@ -794,8 +793,7 @@ describe('Routes', () => {
         authMode: 'chatgpt',
         refreshSupported: true,
       });
-      expect(json.providerApiKeys).toEqual({
-      });
+      expect(json.providerApiKeys).toEqual({});
     });
 
     it('should return null githubTokenExpiresAt when token expiry is not set', async () => {

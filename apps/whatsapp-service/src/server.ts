@@ -173,6 +173,10 @@ export async function buildServer(
     matrixOutboundAdapterBaseUrl: process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] ?? '',
     matrixOutboundAdapterAuthToken:
       process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] ?? '',
+    matrixOutboundCloudflareAccessClientId:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'],
+    matrixOutboundCloudflareAccessClientSecret:
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'],
     intexAgentBaseUrl: process.env['INTEXURAOS_INTEX_AGENT_URL'] ?? '',
     matrixCorpus: config.matrixCorpus,
   };
