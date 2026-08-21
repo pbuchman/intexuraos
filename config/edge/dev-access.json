@@ -5,6 +5,7 @@
     { "pathPrefix": "/api/notion", "port": 8112 },
     { "pathPrefix": "/api/whatsapp", "port": 8113 },
     { "pathPrefix": "/api/notifications", "port": 8114 },
+    { "pathPrefix": "/api/message-digests", "port": 8135 },
     { "pathPrefix": "/api/research", "port": 8116 },
     { "pathPrefix": "/api/commands", "port": 8117 },
     { "pathPrefix": "/api/actions", "port": 8118 },
@@ -22,6 +23,7 @@
     { "pathPrefix": "/api/cron-agent", "port": 8130 },
     { "pathPrefix": "/api/hellscript-agent", "port": 8131 },
     { "pathPrefix": "/api/llm-usage", "port": 8132 },
+    { "pathPrefix": "/api/intex-agent", "port": 8134 },
     { "pathPrefix": "/api/docs", "port": 8133 }
   ],
   "host": "dev.intexuraos.cloud",

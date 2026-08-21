@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = resolve(__dirname, '..', '..');
 const manifestPath = resolve(repoRoot, 'config', 'edge', 'dev-access.json');
 const generatorPath = resolve(repoRoot, 'scripts', 'generate-dev-caddy.mjs');
+const serviceManifestPath = resolve(repoRoot, 'apps', 'web', 'service-manifest.json');
 
 const EXPECTED_MACHINE_ROUTES = [
   ['POST', '/api/code/internal/webhooks/task-complete', 'per-task-hmac-timestamp'],
@@ -24,6 +25,25 @@ const EXPECTED_MACHINE_ROUTES = [
 ] as const;
 
 describe('DEV edge manifest', () => {
+  it('routes every browser service published by the web service manifest', () => {
+    const edgeManifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      browserRoutes: { pathPrefix: string; port: number }[];
+    };
+    const serviceManifest = JSON.parse(readFileSync(serviceManifestPath, 'utf8')) as {
+      services: { apiPath: string; proxyTarget: string }[];
+    };
+    const browserRoutes = new Set(
+      edgeManifest.browserRoutes.map(({ pathPrefix, port }) => `${pathPrefix}:${String(port)}`)
+    );
+
+    expect(
+      serviceManifest.services.map(({ apiPath, proxyTarget }) => {
+        const port = new URL(proxyTarget).port;
+        return `${apiPath}:${port}`;
+      })
+    ).toSatisfy((routes: string[]) => routes.every((route) => browserRoutes.has(route)));
+  });
+
   it('freezes the exact external machine paths and guards without wildcards', () => {
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
       browserIdentity: string;
