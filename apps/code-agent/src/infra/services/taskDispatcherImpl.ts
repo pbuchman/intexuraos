@@ -232,6 +232,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       this.logger.warn(
         {
           taskId: request.taskId,
+          remediationFamily: 'code-task.dispatch',
+          ...(request.dispatchAttemptId !== undefined && {
+            dispatchAttemptId: request.dispatchAttemptId,
+          }),
           workerType: request.workerType,
           reason: dispatchability.reason,
           workerNames: dispatchability.workerNames,
@@ -253,6 +257,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       this.logger.warn(
         {
           taskId: request.taskId,
+          remediationFamily: 'code-task.dispatch',
+          ...(request.dispatchAttemptId !== undefined && {
+            dispatchAttemptId: request.dispatchAttemptId,
+          }),
           workerType: request.workerType,
           reason: 'unexpected_worker_health_response',
           unexpectedWorkerHealth,
@@ -304,7 +312,13 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     const sortedWorkers = workersWithCapacity.map((wc) => wc.worker);
 
     // Try to dispatch to available workers
-    const result = await this.dispatchToWorker(taskRequest, body, timestamp, sortedWorkers);
+    const result = await this.dispatchToWorker(
+      taskRequest,
+      body,
+      timestamp,
+      sortedWorkers,
+      request.dispatchAttemptId,
+    );
 
     return result;
   }
@@ -317,7 +331,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     taskRequest: WorkerTaskRequest,
     body: string,
     timestamp: number,
-    workers: WorkerConfigWithCredentials[]
+    workers: WorkerConfigWithCredentials[],
+    dispatchAttemptId?: string,
   ): Promise<Result<DispatchResult, DispatchError>> {
     let sawCapacity503 = false;
     let sawExplicitRejection = false;
@@ -333,7 +348,12 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       );
       if (!signatureResult.ok) {
         this.logger.warn(
-          { taskId: taskRequest.taskId, workerLocation: worker.location },
+          {
+            taskId: taskRequest.taskId,
+            workerLocation: worker.location,
+            ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
+            [SKIP_SENTRY_KEY]: true,
+          },
           'Failed to sign dispatch request'
         );
         sawExplicitRejection = true;
@@ -343,7 +363,15 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       const { signature } = signatureResult.value;
 
       try {
-        const response = await this.tryDispatch(worker, taskRequest, body, timestamp, signature, nonce);
+        const response = await this.tryDispatch(
+          worker,
+          taskRequest,
+          body,
+          timestamp,
+          signature,
+          nonce,
+          dispatchAttemptId,
+        );
 
         if (!response.ok) {
           return response;
@@ -364,14 +392,26 @@ class TaskDispatcherImpl implements TaskDispatcherService {
         }
 
         this.logger.warn(
-          { taskId: taskRequest.taskId, workerLocation: worker.location, reason: workerResponse.reason },
+          {
+            taskId: taskRequest.taskId,
+            workerLocation: worker.location,
+            reason: workerResponse.reason,
+            ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
+            [SKIP_SENTRY_KEY]: true,
+          },
           'Worker rejected task'
         );
         sawExplicitRejection = true;
         continue;
       } catch (error) {
         this.logger.error(
-          { taskId: taskRequest.taskId, workerLocation: worker.location, error },
+          {
+            taskId: taskRequest.taskId,
+            workerLocation: worker.location,
+            error,
+            ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
+            [SKIP_SENTRY_KEY]: true,
+          },
           'Failed to dispatch to worker'
         );
 
@@ -416,7 +456,8 @@ class TaskDispatcherImpl implements TaskDispatcherService {
     body: string,
     timestamp: number,
     signature: string,
-    nonce: string
+    nonce: string,
+    dispatchAttemptId?: string,
   ): Promise<Result<WorkerTaskResponse, DispatchError>> {
     this.logger.debug(
       { taskId: taskRequest.taskId, workerLocation: worker.location },
@@ -445,7 +486,13 @@ class TaskDispatcherImpl implements TaskDispatcherService {
 
     if (!response.ok) {
       this.logger.warn(
-        { taskId: taskRequest.taskId, workerLocation: worker.location, status: response.status },
+        {
+          taskId: taskRequest.taskId,
+          workerLocation: worker.location,
+          status: response.status,
+          ...(dispatchAttemptId !== undefined && { dispatchAttemptId }),
+          [SKIP_SENTRY_KEY]: true,
+        },
         'Worker dispatch request failed'
       );
 

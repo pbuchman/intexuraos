@@ -5,7 +5,9 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Timestamp } from '@google-cloud/firestore';
+import type { Firestore } from '@google-cloud/firestore';
 import { err, ok } from '@intexuraos/common-core';
+import { createFakeFirestore } from '@intexuraos/infra-firestore';
 import { resetServices, setServices, type ServiceContainer } from '../../services.js';
 import type { AcquireSentryTaskReservationInput } from '../../domain/models/sentryIssueEvent.js';
 import { processSentryWebhook, type ProcessSentryWebhookInput } from '../../domain/usecases/processSentryWebhook.js';
@@ -13,12 +15,14 @@ import { verifySentrySignature } from '../../infra/sentry-webhook-auth.js';
 import { parseSentryIssueEvent } from '../../infra/sentry-event-parser.js';
 import { createMockLogger } from '../helpers/mockLogger.js';
 import { createFakeTask } from '../helpers/mockFirestore.js';
+import { createFirestoreSentryIssueEventRepository } from '../../infra/firestore/sentryIssueEventRepository.js';
 
 const WEBHOOK_SECRET = 'sentry-webhook-secret';
 const ORCHESTRATOR_SECRET = 'orchestrator-secret';
 const AUTOMATION_USER_ID = 'sentry-automation-user';
 const TRANSITION_KEY = 'sentry:intexuraos:100:4509001:issue:created';
 const ISSUE_KEY = 'sentry-task:intexuraos:100:4509001';
+const OCCURRENCE_KEY = 'sentry-occurrence:trusted-dispatch-attempt';
 const LEASE_TOKEN = 'lease-token';
 
 function buildIssueBody(): Record<string, unknown> {
@@ -50,6 +54,31 @@ function buildEventAlertBody(): Record<string, unknown> {
         issue:
           'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/4509002/',
         project: 'intexuraos-web-development',
+      },
+    },
+  };
+}
+
+function buildCorrelatedDispatchBody(issueId: string, eventId: string): Record<string, unknown> {
+  return {
+    action: 'triggered',
+    data: {
+      event: {
+        event_id: eventId,
+        title: 'Drain dispatch failed with permanent error',
+        web_url:
+          `https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/${issueId}/events/${eventId}/`,
+        issue: {
+          id: issueId,
+          permalink:
+            `https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/${issueId}/`,
+          project: { id: '1', slug: 'intexuraos-backend' },
+        },
+        project: { id: '1', slug: 'intexuraos-backend' },
+        environment: 'prod',
+        task_id: 'task_review_3575a69848b633cd68c25a0688a6c6d1',
+        dispatch_attempt_id: '11111111-2222-4333-8444-555555555555',
+        trace_id: '7c5f9b88d035451ebea52ef9d653de7b',
       },
     },
   };
@@ -123,6 +152,8 @@ function acquiredResult(input: AcquireSentryTaskReservationInput): ReturnType<ty
     kind: 'acquired' as const,
     transitionKey: TRANSITION_KEY,
     issueKey: ISSUE_KEY,
+    reservationKey: ISSUE_KEY,
+    idempotencyKey: TRANSITION_KEY,
     leaseToken: LEASE_TOKEN,
     codeTaskId: input.proposedCodeTaskId,
   });
@@ -195,6 +226,23 @@ function installMocks(overrides: MockOverrides = {}): MocksShape {
     codeTaskRepo,
     taskEnqueueService,
   };
+}
+
+function installMocksWithRealSentryRepository(): MocksShape {
+  const installed = installMocks();
+  const realRepository = createFirestoreSentryIssueEventRepository({
+    firestore: createFakeFirestore() as unknown as Firestore,
+    logger: createMockLogger() as never,
+  });
+  setServices({
+    logger: createMockLogger(),
+    sentryIssueEventRepo: realRepository,
+    workerSettingsRepo: installed.workerSettingsRepo,
+    linearIssueService: installed.linearIssueService,
+    codeTaskRepo: installed.codeTaskRepo,
+    taskEnqueueService: installed.taskEnqueueService,
+  } as unknown as ServiceContainer);
+  return installed;
 }
 
 function buildInput(partial: Partial<ProcessSentryWebhookInput> = {}): ProcessSentryWebhookInput {
@@ -292,11 +340,87 @@ describe('processSentryWebhook', () => {
     expect(mocks.sentryIssueEventRepo.completeReservation).toHaveBeenCalledWith({
       transitionKey: TRANSITION_KEY,
       issueKey: ISSUE_KEY,
+      reservationKey: ISSUE_KEY,
       leaseToken: LEASE_TOKEN,
       codeTaskId: acquisition.proposedCodeTaskId,
       linearIssueId: 'INT-200',
     });
     expect(mocks.sentryIssueEventRepo.failReservation).not.toHaveBeenCalled();
+  });
+
+  it('creates one Linear issue and one code task for two Sentry issues from one dispatch attempt', async () => {
+    resetServices();
+    mocks = installMocksWithRealSentryRepository();
+
+    const first = await processSentryWebhook(buildInput({
+      body: buildCorrelatedDispatchBody('135', 'event-135'),
+      resourceHeader: 'event_alert',
+    }));
+    const second = await processSentryWebhook(buildInput({
+      body: buildCorrelatedDispatchBody('136', 'event-136'),
+      resourceHeader: 'event_alert',
+    }));
+
+    expect(first).toEqual(expect.objectContaining({ ok: true, outcome: 'processed' }));
+    if (!first.ok || first.outcome !== 'processed') {
+      throw new Error('Expected the first correlated delivery to create the task');
+    }
+    expect(second).toEqual(expect.objectContaining({
+      ok: true,
+      outcome: 'duplicate',
+      codeTaskId: first.codeTaskId,
+    }));
+    expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledTimes(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.taskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates one set of remediation side effects for concurrent cross-issue deliveries', async () => {
+    resetServices();
+    mocks = installMocksWithRealSentryRepository();
+
+    const results = await Promise.all([
+      processSentryWebhook(buildInput({
+        body: buildCorrelatedDispatchBody('135', 'event-135-concurrent'),
+        resourceHeader: 'event_alert',
+      })),
+      processSentryWebhook(buildInput({
+        body: buildCorrelatedDispatchBody('136', 'event-136-concurrent'),
+        resourceHeader: 'event_alert',
+      })),
+    ]);
+
+    expect(results.some((result) => result.ok && result.outcome === 'processed')).toBe(true);
+    expect(results.every((result) => result.ok || result.reason === 'retryable')).toBe(true);
+    expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledTimes(1);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(1);
+    expect(mocks.taskEnqueueService.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps issue-level behavior when signed correlation is malformed', async () => {
+    resetServices();
+    mocks = installMocksWithRealSentryRepository();
+    const firstBody = buildCorrelatedDispatchBody('135', 'event-malformed-135');
+    const secondBody = buildCorrelatedDispatchBody('136', 'event-malformed-136');
+    const firstEvent = (firstBody['data'] as { event: Record<string, unknown> }).event;
+    const secondEvent = (secondBody['data'] as { event: Record<string, unknown> }).event;
+    firstEvent['dispatch_attempt_id'] = 'not-a-uuid';
+    secondEvent['dispatch_attempt_id'] = 'not-a-uuid';
+
+    const first = await processSentryWebhook(buildInput({
+      body: firstBody,
+      resourceHeader: 'event_alert',
+    }));
+    const second = await processSentryWebhook(buildInput({
+      body: secondBody,
+      resourceHeader: 'event_alert',
+    }));
+
+    expect(first).toEqual(expect.objectContaining({ ok: true, outcome: 'processed' }));
+    expect(second).toEqual(expect.objectContaining({ ok: true, outcome: 'processed' }));
+    expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledTimes(2);
+    expect(mocks.codeTaskRepo.create).toHaveBeenCalledTimes(2);
+    expect(mocks.taskEnqueueService.enqueue).toHaveBeenCalledTimes(2);
   });
 
   it('returns a duplicate without touching task dependencies', async () => {
@@ -823,6 +947,7 @@ describe('processSentryWebhook', () => {
     expect(mocks.sentryIssueEventRepo.failReservation).toHaveBeenCalledWith({
       transitionKey: TRANSITION_KEY,
       issueKey: ISSUE_KEY,
+      reservationKey: ISSUE_KEY,
       leaseToken: LEASE_TOKEN,
       reason: 'settings failed',
     });
@@ -897,6 +1022,7 @@ describe('processSentryWebhook', () => {
     expect(mocks.sentryIssueEventRepo.failReservation).toHaveBeenCalledWith({
       transitionKey: TRANSITION_KEY,
       issueKey: ISSUE_KEY,
+      reservationKey: ISSUE_KEY,
       leaseToken: LEASE_TOKEN,
       reason: 'create failed',
       linearIssueId: 'INT-200',
@@ -963,7 +1089,7 @@ describe('processSentryWebhook', () => {
     expect(create.mock.calls.map((call) => call[0]?.id)).toEqual(['task_stable', 'task_stable']);
   });
 
-  it('uses the transition key to recover a Linear issue after a crash before checkpoint', async () => {
+  it('keeps the transition key for legacy Linear recovery after a crash before checkpoint', async () => {
     resetServices();
     const acquire = vi.fn().mockResolvedValue(ok({
       kind: 'acquired',
@@ -1014,6 +1140,34 @@ describe('processSentryWebhook', () => {
     }));
   });
 
+  it('uses the trusted occurrence reservation key for Linear idempotency and fencing', async () => {
+    resetServices();
+    const acquire = vi.fn().mockResolvedValue(ok({
+      kind: 'acquired',
+      transitionKey: TRANSITION_KEY,
+      issueKey: ISSUE_KEY,
+      reservationKey: OCCURRENCE_KEY,
+      idempotencyKey: OCCURRENCE_KEY,
+      leaseToken: LEASE_TOKEN,
+      codeTaskId: 'task_correlated',
+    }));
+    mocks = installMocks({
+      sentryIssueEventRepo: { acquire },
+    });
+
+    expect((await processSentryWebhook(buildInput())).ok).toBe(true);
+
+    expect(mocks.linearIssueService.ensureIssueExists).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: OCCURRENCE_KEY }),
+    );
+    expect(mocks.sentryIssueEventRepo.checkpointLinearIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ reservationKey: OCCURRENCE_KEY }),
+    );
+    expect(mocks.sentryIssueEventRepo.completeReservation).toHaveBeenCalledWith(
+      expect.objectContaining({ reservationKey: OCCURRENCE_KEY }),
+    );
+  });
+
   it('fails the lease when the Linear checkpoint cannot be persisted', async () => {
     resetServices();
     mocks = installMocks({
@@ -1052,6 +1206,7 @@ describe('processSentryWebhook', () => {
     expect(mocks.sentryIssueEventRepo.failReservation).toHaveBeenCalledWith({
       transitionKey: TRANSITION_KEY,
       issueKey: ISSUE_KEY,
+      reservationKey: ISSUE_KEY,
       leaseToken: LEASE_TOKEN,
       reason: 'enqueue failed',
       codeTaskId: createdTaskId,

@@ -319,7 +319,7 @@
     },
     "sentry-issue-events": {
       "owner": "code-agent",
-      "description": "Atomic leased Sentry webhook transition and stable-issue reservations with task and Linear linkage",
+      "description": "Atomic leased Sentry webhook transition, stable-issue alias, and trusted occurrence reservations with task and Linear linkage",
       "scanPaths": ["apps/code-agent/src/infra/firestore"]
     },
     "github-event-log-entries": {
