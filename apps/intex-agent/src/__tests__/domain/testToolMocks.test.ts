@@ -152,6 +152,26 @@ describe('test tool mocks', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('does not report attendee additions for a general update without attendee changes', async () => {
+    const calls: CapturedToolCall[] = [];
+    const executor = createTestToolExecutor({ calls });
+
+    const result = JSON.parse(
+      await executor.updateCalendarEvent({
+        eventId: 'mock-event-1',
+        eventSummary: 'Synthetic event',
+        changes: { summary: 'Renamed event' },
+        calendarId: 'primary',
+        expectedEtag: '"mock-event-1-v1"',
+        eventStart: { dateTime: '2026-07-20T10:00:00Z' },
+        eventEnd: { dateTime: '2026-07-20T11:00:00Z' },
+      })
+    ) as Record<string, unknown>;
+
+    expect(result).not.toHaveProperty('attendeesAdded');
+    expect(calls).toHaveLength(1);
+  });
+
   it('records canonical marker evidence without changing it when surrounding secrets change', async () => {
     const calls: CapturedToolCall[] = [];
     const executor = createTestToolExecutor({ calls });

@@ -100,7 +100,9 @@ export interface SanitizedToolArgsSummary {
   descriptionLength?: number;
   attendeesCount?: number;
   eventSummaryLength?: number;
+  changeFieldCount?: number;
   attendeesToAddCount?: number;
+  attendeesToRemoveCount?: number;
   contentLength?: number;
   titleLength?: number;
   tagsCount?: number;

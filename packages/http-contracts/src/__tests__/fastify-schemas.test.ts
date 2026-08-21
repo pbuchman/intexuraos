@@ -117,8 +117,14 @@ describe('Fastify Schemas', () => {
     });
 
     it('includes strict calendar attendee update schemas', () => {
+      expect(contractFastifySchemas).toHaveProperty('CalendarUpdateEventRequest');
+      expect(contractFastifySchemas).toHaveProperty('CalendarUpdateEventData');
       expect(contractFastifySchemas).toHaveProperty('CalendarUpdateEventAttendeesRequest');
       expect(contractFastifySchemas).toHaveProperty('CalendarUpdateEventAttendeesData');
+      expect(contractFastifySchemas.CalendarUpdateEventRequest).toMatchObject({
+        additionalProperties: false,
+        required: ['userId', 'calendarId', 'expectedEtag', 'changes'],
+      });
 
       const requestSchema = contractFastifySchemas.CalendarUpdateEventAttendeesRequest as {
         additionalProperties?: boolean;

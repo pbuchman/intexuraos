@@ -255,7 +255,7 @@ describe('Internal Routes', () => {
       userId: 'user-456',
       calendarId: 'primary',
       expectedEtag: '"event-bagrowa-v1"',
-      attendeesToAdd: [{ email: 'new@example.com' }],
+      changes: { attendeesToAdd: [{ email: 'new@example.com' }] },
     };
 
     it('adds attendees while preserving the existing attendee metadata', async () => {
@@ -318,6 +318,103 @@ describe('Internal Routes', () => {
       ]);
     });
 
+    it('updates ordinary mutable fields without replacing attendees', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v1"',
+        summary: 'Bagrowa',
+        description: 'Old description',
+        location: 'Old location',
+        start: { date: '2026-08-13' },
+        end: { date: '2026-08-14' },
+        attendees: [{ email: 'existing@example.com', responseStatus: 'accepted' }],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          changes: {
+            summary: 'Google Photos archive',
+            description: null,
+            location: null,
+            start: { date: '2026-08-22' },
+            end: { date: '2026-08-23' },
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCalendarClient.updateEventCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          eventId: 'event-bagrowa',
+          updates: {
+            summary: 'Google Photos archive',
+            description: '',
+            location: '',
+            start: { date: '2026-08-22' },
+            end: { date: '2026-08-23' },
+          },
+          options: { expectedEtag: '"event-bagrowa-v1"' },
+        },
+      ]);
+    });
+
+    it('updates timed fields and removes attendees without losing the remaining metadata', async () => {
+      fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
+      fakeCalendarClient.addEvent({
+        id: 'event-bagrowa',
+        etag: '"event-bagrowa-v1"',
+        summary: 'Bagrowa',
+        start: { dateTime: '2026-08-22T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        end: { dateTime: '2026-08-22T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        attendees: [
+          { email: 'remove@example.com', responseStatus: 'declined' },
+          { email: 'keep@example.com', responseStatus: 'accepted', optional: true },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: '/internal/calendar/events/event-bagrowa',
+        headers: { 'x-internal-auth': INTERNAL_AUTH_TOKEN },
+        payload: {
+          userId: 'user-456',
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          changes: {
+            start: { dateTime: '2026-08-23T18:30:00+02:00', timeZone: 'Europe/Warsaw' },
+            end: { dateTime: '2026-08-23T20:00:00+02:00', timeZone: 'Europe/Warsaw' },
+            attendeesToRemove: [{ email: 'REMOVE@example.com' }],
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(fakeCalendarClient.updateEventCalls).toEqual([
+        {
+          accessToken: 'fake-google-token',
+          calendarId: 'primary',
+          eventId: 'event-bagrowa',
+          updates: {
+            start: { dateTime: '2026-08-23T18:30:00+02:00', timeZone: 'Europe/Warsaw' },
+            end: { dateTime: '2026-08-23T20:00:00+02:00', timeZone: 'Europe/Warsaw' },
+            attendees: [
+              { email: 'keep@example.com', responseStatus: 'accepted', optional: true },
+            ],
+          },
+          options: { sendUpdates: 'all', expectedEtag: '"event-bagrowa-v1"' },
+        },
+      ]);
+    });
+
     it('does not patch Google Calendar when the attendee already exists', async () => {
       fakeUserService.setTokenSuccess('fake-google-token', 'owner@example.com');
       fakeCalendarClient.addEvent({
@@ -366,9 +463,9 @@ describe('Internal Routes', () => {
     });
 
     it.each([
-      { ...validPayload, attendeesToAdd: [] },
-      { ...validPayload, attendeesToAdd: [{ email: 'not-an-email' }] },
-      { calendarId: 'primary', attendeesToAdd: [{ email: 'new@example.com' }] },
+      { ...validPayload, changes: { attendeesToAdd: [] } },
+      { ...validPayload, changes: { attendeesToAdd: [{ email: 'not-an-email' }] } },
+      { calendarId: 'primary', changes: { attendeesToAdd: [{ email: 'new@example.com' }] } },
     ])('returns 400 for an invalid attendee update payload', async (payload) => {
       const response = await app.inject({
         method: 'PATCH',

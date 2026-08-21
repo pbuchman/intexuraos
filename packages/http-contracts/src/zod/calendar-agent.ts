@@ -136,6 +136,76 @@ export const calendarUpdateEventAttendeesResponseSchema = createApiSuccessEnvelo
   calendarUpdateEventAttendeesDataSchema
 );
 
+const calendarUpdateEventAttendeeEmailSchema = z
+  .object({
+    email: z.string().email(),
+  })
+  .strict();
+
+export const calendarUpdateEventChangesSchema = z
+  .object({
+    summary: z.string().trim().min(1).optional(),
+    description: z.string().nullable().optional(),
+    location: z.string().nullable().optional(),
+    start: createCalendarEventDateTimeSchema().optional(),
+    end: createCalendarEventDateTimeSchema().optional(),
+    attendeesToAdd: z.array(calendarUpdateEventAttendeeEmailSchema).min(1).optional(),
+    attendeesToRemove: z.array(calendarUpdateEventAttendeeEmailSchema).min(1).optional(),
+  })
+  .strict()
+  .superRefine((changes, context) => {
+    if (Object.values(changes).every((value) => value === undefined)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'At least one calendar event change is required',
+      });
+    }
+    if ((changes.start === undefined) !== (changes.end === undefined)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Calendar event start and end must be updated together',
+      });
+      return;
+    }
+    if (changes.start === undefined || changes.end === undefined) return;
+    const startKind = calendarDateTimeKind(changes.start);
+    const endKind = calendarDateTimeKind(changes.end);
+    if (startKind === null || endKind === null || startKind !== endKind) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Calendar event start and end must use the same valid date type',
+      });
+    }
+  });
+
+export const calendarUpdateEventRequestSchema = z
+  .object({
+    userId: z.string(),
+    calendarId: z.string().trim().min(1),
+    expectedEtag: z.string().trim().min(1),
+    changes: calendarUpdateEventChangesSchema,
+  })
+  .strict();
+
+export const calendarUpdateEventDataSchema = z
+  .object({
+    event: calendarCreatedEventSchema,
+  })
+  .strict();
+
+export const calendarUpdateEventResponseSchema = createApiSuccessEnvelopeSchema(
+  calendarUpdateEventDataSchema
+);
+
+function calendarDateTimeKind(
+  value: z.infer<typeof calendarEventDateTimeSchema>
+): 'date' | 'dateTime' | null {
+  const hasDate = typeof value.date === 'string' && value.date.trim() !== '';
+  const hasDateTime = typeof value.dateTime === 'string' && value.dateTime.trim() !== '';
+  if (hasDate === hasDateTime) return null;
+  return hasDate ? 'date' : 'dateTime';
+}
+
 const createIsoDateTimeStringSchema = (): z.ZodString => z.string().datetime({ offset: true });
 
 export const calendarListEventsRequestSchema = z
@@ -229,6 +299,10 @@ export type CalendarUpdateEventAttendeesData = z.infer<
 export type CalendarUpdateEventAttendeesResponse = z.infer<
   typeof calendarUpdateEventAttendeesResponseSchema
 >;
+export type CalendarUpdateEventChanges = z.infer<typeof calendarUpdateEventChangesSchema>;
+export type CalendarUpdateEventRequest = z.infer<typeof calendarUpdateEventRequestSchema>;
+export type CalendarUpdateEventData = z.infer<typeof calendarUpdateEventDataSchema>;
+export type CalendarUpdateEventResponse = z.infer<typeof calendarUpdateEventResponseSchema>;
 export type CalendarListEventsRequest = z.infer<typeof calendarListEventsRequestSchema>;
 export type CalendarListEvent = z.infer<typeof calendarListEventSchema>;
 export type CalendarListEventsData = z.infer<typeof calendarListEventsDataSchema>;

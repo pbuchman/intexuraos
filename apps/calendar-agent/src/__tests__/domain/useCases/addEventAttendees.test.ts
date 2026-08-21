@@ -187,6 +187,23 @@ describe('addEventAttendees', () => {
     expect(updateEvent).not.toHaveBeenCalled();
   });
 
+  it('returns the calendar lookup error without patching the event', async () => {
+    getEvent.mockResolvedValue(err({ code: 'NOT_FOUND', message: 'Event not found' }));
+
+    const result = await addEventAttendees(
+      {
+        userId: 'user-1',
+        eventId: 'event-bagrowa',
+        ...snapshot,
+        attendeesToAdd: [{ email: 'new@example.com' }],
+      },
+      { userServiceClient, googleCalendarClient, logger }
+    );
+
+    expect(result).toEqual(err({ code: 'NOT_FOUND', message: 'Event not found' }));
+    expect(updateEvent).not.toHaveBeenCalled();
+  });
+
   it.each([undefined, '', '   '])('fails closed when the confirmed snapshot has no version tag', async (expectedEtag) => {
     const result = await addEventAttendees(
       {

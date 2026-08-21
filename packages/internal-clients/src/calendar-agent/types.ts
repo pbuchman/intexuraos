@@ -5,6 +5,7 @@ import type {
   CalendarListEvent,
   CalendarListEventsRequest,
   CalendarProcessActionRequest,
+  CalendarUpdateEventRequest,
   CalendarUpdateEventAttendeesRequest,
 } from '@intexuraos/http-contracts';
 import type { Result, ServiceFeedback } from '@intexuraos/common-core';
@@ -30,6 +31,7 @@ export type ListCalendarEventsRequest = CalendarListEventsRequest;
 export type UpdateCalendarEventAttendeesRequest = CalendarUpdateEventAttendeesRequest & {
   eventId: string;
 };
+export type UpdateCalendarEventRequest = CalendarUpdateEventRequest & { eventId: string };
 export type GeneratePreviewRequest = CalendarGeneratePreviewRequest;
 
 export type CalendarPreviewStatus = 'pending' | 'ready' | 'failed';
@@ -65,6 +67,11 @@ export interface CalendarAgentServiceClient {
 
   updateEventAttendees(
     request: UpdateCalendarEventAttendeesRequest,
+    options?: CalendarAgentRequestOptions
+  ): Promise<Result<CreatedCalendarEvent>>;
+
+  updateEvent(
+    request: UpdateCalendarEventRequest,
     options?: CalendarAgentRequestOptions
   ): Promise<Result<CreatedCalendarEvent>>;
 

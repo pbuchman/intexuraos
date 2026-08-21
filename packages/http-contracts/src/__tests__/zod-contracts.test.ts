@@ -6,6 +6,7 @@ import {
   bookmarksCreateBookmarkRequestSchema,
   calendarListEventsRequestSchema,
   calendarListEventsDataSchema,
+  calendarUpdateEventRequestSchema,
   calendarUpdateEventAttendeesDataSchema,
   calendarUpdateEventAttendeesRequestSchema,
   calendarUpdateEventAttendeesResponseSchema,
@@ -239,6 +240,78 @@ describe('Zod contracts', () => {
       events: [event],
       truncated: false,
     });
+  });
+
+  it('parses strict general calendar event updates', () => {
+    expect(
+      calendarUpdateEventRequestSchema.parse({
+        userId: 'user-1',
+        calendarId: 'primary',
+        expectedEtag: '"event-1-v1"',
+        changes: {
+          summary: 'Updated title',
+          description: null,
+          location: 'Updated location',
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+          attendeesToAdd: [{ email: 'new@example.com' }],
+          attendeesToRemove: [{ email: 'old@example.com' }],
+        },
+      })
+    ).toEqual({
+      userId: 'user-1',
+      calendarId: 'primary',
+      expectedEtag: '"event-1-v1"',
+      changes: {
+        summary: 'Updated title',
+        description: null,
+        location: 'Updated location',
+        start: { date: '2026-08-22' },
+        end: { date: '2026-08-23' },
+        attendeesToAdd: [{ email: 'new@example.com' }],
+        attendeesToRemove: [{ email: 'old@example.com' }],
+      },
+    });
+  });
+
+  it('rejects empty, incomplete, and unknown general calendar event updates', () => {
+    const base = {
+      userId: 'user-1',
+      calendarId: 'primary',
+      expectedEtag: '"event-1-v1"',
+    };
+
+    expect(() => calendarUpdateEventRequestSchema.parse({ ...base, changes: {} })).toThrow();
+    expect(() =>
+      calendarUpdateEventRequestSchema.parse({
+        ...base,
+        changes: { start: { date: '2026-08-22' } },
+      })
+    ).toThrow();
+    expect(() =>
+      calendarUpdateEventRequestSchema.parse({
+        ...base,
+        changes: {
+          start: { date: '2026-08-22' },
+          end: { dateTime: '2026-08-23T10:00:00+02:00' },
+        },
+      })
+    ).toThrow();
+    expect(() =>
+      calendarUpdateEventRequestSchema.parse({
+        ...base,
+        changes: {
+          start: { date: '2026-08-22', dateTime: '2026-08-22T10:00:00+02:00' },
+          end: { date: '2026-08-23', dateTime: '2026-08-23T11:00:00+02:00' },
+        },
+      })
+    ).toThrow();
+    expect(() =>
+      calendarUpdateEventRequestSchema.parse({
+        ...base,
+        changes: { summary: 'Updated', unexpected: true },
+      })
+    ).toThrow();
   });
 
   it('parses the remaining internal-client request and response payloads', () => {

@@ -174,6 +174,12 @@ describe('OpenAPI Schemas', () => {
       expect(
         (contractComponentSchemas.CalendarUpdateEventAttendeesRequest as { type?: string }).type
       ).toBe('object');
+      expect((contractComponentSchemas.CalendarUpdateEventRequest as { type?: string }).type).toBe(
+        'object'
+      );
+      expect((contractComponentSchemas.CalendarUpdateEventData as { type?: string }).type).toBe(
+        'object'
+      );
       expect(
         (contractComponentSchemas.CalendarUpdateEventAttendeesData as { type?: string }).type
       ).toBe('object');

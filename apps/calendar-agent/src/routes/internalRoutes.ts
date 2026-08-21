@@ -9,20 +9,21 @@ import type {
   CalendarCreateEventRequest,
   CalendarListEvent,
   CalendarListEventsRequest,
-  CalendarUpdateEventAttendeesRequest,
+  CalendarUpdateEventRequest,
 } from '@intexuraos/http-contracts';
 import { getServices } from '../services.js';
 import {
   createEvent,
-  addEventAttendees,
+  updateExistingEvent,
   listEvents,
   processCalendarAction,
   generateCalendarPreview,
   type CalendarError,
   type CalendarEvent,
+  type EventDateTime,
   type CalendarPreview,
   type CreateEventRequest,
-  type AddEventAttendeesRequest,
+  type UpdateExistingEventRequest,
   type ListEventsInput,
   type ListEventsRequest,
 } from '../domain/index.js';
@@ -65,7 +66,7 @@ interface GetPreviewParams {
   actionId: string;
 }
 
-interface UpdateEventAttendeesParams {
+interface UpdateEventParams {
   eventId: string;
 }
 
@@ -216,16 +217,15 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
   );
 
   fastify.patch<{
-    Params: UpdateEventAttendeesParams;
-    Body: CalendarUpdateEventAttendeesRequest;
+    Params: UpdateEventParams;
+    Body: CalendarUpdateEventRequest;
   }>(
     '/internal/calendar/events/:eventId',
     {
       schema: {
-        operationId: 'updateInternalCalendarEventAttendees',
-        summary: 'Add attendees to an existing calendar event',
-        description:
-          'Internal service endpoint for adding attendees without changing other event details',
+        operationId: 'updateInternalCalendarEvent',
+        summary: 'Update an existing calendar event',
+        description: 'Internal endpoint for patching mutable calendar event fields',
         tags: ['internal'],
         params: {
           type: 'object',
@@ -235,7 +235,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             eventId: { type: 'string', minLength: 1 },
           },
         },
-        body: { $ref: 'CalendarUpdateEventAttendeesRequest#' },
+        body: { $ref: 'CalendarUpdateEventRequest#' },
         response: {
           200: {
             description: 'Success',
@@ -243,7 +243,7 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
             required: ['success', 'data'],
             properties: {
               success: { type: 'boolean', enum: [true] },
-              data: { $ref: 'CalendarUpdateEventAttendeesData#' },
+              data: { $ref: 'CalendarUpdateEventData#' },
               diagnostics: { $ref: 'Diagnostics#' },
             },
           },
@@ -306,8 +306,8 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
     },
     async (
       request: FastifyRequest<{
-        Params: UpdateEventAttendeesParams;
-        Body: CalendarUpdateEventAttendeesRequest;
+        Params: UpdateEventParams;
+        Body: CalendarUpdateEventRequest;
       }>,
       reply: FastifyReply
     ) => {
@@ -320,12 +320,34 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
       }
 
       const services = getServices();
-      const updateRequest: AddEventAttendeesRequest = {
+      const updateRequest: UpdateExistingEventRequest = {
         userId: request.body.userId,
         calendarId: request.body.calendarId,
         eventId: request.params.eventId,
         expectedEtag: request.body.expectedEtag,
-        attendeesToAdd: request.body.attendeesToAdd,
+        changes: {
+          ...(request.body.changes.summary !== undefined
+            ? { summary: request.body.changes.summary }
+            : {}),
+          ...(request.body.changes.description !== undefined
+            ? { description: request.body.changes.description }
+            : {}),
+          ...(request.body.changes.location !== undefined
+            ? { location: request.body.changes.location }
+            : {}),
+          ...(request.body.changes.start !== undefined
+            ? { start: toDomainEventDateTime(request.body.changes.start) }
+            : {}),
+          ...(request.body.changes.end !== undefined
+            ? { end: toDomainEventDateTime(request.body.changes.end) }
+            : {}),
+          ...(request.body.changes.attendeesToAdd !== undefined
+            ? { attendeesToAdd: request.body.changes.attendeesToAdd }
+            : {}),
+          ...(request.body.changes.attendeesToRemove !== undefined
+            ? { attendeesToRemove: request.body.changes.attendeesToRemove }
+            : {}),
+        },
       };
 
       request.log.info(
@@ -333,12 +355,12 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
           userId: request.body.userId,
           calendarId: request.body.calendarId,
           eventId: request.params.eventId,
-          attendeeCount: request.body.attendeesToAdd.length,
+          updates: Object.keys(request.body.changes),
         },
-        'internal/updateCalendarEventAttendees: updating event'
+        'internal/updateCalendarEvent: updating event'
       );
 
-      const result = await addEventAttendees(updateRequest, {
+      const result = await updateExistingEvent(updateRequest, {
         userServiceClient: services.userServiceClient,
         googleCalendarClient: services.googleCalendarClient,
         logger: request.log,
@@ -350,13 +372,25 @@ export const internalRoutes: FastifyPluginCallback = (fastify, _opts, done) => {
 
       request.log.info(
         { userId: request.body.userId, eventId: result.value.id }, // @allow-result-access -- guarded by !result.ok check above
-        'internal/updateCalendarEventAttendees: complete'
+        'internal/updateCalendarEvent: complete'
       );
 
       reply.status(200);
       return await reply.ok({ event: result.value }); // @allow-result-access -- guarded by !result.ok check above
     }
   );
+
+  function toDomainEventDateTime(value: {
+    date?: string | undefined;
+    dateTime?: string | undefined;
+    timeZone?: string | undefined;
+  }): EventDateTime {
+    return {
+      ...(value.date !== undefined ? { date: value.date } : {}),
+      ...(value.dateTime !== undefined ? { dateTime: value.dateTime } : {}),
+      ...(value.timeZone !== undefined ? { timeZone: value.timeZone } : {}),
+    };
+  }
 
   fastify.post<{ Body: CalendarListEventsRequest }>(
     '/internal/calendar/events/query',

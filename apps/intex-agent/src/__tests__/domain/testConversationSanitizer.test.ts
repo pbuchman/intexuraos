@@ -205,6 +205,29 @@ describe('test conversation sanitizer', () => {
       /private-event-id|private\.person@example\.com|private-calendar-id|private-etag/u
     );
 
+    const generalUpdateSummary = summarizeArgs('update_calendar_event', {
+      eventId: 'private-event-id',
+      eventSummary: 'Google Photos',
+      changes: {
+        summary: 'private-new-title',
+        attendeesToAdd: ['private.new@example.com'],
+        attendeesToRemove: ['private.old@example.com'],
+      },
+      calendarId: 'private-calendar-id',
+      expectedEtag: 'private-etag',
+      eventStart: { date: '2026-08-13' },
+      eventEnd: { date: '2026-08-14' },
+    });
+    expect(generalUpdateSummary).toMatchObject({
+      eventSummaryLength: 'Google Photos'.length,
+      changeFieldCount: 3,
+      attendeesToAddCount: 1,
+      attendeesToRemoveCount: 1,
+    });
+    expect(JSON.stringify(generalUpdateSummary)).not.toMatch(
+      /private-new-title|private\.new@example\.com|private\.old@example\.com/u
+    );
+
     const calendar = summarizeArgs('create_calendar_event', {
       summary: 'Synthetic event',
       start: '2026-08-18T14:30:00+02:00 INTEX-EVAL-002-F01',

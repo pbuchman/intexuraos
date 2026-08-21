@@ -94,6 +94,12 @@ export {
   type AddEventAttendeesDeps,
 } from './useCases/addEventAttendees.js';
 export {
+  updateExistingEvent,
+  type UpdateExistingEventRequest,
+  type UpdateExistingEventChanges,
+  type UpdateExistingEventDeps,
+} from './useCases/updateExistingEvent.js';
+export {
   deleteEvent,
   type DeleteEventRequest,
   type DeleteEventDeps,

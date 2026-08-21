@@ -25,6 +25,7 @@ import {
 } from '@intexuraos/llm-utils';
 import type {
   IntexAgentFallbackReason,
+  IntexAgentConfirmedOperation,
   IntexAgentRunner,
   IntexAgentRunnerResult,
   IntexAgentSupportingToolCompletion,
@@ -409,6 +410,11 @@ const CALENDAR_UPDATE_PRESERVATION_NOTICE: LocalizedText = {
   pl: 'Pozostałe dane wydarzenia pozostaną bez zmian.',
 };
 
+const CALENDAR_UPDATE_CONFIRMATION_INTRO: LocalizedText = {
+  en: 'Update this existing calendar event?',
+  pl: 'Czy zaktualizować istniejące wydarzenie w kalendarzu?',
+};
+
 const CALENDAR_UPDATE_MALFORMED_REPLIES: LocalizedText = {
   en: 'I could not prepare the existing calendar event update. Please send the request again.',
   pl: 'Nie udało mi się przygotować zmiany istniejącego wydarzenia w kalendarzu. Wyślij prośbę ponownie.',
@@ -438,6 +444,9 @@ const CALENDAR_UPDATE_EMAIL_CLARIFICATION_NEXT_STEPS: LocalizedText = {
   en: 'Provide the attendee email address.',
   pl: 'Podaj adres e-mail uczestnika.',
 };
+
+const CALENDAR_NON_ATTENDEE_UPDATE_SIGNAL_PATTERN =
+  /(?<![\p{L}\p{N}])(?:mov\p{L}*|reschedul\p{L}*|renam\p{L}*|chang\p{L}*|updat\p{L}*|shift\p{L}*|przeni\p{L}*|przesu\p{L}*|zmie(?:ń|n)\p{L}*|zaktualiz\p{L}*|ustaw\p{L}*|tytu\p{L}*|title\p{L}*|dat\p{L}*|time\p{L}*|godzin\p{L}*|location\p{L}*|lokalizacj\p{L}*|miejsce\p{L}*|description\p{L}*|opis\p{L}*)(?![\p{L}\p{N}])/iu;
 
 const CONFIRMATION_LABELS = {
   title: { en: 'Title', pl: 'Tytuł' },
@@ -517,72 +526,111 @@ export interface IntexAgentRunnerConfig {
   matrixCorpusLlm?: MatrixCorpusLlmRecorder;
 }
 
+async function executeConfirmedOperation(
+  config: IntexAgentRunnerConfig,
+  toolName: IntexAgentToolName,
+  toolArgs: Record<string, unknown>,
+  replyLanguage: IntexAgentReplyLanguage
+): Promise<IntexAgentRunnerResult> {
+  if (!isMutatingToolName(toolName)) {
+    return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch', 'confirmed_execution');
+  }
+
+  const toolExecutions: IntexAgentToolExecution[] = [];
+  const tools = createIntexAgentToolDefinitions(
+    createTrackingToolExecutor(config.toolExecutor, toolExecutions)
+  );
+  const tool = tools.find((candidate) => candidate.name === toolName);
+  /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
+  if (tool === undefined) {
+    return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch', 'confirmed_execution');
+  }
+  /* v8 ignore stop @preserve */
+
+  try {
+    const rawResult = await tool.run(toolArgs);
+    const toolExecution = getCompletedToolExecution(toolExecutions);
+    /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
+    if (toolExecution === undefined) {
+      return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch', 'confirmed_execution');
+    }
+    /* v8 ignore stop @preserve */
+    const parsedResult = parseToolResult(rawResult);
+    const completedReply = buildCompletedReply(
+      toolName,
+      parsedResult,
+      defaultCompletedReply(toolName, replyLanguage),
+      config.webAppUrl ?? DEFAULT_WEB_APP_URL,
+      replyLanguage
+    );
+    return {
+      outcome: 'completed',
+      reply: completedReply.reply,
+      toolName,
+      ...(parsedResult !== undefined ? { toolResult: parsedResult } : {}),
+      ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
+    };
+  } catch (error) {
+    const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
+    const failureMetadata = toolFailureMetadata(toolName, errorMessage);
+    return {
+      outcome: 'tool_failed',
+      reply: buildConfirmedExecutionFailureReply(toolName, errorMessage, replyLanguage),
+      toolName,
+      error: errorMessage,
+      ...failureMetadata,
+    };
+  }
+}
+
 export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAgentRunner {
   return {
     async executeConfirmed(input): Promise<IntexAgentRunnerResult> {
       const replyLanguage = detectReplyLanguage(input.events ?? []);
-      if (!isMutatingToolName(input.toolName)) {
-        return fallbackClarificationResult(
-          replyLanguage,
-          'tool_result_mismatch',
-          'confirmed_execution'
-        );
-      }
-
-      const toolExecutions: IntexAgentToolExecution[] = [];
-      const tools = createIntexAgentToolDefinitions(
-        createTrackingToolExecutor(config.toolExecutor, toolExecutions)
-      );
-      const tool = tools.find((candidate) => candidate.name === input.toolName);
-      /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
-      if (tool === undefined) {
-        return fallbackClarificationResult(
-          replyLanguage,
-          'tool_result_mismatch',
-          'confirmed_execution'
-        );
-      }
-      /* v8 ignore stop @preserve */
-
-      try {
-        const rawResult = await tool.run(input.toolArgs);
-        const toolExecution = getCompletedToolExecution(toolExecutions);
-        /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
-        if (toolExecution === undefined) {
-          return fallbackClarificationResult(
-            replyLanguage,
-            'tool_result_mismatch',
-            'confirmed_execution'
+      if ('operations' in input) {
+        const operationResults = [];
+        for (const operation of input.operations) {
+          const result = await executeConfirmedOperation(
+            config,
+            operation.toolName,
+            operation.toolArgs,
+            replyLanguage
+          );
+          operationResults.push(
+            result.outcome === 'completed'
+              ? {
+                  toolName: operation.toolName,
+                  status: 'completed' as const,
+                  ...(result.toolResult !== undefined ? { toolResult: result.toolResult } : {}),
+                }
+              : {
+                  toolName: operation.toolName,
+                  status: 'failed' as const,
+                  error:
+                    result.outcome === 'tool_failed'
+                      ? result.error
+                      : 'Confirmed calendar operation could not be executed',
+                }
           );
         }
-        /* v8 ignore stop @preserve */
-        const parsedResult = parseToolResult(rawResult);
-        const completedReply = buildCompletedReply(
-          input.toolName,
-          parsedResult,
-          defaultCompletedReply(input.toolName, replyLanguage),
-          config.webAppUrl ?? DEFAULT_WEB_APP_URL,
-          replyLanguage
-        );
-
+        const completedCount = operationResults.filter(
+          (operation) => operation.status === 'completed'
+        ).length;
         return {
           outcome: 'completed',
-          reply: completedReply.reply,
-          toolName: input.toolName,
-          ...(parsedResult !== undefined ? { toolResult: parsedResult } : {}),
-          ...(completedReply.ctaUrl !== undefined ? { ctaUrl: completedReply.ctaUrl } : {}),
-        };
-      } catch (error) {
-        const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
-        const failureMetadata = toolFailureMetadata(input.toolName, errorMessage);
-        return {
-          outcome: 'tool_failed',
-          reply: buildConfirmedExecutionFailureReply(input.toolName, errorMessage, replyLanguage),
-          toolName: input.toolName,
-          error: errorMessage,
-          ...failureMetadata,
+          reply:
+            replyLanguage === 'pl'
+              ? `Zaktualizowano ${String(completedCount)} z ${String(operationResults.length)} wydarzeń w kalendarzu.`
+              : `Updated ${String(completedCount)} of ${String(operationResults.length)} calendar events.`,
+          operationResults,
         };
       }
+      return await executeConfirmedOperation(
+        config,
+        input.toolName,
+        input.toolArgs,
+        replyLanguage
+      );
     },
     async run(input): Promise<IntexAgentRunnerResult> {
       const detectedReplyLanguage = detectReplyLanguage(input.events, {
@@ -745,6 +793,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
       const calendarUpdateAttendeeEmails = isCalendarUpdateIntent(intent)
         ? resolveActiveCalendarAttendeeEmails(calendarUpdateContext)
         : undefined;
+      const calendarUpdateExplicitAttendeeEmails = isCalendarUpdateIntent(intent)
+        ? resolveActiveCalendarExplicitAttendeeEmails(calendarUpdateContext)
+        : undefined;
       const todayAndTomorrowCalendarQueryScope =
         intent.kind === 'tool' &&
         intent.allowedToolNames.length === 1 &&
@@ -773,7 +824,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             allowedToolNames.includes(tool.name as IntexAgentToolName)
         )
         .map((tool) =>
-          isMutatingToolName(tool.name as IntexAgentToolName) ||
+          (isMutatingToolName(tool.name as IntexAgentToolName) &&
+            tool.name !== 'update_calendar_event') ||
           tool.name === 'get_user_preferences' ||
           (tool.name === 'query_calendar_events' &&
             todayAndTomorrowCalendarQueryScope !== undefined)
@@ -840,7 +892,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         intent,
         toolExecutions,
         tools,
-        attendeesToAdd: calendarUpdateAttendeeEmails as string[],
+        attendeesToAdd: calendarUpdateAttendeeEmails,
         activeUserTexts: calendarUpdateRelevantTexts,
       });
       const currentCalendarEvidence = currentCalendarEvidenceTexts(
@@ -903,6 +955,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             : {}),
           ...(calendarUpdateAttendeeEmails !== undefined
             ? { calendarUpdateAttendeeEmails }
+            : {}),
+          ...(calendarUpdateExplicitAttendeeEmails !== undefined
+            ? { calendarUpdateExplicitAttendeeEmails }
             : {}),
           ...(synthesizedCalendarUpdatePreview
             ? { synthesizedCalendarUpdatePreview: true }
@@ -1500,6 +1555,14 @@ function applyMissingCalendarAttendeeEmailClarification(
     return intent;
   }
 
+  if (
+    activeCalendarAttendeeUserTurns(context)
+      .flat()
+      .some((text) => CALENDAR_NON_ATTENDEE_UPDATE_SIGNAL_PATTERN.test(text))
+  ) {
+    return intent;
+  }
+
   if (hasCalendarAttendeeEmailContext(context)) {
     return isSingleUpdateClarification &&
       isAnsweringActiveCalendarAttendeeEmailClarification(context)
@@ -1580,6 +1643,22 @@ function resolveActiveCalendarAttendeeEmails(
     relevantTexts
   );
   return preferenceEmail === undefined ? undefined : [preferenceEmail];
+}
+
+function resolveActiveCalendarExplicitAttendeeEmails(
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+    replyContext: IntexIncomingMessageReplyContext | undefined;
+  }>
+): string[] | undefined {
+  const emailsByIdentity = new Map<string, string>();
+  for (const text of activeCalendarAttendeeUserTurns(context).flat()) {
+    for (const email of uniqueValidAttendeeEmails(text)) {
+      emailsByIdentity.set(normalizeAttendeeEmail(email), email);
+    }
+  }
+  return emailsByIdentity.size === 0 ? undefined : [...emailsByIdentity.values()];
 }
 
 function extractAssociatedAttendeeEmails(message: string): string[] {
@@ -2731,6 +2810,7 @@ interface RunnerOutputValidationInput {
   }>;
   todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope;
   calendarUpdateAttendeeEmails?: string[];
+  calendarUpdateExplicitAttendeeEmails?: string[];
   synthesizedCalendarUpdatePreview?: true;
   matrixCorpusLlm?: MatrixCorpusLlmRecorder;
 }
@@ -2785,7 +2865,13 @@ async function parseRunnerContent(
       reply: TOOL_SELECTION_REJECTED_REPLIES[replyLanguage],
     };
   }
-  const toolExecution = getCompletedToolExecution(toolExecutions);
+  const calendarUpdateExecutions = toolExecutions.filter(
+    (execution) => execution.toolName === 'update_calendar_event'
+  );
+  const toolExecution =
+    calendarUpdateExecutions.length > 1
+      ? calendarUpdateExecutions.at(-1)
+      : getCompletedToolExecution(toolExecutions);
   if (
     toolExecution?.toolName === 'get_user_preferences' &&
     toolExecution.error === undefined &&
@@ -2838,9 +2924,27 @@ async function parseRunnerContent(
       ? buildCalendarUpdateConfirmationArgs(
           toolExecutions,
           toolExecution,
-          input.calendarUpdateAttendeeEmails
+          input.calendarUpdateAttendeeEmails,
+          input.calendarUpdateExplicitAttendeeEmails
         )
       : undefined;
+  const calendarUpdateOperations =
+    calendarUpdateExecutions.length > 1
+      ? calendarUpdateExecutions.map((execution) => {
+          const args = buildCalendarUpdateConfirmationArgs(
+            toolExecutions,
+            execution,
+            input.calendarUpdateAttendeeEmails,
+            input.calendarUpdateExplicitAttendeeEmails
+          );
+          return args === undefined
+            ? undefined
+            : { toolName: 'update_calendar_event' as const, toolArgs: args };
+        })
+      : undefined;
+  if (calendarUpdateOperations?.some((operation) => operation === undefined) === true) {
+    return calendarUpdateLookupResult(replyLanguage);
+  }
   if (toolExecution?.toolName === 'update_calendar_event' && calendarUpdateArgs === undefined) {
     return calendarUpdateLookupResult(replyLanguage);
   }
@@ -2883,6 +2987,35 @@ async function parseRunnerContent(
       };
     }
     calendarCreateArgs = readiness.toolArgs;
+  }
+  if (
+    toolExecution?.toolName === 'update_calendar_event' &&
+    calendarUpdateOperations !== undefined &&
+    calendarUpdateOperations.length > 1
+  ) {
+    const operations = calendarUpdateOperations.filter(
+      (operation): operation is NonNullable<typeof operation> => operation !== undefined
+    );
+    const firstOperation = operations[0];
+    /* v8 ignore start -- schema: firstOperation cannot be undefined because this branch requires at least two calendar update operations @preserve */
+    if (firstOperation === undefined) return calendarUpdateLookupResult(replyLanguage);
+    /* v8 ignore stop @preserve */
+    const supportingToolCompletions = collectSupportingToolCompletions(
+      toolExecutions,
+      toolExecution
+    );
+    return {
+      outcome: 'needs_confirmation',
+      reply: buildCalendarUpdateOperationsConfirmationReply(
+        operations,
+        replyLanguage,
+        runtimeTimeZone
+      ),
+      toolName: 'update_calendar_event',
+      toolArgs: firstOperation.toolArgs,
+      operations,
+      supportingToolCompletions,
+    };
   }
   if (
     toolExecution !== undefined &&
@@ -3121,7 +3254,9 @@ function isCalendarUpdateIntent(
 function isSingleCalendarUpdateIntent(
   intent: IntexAgentIntentClassification | IntexAgentIntentDecision
 ): boolean {
+  /* v8 ignore start -- schema: extracted calendar attendee changes cannot be paired with a non-tool intent @preserve */
   if (intent.kind !== 'tool') return false;
+  /* v8 ignore stop @preserve */
   const toolNames = new Set(intent.allowedToolNames);
   return (
     toolNames.size === intent.allowedToolNames.length &&
@@ -3137,10 +3272,14 @@ async function appendDeterministicCalendarUpdatePreview(input: Readonly<{
   intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
   toolExecutions: IntexAgentToolExecution[];
   tools: readonly ToolDefinition[];
-  attendeesToAdd: string[];
+  attendeesToAdd: string[] | undefined;
   activeUserTexts: string[] | undefined;
 }>): Promise<boolean> {
-  if (!isSingleCalendarUpdateIntent(input.intent) || input.toolExecutions.length !== 1) {
+  if (
+    input.attendeesToAdd === undefined ||
+    !isSingleCalendarUpdateIntent(input.intent) ||
+    input.toolExecutions.length !== 1
+  ) {
     return false;
   }
   const queryExecution = input.toolExecutions[0];
@@ -3195,7 +3334,8 @@ function calendarUpdateLookupResult(
 function buildCalendarUpdateConfirmationArgs(
   toolExecutions: IntexAgentToolExecution[],
   updateExecution: IntexAgentToolExecution,
-  authoritativeAttendeeEmails: string[] | undefined
+  authoritativeAttendeeEmails: string[] | undefined,
+  explicitAttendeeEmails: string[] | undefined
 ): Record<string, unknown> | undefined {
   const updateIndex = toolExecutions.indexOf(updateExecution);
   const precedingExecutions = toolExecutions.slice(0, updateIndex);
@@ -3204,18 +3344,62 @@ function buildCalendarUpdateConfirmationArgs(
     .find((execution) => execution.toolName === 'query_calendar_events');
   if (queryExecution === undefined) return undefined;
 
-  const snapshot = readCalendarUpdateLookupSnapshot(queryExecution);
+  const eventId = readNonEmptyString(updateExecution.args, 'eventId');
+  const eventSummary = readNonEmptyString(updateExecution.args, 'eventSummary');
+  /* v8 ignore start -- schema: a recorded update_calendar_event execution cannot omit its validated event identity @preserve */
+  if (eventId === undefined || eventSummary === undefined) return undefined;
+  /* v8 ignore stop @preserve */
+  const snapshot = readCalendarUpdateLookupSnapshot(queryExecution, { eventId, eventSummary });
   if (snapshot === undefined) return undefined;
 
   const requestedCalendarId = readNonEmptyString(updateExecution.args, 'calendarId');
   if (
-    authoritativeAttendeeEmails === undefined ||
-    snapshot.eventId !== readNonEmptyString(updateExecution.args, 'eventId') ||
-    snapshot.eventSummary !== readNonEmptyString(updateExecution.args, 'eventSummary') ||
     (requestedCalendarId !== undefined && requestedCalendarId !== snapshot.calendarId)
   ) {
     return undefined;
   }
+
+  const rawChanges = updateExecution.args['changes'];
+  if (rawChanges !== undefined) {
+    /* v8 ignore start -- schema: validated update_calendar_event changes cannot be null, an array, or a primitive @preserve */
+    if (rawChanges === null || typeof rawChanges !== 'object' || Array.isArray(rawChanges)) {
+      return undefined;
+    }
+    /* v8 ignore stop @preserve */
+    const changes = rawChanges as Record<string, unknown>;
+    const attendeeChanges = [changes['attendeesToAdd'], changes['attendeesToRemove']].filter(
+      (value) => value !== undefined
+    );
+    if (attendeeChanges.length > 0) {
+      const allowedAttendeeEmails = [
+        ...(explicitAttendeeEmails ?? []),
+        ...(authoritativeAttendeeEmails ?? []),
+      ];
+      if (allowedAttendeeEmails.length === 0) return undefined;
+      const allowedEmailIdentities = new Set(allowedAttendeeEmails.map(normalizeAttendeeEmail));
+      for (const attendeeChange of attendeeChanges) {
+        /* v8 ignore start -- schema: validated attendee changes cannot be a non-array value @preserve */
+        if (!Array.isArray(attendeeChange)) return undefined;
+        /* v8 ignore stop @preserve */
+        const requestedEmails = attendeeChange as string[];
+        if (
+          !requestedEmails.every((email) =>
+            allowedEmailIdentities.has(normalizeAttendeeEmail(email))
+          )
+        ) {
+          return undefined;
+        }
+      }
+    }
+    return {
+      ...updateExecution.args,
+      changes,
+      ...snapshot,
+    };
+  }
+  /* v8 ignore start -- schema: the hidden legacy attendee update cannot be synthesized without authoritative attendee emails @preserve */
+  if (authoritativeAttendeeEmails === undefined) return undefined;
+  /* v8 ignore stop @preserve */
 
   return {
     ...updateExecution.args,
@@ -3252,7 +3436,8 @@ function normalizeCalendarLookupIdentity(value: string): string {
 }
 
 function readCalendarUpdateLookupSnapshot(
-  queryExecution: IntexAgentToolExecution
+  queryExecution: IntexAgentToolExecution,
+  target?: Readonly<{ eventId: string; eventSummary: string }>
 ): Required<
   Pick<
     UpdateCalendarEventToolArgs,
@@ -3265,7 +3450,6 @@ function readCalendarUpdateLookupSnapshot(
     queryExecution.args['mode'] !== 'list' ||
     queryExecution.result?.['status'] !== 'completed' ||
     queryExecution.result['mode'] !== 'list' ||
-    queryExecution.result['count'] !== 1 ||
     queryExecution.result['truncated'] !== false
   ) {
     return undefined;
@@ -3273,11 +3457,29 @@ function readCalendarUpdateLookupSnapshot(
 
   const eventsValue: unknown = queryExecution.result['events'];
   const events: unknown[] = Array.isArray(eventsValue) ? (eventsValue as unknown[]) : [];
-  if (events.length !== 1) return undefined;
+  if (queryExecution.result['count'] !== events.length) return undefined;
+  if (target === undefined && events.length !== 1) return undefined;
   const maxResults = queryExecution.args['maxResults'];
   if (typeof maxResults === 'number' && events.length >= maxResults) return undefined;
 
-  const event: unknown = events[0];
+  const matchingEvents =
+    target === undefined
+      ? events
+      : events.filter((candidate) => {
+          /* v8 ignore start -- upstream: typed calendar query results cannot contain a non-object event candidate @preserve */
+          if (candidate === null || typeof candidate !== 'object' || Array.isArray(candidate)) {
+            return false;
+          }
+          /* v8 ignore stop @preserve */
+          const record = candidate as Record<string, unknown>;
+          return (
+            (readNonEmptyString(record, 'id') ?? readNonEmptyString(record, 'eventId')) ===
+              target.eventId &&
+            readNonEmptyString(record, 'summary') === target.eventSummary
+          );
+        });
+  if (matchingEvents.length !== 1) return undefined;
+  const event: unknown = matchingEvents[0];
   /* v8 ignore start -- upstream: the typed Calendar Agent response cannot emit a non-object calendar event @preserve */
   if (event === null || typeof event !== 'object' || Array.isArray(event)) return undefined;
   /* v8 ignore stop @preserve */
@@ -3613,7 +3815,9 @@ function createTrackingToolExecutor(
       const normalizedArgs =
         authoritativeCalendarAttendeeEmails === undefined
           ? args
-          : { ...args, attendeesToAdd: authoritativeCalendarAttendeeEmails };
+          : args.changes === undefined
+            ? { ...args, attendeesToAdd: authoritativeCalendarAttendeeEmails }
+            : args;
       return await track(
         'update_calendar_event',
         toRecord(normalizedArgs),
@@ -3839,6 +4043,47 @@ function buildConfirmationReply(
   );
 }
 
+function buildCalendarUpdateOperationsConfirmationReply(
+  operations: readonly IntexAgentConfirmedOperation[],
+  replyLanguage: IntexAgentReplyLanguage,
+  runtimeTimeZone: string
+): string {
+  const lines = [
+    replyLanguage === 'pl'
+      ? `Czy wykonać ${String(operations.length)} zmiany wydarzeń w kalendarzu?`
+      : `Apply ${String(operations.length)} calendar event updates?`,
+  ];
+  operations.forEach((operation, index) => {
+    /* v8 ignore start -- schema: staged calendar update operations cannot omit their validated event summary @preserve */
+    const summary = readRawString(operation.toolArgs, 'eventSummary') ?? '(untitled)';
+    /* v8 ignore stop @preserve */
+    lines.push('', `${String(index + 1)}. ${summary}`);
+    const changes = readCalendarUpdateChanges(operation.toolArgs);
+    /* v8 ignore start -- schema: staged calendar update operations cannot omit validated changes @preserve */
+    if (changes === undefined) return;
+    /* v8 ignore stop @preserve */
+    appendConfirmationLine(
+      lines,
+      replyLanguage === 'pl' ? 'Początek po zmianie' : 'New start',
+      formatCalendarEventDateTimeSnapshot(changes['start'], runtimeTimeZone, replyLanguage)
+    );
+    appendConfirmationLine(
+      lines,
+      replyLanguage === 'pl' ? 'Koniec po zmianie' : 'New end',
+      formatCalendarEventDateTimeSnapshot(changes['end'], runtimeTimeZone, replyLanguage)
+    );
+  });
+  lines.push('', CALENDAR_UPDATE_PRESERVATION_NOTICE[replyLanguage]);
+  return limitConfirmationReply(lines.join('\n'), replyLanguage);
+}
+
+function readCalendarUpdateChanges(args: Record<string, unknown>): Record<string, unknown> | undefined {
+  const value = args['changes'];
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function buildUnboundedConfirmationReply(
   toolName: MutatingIntexAgentToolName,
   args: Record<string, unknown>,
@@ -3897,31 +4142,65 @@ function buildUnboundedConfirmationReply(
   }
 
   if (toolName === 'update_calendar_event') {
-    const lines = [CONFIRMATION_INTROS.update_calendar_event[replyLanguage]];
+    const changes = readCalendarUpdateChanges(args);
+    const lines = [
+      changes === undefined
+        ? CONFIRMATION_INTROS.update_calendar_event[replyLanguage]
+        : CALENDAR_UPDATE_CONFIRMATION_INTRO[replyLanguage],
+    ];
     appendConfirmationLine(
       lines,
       CONFIRMATION_LABELS.title[replyLanguage],
       limitConfirmationField(readRawString(args, 'eventSummary'), 240)
     );
-    appendConfirmationLine(
-      lines,
-      CONFIRMATION_LABELS.start[replyLanguage],
-      formatCalendarEventDateTimeSnapshot(
-        args['eventStart'],
-        runtimeTimeZone,
-        replyLanguage
-      )
-    );
-    appendConfirmationLine(
-      lines,
-      CONFIRMATION_LABELS.end[replyLanguage],
-      formatCalendarEventDateTimeSnapshot(args['eventEnd'], runtimeTimeZone, replyLanguage)
-    );
-    appendConfirmationListLine(
-      lines,
-      CONFIRMATION_LABELS.attendees[replyLanguage],
-      readStringArray(args, 'attendeesToAdd')
-    );
+    if (changes === undefined) {
+      appendConfirmationLine(
+        lines,
+        CONFIRMATION_LABELS.start[replyLanguage],
+        formatCalendarEventDateTimeSnapshot(args['eventStart'], runtimeTimeZone, replyLanguage)
+      );
+      appendConfirmationLine(
+        lines,
+        CONFIRMATION_LABELS.end[replyLanguage],
+        formatCalendarEventDateTimeSnapshot(args['eventEnd'], runtimeTimeZone, replyLanguage)
+      );
+      appendConfirmationListLine(
+        lines,
+        CONFIRMATION_LABELS.attendees[replyLanguage],
+        readStringArray(args, 'attendeesToAdd')
+      );
+    } else {
+      appendConfirmationLine(
+        lines,
+        replyLanguage === 'pl' ? 'Nowy tytuł' : 'New title',
+        readRawString(changes, 'summary')
+      );
+      appendConfirmationLine(
+        lines,
+        replyLanguage === 'pl' ? 'Początek po zmianie' : 'New start',
+        formatCalendarEventDateTimeSnapshot(changes['start'], runtimeTimeZone, replyLanguage)
+      );
+      appendConfirmationLine(
+        lines,
+        replyLanguage === 'pl' ? 'Koniec po zmianie' : 'New end',
+        formatCalendarEventDateTimeSnapshot(changes['end'], runtimeTimeZone, replyLanguage)
+      );
+      appendConfirmationLine(
+        lines,
+        CONFIRMATION_LABELS.location[replyLanguage],
+        readRawString(changes, 'location')
+      );
+      appendConfirmationListLine(
+        lines,
+        replyLanguage === 'pl' ? 'Uczestnicy do dodania' : 'Attendees to add',
+        readStringArray(changes, 'attendeesToAdd')
+      );
+      appendConfirmationListLine(
+        lines,
+        replyLanguage === 'pl' ? 'Uczestnicy do usunięcia' : 'Attendees to remove',
+        readStringArray(changes, 'attendeesToRemove')
+      );
+    }
     lines.push(CALENDAR_UPDATE_PRESERVATION_NOTICE[replyLanguage]);
     return lines.join('\n');
   }

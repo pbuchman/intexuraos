@@ -79,6 +79,18 @@ export interface IntexAgentSupportingToolCompletion {
   toolSelection?: IntexAgentToolSelectionMetadata;
 }
 
+export interface IntexAgentConfirmedOperation {
+  toolName: IntexAgentToolName;
+  toolArgs: Record<string, unknown>;
+}
+
+export interface IntexAgentConfirmedOperationResult {
+  toolName: IntexAgentToolName;
+  status: 'completed' | 'failed';
+  toolResult?: Record<string, unknown>;
+  error?: string;
+}
+
 export type IntexAgentRunnerResult =
   | {
       outcome: 'completed';
@@ -91,6 +103,7 @@ export type IntexAgentRunnerResult =
         displayText: string;
         url: string;
       };
+      operationResults?: readonly IntexAgentConfirmedOperationResult[];
     }
   | {
       outcome: 'needs_confirmation';
@@ -100,6 +113,7 @@ export type IntexAgentRunnerResult =
       summary?: string;
       toolSelection?: IntexAgentToolSelectionMetadata;
       supportingToolCompletions?: readonly IntexAgentSupportingToolCompletion[];
+      operations?: readonly IntexAgentConfirmedOperation[];
     }
   | {
       outcome: 'tool_failed';
@@ -154,11 +168,20 @@ export interface IntexAgentRunner {
   executeConfirmed(input: {
     session: IntexAgentSession;
     events?: IntexAgentSessionEvent[];
-    toolName: IntexAgentToolName;
-    toolArgs: Record<string, unknown>;
     currentDateTime: string;
     messageId?: string;
-  }): Promise<IntexAgentRunnerResult>;
+  } & (
+    | {
+        toolName: IntexAgentToolName;
+        toolArgs: Record<string, unknown>;
+        operations?: never;
+      }
+    | {
+        operations: readonly IntexAgentConfirmedOperation[];
+        toolName?: never;
+        toolArgs?: never;
+      }
+  )): Promise<IntexAgentRunnerResult>;
   run(input: {
     session: IntexAgentSession;
     events: IntexAgentSessionEvent[];
@@ -496,14 +519,32 @@ async function handleConfirmationButton(
 
   let executionResult: IntexAgentRunnerResult;
   try {
-    executionResult = await deps.runner.executeConfirmed({
+    const confirmedInput = {
       session: currentSession,
       events: await deps.sessionRepository.listEvents(currentSession.id, input.userId),
-      toolName: pendingConfirmation.toolName,
-      toolArgs: pendingConfirmation.toolArgs,
       currentDateTime: now,
       messageId: input.messageId,
-    });
+    };
+    executionResult = await deps.runner.executeConfirmed(
+      pendingConfirmation.operations === undefined
+        ? {
+            ...confirmedInput,
+            toolName: pendingConfirmation.toolName,
+            toolArgs: pendingConfirmation.toolArgs,
+          }
+        : { ...confirmedInput, operations: pendingConfirmation.operations }
+    );
+    if (
+      pendingConfirmation.operations !== undefined &&
+      executionResult.outcome === 'completed' &&
+      executionResult.operationResults === undefined &&
+      executionResult.toolName === undefined
+    ) {
+      executionResult = {
+        ...executionResult,
+        toolName: pendingConfirmation.toolName,
+      };
+    }
   } catch (error) {
     const errorMessage = getErrorMessage(error, 'Unknown tool execution error');
     executionResult = {
@@ -643,6 +684,7 @@ async function applyRunnerResult(
       confirmationId,
       toolName: runnerResult.toolName,
       toolArgs: runnerResult.toolArgs,
+      ...(runnerResult.operations !== undefined ? { operations: runnerResult.operations } : {}),
       message: reply,
       sourceMessageId: input.messageId,
       ...(runnerResult.toolSelection !== undefined
@@ -713,6 +755,31 @@ async function applyRunnerResult(
 
   if (runnerResult.outcome === 'tool_selection_rejected') {
     throw new Error('Matrix corpus tool-selection results require the isolated test handler');
+  }
+
+  if (runnerResult.operationResults !== undefined) {
+    for (const operation of runnerResult.operationResults) {
+      await appendEvent(
+        deps,
+        session,
+        operation.status === 'completed' ? 'tool_call_completed' : 'tool_call_failed',
+        operation.status === 'completed'
+          ? {
+              toolName: operation.toolName,
+              ...(operation.toolResult !== undefined ? { result: operation.toolResult } : {}),
+            }
+          : { toolName: operation.toolName, error: operation.error ?? 'Unknown tool execution error' }
+      );
+    }
+    const reply = stripDuplicateSessionPrefix(runnerResult.reply);
+    const assistantAt = await appendAssistantMessage(session, deps, reply);
+    await deps.sessionRepository.updateSession(session.id, {
+      status: 'waiting_for_user',
+      lastAssistantMessageAt: assistantAt,
+      activeTool: null,
+    });
+    await publishReply(input, deps, session.id, reply);
+    return;
   }
 
   if (runnerResult.toolName === undefined) {
@@ -936,6 +1003,7 @@ interface PendingConfirmation {
   confirmationId: string;
   toolName: IntexAgentToolName;
   toolArgs: Record<string, unknown>;
+  operations?: readonly IntexAgentConfirmedOperation[];
 }
 
 function confirmationButtons(
@@ -1000,22 +1068,37 @@ function findLatestPendingConfirmation(
     const confirmationId = event.payload['confirmationId'];
     const toolName = event.payload['toolName'];
     const toolArgs = event.payload['toolArgs'];
+    const operations = parseConfirmedOperations(event.payload['operations']);
     if (
       typeof confirmationId !== 'string' ||
       resolvedConfirmationIds.has(confirmationId) ||
-      !isConfirmableToolName(toolName) ||
-      !isRecord(toolArgs)
+      (operations === undefined && (!isConfirmableToolName(toolName) || !isRecord(toolArgs)))
     ) {
       continue;
     }
+    const firstOperation = operations?.[0];
     return {
       confirmationId,
-      toolName,
-      toolArgs,
+      toolName: firstOperation?.toolName ?? (toolName as IntexAgentToolName),
+      toolArgs: firstOperation?.toolArgs ?? (toolArgs as Record<string, unknown>),
+      ...(operations !== undefined ? { operations } : {}),
     };
   }
 
   return null;
+}
+
+function parseConfirmedOperations(value: unknown): IntexAgentConfirmedOperation[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) return undefined;
+  const operations: IntexAgentConfirmedOperation[] = [];
+  for (const operation of value) {
+    if (!isRecord(operation)) return undefined;
+    const toolName = operation['toolName'];
+    const toolArgs = operation['toolArgs'];
+    if (!isConfirmableToolName(toolName) || !isRecord(toolArgs)) return undefined;
+    operations.push({ toolName, toolArgs });
+  }
+  return operations;
 }
 
 async function supersedePendingConfirmationIfNeeded(
