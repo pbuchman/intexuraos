@@ -615,6 +615,92 @@ export function createFirestoreSentryIssueEventRepository(deps: {
           }));
         };
 
+        const correlatedReservationKey = exactTransition?.correlationKey
+          ?? issueReservation?.correlationKey;
+        if (correlatedReservationKey !== undefined) {
+          const reservationRef = collection.doc(correlatedReservationKey);
+          const reservationSnapshot = await transaction.get(reservationRef);
+          if (!reservationSnapshot.exists) {
+            return err({
+              code: 'FIRESTORE_ERROR' as const,
+              message: 'Sentry task correlation owner is missing',
+            });
+          }
+
+          const reservation = toReservationView(
+            reservationSnapshot.data() as Record<string, unknown>,
+            fallback
+          );
+          const latestReceivedAt = Timestamp.fromDate(input.receivedAt);
+          const updateMatchingAlias = (
+            data: Record<string, unknown> | undefined,
+            ref: typeof transitionRef,
+            fields: Record<string, unknown> = {}
+          ): void => {
+            if (data?.['correlationKey'] !== correlatedReservationKey) return;
+            transaction.update(ref, {
+              latestReceivedAt,
+              payload,
+              duplicateCount: toReservationView(data, fallback).duplicateCount + 1,
+              ...fields,
+            });
+          };
+          const recordDuplicate = (): void => {
+            transaction.update(reservationRef, {
+              latestReceivedAt,
+              payload,
+              duplicateCount: reservation.duplicateCount + 1,
+            });
+            updateMatchingAlias(transitionData, transitionRef);
+            updateMatchingAlias(issueData, issueRef);
+          };
+
+          if (reservation.state === 'task_created' || reservation.codeTaskId !== undefined) {
+            recordDuplicate();
+            return ok({
+              kind: 'duplicate' as const,
+              ...(reservation.codeTaskId !== undefined && { codeTaskId: reservation.codeTaskId }),
+            });
+          }
+          if (isLeaseActive(reservation, input.receivedAt)) {
+            recordDuplicate();
+            return ok({ kind: 'retryable' as const });
+          }
+
+          const leaseToken = randomUUID();
+          const leaseExpiresAt = new Date(input.receivedAt.getTime() + input.leaseDurationMs);
+          const leaseFields = {
+            state: 'reserved' as const,
+            proposedCodeTaskId: reservation.proposedCodeTaskId,
+            leaseToken,
+            leaseExpiresAt: Timestamp.fromDate(leaseExpiresAt),
+            leaseOwner: input.leaseOwner,
+            failureReason: null,
+            codeTaskId: null,
+            linearIssueId: reservation.linearIssueId ?? null,
+          };
+          transaction.update(reservationRef, {
+            latestReceivedAt,
+            payload,
+            duplicateCount: reservation.duplicateCount + 1,
+            ...leaseFields,
+          });
+          updateMatchingAlias(transitionData, transitionRef, leaseFields);
+          updateMatchingAlias(issueData, issueRef, leaseFields);
+          return ok({
+            kind: 'acquired' as const,
+            transitionKey,
+            issueKey,
+            reservationKey: correlatedReservationKey,
+            idempotencyKey: correlatedReservationKey,
+            leaseToken,
+            codeTaskId: reservation.proposedCodeTaskId,
+            ...(reservation.linearIssueId !== undefined && {
+              linearIssueId: reservation.linearIssueId,
+            }),
+          });
+        }
+
         if (exactTransition?.state === 'task_created') {
           persistExisting(transitionKey, 'transition', exactTransition);
           if (issueReservation === undefined) {

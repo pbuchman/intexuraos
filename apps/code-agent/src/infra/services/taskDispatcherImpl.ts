@@ -232,6 +232,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       this.logger.warn(
         {
           taskId: request.taskId,
+          remediationFamily: 'code-task.dispatch',
+          ...(request.dispatchAttemptId !== undefined && {
+            dispatchAttemptId: request.dispatchAttemptId,
+          }),
           workerType: request.workerType,
           reason: dispatchability.reason,
           workerNames: dispatchability.workerNames,
@@ -253,6 +257,10 @@ class TaskDispatcherImpl implements TaskDispatcherService {
       this.logger.warn(
         {
           taskId: request.taskId,
+          remediationFamily: 'code-task.dispatch',
+          ...(request.dispatchAttemptId !== undefined && {
+            dispatchAttemptId: request.dispatchAttemptId,
+          }),
           workerType: request.workerType,
           reason: 'unexpected_worker_health_response',
           unexpectedWorkerHealth,

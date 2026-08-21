@@ -413,6 +413,164 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     }
   });
 
+  it('routes fallback lease recovery through the correlated owner', async () => {
+    const correlatedEvent = buildCorrelatedEvent({ eventId: 'event-correlated-fallback' });
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(correlatedEvent, {
+      proposedCodeTaskId: 'task_correlated_fallback',
+      leaseOwner: 'delivery-correlated',
+    })));
+    expect(await repo.checkpointLinearIssue({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      linearIssueId: 'INT-CORRELATED',
+    })).toEqual({ ok: true, value: undefined });
+    await fakeFirestore.collection('sentry-issue-events').doc(first.issueKey).delete();
+
+    const fallback = expectAcquired(await repo.acquire(buildAcquireInput(buildEvent({
+      eventId: correlatedEvent.eventId,
+    }), {
+      receivedAt: new Date('2026-07-29T10:01:01.000Z'),
+      proposedCodeTaskId: 'task_fallback_discarded',
+      leaseOwner: 'delivery-fallback',
+    })));
+
+    expect(fallback).toEqual(expect.objectContaining({
+      reservationKey: first.reservationKey,
+      idempotencyKey: first.reservationKey,
+      codeTaskId: 'task_correlated_fallback',
+      linearIssueId: 'INT-CORRELATED',
+    }));
+    expect(await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: 'task_stale_correlated_owner',
+    })).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+    });
+    expect(await repo.completeReservation({
+      transitionKey: fallback.transitionKey,
+      issueKey: fallback.issueKey,
+      reservationKey: fallback.reservationKey,
+      leaseToken: fallback.leaseToken,
+      codeTaskId: fallback.codeTaskId,
+      linearIssueId: fallback.linearIssueId,
+    })).toEqual({ ok: true, value: undefined });
+    expect((await fakeFirestore.collection('sentry-issue-events').doc(first.issueKey).get()).exists)
+      .toBe(false);
+  });
+
+  it('recovers an expired correlated owner without Linear linkage through fallback', async () => {
+    const correlatedEvent = buildCorrelatedEvent({ eventId: 'event-correlated-without-linear' });
+    const correlated = expectAcquired(await repo.acquire(buildAcquireInput(correlatedEvent, {
+      proposedCodeTaskId: 'task_correlated_without_linear',
+      leaseOwner: 'delivery-correlated',
+    })));
+
+    const fallback = expectAcquired(await repo.acquire(buildAcquireInput(buildEvent({
+      eventId: correlatedEvent.eventId,
+    }), {
+      receivedAt: new Date('2026-07-29T10:01:01.000Z'),
+      proposedCodeTaskId: 'task_fallback_without_linear_discarded',
+      leaseOwner: 'delivery-fallback',
+    })));
+
+    expect(fallback).toEqual(expect.objectContaining({
+      reservationKey: correlated.reservationKey,
+      idempotencyKey: correlated.reservationKey,
+      codeTaskId: 'task_correlated_without_linear',
+    }));
+    expect(fallback).not.toHaveProperty('linearIssueId');
+    const owner = await fakeFirestore.collection('sentry-issue-events')
+      .doc(correlated.reservationKey)
+      .get();
+    expect(owner.data()?.['linearIssueId']).toBeNull();
+  });
+
+  it('keeps fallback redelivery on an active and completed correlated owner', async () => {
+    const correlatedEvent = buildCorrelatedEvent({ eventId: 'event-correlated-owner-state' });
+    const correlated = expectAcquired(await repo.acquire(buildAcquireInput(correlatedEvent, {
+      proposedCodeTaskId: 'task_correlated_owner_state',
+      leaseOwner: 'delivery-correlated',
+    })));
+    const fallbackEvent = buildEvent({ eventId: correlatedEvent.eventId });
+
+    expect(await repo.acquire(buildAcquireInput(fallbackEvent, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      leaseOwner: 'delivery-fallback-active',
+    }))).toEqual({ ok: true, value: { kind: 'retryable' } });
+
+    expect(await repo.completeReservation({
+      transitionKey: correlated.transitionKey,
+      issueKey: correlated.issueKey,
+      reservationKey: correlated.reservationKey,
+      leaseToken: correlated.leaseToken,
+      codeTaskId: correlated.codeTaskId,
+      linearIssueId: 'INT-CORRELATED-OWNER',
+    })).toEqual({ ok: true, value: undefined });
+
+    expect(await repo.acquire(buildAcquireInput(fallbackEvent, {
+      receivedAt: new Date('2026-07-29T10:00:02.000Z'),
+      leaseOwner: 'delivery-fallback-completed',
+    }))).toEqual({
+      ok: true,
+      value: { kind: 'duplicate', codeTaskId: 'task_correlated_owner_state' },
+    });
+  });
+
+  it('fails closed when a fallback alias has lost its correlated owner', async () => {
+    const correlatedEvent = buildCorrelatedEvent({ eventId: 'event-dangling-correlation-owner' });
+    const correlated = expectAcquired(await repo.acquire(buildAcquireInput(correlatedEvent)));
+    await fakeFirestore.collection('sentry-issue-events').doc(correlated.reservationKey).delete();
+
+    expect(await repo.acquire(buildAcquireInput(buildEvent({
+      eventId: correlatedEvent.eventId,
+    }), {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      leaseOwner: 'delivery-fallback-dangling',
+    }))).toEqual({
+      ok: false,
+      error: {
+        code: 'FIRESTORE_ERROR',
+        message: 'Sentry task correlation owner is missing',
+      },
+    });
+  });
+
+  it('does not let a legacy issue tombstone block a new trusted occurrence', async () => {
+    const legacyEvent = buildEvent({ eventId: 'event-legacy-occurrence' });
+    const legacy = expectAcquired(await repo.acquire(buildAcquireInput(legacyEvent, {
+      proposedCodeTaskId: 'task_legacy_occurrence',
+      leaseOwner: 'delivery-legacy',
+    })));
+    expect(await repo.completeReservation({
+      transitionKey: legacy.transitionKey,
+      issueKey: legacy.issueKey,
+      reservationKey: legacy.reservationKey,
+      leaseToken: legacy.leaseToken,
+      codeTaskId: legacy.codeTaskId,
+      linearIssueId: 'INT-LEGACY',
+    })).toEqual({ ok: true, value: undefined });
+
+    const correlatedEvent = buildCorrelatedEvent({ eventId: 'event-new-trusted-occurrence' });
+    const correlated = expectAcquired(await repo.acquire(buildAcquireInput(correlatedEvent, {
+      receivedAt: new Date('2026-07-29T10:00:02.000Z'),
+      proposedCodeTaskId: 'task_trusted_occurrence',
+      leaseOwner: 'delivery-correlated',
+    })));
+
+    const correlationKey = createSentryOccurrenceDedupeKey(correlatedEvent);
+    expect(correlated).toEqual(expect.objectContaining({
+      reservationKey: correlationKey,
+      idempotencyKey: correlationKey,
+      codeTaskId: 'task_trusted_occurrence',
+    }));
+  });
+
   it('returns errors when the trusted owner record disappears before fenced updates', async () => {
     const acquired = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
       eventId: 'event-missing-owner',

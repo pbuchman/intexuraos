@@ -825,6 +825,7 @@ describe('taskDispatcherImpl', () => {
       await service.dispatch({
         ...baseRequest,
         taskId: 'task-invalid-health',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
         workerCredentials: {
           workers: [{
             name: 'default',
@@ -839,6 +840,8 @@ describe('taskDispatcherImpl', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'task-invalid-health',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
+          remediationFamily: 'code-task.dispatch',
           reason: 'workers_unreachable',
           _skipSentry: false,
         }),
@@ -932,6 +935,7 @@ describe('taskDispatcherImpl', () => {
       const result = await service.dispatch({
         ...baseRequest,
         taskId: 'task-mixed-dispatchable-health',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
         workerCredentials: {
           workers: [
             {
@@ -956,6 +960,8 @@ describe('taskDispatcherImpl', () => {
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
           taskId: 'task-mixed-dispatchable-health',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
+          remediationFamily: 'code-task.dispatch',
           reason: 'unexpected_worker_health_response',
           unexpectedWorkerHealth: [expect.objectContaining({ workerName: 'malformed', tag: 'unknown' })],
           _skipSentry: false,
