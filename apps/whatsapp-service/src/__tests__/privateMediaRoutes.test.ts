@@ -607,6 +607,32 @@ describe('Private WhatsApp Media Routes', () => {
     expect(JSON.parse(response.body).error.details).toEqual({
       reason: 'original_gcs_upload_failed',
     });
+    expect(response.headers['x-intexuraos-storage-failure']).toBe('unknown');
+  });
+
+  it('returns only a closed safe GCS failure reason', async () => {
+    vi.spyOn(ctx.mediaStorage, 'uploadPrivateMedia').mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'PERSISTENCE_ERROR',
+        message: 'sensitive raw storage detail',
+        details: { storageFailureReason: 'permission_denied' },
+      },
+    });
+
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/internal/whatsapp/private/media?sourceAccountId=private-source-123&matrixEventId=%24image&mxcUri=mxc%3A%2F%2Fhome-dev%2Fimage&mimeType=image%2Fjpeg&mediaId=image',
+      headers: {
+        'x-internal-auth': 'test-internal-token',
+        'content-type': 'application/octet-stream',
+      },
+      payload: Buffer.from('image-bytes'),
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.headers['x-intexuraos-storage-failure']).toBe('permission_denied');
+    expect(JSON.stringify(response.headers)).not.toContain('sensitive raw storage detail');
   });
 
   it('returns 502 when thumbnail generation fails', async () => {
