@@ -3,7 +3,7 @@
  * Uses vi.mock() to mock @google-cloud/storage for unit testing.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GcsMediaStorageAdapter } from '../../infra/gcs/index.js';
+import { classifyGcsFailure, GcsMediaStorageAdapter } from '../../infra/gcs/index.js';
 
 const mockSave = vi.fn();
 const mockDelete = vi.fn();
@@ -35,6 +35,18 @@ describe('GcsMediaStorageAdapter', () => {
     adapter = new GcsMediaStorageAdapter(testBucketName);
     vi.clearAllMocks();
     mockGetFiles.mockReset();
+  });
+
+  it('classifies only closed safe GCS failure reasons', () => {
+    expect(classifyGcsFailure({ code: 401 })).toBe('authentication_failed');
+    expect(classifyGcsFailure({ code: 403 })).toBe('permission_denied');
+    expect(classifyGcsFailure({ code: 404 })).toBe('not_found');
+    expect(classifyGcsFailure({ code: 408 })).toBe('rate_limited');
+    expect(classifyGcsFailure({ code: 400 })).toBe('invalid_request');
+    expect(classifyGcsFailure({ code: 503 })).toBe('upstream');
+    expect(classifyGcsFailure({ code: 'ETIMEDOUT' })).toBe('network');
+    expect(classifyGcsFailure({ code: 412 })).toBe('precondition_failed');
+    expect(classifyGcsFailure(new Error('sensitive raw detail'))).toBe('unknown');
   });
 
   describe('upload', () => {

@@ -1677,7 +1677,13 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
     body = undefined;
   }
   if (!response.ok) {
-    throw new Error(privateMediaUploadFailureCode(response.status, body));
+    throw new Error(
+      privateMediaUploadFailureCode(
+        response.status,
+        body,
+        response.headers.get('x-intexuraos-storage-failure') ?? undefined
+      )
+    );
   }
   if (
     !isRecord(body) ||
@@ -1690,16 +1696,27 @@ export async function uploadPrivateMedia(config, event, media, downloaded) {
   return body.data.media;
 }
 
-export function privateMediaUploadFailureCode(status, body) {
+export function privateMediaUploadFailureCode(status, body, storageFailureReason) {
   const reason = body?.error?.details?.reason;
   const safeReasons = new Set([
     'original_gcs_upload_failed',
     'thumbnail_generation_failed',
     'thumbnail_gcs_upload_failed',
   ]);
+  const safeStorageReasons = new Set([
+    'authentication_failed',
+    'permission_denied',
+    'not_found',
+    'rate_limited',
+    'network',
+    'precondition_failed',
+    'invalid_request',
+    'upstream',
+    'unknown',
+  ]);
   return `intexuraos_private_media_upload_failed_${status}${
     safeReasons.has(reason) ? `_${reason}` : ''
-  }`;
+  }${safeStorageReasons.has(storageFailureReason) ? `_${storageFailureReason}` : ''}`;
 }
 
 export async function postPrivateMediaBackfill(config, payload) {

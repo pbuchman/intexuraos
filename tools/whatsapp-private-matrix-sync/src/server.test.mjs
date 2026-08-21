@@ -1300,6 +1300,18 @@ test('private media upload failures retain only the safe typed API stage', () =>
     }),
     'intexuraos_private_media_upload_failed_502'
   );
+  assert.equal(
+    privateMediaUploadFailureCode(
+      502,
+      { success: false, error: { details: { reason: 'original_gcs_upload_failed' } } },
+      'permission_denied'
+    ),
+    'intexuraos_private_media_upload_failed_502_original_gcs_upload_failed_permission_denied'
+  );
+  assert.equal(
+    privateMediaUploadFailureCode(502, undefined, 'raw-private-id-must-not-pass'),
+    'intexuraos_private_media_upload_failed_502'
+  );
 });
 
 test('recovery classifier uses closed skip predicates and fails on malformed message-like events', () => {

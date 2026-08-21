@@ -14,6 +14,40 @@ import type {
 
 const DEFAULT_SIGNED_URL_TTL_SECONDS = 900; // 15 minutes
 
+export type GcsFailureReason =
+  | 'authentication_failed'
+  | 'permission_denied'
+  | 'not_found'
+  | 'rate_limited'
+  | 'network'
+  | 'precondition_failed'
+  | 'invalid_request'
+  | 'upstream'
+  | 'unknown';
+
+export function classifyGcsFailure(error: unknown): GcsFailureReason {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined;
+  if (code === 401) return 'authentication_failed';
+  if (code === 403) return 'permission_denied';
+  if (code === 404) return 'not_found';
+  if (code === 408 || code === 429) return 'rate_limited';
+  if (code === 412) return 'precondition_failed';
+  if (code === 400) return 'invalid_request';
+  if (typeof code === 'number' && code >= 500 && code <= 599) return 'upstream';
+  if (
+    code === 'ECONNRESET' ||
+    code === 'ENOTFOUND' ||
+    code === 'EAI_AGAIN' ||
+    code === 'ETIMEDOUT'
+  ) {
+    return 'network';
+  }
+  return 'unknown';
+}
+
 /**
  * Generate deterministic GCS path for media.
  * Format: whatsapp/{userId}/{messageId}/{mediaId}.{ext}
@@ -83,6 +117,7 @@ async function saveObject(
     return err({
       code: 'PERSISTENCE_ERROR',
       message: `${errorLabel}: ${getErrorMessage(error, 'Unknown GCS error')}`,
+      details: { storageFailureReason: classifyGcsFailure(error) },
     });
   }
 }

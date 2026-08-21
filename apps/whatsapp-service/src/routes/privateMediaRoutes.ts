@@ -50,6 +50,18 @@ type PrivateMediaFailureReason =
   | 'thumbnail_generation_failed'
   | 'thumbnail_gcs_upload_failed';
 
+const SAFE_STORAGE_FAILURE_REASONS = new Set([
+  'authentication_failed',
+  'permission_denied',
+  'not_found',
+  'rate_limited',
+  'network',
+  'precondition_failed',
+  'invalid_request',
+  'upstream',
+  'unknown',
+]);
+
 function privateMediaErrorResponse(description: string): Record<string, unknown> {
   return {
     description,
@@ -66,15 +78,32 @@ function privateMediaErrorResponse(description: string): Record<string, unknown>
 async function replyForPrivateMediaStageFailure(
   request: FastifyRequest,
   reply: FastifyReply,
-  reason: PrivateMediaFailureReason
+  reason: PrivateMediaFailureReason,
+  storageFailureReason?: string
 ): Promise<FastifyReply> {
-  request.log.error({ reason }, 'Private WhatsApp media pipeline stage failed');
+  const safeStorageFailureReason = SAFE_STORAGE_FAILURE_REASONS.has(storageFailureReason ?? '')
+    ? storageFailureReason
+    : undefined;
+  request.log.error(
+    { reason, ...(safeStorageFailureReason === undefined ? {} : { storageFailureReason }) },
+    'Private WhatsApp media pipeline stage failed'
+  );
+  if (safeStorageFailureReason !== undefined) {
+    reply.header('x-intexuraos-storage-failure', safeStorageFailureReason);
+  }
   return await reply.fail(
     'DOWNSTREAM_ERROR',
     'Private WhatsApp media pipeline failed',
     undefined,
     { reason }
   );
+}
+
+function storageFailureReason(error: { details?: Record<string, unknown> }): string {
+  const reason = error.details?.['storageFailureReason'];
+  return typeof reason === 'string' && SAFE_STORAGE_FAILURE_REASONS.has(reason)
+    ? reason
+    : 'unknown';
 }
 
 function sanitizeMediaId(value: string): string {
@@ -532,7 +561,8 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
           return await replyForPrivateMediaStageFailure(
             request,
             reply,
-            'original_gcs_upload_failed'
+            'original_gcs_upload_failed',
+            storageFailureReason(uploadResult.error)
           );
         }
 
@@ -581,7 +611,8 @@ export const privateMediaRoutes: FastifyPluginCallback = (fastify, _opts, done) 
             return await replyForPrivateMediaStageFailure(
               request,
               reply,
-              'thumbnail_gcs_upload_failed'
+              'thumbnail_gcs_upload_failed',
+              storageFailureReason(thumbnailUploadResult.error)
             );
           }
           thumbnailGcsPath = thumbnailUploadResult.value.gcsPath;
