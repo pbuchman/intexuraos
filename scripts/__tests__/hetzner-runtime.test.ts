@@ -783,6 +783,8 @@ describe('Hetzner web asset deployment', () => {
     );
 
     expect(remoteFlow).toContain('bash -o pipefail -c');
+    expect(remoteFlow).toContain('ssh "${SSH_ARGS[@]}"');
+    expect(remoteFlow).not.toContain('${ssh_command} "${REMOTE_USER}@${HETZNER_PROD_HOST}"');
   });
 
   it('pins retained Cloud Build targets to the workflow commit and verifies provenance', () => {

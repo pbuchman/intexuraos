@@ -13,6 +13,7 @@ DEPLOY_NGINX="${DEPLOY_NGINX:-true}"
 SECRET_PACKAGE_VERSION="${SECRET_PACKAGE_VERSION:-}"
 KEY_FILE=""
 KNOWN_HOSTS_FILE=""
+SSH_ARGS=()
 SYNC_SOURCE_DIR=""
 COMMIT_SHA_VALUE=""
 COMMIT_MESSAGE_VALUE=""
@@ -85,6 +86,15 @@ setup_ssh() {
   chmod 600 "${KEY_FILE}" "${KNOWN_HOSTS_FILE}"
   printf '%s\n' "${HETZNER_DEPLOY_SSH_PRIVATE_KEY}" | tr -d '\r' > "${KEY_FILE}"
   ssh-keyscan -p "${SSH_PORT}" -H "${HETZNER_PROD_HOST}" > "${KNOWN_HOSTS_FILE}"
+  SSH_ARGS=(
+    -i "${KEY_FILE}"
+    -p "${SSH_PORT}"
+    -o BatchMode=yes
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=8
+    -o StrictHostKeyChecking=yes
+    -o "UserKnownHostsFile=${KNOWN_HOSTS_FILE}"
+  )
 }
 
 ssh_base() {
@@ -97,11 +107,9 @@ run_remote_at() {
   local command="$2"
   local quoted_directory=""
   local quoted_command=""
-  local ssh_command=""
   printf -v quoted_directory '%q' "${directory}"
   printf -v quoted_command '%q' "${command}"
-  ssh_command="$(ssh_base)"
-  ${ssh_command} "${REMOTE_USER}@${HETZNER_PROD_HOST}" \
+  ssh "${SSH_ARGS[@]}" "${REMOTE_USER}@${HETZNER_PROD_HOST}" \
     "cd ${quoted_directory} && bash -o pipefail -c ${quoted_command}"
 }
 
