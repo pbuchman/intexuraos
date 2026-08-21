@@ -371,20 +371,14 @@ describe('CodeTaskNewPage - linearMode reset behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sonnet' }));
     expect(screen.getByText('Anthropic\'s daily coding model with the best balance of speed and intelligence')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'MiniMax' }));
-    expect(screen.getByText('MiniMax\'s coding and agent model with strong reasoning at lower cost')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'GLM' }));
-    expect(screen.getByText('Zhipu\'s flagship Agentic Engineering model for complex systems and long-running agent tasks')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Qwen' }));
-    expect(screen.getByText('Advanced Qwen model with thinking enabled')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Kimi' }));
-    expect(screen.getByText('Moonshot\'s latest recommended model with image understanding')).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }));
     expect(screen.getByText('OpenAI Codex runtime for code-task execution with persisted thread resume')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Codex XHigh' }));
+    expect(screen.getByText('High-effort Codex preset for deeper reviews, investigations, and complex implementation tasks')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'OpenRouter Free' }));
+    expect(screen.getByText('Free-tier code worker routed only through OpenRouter')).toBeInTheDocument();
   });
 
   it('renders task mode selector with Planning and Execution options', () => {

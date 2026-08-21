@@ -91,7 +91,7 @@ export interface SanitizedToolArgsSummary {
   timeMin?: string;
   timeMax?: string;
   timeZone?: string;
-  workerType?: 'codex' | 'codex-xhigh' | 'minimax';
+  workerType?: 'codex' | 'codex-xhigh' | 'openrouter-free';
   taskMode?: 'planning' | 'execution';
   maxResults?: number;
   queryLength?: number;

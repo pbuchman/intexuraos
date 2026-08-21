@@ -277,10 +277,6 @@ describe('TaskDispatcher', () => {
       ANTHROPIC_API_KEY: 'test-anthropic-key',
       LINEAR_API_KEY: 'test-linear-key',
       ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
-      MINIMAX_API_KEY: 'test-minimax-key',
-      MIMO_API_KEY: 'test-mimo-key',
-      DASHSCOPE_API_KEY: 'test-dashscope-key',
-      KIMI_API_KEY: 'test-kimi-key',
       OPENROUTER_API_KEY: 'test-openrouter-key',
     }),
     gcpSaKeyPath: '/tmp/gcp-sa.json',
@@ -3071,7 +3067,7 @@ describe('TaskDispatcher', () => {
       });
       const request: CreateTaskRequest = {
         taskId: 'glm-tier-optional-accept',
-        workerType: 'glm',
+        workerType: 'openrouter-free',
         prompt: 'Weak-worker review task',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',
@@ -5650,7 +5646,7 @@ describe('TaskDispatcher', () => {
     it('should skip shared auth preflight for GLM tasks', async () => {
       const request: CreateTaskRequest = {
         taskId: 'glm-skip-validation',
-        workerType: 'glm',
+        workerType: 'openrouter-free',
         prompt: 'Test GLM task',
         webhookUrl: 'https://example.com/webhook',
         webhookSecret: 'secret',

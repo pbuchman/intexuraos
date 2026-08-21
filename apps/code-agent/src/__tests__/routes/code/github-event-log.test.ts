@@ -266,7 +266,7 @@ describe('GitHub event log routes', () => {
       dispatchParams: {
         taskId: 'task-review-1',
         reviewTypes: ['architecture', 'security'],
-        workerType: 'qwen',
+        workerType: 'openrouter-free',
       },
       decisionLatencyMs: 1200,
     });
@@ -311,7 +311,7 @@ describe('GitHub event log routes', () => {
         dispatchAction: 'create_review_task',
         reviewTypes: ['architecture', 'security'],
         taskId: 'task-review-1',
-        workerType: 'qwen',
+        workerType: 'openrouter-free',
       }),
     ]);
   });

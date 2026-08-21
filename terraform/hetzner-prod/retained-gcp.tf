@@ -77,51 +77,17 @@ locals {
     "INTEXURAOS_SPEECHMATICS_APP_API_KEY",
   ])
 
-  retained_gcp_legacy_secret_ids = toset([
-    "INTEXURAOS_CLOUDFLARE_API_TOKEN",
-    "INTEXURAOS_DASHSCOPE_APP_API_KEY",
-    "INTEXURAOS_ENCRYPTION_KEY",
-    "INTEXURAOS_GITHUB_APP_PRIVATE_KEY",
-    "INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_GITHUB_WEBHOOK_SECRET",
-    "INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET",
-    "INTEXURAOS_KIMI_APP_API_KEY",
-    "INTEXURAOS_LINEAR_API_KEY",
-    "INTEXURAOS_MIMO_APP_API_KEY",
-    "INTEXURAOS_MINIMAX_APP_API_KEY",
-    "INTEXURAOS_OPENAI_APP_API_KEY",
-    "INTEXURAOS_OPENROUTER_APP_API_KEY",
-    "INTEXURAOS_ORCHESTRATOR_SECRET",
-    "INTEXURAOS_SENTRY_AUTOMATION_USER_ID",
-    "INTEXURAOS_SENTRY_WEBHOOK_SECRET",
-    "INTEXURAOS_SSL_PRIVATE_KEY",
-    "INTEXURAOS_TOKEN_ENCRYPTION_KEY",
-    "INTEXURAOS_WEBHOOK_VERIFY_SECRET",
-    "INTEXURAOS_WHATSAPP_ACCESS_TOKEN",
-    "INTEXURAOS_WHATSAPP_APP_SECRET",
-    "INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID",
-    "INTEXURAOS_WHATSAPP_VERIFY_TOKEN",
-    "INTEXURAOS_WHATSAPP_WABA_ID",
-    var.cloudflare_dns_api_token_secret_id,
-  ])
-
-  retained_gcp_secret_ids = setunion(
-    local.retained_gcp_target_secret_ids,
-    var.legacy_secret_containers_enabled ? local.retained_gcp_legacy_secret_ids : toset([])
-  )
-
   retained_gcp_inventory = {
-    project_id                    = local.retained_gcp.project_id
-    project_number                = local.retained_gcp.project_number
-    source_environment            = local.retained_gcp_environment
-    firestore_database_id         = local.retained_gcp.firestore_database_id
-    buckets                       = local.retained_gcp_buckets
-    pubsub_topics                 = local.retained_gcp_pubsub_topics
-    cloud_functions               = local.retained_gcp_cloud_function_names
-    artifact_registry             = local.retained_gcp_artifact_registry
-    cloud_build_triggers          = local.retained_gcp_cloud_build_triggers
-    service_accounts              = local.retained_gcp_service_accounts
-    secret_ids                    = local.retained_gcp_secret_ids
-    cloudflare_dns_api_token_name = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null
+    project_id            = local.retained_gcp.project_id
+    project_number        = local.retained_gcp.project_number
+    source_environment    = local.retained_gcp_environment
+    firestore_database_id = local.retained_gcp.firestore_database_id
+    buckets               = local.retained_gcp_buckets
+    pubsub_topics         = local.retained_gcp_pubsub_topics
+    cloud_functions       = local.retained_gcp_cloud_function_names
+    artifact_registry     = local.retained_gcp_artifact_registry
+    cloud_build_triggers  = local.retained_gcp_cloud_build_triggers
+    service_accounts      = local.retained_gcp_service_accounts
+    secret_ids            = local.retained_gcp_target_secret_ids
   }
 }

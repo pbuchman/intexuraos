@@ -42,10 +42,6 @@ vi.mock('../bootstrap/env-config.js', () => ({
       preserveWorkerContainers: true,
       linearApiKey: 'lin',
       errorHubHost: 'home-dev.example.ts.net:8443',
-      minimaxApiKey: 'm',
-      mimoApiKey: 'm',
-      dashscopeApiKey: 'd',
-      kimiApiKey: 'ABCDEFG',
       openRouterApiKey: '',
       logLevel: 'info',
       environment: 'test',
@@ -197,8 +193,8 @@ describe('start() — full bootstrap happy path', () => {
     expect(buildOrchestratorServices).toHaveBeenCalledOnce();
     expect(validateWorkerApiKeys).toHaveBeenCalledOnce();
     expect(validateWorkerApiKeys).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ kimiKey: 'ABCDEFG' }),
+      {},
+      { openRouterKey: '' },
       expect.anything()
     );
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
@@ -250,10 +246,6 @@ describe('start() — full bootstrap happy path', () => {
       preserveWorkerContainers: true,
       linearApiKey: 'lin',
       errorHubHost: 'home-dev.example.ts.net:8443',
-      minimaxApiKey: 'm',
-      mimoApiKey: 'm',
-      dashscopeApiKey: 'd',
-      kimiApiKey: 'ABCDEFG',
       openRouterApiKey: '',
       logLevel: 'info',
       environment: 'production',
@@ -350,10 +342,6 @@ describe('start() — full bootstrap happy path', () => {
       preserveWorkerContainers: true,
       linearApiKey: 'lin',
       errorHubHost: 'home-dev.example.ts.net:8443',
-      minimaxApiKey: 'm',
-      mimoApiKey: 'm',
-      dashscopeApiKey: 'd',
-      kimiApiKey: 'ABCDEFG',
       openRouterApiKey: '',
       gitUserNameOverride: 'Test User',
       gitUserEmailOverride: 'test@example.com',

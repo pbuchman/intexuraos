@@ -22,11 +22,11 @@ Catalog for IntexuraOS services, workers, and packages.
 | Component                         | Key Changes                                                                                                                                                                                                                   |
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **fishing-assistant-service**     | New Fishing Assistant RAG foundation with knowledge folders/pages, embedding-backed retrieval, persisted chat history, digest/raw-message evidence, citation validation, ISO response timestamps, and web/mobile chat support |
-| **llm-usage-service**             | Richer cost visibility with prompt-type grouping, research-run cost summaries, image generation metadata, and OpenRouter/MiMo Pro 2.5 model reporting                                                                         |
+| **llm-usage-service**             | Richer cost visibility with prompt-type grouping, research-run cost summaries, image generation metadata, and OpenRouter model reporting                                                                                      |
 | **code-agent**                    | Scheduled execution dispatch, custom per-task timeout overrides, and OpenRouter Gemini 3.6 Flash for GitHub Agent tool-calling triage                                                                                   |
 | **mobile-notifications-service**  | Internal digest evidence routes for Fishing Assistant, cleaned group-message retrieval, digest state lookup, subscription-scoped access, and digest output-language preservation                                               |
 | **whatsapp-service/bookmarks**    | Reliable async recovery paths for WhatsApp bookmark saves and duplicate-safe bookmark replay; bookmark rows remain scannable on mobile                                                                                         |
-| **orchestrator / model catalog**  | Worker presets and usage reporting include Xiaomi MiMo Pro 2.5, OpenRouter catalog support includes Gemini 3.6 Flash for tool-calling flows, and Grafana Cloud PM2 log dashboards improve ops visibility               |
+| **orchestrator / model catalog**  | Claude, Codex, and OpenRouter worker presets with usage reporting; Grafana Cloud PM2 log dashboards improve operations                                                                                                 |
 
 ## v3.6.0 Highlights (Previous)
 
@@ -35,7 +35,7 @@ Catalog for IntexuraOS services, workers, and packages.
 | **code-worker**                  | Claude resume fix — `--resume <sessionId>` replaces `--continue` for reliable session resumption, `CLAUDE_SESSION_ID` now required for Claude resumes                                                                                                                         |
 | **mobile-notifications-service** | WhatsApp Group Digest pipeline — end-to-end AI-generated daily digests from WhatsApp group messages with headline/bullets summaries, persistent group state, backfill, and WhatsApp delivery via Pub/Sub                                                                      |
 | **hellscript-agent**             | Per-user LLM client resolution via user-service (INT-1369), centralized LLM pricing removal (INT-1387), usage tracking via `HttpInternalAuthUsageSink`                                                                                                                        |
-| **orchestrator**                 | Execution memory pipeline simplification (soft-warning for memory_acknowledgment), log cap raised to 8MB, task timeout default extended to 5h, StatusUpdateClient for redundant status delivery, mimo-pro worker type, test_quality review scope, configurable validation chain for LLM-backed resume/compliance paths |
+| **orchestrator**                 | Execution memory pipeline simplification, 8MB log cap, five-hour default timeout, redundant status delivery, `test_quality` review scope, and an OpenRouter validation chain                                                     |
 | **code-agent**                   | Robust task finalization via dedicated status endpoint, PR triage through Pub/Sub push, important flag for issue groups, GitHub Agent inherits user LLM settings, task mode selector (planning/execution), self-healing failure triage, draft PR blocking                     |
 
 ## v3.5.0 Highlights (Previous)
@@ -67,16 +67,16 @@ Catalog for IntexuraOS services, workers, and packages.
 | Component        | Key Changes                                                                                                                                                                                     |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **code-agent**   | GitHub Agent with tool calling, unified PR automation log, structured output triage with auto-repair                                                                                            |
-| **orchestrator** | Review Agent, Execution Deep Validator, Kimi worker type, Docker health gate, fatal exit codes, PR branch inheritance, mandatory /simplify, already-completed outcome, reliability improvements |
+| **orchestrator** | Review Agent, Execution Deep Validator, Docker health gate, fatal exit codes, PR branch inheritance, mandatory /simplify, already-completed outcome, reliability improvements                   |
 | **web**          | Code Task Detail Page V2 (issue-centric grouped view), workers status in user menu                                                                                                              |
-| **Platform**     | Alibaba Cloud Model Studio integration replacing ZAI (GLM-5, Qwen, Kimi), Gemini tool-call mode                                                                                                 |
+| **Platform**     | Expanded model routing and tool-call support                                                                                                                                                     |
 
 ## v3.2.0 Highlights (Previous)
 
 | Component            | Key Changes                                                                          |
 | -------------------- | ------------------------------------------------------------------------------------ |
 | **code-agent**       | Agent-based routing, implement button lifecycle, task queueing, PR comment tasks     |
-| **orchestrator**     | Label-based dispatch, Qwen/Sonnet/MiniMax worker types, automatic container cleanup  |
+| **orchestrator**     | Label-based dispatch and automatic container cleanup                              |
 | **whatsapp-service** | CTA buttons with deep links, task progress notifications                             |
 | **transcription**    | Event-driven audio processing, user-level language preferences                       |
 | **linear-agent**     | Live data hydration                                                                  |
@@ -161,7 +161,7 @@ graph TB
 | Service                                        | AI Models          | Capability                            |
 | ---------------------------------------------- | ------------------ | ------------------------------------- |
 | [bookmarks-agent](bookmarks-agent/features.md) | Via web-agent      | Link summarization                    |
-| [web-agent](web-agent/features.md)             | Gemini 2.5 Flash   | Content extraction, summarization     |
+| [web-agent](web-agent/features.md)             | OpenRouter         | Content extraction, summarization     |
 | [message-digest-service](message-digest-service/features.md) | OpenRouter configured model | WhatsApp group and direct-chat summaries |
 
 ### Conversational AI
@@ -174,13 +174,13 @@ graph TB
 
 | Service                              | AI Models                                        | Capability                                                                                    |
 | ------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| [code-agent](code-agent/features.md) | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | GitHub Agent with tool calling, unified PR log, task queueing, PR creation via worker presets |
+| [code-agent](code-agent/features.md) | Claude, Codex, OpenRouter | GitHub Agent with tool calling, unified PR log, task queueing, PR creation via worker presets |
 
 ### Writing Assistance
 
 | Service                                                  | AI Models        | Capability                                                                                  |
 | -------------------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------- |
-| [hellscript-agent](hellscript-agent/features.md)         | Gemini 2.5 Flash | Intent interpretation, thought accumulation, categorized writing config, draft generation   |
+| [hellscript-agent](hellscript-agent/features.md)         | OpenRouter       | Intent interpretation, thought accumulation, categorized writing config, draft generation   |
 
 ### Messaging & Transcription
 
@@ -203,11 +203,11 @@ Services that directly invoke AI models for their core functionality.
 | [research-agent](research-agent/features.md)           | Multi-LLM research orchestration   | Curated OpenRouter catalog, maximum 6 models     | [features](research-agent/features.md) / [technical](research-agent/technical.md) / [tutorial](research-agent/tutorial.md) / [debt](research-agent/technical-debt.md) / [agent](research-agent/agent.md)                          |
 | [image-service](image-service/features.md)             | AI image generation                | GPT aliases executed through OpenRouter          | [features](image-service/features.md) / [technical](image-service/technical.md) / [tutorial](image-service/tutorial.md) / [debt](image-service/technical-debt.md) / [agent](image-service/agent.md)                               |
 | [bookmarks-agent](bookmarks-agent/features.md)         | Link management with AI summaries  | Via web-agent                                    | [features](bookmarks-agent/features.md) / [technical](bookmarks-agent/technical.md) / [tutorial](bookmarks-agent/tutorial.md) / [debt](bookmarks-agent/technical-debt.md) / [agent](bookmarks-agent/agent.md)                     |
-| [web-agent](web-agent/features.md)                     | Web scraping with AI               | Gemini 2.5 Flash                                 | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
+| [web-agent](web-agent/features.md)                     | Web scraping with AI               | OpenRouter                                       | [features](web-agent/features.md) / [technical](web-agent/technical.md) / [tutorial](web-agent/tutorial.md) / [debt](web-agent/technical-debt.md) / [agent](web-agent/agent.md)                                                   |
 | [fishing-assistant-service](fishing-assistant-service/features.md) | Grounded fishing chat and knowledge base | OpenRouter Gemini 3.6 Flash + OpenRouter embeddings | [features](fishing-assistant-service/features.md) / [technical](fishing-assistant-service/technical.md) / [tutorial](fishing-assistant-service/tutorial.md) / [debt](fishing-assistant-service/technical-debt.md) / [agent](fishing-assistant-service/agent.md) |
 | [message-digest-service](message-digest-service/features.md) | Scheduled private WhatsApp summaries | Configured OpenRouter model | [features](message-digest-service/features.md) / [technical](message-digest-service/technical.md) / [tutorial](message-digest-service/tutorial.md) / [debt](message-digest-service/technical-debt.md) / [agent](message-digest-service/agent.md) |
-| [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, MiniMax, MiMo Pro 2.5, GLM-5, Qwen, Kimi, Codex, OpenRouter | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
-| [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | Gemini 2.5 Flash                                 | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
+| [code-agent](code-agent/features.md)                   | Autonomous code execution          | Claude, Codex, OpenRouter                        | [features](code-agent/features.md) / [technical](code-agent/technical.md) / [tutorial](code-agent/tutorial.md) / [debt](code-agent/technical-debt.md) / [agent](code-agent/agent.md)                                              |
+| [hellscript-agent](hellscript-agent/features.md)       | Voice-to-draft writing assistant   | OpenRouter                                       | [features](hellscript-agent/features.md) / [technical](hellscript-agent/technical.md) / [tutorial](hellscript-agent/tutorial.md) / [debt](hellscript-agent/technical-debt.md) / [agent](hellscript-agent/agent.md)                |
 
 ### Content Management Agents
 
@@ -217,7 +217,7 @@ Services that manage user content with AI-enhanced features.
 | -------------------------------------------- | --------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [notes-agent](notes-agent/features.md)       | Note-taking                 | -              | [features](notes-agent/features.md) / [technical](notes-agent/technical.md) / [tutorial](notes-agent/tutorial.md) / [debt](notes-agent/technical-debt.md) / [agent](notes-agent/agent.md)                |
 | [calendar-agent](calendar-agent/features.md) | Google Calendar integration | Date parsing   | [features](calendar-agent/features.md) / [technical](calendar-agent/technical.md) / [tutorial](calendar-agent/tutorial.md) / [debt](calendar-agent/technical-debt.md) / [agent](calendar-agent/agent.md) |
-| [linear-agent](linear-agent/features.md)     | Linear issue management     | Gemini, GLM    | [features](linear-agent/features.md) / [technical](linear-agent/technical.md) / [tutorial](linear-agent/tutorial.md) / [debt](linear-agent/technical-debt.md) / [agent](linear-agent/agent.md)           |
+| [linear-agent](linear-agent/features.md)     | Linear issue management     | OpenRouter     | [features](linear-agent/features.md) / [technical](linear-agent/technical.md) / [tutorial](linear-agent/tutorial.md) / [debt](linear-agent/technical-debt.md) / [agent](linear-agent/agent.md)           |
 
 ### Infrastructure Services
 
@@ -258,7 +258,7 @@ Cloud Functions and local services that run outside Cloud Run.
 
 ### Worker Details
 
-**orchestrator** — Runs on local machines (Mac or VM) behind Cloudflare Tunnel. Receives task dispatch requests from code-agent, creates isolated execution environments, spawns code-worker sessions in Docker containers via Claude or Codex runtimes, and reports results via webhooks. Supports worker type presets across Anthropic (opus, auto, sonnet), MiniMax (minimax/M3), Xiaomi MiMo Pro 2.5 (mimo-pro), Alibaba Cloud Model Studio (glm/glm-5, qwen/qwen3.5-plus), Kimi Code (kimi/kimi-for-coding), Codex (`codex`, `codex-xhigh`), and OpenRouter (`openrouter-free`). Features 6 agent types (planning, execution, pull_request, review, remediation, ask_agent), Gemini-based completion verification with agent-specific Zod schemas, Agent Compliance Validator (OpenRouter-based transcript audit), Execution Memory Graph for cross-task learning, Remediation Agent for autonomous review finding fixes, Ask Agent for interactive Q&A sessions, selective container preservation by agent type, a five-hour default task timeout, versioned system prompts via PromptBuilder, forensics mode, and mid-task messaging.
+**orchestrator** — Runs on local machines behind Cloudflare Tunnel. It receives signed tasks, creates isolated Docker workspaces, and reports results through signed callbacks. Worker types are limited to subscription-authenticated Claude (`auto`, `opus`, `sonnet`), subscription-authenticated Codex (`codex`, `codex-xhigh`), and OpenRouter (`openrouter-free`). Completion contracts are deterministic; transcript compliance validation uses OpenRouter.
 
 **code-worker** is a Docker container (Node.js 22 Alpine) pre-loaded with Claude CLI, Codex CLI, git, pnpm, GitHub CLI, ripgrep, terraform, and gcloud. Runs as non-root user with network restrictions. The orchestrator manages its lifecycle.
 

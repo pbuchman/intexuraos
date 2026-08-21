@@ -4,11 +4,6 @@ const EXPECTED_CODE_TASK_WORKER_TYPES = [
   'auto',
   'opus',
   'sonnet',
-  'minimax',
-  'mimo-pro',
-  'glm',
-  'qwen',
-  'kimi',
   'codex',
   'codex-xhigh',
   'openrouter-free',
@@ -48,7 +43,7 @@ describe('code task worker types', () => {
     );
   });
 
-  it('describes auth requirements for codex, claude, and provider-backed workers', async () => {
+  it('describes auth requirements for codex, claude, and the OpenRouter worker', async () => {
     const commonCore = (await import('../index.js')) as Record<string, unknown>;
     const capabilities = commonCore['CODE_TASK_WORKER_CAPABILITIES'] as Record<
       string,
@@ -63,11 +58,6 @@ describe('code task worker types', () => {
     expect(capabilities['sonnet']).toMatchObject({
       runtimeFamily: 'claude',
       auth: { kind: 'claude' },
-      requiresDocker: true,
-    });
-    expect(capabilities['glm']).toMatchObject({
-      runtimeFamily: 'provider',
-      auth: { kind: 'api_key', envVar: 'DASHSCOPE_API_KEY' },
       requiresDocker: true,
     });
     expect(capabilities['openrouter-free']).toMatchObject({

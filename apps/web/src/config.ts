@@ -1,26 +1,22 @@
 import type { AppConfig } from '@/types';
 import { WEB_SERVICE_URLS } from './config.generated';
+import { readPublicWebEnv, type PublicWebEnvKey } from './publicEnv';
 
 type ServiceEnvVar = (typeof WEB_SERVICE_URLS)[number]['envVar'];
 
-function getEnvVar(key: string): string {
-  const value = import.meta.env[key] as string | undefined;
+const publicEnv = readPublicWebEnv();
+
+function getEnvVar(key: PublicWebEnvKey): string {
+  const value = publicEnv[key];
   if (value === undefined || value === '') {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value;
 }
 
-function getServiceUrl(envVar: string, apiPath: string): string {
-  if (import.meta.env.DEV) {
-    return apiPath;
-  }
-  return getEnvVar(envVar);
-}
-
 function getGeneratedServiceUrls(): Record<ServiceEnvVar, string> {
   return Object.fromEntries(
-    WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, getServiceUrl(envVar, apiPath)])
+    WEB_SERVICE_URLS.map(({ envVar, apiPath }) => [envVar, apiPath])
   ) as Record<ServiceEnvVar, string>;
 }
 

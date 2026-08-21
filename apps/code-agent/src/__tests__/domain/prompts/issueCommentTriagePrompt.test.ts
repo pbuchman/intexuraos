@@ -53,7 +53,7 @@ describe('buildIssueCommentTriageSection', () => {
 
   it('includes review triage instructions and examples for @review comments', () => {
     const result = buildIssueCommentTriageSection({
-      commentBody: '@review architecture, security with qwen',
+      commentBody: '@review architecture, security with codex-xhigh',
       isEdit: false,
       isBotSender: false,
       senderLogin: 'user',
@@ -61,10 +61,10 @@ describe('buildIssueCommentTriageSection', () => {
 
     expect(result).toContain('Review Command Instructions');
     expect(result).toContain('Allowed worker types');
-    expect(result).toContain('@review architecture, security with qwen');
-    expect(result).toContain('qwen');
-    expect(result).toContain('@review with minimax');
+    expect(result).toContain('@review architecture, security with codex-xhigh');
+    expect(result).toContain('openrouter-free');
     expect(result).toContain('@review with openrouter-free');
+    expect(result).not.toMatch(/\b(?:minimax|mimo-pro|glm|qwen|kimi)\b/iu);
   });
 
   it('shows bot sender and edited action in the @review branch', () => {

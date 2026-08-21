@@ -109,7 +109,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         dispatchAction: 'create_review_task',
         dispatchParams: {
           reviewTypes: ['code_quality', 'security'],
-          workerType: 'qwen',
+          workerType: 'openrouter-free',
         },
       });
 
@@ -125,7 +125,7 @@ describe('createFirestoreEventDecisionRepository', () => {
         expect(result.value.llmReasoning).toBe('This PR modifies auth logic across multiple services.');
         expect(result.value.dispatchAction).toBe('create_review_task');
         expect(result.value.dispatchParams?.reviewTypes).toEqual(['code_quality', 'security']);
-        expect(result.value.dispatchParams?.workerType).toBe('qwen');
+        expect(result.value.dispatchParams?.workerType).toBe('openrouter-free');
       }
     });
 

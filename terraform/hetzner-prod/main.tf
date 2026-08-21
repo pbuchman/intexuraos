@@ -13,10 +13,9 @@ locals {
   )
 
   retained_gcp = {
-    project_id                         = data.google_project.retained.project_id
-    project_number                     = data.google_project.retained.number
-    firestore_database_id              = "(default)"
-    cloudflare_dns_api_token_secret_id = var.cloudflare_dns_api_token_secret_id
+    project_id            = data.google_project.retained.project_id
+    project_number        = data.google_project.retained.number
+    firestore_database_id = "(default)"
   }
 
   service_account_ids = {

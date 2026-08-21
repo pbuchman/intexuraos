@@ -147,10 +147,6 @@ export async function start(): Promise<void> {
   void validateWorkerApiKeys(
     services.workerAuthRegistry,
     {
-      minimaxKey: env.minimaxApiKey,
-      mimoKey: env.mimoApiKey,
-      dashscopeKey: env.dashscopeApiKey,
-      kimiKey: env.kimiApiKey,
       openRouterKey: env.openRouterApiKey,
     },
     logger

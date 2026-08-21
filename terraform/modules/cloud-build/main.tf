@@ -78,21 +78,6 @@ resource "google_project_iam_member" "cloud_build_logs_writer" {
   member  = "serviceAccount:${google_service_account.cloud_build.email}"
 }
 
-moved {
-  from = google_project_iam_member.cloud_build_secret_accessor
-  to   = google_project_iam_member.cloud_build_secret_accessor[0]
-}
-
-# Retained only for the additive migration stage. The active GitHub connection
-# token is Google-managed and does not depend on this custom service account role.
-resource "google_project_iam_member" "cloud_build_secret_accessor" {
-  count = var.legacy_secret_readers_enabled ? 1 : 0
-
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.cloud_build.email}"
-}
-
 # Cloud Build needs to trigger builds via API (for GitHub Actions integration)
 resource "google_project_iam_member" "cloud_build_builds_editor" {
   project = var.project_id

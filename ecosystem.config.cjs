@@ -86,10 +86,6 @@ const COMMON_SERVICE_ENV = {
   GOOGLE_CLOUD_QUOTA_PROJECT: process.env.INTEXURAOS_GCP_PROJECT_ID,
   INTEXURAOS_GCP_PROJECT_ID: process.env.INTEXURAOS_GCP_PROJECT_ID,
   INTEXURAOS_WEB_APP_URL: process.env.INTEXURAOS_WEB_APP_URL ?? 'https://dev.intexuraos.cloud',
-  INTEXURAOS_MINIMAX_APP_API_KEY: process.env.INTEXURAOS_MINIMAX_APP_API_KEY,
-  INTEXURAOS_MIMO_APP_API_KEY: process.env.INTEXURAOS_MIMO_APP_API_KEY,
-  INTEXURAOS_DASHSCOPE_APP_API_KEY: process.env.INTEXURAOS_DASHSCOPE_APP_API_KEY,
-  INTEXURAOS_KIMI_APP_API_KEY: process.env.INTEXURAOS_KIMI_APP_API_KEY,
   INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS:
     process.env.INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS ??
     'or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash',
@@ -197,7 +193,6 @@ const SERVICE_ENV_MAPPINGS = {
   'code-agent': {
     INTEXURAOS_SERVICE_URL: 'https://dev.intexuraos.cloud/api/code',
     INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL: 'https://dev.intexuraos.cloud/api/code',
-    INTEXURAOS_WEBHOOK_VERIFY_SECRET: process.env.INTEXURAOS_WEBHOOK_VERIFY_SECRET,
     INTEXURAOS_ORCHESTRATOR_SECRET: process.env.INTEXURAOS_ORCHESTRATOR_SECRET,
     INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WHATSAPP_SEND_TOPIC ?? 'whatsapp-send-message',
@@ -394,26 +389,5 @@ module.exports = {
     // upstream services have already been started by the time it boots.
     createServiceConfig('api-docs-hub', 8133),
 
-    // Web app (Vite dev server — uses proxy for /api/* routes in dev environment)
-    {
-      name: 'web',
-      cwd: './apps/web',
-      script: path.resolve(__dirname, 'node_modules/vite/bin/vite.js'),
-      args: ['--mode', 'development'],
-      interpreter: 'node',
-      env: {
-        ...PM2_BASE_ENV,
-        ...COMMON_SERVICE_ENV,
-        ...COMMON_SERVICE_URLS,
-        NODE_ENV: 'development',
-        VITE_PM2_MODE: 'true',
-        INTEXURAOS_USE_FIREBASE_EMULATORS: 'false',
-      },
-      autorestart: true,
-      max_restarts: 5,
-      kill_timeout: 5000,
-      restart_delay: 2000,
-      watch: false,
-    },
   ],
 };

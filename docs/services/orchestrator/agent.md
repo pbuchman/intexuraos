@@ -23,7 +23,7 @@ interface OrchestratorTools {
   // Submit a new code task for execution
   submitTask(params: {
     taskId: string;
-    workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+    workerType: 'opus' | 'auto' | 'sonnet' | 'codex' | 'codex-xhigh' | 'openrouter-free';
     prompt: string;
     repository?: string;
     baseBranch?: string;
@@ -130,7 +130,7 @@ interface OrchestratorResources {
 ```typescript
 interface Task {
   taskId: string;
-  workerType: 'opus' | 'auto' | 'sonnet' | 'minimax' | 'mimo-pro' | 'glm' | 'qwen' | 'kimi' | 'codex' | 'codex-xhigh' | 'openrouter-free';
+  workerType: 'opus' | 'auto' | 'sonnet' | 'codex' | 'codex-xhigh' | 'openrouter-free';
   runtime?: 'claude' | 'codex';
   runtimeSessionId?: string;
   prompt: string;
@@ -567,10 +567,6 @@ On startup, the orchestrator:
 | `INTEXURAOS_INTERNAL_AUTH_TOKEN`            | Yes      | -                                  |
 | `INTEXURAOS_LINEAR_API_KEY`                 | Yes      | -                                  |
 | `INTEXURAOS_ERROR_HUB_HOST`                 | Yes      | -                                  |
-| `INTEXURAOS_MINIMAX_APP_API_KEY`            | Yes      | -                                  |
-| `INTEXURAOS_MIMO_APP_API_KEY`               | Yes      | -                                  |
-| `INTEXURAOS_DASHSCOPE_APP_API_KEY`          | Yes      | -                                  |
-| `INTEXURAOS_KIMI_APP_API_KEY`               | Yes      | -                                  |
 | `INTEXURAOS_USAGE_WEBHOOK_URL`              | Yes      | -                                  |
 | `GOOGLE_APPLICATION_CREDENTIALS`            | Yes      | -                                  |
 | `INTEXURAOS_ORCHESTRATOR_VALIDATION_MODELS` | No       | `or:google/gemma-4-31b-it,or:deepseek/deepseek-v4-flash` |

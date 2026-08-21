@@ -1,7 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 
 const ENV_CURRENT = 'INTEXURAOS_INTERNAL_AUTH_TOKEN';
-const ENV_PREVIOUS = 'INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS';
 const HEADER = 'x-internal-auth';
 // Keep common-http independent of infra-sentry; this string mirrors SKIP_SENTRY_KEY.
 const SKIP_SENTRY_KEY = '_skipSentry';
@@ -9,23 +8,15 @@ const SKIP_SENTRY_KEY = '_skipSentry';
 export interface InternalAuthResult {
   valid: boolean;
   reason?: 'not_configured' | 'token_mismatch';
-  tokenUsed?: 'current' | 'previous';
+  tokenUsed?: 'current';
 }
 
 /**
  * Validate internal service-to-service authentication.
  *
- * Reads INTEXURAOS_INTERNAL_AUTH_TOKEN (current) and the optional
- * INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS (previous) at runtime to
- * support a 24h rotation window where both tokens are accepted.
- *
- * Acceptance order:
- * 1. CURRENT must be configured. If empty → `not_configured`.
- * 2. Header matches CURRENT → accept (`tokenUsed: 'current'`).
- * 3. PREVIOUS is non-empty AND header matches PREVIOUS → accept
- *    (`tokenUsed: 'previous'`) and emit a warn-level log so operators
- *    can observe rotation traffic and tighten the window.
- * 4. Otherwise → `token_mismatch`.
+ * Reads exactly one INTEXURAOS_INTERNAL_AUTH_TOKEN at runtime. Old-token
+ * fallback is intentionally unsupported: the security cutover stops every
+ * caller and restarts the complete runtime with one new value.
  *
  * @param request - Fastify request object
  * @returns Object with valid boolean, optional reason for failure, and
@@ -41,12 +32,6 @@ export function validateInternalAuth(request: FastifyRequest): InternalAuthResul
   const authHeader = request.headers[HEADER];
   if (authHeader === current) {
     return { valid: true, tokenUsed: 'current' };
-  }
-
-  const previous = process.env[ENV_PREVIOUS] ?? '';
-  if (previous !== '' && authHeader === previous) {
-    request.log.warn('Internal auth: PREVIOUS token accepted (rotation window active)');
-    return { valid: true, tokenUsed: 'previous' };
   }
 
   request.log.warn({ [SKIP_SENTRY_KEY]: true }, 'Internal auth failed: token mismatch');

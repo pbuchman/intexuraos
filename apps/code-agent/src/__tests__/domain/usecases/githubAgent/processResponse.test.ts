@@ -261,7 +261,7 @@ describe('processCommentResponse', () => {
         skipped: false,
         skipReason: undefined,
         reviewTypes: ['architecture', 'security'],
-        reviewWorkerType: 'qwen',
+        reviewWorkerType: 'openrouter-free',
         dispatchTemplate: undefined,
       },
       toolCalls: [],
@@ -274,7 +274,7 @@ describe('processCommentResponse', () => {
       expect(result.value.triage).toEqual({
         action: 'request_review',
         reviewTypes: ['architecture', 'security'],
-        workerType: 'qwen',
+        workerType: 'openrouter-free',
       });
     }
   });

@@ -912,7 +912,7 @@ function toolArgs(
         title: `Synthetic ${entry.scenario.id}`,
       };
     case 'create_code_task':
-      return { prompt: message, workerType: 'minimax', taskMode: 'planning' };
+      return { prompt: message, workerType: 'openrouter-free', taskMode: 'planning' };
     case 'save_external':
       return { message };
     case 'get_user_preferences':

@@ -112,21 +112,24 @@ describe('PROD secret-package version reconciliation', () => {
     expect(result.stderr).not.toContain(terraform);
   });
 
-  it('runs repository-pin reconciliation before remote mutation and active-pin checks after activation', () => {
+  it('reconciles repository pins before remote mutation and verifies runtime after exact projection', () => {
     const deploy = readFileSync(deployPath, 'utf8');
     const main = deploy.slice(deploy.indexOf('main() {'));
+    const resolveRelease = deploy.slice(
+      deploy.indexOf('resolve_release() {'),
+      deploy.indexOf('prepare_release_tree() {')
+    );
+    const deployRelease = deploy.slice(
+      deploy.indexOf('deploy_release() {'),
+      deploy.indexOf('publish_deployment_metadata() {')
+    );
 
-    expect(main).toContain('verify_repository_secret_package_version_pins');
-    expect(main.indexOf('verify_repository_secret_package_version_pins')).toBeLessThan(
-      main.indexOf('sync_repo')
-    );
-    const activationIndex = main.indexOf('activate_secret_projection');
-    const postActivationVerificationIndex = main.lastIndexOf(
-      'verify_active_secret_projection_version'
-    );
-    expect(activationIndex).toBeLessThan(postActivationVerificationIndex);
-    expect(postActivationVerificationIndex).toBeLessThan(
-      main.indexOf('run_secret_projection_canary')
-    );
+    expect(resolveRelease).toContain('verify-secret-package-version-pins.mjs');
+    expect(main.indexOf('resolve_release')).toBeLessThan(main.indexOf('sync_release'));
+    const projectionIndex = deployRelease.indexOf('load-secrets.sh --version');
+    const runtimeStartIndex = deployRelease.indexOf('reload-pm2.sh');
+    const runtimeVerificationIndex = deployRelease.indexOf('verify_remote_runtime');
+    expect(projectionIndex).toBeLessThan(runtimeStartIndex);
+    expect(runtimeStartIndex).toBeLessThan(runtimeVerificationIndex);
   });
 });

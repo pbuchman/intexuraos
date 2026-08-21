@@ -326,8 +326,8 @@ function isIanaTimeZone(value: unknown): value is string {
 
 function isCodeTaskWorkerType(
   value: unknown
-): value is 'codex' | 'codex-xhigh' | 'minimax' {
-  return value === 'codex' || value === 'codex-xhigh' || value === 'minimax';
+): value is 'codex' | 'codex-xhigh' | 'openrouter-free' {
+  return value === 'codex' || value === 'codex-xhigh' || value === 'openrouter-free';
 }
 
 export function summarizeArgs(

@@ -1,245 +1,99 @@
 # Scripts
 
-Build, deployment, and utility scripts.
+Repository utilities for configuration, package publication, deployment,
+database maintenance, and CI. Secret-bearing output must always remain outside
+the repository in mode-`0600` files.
 
-## build-secret-package.mjs
+## Runtime Configuration
 
-Builds a complete DEV or PROD candidate in one of three modes: initial migration
-from the exact legacy numeric versions declared in the tracked, non-secret
-`config/environments/secret-package-sources.json` manifest, or ongoing rotation
-from one exact numeric version of the active package plus explicit private
-member overrides, or lost-container recovery from the complete authoritative
-private-file member set. It never reads `latest` and never prints source values
-or payloads.
+Render reviewable non-secret configuration:
 
 ```bash
-node scripts/build-secret-package.mjs \
-  --environment dev --project-id <project-id> \
-  --output <mode-0600-candidate> \
-  --firebase-api-key-file <mode-0600-file>
+node scripts/render-runtime-config.mjs --environment dev --format shell-export
+node scripts/render-runtime-config.mjs --environment prod --format dotenv
 ```
 
-The PROD command additionally requires its two PROD-only external files:
+The renderer uses the exact tracked allowlist. It rejects missing, duplicate,
+unknown, and secret-classified names.
+
+## Secret Packages
+
+`config/environments/secret-packages.json` defines the exact DEV and PROD
+package membership. `config/environments/secret-package-sources.json` permits
+only the current base package as an incremental build source.
+
+Build a complete candidate from an exact current version and explicit private
+overrides:
 
 ```bash
 node scripts/build-secret-package.mjs \
-  --environment prod --project-id <project-id> \
-  --output <mode-0600-candidate> \
-  --firebase-api-key-file <mode-0600-file> \
-  --runtime-gcp-service-account-file <mode-0600-file> \
-  --cloudflare-dns-api-token-file <mode-0600-file>
-```
-
-Firebase is an external input for both environments. The runtime service-account
-JSON and Cloudflare DNS token are external PROD-only inputs; supplying them for
-DEV is rejected. The DEV GitHub App PEM comes from exact version `1` of
-`INTEXURAOS_GITHUB_APP_PRIVATE_KEY`, while the PROD TLS PEM comes from exact
-version `1` of `INTEXURAOS_SSL_PRIVATE_KEY`. All other legacy mappings and their
-numeric versions are defined explicitly in the source manifest.
-
-After the first complete package has been promoted, build later rotations from
-that package even after legacy containers are removed. Pin the reviewed base
-version and pass at least one override as a private file path; repeat either
-override option to rotate more members:
-
-```bash
-node scripts/build-secret-package.mjs \
-  --environment dev --project-id <project-id> \
-  --output <mode-0600-candidate> \
+  --environment dev \
+  --project-id intexuraos-dev-pbuchman \
   --base-version <numeric-version> \
-  --override-env INTEXURAOS_OPENAI_APP_API_KEY=<mode-0600-file> \
-  --override-file githubAppPrivateKeyPemBase64=<mode-0600-file>
+  --override-env NAME=<mode-0600-file> \
+  --override-file NAME=<mode-0600-file> \
+  --output <mode-0600-candidate>
 ```
 
-`--override-env` accepts only an exact `envNames` member and
-`--override-file` only an exact `files` member from the package manifest. The
-builder validates the base package's server CRC32C and complete membership,
-applies the named replacements, then validates the complete candidate again.
-Base mode rejects `latest`, non-canonical versions such as `01`, duplicate or
-unknown members, empty override sets, and all legacy external-input flags.
+Alternatively provide every manifest member exactly once without a base
+version. The builder rejects `latest`, incomplete/duplicate/unknown members,
+symlinks, unsafe modes, empty values, and files larger than 64 KiB.
 
-If the target package container and all package versions are unavailable, omit
-`--base-version` and pass every manifest member exactly once with the same
-repeatable `--override-env NAME=FILE` and `--override-file NAME=FILE` options.
-This full-recovery mode performs no Secret Manager read and fails closed for a
-missing, extra, duplicate, or unknown member. The private inputs must be
-reconstructed by the owners from the exact source/method recorded in the
-schema-v2 recovery inventory; CI rejects missing, unknown, or unused sources.
-Partial recovery never falls back to deleted legacy sources.
-
-Every external or override input must be a non-symlink regular file with no
-group/other permission bits and at most 64 KiB. The builder verifies source
-CRC32C, creates the payload deterministically, runs the complete package
-validator, and atomically installs the candidate with mode `0600`. Standard
-output contains only validation metadata and counts. Optional
-`--manifest <path>` and `--sources-manifest <path>` overrides are intended for
-isolated verification and tests.
-
-## secret-package.mjs
-
-The single safe interface for validating, fetching, publishing, rendering, and
-shadow-comparing the DEV/PROD package contracts in
-`config/environments/secret-packages.json`.
+Validate, publish, fetch, or render one exact version:
 
 ```bash
 node scripts/secret-package.mjs validate \
-  --environment <dev-or-prod> --payload-file <mode-0600-candidate>
+  --environment dev --payload-file <candidate>
 node scripts/secret-package.mjs publish \
-  --environment <dev-or-prod> --project-id <project-id> \
-  --payload-file <mode-0600-candidate> \
-  --receipt-file <private-receipt>
-node scripts/secret-package.mjs publish-resume \
-  --environment <dev-or-prod> --project-id <project-id> \
-  --payload-file <mode-0600-candidate> \
-  --receipt-file <private-receipt>
-node scripts/secret-package.mjs publish-reconcile \
-  --environment <dev-or-prod> --project-id <project-id> \
-  --payload-file <mode-0600-candidate> \
-  --receipt-file <private-receipt> \
-  --version <exact-recovery-version>
-node scripts/secret-package.mjs publish-unlock \
-  --environment <dev-or-prod> --project-id <project-id> \
-  --receipt-file <private-receipt>
+  --environment dev --project-id intexuraos-dev-pbuchman \
+  --payload-file <candidate> --receipt-file <private-receipt>
 node scripts/secret-package.mjs fetch \
-  --environment <dev-or-prod> --version <numeric-version> \
-  --project-id <project-id> --output <mode-0600-path>
+  --environment dev --version <numeric-version> \
+  --project-id intexuraos-dev-pbuchman --output <mode-0600-file>
 node scripts/secret-package.mjs render \
-  --environment <dev-or-prod> --version <numeric-version> \
-  --project-id <project-id> --output-dir <private-directory>
-node scripts/secret-package.mjs dual-compare \
-  --environment <dev-or-prod> --left-payload-file <candidate-a> \
-  --right-payload-file <candidate-b> --hmac-key-file <ephemeral-key>
+  --environment dev --version <numeric-version> \
+  --project-id intexuraos-dev-pbuchman --output-dir <private-directory>
 ```
 
-`render` may use `--payload-file <already-fetched-file>` for offline validated
-rendering. Otherwise it fetches the requested exact version. Never substitute
-`latest`. The CLI enforces schema version, environment, exact env/file
-membership, string values, base64/PEM/service-account JSON shape, 64 KiB
-maximum payload, positive numeric versions, CRC32C, restrictive staging modes,
-and atomic promotion. It invokes `gcloud` without logging payload data. Shadow
-comparison uses an ephemeral HMAC and emits only package-level
-`MATCH`/`MISMATCH`.
+All commands validate schema, environment, exact membership, string/file
+shape, CRC32C, permissions, and numeric versions. Output is limited to safe
+metadata and counts. Package values never enter Terraform state or Git.
 
-`publish` requires a new receipt path under one canonical private journal parent
-on a local filesystem that supports durable directory `fsync` and hard links.
-Its mode-`0600` lock is package-scoped by project and secret ID, so different
-receipt filenames in that parent still serialize. A different parent or host is
-outside the lock domain; use one parent and one publisher/freeze for each
-package operation.
-
-Under the lock, `publish` first lists only target-package version metadata and
-records the largest ID as `prePublishMaxVersion`. It writes and synchronizes a
-complete private temporary inode, hard-links it to the final receipt pathname
-with no replacement, then synchronizes the parent. Only after that durable
-reservation may it call `addVersion`. A crash therefore leaves either no final
-receipt before any add, or a complete schema-v2 receipt in state `publishing`
-with `version: null`, never a partially written final inode. The receipt also
-binds a UUID-v4 `operationId` and canonical UTC `startedAt`; it contains only
-those fields plus schema/operation, state, environment, project ID, package
-secret ID, watermark, and numeric version. It never contains the candidate,
-member values, checksums, digests, credentials, or private paths.
-
-As soon as `addVersion` returns the exact numeric version, and before readback,
-the receipt becomes `pending-verification`. Successful server CRC32C and exact
-byte-for-byte readback changes it to `verified`. Preserve the exact candidate
-and receipt after any interruption. Run `publish-resume` only for a
-`pending-verification` or `verified` receipt; it reads the already recorded
-version and has no `addVersion` or version-selection path.
-
-For an ambiguous state `publishing` receipt, run `publish-reconcile` with
-`--version <exact-recovery-version>`. Before any payload access it lists only
-metadata and requires exactly one observed version ID greater than
-`prePublishMaxVersion`; that version must equal the argument and its creation
-time must not predate `startedAt`. It then verifies only that exact version's
-server CRC32C and bytes. An old byte-identical version is rejected, and zero or
-multiple post-watermark versions leave the receipt unchanged and blocked.
-
-There is no supported `publish-abort`: even zero currently observed candidates
-is not treated as sufficiently robust proof that no version committed. Stop and
-escalate instead of deleting/replacing the receipt, selecting a second journal
-parent, or publishing again. The operator must not run `publish` again when a
-receipt exists.
-
-After a hard crash, use `publish-unlock` only on the same host and only after
-confirming the recorded PID no longer exists. A result of `publishing` must be
-followed by `publish-reconcile`; `pending-verification` or `verified` must be
-followed by `publish-resume`. The result `unreserved` proves the process stopped
-before the synchronized receipt reservation and therefore before `addVersion`;
-only that result permits a new `publish` at the same canonical path and parent.
-The dedicated publishers receive resource-level target-package metadata viewer
-access for their own environment only; neither can inspect the opposite package.
-
-Rendering creates an immutable `<env>-v<N>-<crc32c-hex>/` release under the
-output directory, then atomically switches `current`. Every release has
-`environment.env` and `metadata.json`. DEV also has
-`github-app-private-key.pem`; PROD has `cloudflare-dns-api-token`,
-`runtime-gcp-service-account.json`, and `tls-private-key.pem`. All files and the
-`current` target are implementation artifacts; consumer installers copy only
-their allowlisted projection.
-
-Candidates and rendered staging artifacts live outside the repository, use
-mode `0600`, and are removed immediately. Terraform owns the containers and IAM
-but not versions or values.
-
-Run repository policy verification with the command below. It validates both
-tracked manifests and prints names/counts only, never source versions or values.
+Verify tracked contracts:
 
 ```bash
 pnpm run verify:secret-packages
 ```
 
-See [Secret Packages Operations](../docs/operations/secret-packages.md) for the
-candidate, promotion, rotation, rollback, and evidence procedure.
+See [Secret Packages Operations](../docs/operations/secret-packages.md).
 
-## sync-secrets.sh
+## Home Dev Package Projection
 
-Local/home-dev renderer for one exact DEV package version.
+Render one exact DEV version:
 
 ```bash
 SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS="${HOME}/.config/intexuraos/secret-renderer-sa-key.json" \
-  ./scripts/sync-secrets.sh --version <dev-numeric-version>
+  ./scripts/sync-secrets.sh --version <numeric-version>
 ```
 
-It merges repository-backed DEV configuration with the validated package
-projection, writes an immutable release under
-`${HOME}/.config/intexuraos/secret-packages/dev`, atomically switches `current`,
-and writes mode-`0600` `.envrc`. It fetches no individual legacy secrets and
-has no add-new mode. `.envrc.local` is sourced last for host-only overrides and
-must not be used as shared secret storage.
-The package `current` link, `.envrc`, and GitHub App PEM are transactional: any
-failure after rendering restores the prior set, or removes the new set when no
-prior projection existed.
+The renderer atomically installs mode-`0600` `.envrc` and the approved private
+files, deletes superseded local renders, and never reads individual Secret
+Manager containers. The renderer credential is selected only for this command
+and is not exported to runtime.
 
-That directory is the DEV projection root and must never be passed to generic
-`secret-package render`; generic renders use a separate private scratch root
-whose three-file `current` contract is intentionally different. The sync CLI
-keeps its public `--package-output-dir`/`--output-dir` aliases, but both select
-only the projection root. Generic render and projection sync take the same
-root-local writer lock; after sync installs the durable marker, generic `render`
-rejects the managed root before it can create or switch a release.
-`SECRET_PACKAGE_RENDER_DIR` is not a sync input;
-`INTEXURAOS_SECRET_PACKAGE_PROJECTION_DIR` is the explicit environment override.
+The DEV projection root is application-managed and must never be passed to
+generic `secret-package render`; use a separate private scratch directory for
+generic rendering.
 
-Concurrent syncs and generic renders serialize through unique mode-`0700`
-claims in `.sync-lock`. A generic scratch root may retain an empty lock directory;
-only the durable marker classifies a DEV projection root.
-Each claim binds a random token to hostname, boot identity, PID, process start,
-and the sync command. A stopped or PID-reused owner permits deletion of only
-its unrepeatable claim and matching work directory; no contender removes a
-shared lock name. The lock directory stays present and empty after cleanup.
+Generate the strict orchestrator environment only after the package render:
 
-## observability/load-grafana-cloud-env.sh
+```bash
+node scripts/generate-orchestrator-env.mjs \
+  --output "${HOME}/.code-orchestrator/env" \
+  --user-home "${HOME}"
+```
 
-Builds the home-dev Grafana/Alloy projection without GCP access. It reads only
-`INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN` from
-`${SECRET_PACKAGE_RENDER_DIR}/current/environment.env`; the default render root
-is `${HOME}/.config/intexuraos/secret-packages/dev`. It merges that token with
-the tracked Loki URL and username and atomically installs `OUTPUT_FILE` as mode
-`0600`. A missing render, token, or tracked value leaves the previous output
-untouched.
-
-Under sudo/systemd on home-dev, select the deployment user's render explicitly;
-root's `HOME` is not the package owner:
+Build the Alloy projection without direct GCP access:
 
 ```bash
 sudo -n env \
@@ -249,371 +103,91 @@ sudo -n env \
   bash scripts/observability/load-grafana-cloud-env.sh
 ```
 
-Prerequisites:
+## Production Deployment
 
-- `gcloud` installed;
-- an explicitly selected operator/renderer identity authorized only for the DEV
-  package (`ixos-home-secret-renderer-dev`; home-dev transitional key at
-  `/home/pbuchman/.config/intexuraos/secret-renderer-sa-key.json`, mode `0600`,
-  selected only for the sync command; local Mac prefers ADC impersonation);
-- the Terraform-managed package container/IAM already applied;
-- an approved positive numeric version.
+`scripts/hetzner/github-actions-deploy.sh` deploys the exact GitHub Actions SHA
+and exact protected package version. It stops PM2 and Alloy, runs the one-shot
+loader, installs static web and code, starts services, writes the deployment
+attestation, verifies health, and deletes prior releases.
 
-## verify-connections.sh
-
-Verification script for Claude Code cloud development setup.
+The production loader may run manually only while PM2 and Alloy are stopped:
 
 ```bash
-# Run from repository root
+sudo -n INTEXURAOS_ENVIRONMENT=prod \
+  bash scripts/hetzner/load-secrets.sh --version <numeric-version>
+```
+
+It publishes a complete stable projection and has no partial, activation,
+previous-release, or rollback mode. Any failure leaves services stopped for a
+fix-forward repair.
+
+## Edge And Cutover Verification
+
+- `generate-dev-caddy.mjs`: generates exact DEV edge routes from the tracked
+  method/path/guard manifest.
+- `verify-final-cutover-plan.mjs`: checks saved Terraform plan JSON against the
+  frozen exact address/action allowlist.
+- `security/final-cutover-data.mjs`: one-time offline encrypted-data and
+  retired-worker migration while every writer is stopped.
+
+## Connection Verification
+
+```bash
 ./scripts/verify-connections.sh
 ```
 
-The script verifies:
+Checks Git/GitHub, GCP identity, repository secret hygiene, and branch state.
 
-1. GitHub/Git connectivity
-2. GCP service account configuration
-3. Security (gitignore verification)
-4. Current branch status
-
-See [docs/setup/10-claude-code-cloud-dev.md](../docs/setup/10-claude-code-cloud-dev.md) for full setup guide.
-
-## CI Scripts
-
-### ci.mjs
-
-Runs the full CI pipeline in phases ordered by failure likelihood. Phases run in parallel within each phase, aborting on first failure for fast feedback.
+## CI
 
 ```bash
 pnpm run ci
-```
-
-### ci-tracked.mjs
-
-Wrapper around `ci.mjs` that appends failure records to `.claude/ci-failures/{project}-{branch}.jsonl` for LLM learning and pattern recognition.
-
-```bash
 pnpm run ci:tracked
-```
-
-### ci-capture.sh
-
-Runs `ci:tracked` and saves output to a timestamped file in `/tmp/` with branch-safe naming.
-
-```bash
 ./scripts/ci-capture.sh
+node scripts/ci-failure-report.mjs --first-run
 ```
 
-### ci-failure-report.mjs
+- `ci.mjs`: full repository CI pipeline.
+- `ci-tracked.mjs`: records first-failure metadata under `.claude/ci-failures/`.
+- `ci-capture.sh`: captures output to a private temporary file.
+- `ci-failure-report.mjs`: summarizes historical failure patterns.
 
-Aggregates CI failure records from `.claude/ci-failures/` and reports patterns. Focuses on first-run failures to identify recurring LLM coding mistakes.
+## Builds And Deployments
 
-```bash
-node scripts/ci-failure-report.mjs              # Full report
-node scripts/ci-failure-report.mjs --first-run  # First-run failures only
-node scripts/ci-failure-report.mjs --json       # JSON output
-node scripts/ci-failure-report.mjs --days 7     # Last 7 days only
-```
+- `build-service.mjs <service>`: bundle one service.
+- `build-all-services.mjs`: bundle all deployable services.
+- `build-worker-image.sh [tag]`: build and push the code-worker image.
+- `push-missing-images.sh`: build images missing from Artifact Registry.
+- `deploy-workers.sh [worker|--all]`: deploy retained function workers.
+- `setup-worker-network.sh`: validate/create the code-worker Docker network.
 
-### ci-health.mjs
+Artifact Registry cleanup tools live under `scripts/artifact-registry/`; see
+[Artifact Registry Cleanup](../docs/operations/artifact-registry-cleanup.md).
 
-Minimal HTTP health server on port 8080. Used by CI infrastructure to verify the environment is responsive.
+## Development
 
-## Build Scripts
+- `dev-setup.mjs`: start local emulators and validate the environment.
+- `pm2-wait-start.mjs`: wait for a dependency health endpoint.
+- `pubsub-publish-test.mjs`: publish local test events.
+- `test-llm-clients.ts <userId>`: exercise allowed LLM routes with user-service
+  credentials.
 
-### build-service.mjs
-
-Builds a single app service using esbuild, bundling all `@intexuraos/*` workspace packages and externalizing third-party dependencies.
-
-```bash
-node scripts/build-service.mjs <service-name>
-```
-
-### build-all-services.mjs
-
-Builds a predefined set of Cloud Run services by invoking `build-service.mjs` in sequence.
+## Firestore
 
 ```bash
-node scripts/build-all-services.mjs
-```
-
-### build-worker-image.sh
-
-Builds and pushes the code-worker Docker image to Artifact Registry.
-
-```bash
-./scripts/build-worker-image.sh [image-tag]
-```
-
-### push-missing-images.sh
-
-Detects services with Dockerfiles, checks which images are missing from Artifact Registry, and builds and pushes the missing ones.
-
-```bash
-./scripts/push-missing-images.sh
-```
-
-## Deployment Scripts
-
-### deploy-workers.sh
-
-Deploys Cloud Function workers to GCS. Builds the worker, generates a production `package.json`, creates `function.zip`, and uploads to the GCS functions source bucket.
-
-```bash
-./scripts/deploy-workers.sh                  # Interactive: choose workers
-./scripts/deploy-workers.sh vm-lifecycle     # Deploy specific worker
-./scripts/deploy-workers.sh --all            # Deploy all workers
-```
-
-### setup-worker-network.sh
-
-Creates and validates the dual-stack Docker network for code-worker containers. Existing
-networks that do not match the required IPv4, IPv6, fixed Linux bridge name, and masquerade
-contract are rejected without modification.
-
-```bash
-./scripts/setup-worker-network.sh
-```
-
-### Artifact Registry Cleanup Tools
-
-Safe inventory and prune tooling for `intexuraos-dev` lives under `scripts/artifact-registry/`.
-
-```bash
-node scripts/artifact-registry/export-live-images.mjs ...
-node scripts/artifact-registry/generate-prune-plan.mjs ...
-node scripts/artifact-registry/apply-prune-plan.mjs ...
-```
-
-See [docs/operations/artifact-registry-cleanup.md](../docs/operations/artifact-registry-cleanup.md) for the full runbook.
-
-## Development Scripts
-
-### dev-setup.mjs
-
-Starts Docker emulators and validates the development environment. Does not sync data from GCP.
-
-```bash
-pnpm run dev:setup
-```
-
-### pm2-wait-start.mjs
-
-Polls a health URL before starting a service's entry point. Used by PM2-managed services that depend on `app-settings-service` being available at startup.
-
-### pubsub-publish-test.mjs
-
-Publishes test events to local Pub/Sub for development and debugging. Supports all event types used across the system.
-
-```bash
-node scripts/pubsub-publish-test.mjs [event-type]
-```
-
-### backfill-research-favourite.mjs
-
-Backfills `favourite: false` on research documents that are missing the field. Requires `FIRESTORE_EMULATOR_HOST` to be set.
-
-### test-llm-clients.ts
-
-Integration test script that verifies all LLM provider clients (`research`, `generate`, `generateImage`) work correctly with real API keys fetched from user-service.
-
-```bash
-npx tsx scripts/test-llm-clients.ts <userId>
-```
-
-## Database Scripts
-
-### migrate.mjs
-
-Runs pending Firestore database migrations in order by numeric prefix. Tracks applied migrations in the `_migrations` collection. Also supports regenerating the tracked Firestore artifacts without deploying.
-
-```bash
-node scripts/migrate.mjs                    # Run pending migrations
-node scripts/migrate.mjs --status           # Show applied/pending
-node scripts/migrate.mjs --dry-run          # Preview without applying
-node scripts/migrate.mjs --project <id>     # Target specific project
+node scripts/migrate.mjs
+node scripts/migrate.mjs --status
+node scripts/migrate.mjs --dry-run
 node scripts/migrate.mjs --write-artifacts-only
 ```
 
-### generate-firestore-config.mjs
-
-Aggregates Firestore indexes and rules from all migration files and writes the tracked `firestore.indexes.json` and `firestore.rules` artifacts. This is equivalent to `node scripts/migrate.mjs --write-artifacts-only`.
-
-```bash
-node scripts/generate-firestore-config.mjs
-```
-
-### migrate-v8-ignore.mjs
-
-One-time migration script that converts legacy inline `v8 ignore` comments to the current start/stop format.
-
-## Parallel Execution Scripts
-
-### typecheck-parallel.mjs
-
-Runs `tsc --noEmit` in parallel across all workspaces that have a typecheck script. Significantly faster than sequential execution.
-
-```bash
-pnpm run typecheck
-```
-
-### lint-parallel.mjs
-
-Runs ESLint in batches of 4 workspaces at a time to prevent OOM crashes with `strictTypeChecked` config.
-
-```bash
-pnpm run lint
-```
-
-## Verification Scripts (CI)
-
-These scripts run as part of `pnpm run ci` Static Validation phase.
-
-### verify-boundaries.mjs
-
-Verifies that the ESLint `boundaries` plugin is loaded and package import boundary rules are correctly enforced. Uses positive and negative test cases.
-
-### verify-common.mjs
-
-Verifies that `packages/common-core` contains only cross-cutting utilities and has not accumulated domain-specific logic.
-
-### verify-date-formatting.mjs
-
-Verifies that date formatting in `apps/web` uses the centralized utility from `@/utils/dateFormat` rather than scattered local implementations.
-
-### verify-env-vars.mjs
-
-Verifies that all `process.env` usages in apps are declared in `REQUIRED_ENV` and registered in `ecosystem.config.cjs`.
-
-### verify-error-serializers.mjs
-
-Verifies that all logger configurations include error serializers to prevent `{ error: {} }` in structured logs.
-
-### verify-firestore-ownership.mjs
-
-Verifies that each Firestore collection is only accessed by its owning service, as registered in `firestore-collections.json`.
-
-### verify-firestore-artifacts.mjs
-
-Verifies that committed `firestore.indexes.json` and `firestore.rules` still match the current migration aggregation.
-
-### verify-hash-routing.mjs
-
-Verifies that `apps/web` uses complete declarative or data hash-router wiring and no browser-history
-router (required for GCS static hosting).
-
-### verify-llm-architecture.ts
-
-Verifies LLM client architecture rules: only allowed implementations exist, clients use `usageLogger`, no hardcoded model/provider strings outside `llm-contract`.
-
-### verify-logging.mjs
-
-Verifies that factory functions accepting optional loggers are always called with a logger in `services.ts`.
-
-### verify-migrations.mjs
-
-Verifies migration files follow naming conventions (`NNN_name.mjs`), have sequential IDs, export required metadata and `up` functions, and match the tracked `migrations/manifest.json` checksums.
-
-### verify-no-console.mjs
-
-Verifies that `eslint-disable` comments are not used to bypass the `no-console` rule in non-exempt paths.
-
-### verify-package-json.mjs
-
-Verifies that `package.json` does not contain truncation artifacts (`...`) from LLM-generated edits.
-
-### verify-pattern-suppression.mjs
-
-Verifies that all `@allow-*` suppression comments include a reason after `--`.
-
-### verify-prompt-versions.mjs
-
-Verifies that all `PromptBuilder` objects have a valid semver `version` field and that versions are bumped when prompt content changes.
-
-### verify-pubsub.mjs
-
-Verifies that all Pub/Sub publishers extend `BasePubSubPublisher`.
-
-### verify-reply-send.mjs
-
-Verifies that all HTTP responses use `reply.ok()` or `reply.fail()` instead of raw `reply.send()` or direct object returns.
-
-### verify-required-endpoints.mjs
-
-Verifies that all apps expose `/openapi.json`, `/health`, and `/docs` endpoints.
-
-### verify-sentry-logging.mjs
-
-Verifies that all loggers in apps are created via `createAppLogger()` from `@intexuraos/infra-sentry` rather than direct `pino()` calls.
-
-### verify-terraform-secrets.mjs
-
-Scans Terraform files for hardcoded secrets (API keys, tokens, private keys).
-
-### verify-test-isolation.mjs
-
-Verifies that tests use in-memory fakes and do not make external network calls, require Docker, or connect to real emulators.
-
-### verify-test-stdout.mjs
-
-Verifies that test output contains only vitest-expected lines, detecting accidental `console.log` or non-silent logger usage in tests.
-
-### verify-v8-ignore.mjs
-
-Verifies that all `v8 ignore` comments use a valid category from the canonical list and include a reason.
-
-### verify-vitest-config.mjs
-
-Verifies that coverage thresholds in `vitest.config.ts` remain at 95% and the exclusion list has not grown.
-
-### verify-workspace-deps.mjs
-
-Verifies that all `@intexuraos/*` imports in apps and packages are declared in their `package.json` dependencies, preventing Docker build failures.
-
-## Workspace Verification Scripts
-
-### verify-workspace.sh
-
-Runs targeted verification (typecheck, lint, tests + coverage) for a single workspace.
-
-```bash
-./scripts/verify-workspace.sh <workspace-name>
-# Example: ./scripts/verify-workspace.sh research-agent
-```
-
-### verify-workspace-tracked.mjs
-
-Wrapper around `verify-workspace.sh` that tracks failures to `.claude/ci-failures/` for LLM learning.
-
-```bash
-pnpm run verify:workspace:tracked -- <workspace-name>
-```
-
-## Utility Scripts
-
-### install-hooks.mjs
-
-Installs:
-
-- a `pre-commit` hook that blocks modifications to `vitest.config.ts`
-- a `pre-push` hook that runs `pnpm verify:migrations` and `pnpm verify:firestore-artifacts`
-
-```bash
-node scripts/install-hooks.mjs
-```
-
-### show-low-coverage.mjs
-
-Reads `coverage/coverage-summary.json` and prints files with the lowest coverage percentages.
-
-```bash
-node scripts/show-low-coverage.mjs
-```
-
-### import-issues.sh
-
-Imports GitHub issues from `scripts/github-issues.yaml` using the `gh` CLI.
-
-```bash
-./scripts/import-issues.sh
-./scripts/import-issues.sh --dry-run
-```
+`generate-firestore-config.mjs` regenerates tracked rules and indexes from the
+migration set.
+
+## Static Verification
+
+The `verify-*.mjs` scripts enforce repository invariants for boundaries,
+configuration, environment mappings, Firestore ownership, generated artifacts,
+hash routing, LLM architecture, logging, migrations, secret packages, and
+source hygiene. They run through CI and should also be used as focused checks
+for the changed area.

@@ -9,8 +9,8 @@ Each worker type in `workers/orchestrator/src/services/isolation/types.ts:WORKER
 
 | Tier       | Workers                                                                                 | Behavior on telemetry-only failure                                                             |
 | ---------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `required` | `auto`, `opus`, `sonnet`                                                                | Retry with the union of blocking + telemetry fields. Terminal fail after the last attempt.     |
-| `optional` | `glm`, `qwen`, `kimi`, `minimax`, `mimo-pro`, `codex`, `codex-xhigh`, `openrouter-free` | Accept as completed with a `warn` log line. `verificationHistory[n].telemetryAccepted = true`. |
+| `required` | `auto`, `opus`, `sonnet`                           | Retry with the union of blocking + telemetry fields. Terminal fail after the last attempt.     |
+| `optional` | `codex`, `codex-xhigh`, `openrouter-free`          | Accept as completed with a `warn` log line. `verificationHistory[n].telemetryAccepted = true`. |
 
 ## Ordering of completion gates
 

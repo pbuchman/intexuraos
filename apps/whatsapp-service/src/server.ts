@@ -165,12 +165,6 @@ export async function buildServer(
     whatsappPhoneNumberId: config.allowedPhoneNumberIds[0] ?? '',
     webAgentUrl: config.webAgentUrl,
     internalAuthToken: config.internalAuthToken,
-    ...(process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'] === undefined
-      ? {}
-      : {
-          internalAuthTokenPrevious:
-            process.env['INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS'],
-        }),
     llmUsageServiceUrl: config.llmUsageServiceUrl,
     userServiceUrl: config.userServiceUrl,
     platformOpenRouterApiKey: config.platformOpenRouterApiKey,

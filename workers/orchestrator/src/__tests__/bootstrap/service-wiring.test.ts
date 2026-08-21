@@ -182,10 +182,6 @@ describe('buildTaskDispatcherWorkerSecrets', () => {
       ANTHROPIC_API_KEY: 'anthropic-token',
       LINEAR_API_KEY: 'linear-key',
       ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
-      MINIMAX_API_KEY: 'minimax-key',
-      MIMO_API_KEY: 'mimo-key',
-      DASHSCOPE_API_KEY: 'dashscope-key',
-      KIMI_API_KEY: 'kimi-key',
       OPENROUTER_API_KEY: 'openrouter-key',
     });
   });

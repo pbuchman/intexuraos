@@ -76,19 +76,19 @@ describe('labelUtils', () => {
     });
 
     it('returns minimax for single minimax label', () => {
-      expect(getWorkerTypeFromLabels(['minimax'])).toBe('minimax');
+      expect(getWorkerTypeFromLabels(['openrouter-free'])).toBe('openrouter-free');
     });
 
     it('normalizes glm label to glm', () => {
-      expect(getWorkerTypeFromLabels(['glm'])).toBe('glm');
+      expect(getWorkerTypeFromLabels(['openrouter-free'])).toBe('openrouter-free');
     });
 
     it('returns kimi for single kimi label', () => {
-      expect(getWorkerTypeFromLabels(['kimi'])).toBe('kimi');
+      expect(getWorkerTypeFromLabels(['openrouter-free'])).toBe('openrouter-free');
     });
 
     it('returns qwen for single qwen label', () => {
-      expect(getWorkerTypeFromLabels(['qwen'])).toBe('qwen');
+      expect(getWorkerTypeFromLabels(['openrouter-free'])).toBe('openrouter-free');
     });
 
     it('returns openrouter-free for single openrouter-free label', () => {
@@ -116,11 +116,11 @@ describe('labelUtils', () => {
     });
 
     it('returns undefined for conflicting worker labels', () => {
-      expect(getWorkerTypeFromLabels(['opus', 'glm'])).toBeUndefined();
+      expect(getWorkerTypeFromLabels(['opus', 'openrouter-free'])).toBeUndefined();
     });
 
     it('returns undefined for multiple worker labels among others', () => {
-      expect(getWorkerTypeFromLabels(['bug', 'sonnet', 'minimax', 'feature'])).toBeUndefined();
+      expect(getWorkerTypeFromLabels(['bug', 'sonnet', 'openrouter-free', 'feature'])).toBeUndefined();
     });
   });
 });

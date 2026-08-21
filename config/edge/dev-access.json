@@ -1,0 +1,41 @@
+{
+  "browserIdentity": "kontakt@pbuchman.com",
+  "browserRoutes": [
+    { "pathPrefix": "/api/user", "port": 8110 },
+    { "pathPrefix": "/api/notion", "port": 8112 },
+    { "pathPrefix": "/api/whatsapp", "port": 8113 },
+    { "pathPrefix": "/api/notifications", "port": 8114 },
+    { "pathPrefix": "/api/research", "port": 8116 },
+    { "pathPrefix": "/api/commands", "port": 8117 },
+    { "pathPrefix": "/api/actions", "port": 8118 },
+    { "pathPrefix": "/api/fishing-assistant", "port": 8119 },
+    { "pathPrefix": "/api/images", "port": 8120 },
+    { "pathPrefix": "/api/notes", "port": 8121 },
+    { "pathPrefix": "/api/settings", "port": 8122 },
+    { "pathPrefix": "/api/todos", "port": 8123 },
+    { "pathPrefix": "/api/bookmarks", "port": 8124 },
+    { "pathPrefix": "/api/calendar", "port": 8125 },
+    { "pathPrefix": "/api/linear", "port": 8126 },
+    { "pathPrefix": "/api/web", "port": 8127 },
+    { "pathPrefix": "/api/code", "port": 8128 },
+    { "pathPrefix": "/api/chat", "port": 8129 },
+    { "pathPrefix": "/api/cron-agent", "port": 8130 },
+    { "pathPrefix": "/api/hellscript-agent", "port": 8131 },
+    { "pathPrefix": "/api/llm-usage", "port": 8132 },
+    { "pathPrefix": "/api/docs", "port": 8133 }
+  ],
+  "host": "dev.intexuraos.cloud",
+  "machineRoutes": [
+    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/webhooks/task-complete", "port": 8128, "stripPrefix": "/api/code" },
+    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/logs", "port": 8128, "stripPrefix": "/api/code" },
+    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/turn-metrics", "port": 8128, "stripPrefix": "/api/code" },
+    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/webhooks/task-event", "port": 8128, "stripPrefix": "/api/code" },
+    { "guard": "per-task-hmac-timestamp-internal-auth", "method": "POST", "path": "/api/code/internal/webhooks/compliance-report", "port": 8128, "stripPrefix": "/api/code" },
+    { "guard": "task-or-orchestrator-hmac", "method": "PATCH", "path": "/api/code/internal/code-tasks/status", "port": 8128, "stripPrefix": "/api/code" },
+    { "guard": "linear-signature", "method": "POST", "path": "/api/linear/webhooks", "port": 8126, "stripPrefix": "/api/linear" },
+    { "guard": "mobile-signature", "method": "POST", "path": "/api/notifications/webhooks", "port": 8114, "stripPrefix": "/api/notifications" },
+    { "guard": "sentry-hook-signature", "method": "POST", "path": "/api/code/webhooks/sentry", "port": 8128, "stripPrefix": "/api/code" }
+  ],
+  "schemaVersion": 1,
+  "staticRoot": "/home/pbuchman/deploy/intexuraos/apps/web/dist"
+}

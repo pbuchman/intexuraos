@@ -1,5 +1,5 @@
 /**
- * Tests for PATCH /internal/code-tasks/:id/status
+ * Tests for PATCH /internal/code-tasks/status
  *
  * Dedicated, minimal endpoint for the orchestrator to commit terminal task
  * status to Firestore. Authed via X-Internal-Auth + orchestratorSecret HMAC.
@@ -45,7 +45,7 @@ const INTERNAL_AUTH_TOKEN = 'test-internal-token';
 const TASK_ID = 'task-abc';
 const WEBHOOK_SECRET = 'test-task-webhook-secret';
 
-describe('PATCH /internal/code-tasks/:id/status', () => {
+describe('PATCH /internal/code-tasks/status', () => {
   let app: Awaited<ReturnType<typeof buildServer>>;
   let mockCodeTaskRepo: {
     findById: ReturnType<typeof vi.fn>;
@@ -172,7 +172,7 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
 
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   function sendUpdate(
-    id: string,
+    _ignoredTaskId: string,
     body: unknown,
     overrides?: { token?: string | null; skipSignature?: boolean; badSignature?: boolean; signatureSecret?: string }
   ) {
@@ -196,7 +196,7 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
 
     return app.inject({
       method: 'PATCH',
-      url: `/internal/code-tasks/${id}/status`,
+      url: '/internal/code-tasks/status',
       headers,
       payload: rawBody,
     });
@@ -469,7 +469,7 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
 
     const response = await app.inject({
       method: 'PATCH',
-      url: `/internal/code-tasks/${TASK_ID}/status`,
+      url: '/internal/code-tasks/status',
       headers: {
         'content-type': 'application/json',
         'x-request-timestamp': timestamp,
@@ -666,9 +666,8 @@ describe('PATCH /internal/code-tasks/:id/status', () => {
     expect(mockCodeTaskRepo.update).not.toHaveBeenCalled();
   });
 
-  it('returns 400 when taskId in body does not match :id path param', async () => {
+  it('returns 400 when taskId is missing from the fixed-path request body', async () => {
     const body = {
-      taskId: 'task-different',
       status: 'failed',
       completedAt: '2026-04-17T12:00:00.000Z',
     };

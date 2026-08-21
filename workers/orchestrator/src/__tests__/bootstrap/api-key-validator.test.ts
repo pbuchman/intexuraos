@@ -391,8 +391,8 @@ describe('validateThirdPartyApiKey', () => {
     vi.useRealTimers();
   });
 
-  // Sentry INTEXURAOS-HOME-DEV-1F: the KIMI/MINIMAX/MIMO/DashScope/OpenRouter
-  // startup-time validation error is informational — the real user impact
+  // Sentry INTEXURAOS-HOME-DEV-1F: an OpenRouter startup-time validation
+  // error is informational — the real user impact
   // (a worker task failing) surfaces via the per-task error path. The Pino
   // Sentry transport must not page on every orchestrator restart when one
   // of these keys has been rotated/revoked upstream.
@@ -402,12 +402,12 @@ describe('validateThirdPartyApiKey', () => {
       .mockResolvedValue(new Response('{"error":"unauthorized"}', { status: 401 }));
 
     const logger = makeLogger();
-    await validateThirdPartyApiKey('kimi', 'sk-test-key-1234', logger);
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
 
     expect(fetchSpy).toHaveBeenCalled();
     const errorCall = logger.calls.find(
       ([level, , message]) =>
-        level === 'error' && typeof message === 'string' && message.startsWith('KIMI_API_KEY')
+        level === 'error' && typeof message === 'string' && message.startsWith('OPENROUTER_API_KEY')
     );
     expect(errorCall).toBeDefined();
     expect(errorCall?.[1]).toMatchObject({ _skipSentry: true });
@@ -419,11 +419,11 @@ describe('validateThirdPartyApiKey', () => {
     );
 
     const logger = makeLogger();
-    await validateThirdPartyApiKey('kimi', 'sk-test-key-1234', logger);
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
 
     const successCall = logger.calls.find(
       ([level, , message]) =>
-        level === 'info' && typeof message === 'string' && message.startsWith('KIMI_API_KEY')
+        level === 'info' && typeof message === 'string' && message.startsWith('OPENROUTER_API_KEY')
     );
     expect(successCall).toBeDefined();
     // Success path must remain pageable — a successful validation is a
@@ -431,23 +431,17 @@ describe('validateThirdPartyApiKey', () => {
     expect(successCall?.[1]).not.toMatchObject({ _skipSentry: true });
   });
 
-  it.each([
-    ['kimi', 'KIMI_API_KEY'],
-    ['minimax', 'MINIMAX_API_KEY'],
-    ['mimo-pro', 'MIMO_API_KEY'],
-    ['qwen', 'DASHSCOPE_API_KEY'],
-    ['openrouter-free', 'OPENROUTER_API_KEY'],
-  ])('carries _skipSentry on startup validation errors for %s', async (workerTypeName, keyName) => {
+  it('carries _skipSentry on OpenRouter startup validation errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 401 }));
 
     const logger = makeLogger();
-    await validateThirdPartyApiKey(workerTypeName, 'sk-test-key-1234', logger);
+    await validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
 
     const errorCall = logger.calls.find(
       ([level, , message]) =>
         level === 'error' &&
         typeof message === 'string' &&
-        message.startsWith(`${keyName} validation failed`)
+        message.startsWith('OPENROUTER_API_KEY validation failed')
     );
     expect(errorCall).toBeDefined();
     expect(errorCall?.[1]).toMatchObject({ _skipSentry: true });
@@ -488,6 +482,31 @@ describe('validateThirdPartyApiKey', () => {
     });
   });
 
+  it('uses a minimal messages request for a direct Anthropic runtime with a configured model', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('{"content":[]}', { status: 200 }));
+
+    const logger = makeLogger();
+    await validateThirdPartyApiKey('sonnet', 'sk-test-key-1234', logger);
+
+    const [url, options] = fetchSpy.mock.calls[0] ?? [];
+    expect(url).toBe('https://api.anthropic.com/v1/messages');
+    expect(options).toMatchObject({
+      method: 'POST',
+      headers: {
+        'x-api-key': 'sk-test-key-1234',
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+    });
+    expect(JSON.parse(String(options?.body))).toEqual({
+      model: 'sonnet',
+      max_tokens: 1,
+      messages: [{ role: 'user', content: 'ping' }],
+    });
+  });
+
   it('skips validation for runtimes without direct API-key authentication', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
@@ -507,7 +526,7 @@ describe('validateThirdPartyApiKey', () => {
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
 
     const logger = makeLogger();
-    const validation = validateThirdPartyApiKey('kimi', 'sk-test-key-1234', logger);
+    const validation = validateThirdPartyApiKey('openrouter-free', 'sk-test-key-1234', logger);
     await vi.advanceTimersByTimeAsync(6_000);
     await validation;
 
@@ -515,12 +534,12 @@ describe('validateThirdPartyApiKey', () => {
       ([level, , message]) =>
         level === 'warn' &&
         message ===
-          'KIMI_API_KEY validation request failed (network issue) — key may still be valid'
+          'OPENROUTER_API_KEY validation request failed (network issue) — key may still be valid'
     );
     expect(warnCall).toBeDefined();
     expect(warnCall?.[1]).toMatchObject({
       error: 'network down',
-      url: 'https://api.kimi.com/coding/v1/messages',
+      url: 'https://openrouter.ai/api/v1/key',
       apiKey: '...1234',
     });
     expect(warnCall?.[1]).not.toMatchObject({ _skipSentry: true });

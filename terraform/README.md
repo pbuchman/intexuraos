@@ -69,15 +69,8 @@ Terraform owns only these application Secret Manager containers:
   exceptions.
 
 The Google-managed Cloud Build GitHub connection token remains provider-owned.
-All former per-application containers and broad accessor bindings are legacy
-and are removed after the audit/rollback observation gates.
-
-Legacy cleanup is deliberately split. Phase A removes readers while retaining
-containers (`legacy_secret_readers_enabled=false` and
-`legacy_secret_containers_enabled=true`), then disables existing versions
-outside Terraform so the change remains reversible. Phase B removes containers
-only after the reversible soak and recovery gates pass. Terraform rejects the
-inverse state in which readers remain enabled while containers are absent.
+Former per-application containers, readers, flags, and broad accessor bindings
+are absent. Reintroducing them is forbidden.
 
 Package payloads are complete immutable JSON documents declared by
 `config/environments/secret-packages.json`. An authorized operator publishes a
@@ -175,5 +168,5 @@ Before apply:
 6. verify every native injection and deployment input is a numeric version;
 7. preserve a redacted saved-plan summary for approval.
 
-Do not use Terraform to publish, rotate, inspect, render, disable, or destroy a
-package version. Follow the operational runbook and its audit/rollback gates.
+Do not use Terraform to publish, rotate, inspect, render, or destroy a package
+version. Follow the one-shot fix-forward procedure in the operational runbook.

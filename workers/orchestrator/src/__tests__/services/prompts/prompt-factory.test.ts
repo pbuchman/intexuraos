@@ -156,7 +156,7 @@ describe('buildSystemPrompt dispatch', () => {
     expect(prompt).toContain('- Issue URL: unknown');
     expect(prompt).toContain('- SentryBox: <SentryBox issue URL>');
     expect(prompt).toContain(
-      '- Worker Type: `<auto|opus|sonnet|minimax|mimo-pro|glm|qwen|kimi|codex|codex-xhigh|openrouter-free>`'
+      '- Worker Type: `<auto|opus|sonnet|codex|codex-xhigh|openrouter-free>`'
     );
     expect(prompt).toContain('- Model: `default`');
     expect(prompt).not.toContain('IntexuraOS Code Task: [View task]');

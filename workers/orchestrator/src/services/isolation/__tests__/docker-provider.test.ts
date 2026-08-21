@@ -185,10 +185,6 @@ const createTestConfig = (overrides: Partial<WorkerConfig> = {}): WorkerConfig =
     ANTHROPIC_API_KEY: 'test-anthropic-key',
     LINEAR_API_KEY: 'test-linear-key',
     ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
-    MINIMAX_API_KEY: 'test-minimax-key',
-    MIMO_API_KEY: 'test-mimo-key',
-    DASHSCOPE_API_KEY: 'test-dashscope-key',
-    KIMI_API_KEY: 'test-kimi-key',
     OPENROUTER_API_KEY: 'test-openrouter-key',
   },
   gcpSaKeyPath: '/test/gcp-sa.json',
@@ -1458,16 +1454,6 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets ANTHROPIC_API_KEY env var for glm worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'glm' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
-      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-dashscope-key');
-    });
-
     it('does not set ANTHROPIC_API_KEY env var when sharedCredsPath is configured for sonnet worker', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
@@ -1478,47 +1464,6 @@ describe('DockerProvider', () => {
       expect(anthropicKeyEntry).toBeUndefined();
     });
 
-    it('sets ANTHROPIC_API_KEY env var for minimax worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const anthropicKeyEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='));
-      expect(anthropicKeyEntry).toBe('ANTHROPIC_API_KEY=test-minimax-key');
-    });
-
-    it('sets ANTHROPIC_BASE_URL for minimax worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
-      expect(baseUrlEntry).toBe('ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic');
-    });
-
-    it('sets native Kimi Code env vars for kimi worker', async () => {
-      const config = createTestConfig({ workerType: 'kimi' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-
-      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_API_KEY='))).toBe(
-        'ANTHROPIC_API_KEY=test-kimi-key'
-      );
-      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='))).toBe(
-        'ANTHROPIC_BASE_URL=https://api.kimi.com/coding'
-      );
-      expect(envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='))).toBe(
-        'ANTHROPIC_MODEL=kimi-for-coding'
-      );
-      expect(envArr.find((e: string) => e.startsWith('CLAUDE_CODE_EFFORT_LEVEL='))).toBe(
-        'CLAUDE_CODE_EFFORT_LEVEL=high'
-      );
-    });
-
     it('sets ANTHROPIC_MODEL for sonnet worker', async () => {
       const config = createTestConfig({ workerType: 'sonnet' });
       await sharedCredsProvider.createWorker(config);
@@ -1527,26 +1472,6 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
       expect(modelEntry).toBe('ANTHROPIC_MODEL=sonnet');
-    });
-
-    it('sets ANTHROPIC_MODEL for minimax worker', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=MiniMax-M3');
-    });
-
-    it('sets ANTHROPIC_MODEL for mimo-pro worker', async () => {
-      const config = createTestConfig({ workerType: 'mimo-pro' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const modelEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_MODEL='));
-      expect(modelEntry).toBe('ANTHROPIC_MODEL=mimo-v2.5-pro');
     });
 
     it('sets OpenRouter env vars for openrouter-free worker', async () => {
@@ -1614,17 +1539,6 @@ describe('DockerProvider', () => {
       expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
 
-    it('mounts per-task session for minimax workers even with sharedCredsPath', async () => {
-      const config = createTestConfig({ workerType: 'minimax' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual(
-        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
-      );
-    });
-
     it('does not set ANTHROPIC_BASE_URL env var when sharedCredsPath is configured for auto worker', async () => {
       const config = createTestConfig({ workerType: 'auto' });
       await sharedCredsProvider.createWorker(config);
@@ -1633,18 +1547,6 @@ describe('DockerProvider', () => {
       const envArr = createCall?.Env as string[];
       const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
       expect(baseUrlEntry).toBeUndefined();
-    });
-
-    it('sets ANTHROPIC_BASE_URL env var for glm worker even with sharedCredsPath configured', async () => {
-      const config = createTestConfig({ workerType: 'glm' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const envArr = createCall?.Env as string[];
-      const baseUrlEntry = envArr.find((e: string) => e.startsWith('ANTHROPIC_BASE_URL='));
-      expect(baseUrlEntry).toBe(
-        'ANTHROPIC_BASE_URL=https://coding-intl.dashscope.aliyuncs.com/apps/anthropic'
-      );
     });
 
     it('sets ANTHROPIC_API_KEY env var when sharedCredsPath is NOT configured', async () => {
@@ -1672,16 +1574,6 @@ describe('DockerProvider', () => {
       expect(binds).not.toContainEqual('/shared/claude-creds:/home/claude/.claude:rw');
     });
 
-    it('mounts per-task session for glm workers even with sharedCredsPath', async () => {
-      const config = createTestConfig({ workerType: 'glm' });
-      await sharedCredsProvider.createWorker(config);
-
-      const createCall = mocks.mockDocker.createContainer.mock.calls[0]?.[0];
-      const binds = createCall?.HostConfig?.Binds as string[];
-      expect(binds).toContainEqual(
-        expect.stringContaining('claude-session-test-task-123:/home/claude/.claude:rw')
-      );
-    });
   });
 
   describe('git identity passthrough', () => {
@@ -2994,10 +2886,6 @@ describe('DockerProvider', () => {
               ANTHROPIC_API_KEY: '',
               LINEAR_API_KEY: 'test',
               ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
-              MINIMAX_API_KEY: 'test',
-              MIMO_API_KEY: 'test',
-              DASHSCOPE_API_KEY: 'test',
-              KIMI_API_KEY: 'test',
               OPENROUTER_API_KEY: 'test',
             },
           })
@@ -3091,10 +2979,6 @@ describe('DockerProvider', () => {
             ANTHROPIC_API_KEY: 'key',
             LINEAR_API_KEY: 'test',
             ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
-            MINIMAX_API_KEY: 'test',
-            MIMO_API_KEY: 'test',
-            DASHSCOPE_API_KEY: 'test',
-            KIMI_API_KEY: 'test',
             OPENROUTER_API_KEY: 'test',
           },
         })

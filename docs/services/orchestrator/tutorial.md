@@ -143,11 +143,7 @@ Expected response:
   "dockerHealthy": true,
   "diskHealthy": true,
   "providerApiKeys": {
-    "MINIMAX_API_KEY": { "configured": true },
-    "MIMO_API_KEY": { "configured": true },
-    "DASHSCOPE_API_KEY": { "configured": true },
-    "KIMI_API_KEY": { "configured": true },
-    "OPENROUTER_API_KEY": { "configured": false }
+    "OPENROUTER_API_KEY": { "configured": true }
   }
 }
 ```
@@ -177,7 +173,7 @@ echo "X-Dispatch-Signature: ${SIGNATURE}"
 
 ### Step 2: Submit a task
 
-The `workerType` field controls which runtime/model preset handles the task. Valid types are `opus`, `auto`, `sonnet` (Anthropic), `minimax` (MiniMax), `mimo-pro` (Xiaomi MiMo Pro 2.5), `glm`, `qwen` (Alibaba Cloud DashScope), `kimi` (Kimi Code), `codex`, `codex-xhigh` (OpenAI Codex), and `openrouter-free` (zero-cost via OpenRouter).
+The `workerType` field controls which runtime handles the task. Valid values are `auto`, `opus`, `sonnet`, `codex`, `codex-xhigh`, and `openrouter-free`. OpenRouter is the only provider-key route; Claude and Codex use subscription authentication.
 
 ```bash
 BODY='{
@@ -314,25 +310,7 @@ BODY='{"message": "How does cache invalidation work when a user updates their pr
 curl -X POST http://localhost:8199/tasks/task_00000000-0000-4000-8000-000000000006/message ...
 ```
 
-### Step 8: Submit a task with mimo-pro
-
-For cost-effective execution via Xiaomi MiMo Pro 2.5:
-
-```bash
-BODY='{
-  "taskId": "task_00000000-0000-4000-8000-000000000007",
-  "workerType": "mimo-pro",
-  "prompt": "Implement the feature described in INT-600",
-  "agentType": "execution",
-  "linearIssueId": "INT-600",
-  "linearIssueLabels": ["code-task"],
-  "hasChildren": false,
-  "webhookUrl": "http://localhost:3001/webhook",
-  "webhookSecret": "test-secret-123"
-}'
-```
-
-### Step 9: Monitor the task
+### Step 8: Monitor the task
 
 Check task status:
 
@@ -492,7 +470,6 @@ curl -H "CF-Access-Client-Id: <client-id>" \
 | `Cannot find module '@intexuraos'`                | Packages not built                    | Run `pnpm build` at repository root                                                                                                               |
 | Turn metrics always zero                          | macOS host (no cgroup v2 exposure)    | Expected on macOS; metrics are non-fatal and show zeros                                                                                           |
 | `INTEXURAOS_OPENROUTER_APP_API_KEY not set`       | Missing required env var              | Populate the Secret Manager version and rerun secret sync                                                                                         |
-| `INTEXURAOS_KIMI_APP_API_KEY not set`             | Missing required Kimi Code key        | Populate the Secret Manager version, run `./scripts/sync-secrets.sh --add-new`, then `direnv allow`                                               |
 | `TASK_RUNTIME_HARD_ERROR`                         | Worker/runtime failure or verifier hard error | Inspect the terminal logs and retry only after the runtime error is understood                                                              |
 | `503 docker_unavailable`                          | Docker daemon not responding          | Check Docker Desktop is running                                                                                                                   |
 | `503 auth_unavailable`                            | Worker auth not ready                 | Check `workerAuths` in health endpoint; run `claude login` or `codex-login.sh`                                                                    |

@@ -26,11 +26,6 @@ const CODE_TASK_WORKER_TYPES = [
   'auto',
   'opus',
   'sonnet',
-  'minimax',
-  'mimo-pro',
-  'glm',
-  'qwen',
-  'kimi',
   'codex',
   'codex-xhigh',
   'openrouter-free',
@@ -41,7 +36,7 @@ type CodeTaskWorkerType = (typeof CODE_TASK_WORKER_TYPES)[number];
 function isCodeTaskWorkerType(value: string): value is CodeTaskWorkerType;
 ```
 
-`isCodeTaskWorkerType` is the runtime guard used at every service boundary that accepts a worker-type string (HTTP routes, Pub/Sub messages, `@worker` directive parsing). When the catalog grows, callers stay correct without any sweeping rewrite.
+`isCodeTaskWorkerType` is the runtime guard used at every service boundary that accepts a worker-type string (HTTP routes, Pub/Sub messages, `@worker` directive parsing). The catalog is intentionally limited to subscription-authenticated Claude and Codex runtimes plus the OpenRouter API route.
 
 ### Plan Document Path Resolution (`planPathResolver.ts`)
 

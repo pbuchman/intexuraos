@@ -60,7 +60,6 @@ export interface RunPreparationTokenKey {
 
 export interface RunPreparationTokenConfig {
   currentKey: RunPreparationTokenKey;
-  previousKeys?: RunPreparationTokenKey[] | undefined;
   now?: (() => number) | undefined;
   ttlMs?: number | undefined;
 }
@@ -117,14 +116,10 @@ export function createRunPreparationTokenCodec(
   const now = config.now ?? Date.now;
   const ttlMs = config.ttlMs ?? DEFAULT_TTL_MS;
   validateConfig(config, ttlMs);
-  const configuredKeys = [config.currentKey, ...(config.previousKeys ?? [])];
-  const keys = new Map<string, DerivedKey>(
-    configuredKeys.map((key) => [
-      key.version,
-      { version: key.version, value: deriveRunPreparationTokenKey(key.secret) },
-    ])
-  );
-  const current = keys.get(config.currentKey.version) as DerivedKey;
+  const current: DerivedKey = {
+    version: config.currentKey.version,
+    value: deriveRunPreparationTokenKey(config.currentKey.secret),
+  };
 
   return {
     issue(claims): Result<string, RunPreparationTokenError> {
@@ -160,10 +155,12 @@ export function createRunPreparationTokenCodec(
         const parsedBinding = bindingSchema.safeParse(input.binding);
         if (!parsedBinding.success) return invalidToken();
         const parts = parseToken(input.token);
-        if (parts === null) return invalidToken();
-        const key = keys.get(parts.keyVersion);
-        if (key === undefined) return invalidToken();
-        const plaintext = decrypt(parts.encrypted, key.value, additionalData(parsedBinding.data));
+        if (parts?.keyVersion !== current.version) return invalidToken();
+        const plaintext = decrypt(
+          parts.encrypted,
+          current.value,
+          additionalData(parsedBinding.data)
+        );
         if (plaintext === null) return invalidToken();
         const parsed = envelopeSchema.safeParse(JSON.parse(plaintext) as unknown);
         if (!parsed.success) return invalidToken();
@@ -187,10 +184,9 @@ export function createRunPreparationTokenCodec(
 }
 
 function validateConfig(config: RunPreparationTokenConfig, ttlMs: number): void {
-  const keys = [config.currentKey, ...(config.previousKeys ?? [])];
   if (
-    keys.some((key) => !/^[A-Za-z0-9_-]{1,32}$/u.test(key.version) || key.secret.length === 0) ||
-    new Set(keys.map((key) => key.version)).size !== keys.length ||
+    !/^[A-Za-z0-9_-]{1,32}$/u.test(config.currentKey.version) ||
+    config.currentKey.secret.length === 0 ||
     !Number.isInteger(ttlMs) ||
     ttlMs <= 0 ||
     ttlMs > MAX_TTL_MS

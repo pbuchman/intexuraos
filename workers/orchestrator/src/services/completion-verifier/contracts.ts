@@ -330,12 +330,7 @@ export const TIER_BY_WORKER: Record<WorkerType, TelemetryExpectation> = {
   opus: 'required',
   sonnet: 'required',
   auto: 'required',
-  glm: 'optional',
-  minimax: 'optional',
   codex: 'optional',
   'codex-xhigh': 'optional',
-  kimi: 'optional',
-  qwen: 'optional',
-  'mimo-pro': 'optional',
   'openrouter-free': 'optional',
 };

@@ -40,7 +40,6 @@ function codec(
     now?: () => number;
     currentVersion?: string;
     currentSecret?: string;
-    previousKeys?: { version: string; secret: string }[];
   } = {}
 ): PrivateDigestSourceTokenCodec {
   return createPrivateDigestSourceTokenCodec({
@@ -48,7 +47,6 @@ function codec(
       version: options.currentVersion ?? 'key-v1',
       secret: options.currentSecret ?? 'synthetic-current-internal-auth-secret',
     },
-    previousKeys: options.previousKeys ?? [],
     now: options.now ?? ((): number => Date.parse('2026-07-27T12:00:00.000Z')),
     ttlMs: 60_000,
   });
@@ -142,7 +140,7 @@ describe('private digest source token security', () => {
     });
   });
 
-  it('accepts a previous derived key during rotation and rejects it after retirement', () => {
+  it('rejects tokens issued under any other key version', () => {
     const oldTokens = codec({
       currentVersion: 'key-v1',
       currentSecret: 'synthetic-old-secret',
@@ -153,18 +151,8 @@ describe('private digest source token security', () => {
     const rotated = codec({
       currentVersion: 'key-v2',
       currentSecret: 'synthetic-new-secret',
-      previousKeys: [{ version: 'key-v1', secret: 'synthetic-old-secret' }],
     });
     expect(rotated.readCursor({ token: issued.value, binding })).toEqual({
-      ok: true,
-      value: cursorClaims,
-    });
-
-    const retired = codec({
-      currentVersion: 'key-v2',
-      currentSecret: 'synthetic-new-secret',
-    });
-    expect(retired.readCursor({ token: issued.value, binding })).toEqual({
       ok: false,
       error: { code: 'VALIDATION_ERROR', message: 'Invalid digest cursor' },
     });

@@ -888,14 +888,14 @@ describe('createTaskForPR', () => {
   });
 
   it('includes workerType in automation log after enqueue when provided', async () => {
-    request.workerType = 'qwen';
+    request.workerType = 'openrouter-free';
 
     const result = await createTaskForPR(deps, request);
 
     expect(result.ok).toBe(true);
     expect(deps.automationLog.record).toHaveBeenCalledWith(
       { repository: 'pbuchman/intexuraos', prNumber: 42 },
-      expect.objectContaining({ type: 'task_dispatched', workerType: 'qwen', agentType: 'pull_request' }),
+      expect.objectContaining({ type: 'task_dispatched', workerType: 'openrouter-free', agentType: 'pull_request' }),
       expect.any(String),
     );
   });

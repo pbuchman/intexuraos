@@ -30,12 +30,6 @@ const devTfvarsExamplePath = resolve(
   'dev',
   'terraform.tfvars.example'
 );
-const secretPackageSourcesPath = resolve(
-  repoRoot,
-  'config',
-  'environments',
-  'secret-package-sources.json'
-);
 const cloudFunctionTerraformPath = resolve(
   repoRoot,
   'terraform',
@@ -50,6 +44,7 @@ const cloudFunctionVariablesPath = resolve(
   'cloud-function',
   'variables.tf'
 );
+const monitoringTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'monitoring', 'main.tf');
 const hetznerBootstrapPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'bootstrap.tf');
 const hetznerVariablesPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'variables.tf');
 const hetznerOutputsPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'outputs.tf');
@@ -92,6 +87,7 @@ const githubWifVariables = readFileSync(githubWifVariablesPath, 'utf8');
 const devTfvarsExample = readFileSync(devTfvarsExamplePath, 'utf8');
 const cloudFunctionTerraform = readFileSync(cloudFunctionTerraformPath, 'utf8');
 const cloudFunctionVariables = readFileSync(cloudFunctionVariablesPath, 'utf8');
+const monitoringTerraform = readFileSync(monitoringTerraformPath, 'utf8');
 const hetznerBootstrap = readFileSync(hetznerBootstrapPath, 'utf8');
 const hetznerVariables = readFileSync(hetznerVariablesPath, 'utf8');
 const hetznerOutputs = readFileSync(hetznerOutputsPath, 'utf8');
@@ -100,61 +96,11 @@ const hetznerTfvarsExample = readFileSync(hetznerTfvarsExamplePath, 'utf8');
 const deployFunction = readFileSync(deployFunctionPath, 'utf8');
 const claudeCodeDevTerraform = readFileSync(claudeCodeDevTerraformPath, 'utf8');
 
-interface SecretPackageSourceEnvironment {
-  legacyEnvNames: string[];
-  legacyFiles: Record<string, string>;
-}
-
-interface SecretPackageSources {
-  packages: Record<'dev' | 'prod', SecretPackageSourceEnvironment>;
-}
-
-const secretPackageSources = JSON.parse(
-  readFileSync(secretPackageSourcesPath, 'utf8')
-) as SecretPackageSources;
-
 const physicalSecretIds = [
   'INTEXURAOS_INTERNAL_AUTH_TOKEN',
   'INTEXURAOS_SECRET_PACKAGE_DEV',
   'INTEXURAOS_SECRET_PACKAGE_PROD',
   'INTEXURAOS_SPEECHMATICS_APP_API_KEY',
-] as const;
-
-const legacyApplicationSecretIds = [
-  'INTEXURAOS_CLOUDFLARE_API_TOKEN',
-  'INTEXURAOS_DASHSCOPE_APP_API_KEY',
-  'INTEXURAOS_ENCRYPTION_KEY',
-  'INTEXURAOS_GITHUB_APP_PRIVATE_KEY',
-  'INTEXURAOS_GITHUB_OAUTH_CLIENT_SECRET',
-  'INTEXURAOS_GITHUB_WEBHOOK_SECRET',
-  'INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET',
-  'INTEXURAOS_GRAFANA_CLOUD_GRAFANA_TOKEN',
-  'INTEXURAOS_GRAFANA_CLOUD_LOKI_TOKEN',
-  'INTEXURAOS_KIMI_APP_API_KEY',
-  'INTEXURAOS_LINEAR_API_KEY',
-  'INTEXURAOS_MATRIX_CORPUS_BINDING_HMAC_KEY',
-  'INTEXURAOS_MATRIX_CORPUS_CONTEXT_ENCRYPTION_KEY',
-  'INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID',
-  'INTEXURAOS_MATRIX_CORPUS_MATRIX_ROOM_BINDING',
-  'INTEXURAOS_MATRIX_CORPUS_SIGNING_PRIVATE_KEY',
-  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_ACCOUNT_BINDING',
-  'INTEXURAOS_MATRIX_CORPUS_WHATSAPP_SENDER_BINDING',
-  'INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN',
-  'INTEXURAOS_MIMO_APP_API_KEY',
-  'INTEXURAOS_MINIMAX_APP_API_KEY',
-  'INTEXURAOS_OPENAI_APP_API_KEY',
-  'INTEXURAOS_OPENROUTER_APP_API_KEY',
-  'INTEXURAOS_ORCHESTRATOR_SECRET',
-  'INTEXURAOS_SENTRY_AUTOMATION_USER_ID',
-  'INTEXURAOS_SENTRY_WEBHOOK_SECRET',
-  'INTEXURAOS_SSL_PRIVATE_KEY',
-  'INTEXURAOS_TOKEN_ENCRYPTION_KEY',
-  'INTEXURAOS_WEBHOOK_VERIFY_SECRET',
-  'INTEXURAOS_WHATSAPP_ACCESS_TOKEN',
-  'INTEXURAOS_WHATSAPP_APP_SECRET',
-  'INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID',
-  'INTEXURAOS_WHATSAPP_VERIFY_TOKEN',
-  'INTEXURAOS_WHATSAPP_WABA_ID',
 ] as const;
 
 const migratedSecretTombstones = [
@@ -194,11 +140,6 @@ function sectionBetween(start: string, end: string): string {
   expect(startIndex, `missing Terraform section start: ${start}`).toBeGreaterThanOrEqual(0);
   expect(endIndex, `missing Terraform section end: ${end}`).toBeGreaterThan(startIndex);
   return terraform.slice(startIndex, endIndex);
-}
-
-function expectedPackageSources(environment: 'dev' | 'prod'): string[] {
-  const source = secretPackageSources.packages[environment];
-  return [...new Set([...source.legacyEnvNames, ...Object.values(source.legacyFiles)])].sort();
 }
 
 describe('versioned runtime configuration Terraform cutover', () => {
@@ -286,36 +227,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(cloudBuildBinding).toContain('/attribute.repository_id/${var.github_repository_id}');
   });
 
-  it('uses separate least-privilege DEV and PROD package publisher identities', () => {
-    expect(terraform).toContain(
-      'secret_package_source_manifest = jsondecode(file("${path.module}/../../../config/environments/secret-package-sources.json"))'
-    );
-    expect(terraform).toMatch(
-      /secret_package_dev_legacy_source_names\s*=\s*setunion\([\s\S]*?packages\.dev\.legacyEnvNames[\s\S]*?packages\.dev\.legacyFiles[\s\S]*?\)/u
-    );
-    expect(terraform).toMatch(
-      /secret_package_prod_legacy_source_names\s*=\s*setunion\([\s\S]*?packages\.prod\.legacyEnvNames[\s\S]*?packages\.prod\.legacyFiles[\s\S]*?\)/u
-    );
-    expect(terraform).toMatch(
-      /secret_package_native_source_names\s*=\s*toset\(\[[\s\S]*?INTEXURAOS_INTERNAL_AUTH_TOKEN[\s\S]*?INTEXURAOS_SPEECHMATICS_APP_API_KEY[\s\S]*?\]\)/u
-    );
-    expect(terraform).toMatch(
-      /secret_package_dev_active_source_names\s*=\s*setunion\([\s\S]*?setintersection\([\s\S]*?secret_package_dev_legacy_source_names[\s\S]*?secret_package_native_source_names[\s\S]*?var\.legacy_secret_readers_enabled \? local\.secret_package_dev_legacy_source_names : toset\(\[\]\)[\s\S]*?\)/u
-    );
-    expect(terraform).toMatch(
-      /secret_package_prod_active_source_names\s*=\s*setunion\([\s\S]*?setintersection\([\s\S]*?secret_package_prod_legacy_source_names[\s\S]*?secret_package_native_source_names[\s\S]*?var\.legacy_secret_readers_enabled \? local\.secret_package_prod_legacy_source_names : toset\(\[\]\)[\s\S]*?\)/u
-    );
-    expect(expectedPackageSources('dev')).toHaveLength(35);
-    expect(expectedPackageSources('dev')).toEqual(
-      expect.arrayContaining([
-        'INTEXURAOS_INTERNAL_AUTH_TOKEN',
-        'INTEXURAOS_SPEECHMATICS_APP_API_KEY',
-      ])
-    );
-    expect(expectedPackageSources('prod')).toHaveLength(28);
-    expect(expectedPackageSources('prod')).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN');
-    expect(expectedPackageSources('prod')).not.toContain('INTEXURAOS_SPEECHMATICS_APP_API_KEY');
-
+  it('uses separate target-only DEV and PROD package publisher identities', () => {
     for (const [environment, packageName] of [
       ['dev', 'INTEXURAOS_SECRET_PACKAGE_DEV'],
       ['prod', 'INTEXURAOS_SECRET_PACKAGE_PROD'],
@@ -334,10 +246,6 @@ describe('versioned runtime configuration Terraform cutover', () => {
       );
       const targetMetadataViewer = sectionBetween(
         `resource "google_secret_manager_secret_iam_member" "secret_package_${environment}_publisher_target_metadata_viewer" {`,
-        '\n}\n'
-      );
-      const sourceAccessor = sectionBetween(
-        `resource "google_secret_manager_secret_iam_member" "secret_package_${environment}_publisher_source_accessor" {`,
         '\n}\n'
       );
       const operatorImpersonation = sectionBetween(
@@ -373,14 +281,6 @@ describe('versioned runtime configuration Terraform cutover', () => {
       expect(targetMetadataViewer).not.toContain(
         environment === 'dev' ? 'INTEXURAOS_SECRET_PACKAGE_PROD' : 'INTEXURAOS_SECRET_PACKAGE_DEV'
       );
-      expect(sourceAccessor).toContain(
-        `for_each = local.secret_package_${environment}_active_source_names`
-      );
-      expect(sourceAccessor).toContain('secret_id = module.secret_manager.secret_ids[each.value]');
-      expect(sourceAccessor).toContain('role      = "roles/secretmanager.secretAccessor"');
-      expect(sourceAccessor).toContain(
-        `member    = "serviceAccount:\${google_service_account.secret_package_${environment}_publisher.email}"`
-      );
       expect(operatorImpersonation).toContain(
         `service_account_id = google_service_account.secret_package_${environment}_publisher.name`
       );
@@ -403,6 +303,9 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(terraform).not.toMatch(
       /resource "google_service_account_key" "[^"]*secret_package_(?:dev|prod)_publisher/u
     );
+    expect(terraform).not.toContain('secret_package_source_manifest');
+    expect(terraform).not.toContain('publisher_source_accessor');
+    expect(terraform).not.toContain('legacy_secret_readers_enabled');
     expect(claudeCodeDevTerraform).not.toContain('"roles/secretmanager.admin"');
     expect(claudeCodeDevTerraform).not.toContain('"roles/iam.serviceAccountTokenCreator"');
   });
@@ -435,59 +338,28 @@ describe('versioned runtime configuration Terraform cutover', () => {
     }
   });
 
-  it('declares the target inventory additively without Terraform-managed values', () => {
-    const targetSection = sectionBetween(
-      'target_secret_containers = {',
-      '\n\n  legacy_secret_container_names = toset(['
-    );
-    const legacySection = sectionBetween(
-      'legacy_secret_container_names = toset([',
-      '\n  ])\n\n  legacy_secret_containers = {'
-    );
+  it('declares only the four final Secret Manager containers without managed values', () => {
+    const targetSection = sectionBetween('target_secret_containers = {', '\n  }\n\n}');
     const secretManagerSection = sectionBetween(
       'module "secret_manager" {',
-      '\nmoved {\n  from = google_secret_manager_secret.cloudflare_dns_api_token'
+      '\nresource "google_service_account" "hetzner_provisioner" {'
     );
 
     const targetIds = [...targetSection.matchAll(/"(INTEXURAOS_[A-Z0-9_]+)"\s*=/gu)]
       .map((match) => match[1])
       .sort();
-    const legacyIds = [...legacySection.matchAll(/"(INTEXURAOS_[A-Z0-9_]+)"/gu)]
-      .map((match) => match[1])
-      .sort();
-
     expect(targetIds).toEqual(physicalSecretIds);
-    expect(legacyIds).toEqual(legacyApplicationSecretIds);
     expect(secretManagerSection).toContain('local.target_secret_containers');
-    expect(secretManagerSection).toContain(
-      'var.legacy_secret_containers_enabled ? local.legacy_secret_containers : {}'
-    );
-    expect(terraform).toMatch(
-      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*false[\s\S]*?\}/u
-    );
-    expect(terraform).toMatch(
-      /variable "legacy_secret_containers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
-    );
-    expect(terraform).toMatch(
-      /check "legacy_secret_reader_container_order" \{[\s\S]*?condition\s*=\s*!var\.legacy_secret_readers_enabled \|\| var\.legacy_secret_containers_enabled[\s\S]*?\}/u
-    );
-    expect(devTfvarsExample).toContain('legacy_secret_readers_enabled    = false');
-    expect(devTfvarsExample).toContain('legacy_secret_containers_enabled = true');
-    expect(terraform).not.toContain('legacy_secret_manager_enabled');
+    expect(terraform).not.toContain('legacy_secret');
     expect(terraform).not.toContain('resource "google_secret_manager_secret_version"');
     expect(terraform).not.toMatch(/\bsecret_data\s*=/u);
-    expect(terraform).toContain(
-      'from = google_secret_manager_secret.cloudflare_dns_api_token\n  to   = google_secret_manager_secret.cloudflare_dns_api_token[0]'
-    );
-    expect(terraform).toContain(
-      'resource "google_secret_manager_secret" "cloudflare_dns_api_token" {\n  count = var.legacy_secret_containers_enabled ? 1 : 0'
-    );
+    expect(terraform).not.toContain('cloudflare_dns_api_token');
   });
 
   it('loads versioned config after removing every rollback-only IaC reference', () => {
     const secretManagerSection = sectionBetween(
       'module "secret_manager" {',
-      '\nmoved {\n  from = google_secret_manager_secret.cloudflare_dns_api_token'
+      '\nresource "google_service_account" "hetzner_provisioner" {'
     );
 
     expect(terraform).toContain('versioned_runtime_config = {');
@@ -520,7 +392,7 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
   });
 
-  it('adds package readers and makes all legacy runtime accessors cleanup-gated', () => {
+  it('grants runtimes access only to their final package containers', () => {
     const provisionerBinding = sectionBetween(
       'resource "google_secret_manager_secret_iam_member" "hetzner_provisioner_prod_package" {',
       '\n}\n'
@@ -529,11 +401,6 @@ describe('versioned runtime configuration Terraform cutover', () => {
       'resource "google_secret_manager_secret_iam_member" "home_dev_secret_renderer_dev_package" {',
       '\n}\n'
     );
-    const iamModule = sectionBetween(
-      'module "iam" {',
-      '\n}\n\n# -----------------------------------------------------------------------------\n# Claude Code Dev'
-    );
-
     expect(provisionerBinding).toContain(
       'secret_id = module.secret_manager.secret_ids["INTEXURAOS_SECRET_PACKAGE_PROD"]'
     );
@@ -548,24 +415,14 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect([
       ...terraform.matchAll(/google_service_account\.home_dev_secret_renderer/gu),
     ]).toHaveLength(3);
-    expect(terraform).toContain(
-      'for_each = var.legacy_secret_readers_enabled ? local.hetzner_runtime_secret_names : toset([])'
-    );
-    expect(iamModule).toContain(
-      'legacy_secret_readers_enabled = var.legacy_secret_readers_enabled'
-    );
-    expect(iamModule).toContain('contains(local.legacy_cloud_run_secret_names, name)');
     expect(terraform).toContain('output "home_dev_secret_renderer_service_account_email" {');
     expect(terraform).toContain(
       'value       = google_service_account.home_dev_secret_renderer.email'
     );
-    expect(iamTerraform).toContain(
-      'for_each = var.legacy_secret_readers_enabled ? var.secret_ids : {}'
-    );
-    expect(iamVariables).toMatch(
-      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
-    );
-    expect(iamVariables).not.toContain('legacy_secret_manager_enabled');
+    expect(terraform).not.toContain('hetzner_runtime_secrets');
+    expect(iamTerraform).not.toContain('google_secret_manager_secret_iam_member');
+    expect(iamVariables).not.toContain('secret_ids');
+    expect(iamVariables).not.toContain('legacy_secret');
   });
 
   it('gives the dedicated home orchestrator only repository pull access and narrow key bootstrap', () => {
@@ -689,17 +546,21 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
   });
 
-  it('cleanup-gates Cloud Build secret access while preserving the managed connection', () => {
-    expect(cloudBuildTerraform).toContain('cloud_build_secret_accessor');
-    expect(cloudBuildTerraform).toContain(
-      'from = google_project_iam_member.cloud_build_secret_accessor\n  to   = google_project_iam_member.cloud_build_secret_accessor[0]'
+  it('gives Cloud Build one exact OAuth-secret accessor and no project-wide secret role', () => {
+    const accessor = sectionBetween(
+      'resource "google_secret_manager_secret_iam_member" "cloud_build_connection_oauth_accessor" {',
+      '\n}\n'
     );
-    expect(cloudBuildTerraform).toContain('count = var.legacy_secret_readers_enabled ? 1 : 0');
-    expect(cloudBuildVariables).toMatch(
-      /variable "legacy_secret_readers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
+
+    expect(accessor).toContain(
+      'secret_id = "projects/${var.project_id}/secrets/pbuchman-github-github-oauthtoken-8b04fa"'
     );
-    expect(cloudBuildVariables).not.toContain('legacy_secret_manager_enabled');
-    expect(cloudBuildTerraform).toContain('roles/secretmanager.secretAccessor');
+    expect(accessor).toContain('role      = "roles/secretmanager.secretAccessor"');
+    expect(accessor).toContain(
+      'member    = "serviceAccount:service-${local.project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com"'
+    );
+    expect(cloudBuildTerraform).not.toContain('roles/secretmanager.');
+    expect(cloudBuildVariables).not.toContain('legacy_secret');
     expect(cloudBuildTerraform).toContain('resource "google_cloudbuildv2_connection" "github" {');
     expect(cloudBuildTerraform).toContain('github_config {}');
     expect(cloudBuildTerraform).toContain('ignore_changes = [github_config]');
@@ -725,17 +586,17 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(cloudFunctionTerraform).not.toContain('version    = "latest"');
     expect(transcriptionModule).toContain('secrets = local.transcription_native_secrets');
     expect(terraform).toMatch(
-      /INTEXURAOS_INTERNAL_AUTH_TOKEN\s*=\s*\{[\s\S]*?version\s*=\s*2[\s\S]*?\}/u
+      /INTEXURAOS_INTERNAL_AUTH_TOKEN\s*=\s*\{[\s\S]*?version\s*=\s*3[\s\S]*?\}/u
     );
     expect(terraform).toMatch(
-      /INTEXURAOS_SPEECHMATICS_APP_API_KEY\s*=\s*\{[\s\S]*?version\s*=\s*1[\s\S]*?\}/u
+      /INTEXURAOS_SPEECHMATICS_APP_API_KEY\s*=\s*\{[\s\S]*?version\s*=\s*2[\s\S]*?\}/u
     );
-    expect(deployFunction).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN:2');
-    expect(deployFunction).toContain('INTEXURAOS_SPEECHMATICS_APP_API_KEY:1');
+    expect(deployFunction).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN:3');
+    expect(deployFunction).toContain('INTEXURAOS_SPEECHMATICS_APP_API_KEY:2');
     expect(deployFunction).not.toMatch(/(?:versions\/latest|:\s*latest\b)/u);
   });
 
-  it('makes legacy runtime credential copy and secret inventory explicitly cleanup-gated', () => {
+  it('keeps only the final retained secret inventory and one-shot VM bootstrap', () => {
     const targetRetainedIds = [
       ...(retainedGcpTerraform
         .split('retained_gcp_target_secret_ids = toset([')[1]
@@ -746,42 +607,14 @@ describe('versioned runtime configuration Terraform cutover', () => {
       .sort();
 
     expect(targetRetainedIds).toEqual(physicalSecretIds);
-    expect(retainedGcpTerraform).toContain(
-      'var.legacy_secret_containers_enabled ? local.retained_gcp_legacy_secret_ids : toset([])'
-    );
-    expect(retainedGcpTerraform).toContain(
-      'cloudflare_dns_api_token_name = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null'
-    );
-    expect(hetznerOutputs).toContain(
-      'value       = var.legacy_secret_containers_enabled ? local.retained_gcp.cloudflare_dns_api_token_secret_id : null'
-    );
-    expect(hetznerVariables).toMatch(
-      /variable "legacy_secret_containers_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
-    );
-    expect(hetznerAutoTfvars).toContain('"legacy_secret_containers_enabled": true');
-    expect(hetznerTfvarsExample).toContain('legacy_secret_containers_enabled       = true');
     expect(
       [retainedGcpTerraform, hetznerVariables, hetznerOutputs, hetznerAutoTfvars].join('\n')
-    ).not.toContain('legacy_secret_manager_enabled');
+    ).not.toContain('legacy_secret');
     expect(hetznerBootstrap).toContain('provisioner_sa_key_path');
-    const primaryBootstrap = hetznerBootstrap.split(
-      'resource "terraform_data" "legacy_runtime_sa_bootstrap" {'
-    )[0];
-    expect(primaryBootstrap).not.toContain('runtime_sa_key_path');
-    expect(primaryBootstrap).toContain('terraform_data.legacy_runtime_sa_bootstrap');
-    expect(hetznerBootstrap).toContain(
-      'count = var.hetzner_bootstrap_enabled && var.legacy_runtime_sa_bootstrap_enabled ? 1 : 0'
-    );
-    const legacyBootstrap = hetznerBootstrap.split(
-      'resource "terraform_data" "legacy_runtime_sa_bootstrap" {'
-    )[1];
-    expect(legacyBootstrap).toContain('depends_on = [hcloud_server.prod]');
-    expect(legacyBootstrap).not.toContain('depends_on = [terraform_data.bootstrap_prod]');
-    expect(hetznerVariables).toMatch(
-      /variable "legacy_runtime_sa_bootstrap_enabled" \{[\s\S]*?default\s*=\s*true[\s\S]*?\}/u
-    );
-    expect(hetznerAutoTfvars).toContain('"legacy_runtime_sa_bootstrap_enabled": true');
-    expect(hetznerTfvarsExample).toContain('legacy_runtime_sa_bootstrap_enabled');
+    expect(hetznerBootstrap).toContain('resource "terraform_data" "bootstrap_prod" {');
+    expect(hetznerBootstrap).not.toContain('runtime_sa_key_path');
+    expect(hetznerBootstrap).not.toContain('legacy_runtime_sa_bootstrap');
+    expect(hetznerTfvarsExample).not.toContain('legacy_');
   });
 
   it('enables API Keys and Secret Manager DATA_READ audit logging', () => {
@@ -799,6 +632,24 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(auditConfig).toContain('log_type = "DATA_READ"');
   });
 
+  it('alerts on Gemini API enablement and API-key lifecycle changes', () => {
+    expect(monitoringTerraform).toContain(
+      'resource "google_logging_metric" "gemini_security_changes" {'
+    );
+    expect(monitoringTerraform).toContain('serviceusage.googleapis.com');
+    expect(monitoringTerraform).toContain('ServiceUsage.EnableService');
+    expect(monitoringTerraform).toContain('generativelanguage.googleapis.com');
+    expect(monitoringTerraform).toContain('apikeys.googleapis.com');
+    expect(monitoringTerraform).toContain('CreateKey|UndeleteKey|UpdateKey');
+    expect(monitoringTerraform).toContain(
+      'resource "google_monitoring_alert_policy" "gemini_security_changes" {'
+    );
+    expect(monitoringTerraform).toContain(
+      'metric.type=\\"logging.googleapis.com/user/${google_logging_metric.gemini_security_changes.name}\\"'
+    );
+    expect(monitoringTerraform).toContain('threshold_value = 0');
+  });
+
   it('does not grant home-dev orchestrator direct access to a single GitHub App secret', () => {
     expect(terraform).not.toContain(
       'resource "google_secret_manager_secret_iam_member" "home_orchestrator_github_app_private_key" {'
@@ -806,46 +657,12 @@ describe('versioned runtime configuration Terraform cutover', () => {
     expect(terraform).not.toContain('data "google_service_account" "home_orchestrator" {');
   });
 
-  it('imports and restricts the existing Firebase browser key without exposing key material', () => {
-    const apiKeyResource = sectionBetween(
-      'resource "google_apikeys_key" "firebase_browser" {',
-      '\nimport {\n'
-    );
-    const apiKeyImport = sectionBetween(
-      'import {\n  to = google_apikeys_key.firebase_browser',
-      '\n}\n'
-    );
-
-    expect(apiKeyResource).toContain('name         = "d8251549-1bde-49c0-82a7-b0525a2fe688"');
-    expect(apiKeyResource).toContain('project      = var.project_id');
-    expect(apiKeyResource).toContain('display_name = "Browser key (auto created by Firebase)"');
-    expect(apiKeyResource).toContain('prevent_destroy = true');
-
-    const allowedReferrers = apiKeyResource.match(/allowed_referrers\s*=\s*\[([^\]]+)\]/su)?.[1];
-    expect(allowedReferrers).toBeDefined();
-    expect([...(allowedReferrers ?? '').matchAll(/"([^"]+)"/gu)].map((match) => match[1])).toEqual([
-      'https://intexuraos.cloud/*',
-      'https://dev.intexuraos.cloud/*',
-      'http://localhost:3000/*',
-    ]);
-
-    expect(
-      [...apiKeyResource.matchAll(/service\s*=\s*"([^"]+)"/gu)].map((match) => match[1])
-    ).toEqual([
-      'firestore.googleapis.com',
-      'identitytoolkit.googleapis.com',
-      'securetoken.googleapis.com',
-      'firebaseinstallations.googleapis.com',
-    ]);
-    expect(apiKeyResource).not.toMatch(/\b(?:key_string|uid)\b/u);
-
-    expect(apiKeyImport).toContain(
-      'id = "projects/intexuraos-dev-pbuchman/locations/global/keys/d8251549-1bde-49c0-82a7-b0525a2fe688"'
-    );
+  it('removes the compromised Firebase key and keeps only the restricted replacement', () => {
+    expect(terraform).not.toContain('resource "google_apikeys_key" "firebase_browser" {');
+    expect(terraform).not.toContain('to = google_apikeys_key.firebase_browser');
+    expect(terraform).not.toContain('d8251549-1bde-49c0-82a7-b0525a2fe688');
+    expect(terraform).toContain('resource "google_apikeys_key" "firebase_browser_replacement" {');
     expect([...terraform.matchAll(/"firebaseappcheck\.googleapis\.com"/gu)]).toHaveLength(1);
-    expect(terraform).not.toMatch(
-      /output\s+"[^"]+"\s*\{[^}]*google_apikeys_key\.firebase_browser\.(?:key_string|uid)/su
-    );
   });
 
   it('declares a parallel restricted Firebase browser replacement for additive rotation', () => {

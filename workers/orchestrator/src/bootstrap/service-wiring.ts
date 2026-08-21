@@ -97,10 +97,6 @@ export function buildTaskDispatcherWorkerSecrets(
     ANTHROPIC_API_KEY: anthropicApiKey,
     LINEAR_API_KEY: env.linearApiKey,
     ERROR_HUB_HOST: env.errorHubHost,
-    MINIMAX_API_KEY: env.minimaxApiKey,
-    MIMO_API_KEY: env.mimoApiKey,
-    DASHSCOPE_API_KEY: env.dashscopeApiKey,
-    KIMI_API_KEY: env.kimiApiKey,
     OPENROUTER_API_KEY: env.openRouterApiKey,
   };
 }
@@ -273,10 +269,6 @@ export async function buildOrchestratorServices(inputs: WiringInputs): Promise<W
   );
 
   const providerApiKeys: Record<string, ProviderApiKeyHealth> = {
-    MINIMAX_API_KEY: { configured: env.minimaxApiKey.trim() !== '' },
-    MIMO_API_KEY: { configured: env.mimoApiKey.trim() !== '' },
-    DASHSCOPE_API_KEY: { configured: env.dashscopeApiKey.trim() !== '' },
-    KIMI_API_KEY: { configured: env.kimiApiKey.trim() !== '' },
     OPENROUTER_API_KEY: { configured: env.openRouterApiKey.trim() !== '' },
   };
 

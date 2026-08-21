@@ -40,7 +40,7 @@ export type SafeToolFactValueV1 =
   | 'count'
   | 'codex'
   | 'codex-xhigh'
-  | 'minimax'
+  | 'openrouter-free'
   | 'planning'
   | 'execution';
 
@@ -132,7 +132,7 @@ function mapArgumentFacts(
       return facts(
         lengthFact('promptLength', value['prompt']),
         presenceFact('hasLinearIssueId', value['linearIssueId']),
-        enumFact('workerType', value['workerType'], ['codex', 'codex-xhigh', 'minimax']),
+        enumFact('workerType', value['workerType'], ['codex', 'codex-xhigh', 'openrouter-free']),
         enumFact('taskMode', value['taskMode'], ['planning', 'execution'])
       );
     case 'save_external':

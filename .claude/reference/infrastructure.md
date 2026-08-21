@@ -155,12 +155,11 @@ adds an immutable validated version outside Terraform through
 `scripts/secret-package.mjs`. This prevents payload data from entering state.
 It does not authorize direct creation of containers or ad hoc versions.
 
-Disabling an existing Secret Manager version during a reviewed reversible
-cleanup soak is also a controlled data-plane exception. The exact numeric
-versions must come from a frozen metadata-only inventory, and the operation
-must never read or print payloads. Terraform continues to own containers and
-IAM, and must never place `secret_data` in Terraform state. Destruction of
-versions or containers remains a separately reviewed Phase B action.
+Destroying an obsolete Secret Manager version after a successful destructive
+cutover is also a controlled data-plane exception. The exact numeric versions
+must come from a frozen metadata-only inventory, and the operation must never
+read or print payloads. Terraform continues to own containers and IAM and must
+never place `secret_data` in Terraform state.
 
 ---
 
@@ -170,7 +169,11 @@ versions or containers remains a separately reviewed Phase B action.
 
 **CI:** `.github/workflows/ci.yml` runs `pnpm run ci` on all branches (lint, typecheck, test, build)
 
-**Deploy:** `.github/workflows/deploy.yml` automatically deploys production to Hetzner on every push to `development` and also supports manual `workflow_dispatch` target `hetzner-prod`. The Hetzner job uses `scripts/hetzner/github-actions-deploy.sh`, syncs the checked-out commit to `/opt/intexuraos`, refreshes secrets on the VM, rebuilds the web bundle, reloads PM2/nginx, and runs direct-origin health checks.
+**Deploy:** `.github/workflows/deploy.yml` is manual-only through
+`workflow_dispatch`. The operator freezes `development` to an exact reviewed
+SHA before dispatch. The Hetzner job uses
+`scripts/hetzner/github-actions-deploy.sh`, installs one exact numeric package
+version, deploys that SHA, and runs direct-origin health checks.
 
 Required GitHub configuration:
 

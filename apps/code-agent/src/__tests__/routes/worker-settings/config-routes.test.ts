@@ -23,11 +23,11 @@ import { resetServices } from '../../../services.js';
 import { setupTestServices } from '../../helpers/mockServices.js';
 
 const CONFIG_ROUTE_FIELDS = [
-  { endpoint: 'default-review-worker-type', field: 'defaultReviewWorkerType', value: 'glm' },
+  { endpoint: 'default-review-worker-type', field: 'defaultReviewWorkerType', value: 'openrouter-free' },
   { endpoint: 'default-remediation-worker-type', field: 'defaultRemediationWorkerType', value: 'opus' },
   { endpoint: 'default-execution-worker-type', field: 'defaultExecutionWorkerType', value: 'sonnet' },
   { endpoint: 'default-planning-worker-type', field: 'defaultPlanningWorkerType', value: 'codex' },
-  { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'kimi' },
+  { endpoint: 'default-pull-request-worker-type', field: 'defaultPullRequestWorkerType', value: 'openrouter-free' },
   { endpoint: 'default-sentry-worker-type', field: 'defaultSentryWorkerType', value: 'codex-xhigh' },
 ] as const;
 
@@ -87,7 +87,7 @@ describe('configRoutes (sub-plugin)', () => {
       method: 'PATCH',
       url: '/worker-settings/default-review-worker-type',
       headers: { Authorization: 'Bearer test-token', 'Content-Type': 'application/json' },
-      payload: { workerType: 'glm' },
+      payload: { workerType: 'openrouter-free' },
     });
 
     // Then clear via the "auto" sentinel.

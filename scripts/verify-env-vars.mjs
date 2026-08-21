@@ -39,7 +39,6 @@ const STANDARD_ENV_VARS = new Set([
 const COMMON_OPTIONAL_ENV = new Set([
   'INTEXURAOS_SENTRY_DSN',
   'INTEXURAOS_ENVIRONMENT',
-  'INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS',
   'LOG_LEVEL',
   // E2E testing env vars (used by code-agent in E2E mode)
   'E2E_MODE',

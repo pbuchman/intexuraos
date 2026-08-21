@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { extractDispatchWorkerType } from '../../../domain/utils/dispatchWorkerTriage.js';
 
 describe('extractDispatchWorkerType', () => {
-  it('extracts worker type from @worker directive', () => {
-    expect(extractDispatchWorkerType('Fix this @worker minimax')).toBe('minimax');
+  it('rejects a retired worker type', () => {
+    expect(extractDispatchWorkerType('Fix this @worker minimax')).toBeUndefined();
   });
 
   it('should return undefined for @model directive (removed)', () => {
@@ -12,8 +12,8 @@ describe('extractDispatchWorkerType', () => {
     expect(extractDispatchWorkerType('fix this @model sonnet')).toBeUndefined();
   });
 
-  it('normalizes qwen alias to qwen', () => {
-    expect(extractDispatchWorkerType('@worker qwen')).toBe('qwen');
+  it('rejects a retired qwen worker type', () => {
+    expect(extractDispatchWorkerType('@worker qwen')).toBeUndefined();
   });
 
   it('returns undefined when no directive found', () => {
@@ -36,14 +36,12 @@ describe('extractDispatchWorkerType', () => {
   it('extracts opus from @worker opus', () => {
     expect(extractDispatchWorkerType('@worker opus')).toBe('opus');
   });
-
-
-  it('normalizes glm to glm', () => {
-    expect(extractDispatchWorkerType('@worker glm')).toBe('glm');
+  it('rejects a retired glm worker type', () => {
+    expect(extractDispatchWorkerType('@worker glm')).toBeUndefined();
   });
 
-  it('extracts kimi from @worker kimi', () => {
-    expect(extractDispatchWorkerType('@worker kimi')).toBe('kimi');
+  it('rejects a retired kimi worker type', () => {
+    expect(extractDispatchWorkerType('@worker kimi')).toBeUndefined();
   });
 
   it('extracts codex from @worker codex', () => {
@@ -65,5 +63,4 @@ describe('extractDispatchWorkerType', () => {
   it('returns undefined for @worker without type', () => {
     expect(extractDispatchWorkerType('@worker')).toBeUndefined();
   });
-
 });

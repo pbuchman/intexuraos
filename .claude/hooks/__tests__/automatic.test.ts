@@ -132,6 +132,16 @@ describe.sequential('Claude Hooks - Automatic/Rebuild', () => {
       // Should have `pnpm --filter` build
       expect(hookContent).toContain('pnpm --filter');
     });
+
+    it('checks only retained runtime credentials', () => {
+      const hookPath = path.join(__dirname, '..', 'session-start-build.sh');
+      const hookContent = fs.readFileSync(hookPath, 'utf-8');
+
+      expect(hookContent).toContain('INTEXURAOS_OPENROUTER_APP_API_KEY');
+      expect(hookContent).not.toMatch(
+        /INTEXURAOS_(?:OPENAI|MINIMAX|MIMO|DASHSCOPE|KIMI)_APP_API_KEY/u
+      );
+    });
   });
 
   describe('rebuild-after-git.sh', () => {

@@ -307,7 +307,7 @@ describe('submitDirectCodeTask', () => {
             enabled: true,
           },
         ],
-        defaultPlanningWorkerType: 'glm',
+        defaultPlanningWorkerType: 'openrouter-free',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })
@@ -316,8 +316,8 @@ describe('submitDirectCodeTask', () => {
     const result = await submit(deps, { source: 'whatsapp' });
 
     expect(result.ok).toBe(true);
-    expect(codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({ workerType: 'glm' }));
-    expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('glm', 'whatsapp');
+    expect(codeTaskRepo.create).toHaveBeenCalledWith(expect.objectContaining({ workerType: 'openrouter-free' }));
+    expect(metricsClient.incrementTasksSubmitted).toHaveBeenCalledWith('openrouter-free', 'whatsapp');
   });
 
   it('uses user default execution worker type when taskMode resolves to execution and request worker type is auto', async () => {

@@ -122,7 +122,6 @@ export interface ServiceConfig {
   whatsappSendTopic: string;
   prTriageTopic: string;
   linearAgentUrl: string;
-  webhookVerifySecret: string;
   orchestratorSecret: string;
   serviceUrl: string;
   codeTaskCallbackBaseUrl: string;

@@ -179,9 +179,9 @@ describe('createIntexAgentToolDefinitions', () => {
     expect(codeTaskTool?.parameters['properties']).toMatchObject({
       workerType: {
         type: 'string',
-        enum: ['codex', 'codex-xhigh', 'minimax'],
+        enum: ['codex', 'codex-xhigh', 'openrouter-free'],
         description: expect.stringMatching(
-          /only when explicitly requested.*Codex.*codex.*Codex extra high.*codex-xhigh.*MiniMax.*minimax/
+          /only when explicitly requested.*Codex.*codex.*Codex extra high.*codex-xhigh.*OpenRouter Free.*openrouter-free/
         ),
       },
     });

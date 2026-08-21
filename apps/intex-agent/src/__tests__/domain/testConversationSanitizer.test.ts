@@ -419,7 +419,6 @@ describe('test conversation sanitizer', () => {
           timeMin: '2026-07-18T00:00:00Z',
           timeMax: '2026-07-19T00:00:00Z',
           timeZone: 'Europe/Warsaw',
-          workerType: 'minimax',
           taskMode: 'planning',
           maxResults: 10,
           queryLength: 33,
@@ -461,7 +460,7 @@ describe('test conversation sanitizer', () => {
     expect(closedValues.map((call) => call.argsSummary)).toEqual([
       { mode: 'list', workerType: 'codex', taskMode: 'planning' },
       { mode: 'count', workerType: 'codex-xhigh', taskMode: 'execution' },
-      { workerType: 'minimax' },
+      {},
     ]);
   });
 

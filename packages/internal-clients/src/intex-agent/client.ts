@@ -173,7 +173,7 @@ const retentionPlanSchema = identitySchema
 const factValueSchema = z.union([
   safeInteger,
   z.boolean(),
-  z.enum(['list', 'count', 'codex', 'codex-xhigh', 'minimax', 'planning', 'execution']),
+  z.enum(['list', 'count', 'codex', 'codex-xhigh', 'openrouter-free', 'planning', 'execution']),
 ]);
 const factNameSchema = z.enum([
   'contentLength',

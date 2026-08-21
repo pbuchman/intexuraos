@@ -2459,7 +2459,7 @@ describe('createIntexAgentRunner', () => {
         args: {
           prompt:
             'Investigate synthetic cache behavior with markers INTEX-EVAL-014 and INTEX-EVAL-014-F01.',
-          workerType: 'minimax',
+          workerType: 'openrouter-free',
           taskMode: 'planning',
         },
       },
@@ -11417,7 +11417,7 @@ describe('createIntexAgentRunner', () => {
   it('normalizes a missing code-task mode at the typed tool boundary', async () => {
     const client = new ToolExecutingFakeToolCallingClient({
       toolName: 'create_code_task',
-      args: { prompt: 'Investigate the webhook retry path.', workerType: 'minimax' },
+      args: { prompt: 'Investigate the webhook retry path.', workerType: 'openrouter-free' },
     }, [
       ok(
         toolResult({
@@ -11439,13 +11439,34 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
-        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning\nWorker: minimax',
+        'Create this code task?\n\nPrompt: Investigate the webhook retry path.\nMode: planning\nWorker: openrouter-free',
       toolName: 'create_code_task',
       toolArgs: {
         prompt: 'Investigate the webhook retry path.',
         taskMode: 'planning',
-        workerType: 'minimax',
+        workerType: 'openrouter-free',
       },
+    });
+  });
+
+  it('rejects retired code-task worker types at the typed tool boundary', async () => {
+    const runner = createIntexAgentRunner({
+      client: new FakeToolCallingClient([]),
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        toolName: 'create_code_task',
+        toolArgs: { prompt: 'Investigate the webhook retry path.', workerType: 'minimax' },
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'tool_failed',
+      error: 'Tool argument workerType must be one of: codex, codex-xhigh, openrouter-free',
+      errorCategory: 'validation',
+      isRetryable: false,
     });
   });
 

@@ -1363,7 +1363,7 @@ export class CompletionPipeline {
           repository: task.repository,
           finalStatus,
         },
-        'Failed to commit terminal status via /internal/code-tasks/:id/status; zombie watchdog will recover'
+        'Failed to commit terminal status via /internal/code-tasks/status; zombie watchdog will recover'
       );
       ctx.appendOrchestratorTaskLog(
         task.taskId,

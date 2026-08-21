@@ -2502,7 +2502,7 @@ function safeFactExpectations(
         value !== 'count' &&
         value !== 'codex' &&
         value !== 'codex-xhigh' &&
-        value !== 'minimax' &&
+        value !== 'openrouter-free' &&
         value !== 'planning' &&
         value !== 'execution'
       )

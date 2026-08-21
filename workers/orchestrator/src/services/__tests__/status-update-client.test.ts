@@ -64,7 +64,7 @@ describe('StatusUpdateClient', () => {
     const completedAt = new Date('2026-04-17T10:00:00.000Z');
 
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_1/status')
+      .patch('/internal/code-tasks/status')
       .matchHeader('content-type', 'application/json')
       .matchHeader('x-internal-auth', internalAuthToken)
       .matchHeader('x-request-signature', /^[a-f0-9]{64}$/)
@@ -86,7 +86,7 @@ describe('StatusUpdateClient', () => {
     const taskCallbackOrigin = 'https://intexuraos.cloud';
 
     nock(taskCallbackOrigin)
-      .patch('/api/code/internal/code-tasks/task_prod/status')
+      .patch('/api/code/internal/code-tasks/status')
       .reply(200, { success: true });
 
     const { client } = makeClient();
@@ -107,7 +107,7 @@ describe('StatusUpdateClient', () => {
     let capturedSignature: string | undefined;
 
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_sig/status', (body) => {
+      .patch('/internal/code-tasks/status', (body) => {
         capturedBody = JSON.stringify(body);
         return true;
       })
@@ -145,7 +145,7 @@ describe('StatusUpdateClient', () => {
     let capturedSignature: string | undefined;
 
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_task_secret/status', (body) => {
+      .patch('/internal/code-tasks/status', (body) => {
         capturedBody = JSON.stringify(body);
         return true;
       })
@@ -175,9 +175,9 @@ describe('StatusUpdateClient', () => {
   });
 
   it('returns ok on eventual 200 after 5xx retries', async () => {
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_retry/status').reply(500, 'boom');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(500, 'boom');
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_retry/status')
+      .patch('/internal/code-tasks/status')
       .reply(200, { success: true });
 
     const { client, calls } = makeClient({ retryDelaysMs: [1, 1] });
@@ -201,7 +201,7 @@ describe('StatusUpdateClient', () => {
   });
 
   it('does not retry on 4xx and returns err with type "4xx"', async () => {
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_404/status').reply(404, 'not found');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(404, 'not found');
 
     const { client, calls } = makeClient({ retryDelaysMs: [1, 1, 1] });
     const result = await client.commit({
@@ -229,9 +229,9 @@ describe('StatusUpdateClient', () => {
   });
 
   it('returns err after exhausting retries on persistent 5xx', async () => {
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_503/status').reply(503, 'unavailable');
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_503/status').reply(503, 'unavailable');
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_503/status').reply(503, 'unavailable');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(503, 'unavailable');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(503, 'unavailable');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(503, 'unavailable');
 
     const { client, calls } = makeClient({ retryDelaysMs: [1, 1] });
     const result = await client.commit({
@@ -272,7 +272,7 @@ describe('StatusUpdateClient', () => {
 
   it('returns timeout error when request exceeds requestTimeoutMs', async () => {
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_slow/status')
+      .patch('/internal/code-tasks/status')
       .delay(50)
       .reply(200, { success: true });
 
@@ -307,7 +307,7 @@ describe('StatusUpdateClient', () => {
     let capturedBody: unknown;
 
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_iso/status', (body) => {
+      .patch('/internal/code-tasks/status', (body) => {
         capturedBody = body;
         return true;
       })
@@ -332,7 +332,7 @@ describe('StatusUpdateClient', () => {
     let capturedBody: Record<string, unknown> | undefined;
 
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_min/status', (body) => {
+      .patch('/internal/code-tasks/status', (body) => {
         capturedBody = body as Record<string, unknown>;
         return true;
       })
@@ -356,7 +356,7 @@ describe('StatusUpdateClient', () => {
 
   it('uses default retry delays and timeout when not supplied', async () => {
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_defaults/status')
+      .patch('/internal/code-tasks/status')
       .reply(200, { success: true });
 
     const { logger } = makeLogger();
@@ -379,8 +379,8 @@ describe('StatusUpdateClient', () => {
   });
 
   it('falls back to HTTP status string when 5xx body is empty', async () => {
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_empty/status').reply(500, '');
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_empty/status').reply(500, '');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(500, '');
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(500, '');
 
     const { client, calls } = makeClient({ retryDelaysMs: [1] });
     const result = await client.commit({
@@ -443,9 +443,9 @@ describe('StatusUpdateClient', () => {
 
   it('retries on network error and eventually succeeds', async () => {
     nock(codeAgentUrl)
-      .patch('/internal/code-tasks/task_net/status')
+      .patch('/internal/code-tasks/status')
       .replyWithError({ code: 'ECONNRESET', message: 'socket hang up' });
-    nock(codeAgentUrl).patch('/internal/code-tasks/task_net/status').reply(200, { success: true });
+    nock(codeAgentUrl).patch('/internal/code-tasks/status').reply(200, { success: true });
 
     const { client, calls } = makeClient({ retryDelaysMs: [1] });
     const result = await client.commit({

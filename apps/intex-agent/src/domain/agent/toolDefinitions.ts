@@ -90,7 +90,7 @@ export interface DeleteUserPreferenceToolArgs {
   expectedVersion: number;
 }
 
-const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'minimax'] as const;
+const EXPLICIT_CODE_TASK_WORKER_TYPES = ['codex', 'codex-xhigh', 'openrouter-free'] as const;
 
 interface ToolDescriptionParts {
   purpose: string;
@@ -429,7 +429,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
         doNotUseFor:
           '"How do HTTP requests work?", "Can you code this right here?", "What parameters do code tasks need?", or general programming explanations.',
         requiredInput:
-          'prompt is required. workerType, linearIssueId, and taskMode are optional. workerType is only codex, codex-xhigh, or minimax.',
+          'prompt is required. workerType, linearIssueId, and taskMode are optional. workerType is only codex, codex-xhigh, or openrouter-free.',
         boundary:
           'planning mode is default. Use execution mode only when explicitly requested or when the user says the task is in execution stage. Set linearIssueId only when the user explicitly associates a supplied identifier with a Linear issue or ticket. An arbitrary opaque identifier, tracking marker, or evaluation marker is not enough; keep it in the task prompt and omit linearIssueId.',
         examples:
@@ -450,7 +450,7 @@ export function createIntexAgentToolDefinitions(executor: IntexAgentToolExecutor
             type: 'string',
             enum: [...EXPLICIT_CODE_TASK_WORKER_TYPES],
             description:
-              'Optional worker type. Set only when explicitly requested by the user. Available choices: Codex (codex), Codex extra high (codex-xhigh), MiniMax (minimax).',
+              'Optional worker type. Set only when explicitly requested by the user. Available choices: Codex (codex), Codex extra high (codex-xhigh), OpenRouter Free (openrouter-free).',
           },
           linearIssueId: {
             type: 'string',
@@ -928,7 +928,7 @@ function toCreateLinkArgs(args: Record<string, unknown>): CreateLinkToolArgs {
 
 function toCreateCodeTaskArgs(args: Record<string, unknown>): CreateCodeTaskToolArgs {
   const prompt = requiredString(args, 'prompt');
-  const workerType = optionalString(args, 'workerType');
+  const workerType = optionalCodeTaskWorkerType(args, 'workerType');
   const linearIssueId = optionalString(args, 'linearIssueId');
   const taskMode = optionalTaskMode(args, 'taskMode') ?? 'planning';
 
@@ -938,6 +938,20 @@ function toCreateCodeTaskArgs(args: Record<string, unknown>): CreateCodeTaskTool
     ...(linearIssueId !== undefined ? { linearIssueId } : {}),
     taskMode,
   };
+}
+
+function optionalCodeTaskWorkerType(
+  args: Record<string, unknown>,
+  key: string
+): (typeof EXPLICIT_CODE_TASK_WORKER_TYPES)[number] | undefined {
+  const value = optionalString(args, key);
+  if (value === undefined) return undefined;
+  if (!(EXPLICIT_CODE_TASK_WORKER_TYPES as readonly string[]).includes(value)) {
+    throw new Error(
+      `Tool argument ${key} must be one of: ${EXPLICIT_CODE_TASK_WORKER_TYPES.join(', ')}`
+    );
+  }
+  return value as (typeof EXPLICIT_CODE_TASK_WORKER_TYPES)[number];
 }
 
 function toSaveExternalArgs(args: Record<string, unknown>): SaveExternalToolArgs {

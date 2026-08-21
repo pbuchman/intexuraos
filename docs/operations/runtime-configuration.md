@@ -89,8 +89,9 @@ that opens a package is separate from any credential inside that package.
    and the operational documentation in the same pull request.
 6. Build and publish a complete new candidate package outside Terraform. Never
    commit or log the payload.
-7. Validate, shadow-compare, render to staging, canary, and promote using an
-   exact numeric version.
+7. Stop affected writers, validate the complete candidate, publish one exact
+   numeric version, deploy it, and destroy the superseded version after the
+   live gates pass.
 
 A missing member blocks the whole candidate. Per-field fallback, partial
 promotion, `latest`, and mutable aliases are forbidden.
@@ -216,18 +217,17 @@ Use WIF/OIDC or service-account impersonation for automation and operators
 where possible. A long-lived bootstrap key remains outside both packages and
 must be separately protected and rotated.
 
-## Rotation And Rollback
+## Rotation
 
-Every rotation creates a complete immutable candidate. Fetch and deploy it by
-numeric version, retain the previously verified numeric version for rollback,
-and switch the whole package together. Never roll back an exposed Firebase key
-or compromised service-account key; instead publish a new complete package
-with replacement credentials.
+Every rotation creates a complete immutable candidate. Stop affected writers,
+publish and deploy it by exact numeric version, verify DEV and PROD, revoke the
+old credential, and destroy every superseded package version. There is no
+rollback, dual-key runtime, or compatibility reader. A failed gate leaves the
+affected service stopped and is repaired forward.
 
-For the runtime service-account JSON, create replacement, publish, canary,
-disable the old key, monitor, then delete. For the browser key, create and
-restrict replacement, publish to both packages, deploy and verify DEV then
-PROD, delete the old key, then close the repository alert as revoked.
+For encryption keys, a one-time offline migrator may hold the old and new key
+while all writers are stopped. Runtime receives only the new key. Delete the
+old key and migrator immediately after the complete rescan passes.
 
 ## Safe Verification And Evidence
 
@@ -242,6 +242,5 @@ PROD, delete the old key, then close the repository alert as revoked.
 - Never include a package payload, base64, private key, rendered environment,
   token, or reversible digest in evidence.
 
-The historical individual-secret cleanup record is
-[Runtime Secret Manager Cleanup](./runtime-secret-manager-cleanup.md). It is not
-a current deployment procedure and must not be replayed.
+The final destructive cleanup is governed only by
+[Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).

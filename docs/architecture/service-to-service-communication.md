@@ -85,23 +85,15 @@ X-Internal-Auth: <token>
 INTEXURAOS_INTERNAL_AUTH_TOKEN=<shared-secret>
 ```
 
-For zero-downtime rotation, also accept the previous token via:
-
-```bash
-INTEXURAOS_INTERNAL_AUTH_TOKEN_PREVIOUS=<previous-shared-secret>
-```
-
-`validateInternalAuth` accepts EITHER value and returns
-`{ valid: true, tokenUsed: 'current' | 'previous' }` so callers can
-log/alert when the PREVIOUS token is used. See
-[`docs/runbooks/internal-auth-rotation.md`](../runbooks/internal-auth-rotation.md)
-for the quarterly rotation procedure.
+`validateInternalAuth` accepts exactly this value. Rotation is a hard cutover:
+stop every writer, replace the token in both environments, and restart all
+consumers. There is no previous-token fallback or overlap window.
 
 The static shared secret is a Phase 1 mechanism; per-service Google OIDC is
 the Phase 2 target — see
 [`docs/architecture/internal-oidc-phase-two.md`](./internal-oidc-phase-two.md).
 
-**Note:** Services should use the `INTEXURAOS_` prefix for consistency. Legacy services may use `INTERNAL_AUTH_TOKEN`.
+**Note:** Services use the `INTEXURAOS_` prefix consistently.
 
 ### Server-Side Validation
 

@@ -589,7 +589,7 @@ describe('handleIncomingMessage', () => {
     const runner = createIntexAgentRunner({
       client: forcedCodeTaskToolClient({
         prompt: 'Investigate synthetic cache behavior.',
-        workerType: 'minimax',
+        workerType: 'openrouter-free',
       }),
       intentClassifier: {
         async classify() {
@@ -610,7 +610,7 @@ describe('handleIncomingMessage', () => {
     const canonicalArgs = {
       prompt: 'Investigate synthetic cache behavior.',
       taskMode: 'planning',
-      workerType: 'minimax',
+      workerType: 'openrouter-free',
     };
     expect(replies.messages[0]?.message).toBe(
       [
@@ -618,7 +618,7 @@ describe('handleIncomingMessage', () => {
         '',
         'Prompt: Investigate synthetic cache behavior.',
         'Mode: planning',
-        'Worker: minimax',
+        'Worker: openrouter-free',
       ].join('\n')
     );
     expect(eventPayloads(repo, 'confirmation_requested')[0]).toMatchObject({

@@ -37,12 +37,6 @@ variable "source_environment" {
   }
 }
 
-variable "legacy_secret_containers_enabled" {
-  description = "Keep legacy individual secret inventory through the reversible disable soak; disable only in Phase B after at least seven healthy days"
-  type        = bool
-  default     = true
-}
-
 variable "domain" {
   description = "Public production domain served by the Hetzner VM."
   type        = string
@@ -141,23 +135,6 @@ variable "provisioner_sa_key_path" {
   }
 }
 
-variable "runtime_sa_key_path" {
-  description = "Local path to the Hetzner runtime service account key copied to the VM during Terraform bootstrap."
-  type        = string
-  default     = "~/.config/intexuraos/hetzner/runtime-sa-key.json"
-
-  validation {
-    condition     = length(trimspace(var.runtime_sa_key_path)) > 0
-    error_message = "runtime_sa_key_path must be non-empty."
-  }
-}
-
-variable "legacy_runtime_sa_bootstrap_enabled" {
-  description = "Copy the legacy runtime service-account key during additive package migration. Disable only after the package renderer owns the verified credential file and at least 72 healthy hours."
-  type        = bool
-  default     = true
-}
-
 variable "prod_secret_package_version" {
   description = "Exact positive numeric PROD secret-package version used during a full VM bootstrap. Keep aligned with the protected GitHub Actions PROD_SECRET_PACKAGE_VERSION variable."
   type        = number
@@ -200,12 +177,6 @@ variable "web_source_ips" {
     condition     = alltrue([for source in var.web_source_ips : can(cidrhost(source, 0))])
     error_message = "web_source_ips must contain valid CIDR ranges."
   }
-}
-
-variable "cloudflare_dns_api_token_secret_id" {
-  description = "Retained GCP Secret Manager secret ID for the Cloudflare DNS API token used by certbot DNS-01."
-  type        = string
-  default     = "INTEXURAOS_CLOUDFLARE_DNS_API_TOKEN"
 }
 
 variable "labels" {

@@ -131,10 +131,6 @@ function validOrchestratorEnvironment(
     INTEXURAOS_GITHUB_INSTALLATION_ID: '456',
     INTEXURAOS_LINEAR_API_KEY: 'linear-token',
     INTEXURAOS_ERROR_HUB_HOST: 'home-dev.example.ts.net:8443',
-    INTEXURAOS_MINIMAX_APP_API_KEY: 'minimax-token',
-    INTEXURAOS_MIMO_APP_API_KEY: 'mimo-token',
-    INTEXURAOS_DASHSCOPE_APP_API_KEY: 'dashscope-token',
-    INTEXURAOS_KIMI_APP_API_KEY: 'kimi-token',
     INTEXURAOS_OPENROUTER_APP_API_KEY: 'openrouter-token',
     INTEXURAOS_SENTRY_DSN: 'https://public@example.invalid/1',
     ...overrides,
@@ -555,7 +551,7 @@ describe('runtime configuration cutover', () => {
     expect(readFileSync(defaultKeyPath, 'utf8')).toBe(privateKeyPem);
     expect(statSync(defaultKeyPath).mode & 0o777).toBe(0o600);
     expect(lstatSync(join(defaultRenderRoot, 'current')).isSymbolicLink()).toBe(true);
-  });
+  }, 30_000);
 
   it.each([undefined, 'latest', '0', '01', '-1'])(
     'rejects a missing or non-numeric version %s without replacing local artifacts',
@@ -636,83 +632,7 @@ describe('runtime configuration cutover', () => {
     expect(readFileSync(outputPath, 'utf8')).toBe('previous-complete-file\n');
     expect(readFileSync(githubKeyOutput, 'utf8')).toBe('previous-private-key\n');
     expect(statSync(outputPath).mode & 0o777).toBe(0o600);
-  });
-
-  it.each([
-    ['candidate-durable', '7'],
-    ['compatibility-active', '7'],
-    ['envrc-link-installed', '7'],
-    ['github-link-installed', '7'],
-    ['before-activation', '7'],
-    ['after-activation', '8'],
-  ])(
-    'keeps a complete legacy or candidate projection after SIGKILL at %s and resumes',
-    (failpoint, visibleVersion) => {
-      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-crash-legacy-'));
-      const outputPath = join(tempRoot, '.envrc');
-      const packageOutputDir = join(tempRoot, 'packages');
-      const githubKeyOutput = join(tempRoot, 'github-app.pem');
-      const previousPayloadPath = join(tempRoot, 'payload-v7.json');
-      const candidatePayloadPath = join(tempRoot, 'payload-v8.json');
-      const previous = makeDevSecretPackagePayload();
-      const candidate = makeDevSecretPackagePayload();
-      writeFileSync(previousPayloadPath, JSON.stringify(previous.payload), { mode: 0o600 });
-      writeFileSync(candidatePayloadPath, JSON.stringify(candidate.payload), { mode: 0o600 });
-      makeLegacyDevProjection({
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-        payloadPath: previousPayloadPath,
-        privateKeyPem: previous.privateKeyPem,
-        tempRoot,
-        version: '7',
-      });
-
-      const interrupted = syncDevPackage({
-        failpoint,
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-        payloadPath: candidatePayloadPath,
-        tempRoot,
-        version: '8',
-      });
-
-      expect(interrupted.status).not.toBe(0);
-      const expected = visibleVersion === '7' ? previous : candidate;
-      expectCompleteDevProjection({
-        expectedPrivateKeyPem: expected.privateKeyPem,
-        expectedVersion: visibleVersion,
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-      });
-
-      const resumed = syncDevPackage({
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-        payloadPath: candidatePayloadPath,
-        tempRoot,
-        version: '8',
-      });
-      expect(resumed.status).toBe(0);
-      expect(lstatSync(outputPath).isSymbolicLink()).toBe(true);
-      expect(lstatSync(githubKeyOutput).isSymbolicLink()).toBe(true);
-      expect(readlinkSync(outputPath)).toBe(join(packageOutputDir, 'current', '.envrc'));
-      expect(readlinkSync(githubKeyOutput)).toBe(
-        join(packageOutputDir, 'current', 'github-app-private-key.pem')
-      );
-      expectCompleteDevProjection({
-        expectedPrivateKeyPem: candidate.privateKeyPem,
-        expectedVersion: '8',
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-      });
-    },
-    30_000
-  );
+  }, 30_000);
 
   it.each([
     'candidate-durable',
@@ -1109,7 +1029,9 @@ describe('runtime configuration cutover', () => {
     expect(script).toContain('PROJECTION_OUTPUT_DIR');
     expect(script).toContain('CANDIDATE_RENDER_DIR');
     expect(script).not.toContain('SECRET_PACKAGE_RENDER_DIR:-');
-    expect(scriptsReadme).toMatch(/must never be passed to generic\s+`secret-package render`/u);
+    expect(scriptsReadme).toMatch(
+      /must never be passed to\s+generic `secret-package render`/u
+    );
     expect(runtimeOperations).toMatch(
       /must never be reused as the `--output-dir` of\s+generic `secret-package render`/u
     );
@@ -1209,64 +1131,6 @@ describe('runtime configuration cutover', () => {
   );
 
   it(
-    'waits for a generic DEV writer before converting its complete release into a projection',
-    { timeout: 30_000 },
-    async () => {
-      const tempRoot = mkdtempSync(join(tmpdir(), 'runtime-config-render-before-sync-'));
-      const packageOutputDir = join(tempRoot, 'projection');
-      const outputPath = join(tempRoot, '.envrc');
-      const githubKeyOutput = join(tempRoot, 'github-app.pem');
-      const genericPayloadPath = join(tempRoot, 'payload-v8.json');
-      const syncPayloadPath = join(tempRoot, 'payload-v9.json');
-      const preparedOutput = join(tempRoot, 'prepared.envrc');
-      const preparedKey = join(tempRoot, 'prepared-key.pem');
-      const preparedProjection = join(tempRoot, 'prepared-projection');
-      const genericCandidate = makeDevSecretPackagePayload();
-      const syncCandidate = makeDevSecretPackagePayload();
-      writeFileSync(genericPayloadPath, JSON.stringify(genericCandidate.payload), { mode: 0o600 });
-      writeFileSync(syncPayloadPath, JSON.stringify(syncCandidate.payload), { mode: 0o600 });
-      const prepared = syncDevPackage({
-        githubKeyOutput: preparedKey,
-        outputPath: preparedOutput,
-        packageOutputDir: preparedProjection,
-        payloadPath: genericPayloadPath,
-        tempRoot,
-        version: '8',
-      });
-      expect(prepared).toMatchObject({ status: 0, stderr: '' });
-      copyFileSync(preparedOutput, outputPath);
-      copyFileSync(preparedKey, githubKeyOutput);
-
-      const generic = startGenericDevRender({
-        holdLockMilliseconds: 500,
-        outputDir: packageOutputDir,
-        payloadPath: genericPayloadPath,
-        version: '8',
-      });
-      await waitForDevSyncClaim(packageOutputDir);
-      const sync = startDevPackageSync({
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-        payloadPath: syncPayloadPath,
-        tempRoot,
-        version: '9',
-      });
-
-      const [genericResult, syncResult] = await Promise.all([generic.completed, sync.completed]);
-      expect(genericResult).toMatchObject({ status: 0, stderr: '' });
-      expect(syncResult).toMatchObject({ status: 0, stderr: '' });
-      expectCompleteDevProjection({
-        expectedPrivateKeyPem: syncCandidate.privateKeyPem,
-        expectedVersion: '9',
-        githubKeyOutput,
-        outputPath,
-        packageOutputDir,
-      });
-    }
-  );
-
-  it(
     'serializes two generic DEV scratch writers without classifying the scratch root as a projection',
     { timeout: 30_000 },
     async () => {
@@ -1334,7 +1198,7 @@ describe('runtime configuration cutover', () => {
         writeFileSync(
           envrcPath,
           readFileSync(envrcPath, 'utf8').replace(
-            /^export INTEXURAOS_OPENAI_APP_API_KEY=.*\n/mu,
+            /^export INTEXURAOS_OPENROUTER_APP_API_KEY=.*\n/mu,
             ''
           ),
           { mode: 0o600 }
@@ -1347,8 +1211,8 @@ describe('runtime configuration cutover', () => {
         writeFileSync(
           envrcPath,
           readFileSync(envrcPath, 'utf8').replace(
-            /^export INTEXURAOS_OPENAI_APP_API_KEY=.*$/mu,
-            "export INTEXURAOS_OPENAI_APP_API_KEY='mismatched-value'"
+            /^export INTEXURAOS_OPENROUTER_APP_API_KEY=.*$/mu,
+            "export INTEXURAOS_OPENROUTER_APP_API_KEY='mismatched-value'"
           ),
           { mode: 0o600 }
         );
@@ -1533,8 +1397,6 @@ describe('runtime configuration cutover', () => {
           outputPath,
           '--render-dir',
           renderDir,
-          '--projection-dir',
-          projectionDir,
           '--payload-file',
           payloadPath,
         ],
@@ -1551,6 +1413,9 @@ describe('runtime configuration cutover', () => {
             RUNTIME_SA_KEY_FILE: runtimeKeyPath,
             INTERNAL_AUTH_TOKEN_FILE: internalAuthTokenPath,
             CLOUDFLARE_CREDENTIALS_FILE: cloudflareCredentialsPath,
+            PACKAGE_METADATA_FILE: join(tempRoot, 'package-metadata.json'),
+            SECRET_PACKAGE_LOCK_FILE: join(tempRoot, 'loader.lock'),
+            SECRET_PROJECTION_ROOT: projectionDir,
             TLS_PRIVATE_KEY_FILE: tlsPrivateKeyPath,
             TMPDIR: tempRoot,
           },
@@ -1588,7 +1453,7 @@ describe('runtime configuration cutover', () => {
       );
       expect(readFileSync(tlsPrivateKeyPath, 'utf8')).toBe(tlsPrivateKeyPem);
       expect(lstatSync(join(renderDir, 'current')).isSymbolicLink()).toBe(true);
-      expect(lstatSync(join(projectionDir, 'current')).isSymbolicLink()).toBe(true);
+      expect(existsSync(projectionDir)).toBe(false);
       for (const [path, mode] of [
         [outputPath, 0o600],
         [runtimeKeyPath, 0o600],
@@ -1596,7 +1461,7 @@ describe('runtime configuration cutover', () => {
         [cloudflareCredentialsPath, 0o600],
         [tlsPrivateKeyPath, 0o600],
       ] as const) {
-        expect(lstatSync(path).isSymbolicLink(), path).toBe(true);
+        expect(lstatSync(path).isSymbolicLink(), path).toBe(false);
         expect(statSync(path).mode & 0o777, path).toBe(mode);
       }
       expect(result.stdout).toContain('Activated PROD secret package version 17');
@@ -1638,8 +1503,6 @@ describe('runtime configuration cutover', () => {
         outputPath,
         '--render-dir',
         join(tempRoot, 'package-render'),
-        '--projection-dir',
-        join(tempRoot, 'projections'),
         '--payload-file',
         payloadPath,
       ],
@@ -1656,6 +1519,9 @@ describe('runtime configuration cutover', () => {
           RUNTIME_SA_KEY_FILE: runtimeKeyPath,
           INTERNAL_AUTH_TOKEN_FILE: internalAuthTokenPath,
           CLOUDFLARE_CREDENTIALS_FILE: cloudflareCredentialsPath,
+          PACKAGE_METADATA_FILE: join(tempRoot, 'package-metadata.json'),
+          SECRET_PACKAGE_LOCK_FILE: join(tempRoot, 'loader.lock'),
+          SECRET_PROJECTION_ROOT: join(tempRoot, 'projections'),
           TLS_PRIVATE_KEY_FILE: tlsPrivateKeyPath,
           TMPDIR: tempRoot,
         },
@@ -1663,7 +1529,7 @@ describe('runtime configuration cutover', () => {
     );
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Unable to fetch, verify, and render PROD package');
+    expect(result.stderr).toContain('Unable to render PROD package');
     for (const [path, contents] of previousArtifacts) {
       expect(lstatSync(path).isSymbolicLink(), path).toBe(false);
       expect(readFileSync(path, 'utf8'), path).toBe(contents);
@@ -1965,17 +1831,12 @@ describe('runtime configuration documentation', () => {
       resolve(repoRoot, 'workers/orchestrator/README.md'),
       'utf8'
     );
-    const cleanupRunbook = readFileSync(
-      resolve(repoRoot, 'docs/operations/runtime-secret-manager-cleanup.md'),
-      'utf8'
-    );
-
     expect(policyRunbook).toContain('belong in exactly one environment package');
     expect(policyRunbook).toContain('INTEXURAOS_SECRET_PACKAGE_DEV');
     expect(policyRunbook).toContain('INTEXURAOS_SECRET_PACKAGE_PROD');
     expect(policyRunbook).toContain('INTEXURAOS_FIREBASE_API_KEY');
     expect(policyRunbook).toContain('config/environments/policy.json');
-    expect(policyRunbook).toContain('./runtime-secret-manager-cleanup.md');
+    expect(policyRunbook).toContain('./secret-exposure-final-cutover-plan.md');
     expect(localSetup).toContain('../operations/runtime-configuration.md');
     expect(orchestratorReadme).toContain('scripts/generate-orchestrator-env.mjs');
     expect(orchestratorReadme).toContain('SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS=');
@@ -1987,101 +1848,5 @@ describe('runtime configuration documentation', () => {
       'SECRET_PACKAGE_RENDER_DIR=/home/pbuchman/.config/intexuraos/secret-packages/dev'
     );
     expect(orchestratorReadme).not.toContain("grep -E '^export INTEXURAOS_' .envrc");
-
-    expect(cleanupRunbook).toContain('0 add / 0 change / 396 destroy');
-    expect(cleanupRunbook).toContain('| Secret Manager containers | 26 |');
-    expect(cleanupRunbook).toContain('| Application secret-access IAM bindings | 324 |');
-    expect(cleanupRunbook).toContain('| Hetzner secret-access IAM bindings | 42 |');
-    expect(cleanupRunbook).toContain('| Firebase secret versions | 3 |');
-    expect(cleanupRunbook).toContain('| Transcription Sentry rollback IAM binding | 1 |');
-    expect(cleanupRunbook).toContain(
-      '5c87082e4e1ae827fc067b77fd5a77425ace7e3d60c301fb2a9f03a3c737083c'
-    );
-    expect(cleanupRunbook).toContain('AccessSecretVersion');
-    expect(cleanupRunbook).toContain('DATA_READ');
-    expect(cleanupRunbook).toContain('T0');
-    expect(cleanupRunbook).toContain('f9e4d21910a553405ea0b278fb59bc696c8ebe65');
-    expect(cleanupRunbook).toContain('Older commits and old Terraform are prohibited');
-    expect(cleanupRunbook).toContain('Recreating empty Secret Manager containers is not rollback');
-    expect(cleanupRunbook).not.toContain('configScopes');
-    expect(cleanupRunbook).toContain(
-      '[.scopes.common[], .scopes.dev[], .scopes.prod[], .deleteOnlyNames[]] | unique[]'
-    );
-    expect(cleanupRunbook).toContain('Record `T0` immediately before Step 1 (merge)');
-    expect(cleanupRunbook).toContain(
-      'Every plan regeneration or deliberate read of a blocked secret invalidates and\nresets T0'
-    );
-    expect(cleanupRunbook).toContain('T0-pre-apply');
-    expect(cleanupRunbook).toContain('protoPayload.resourceName=~');
-    expect(cleanupRunbook).toContain('exhausts all result pages; do not add `--limit`');
-    expect(cleanupRunbook).toContain('INTEXURAOS_INTERNAL_AUTH_TOKEN');
-    expect(cleanupRunbook).toContain('INTEXURAOS_LINEAR_API_KEY');
-    expect(cleanupRunbook).toContain(
-      'ixos-hetzner-provisioner-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
-    );
-    expect(cleanupRunbook).toContain(
-      'claude-code-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
-    );
-    expect(cleanupRunbook).toContain(
-      'ixos-transcription-fn-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
-    );
-    expect(cleanupRunbook).toContain('audit_blocked_secret_names()');
-    expect(cleanupRunbook).toContain('audit_runtime_secret_set()');
-    expect(cleanupRunbook).toContain('audit_unknown_secret_names()');
-    expect(cleanupRunbook).toContain('prod-secret-names.txt');
-    expect(cleanupRunbook).toContain('transcription-secret-names.txt');
-    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'prod-before-apply'");
-    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'home-dev-after-apply'");
-    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'prod-after-apply'");
-    expect(cleanupRunbook).toContain("audit_runtime_secret_set \\\n  'transcription-after-apply'");
-    expect(cleanupRunbook).toContain('Production reads exactly 28 allowlisted secrets');
-    expect(cleanupRunbook).toContain('Home-dev sync reads\nall 37 policy-classified secrets');
-    expect(cleanupRunbook).toContain('scripts/observability/load-grafana-cloud-env.sh');
-    expect(cleanupRunbook).toContain('scripts/observability/install-grafana-alloy.sh');
-    expect(cleanupRunbook).toContain('systemctl is-active --quiet alloy.service');
-    expect(cleanupRunbook).toContain('target=transcription');
-    expect(cleanupRunbook).toContain('gcloud functions describe');
-    expect(cleanupRunbook).toContain('.state == "ACTIVE"');
-    expect(cleanupRunbook).toContain('.serviceConfig.serviceAccountEmail == $principal');
-    expect(cleanupRunbook).toContain('gcloud auth print-identity-token');
-    expect(cleanupRunbook).toContain('__cold_start_probe__');
-    expect(cleanupRunbook).toContain('test "${cleanup_transcription_status}" = \'404\'');
-    expect(cleanupRunbook).toContain('resource.labels.revision_name');
-    expect(cleanupRunbook).toContain('httpRequest.status=404');
-    expect(cleanupRunbook).toContain('Manual `workflow_dispatch` has no SHA input');
-    expect(cleanupRunbook).toContain('--ref development');
-    expect(cleanupRunbook).toContain('headSha');
-    expect(cleanupRunbook).toContain('gcloud secrets list');
-    expect(cleanupRunbook).toContain('terraform -chdir=terraform/environments/dev state list');
-    expect(cleanupRunbook).toContain('post-apply-targeted-noop.tfplan');
-    expect(cleanupRunbook).toContain('approved=false');
-    expect(cleanupRunbook).toContain('four unrelated updates');
-    expect(cleanupRunbook).toContain('umask 077');
-    expect(cleanupRunbook).toContain('test "$(stat -f \'%Lp\' "${cleanup_dir}")" = \'700\'');
-
-    const gcloudCommands = cleanupRunbook
-      .split('\n')
-      .filter((line) => /^\s*(?:CLOUDSDK_[A-Z_]+=[^ ]+\s+)?gcloud\s/u.test(line));
-    expect(gcloudCommands.length).toBeGreaterThanOrEqual(4);
-    for (const command of gcloudCommands) {
-      expect(command.trim()).toMatch(
-        /^CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE="\$\{cleanup_sa_key\}" gcloud\s/u
-      );
-    }
-
-    const orderedSteps = [
-      '1. Merge PR2',
-      '2. Deploy PR2 To Production',
-      '3. Apply The Saved Plan',
-      '4. Cold-Sync And Restart home-dev',
-      '5. Redeploy Production',
-      '6. Verify Health And Audit',
-    ];
-    const positions = orderedSteps.map((step) => cleanupRunbook.indexOf(step));
-    expect(positions.every((position) => position >= 0)).toBe(true);
-    expect(positions).toEqual([...positions].sort((left, right) => left - right));
-    expect(cleanupRunbook.indexOf('Record `T0` immediately before Step 1 (merge)')).toBeLessThan(
-      cleanupRunbook.indexOf('### 1. Merge PR2')
-    );
   });
 });

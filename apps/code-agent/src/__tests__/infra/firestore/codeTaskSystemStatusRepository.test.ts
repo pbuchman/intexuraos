@@ -239,7 +239,7 @@ describe('FirestoreCodeTaskSystemStatusRepository', () => {
     const statusRepo = repo();
     const status = await statusRepo.upsertActive({
       userId: 'user-1',
-      workerType: 'glm',
+      workerType: 'openrouter-free',
       reason: 'provider_auth_unavailable',
       severity: 'critical',
       message: 'Provider key unavailable',
