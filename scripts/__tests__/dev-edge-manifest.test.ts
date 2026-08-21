@@ -59,7 +59,8 @@ describe('DEV edge manifest', () => {
 
     expect(output).toContain('dev.intexuraos.cloud:80');
     expect(output).toContain('handle @forbidden {\n    respond "Not Found" 404\n  }');
-    expect(output).toContain('handle {\n    root * /home/pbuchman/deploy/intexuraos/apps/web/dist');
+    expect(output).toContain('handle {\n    root * /var/www/intexuraos-dev/current');
+    expect(output).not.toContain('/home/pbuchman/');
     expect(output).toContain('file_server');
     expect(output).toContain('format json');
     expect(output).not.toContain('localhost:3000');
