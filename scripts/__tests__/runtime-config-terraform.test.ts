@@ -789,6 +789,15 @@ describe('versioned runtime configuration Terraform cutover', () => {
     );
   });
 
+  it('pins the Firebase Web App to the managed restricted browser key', () => {
+    const webApp = sectionBetween(
+      'resource "google_firebase_web_app" "web" {',
+      '\n}\n\ndata "google_firebase_web_app_config" "web" {'
+    );
+
+    expect(webApp).toContain('api_key_id   = google_apikeys_key.firebase_browser_replacement.uid');
+  });
+
   it('grants the Terraform operator durable API Keys update permission', () => {
     const operatorTerraform = readFileSync(claudeCodeDevTerraformPath, 'utf8');
     const operatorReadme = readFileSync(claudeCodeDevReadmePath, 'utf8');

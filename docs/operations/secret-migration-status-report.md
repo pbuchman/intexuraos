@@ -1,117 +1,86 @@
 # Secret Migration Status Report
 
-> **Execution authority:**
-> [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).
-> The owner-approved destructive cutover supersedes the rollback, compatibility,
-> soak, and delayed-cleanup gates recorded below. This report remains historical
-> evidence and must not be used as an execution runbook.
+Status: **COMPLETE**
 
-Last updated: 2026-08-20 UTC
+Last updated: 2026-08-21 UTC
 
-This report records only non-secret operational metadata. It contains no
-credential values, package payloads, private-key material, reversible value
-fingerprints, rendered environment data, or private evidence paths.
+Execution authority:
+[Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).
+That owner-approved destructive cutover superseded the earlier rollback,
+compatibility, soak, Phase A/B, and delayed-cleanup instructions.
 
-## Historical Executive Status
+This report contains operational metadata only. It contains no credential
+values, package payloads, private-key material, reversible value fingerprints,
+rendered environment data, or private evidence paths.
 
-The DEV and PROD package cutovers are complete on package version `2`.
-Production is healthy on the reviewed `development` release, and local,
-home-dev, worker, direct-origin, and public verification have passed. The
-remaining migration work is cleanup and observation, not a runtime cutover.
+## Final Result
 
-The cleanup is intentionally split:
+The irreversible security cutover and its follow-up remediation are complete.
+The application now uses only the final package and native-secret versions,
+the final runtime service-account key, and the managed restricted Firebase
+browser key. Obsolete keys, versions, containers, readers, compatibility
+paths, direct provider integrations, and rollback state are absent.
 
-- Phase A removes legacy readers and disables legacy versions while retaining
-  every container, so rollback remains possible;
-- Phase B destroys the obsolete containers only after seven complete days of
-  healthy Phase A evidence.
+The implementation was delivered by PR `#2486` and the focused remediation by
+PR `#2493`. Production was subsequently verified on `development` commit
+`29ab12f39a2f62deb4e8835cc9e0acc67d800f4a`, deployment run `32501443955`, and
+PROD package version `4`.
 
-Phase A was applied on 2026-08-20. Its reversible observation window began at
-`D_legacy=2026-08-20T16:41:14.034606179Z`. The earliest possible Phase B
-boundary is therefore `2026-08-27T16:41:14.034606179Z`; reaching that time is
-not sufficient by itself, because every daily health and audit gate must also
-pass.
-
-## Completed Evidence
+## Completion Evidence
 
 | Area | Status | Non-secret result |
 | --- | --- | --- |
-| DEV and PROD packages | PASS | Both environments use exact numeric package version `2`. |
-| Production rollout | PASS | Exact release attestation, PM2 `19/19`, semantic health, direct-origin and public matrices passed. |
-| home-dev and workers | PASS | Atomic projections, package-only runtime, replacement worker image, terminal callback, and secret-isolation checks passed. |
-| Rollback drill | PASS | Prior and forward package projections passed the required sampled observation. |
-| Recovery and escrow | PASS | Two independent encrypted provider copies and eight offline reconstruction paths passed with zero Secret Manager reads. |
-| Break-glass review | PASS | Two-person, exact-version, resource-level, maximum-60-minute design passed; no emergency grant was created. |
-| Abandoned runtime key | COMPLETE | The disabled, never-used staged key was deleted on 2026-08-20 at 14:40 UTC; the active and disabled rollback keys were unchanged. |
-| Phase A implementation | PASS | PRs `#2480` and `#2481` merged the reversible reader/container split and made `readers=false, containers=true` the authoritative Terraform desired state. |
-| Phase A IAM removal | PASS | The saved-plan allowlist covered exactly `569` approved Terraform deletes and no create/update/container/App Check action. A credential self-removal interrupted the first apply after `191` deletes; an independent owner resumed only the exact `378` remaining deletes. The final targeted plan is clean. |
-| Unmanaged legacy drift | PASS | Ten PromptVault resource accessors were removed after metadata-only proof of zero Secret Manager version access during the preceding 30 days. |
-| Legacy version disable | PASS | All `34` frozen legacy containers remain. Their version inventory is `0 ENABLED`, `35 DISABLED`, and `7 DESTROYED`; resource-level accessor count is `0`. The separate empty DNS-token container also remains with zero accessors. |
-| Post-Phase A runtime | PASS | PROD exact release/package attestation, `14/14` direct/public checks, PM2 `19/19`, and a non-activating package preflight passed. home-dev PM2 `22/22`, application package v2 `20/20`, orchestrator, Alloy, tunnel, and scheduler also passed. |
-| Remaining Terraform drift | DEFERRED | The full, untargeted plan contains exactly two pre-existing App Check service-config deletes and no Secret Manager or project-service change. They were not applied or mixed into Phase A. |
+| Secret inventory | PASS | Four application Secret Manager containers remain, plus the Google-managed Cloud Build connection token. Every application container has exactly one enabled version; all prior application versions are destroyed. |
+| Runtime identity | PASS | Exactly one user-managed Hetzner runtime key remains enabled. Both retired runtime keys are deleted, replacement authentication is positive, and the completed 24-hour windows contained zero retired-key authentication and zero operational credential failures. |
+| Firebase | PASS | The compromised key is deleted and its GitHub secret-scanning alert is resolved as revoked. The Firebase Web App is associated with the managed restricted replacement; its restrictions remain exactly three approved browser origins and four Firebase APIs. A transient unused Firebase-created key was proven absent from DEV and PROD static bundles and then deleted. |
+| Firebase desired state | PASS | Terraform pins the Firebase Web App to the managed restricted key, preventing Firebase from auto-associating or creating a broader key during future applies. |
+| Cloud Build | PASS | The connection retains one exact secret-level accessor, has zero project-level Secret Manager admin bindings, and the Google-managed connection token is retained intentionally. |
+| Legacy Secret Manager state | PASS | All obsolete legacy containers, readers, resource-level accessors, broad project roles, disabled versions, and compatibility controls are absent. |
+| Package-only runtime | PASS | DEV and PROD use final numeric package versions and final native-secret versions. No runtime performs direct Secret Manager reads or legacy sync. |
+| Home Dev and production | PASS | Static DEV web, edge policy, package projections, services, workers, direct-origin endpoints, public endpoints, semantic health, browser flows, and deployment attestations passed. Production direct/public verification passed `14/14`, and the non-printing credential canary passed. |
+| Recovery and break-glass | PASS | Two independent encrypted recovery copies and eight offline reconstruction paths passed with zero Secret Manager reads. The two-person, exact-version, maximum-60-minute break-glass design passed without creating an emergency grant. |
+| CI and infrastructure | PASS | The final push-triggered full-repository gate passed. Focused remediation CI, Terraform validation, exact-plan verification, static-bundle scans, and scoped live reconciliation passed. The known unrelated App Check drift was not applied. |
+| Provider incident | SENT | Google Cloud support case `#74312245` was reopened and the unauthorized-usage correction request was sent. Google acknowledged the case; the provider's billing decision is external follow-up, not a cutover gate. |
 
-## Phase A Applied Result
+## Counterfactual Review Of Former Time Gates
 
-The reviewed implementation was merged to `development` and deployed before
-the infrastructure change. The follow-up release attests exact application
-SHA `ad7440fd63afb0cac89162616cabbc4a5f047229`, workflow run `32390862324`, and
-secret package version `2`.
+The prior automation requested daily runtime-key observations, a 24-hour
+Firebase window, a 72-hour legacy-read window, and a seven-day Phase B delay.
+Those instructions are no longer executable authority.
 
-The first saved Terraform plan contained exactly `569` allowlisted legacy IAM
-deletes. It contained zero additions, updates, Secret Manager containers,
-secret versions, or App Check resources. The execution account's own broad
-Secret Manager admin role was one of those deletes, so the first apply removed
-`191` entries and then failed closed on `378` permission denials. No
-out-of-scope resource changed. A fresh plan under an independent owner account
-contained exactly those `378` remaining deletes; its apply passed, and the
-same targeted plan now reports zero changes.
+- **Runtime keys:** keeping the previously active key would preserve rollback,
+  but the approved cutover explicitly removed rollback. Both retired keys are
+  already deleted. Recreating or observing them would weaken the final state
+  and provide no equivalent safety evidence.
+- **Firebase:** a mature observation window would reduce uncertainty about old
+  cached clients, but the final plan accepted downtime and required immediate
+  revocation. The old key is deleted, signed-in DEV/PROD browser reads pass,
+  replacement usage is positive, and both deployed bundles reference only the
+  managed replacement. There is no safe or useful reason to restore the old
+  key for another window.
+- **Legacy Secret Manager:** passive T1 classification could only observe state
+  that no longer exists. All legacy containers and readers were intentionally
+  destroyed under exact-set plans. Running the old T1 block would therefore be
+  misleading, not conservative.
+- **Phase B:** the former reversible retention strategy was explicitly
+  superseded. Recovery and break-glass evidence passed before irreversible
+  deletion, so no delayed cleanup remains.
 
-Live IAM inspection then found ten unmanaged PromptVault accessors outside the
-Terraform state. The service account had zero `AccessSecretVersion` events in
-the preceding 30 days, so those ten bindings were removed directly and the
-resource-level legacy accessor count reached zero. Cloud Audit Log records
-`35/35` successful `DisableSecretVersion` operations between
-`2026-08-20T16:40:27.147626224Z` and
-`2026-08-20T16:41:14.034606179Z`. No version or container was destroyed by
-Phase A.
+## Later Follow-up
 
-The prior passive 72-hour legacy-read window was intentionally superseded by
-this accelerated reversible path and must not be cited as a completed gate.
-Two known Cloud Build P4SA project-level Secret Manager admin bindings remain
-separately tracked; the legacy versions are disabled, and their least-privilege
-cleanup is scheduled during the reversible soak with a connection canary.
-The broad admin count is exactly `2`; the removed custom Cloud Build accessor
-and removed technical-account admin both have live count `0`.
+No timed secret-migration gate remains. The following items are ordinary
+operations and must not be used to reopen the completed migration:
 
-## Superseded Deferred Work
+1. Monitor Google Cloud support case `#74312245` until the provider issues its
+   billing decision; respond with metadata and chronology only, never a key.
+2. Keep the existing API-key lifecycle and Gemini enablement alerts active.
+3. Treat the excluded App Check Terraform drift as a separate reviewed change
+   if it is ever intentionally reconciled.
+4. Re-run ordinary health, static-bundle, and scoped Terraform verification
+   after future relevant changes; do not recreate obsolete soak automations.
 
-The following table records the prior reversible strategy. Do not execute it;
-use the final cutover plan linked above.
+## Closure
 
-| Earliest gate | Required action | PASS condition | Why it is deferred |
-| --- | --- | --- | --- |
-| 2026-08-21 13:33 UTC | Close the Firebase 24-hour observation query. | Old-key request count `0`, replacement traffic positive, exhaustive query, DEV/PROD browser smokes remain healthy. | Recent old-key traffic proved cached clients still existed; deleting now could break sign-in or token refresh. |
-| After Firebase observation PASS | Remove the old Firebase key through reviewed Terraform and close the matching secret-scanning alert as revoked. | Exact old resource absent, replacement restrictions unchanged, browser smokes PASS, alert resolved. | Deletion before the observation gate is unnecessary availability risk. |
-| Daily through 2026-08-27 | Continue the disabled runtime-key soak. | Eight state snapshots, seven non-overlapping 24-hour intervals, replacement use positive, health/canary PASS, no re-enable or credential failures. | The disabled key is the only immediate rollback for a previously active credential. |
-| No earlier than 2026-08-27 16:06 UTC | Delete the previous runtime key. | All seven windows pass after the required logging lag. | Earlier deletion would remove the rollback before rare consumers are excluded. |
-| No earlier than 2026-08-27 16:41:14 UTC | Run legacy Phase B. | Seven complete Phase A intervals PASS; recovery, break-glass, health, IAM, and version-state evidence PASS; saved plan contains only obsolete container deletes. | Container deletion irreversibly deletes its versions. |
-| During the reversible soak | Reduce retained Cloud Build connection IAM to its exact secret-level dependency. | Connection remains complete, source-reference canary passes before and after, project-level Secret Manager admin count is zero, final plan is clean. | Requires separate Terraform adoption and an exact two-delete plan; it must not be mixed with container destruction. |
-| After every cleanup gate | Reconcile Terraform and documentation. | Clean full plans, full CI, current package/version/production attestations, no stale acceptance items. | Final closure must reflect live state rather than planned state. |
-
-## Superseded Safety Constraints
-
-These constraints belonged to the prior rollback strategy and are retained only
-as historical evidence.
-
-- Do not delete the legacy containers during Phase A.
-- Do not delete the previous runtime key before its complete seven-day gate.
-- Do not delete the old Firebase key before the mature 24-hour query passes.
-- Do not put secret values or secret-version payloads in Terraform state.
-- Do not combine unrelated App Check, provider, package, or native-secret
-  changes with either cleanup phase.
-- Do not treat an interrupted or shortened passive legacy-read window as a
-  72-hour PASS.
-
-## Superseded Closure Definition
-
-The active completion definition is in the final cutover plan linked above.
+All completion gates in the final cutover plan are satisfied. The historical
+timed-gate automation must not execute its old runtime, Firebase, legacy T1, or
+Phase B instructions against the final state.
