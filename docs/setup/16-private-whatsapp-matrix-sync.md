@@ -2,6 +2,10 @@
 
 This is the canonical IntexuraOS reference for connecting an external Matrix/mautrix-whatsapp bridge to the private WhatsApp ingest API.
 
+For incident repair, limited-timeline recovery, production deployment, and deterministic
+backfill, follow
+[the Private WhatsApp Matrix sync recovery plan](../plans/private-whatsapp-matrix-sync-recovery.md).
+
 ## Endpoint Changes
 
 Created:
