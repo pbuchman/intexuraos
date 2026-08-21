@@ -367,6 +367,62 @@ test('apply is idempotent, uses backfill batches, and drains media only after me
   assert.deepEqual(trace.slice(0, 3), [['post', 'backfill', 2], ['enqueue', 2], ['drain']]);
 });
 
+test('apply retries transient ingest failures with bounded backoff and stops on non-retryable failures', async () => {
+  const segment = {
+    name: 's0-s1',
+    events: [{ matrixEventId: '$one', message: { type: 'text' } }],
+  };
+  const delays = [];
+  let attempts = 0;
+  const result = await applyRecoverySegment(segment, {
+    postBatch: async (events) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('intexuraos_ingest_failed_502');
+      if (attempts === 2) throw new TypeError('fetch failed');
+      return { accepted: events.length, duplicates: 0, rejected: 0 };
+    },
+    enqueueMedia: async () => {},
+    drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+    waitBeforeRetry: async (delayMs) => delays.push(delayMs),
+  });
+
+  assert.equal(attempts, 3);
+  assert.deepEqual(delays, [1_000, 2_000]);
+  assert.equal(result.accepted, 1);
+
+  let nonRetryableAttempts = 0;
+  await assert.rejects(
+    applyRecoverySegment(segment, {
+      postBatch: async () => {
+        nonRetryableAttempts += 1;
+        throw new Error('intexuraos_ingest_failed_400');
+      },
+      enqueueMedia: async () => {},
+      drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+      waitBeforeRetry: async () => assert.fail('non-retryable failures must not wait'),
+    }),
+    /intexuraos_ingest_failed_400/
+  );
+  assert.equal(nonRetryableAttempts, 1);
+
+  const exhaustedDelays = [];
+  let exhaustedAttempts = 0;
+  await assert.rejects(
+    applyRecoverySegment(segment, {
+      postBatch: async () => {
+        exhaustedAttempts += 1;
+        throw new Error('intexuraos_ingest_failed_503');
+      },
+      enqueueMedia: async () => {},
+      drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+      waitBeforeRetry: async (delayMs) => exhaustedDelays.push(delayMs),
+    }),
+    /intexuraos_ingest_failed_503/
+  );
+  assert.equal(exhaustedAttempts, 5);
+  assert.deepEqual(exhaustedDelays, [1_000, 2_000, 4_000, 8_000]);
+});
+
 test('verification rejects file-backed, service-account, emulator, and wrong reader credentials', () => {
   const expected = 'wa-private-recovery-reader-dev@example.iam.gserviceaccount.com';
   const validAdc = { type: 'authorized_user' };
