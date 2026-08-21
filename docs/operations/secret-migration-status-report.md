@@ -26,7 +26,7 @@ dual-read, compatibility, or retained legacy-secret path.
 | Runtime service account | Old key `ecd947dfc08351f186efc8f23c04c10b2d3c482a` absent. Replacement key `4bf7371e272b2c67b6d0bd59cd52cae7daf18efc` remains. |
 | Cloud Build | Project-level Secret Manager admin bindings: `0`. Exact Google-managed OAuth-secret accessor: `1`. GitHub connection is `COMPLETE`. |
 | Direct LLM providers | Removed. Application inference uses OpenRouter. Subscription-authenticated Claude and Codex CLI code-task runners are the only exception. |
-| Gemini | Generative Language API disabled. The exposed Gemini key is absent. Security-change logging and alerting are enabled. |
+| Gemini | Generative Language API disabled. The exposed Gemini key is absent. Security-change logging and alerting are enabled. The project-scoped Gemini API emergency spend cap is enforced. |
 | DEV edge | Cloudflare Access protects the browser surface. Only the frozen, authenticated webhook allowlist bypasses Access. Home Dev serves a static build; Vite internals and source maps are not public. |
 | Deployment automation | Production deployment is manual-only. The legacy Home Dev webhook service is disabled and masked. |
 
@@ -61,13 +61,15 @@ was checked against an exact address/action allowlist before apply.
 ## Separate billing follow-up
 
 The security migration is not blocked by the Google billing dispute. The
-existing `20 PLN` budget is alert-only and is not a hard spending cap.
+existing `20 PLN` account budget remains alert-only. A separate
+`IntexuraOS Gemini emergency cap`, scoped to the `Gemini API Keys` project and
+the `Gemini API` service, is enforced.
 
-The support response for case `#74312245` has been prepared with the verified
-incident totals (`237.691246 PLN`, `1,068` calls) and remediation evidence, but
-delivery and any billing credit remain external Google-account actions. They
-must not be represented as completed by this migration report until Google
-confirms receipt and resolution.
+The concise reply for case `#74312245` has been prepared with the verified
+incident totals (`237.691246 PLN`, `1,068` calls) and remediation evidence.
+Per the account owner's instruction, the automation must not send it. Delivery
+and any billing credit remain owner-controlled Google-account actions and must
+not be represented as completed until Google confirms receipt and resolution.
 
 ## Terminal state
 
