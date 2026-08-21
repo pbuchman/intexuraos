@@ -414,6 +414,13 @@ export async function runSyncLoop(config, runtime) {
   for (;;) {
     try {
       await runSyncIteration(config, runtime);
+      if (
+        runtime.state === 'recovery_required' ||
+        runtime.state === 'waiting_for_matrix_access_token' ||
+        runtime.state === 'waiting_for_intexuraos_oidc_credentials'
+      ) {
+        await delay(config.retryDelayMs);
+      }
     } catch (error) {
       const safeError = sanitizeError(error);
       runtime.state = safeError === 'matrix_timeline_limited' ? 'recovery_required' : 'error';

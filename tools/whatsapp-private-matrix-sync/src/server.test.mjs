@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import http from 'node:http';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   backfillPrivateMedia,
@@ -1878,6 +1881,91 @@ test('runSyncIteration does not call Matrix or IntexuraOS while the recovery fen
 
   assert.equal(externalCall, false);
   assert.equal(runtime.state, 'recovery_required');
+});
+
+test('a fenced adapter yields to its health server while making no external calls', async () => {
+  const directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'whatsapp-sync-fence-'));
+  const accessTokenFile = path.join(directory, 'matrix-access-token');
+  const credentialFile = path.join(directory, 'private-sync.json');
+  const stateFile = path.join(directory, 'state.json');
+  const pendingMediaFile = path.join(directory, 'pending-media.json');
+  const maintenanceFenceFile = path.join(directory, 'recovery-required');
+  await Promise.all([
+    fsp.writeFile(accessTokenFile, 'matrix-token\n', { mode: 0o600 }),
+    fsp.writeFile(credentialFile, '{}\n', { mode: 0o600 }),
+    fsp.writeFile(stateFile, '{"nextBatch":"s0","roomContexts":{}}\n', { mode: 0o600 }),
+    fsp.writeFile(maintenanceFenceFile, '', { mode: 0o600 }),
+  ]);
+
+  const listener = http.createServer();
+  await new Promise((resolve, reject) => {
+    listener.once('error', reject);
+    listener.listen(0, '127.0.0.1', resolve);
+  });
+  const address = listener.address();
+  assert.notEqual(address, null);
+  assert.equal(typeof address, 'object');
+  const port = address.port;
+  await new Promise((resolve, reject) =>
+    listener.close((error) => (error === undefined ? resolve() : reject(error)))
+  );
+
+  let stderr = '';
+  const child = spawn(process.execPath, [fileURLToPath(new URL('./server.mjs', import.meta.url))], {
+    env: {
+      ...process.env,
+      PORT: String(port),
+      MATRIX_HOMESERVER_URL: 'http://127.0.0.1:1',
+      MATRIX_USER_ID: '@pbuchman:home-dev',
+      MATRIX_ACCESS_TOKEN_FILE: accessTokenFile,
+      INTEXURAOS_WHATSAPP_PRIVATE_EVENTS_URL: 'http://127.0.0.1:1/private/events',
+      INTEXURAOS_GOOGLE_APPLICATION_CREDENTIALS_FILE: credentialFile,
+      INTEXURAOS_SOURCE_ACCOUNT_ID: 'private-account',
+      SOURCE_WHATSAPP_PHONE_NUMBER: '48111222333',
+      WHATSAPP_SYNC_STATE_FILE: stateFile,
+      WHATSAPP_SYNC_PENDING_MEDIA_FILE: pendingMediaFile,
+      WHATSAPP_SYNC_MAINTENANCE_FENCE_FILE: maintenanceFenceFile,
+      WHATSAPP_SYNC_RETRY_DELAY_MS: '25',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString('utf8');
+  });
+
+  try {
+    const deadline = Date.now() + 2_000;
+    let response;
+    while (Date.now() < deadline) {
+      try {
+        response = await fetch(`http://127.0.0.1:${port}/health`, {
+          signal: AbortSignal.timeout(150),
+        });
+        break;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    }
+
+    assert.notEqual(response, undefined, stderr || 'health server was starved by the sync loop');
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), {
+      ok: false,
+      state: 'recovery_required',
+      homeserverUrl: 'http://127.0.0.1:1',
+      matrixUserId: '@pbuchman:home-dev',
+      ingestUrl: 'http://127.0.0.1:1/private/events',
+      sourceAccountId: 'private-account',
+      counters: {},
+    });
+    await assert.rejects(fsp.access(pendingMediaFile));
+    assert.equal(await fsp.readFile(stateFile, 'utf8'), '{"nextBatch":"s0","roomContexts":{}}\n');
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+      await once(child, 'exit');
+    }
+  }
 });
 
 test('runSyncIteration never posts or advances a limited timeline', async () => {
