@@ -185,6 +185,10 @@ const SERVICE_ENV_MAPPINGS = {
       process.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL ?? 'http://localhost:8099',
     INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN:
       process.env.INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN,
+    INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID:
+      process.env.INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID,
+    INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET:
+      process.env.INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET,
     INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC:
       process.env.INTEXURAOS_PUBSUB_WEBHOOK_PROCESS_TOPIC ?? 'whatsapp-webhook-process',
     INTEXURAOS_CONVERSATION_ASSISTANT_MODEL:
@@ -388,6 +392,5 @@ module.exports = {
     // Aggregates `/openapi.json` from every other service — register last so
     // upstream services have already been started by the time it boots.
     createServiceConfig('api-docs-hub', 8133),
-
   ],
 };

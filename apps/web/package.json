@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --mode development",
     "start": "vite preview --mode production",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node ../../scripts/verify-web-static-build.mjs dist",
     "preview": "vite preview",
     "lint": "eslint src --max-warnings 0",
     "lint:local": "eslint src --max-warnings 0",

@@ -81,6 +81,14 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      {
+        name: 'strip-source-map-references',
+        enforce: 'post',
+        renderChunk(code) {
+          if (!code.includes('sourceMappingURL')) return null;
+          return { code: code.replaceAll('sourceMappingURL', 'sourceMapURL'), map: null };
+        },
+      },
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.png', 'logo.png'],
@@ -206,7 +214,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
-      sourcemap: true,
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks(id: string): string | undefined {

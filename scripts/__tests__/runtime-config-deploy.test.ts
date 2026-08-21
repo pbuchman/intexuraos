@@ -1029,9 +1029,7 @@ describe('runtime configuration cutover', () => {
     expect(script).toContain('PROJECTION_OUTPUT_DIR');
     expect(script).toContain('CANDIDATE_RENDER_DIR');
     expect(script).not.toContain('SECRET_PACKAGE_RENDER_DIR:-');
-    expect(scriptsReadme).toMatch(
-      /must never be passed to\s+generic `secret-package render`/u
-    );
+    expect(scriptsReadme).toMatch(/must never be passed to\s+generic `secret-package render`/u);
     expect(runtimeOperations).toMatch(
       /must never be reused as the `--output-dir` of\s+generic `secret-package render`/u
     );

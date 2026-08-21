@@ -16,6 +16,8 @@ describe('config validation', () => {
   let savedMessageDigestServiceUrl: string | undefined;
   let savedMatrixOutboundAdapterUrl: string | undefined;
   let savedMatrixOutboundAdapterAuthToken: string | undefined;
+  let savedMatrixOutboundCfAccessClientId: string | undefined;
+  let savedMatrixOutboundCfAccessClientSecret: string | undefined;
   let savedOpenRouterAppApiKey: string | undefined;
   let savedConversationAssistantModel: string | undefined;
 
@@ -36,6 +38,10 @@ describe('config validation', () => {
     savedMatrixOutboundAdapterUrl = process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'];
     savedMatrixOutboundAdapterAuthToken =
       process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
+    savedMatrixOutboundCfAccessClientId =
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'];
+    savedMatrixOutboundCfAccessClientSecret =
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'];
     savedOpenRouterAppApiKey = process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'];
     process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = 'platform-openrouter-key';
     savedConversationAssistantModel =
@@ -106,6 +112,18 @@ describe('config validation', () => {
     } else {
       delete process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'];
     }
+    if (savedMatrixOutboundCfAccessClientId !== undefined) {
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'] =
+        savedMatrixOutboundCfAccessClientId;
+    } else {
+      delete process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'];
+    }
+    if (savedMatrixOutboundCfAccessClientSecret !== undefined) {
+      process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'] =
+        savedMatrixOutboundCfAccessClientSecret;
+    } else {
+      delete process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'];
+    }
     if (savedOpenRouterAppApiKey !== undefined) {
       process.env['INTEXURAOS_OPENROUTER_APP_API_KEY'] = savedOpenRouterAppApiKey;
     } else {
@@ -156,6 +174,30 @@ describe('config validation', () => {
 
     delete process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED'];
     delete process.env['INTEXURAOS_MATRIX_CORPUS_EVALUATOR_USER_ID'];
+  });
+
+  it('requires Cloudflare service credentials only for the HTTPS production adapter', async () => {
+    const { validateConfigEnv } = await import('../config.js');
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] =
+      'https://dev.intexuraos.cloud/api/matrix-outbound';
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-token';
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'];
+    delete process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'];
+
+    expect(validateConfigEnv()).toEqual(
+      expect.arrayContaining([
+        'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID',
+        'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET',
+      ])
+    );
+
+    process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] = 'http://127.0.0.1:8099';
+    expect(validateConfigEnv()).not.toEqual(
+      expect.arrayContaining([
+        'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID',
+        'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET',
+      ])
+    );
   });
 
   it('returns empty array when all required vars present', async () => {

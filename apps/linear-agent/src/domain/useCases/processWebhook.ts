@@ -12,7 +12,9 @@ import type { LinearConnectionRepository, LinearIssueRepository, LinearCommentRe
 import type { LinearWebhookUpdatedFrom } from '../webhookTypes.js';
 import { WEBHOOK_TYPES } from '../webhookTypes.js';
 import type { WebhookAction } from '../webhookTypes.js';
+import type { SyncedLinearIssue } from '../models.js';
 import { isIssueWebhookData, isCommentWebhookData } from '../webhookTypeGuards.js';
+import type { CommentWebhookData, IssueWebhookData } from '../webhookTypeGuards.js';
 import { syncSingleIssue, shouldTriggerCodeTask, triggerCodeTaskFromAssignment } from '../index.js';
 import { syncCommentFromWebhook } from './syncCommentFromWebhook.js';
 
@@ -43,6 +45,82 @@ export type ProcessWebhookResult =
   | { outcome: 'unauthorized'; message: string }
   | { outcome: 'error'; message: string };
 
+type AuthenticatedWebhook =
+  | { outcome: 'authenticated'; kind: 'issue'; teamId: string; data: IssueWebhookData }
+  | {
+      outcome: 'authenticated';
+      kind: 'comment';
+      teamId: string;
+      issue: SyncedLinearIssue;
+      data: CommentWebhookData;
+    };
+
+async function authenticateWebhook(
+  data: unknown,
+  rawBody: string,
+  deps: ProcessWebhookDeps
+): Promise<AuthenticatedWebhook | ProcessWebhookResult> {
+  const { connectionRepository, issueRepository, validateSignature, logger } = deps;
+
+  let authentication:
+    | { kind: 'issue'; teamId: string; data: IssueWebhookData }
+    | { kind: 'comment'; teamId: string; issue: SyncedLinearIssue; data: CommentWebhookData };
+
+  if (isIssueWebhookData(data)) {
+    const teamId = data.team.id;
+    if (typeof teamId !== 'string' || teamId === '') {
+      logger.warn({ teamId }, 'Cannot authenticate Linear webhook without a valid team ID');
+      return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
+    }
+    authentication = { kind: 'issue', teamId, data };
+  } else if (isCommentWebhookData(data)) {
+    if (data.issueId === '') {
+      logger.warn('Cannot authenticate Linear comment webhook without an issue ID');
+      return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
+    }
+
+    const issueResult = await issueRepository.findById(data.issueId);
+    if (!issueResult.ok) {
+      logger.error({ error: issueResult.error, issueId: data.issueId }, 'Failed to lookup issue for webhook authentication');
+      return { outcome: 'error', message: 'Failed to lookup issue' };
+    }
+    if (issueResult.value === null || issueResult.value.teamId === '') {
+      logger.warn({ issueId: data.issueId }, 'Cannot authenticate Linear webhook without a configured issue team');
+      return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
+    }
+    authentication = {
+      kind: 'comment',
+      teamId: issueResult.value.teamId,
+      issue: issueResult.value,
+      data,
+    };
+  } else {
+    logger.warn('Cannot authenticate Linear webhook with an unknown data structure');
+    return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
+  }
+
+  const secretResult = await connectionRepository.findWebhookSecretByTeamId(authentication.teamId);
+  if (!secretResult.ok) {
+    logger.error(
+      { error: secretResult.error, teamId: authentication.teamId },
+      'Failed to lookup Linear webhook secret'
+    );
+    return { outcome: 'error', message: 'Failed to lookup connection' };
+  }
+  if (secretResult.value === null) {
+    logger.warn({ teamId: authentication.teamId }, 'Linear webhook secret is not configured');
+    return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
+  }
+
+  const signatureResult = validateSignature(rawBody, secretResult.value.webhookSecret);
+  if (!signatureResult.ok) {
+    logger.warn({ error: signatureResult.error }, 'Linear webhook signature validation failed');
+    return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
+  }
+
+  return { outcome: 'authenticated', ...authentication };
+}
+
 /**
  * Process a Linear webhook event.
  *
@@ -53,33 +131,29 @@ export async function processWebhook(
   payload: WebhookPayload,
   deps: ProcessWebhookDeps
 ): Promise<ProcessWebhookResult> {
-  const { connectionRepository, issueRepository, commentRepository, codeAgentClient, validateSignature, logger } = deps;
+  const { connectionRepository, issueRepository, commentRepository, codeAgentClient, logger } = deps;
   const { action, type, data, updatedFrom, webhookTimestamp, webhookId, rawBody } = payload;
 
-  // 1. For non-Issue and non-Comment events, skip processing early
+  const authentication = await authenticateWebhook(data, rawBody, deps);
+  if (authentication.outcome !== 'authenticated') {
+    return authentication;
+  }
+
+  // Ignore unsupported events only after their HMAC has been verified.
   if (type !== WEBHOOK_TYPES.ISSUE && type !== WEBHOOK_TYPES.COMMENT) {
     logger.info({ type }, 'Ignoring non-Issue/non-Comment webhook event');
     return { outcome: 'ignored', message: 'Ignored' };
   }
 
-  // 2. Process based on event type
-  if (isIssueWebhookData(data)) {
+  // Process based on the authenticated data shape.
+  if (authentication.kind === 'issue') {
     // === ISSUE EVENT ===
+    const data = authentication.data;
 
-    // Validate team.id first (needed for connection lookup)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, team may not have correct shape at runtime
-    const teamId = data.team?.id;
-    if (typeof teamId !== 'string' || teamId === '') {
-      logger.warn({ type, teamId }, 'Missing or invalid team.id in issue webhook data');
-      return { outcome: 'ignored', message: 'Invalid data structure' };
-    }
+    // Reuse the team ID that was verified before signature validation.
+    const teamId = authentication.teamId;
 
-    // Look up ALL user connections AND webhook secret by team ID concurrently
-    // (any user's secret works — they share the same Linear webhook)
-    const [connectionResult, secretResult] = await Promise.all([
-      connectionRepository.findUserIdsByTeamId(teamId),
-      connectionRepository.findWebhookSecretByTeamId(teamId),
-    ]);
+    const connectionResult = await connectionRepository.findUserIdsByTeamId(teamId);
 
     if (!connectionResult.ok) {
       logger.error({ error: connectionResult.error, teamId }, 'Failed to lookup connections');
@@ -90,24 +164,6 @@ export async function processWebhook(
     if (userIds.length === 0) {
       logger.warn({ teamId }, 'No connected users found for team');
       return { outcome: 'ignored', message: 'Team not connected' };
-    }
-
-    if (!secretResult.ok) {
-      logger.error({ error: secretResult.error, teamId }, 'Failed to lookup webhook secret');
-      return { outcome: 'error', message: 'Failed to lookup connection' };
-    }
-
-    if (secretResult.value === null) {
-      logger.warn({ teamId }, 'Webhook secret not configured for team');
-      return { outcome: 'ignored', message: 'Webhook not configured' };
-    }
-
-    const { webhookSecret } = secretResult.value;
-
-    const signatureResult = validateSignature(rawBody, webhookSecret);
-    if (!signatureResult.ok) {
-      logger.warn({ error: signatureResult.error }, 'Linear webhook signature validation failed');
-      return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
     }
 
     // Validate required fields after signature validation
@@ -225,63 +281,18 @@ export async function processWebhook(
     }
     /* v8 ignore stop @preserve */
     return result;
-  } else if (isCommentWebhookData(data)) {
+  } else {
     // === COMMENT EVENT ===
-
-    // Validate required fields
-    if (typeof data.issueId !== 'string' || data.issueId === '') {
-      logger.warn({ type, issueId: data.issueId }, 'Missing or invalid issueId in comment webhook data');
-      return { outcome: 'ignored', message: 'Invalid data structure' };
-    }
-
-    // Look up issue to get teamId for signature validation
-    const issueResult = await issueRepository.findById(data.issueId);
-    if (!issueResult.ok) {
-      logger.error({ error: issueResult.error, issueId: data.issueId }, 'Failed to lookup issue for comment');
-      return { outcome: 'error', message: 'Failed to lookup issue' };
-    }
-
-    const issue = issueResult.value;
-    if (!issue) {
-      logger.warn({ _skipSentry: true, issueId: data.issueId }, 'Issue not found for comment');
-      return { outcome: 'ignored', message: 'Issue not found' };
-    }
-
-    // Validate webhook signature using teamId from the issue
-    /* v8 ignore start -- ts-type: cannot trigger empty teamId in tests; legacy issues synced before teamId field added always have teamId in test fixtures @preserve */
-    if (issue.teamId === '') {
-      // Issues synced before teamId was added have empty string — cannot validate signature
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, id may be missing at runtime
-      logger.warn({ issueId: data.issueId, commentId: data.id ?? 'unknown' }, 'Comment webhook skipped: issue has no teamId for signature validation');
-      return { outcome: 'ignored', message: 'Webhook not configured' };
-    }
-    /* v8 ignore stop @preserve */
-
-    const secretResult = await connectionRepository.findWebhookSecretByTeamId(issue.teamId);
-    if (!secretResult.ok) {
-      logger.error({ error: secretResult.error, teamId: issue.teamId }, 'Failed to lookup webhook secret for comment');
-      return { outcome: 'error', message: 'Failed to lookup connection' };
-    }
-
-    if (secretResult.value === null) {
-      logger.warn({ teamId: issue.teamId }, 'Webhook secret not configured for comment');
-      return { outcome: 'ignored', message: 'Webhook not configured' };
-    }
-
-    const { webhookSecret } = secretResult.value;
-    const signatureResult = validateSignature(rawBody, webhookSecret);
-    if (!signatureResult.ok) {
-      logger.warn({ error: signatureResult.error }, 'Comment webhook signature validation failed');
-      return { outcome: 'unauthorized', message: 'Invalid webhook signature' };
-    }
+    const commentData = authentication.data;
+    const issue = authentication.issue;
 
     // Find all users who have this issue synced
-    const userIdsResult = await issueRepository.findUserIdsByIssueId(data.issueId);
+    const userIdsResult = await issueRepository.findUserIdsByIssueId(commentData.issueId);
     const userIds = userIdsResult.ok ? userIdsResult.value : [];
     const commentUserId = userIds[0] ?? issue.userId;
 
     if (!userIdsResult.ok) {
-      logger.warn({ error: userIdsResult.error, issueId: data.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
+      logger.warn({ error: userIdsResult.error, issueId: commentData.issueId }, 'Failed to find users by issue ID, falling back to issue.userId');
     }
 
     // Process Comment webhook
@@ -292,18 +303,18 @@ export async function processWebhook(
       type,
       data: {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
-        id: data.id ?? '',
-        issueId: data.issueId,
+        id: commentData.id ?? '',
+        issueId: commentData.issueId,
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
-        issueIdentifier: data.issueIdentifier ?? '',
+        issueIdentifier: commentData.issueIdentifier ?? '',
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
-        user: data.user ?? { id: '', name: '' },
+        user: commentData.user ?? { id: '', name: '' },
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
-        body: data.body ?? '',
+        body: commentData.body ?? '',
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
-        createdAt: data.createdAt ?? commentNow,
+        createdAt: commentData.createdAt ?? commentNow,
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, fields may be missing at runtime
-        updatedAt: data.updatedAt ?? commentNow,
+        updatedAt: commentData.updatedAt ?? commentNow,
       },
       webhookTimestamp,
       webhookId,
@@ -316,12 +327,12 @@ export async function processWebhook(
 
     if (!syncResult.ok) {
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, id may be missing at runtime
-      logger.error({ error: syncResult.error, commentId: data.id ?? 'unknown', userId: commentUserId }, 'Failed to sync comment from webhook');
+      logger.error({ error: syncResult.error, commentId: commentData.id ?? 'unknown', userId: commentUserId }, 'Failed to sync comment from webhook');
       return { outcome: 'error', message: 'Failed to sync comment' };
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- Type guard is lenient, id may be missing at runtime
-    logger.info({ action: syncResult.value.action, commentId: data.id ?? 'unknown', issueId: data.issueId, userId: commentUserId }, 'Comment synced from webhook');
+    logger.info({ action: syncResult.value.action, commentId: commentData.id ?? 'unknown', issueId: commentData.issueId, userId: commentUserId }, 'Comment synced from webhook');
 
     return {
       outcome: 'processed',
@@ -329,7 +340,4 @@ export async function processWebhook(
       commentId: syncResult.value.commentId,
     };
   }
-
-  logger.warn({ type }, 'Unknown webhook data structure');
-  return { outcome: 'ignored', message: 'Unknown data structure' };
 }

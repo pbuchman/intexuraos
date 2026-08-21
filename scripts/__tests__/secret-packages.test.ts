@@ -143,7 +143,7 @@ describe('secret package manifest', () => {
         'secretId',
         'stableVersion',
       ]);
-      expect(definition.stableVersion).toBe(3);
+      expect(definition.stableVersion).toBe(environment === 'dev' ? 3 : 4);
       expect(definition.envNames).toEqual([...definition.envNames].sort());
       expect(new Set(definition.envNames).size).toBe(definition.envNames.length);
       expect(definition.envNames).toContain('INTEXURAOS_FIREBASE_API_KEY');

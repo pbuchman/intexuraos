@@ -45,6 +45,13 @@ const cloudFunctionVariablesPath = resolve(
   'variables.tf'
 );
 const monitoringTerraformPath = resolve(repoRoot, 'terraform', 'modules', 'monitoring', 'main.tf');
+const geminiSecurityTerraformPath = resolve(
+  repoRoot,
+  'terraform',
+  'environments',
+  'dev',
+  'gemini-security.tf'
+);
 const hetznerBootstrapPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'bootstrap.tf');
 const hetznerVariablesPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'variables.tf');
 const hetznerOutputsPath = resolve(repoRoot, 'terraform', 'hetzner-prod', 'outputs.tf');
@@ -88,6 +95,7 @@ const devTfvarsExample = readFileSync(devTfvarsExamplePath, 'utf8');
 const cloudFunctionTerraform = readFileSync(cloudFunctionTerraformPath, 'utf8');
 const cloudFunctionVariables = readFileSync(cloudFunctionVariablesPath, 'utf8');
 const monitoringTerraform = readFileSync(monitoringTerraformPath, 'utf8');
+const geminiSecurityTerraform = readFileSync(geminiSecurityTerraformPath, 'utf8');
 const hetznerBootstrap = readFileSync(hetznerBootstrapPath, 'utf8');
 const hetznerVariables = readFileSync(hetznerVariablesPath, 'utf8');
 const hetznerOutputs = readFileSync(hetznerOutputsPath, 'utf8');
@@ -648,6 +656,29 @@ describe('versioned runtime configuration Terraform cutover', () => {
       'metric.type=\\"logging.googleapis.com/user/${google_logging_metric.gemini_security_changes.name}\\"'
     );
     expect(monitoringTerraform).toContain('threshold_value = 0');
+  });
+
+  it('monitors Gemini security changes in the affected Gemini project', () => {
+    expect(geminiSecurityTerraform).toMatch(/alias\s*=\s*"gemini_security"/u);
+    expect(geminiSecurityTerraform).toMatch(/default\s*=\s*"gen-lang-client-0280571524"/u);
+    expect(geminiSecurityTerraform).toContain(
+      'resource "google_logging_metric" "affected_gemini_security_changes" {'
+    );
+    expect(geminiSecurityTerraform).toContain(
+      'resource "google_project_service" "affected_gemini_security_apis" {'
+    );
+    expect(geminiSecurityTerraform).toContain('"logging.googleapis.com"');
+    expect(geminiSecurityTerraform).toContain('"monitoring.googleapis.com"');
+    expect(geminiSecurityTerraform).toContain('provider = google.gemini_security');
+    expect(geminiSecurityTerraform).toContain('generativelanguage.googleapis.com');
+    expect(geminiSecurityTerraform).toContain('CreateKey|UndeleteKey|UpdateKey');
+    expect(geminiSecurityTerraform).toContain(
+      'resource "google_monitoring_alert_policy" "affected_gemini_security_changes" {'
+    );
+    expect(geminiSecurityTerraform).toContain(
+      'resource "google_monitoring_notification_channel" "affected_gemini_security_email" {'
+    );
+    expect(geminiSecurityTerraform).toContain('enabled      = true');
   });
 
   it('does not grant home-dev orchestrator direct access to a single GitHub App secret', () => {

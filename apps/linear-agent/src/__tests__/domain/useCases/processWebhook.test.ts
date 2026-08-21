@@ -389,11 +389,13 @@ describe('processWebhook', () => {
 
   describe('ignored types', () => {
     it('ignores non-Issue and non-Comment webhook types', async () => {
+      connectionRepo.setWebhookSecretForTeam('team-1', { userId: 'user-1', webhookSecret });
+
       const result = await processWebhook(
         {
           action: 'create',
           type: 'Cycle',
-          data: {},
+          data: createIssuePayload(),
           webhookTimestamp: Date.now(),
           webhookId: 'webhook-1',
           rawBody,
@@ -413,11 +415,13 @@ describe('processWebhook', () => {
     });
 
     it('ignores Project type webhooks', async () => {
+      connectionRepo.setWebhookSecretForTeam('team-1', { userId: 'user-1', webhookSecret });
+
       const result = await processWebhook(
         {
           action: 'create',
           type: 'Project',
-          data: { id: 'proj-1', name: 'Test Project' },
+          data: createIssuePayload(),
           webhookTimestamp: Date.now(),
           webhookId: 'webhook-1',
           rawBody,
@@ -465,7 +469,7 @@ describe('processWebhook', () => {
       expect(result.message).toBe('Team not connected');
     });
 
-    it('returns error when webhook secret is not configured', async () => {
+    it('returns unauthorized when webhook secret is not configured', async () => {
       connectionRepo.setUserIdsForTeam('team-1', ['user-1']);
       connectionRepo.setWebhookSecretForTeam('team-1', null);
 
@@ -488,8 +492,8 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Webhook not configured');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
     });
 
     it('returns unauthorized when signature validation fails', async () => {
@@ -604,7 +608,7 @@ describe('processWebhook', () => {
   });
 
   describe('comment processing', () => {
-    it('returns ignored when issue is not found', async () => {
+    it('returns unauthorized when issue is not found', async () => {
       const result = await processWebhook(
         {
           action: 'create',
@@ -624,11 +628,11 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Issue not found');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
     });
 
-    it('skips Sentry capture when issue is not found for comment', async () => {
+    it('rejects before domain processing when issue is not found for comment', async () => {
       const capturingLogger = createCapturingLogger();
 
       const result = await processWebhook(
@@ -650,15 +654,16 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Issue not found');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
       const warnCalls = capturingLogger.calls.filter((c) => c.level === 'warn');
-      const issueNotFoundLog = warnCalls.find((c) => c.message === 'Issue not found for comment');
+      const issueNotFoundLog = warnCalls.find(
+        (c) => c.message === 'Cannot authenticate Linear webhook without a configured issue team'
+      );
       expect(issueNotFoundLog).toBeDefined();
-      expect(issueNotFoundLog?.context?.['_skipSentry']).toBe(true);
     });
 
-    it('returns ignored when issue has no teamId', async () => {
+    it('returns unauthorized when issue has no teamId', async () => {
       const issue = createSyncedIssue();
       issue.teamId = '';
       issueRepo.setIssue(issue);
@@ -682,8 +687,8 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Webhook not configured');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
     });
 
     it('returns unauthorized when signature validation fails', async () => {
@@ -800,7 +805,7 @@ describe('processWebhook', () => {
   });
 
   describe('validation branches', () => {
-    it('returns ignored when team.id is missing', async () => {
+    it('returns unauthorized when team.id is missing', async () => {
       const result = await processWebhook(
         {
           action: 'create',
@@ -825,8 +830,8 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Invalid data structure');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
     });
 
     it('returns ignored when required fields are missing', async () => {
@@ -1104,7 +1109,7 @@ describe('processWebhook', () => {
       expect((result as { message: string }).message).toBe('Failed to lookup issue');
     });
 
-    it('returns ignored when comment issueId is empty string', async () => {
+    it('returns unauthorized when comment issueId is empty string', async () => {
       const result = await processWebhook(
         {
           action: 'create',
@@ -1127,8 +1132,8 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Invalid data structure');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
     });
 
     it('returns error when webhook secret lookup fails for comment', async () => {
@@ -1191,7 +1196,7 @@ describe('processWebhook', () => {
   });
 
   describe('unknown data structure', () => {
-    it('ignores webhook with unknown data structure', async () => {
+    it('rejects webhook with unknown data structure', async () => {
       const result = await processWebhook(
         {
           action: 'create',
@@ -1211,8 +1216,8 @@ describe('processWebhook', () => {
         }
       );
 
-      expectIgnored(result);
-      expect(result.message).toBe('Unknown data structure');
+      expectUnauthorized(result);
+      expect(result.message).toBe('Invalid webhook signature');
     });
   });
 });

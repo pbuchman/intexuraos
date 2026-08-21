@@ -10,6 +10,8 @@ import type {
 interface MatrixOutboundAdapterClientConfig {
   baseUrl: string;
   authToken: string;
+  cloudflareAccessClientId?: string | undefined;
+  cloudflareAccessClientSecret?: string | undefined;
   fetchImpl?: typeof fetch;
 }
 
@@ -29,7 +31,31 @@ function joinPath(baseUrl: string, path: string): string {
 }
 
 function hasConfig(config: MatrixOutboundAdapterClientConfig): boolean {
-  return config.baseUrl !== '' && config.authToken !== '';
+  if (config.baseUrl === '' || config.authToken === '') return false;
+  if (!config.baseUrl.startsWith('https://')) return true;
+  return (
+    config.cloudflareAccessClientId !== undefined &&
+    config.cloudflareAccessClientId !== '' &&
+    config.cloudflareAccessClientSecret !== undefined &&
+    config.cloudflareAccessClientSecret !== ''
+  );
+}
+
+function buildHeaders(
+  config: MatrixOutboundAdapterClientConfig,
+  additionalHeaders: Record<string, string> = {}
+): Record<string, string> {
+  return {
+    authorization: `Bearer ${config.authToken}`,
+    ...(config.cloudflareAccessClientId !== undefined &&
+    config.cloudflareAccessClientSecret !== undefined
+      ? {
+          'CF-Access-Client-Id': config.cloudflareAccessClientId,
+          'CF-Access-Client-Secret': config.cloudflareAccessClientSecret,
+        }
+      : {}),
+    ...additionalHeaders,
+  };
 }
 
 function getConfigurationErrorMessage(): string {
@@ -68,9 +94,7 @@ export function createMatrixOutboundAdapterClient(
           ),
           {
             method: 'GET',
-            headers: {
-              authorization: `Bearer ${config.authToken}`,
-            },
+            headers: buildHeaders(config),
           }
         );
         const body = (await parseJsonResponse(response)) as MatrixAdapterReadinessResponse | null;
@@ -118,10 +142,7 @@ export function createMatrixOutboundAdapterClient(
           joinPath(config.baseUrl, '/internal/matrix/outbound/messages'),
           {
             method: 'POST',
-            headers: {
-              authorization: `Bearer ${config.authToken}`,
-              'content-type': 'application/json',
-            },
+            headers: buildHeaders(config, { 'content-type': 'application/json' }),
             body: JSON.stringify({
               sourceAccountId: input.sourceAccountId,
               target: input.target,

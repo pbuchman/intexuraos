@@ -88,11 +88,7 @@ export class StatusUpdateClient {
     const maxAttempts = this.retryDelaysMs.length + 1;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const outcome = await this.deliver(
-        rawBody,
-        payload.webhookUrl,
-        payload.webhookSecret
-      );
+      const outcome = await this.deliver(rawBody, payload.webhookUrl, payload.webhookSecret);
 
       if (outcome.ok) {
         if (attempt > 0) {
@@ -155,11 +151,7 @@ export class StatusUpdateClient {
       .update(`${String(timestamp)}.${rawBody}`)
       .digest('hex');
 
-    const url = buildTaskCallbackUrl(
-      webhookUrl,
-      this.codeAgentUrl,
-      '/internal/code-tasks/status'
-    );
+    const url = buildTaskCallbackUrl(webhookUrl, this.codeAgentUrl, '/internal/code-tasks/status');
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {

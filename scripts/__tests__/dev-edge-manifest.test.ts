@@ -29,6 +29,7 @@ describe('DEV edge manifest', () => {
       browserIdentity: string;
       host: string;
       machineRoutes: { guard: string; method: string; path: string }[];
+      serviceRoutes: { guard: string; pathPrefix: string; port: number }[];
       schemaVersion: number;
     };
 
@@ -41,6 +42,13 @@ describe('DEV edge manifest', () => {
     for (const route of manifest.machineRoutes) {
       expect(route.path).not.toMatch(/[{}*]/u);
     }
+    expect(manifest.serviceRoutes).toEqual([
+      {
+        guard: 'cloudflare-service-auth-and-matrix-bearer',
+        pathPrefix: '/api/matrix-outbound',
+        port: 8099,
+      },
+    ]);
   });
 
   it('generates a static, redacted Caddy origin with method gates and no Vite/webhook deployer', () => {
@@ -56,6 +64,9 @@ describe('DEV edge manifest', () => {
     expect(output).toContain('format json');
     expect(output).not.toContain('localhost:3000');
     expect(output).not.toContain('localhost:9000');
+    expect(output).toContain(
+      'handle_path /api/matrix-outbound/* {\n    reverse_proxy 127.0.0.1:8099\n  }'
+    );
     for (const [method, path] of EXPECTED_MACHINE_ROUTES) {
       expect(output).toContain(`method ${method}`);
       expect(output).toContain(`path ${path}`);

@@ -87,7 +87,19 @@ describe('final secret-package integrations', () => {
       'INTEXURAOS_SPEECHMATICS_APP_API_KEY',
     ]);
     expect(manifest.packages.dev?.envNames).toHaveLength(22);
-    expect(manifest.packages.prod?.envNames).toHaveLength(19);
+    expect(manifest.packages.prod?.envNames).toHaveLength(21);
+    expect(manifest.packages.prod?.envNames).toContain(
+      'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'
+    );
+    expect(manifest.packages.prod?.envNames).toContain(
+      'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'
+    );
+    expect(manifest.packages.dev?.envNames).not.toContain(
+      'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'
+    );
+    expect(manifest.packages.dev?.envNames).not.toContain(
+      'INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'
+    );
     expect(manifest.packages.dev?.files).toEqual(['githubAppPrivateKeyPemBase64']);
     expect(manifest.packages.prod?.files).toEqual([
       'cloudflareDnsApiTokenBase64',

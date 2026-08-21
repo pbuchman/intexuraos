@@ -26,15 +26,76 @@
   ],
   "host": "dev.intexuraos.cloud",
   "machineRoutes": [
-    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/webhooks/task-complete", "port": 8128, "stripPrefix": "/api/code" },
-    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/logs", "port": 8128, "stripPrefix": "/api/code" },
-    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/turn-metrics", "port": 8128, "stripPrefix": "/api/code" },
-    { "guard": "per-task-hmac-timestamp", "method": "POST", "path": "/api/code/internal/webhooks/task-event", "port": 8128, "stripPrefix": "/api/code" },
-    { "guard": "per-task-hmac-timestamp-internal-auth", "method": "POST", "path": "/api/code/internal/webhooks/compliance-report", "port": 8128, "stripPrefix": "/api/code" },
-    { "guard": "task-or-orchestrator-hmac", "method": "PATCH", "path": "/api/code/internal/code-tasks/status", "port": 8128, "stripPrefix": "/api/code" },
-    { "guard": "linear-signature", "method": "POST", "path": "/api/linear/webhooks", "port": 8126, "stripPrefix": "/api/linear" },
-    { "guard": "mobile-signature", "method": "POST", "path": "/api/notifications/webhooks", "port": 8114, "stripPrefix": "/api/notifications" },
-    { "guard": "sentry-hook-signature", "method": "POST", "path": "/api/code/webhooks/sentry", "port": 8128, "stripPrefix": "/api/code" }
+    {
+      "guard": "per-task-hmac-timestamp",
+      "method": "POST",
+      "path": "/api/code/internal/webhooks/task-complete",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    },
+    {
+      "guard": "per-task-hmac-timestamp",
+      "method": "POST",
+      "path": "/api/code/internal/logs",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    },
+    {
+      "guard": "per-task-hmac-timestamp",
+      "method": "POST",
+      "path": "/api/code/internal/turn-metrics",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    },
+    {
+      "guard": "per-task-hmac-timestamp",
+      "method": "POST",
+      "path": "/api/code/internal/webhooks/task-event",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    },
+    {
+      "guard": "per-task-hmac-timestamp-internal-auth",
+      "method": "POST",
+      "path": "/api/code/internal/webhooks/compliance-report",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    },
+    {
+      "guard": "task-or-orchestrator-hmac",
+      "method": "PATCH",
+      "path": "/api/code/internal/code-tasks/status",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    },
+    {
+      "guard": "linear-signature",
+      "method": "POST",
+      "path": "/api/linear/webhooks",
+      "port": 8126,
+      "stripPrefix": "/api/linear"
+    },
+    {
+      "guard": "mobile-signature",
+      "method": "POST",
+      "path": "/api/notifications/webhooks",
+      "port": 8114,
+      "stripPrefix": "/api/notifications"
+    },
+    {
+      "guard": "sentry-hook-signature",
+      "method": "POST",
+      "path": "/api/code/webhooks/sentry",
+      "port": 8128,
+      "stripPrefix": "/api/code"
+    }
+  ],
+  "serviceRoutes": [
+    {
+      "guard": "cloudflare-service-auth-and-matrix-bearer",
+      "pathPrefix": "/api/matrix-outbound",
+      "port": 8099
+    }
   ],
   "schemaVersion": 1,
   "staticRoot": "/home/pbuchman/deploy/intexuraos/apps/web/dist"
