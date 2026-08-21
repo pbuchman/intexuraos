@@ -12,6 +12,10 @@ export interface NormalizedSentryIssueEvent {
   issueUrl: string;
   status: string | undefined;
   eventId: string | undefined;
+  sourceEnvironment?: string;
+  sourceTaskId?: string;
+  sourceDispatchAttemptId?: string;
+  sourceTraceId?: string;
 }
 
 export type SentryIssueEventParseError =
@@ -34,7 +38,8 @@ export interface SentryIssueTaskContext {
 export interface SentryIssueEventRecord {
   dedupeKey: string;
   transitionKey: string;
-  recordType: 'transition' | 'issue';
+  recordType: 'transition' | 'issue' | 'correlation';
+  correlationKey?: string | undefined;
   state: SentryTaskReservationState;
   organizationSlug: string;
   projectSlug: string;
@@ -78,6 +83,8 @@ export type AcquireSentryTaskReservationResult =
     kind: 'acquired';
     transitionKey: string;
     issueKey: string;
+    reservationKey?: string | undefined;
+    idempotencyKey?: string | undefined;
     leaseToken: string;
     codeTaskId: string;
     linearIssueId?: string | undefined;
@@ -94,6 +101,7 @@ export type AcquireSentryTaskReservationResult =
 export interface CompleteSentryTaskReservationInput {
   transitionKey: string;
   issueKey: string;
+  reservationKey?: string | undefined;
   leaseToken: string;
   codeTaskId: string;
   linearIssueId?: string | undefined;
@@ -102,6 +110,7 @@ export interface CompleteSentryTaskReservationInput {
 export interface CheckpointSentryLinearIssueInput {
   transitionKey: string;
   issueKey: string;
+  reservationKey?: string | undefined;
   leaseToken: string;
   linearIssueId: string;
 }
@@ -109,6 +118,7 @@ export interface CheckpointSentryLinearIssueInput {
 export interface FailSentryTaskReservationInput {
   transitionKey: string;
   issueKey: string;
+  reservationKey?: string | undefined;
   leaseToken: string;
   reason: string;
   codeTaskId?: string | undefined;

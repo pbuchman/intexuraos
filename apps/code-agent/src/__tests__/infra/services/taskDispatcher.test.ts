@@ -574,6 +574,7 @@ describe('taskDispatcherImpl', () => {
 
       const result = await service.dispatch({
         taskId: 'task-123',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
         prompt: 'Test',
         systemPromptHash: 'abc123',
         repository: 'test/repo',
@@ -590,6 +591,15 @@ describe('taskDispatcherImpl', () => {
       if (!result.ok) {
         expect(result.error.code).toBe('worker_unavailable');
       }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000002',
+          reason: 'Worker overloaded',
+          _skipSentry: true,
+        }),
+        'Worker rejected task',
+      );
     });
 
     it.each([500, 501, 599])(
@@ -777,6 +787,7 @@ describe('taskDispatcherImpl', () => {
 
       const result = await service.dispatch({
         taskId: 'task-123',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
         prompt: 'Test',
         systemPromptHash: 'abc123',
         repository: 'test/repo',
@@ -795,6 +806,14 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.code).toBe('worker_unavailable');
         expect(result.error.message).toContain('all rejected or busy');
       }
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000003',
+          _skipSentry: true,
+        }),
+        'Failed to sign dispatch request',
+      );
     });
 
     it('covers 503 error handling code path (Response with status 503)', async () => {
@@ -817,6 +836,7 @@ describe('taskDispatcherImpl', () => {
 
       const result = await service.dispatch({
         taskId: 'task-123',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000004',
         prompt: 'Test',
         systemPromptHash: 'abc123',
         repository: 'test/repo',
@@ -833,6 +853,15 @@ describe('taskDispatcherImpl', () => {
       if (result.ok) {
         expect(result.value.workerLocation).toBe('cloud-vm');
       }
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000004',
+          error: expect.any(Error),
+          _skipSentry: true,
+        }),
+        'Failed to dispatch to worker',
+      );
     });
 
     it('does not fall back after an ambiguous 502 response to the worker POST', async () => {
@@ -1467,6 +1496,7 @@ describe('taskDispatcherImpl', () => {
 
       const result = await service.dispatch({
         taskId: 'task-123',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000005',
         prompt: 'Test',
         systemPromptHash: 'abc123',
         repository: 'test/repo',
@@ -1490,6 +1520,15 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.message).toContain('Network connection failed');
       }
       expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-123',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000005',
+          error: expect.any(Error),
+          _skipSentry: true,
+        }),
+        'Failed to dispatch to worker',
+      );
     });
 
     it('does not treat transport error text containing 503 as a safe capacity rejection', async () => {

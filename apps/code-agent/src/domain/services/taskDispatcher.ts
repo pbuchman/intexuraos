@@ -51,6 +51,8 @@ export interface ExecutionMemoryPromptContext {
  */
 export interface DispatchRequest {
   taskId: string;
+  /** Per-claim identifier used only to correlate dispatch logs; never sent to the Worker. */
+  dispatchAttemptId?: string;
   linearIssueId?: string;
   /** Labels from the validated Linear issue */
   linearIssueLabels: string[];

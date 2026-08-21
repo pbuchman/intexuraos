@@ -999,6 +999,7 @@ export async function drainTaskQueue(
 
     const dispatchResult = await taskDispatcher.dispatch({
       taskId: task.id,
+      dispatchAttemptId: dispatchToken,
       prompt: task.sanitizedPrompt,
       systemPromptHash: task.systemPromptHash,
       repository: task.repository,
@@ -1053,7 +1054,12 @@ export async function drainTaskQueue(
           });
         }
         logger.warn(
-          { taskId: task.id, dispatchToken, error: dispatchError },
+          {
+            remediationFamily: 'code-task.dispatch',
+            taskId: task.id,
+            dispatchAttemptId: dispatchToken,
+            error: dispatchError,
+          },
           'Worker POST outcome is unknown; retaining the dispatch claim and user lease',
         );
         return ok({ action: 'still_busy', taskId: task.id });
@@ -1107,7 +1113,15 @@ export async function drainTaskQueue(
           'Drain dispatch blocked by known worker capability state',
         );
       } else {
-        logger.error({ taskId: task.id, error: dispatchError }, 'Drain dispatch failed with permanent error');
+        logger.error(
+          {
+            remediationFamily: 'code-task.dispatch',
+            taskId: task.id,
+            dispatchAttemptId: dispatchToken,
+            error: dispatchError,
+          },
+          'Drain dispatch failed with permanent error',
+        );
       }
       const failResult = await failAffectedTasksForDispatchProblem(deps, affectedTasks, dispatchProblem);
       if (!failResult.ok) {

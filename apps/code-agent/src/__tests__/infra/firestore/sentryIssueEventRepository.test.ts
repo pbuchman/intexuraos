@@ -16,6 +16,7 @@ import type { SentryIssueEventRepository } from '../../../domain/repositories/se
 import {
   createFirestoreSentryIssueEventRepository,
   createSentryIssueDedupeKey,
+  createSentryOccurrenceDedupeKey,
   createSentryProblemDedupeKey,
 } from '../../../infra/firestore/sentryIssueEventRepository.js';
 
@@ -34,6 +35,19 @@ function buildEvent(overrides: Partial<NormalizedSentryIssueEvent> = {}): Normal
     eventId: undefined,
     ...overrides,
   };
+}
+
+function buildCorrelatedEvent(
+  overrides: Partial<NormalizedSentryIssueEvent> = {}
+): NormalizedSentryIssueEvent {
+  return {
+    ...buildEvent(),
+    sourceEnvironment: 'prod',
+    sourceTaskId: 'task_review_3575a69848b633cd68c25a0688a6c6d1',
+    sourceDispatchAttemptId: '11111111-2222-4333-8444-555555555555',
+    sourceTraceId: '7c5f9b88d035451ebea52ef9d653de7b',
+    ...overrides,
+  } as NormalizedSentryIssueEvent;
 }
 
 function buildAcquireInput(
@@ -124,6 +138,383 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     );
   });
 
+  it('builds the trusted occurrence key from the versioned dispatch identity', () => {
+    const event = buildCorrelatedEvent();
+    const expected = createHash('sha256')
+      .update([
+        'sentry-occurrence-v1',
+        event.organizationSlug,
+        event.projectSlug,
+        event.sourceEnvironment,
+        'code-task.dispatch',
+        event.sourceTaskId,
+        event.sourceDispatchAttemptId,
+      ].join('\0'))
+      .digest('hex');
+
+    expect(createSentryOccurrenceDedupeKey(event)).toBe(`sentry-occurrence:${expected}`);
+  });
+
+  it('coalesces different Sentry issues that carry one trusted dispatch occurrence', async () => {
+    const firstEvent = buildCorrelatedEvent({ issueId: '135', eventId: 'event-135' });
+    const secondEvent = buildCorrelatedEvent({ issueId: '136', eventId: 'event-136' });
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(firstEvent, {
+      proposedCodeTaskId: 'task_one_occurrence',
+    })));
+    expect(first.idempotencyKey).toBe(first.reservationKey);
+    await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: 'task_one_occurrence',
+      linearIssueId: 'INT-ONE',
+    });
+
+    const second = await repo.acquire(buildAcquireInput(secondEvent, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: 'task_duplicate',
+      leaseOwner: 'delivery-2',
+    }));
+
+    expect(second).toEqual({
+      ok: true,
+      value: { kind: 'duplicate', codeTaskId: 'task_one_occurrence' },
+    });
+  });
+
+  it('grants only one lease to concurrent cross-issue deliveries for one dispatch occurrence', async () => {
+    const [first, second] = await Promise.all([
+      repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+        issueId: '135',
+        eventId: 'event-135-concurrent',
+      }), {
+        proposedCodeTaskId: 'task_concurrent_first',
+        leaseOwner: 'delivery-135',
+      })),
+      repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+        issueId: '136',
+        eventId: 'event-136-concurrent',
+      }), {
+        proposedCodeTaskId: 'task_concurrent_second',
+        leaseOwner: 'delivery-136',
+      })),
+    ]);
+    const kinds = [first, second].map((result) => result.ok ? result.value.kind : 'error').sort();
+
+    expect(kinds).toEqual(['acquired', 'retryable']);
+  });
+
+  it('increments matching trusted evidence aliases on exact redelivery', async () => {
+    const event = buildCorrelatedEvent({ eventId: 'event-exact-redelivery' });
+    const acquired = expectAcquired(await repo.acquire(buildAcquireInput(event)));
+
+    const redelivery = await repo.acquire(buildAcquireInput(event, {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      leaseOwner: 'delivery-2',
+    }));
+    const transition = await fakeFirestore.collection('sentry-issue-events')
+      .doc(acquired.transitionKey)
+      .get();
+    const issue = await fakeFirestore.collection('sentry-issue-events')
+      .doc(acquired.issueKey)
+      .get();
+
+    expect(redelivery).toEqual({ ok: true, value: { kind: 'retryable' } });
+    expect(transition.data()?.['duplicateCount']).toBe(1);
+    expect(issue.data()?.['duplicateCount']).toBe(1);
+  });
+
+  it('allows a new dispatch attempt for the same Sentry issue and task', async () => {
+    const firstEvent = buildCorrelatedEvent({ eventId: 'event-attempt-1' });
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(firstEvent, {
+      proposedCodeTaskId: 'task_attempt_1',
+    })));
+    await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: 'task_attempt_1',
+      linearIssueId: 'INT-ATTEMPT-1',
+    });
+
+    const second = await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      eventId: 'event-attempt-2',
+      sourceDispatchAttemptId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    } as unknown as Partial<NormalizedSentryIssueEvent>), {
+      receivedAt: new Date('2026-07-29T10:01:00.000Z'),
+      proposedCodeTaskId: 'task_attempt_2',
+      leaseOwner: 'delivery-attempt-2',
+    }));
+
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.value).toEqual(expect.objectContaining({
+      kind: 'acquired',
+      codeTaskId: 'task_attempt_2',
+    }));
+  });
+
+  it('does not split one trusted dispatch attempt when only trace context changes', async () => {
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: '135',
+      eventId: 'event-trace-1',
+    }), {
+      proposedCodeTaskId: 'task_trace_stable',
+    })));
+    await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: 'task_trace_stable',
+    });
+
+    const second = await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: '136',
+      eventId: 'event-trace-2',
+      sourceTraceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    } as unknown as Partial<NormalizedSentryIssueEvent>), {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: 'task_trace_duplicate',
+    }));
+
+    expect(second).toEqual({
+      ok: true,
+      value: { kind: 'duplicate', codeTaskId: 'task_trace_stable' },
+    });
+  });
+
+  it.each([
+    ['task', { sourceTaskId: 'task_review_distinct' }],
+    ['environment', { sourceEnvironment: 'dev' }],
+    ['organization', { organizationSlug: 'another-organization' }],
+    ['project', { projectSlug: 'another-project' }],
+  ] as const)('keeps a changed %s in a distinct trusted occurrence', async (dimension, change) => {
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: `first-${dimension}`,
+      eventId: `event-first-${dimension}`,
+    }), {
+      proposedCodeTaskId: `task_first_${dimension}`,
+    })));
+    await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: `task_first_${dimension}`,
+    });
+
+    const second = await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: `second-${dimension}`,
+      eventId: `event-second-${dimension}`,
+      ...change,
+    }), {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: `task_second_${dimension}`,
+    }));
+
+    expect(second).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        kind: 'acquired',
+        codeTaskId: `task_second_${dimension}`,
+      }),
+    });
+  });
+
+  it('lets distinct trusted owners complete after their shared aliases are overwritten', async () => {
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      eventId: 'shared-event-id',
+    }), {
+      proposedCodeTaskId: 'task_alias_owner_1',
+      leaseOwner: 'delivery-owner-1',
+    })));
+    const second = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      eventId: 'shared-event-id',
+      sourceDispatchAttemptId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    }), {
+      receivedAt: new Date('2026-07-29T10:00:01.000Z'),
+      proposedCodeTaskId: 'task_alias_owner_2',
+      leaseOwner: 'delivery-owner-2',
+    })));
+
+    expect(await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: first.codeTaskId,
+    })).toEqual({ ok: true, value: undefined });
+    expect(await repo.completeReservation({
+      transitionKey: second.transitionKey,
+      issueKey: second.issueKey,
+      reservationKey: second.reservationKey,
+      leaseToken: second.leaseToken,
+      codeTaskId: second.codeTaskId,
+    })).toEqual({ ok: true, value: undefined });
+  });
+
+  it('fences stale checkpoint, completion, and failure after trusted lease recovery', async () => {
+    const first = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: '135',
+      eventId: 'event-stale-first',
+    }), {
+      proposedCodeTaskId: 'task_retained_occurrence',
+      leaseOwner: 'delivery-old',
+    })));
+    expect(await repo.checkpointLinearIssue({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      linearIssueId: 'INT-RETAINED',
+    })).toEqual({ ok: true, value: undefined });
+    const recovered = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: '136',
+      eventId: 'event-stale-second',
+    }), {
+      receivedAt: new Date('2026-07-29T10:01:01.000Z'),
+      proposedCodeTaskId: 'task_discarded_occurrence',
+      leaseOwner: 'delivery-new',
+    })));
+
+    expect(recovered.reservationKey).toBe(first.reservationKey);
+    expect(recovered.codeTaskId).toBe('task_retained_occurrence');
+    expect(recovered.linearIssueId).toBe('INT-RETAINED');
+    const staleCheckpoint = await repo.checkpointLinearIssue({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      linearIssueId: 'INT-STALE',
+    });
+    const staleCompletion = await repo.completeReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      codeTaskId: 'task_stale',
+    });
+    const staleFailure = await repo.failReservation({
+      transitionKey: first.transitionKey,
+      issueKey: first.issueKey,
+      reservationKey: first.reservationKey,
+      leaseToken: first.leaseToken,
+      reason: 'stale failure',
+    });
+
+    for (const result of [staleCheckpoint, staleCompletion, staleFailure]) {
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({ code: 'FIRESTORE_ERROR' }),
+      });
+    }
+  });
+
+  it('returns errors when the trusted owner record disappears before fenced updates', async () => {
+    const acquired = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      eventId: 'event-missing-owner',
+    }))));
+    await fakeFirestore.collection('sentry-issue-events').doc(acquired.reservationKey).delete();
+
+    const checkpoint = await repo.checkpointLinearIssue({
+      transitionKey: acquired.transitionKey,
+      issueKey: acquired.issueKey,
+      reservationKey: acquired.reservationKey,
+      leaseToken: acquired.leaseToken,
+      linearIssueId: 'INT-MISSING',
+    });
+    const failure = await repo.failReservation({
+      transitionKey: acquired.transitionKey,
+      issueKey: acquired.issueKey,
+      reservationKey: acquired.reservationKey,
+      leaseToken: acquired.leaseToken,
+      reason: 'owner disappeared',
+    });
+
+    for (const result of [checkpoint, failure]) {
+      expect(result).toEqual({
+        ok: false,
+        error: expect.objectContaining({
+          code: 'FIRESTORE_ERROR',
+          message: 'Sentry task reservation is missing',
+        }),
+      });
+    }
+  });
+
+  it('preserves an existing trusted task on failure and records null without one', async () => {
+    const linked = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: 'linked-owner',
+      eventId: 'event-linked-owner',
+    }), {
+      proposedCodeTaskId: 'task_linked_proposal',
+    })));
+    const linkedRef = fakeFirestore.collection('sentry-issue-events').doc(linked.reservationKey);
+    const linkedSnapshot = await linkedRef.get();
+    await linkedRef.set({ ...linkedSnapshot.data(), codeTaskId: 'task_existing' });
+
+    expect(await repo.failReservation({
+      transitionKey: linked.transitionKey,
+      issueKey: linked.issueKey,
+      reservationKey: linked.reservationKey,
+      leaseToken: linked.leaseToken,
+      reason: 'linked failure',
+    })).toEqual({ ok: true, value: undefined });
+    expect((await linkedRef.get()).data()).toEqual(expect.objectContaining({
+      state: 'failed',
+      codeTaskId: 'task_existing',
+      failureReason: 'linked failure',
+    }));
+
+    const unlinked = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      issueId: 'unlinked-owner',
+      eventId: 'event-unlinked-owner',
+      sourceDispatchAttemptId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+    }), {
+      proposedCodeTaskId: 'task_unlinked_proposal',
+    })));
+    const unlinkedRef = fakeFirestore.collection('sentry-issue-events').doc(unlinked.reservationKey);
+
+    expect(await repo.failReservation({
+      transitionKey: unlinked.transitionKey,
+      issueKey: unlinked.issueKey,
+      reservationKey: unlinked.reservationKey,
+      leaseToken: unlinked.leaseToken,
+      reason: 'unlinked failure',
+    })).toEqual({ ok: true, value: undefined });
+    expect((await unlinkedRef.get()).data()).toEqual(expect.objectContaining({
+      state: 'failed',
+      codeTaskId: null,
+      failureReason: 'unlinked failure',
+    }));
+  });
+
+  it('checkpoints the trusted owner without recreating removed evidence aliases', async () => {
+    const acquired = expectAcquired(await repo.acquire(buildAcquireInput(buildCorrelatedEvent({
+      eventId: 'event-removed-aliases',
+    }))));
+    const collection = fakeFirestore.collection('sentry-issue-events');
+    await collection.doc(acquired.transitionKey).delete();
+    await collection.doc(acquired.issueKey).delete();
+
+    expect(await repo.checkpointLinearIssue({
+      transitionKey: acquired.transitionKey,
+      issueKey: acquired.issueKey,
+      reservationKey: acquired.reservationKey,
+      leaseToken: acquired.leaseToken,
+      linearIssueId: 'INT-OWNER',
+    })).toEqual({ ok: true, value: undefined });
+
+    expect((await collection.doc(acquired.reservationKey).get()).data()).toEqual(
+      expect.objectContaining({ linearIssueId: 'INT-OWNER' })
+    );
+    expect((await collection.doc(acquired.transitionKey).get()).exists).toBe(false);
+    expect((await collection.doc(acquired.issueKey).get()).exists).toBe(false);
+  });
+
   it('atomically creates transition and issue leases with serialized audit data', async () => {
     const event = buildEvent({
       resource: 'event_alert',
@@ -136,6 +527,7 @@ describe('createFirestoreSentryIssueEventRepository', () => {
     const acquired = expectAcquired(await repo.acquire(buildAcquireInput(event, {
       payload: { '': [['nested', 'array']], raw: true },
     })));
+    expect(acquired.idempotencyKey).toBe(acquired.transitionKey);
     const transition = await fakeFirestore.collection('sentry-issue-events').doc(acquired.transitionKey).get();
     const issue = await fakeFirestore.collection('sentry-issue-events').doc(acquired.issueKey).get();
 

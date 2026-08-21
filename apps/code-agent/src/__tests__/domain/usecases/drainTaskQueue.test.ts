@@ -1548,6 +1548,7 @@ describe('drainTaskQueue', () => {
 
     expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith({
       taskId: 'task-123',
+      dispatchAttemptId: 'dispatch-token',
       prompt: 'Fix the bug',
       systemPromptHash: 'hash-abc',
       repository: 'pbuchman/intexuraos',
@@ -3181,15 +3182,16 @@ describe('drainTaskQueue', () => {
   describe('retryable dispatch errors keep task queued (Fix A)', () => {
     it('keeps the claim and lease when the worker POST outcome is unknown', async () => {
       const task = createMockTask();
-      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
-      setupWorkerSettings();
-      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
-      mockTaskDispatcher.dispatch.mockResolvedValue(err({
-        code: 'network_error',
+      const dispatchError = {
+        code: 'network_error' as const,
         message: 'Gateway timed out after accepting the POST',
         outcomeUnknown: true,
         workerLocation: 'home-mac',
-      } as never));
+      };
+      mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
+      setupWorkerSettings();
+      mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err(dispatchError));
       mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
       const result = await drainTaskQueue(createDeps());
@@ -3214,6 +3216,15 @@ describe('drainTaskQueue', () => {
       expect(mockCodeTaskRepo.update).not.toHaveBeenCalledWith(
         'task-123',
         expect.objectContaining({ status: 'failed' }),
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: 'task-123',
+          dispatchAttemptId: 'test-dispatch-token',
+          error: dispatchError,
+        },
+        'Worker POST outcome is unknown; retaining the dispatch claim and user lease',
       );
     });
 
@@ -3322,11 +3333,12 @@ describe('drainTaskQueue', () => {
       'permanent code %s still finalizes as failed',
       async (code) => {
         const task = createMockTask();
+        const dispatchError = { code, message: `Permanent: ${code}` };
         mockCodeTaskRepo.listQueuedByAge.mockResolvedValue(ok([task]));
         setupWorkerSettings();
         mockCodeTaskRepo.claimForDispatch.mockResolvedValue(ok(claimed()));
         mockTaskDispatcher.dispatch.mockResolvedValue(
-          err({ code, message: `Permanent: ${code}` }),
+          err(dispatchError),
         );
         mockCodeTaskRepo.update.mockResolvedValue(ok(task));
 
@@ -3355,6 +3367,18 @@ describe('drainTaskQueue', () => {
             nextAction: 'retry_after_fix',
           }),
         }));
+        expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+          expect.objectContaining({ dispatchAttemptId: 'test-dispatch-token' }),
+        );
+        expect(mockLogger.error).toHaveBeenCalledWith(
+          {
+            remediationFamily: 'code-task.dispatch',
+            taskId: 'task-123',
+            dispatchAttemptId: 'test-dispatch-token',
+            error: dispatchError,
+          },
+          'Drain dispatch failed with permanent error',
+        );
       },
     );
   });

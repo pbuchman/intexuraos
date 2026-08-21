@@ -295,6 +295,8 @@ export async function processSentryWebhook(
 
   const reservation: Extract<AcquireSentryTaskReservationResult, { kind: 'acquired' }> =
     acquireResult.value;
+  const reservationKey = reservation.reservationKey ?? reservation.issueKey;
+  const linearIdempotencyKey = reservation.idempotencyKey ?? reservation.transitionKey;
 
   const failReservation = async (input: {
     result: ProcessSentryWebhookResult;
@@ -305,6 +307,7 @@ export async function processSentryWebhook(
     const failed = await sentryIssueEventRepo.failReservation({
       transitionKey: reservation.transitionKey,
       issueKey: reservation.issueKey,
+      reservationKey,
       leaseToken: reservation.leaseToken,
       reason: input.reason,
       ...(input.codeTaskId !== undefined && { codeTaskId: input.codeTaskId }),
@@ -321,6 +324,7 @@ export async function processSentryWebhook(
     const completed = await sentryIssueEventRepo.completeReservation({
       transitionKey: reservation.transitionKey,
       issueKey: reservation.issueKey,
+      reservationKey,
       leaseToken: reservation.leaseToken,
       codeTaskId: task.id,
       ...(task.linearIssueId !== undefined && { linearIssueId: task.linearIssueId }),
@@ -405,7 +409,7 @@ export async function processSentryWebhook(
   const issueResult = await linearIssueService.ensureIssueExists({
     userId: automationUserId,
     taskPrompt: injectionResult.value,
-    idempotencyKey: reservation.transitionKey,
+    idempotencyKey: linearIdempotencyKey,
     ...(reservation.linearIssueId !== undefined && {
       linearIssueId: reservation.linearIssueId,
     }),
@@ -421,6 +425,7 @@ export async function processSentryWebhook(
   const checkpointResult = await sentryIssueEventRepo.checkpointLinearIssue({
     transitionKey: reservation.transitionKey,
     issueKey: reservation.issueKey,
+    reservationKey,
     leaseToken: reservation.leaseToken,
     linearIssueId: issueResult.linearIssueId,
   });

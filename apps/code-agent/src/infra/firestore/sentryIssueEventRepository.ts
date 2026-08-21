@@ -21,7 +21,8 @@ const COLLECTION_NAME = 'sentry-issue-events';
 interface SentryIssueEventDoc {
   dedupeKey: string;
   transitionKey: string;
-  recordType: 'transition' | 'issue';
+  recordType: 'transition' | 'issue' | 'correlation';
+  correlationKey: string | null;
   state: SentryTaskReservationState;
   organizationSlug: string;
   projectSlug: string;
@@ -34,6 +35,10 @@ interface SentryIssueEventDoc {
   resource: NormalizedSentryIssueEvent['resource'];
   status: string | null;
   eventId: string | null;
+  sourceEnvironment: string | null;
+  sourceTaskId: string | null;
+  sourceDispatchAttemptId: string | null;
+  sourceTraceId: string | null;
   receivedAt: unknown;
   latestReceivedAt: unknown;
   duplicateCount: number;
@@ -49,6 +54,7 @@ interface SentryIssueEventDoc {
 
 interface ReservationView {
   transitionKey: string | undefined;
+  correlationKey: string | undefined;
   state: SentryTaskReservationState;
   receivedAt: Date;
   duplicateCount: number;
@@ -90,6 +96,7 @@ function toReservationView(
         : 'failed';
   return {
     transitionKey: nonBlankString(data['transitionKey']),
+    correlationKey: nonBlankString(data['correlationKey']),
     state,
     receivedAt: toOptionalDate(data['receivedAt']) ?? fallback.receivedAt,
     duplicateCount: typeof data['duplicateCount'] === 'number' ? data['duplicateCount'] : 0,
@@ -174,6 +181,53 @@ export function createSentryProblemDedupeKey(event: NormalizedSentryIssueEvent):
   ].join(':');
 }
 
+const SOURCE_ENVIRONMENT_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/iu;
+const SOURCE_TASK_ID_PATTERN = /^task_[a-z0-9][a-z0-9_-]{0,250}$/iu;
+const DISPATCH_ATTEMPT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function normalizedTrustedValue(
+  value: string | undefined,
+  pattern: RegExp
+): string | undefined {
+  const normalized = value?.trim();
+  return normalized !== undefined && pattern.test(normalized) ? normalized : undefined;
+}
+
+export function createSentryOccurrenceDedupeKey(
+  event: NormalizedSentryIssueEvent
+): string | undefined {
+  const sourceEnvironment = normalizedTrustedValue(
+    event.sourceEnvironment,
+    SOURCE_ENVIRONMENT_PATTERN
+  );
+  const sourceTaskId = normalizedTrustedValue(event.sourceTaskId, SOURCE_TASK_ID_PATTERN);
+  const sourceDispatchAttemptId = normalizedTrustedValue(
+    event.sourceDispatchAttemptId,
+    DISPATCH_ATTEMPT_ID_PATTERN
+  );
+  if (
+    sourceEnvironment === undefined
+    || sourceTaskId === undefined
+    || sourceDispatchAttemptId === undefined
+  ) {
+    return undefined;
+  }
+
+  const fingerprint = createHash('sha256')
+    .update([
+      'sentry-occurrence-v1',
+      event.organizationSlug.trim().toLowerCase(),
+      event.projectSlug.trim().toLowerCase(),
+      sourceEnvironment.toLowerCase(),
+      'code-task.dispatch',
+      sourceTaskId,
+      sourceDispatchAttemptId.toLowerCase(),
+    ].join('\0'))
+    .digest('hex');
+  return `sentry-occurrence:${fingerprint}`;
+}
+
 function createLegacyTransitionKey(event: NormalizedSentryIssueEvent): string {
   return [
     'sentry',
@@ -213,7 +267,8 @@ function firestoreError(error: unknown): SentryIssueEventRepositoryError {
 function buildDoc(input: {
   dedupeKey: string;
   transitionKey: string;
-  recordType: 'transition' | 'issue';
+  recordType: 'transition' | 'issue' | 'correlation';
+  correlationKey?: string | undefined;
   reservation: ReservationView;
   event: NormalizedSentryIssueEvent;
   latestReceivedAt: Date;
@@ -232,6 +287,7 @@ function buildDoc(input: {
     dedupeKey: input.dedupeKey,
     transitionKey: input.transitionKey,
     recordType: input.recordType,
+    correlationKey: input.correlationKey ?? null,
     state: input.state,
     organizationSlug: input.event.organizationSlug,
     projectSlug: input.event.projectSlug,
@@ -244,6 +300,10 @@ function buildDoc(input: {
     resource: input.event.resource,
     status: input.event.status ?? null,
     eventId: input.event.eventId ?? null,
+    sourceEnvironment: input.event.sourceEnvironment ?? null,
+    sourceTaskId: input.event.sourceTaskId ?? null,
+    sourceDispatchAttemptId: input.event.sourceDispatchAttemptId ?? null,
+    sourceTraceId: input.event.sourceTraceId ?? null,
     receivedAt: Timestamp.fromDate(input.reservation.receivedAt),
     latestReceivedAt: Timestamp.fromDate(input.latestReceivedAt),
     duplicateCount: input.duplicateCount,
@@ -281,16 +341,174 @@ export function createFirestoreSentryIssueEventRepository(deps: {
   const { firestore, logger } = deps;
   const collection = firestore.collection(COLLECTION_NAME);
 
+  async function acquireCorrelated(
+    input: AcquireSentryTaskReservationInput,
+    keys: {
+      transitionKey: string;
+      issueKey: string;
+      reservationKey: string;
+    },
+    payload: string
+  ): Promise<Result<AcquireSentryTaskReservationResult, SentryIssueEventRepositoryError>> {
+    const { transitionKey, issueKey, reservationKey } = keys;
+    return await firestore.runTransaction(async (transaction) => {
+      const transitionRef = collection.doc(transitionKey);
+      const issueRef = collection.doc(issueKey);
+      const reservationRef = collection.doc(reservationKey);
+      const [transitionSnapshot, issueSnapshot, reservationSnapshot] = await Promise.all([
+        transaction.get(transitionRef),
+        transaction.get(issueRef),
+        transaction.get(reservationRef),
+      ]);
+      const fallback = {
+        receivedAt: input.receivedAt,
+        proposedCodeTaskId: input.proposedCodeTaskId,
+      };
+      const transitionData = transitionSnapshot.exists
+        ? transitionSnapshot.data() as Record<string, unknown>
+        : undefined;
+      const issueData = issueSnapshot.exists
+        ? issueSnapshot.data() as Record<string, unknown>
+        : undefined;
+      const reservationData = reservationSnapshot.exists
+        ? reservationSnapshot.data() as Record<string, unknown>
+        : undefined;
+      const reservation = reservationData !== undefined
+        ? toReservationView(reservationData, fallback)
+        : undefined;
+      const baseReservation: ReservationView = reservation ?? {
+        transitionKey,
+        correlationKey: reservationKey,
+        state: 'reserved',
+        receivedAt: input.receivedAt,
+        duplicateCount: 0,
+        proposedCodeTaskId: input.proposedCodeTaskId,
+        leaseToken: undefined,
+        leaseExpiresAt: undefined,
+        leaseOwner: undefined,
+        codeTaskId: undefined,
+        linearIssueId: undefined,
+        failureReason: undefined,
+        eventId: input.event.eventId,
+      };
+
+      const aliasDuplicateCount = (data: Record<string, unknown> | undefined): number => {
+        if (data?.['correlationKey'] !== reservationKey) return 0;
+        return toReservationView(data, fallback).duplicateCount + 1;
+      };
+      const persist = (fields: {
+        state: SentryTaskReservationState;
+        proposedCodeTaskId: string;
+        leaseToken?: string | undefined;
+        leaseExpiresAt?: Date | undefined;
+        leaseOwner?: string | undefined;
+        failureReason?: string | undefined;
+        codeTaskId?: string | undefined;
+        linearIssueId?: string | undefined;
+      }): void => {
+        const common = {
+          transitionKey,
+          correlationKey: reservationKey,
+          reservation: baseReservation,
+          event: input.event,
+          latestReceivedAt: input.receivedAt,
+          payload,
+          ...fields,
+        };
+        transaction.set(reservationRef, buildDoc({
+          dedupeKey: reservationKey,
+          recordType: 'correlation',
+          duplicateCount: reservation === undefined ? 0 : reservation.duplicateCount + 1,
+          ...common,
+        }));
+        transaction.set(transitionRef, buildDoc({
+          dedupeKey: transitionKey,
+          recordType: 'transition',
+          duplicateCount: aliasDuplicateCount(transitionData),
+          ...common,
+        }));
+        transaction.set(issueRef, buildDoc({
+          dedupeKey: issueKey,
+          recordType: 'issue',
+          duplicateCount: aliasDuplicateCount(issueData),
+          ...common,
+        }));
+      };
+
+      if (reservation?.state === 'task_created' || reservation?.codeTaskId !== undefined) {
+        persist({
+          state: reservation.state,
+          proposedCodeTaskId: reservation.proposedCodeTaskId,
+          leaseToken: reservation.leaseToken,
+          leaseExpiresAt: reservation.leaseExpiresAt,
+          leaseOwner: reservation.leaseOwner,
+          failureReason: reservation.failureReason,
+          codeTaskId: reservation.codeTaskId,
+          linearIssueId: reservation.linearIssueId,
+        });
+        return ok({
+          kind: 'duplicate' as const,
+          ...(reservation.codeTaskId !== undefined && { codeTaskId: reservation.codeTaskId }),
+        });
+      }
+
+      if (reservation !== undefined && isLeaseActive(reservation, input.receivedAt)) {
+        persist({
+          state: reservation.state,
+          proposedCodeTaskId: reservation.proposedCodeTaskId,
+          leaseToken: reservation.leaseToken,
+          leaseExpiresAt: reservation.leaseExpiresAt,
+          leaseOwner: reservation.leaseOwner,
+          failureReason: reservation.failureReason,
+          linearIssueId: reservation.linearIssueId,
+        });
+        return ok({ kind: 'retryable' as const });
+      }
+
+      const proposedCodeTaskId = reservation?.proposedCodeTaskId ?? input.proposedCodeTaskId;
+      const leaseToken = randomUUID();
+      const leaseExpiresAt = new Date(input.receivedAt.getTime() + input.leaseDurationMs);
+      persist({
+        state: 'reserved',
+        proposedCodeTaskId,
+        leaseToken,
+        leaseExpiresAt,
+        leaseOwner: input.leaseOwner,
+        linearIssueId: reservation?.linearIssueId,
+      });
+      return ok({
+        kind: 'acquired' as const,
+        transitionKey,
+        issueKey,
+        reservationKey,
+        idempotencyKey: reservationKey,
+        leaseToken,
+        codeTaskId: proposedCodeTaskId,
+        ...(reservation?.linearIssueId !== undefined && {
+          linearIssueId: reservation.linearIssueId,
+        }),
+      });
+    });
+  }
+
   async function acquire(
     input: AcquireSentryTaskReservationInput
   ): Promise<Result<AcquireSentryTaskReservationResult, SentryIssueEventRepositoryError>> {
     const transitionKey = createSentryIssueDedupeKey(input.event);
     const issueKey = createSentryProblemDedupeKey(input.event);
+    const reservationKey = createSentryOccurrenceDedupeKey(input.event);
     const legacyTransitionKey = createLegacyTransitionKey(input.event);
     const legacyIssueKey = createLegacyProblemKey(input.event);
     const payload = serializePayload(input.payload);
 
     try {
+      if (reservationKey !== undefined) {
+        return await acquireCorrelated(input, {
+          transitionKey,
+          issueKey,
+          reservationKey,
+        }, payload);
+      }
       return await firestore.runTransaction(async (transaction) => {
         const transitionRef = collection.doc(transitionKey);
         const issueRef = collection.doc(issueKey);
@@ -458,6 +676,7 @@ export function createFirestoreSentryIssueEventRepository(deps: {
         const leaseExpiresAt = new Date(input.receivedAt.getTime() + input.leaseDurationMs);
         const baseReservation: ReservationView = exactTransition ?? {
           transitionKey,
+          correlationKey: undefined,
           state: 'reserved',
           receivedAt: input.receivedAt,
           duplicateCount: 0,
@@ -502,6 +721,8 @@ export function createFirestoreSentryIssueEventRepository(deps: {
           kind: 'acquired' as const,
           transitionKey,
           issueKey,
+          reservationKey: issueKey,
+          idempotencyKey: transitionKey,
           leaseToken,
           codeTaskId: proposedCodeTaskId,
           ...(linearIssueId !== undefined && { linearIssueId }),
@@ -521,6 +742,63 @@ export function createFirestoreSentryIssueEventRepository(deps: {
       return await firestore.runTransaction(async (transaction) => {
         const transitionRef = collection.doc(input.transitionKey);
         const issueRef = collection.doc(input.issueKey);
+        const reservationKey = input.reservationKey ?? input.issueKey;
+        if (reservationKey !== input.issueKey) {
+          const reservationRef = collection.doc(reservationKey);
+          const [transitionSnapshot, issueSnapshot, reservationSnapshot] = await Promise.all([
+            transaction.get(transitionRef),
+            transaction.get(issueRef),
+            transaction.get(reservationRef),
+          ]);
+          if (!reservationSnapshot.exists) {
+            return err({
+              code: 'FIRESTORE_ERROR' as const,
+              message: 'Sentry task reservation is missing',
+            });
+          }
+          const reservationData = reservationSnapshot.data() as Record<string, unknown>;
+          if (
+            reservationData['state'] !== 'reserved'
+            || reservationData['leaseToken'] !== input.leaseToken
+          ) {
+            return err({
+              code: 'FIRESTORE_ERROR' as const,
+              message: 'Sentry task reservation lease is no longer owned by this delivery',
+            });
+          }
+
+          const existingCodeTaskId = nonBlankString(reservationData['codeTaskId']);
+          const codeTaskId = ('codeTaskId' in input ? input.codeTaskId : undefined)
+            ?? existingCodeTaskId
+            ?? null;
+          const linearIssueId = input.linearIssueId
+            ?? nonBlankString(reservationData['linearIssueId'])
+            ?? null;
+          const failureReason = state === 'failed' && 'reason' in input ? input.reason : null;
+          const update = {
+            state,
+            leaseToken: null,
+            leaseExpiresAt: null,
+            leaseOwner: null,
+            failureReason,
+            codeTaskId,
+            linearIssueId,
+          };
+          transaction.update(reservationRef, update);
+          if (
+            transitionSnapshot.exists
+            && transitionSnapshot.data()?.['correlationKey'] === reservationKey
+          ) {
+            transaction.update(transitionRef, update);
+          }
+          if (
+            issueSnapshot.exists
+            && issueSnapshot.data()?.['correlationKey'] === reservationKey
+          ) {
+            transaction.update(issueRef, update);
+          }
+          return ok(undefined);
+        }
         const [transitionSnapshot, issueSnapshot] = await Promise.all([
           transaction.get(transitionRef),
           transaction.get(issueRef),
@@ -581,6 +859,46 @@ export function createFirestoreSentryIssueEventRepository(deps: {
       return await firestore.runTransaction(async (transaction) => {
         const transitionRef = collection.doc(input.transitionKey);
         const issueRef = collection.doc(input.issueKey);
+        const reservationKey = input.reservationKey ?? input.issueKey;
+        if (reservationKey !== input.issueKey) {
+          const reservationRef = collection.doc(reservationKey);
+          const [transitionSnapshot, issueSnapshot, reservationSnapshot] = await Promise.all([
+            transaction.get(transitionRef),
+            transaction.get(issueRef),
+            transaction.get(reservationRef),
+          ]);
+          if (!reservationSnapshot.exists) {
+            return err({
+              code: 'FIRESTORE_ERROR' as const,
+              message: 'Sentry task reservation is missing',
+            });
+          }
+          const reservationData = reservationSnapshot.data() as Record<string, unknown>;
+          if (
+            reservationData['state'] !== 'reserved'
+            || reservationData['leaseToken'] !== input.leaseToken
+          ) {
+            return err({
+              code: 'FIRESTORE_ERROR' as const,
+              message: 'Sentry task reservation lease is no longer owned by this delivery',
+            });
+          }
+          const update = { linearIssueId: input.linearIssueId };
+          transaction.update(reservationRef, update);
+          if (
+            transitionSnapshot.exists
+            && transitionSnapshot.data()?.['correlationKey'] === reservationKey
+          ) {
+            transaction.update(transitionRef, update);
+          }
+          if (
+            issueSnapshot.exists
+            && issueSnapshot.data()?.['correlationKey'] === reservationKey
+          ) {
+            transaction.update(issueRef, update);
+          }
+          return ok(undefined);
+        }
         const [transitionSnapshot, issueSnapshot] = await Promise.all([
           transaction.get(transitionRef),
           transaction.get(issueRef),

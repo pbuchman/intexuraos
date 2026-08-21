@@ -33,6 +33,116 @@ describe('parseSentryIssueEvent', () => {
     });
   });
 
+  it('normalizes trusted dispatch correlation fields from the signed event payload', () => {
+    const result = parseSentryIssueEvent('event_alert', {
+      action: 'triggered',
+      data: {
+        event: {
+          event_id: 'event-correlated',
+          title: 'Drain dispatch failed with permanent error',
+          web_url:
+            'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/135/events/event-correlated/',
+          issue: {
+            id: '135',
+            permalink:
+              'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/135/',
+            project: { id: '1', slug: 'intexuraos-backend' },
+          },
+          project: { id: '1', slug: 'intexuraos-backend' },
+          environment: 'prod',
+          task_id: 'task_review_3575a69848b633cd68c25a0688a6c6d1',
+          dispatch_attempt_id: '11111111-2222-4333-8444-555555555555',
+          trace_id: '7c5f9b88d035451ebea52ef9d653de7b',
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: expect.objectContaining({
+        sourceEnvironment: 'prod',
+        sourceTaskId: 'task_review_3575a69848b633cd68c25a0688a6c6d1',
+        sourceDispatchAttemptId: '11111111-2222-4333-8444-555555555555',
+        sourceTraceId: '7c5f9b88d035451ebea52ef9d653de7b',
+      }),
+    });
+  });
+
+  it('drops malformed correlation fields so the repository keeps issue-level fallback', () => {
+    const result = parseSentryIssueEvent('event_alert', {
+      action: 'triggered',
+      data: {
+        event: {
+          event_id: 'event-malformed-correlation',
+          title: 'Drain dispatch failed with permanent error',
+          web_url:
+            'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/136/events/event-malformed-correlation/',
+          issue: {
+            id: '136',
+            permalink:
+              'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/136/',
+            project: { id: '1', slug: 'intexuraos-backend' },
+          },
+          project: { id: '1', slug: 'intexuraos-backend' },
+          environment: 'prod environment',
+          task_id: 'not-a-task',
+          dispatch_attempt_id: 'not-a-uuid',
+          trace_id: 'x'.repeat(129),
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).not.toHaveProperty('sourceEnvironment');
+    expect(result.value).not.toHaveProperty('sourceTaskId');
+    expect(result.value).not.toHaveProperty('sourceDispatchAttemptId');
+    expect(result.value).not.toHaveProperty('sourceTraceId');
+  });
+
+  it.each([
+    ['missing', {}],
+    ['blank', {
+      environment: ' ',
+      task_id: ' ',
+      dispatch_attempt_id: ' ',
+      trace_id: ' ',
+    }],
+    ['oversized', {
+      environment: 'p'.repeat(65),
+      task_id: `task_${'a'.repeat(121)}`,
+      dispatch_attempt_id: 'a'.repeat(64),
+      trace_id: 'a'.repeat(65),
+    }],
+  ])('omits %s optional correlation instead of rejecting the webhook', (_label, correlation) => {
+    const result = parseSentryIssueEvent('event_alert', {
+      action: 'triggered',
+      data: {
+        event: {
+          event_id: 'event-fallback-correlation',
+          title: 'Drain dispatch failed with permanent error',
+          web_url:
+            'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/137/events/event-fallback-correlation/',
+          issue: {
+            id: '137',
+            permalink:
+              'https://home-dev.example.ts.net:8443/organizations/intexuraos/issues/137/',
+            project: { id: '1', slug: 'intexuraos-backend' },
+          },
+          project: { id: '1', slug: 'intexuraos-backend' },
+          ...correlation,
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value).not.toHaveProperty('sourceEnvironment');
+    expect(result.value).not.toHaveProperty('sourceTaskId');
+    expect(result.value).not.toHaveProperty('sourceDispatchAttemptId');
+    expect(result.value).not.toHaveProperty('sourceTraceId');
+  });
+
   it('normalizes issue webhooks into a Sentry issue event', () => {
     const result = parseSentryIssueEvent('issue', {
       action: 'created',

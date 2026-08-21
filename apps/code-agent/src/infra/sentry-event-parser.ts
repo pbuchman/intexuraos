@@ -19,6 +19,38 @@ function readString(record: Record<string, unknown>, key: string): string | unde
   return undefined;
 }
 
+function readStrictString(
+  record: Record<string, unknown>,
+  key: string,
+  pattern: RegExp,
+): string | undefined {
+  const value = record[key];
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return pattern.test(trimmed) ? trimmed : undefined;
+}
+
+function readDispatchCorrelation(event: Record<string, unknown>): Pick<
+  NormalizedSentryIssueEvent,
+  'sourceEnvironment' | 'sourceTaskId' | 'sourceDispatchAttemptId' | 'sourceTraceId'
+> {
+  const sourceEnvironment = readStrictString(event, 'environment', /^[A-Za-z0-9._-]{1,64}$/);
+  const sourceTaskId = readStrictString(event, 'task_id', /^task_[A-Za-z0-9_-]{1,120}$/);
+  const sourceDispatchAttemptId = readStrictString(
+    event,
+    'dispatch_attempt_id',
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+  const sourceTraceId = readStrictString(event, 'trace_id', /^[0-9a-f]{16,64}$/i);
+
+  return {
+    ...(sourceEnvironment !== undefined && { sourceEnvironment }),
+    ...(sourceTaskId !== undefined && { sourceTaskId }),
+    ...(sourceDispatchAttemptId !== undefined && { sourceDispatchAttemptId }),
+    ...(sourceTraceId !== undefined && { sourceTraceId }),
+  };
+}
+
 function readData(payload: Record<string, unknown>): Record<string, unknown> | null {
   const data = payload['data'];
   return isRecord(data) ? data : null;
@@ -195,6 +227,7 @@ function parseEventAlertWebhook(payload: unknown): Result<NormalizedSentryIssueE
     issueUrl,
     status: issueObject !== null ? readString(issueObject, 'status') : undefined,
     eventId: readString(event, 'event_id') ?? readString(event, 'eventId'),
+    ...readDispatchCorrelation(event),
   });
 }
 

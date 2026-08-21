@@ -1149,14 +1149,15 @@ describe('drainRetryQueue', () => {
     });
 
     it('retains the claim and worker target when retry POST outcome is unknown', async () => {
-      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
-      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
-      mockTaskDispatcher.dispatch.mockResolvedValue(err({
-        code: 'network_error',
+      const dispatchError = {
+        code: 'network_error' as const,
         message: 'Worker returned invalid JSON after accepting the POST',
         outcomeUnknown: true,
         workerLocation: 'home-mac',
-      }));
+      };
+      mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
+      mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
+      mockTaskDispatcher.dispatch.mockResolvedValue(err(dispatchError));
 
       const result = await drainRetryQueue(buildDeps());
 
@@ -1175,6 +1176,15 @@ describe('drainRetryQueue', () => {
         }),
       );
       expect(mockDispatchRetryRepo.delete).toHaveBeenCalledWith('dr_abc');
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: 'task_xyz',
+          dispatchAttemptId: 'retry-dispatch-token',
+          error: dispatchError,
+        },
+        'Retry worker POST outcome is unknown; retaining the dispatch claim and user lease',
+      );
     });
 
     it('retains the existing worker location when retry unknown outcome lacks target metadata', async () => {
@@ -1286,7 +1296,8 @@ describe('drainRetryQueue', () => {
     it('deletes entry and fails task on non-retryable error', async () => {
       mockDispatchRetryRepo.findOldest.mockResolvedValue(ok(sampleNewTaskRetry));
       mockCodeTaskRepo.findById.mockResolvedValue(ok(sampleTask));
-      mockTaskDispatcher.dispatch.mockResolvedValue(err({ code: 'dispatch_failed', message: 'bad payload' }));
+      const dispatchError = { code: 'dispatch_failed' as const, message: 'bad payload' };
+      mockTaskDispatcher.dispatch.mockResolvedValue(err(dispatchError));
 
       const result = await drainRetryQueue(buildDeps());
 
@@ -1303,6 +1314,18 @@ describe('drainRetryQueue', () => {
           nextAction: 'retry_after_fix',
         }),
       }));
+      expect(mockTaskDispatcher.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({ dispatchAttemptId: 'retry-dispatch-token' }),
+      );
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: 'task_xyz',
+          dispatchAttemptId: 'retry-dispatch-token',
+          error: dispatchError,
+        },
+        'Retry dispatch failed with permanent error',
+      );
     });
 
     it('returns internal_error when terminal retry dispatch failure cannot be persisted', async () => {

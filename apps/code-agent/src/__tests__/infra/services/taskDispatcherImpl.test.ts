@@ -540,12 +540,17 @@ describe('taskDispatcherImpl', () => {
 
       const service = createTaskDispatcherService(deps);
 
+      let capturedBody: Record<string, unknown> | undefined;
       nock(WORKER_URL)
-        .post('/tasks')
+        .post('/tasks', (body: Record<string, unknown>) => {
+          capturedBody = body;
+          return true;
+        })
         .reply(400, { error: 'String must contain at least 1 character(s)' });
 
       const result = await service.dispatch({
         taskId: 'task-validation-failure',
+        dispatchAttemptId: '00000000-0000-4000-8000-000000000001',
         prompt: 'Fix CI',
         systemPromptHash: 'hash-123',
         repository: 'test/repo',
@@ -573,6 +578,17 @@ describe('taskDispatcherImpl', () => {
         expect(result.error.message).toContain('400');
         expect(result.error.message).toContain('String must contain at least 1 character(s)');
       }
+
+      expect(capturedBody).not.toHaveProperty('dispatchAttemptId');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId: 'task-validation-failure',
+          dispatchAttemptId: '00000000-0000-4000-8000-000000000001',
+          status: 400,
+          _skipSentry: true,
+        }),
+        'Worker dispatch request failed',
+      );
     });
   });
 

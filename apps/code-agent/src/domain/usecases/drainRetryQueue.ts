@@ -764,6 +764,7 @@ async function handleNewTaskRetry(
   // Attempt dispatch
   const dispatchResult = await taskDispatcher.dispatch({
     taskId: task.id,
+    dispatchAttemptId: dispatchToken,
     prompt: task.sanitizedPrompt,
     systemPromptHash: task.systemPromptHash,
     repository: task.repository,
@@ -825,7 +826,12 @@ async function handleNewTaskRetry(
       }
 
       logger.warn(
-        { taskId: task.id, dispatchToken, error: dispatchError },
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: task.id,
+          dispatchAttemptId: dispatchToken,
+          error: dispatchError,
+        },
         'Retry worker POST outcome is unknown; retaining the dispatch claim and user lease',
       );
       return ok({ action: 'still_busy', taskId: entry.taskId });
@@ -864,6 +870,17 @@ async function handleNewTaskRetry(
     }
 
     // Non-retryable — fail permanently
+    if (dispatchError.blocker === undefined) {
+      logger.error(
+        {
+          remediationFamily: 'code-task.dispatch',
+          taskId: task.id,
+          dispatchAttemptId: dispatchToken,
+          error: dispatchError,
+        },
+        'Retry dispatch failed with permanent error',
+      );
+    }
     const failResult = await failRetryTaskForDispatchProblem(deps, task, dispatchProblem);
     if (!failResult.ok) {
       return err(failResult.error);
