@@ -77,6 +77,14 @@ local ROUTE_PATTERN_ALLOWED_SERVICE_ACCOUNTS = {
       ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
     },
   },
+  {
+    pattern = [[^/internal/whatsapp/private/messages/[^/]+/media$]],
+    caller_role = "whatsapp_private_sync",
+    allowed_methods = { GET = true },
+    allowed_service_accounts = {
+      ["intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com"] = true,
+    },
+  },
 }
 
 local ROUTE_PREFIX_ALLOWED_SERVICE_ACCOUNTS = {

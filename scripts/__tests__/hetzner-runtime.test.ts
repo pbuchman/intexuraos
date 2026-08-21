@@ -489,6 +489,10 @@ describe('Hetzner nginx runtime config', () => {
     expect(routeAllowlist).toContain('["/internal/whatsapp/private/media"]');
     expect(routeAllowlist).toContain('["/internal/whatsapp/private/media/backfill"]');
     expect(routeAllowlist).toContain(
+      'pattern = [[^/internal/whatsapp/private/messages/[^/]+/media$]]'
+    );
+    expect(routeAllowlist).toContain('allowed_methods = { GET = true }');
+    expect(routeAllowlist).toContain(
       'intexuraos-wa-private-sync-dev@intexuraos-dev-pbuchman.iam.gserviceaccount.com'
     );
     expect(routePrefixAllowlist).toContain('["/internal/users/"]');
@@ -498,6 +502,7 @@ describe('Hetzner nginx runtime config', () => {
     expect(hetznerMain).toContain('"/internal/whatsapp/private/events"');
     expect(hetznerMain).toContain('"/internal/whatsapp/private/media"');
     expect(hetznerMain).toContain('"/internal/whatsapp/private/media/backfill"');
+    expect(hetznerMain).toContain('"/internal/whatsapp/private/messages/:messageId/media"');
     expect(hetznerMain).toContain('"/internal/users/"');
     expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/events');
     expect(runbook).toContain('POST https://intexuraos.cloud/internal/whatsapp/private/media');
