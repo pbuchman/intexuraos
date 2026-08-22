@@ -648,11 +648,21 @@ export async function enqueuePendingMedia(pendingMediaFile, sourceAccountId, eve
 export async function drainPendingMedia(config, matrixAccessToken, deps) {
   const queue = await readPendingMediaQueue(config.pendingMediaFile);
   if (queue.items.length === 0) {
-    return { stored: 0, failed: 0, pending: 0 };
+    return { stored: 0, failed: 0, pending: 0, unavailable: [] };
   }
   const remaining = [];
+  const unavailable = [];
   let stored = 0;
   let failed = 0;
+
+  const recordUnavailable = async (item, reason) => {
+    const evidence = {
+      eventHash: createHash('sha256').update(item.matrixEventId).digest('hex'),
+      reason,
+    };
+    await deps.recordMediaUnavailable?.(evidence);
+    unavailable.push(evidence);
+  };
 
   for (const item of queue.items) {
     try {
@@ -661,7 +671,20 @@ export async function drainPendingMedia(config, matrixAccessToken, deps) {
         stored += 1;
         continue;
       }
-      const downloaded = await deps.fetchMatrixMedia(config, matrixAccessToken, item.media.mxcUri);
+      if (item.media.mimeType === 'application/pdf') {
+        await recordUnavailable(item, 'unsupported_application_pdf');
+        continue;
+      }
+      let downloaded;
+      try {
+        downloaded = await deps.fetchMatrixMedia(config, matrixAccessToken, item.media.mxcUri);
+      } catch (error) {
+        if (sanitizeError(error) === 'matrix_media_too_large') {
+          await recordUnavailable(item, 'matrix_media_too_large');
+          continue;
+        }
+        throw error;
+      }
       const storedMedia = await deps.uploadPrivateMedia(
         config,
         { matrixEventId: item.matrixEventId },
@@ -692,7 +715,7 @@ export async function drainPendingMedia(config, matrixAccessToken, deps) {
     version: 1,
     items: remaining,
   });
-  return { stored, failed, pending: remaining.length };
+  return { stored, failed, pending: remaining.length, unavailable };
 }
 
 export async function checkPrivateMediaStored(config, messageId) {

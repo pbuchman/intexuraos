@@ -24,6 +24,10 @@ const MAX_TRANSIENT_INGEST_ATTEMPTS = 5;
 const INITIAL_TRANSIENT_INGEST_DELAY_MS = 1_000;
 const RETAINED_PROJECT_ID = 'intexuraos-dev-pbuchman';
 const DEFAULT_ANCHOR_BEFORE = Date.parse('2026-08-09T22:00:00.000Z');
+const MEDIA_UNAVAILABLE_REASONS = new Set([
+  'unsupported_application_pdf',
+  'matrix_media_too_large',
+]);
 
 export async function discoverRecoverySegment({
   name,
@@ -211,6 +215,7 @@ export async function applyRecoverySegment(segment, deps) {
     rejected: 0,
     mediaStored: 0,
     mediaPending: 0,
+    mediaUnavailable: [],
   };
 
   for (let index = 0; index < segment.events.length; index += MAX_INGEST_BATCH) {
@@ -234,12 +239,57 @@ export async function applyRecoverySegment(segment, deps) {
   }
 
   const media = await deps.drainMedia();
-  if (!isRecord(media) || !Number.isInteger(media.stored) || !Number.isInteger(media.pending)) {
+  if (
+    !isRecord(media) ||
+    !Number.isInteger(media.stored) ||
+    !Number.isInteger(media.pending) ||
+    !Array.isArray(media.unavailable) ||
+    media.unavailable.some((evidence) => !isValidMediaUnavailableEvidence(evidence))
+  ) {
     throw new Error('recovery_apply_invalid_media_summary');
   }
   summary.mediaStored = media.stored;
   summary.mediaPending = media.pending;
+  summary.mediaUnavailable = media.unavailable;
   return summary;
+}
+
+export function mergeMediaUnavailableEvidence(segment, evidenceRecords) {
+  if (
+    !isRecord(segment) ||
+    !Array.isArray(evidenceRecords) ||
+    evidenceRecords.some((evidence) => !isValidMediaUnavailableEvidence(evidence)) ||
+    (segment.mediaUnavailableEvents !== undefined &&
+      (!Array.isArray(segment.mediaUnavailableEvents) ||
+        segment.mediaUnavailableEvents.some(
+          (evidence) => !isValidMediaUnavailableEvidence(evidence)
+        )))
+  ) {
+    throw new Error('recovery_media_unavailable_evidence_invalid');
+  }
+
+  const byEventHash = new Map();
+  for (const evidence of [...(segment.mediaUnavailableEvents ?? []), ...evidenceRecords]) {
+    const existing = byEventHash.get(evidence.eventHash);
+    if (existing !== undefined && existing.reason !== evidence.reason) {
+      throw new Error('recovery_media_unavailable_evidence_conflict');
+    }
+    byEventHash.set(evidence.eventHash, evidence);
+  }
+  segment.mediaUnavailableEvents = [...byEventHash.values()].sort((left, right) =>
+    left.eventHash.localeCompare(right.eventHash)
+  );
+  segment.mediaUnavailableEventHashes = segment.mediaUnavailableEvents.map(
+    ({ eventHash }) => eventHash
+  );
+}
+
+function isValidMediaUnavailableEvidence(evidence) {
+  return (
+    isRecord(evidence) &&
+    /^[a-f0-9]{64}$/u.test(evidence.eventHash) &&
+    MEDIA_UNAVAILABLE_REASONS.has(evidence.reason)
+  );
 }
 
 async function retryTransientIngest(operation, waitBeforeRetry = delay) {
@@ -982,9 +1032,14 @@ async function runApplyStage({ config, manifestFile }) {
         fetchMatrixMedia,
         uploadPrivateMedia,
         postPrivateMediaBackfill,
+        recordMediaUnavailable: async (evidence) => {
+          mergeMediaUnavailableEvidence(segment, [evidence]);
+          await writePrivateRecoveryJson(manifestFile, manifest);
+        },
         nowISOString: () => new Date().toISOString(),
       }),
   });
+  mergeMediaUnavailableEvidence(segment, result.mediaUnavailable);
   segment.lastApply = result;
   segment.applied = result.mediaPending === 0;
   await writePrivateRecoveryJson(manifestFile, manifest);

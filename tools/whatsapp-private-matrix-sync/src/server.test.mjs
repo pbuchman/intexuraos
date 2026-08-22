@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import http from 'node:http';
 import fsp from 'node:fs/promises';
@@ -1658,8 +1659,112 @@ test('pending media retry skips deterministic messages whose media is already st
     nowISOString: () => '2026-08-21T00:00:01.000Z',
   });
 
-  assert.deepEqual(result, { stored: 1, failed: 0, pending: 0 });
+  assert.deepEqual(result, { stored: 1, failed: 0, pending: 0, unavailable: [] });
   assert.deepEqual(JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8')).items, []);
+});
+
+test('pending media retry safely skips only unsupported PDFs and oversized Matrix media', async () => {
+  const stateFile = await createTempStateFile({ nextBatch: 's0' });
+  const pendingMediaFile = path.join(path.dirname(stateFile), 'pending-media.json');
+  const events = [
+    {
+      matrixEventId: '$pdf',
+      message: {
+        type: 'file',
+        media: { mxcUri: 'mxc://home-dev/pdf', mimeType: 'application/pdf' },
+      },
+    },
+    {
+      matrixEventId: '$oversized',
+      message: {
+        type: 'video',
+        media: { mxcUri: 'mxc://home-dev/oversized', mimeType: 'video/mp4' },
+      },
+    },
+    {
+      matrixEventId: '$generic-400',
+      message: {
+        type: 'image',
+        media: { mxcUri: 'mxc://home-dev/generic-400', mimeType: 'image/jpeg' },
+      },
+    },
+  ];
+  await enqueuePendingMedia(
+    pendingMediaFile,
+    config.sourceAccountId,
+    events,
+    '2026-08-21T00:00:00.000Z'
+  );
+
+  const recordedUnavailable = [];
+  const result = await drainPendingMedia({ ...config, pendingMediaFile }, 'matrix-token', {
+    checkPrivateMediaStored: async () => false,
+    fetchMatrixMedia: async (_config, _token, mxcUri) => {
+      if (mxcUri.endsWith('/pdf')) {
+        assert.fail('known unsupported PDFs must not be downloaded');
+      }
+      if (mxcUri.endsWith('/oversized')) {
+        throw new Error('matrix_media_too_large');
+      }
+      return { buffer: Buffer.from('image'), contentType: 'image/jpeg' };
+    },
+    uploadPrivateMedia: async () => {
+      throw new Error('intexuraos_private_media_upload_failed_400');
+    },
+    postPrivateMediaBackfill: async () => assert.fail('failed media must not be patched'),
+    recordMediaUnavailable: async (evidence) => recordedUnavailable.push(evidence),
+    nowISOString: () => '2026-08-21T00:00:01.000Z',
+  });
+
+  const hash = (eventId) => createHash('sha256').update(eventId).digest('hex');
+  assert.deepEqual(result, {
+    stored: 0,
+    failed: 1,
+    pending: 1,
+    unavailable: [
+      { eventHash: hash('$pdf'), reason: 'unsupported_application_pdf' },
+      { eventHash: hash('$oversized'), reason: 'matrix_media_too_large' },
+    ],
+  });
+  assert.deepEqual(recordedUnavailable, result.unavailable);
+  const pending = JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8'));
+  assert.equal(pending.items.length, 1);
+  assert.equal(pending.items[0]?.matrixEventId, '$generic-400');
+  assert.equal(pending.items[0]?.lastError, 'intexuraos_private_media_upload_failed_400');
+});
+
+test('pending media retry keeps unavailable media queued until its evidence is durable', async () => {
+  const stateFile = await createTempStateFile({ nextBatch: 's0' });
+  const pendingMediaFile = path.join(path.dirname(stateFile), 'pending-media.json');
+  await enqueuePendingMedia(
+    pendingMediaFile,
+    config.sourceAccountId,
+    [
+      {
+        matrixEventId: '$pdf-evidence-write-fails',
+        message: {
+          type: 'file',
+          media: { mxcUri: 'mxc://home-dev/pdf', mimeType: 'application/pdf' },
+        },
+      },
+    ],
+    '2026-08-21T00:00:00.000Z'
+  );
+
+  const result = await drainPendingMedia({ ...config, pendingMediaFile }, 'matrix-token', {
+    checkPrivateMediaStored: async () => false,
+    fetchMatrixMedia: async () => assert.fail('known unsupported PDFs must not be downloaded'),
+    uploadPrivateMedia: async () => assert.fail('known unsupported PDFs must not be uploaded'),
+    postPrivateMediaBackfill: async () => assert.fail('known unsupported PDFs must not be patched'),
+    recordMediaUnavailable: async () => {
+      throw new Error('recovery_manifest_write_failed');
+    },
+    nowISOString: () => '2026-08-21T00:00:01.000Z',
+  });
+
+  assert.deepEqual(result, { stored: 0, failed: 1, pending: 1, unavailable: [] });
+  const pending = JSON.parse(await fsp.readFile(pendingMediaFile, 'utf8'));
+  assert.equal(pending.items[0]?.lastError, 'recovery_manifest_write_failed');
 });
 
 test('prepareEventsForIngest uploads new Matrix audio before posting ingest events', async () => {
