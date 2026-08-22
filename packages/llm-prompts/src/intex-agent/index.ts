@@ -34,10 +34,28 @@ export {
 
 export {
   INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT,
+  INTEX_AGENT_CALENDAR_UPDATE_PLANNING_RESPONSE_FORMAT,
   INTEX_AGENT_RUNNER_RESPONSE_FORMAT,
+  IntexAgentCalendarUpdatePlanningProviderOutputSchema,
   IntexAgentIntentClassifierProviderOutputSchema,
   IntexAgentRunnerProviderOutputSchema,
 } from './structuredOutput.js';
+
+export {
+  IntexAgentCalendarUpdatePlanningChangesSchema,
+  IntexAgentCalendarUpdatePlanningOperationSchema,
+  IntexAgentCalendarUpdatePlanningOutputSchema,
+  type IntexAgentCalendarUpdatePlanningChanges,
+  type IntexAgentCalendarUpdatePlanningOperation,
+  type IntexAgentCalendarUpdatePlanningOutput,
+} from './calendarUpdatePlanningSchemas.js';
+
+export {
+  intexAgentCalendarUpdatePlanningPrompt,
+  type IntexAgentCalendarUpdatePlanningLookup,
+  type IntexAgentCalendarUpdatePlanningPromptInput,
+  type IntexAgentCalendarUpdatePlanningPromptMessage,
+} from './calendarUpdatePlanningPrompt.js';
 
 export {
   intexAgentRunnerOutputRepairPrompt,

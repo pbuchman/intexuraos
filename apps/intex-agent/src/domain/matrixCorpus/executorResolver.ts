@@ -19,6 +19,12 @@ export type MatrixCorpusExecutionBoundaryResolution =
   | 'strict_mock_executor_resolved'
   | 'no_executor_required';
 
+export type MatrixCorpusPreauthorizedSelection = Readonly<{
+  toolName: Parameters<NonNullable<CreateStrictToolMockExecutorInput['takePreauthorizedCall']>>[0];
+  turnIndex: number;
+  ordinal: number;
+}>;
+
 export interface MatrixCorpusExecutorExecutionContext {
   flow: MatrixCorpusExecutionFlow;
   turnIndex: number;
@@ -30,11 +36,8 @@ export interface MatrixCorpusExecutorExecutionContext {
   recordProviderCall: (input: MatrixCorpusProviderCallUsageV1) => Promise<void>;
   expectedByCatalog?: CreateStrictToolMockExecutorInput['expectedByCatalog'];
   preferenceOverlay?: MatrixCorpusStrictPreferenceOverlay;
-  preauthorizedSelection?: Readonly<{
-    toolName: Parameters<NonNullable<CreateStrictToolMockExecutorInput['takePreauthorizedCall']>>[0];
-    turnIndex: number;
-    ordinal: number;
-  }>;
+  preauthorizedSelection?: MatrixCorpusPreauthorizedSelection;
+  preauthorizedSelections?: readonly MatrixCorpusPreauthorizedSelection[];
 }
 
 export interface IntexAgentExecutorResolutionInput {
@@ -69,6 +72,7 @@ export interface CreateIntexAgentExecutorResolverInput {
       Readonly<{
         flow: MatrixCorpusExecutionFlow;
         preauthorizedSelection?: MatrixCorpusExecutorExecutionContext['preauthorizedSelection'];
+        preauthorizedSelections?: MatrixCorpusExecutorExecutionContext['preauthorizedSelections'];
       }>
   ) => IntexAgentToolExecutor;
 }
@@ -112,6 +116,9 @@ export function createIntexAgentExecutorResolver(
           : {}),
         ...(input.matrixCorpus.preauthorizedSelection !== undefined
           ? { preauthorizedSelection: input.matrixCorpus.preauthorizedSelection }
+          : {}),
+        ...(input.matrixCorpus.preauthorizedSelections !== undefined
+          ? { preauthorizedSelections: input.matrixCorpus.preauthorizedSelections }
           : {}),
       });
     },

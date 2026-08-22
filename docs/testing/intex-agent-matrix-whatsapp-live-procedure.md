@@ -12,7 +12,7 @@ production UI.
 
 **Architecture:** The runner and protected Matrix credentials stay on Home Dev, while the
 system under test is exclusively `https://intexuraos.cloud` on Hetzner. Matrix is the only
-injection and observation transport for the 59 agent turns. The production WhatsApp
+injection and observation transport for the 60 agent turns. The production WhatsApp
 bridge mirrors those user-authored Matrix events into the operator's Intex Agent WhatsApp
 conversation and mirrors production assistant replies back to Matrix. Google OIDC opens
 only the corpus control endpoints. Durable production evidence, not visual observation
@@ -30,7 +30,7 @@ Firestore-backed production Test Runs, authenticated production web UI.
 - Do not prepend `preflight`, `endpoint`, `scenario`, `matrix-smoke`, or `full`.
 - Never retry an ambiguously sent turn. Under an active end-to-end goal, a terminal failed
   run is diagnosed, corrected, reviewed, deployed, and then replaced by one fresh run.
-- All 59 agent turns use the real Matrix/WhatsApp transport.
+- All 60 agent turns use the real Matrix/WhatsApp transport.
 - The agent model is exactly `or:deepseek/deepseek-v4-flash`.
 - The semantic evaluator is exactly `or:minimax/minimax-m3`.
 - Sonnet and model fallbacks are forbidden.
@@ -103,8 +103,8 @@ The fixed execution environment is:
 
 Every catalog turn creates one user-authored message in the existing WhatsApp
 conversation with Intex Agent. Every expected assistant reply appears in the same
-conversation. The complete passing run therefore produces 59 visible test messages and
-59 expected assistant replies, in scenario order, for 118 conversation bubbles.
+conversation. The complete passing run therefore produces 60 visible test messages and
+60 expected assistant replies, in scenario order, for 120 conversation bubbles.
 
 The first turn of every scenario is visibly labelled:
 
@@ -173,7 +173,7 @@ messages.
 | 019 | Delete a user preference | 2 | 1 accept | `delete_user_preference` once |
 | 020 | Retain context for exactly twenty turns | 20 | 1 accept | `create_note` once |
 
-Corpus totals are fixed at 20 scenarios, 59 turns, 17 confirmation decisions, 59
+Corpus totals are fixed at 20 scenarios, 60 turns, 17 confirmation decisions, 60
 expected replies, and 19 scheduled strict-mock tool executions. Scenario 020 alone must
 show 20 consecutive test messages and 20 assistant replies while retaining its isolated
 session context.
@@ -319,11 +319,11 @@ Exit `0` is valid only if all of the following reconcile for the same run:
 
 - 20 scenarios planned, started, completed, and passed;
 - 20 distinct scenario session-binding digests;
-- 59 Matrix sends;
-- 59 WhatsApp ingresses;
-- 59 completed turns;
-- 59 expected, observed, correlated, and MiniMax-judged assistant replies;
-- 59 WhatsApp egress replies and 59 Matrix reply mirrors;
+- 60 Matrix sends;
+- 60 WhatsApp ingresses;
+- 60 completed turns;
+- 60 expected, observed, correlated, and MiniMax-judged assistant replies;
+- 60 WhatsApp egress replies and 60 Matrix reply mirrors;
 - 17 confirmation decisions completed;
 - the exact 19-row tool schedule selected and completed through strict mocks;
 - zero unexpected known-tool executions;

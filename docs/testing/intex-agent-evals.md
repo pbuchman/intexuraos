@@ -17,7 +17,7 @@ service ports. The fixed Home Dev ports Intex Agent `8134`, WhatsApp Service `81
 and Matrix adapter `8099` belong only to legacy diagnostics and local Matrix transport.
 
 `matrix-corpus` is the canonical live acceptance command. It runs the tracked corpus of
-20 scenarios and 59 turns sequentially through the real Matrix/WhatsApp transport. Each
+20 scenarios and 60 turns sequentially through the real Matrix/WhatsApp transport. Each
 scenario starts a labelled Intex session and all later turns stay bound to that exact
 session. The agent model is locked to `or:deepseek/deepseek-v4-flash`; product tools run
 only through the strict mock boundary, while `or:minimax/minimax-m3` evaluates assistant
@@ -121,7 +121,7 @@ terminal and reports retain no prompts, replies, rationale, credentials, protect
 paths, raw errors, or real identifiers.
 
 For a passing canonical run, report validation requires 20 unique session-reference
-digests, 59 correlated turns/replies, the tracked 17 confirmation decisions, the exact
+digests, 60 correlated turns/replies, the tracked 17 confirmation decisions, the exact
 19-row strict-mock tool schedule, reconciled DeepSeek/MiniMax usage, and successful ready
 artifact cleanup/release gates. `sessionsClosed` remains `0` because session-close state is
 not part of the current safe evidence projection; it must not be inferred from scenario
@@ -176,7 +176,7 @@ For behavioral failures, the corpus runner records and judges the failed turn, s
 the remaining turns that depend on that scenario's now-divergent state, and continues
 with every later scenario through scenario 20. This produces one complete cross-scenario
 failure inventory per run instead of stopping at the first broken flow. A successful run
-still executes all 59 turns. Do not implement behavioral fixes between scenarios: finish
+still executes all 60 turns. Do not implement behavioral fixes between scenarios: finish
 the run, review the complete inventory, and correct the collected behavioral failures as
 one batch before the next production run.
 

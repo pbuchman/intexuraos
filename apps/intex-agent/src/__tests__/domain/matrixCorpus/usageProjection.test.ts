@@ -18,6 +18,7 @@ describe('Matrix corpus usage projection', () => {
   it('projects classifier, multi-iteration generation, and repair calls with exact totals', () => {
     const calls = [
       call('intent_classification', 1, 10, 2, '0.0000000014'),
+      call('calendar_update_planning', 1, 15, 2, '0.0000000015'),
       call('agent_generation', 1, 20, 3, '0.0000000025'),
       call('agent_generation', 2, 30, 4, '0.0000000035'),
       call('response_schema_repair', 1, 40, 5, '0.0000000044'),
@@ -39,9 +40,10 @@ describe('Matrix corpus usage projection', () => {
         record('intent_classification', 1, 10, 2, 1),
         record('agent_generation', 1, 20, 3, 3),
         record('agent_generation', 2, 30, 4, 4),
+        record('calendar_update_planning', 1, 15, 2, 2),
         record('response_schema_repair', 1, 40, 5, 4),
       ],
-      totals: { inputTokens: 100, outputTokens: 14, totalTokens: 114, costNanoUsd: 12 },
+      totals: { inputTokens: 115, outputTokens: 16, totalTokens: 131, costNanoUsd: 14 },
     });
   });
 

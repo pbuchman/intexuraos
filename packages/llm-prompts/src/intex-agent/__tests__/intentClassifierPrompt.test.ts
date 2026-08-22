@@ -10,7 +10,7 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('11.0.0');
+    expect(intexAgentIntentClassifierPrompt.version).toBe('12.0.0');
     expect(intexAgentIntentClassifierRepairPrompt.version).toBe('3.0.0');
   });
 
@@ -69,6 +69,84 @@ describe('intexAgentIntentClassifierPrompt', () => {
     expect(prompt).toContain('lists of possible calendar events');
     expect(prompt).toContain('"outcome":"conversation"');
     expect(prompt).toContain('extract event candidates before any calendar creation');
+  });
+
+  it('keeps a proposed multi-event date preview read-only until the user asks to apply it', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+      messages: [
+        {
+          role: 'assistant',
+          content:
+            'Google Photos od 04.2019: 13 sierpnia; Wyczyścić Photos 2018: 14 sierpnia; Wyczyścić Photos 2017: 15 sierpnia; Wyczyścić Photos 2016: 16 sierpnia.',
+        },
+        {
+          role: 'user',
+          content:
+            'Pierwsze wydarzenie byłoby 22 sierpnia, a kolejne dzień po dniu. Jak wyglądałyby daty poszczególnych wydarzeń?',
+        },
+      ],
+    });
+
+    expect(prompt).toContain(
+      'A request to calculate, show, or preview how proposed calendar changes would look is read-only until the user explicitly asks to apply those changes now'
+    );
+    expect(prompt).toContain(
+      'Return conversation when the transcript already contains the events needed for the preview; use query_calendar_events only when a live lookup is needed'
+    );
+    expect(prompt).toContain(
+      'Pierwsze wydarzenie byłoby 22 sierpnia, a kolejne dzień po dniu. Jak wyglądałyby daty poszczególnych wydarzeń?'
+    );
+    expect(prompt).toContain(
+      '"outcome":"conversation","confidence":0.95,"stylePreferenceAction":"none","reason":"preview proposed dates without applying calendar changes"'
+    );
+  });
+
+  it('classifies explicit plural move and apply wording as one update-calendar intent', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+      messages: [
+        {
+          role: 'user',
+          content:
+            'Przenieś wszystkie cztery wydarzenia Google Photos dzień po dniu od 22 sierpnia.',
+        },
+      ],
+    });
+
+    expect(prompt).toContain(
+      'Przenieś wszystkie cztery wydarzenia Google Photos dzień po dniu od 22 sierpnia.'
+    );
+    expect(prompt).toContain(
+      'Zastosuj zaproponowane daty do wszystkich czterech wydarzeń Google Photos.'
+    );
+    expect(prompt).toContain(
+      '"outcome":"tool","confidence":0.95,"allowedToolNames":["update_calendar_event"],"stylePreferenceAction":"none","reason":"explicitly apply changes to several existing events"'
+    );
+  });
+
+  it('continues an active calendar update when the user supplies a plural event selector', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+      messages: [{ role: 'user', content: 'Wszystkie wydarzenia Google Photos.' }],
+      activeClarification: {
+        blockerReason: 'missing_required_details',
+        candidateIntents: ['update_calendar_event'],
+      },
+    });
+
+    expect(prompt).toContain(
+      'For an active update_calendar_event clarification, a plural event selector supplies the target set and continues the update intent; do not require the user to choose exactly one event'
+    );
+    expect(prompt).toContain(
+      'Active clarification candidate: update_calendar_event. User: "Wszystkie wydarzenia Google Photos."'
+    );
+    expect(prompt).toContain(
+      '"outcome":"tool","confidence":0.95,"allowedToolNames":["update_calendar_event"],"stylePreferenceAction":"none","reason":"plural selector resolves the target set for the active update"'
+    );
   });
 
   it('separates sole temporary retention from mixed conversation intent', () => {

@@ -3,6 +3,7 @@ import { z, type ZodTypeAny } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import { IntexAgentIntentClassifierOutputSchema } from './intentClassifierSchemas.js';
+import { IntexAgentCalendarUpdatePlanningOutputSchema } from './calendarUpdatePlanningSchemas.js';
 import { IntexAgentRunnerOutputSchema } from './runnerOutputSchemas.js';
 
 type StrictJsonSchemaResponseFormat = Extract<LlmResponseFormat, { type: 'json_schema' }>;
@@ -26,6 +27,10 @@ const runnerProviderContract = strictProviderContract(
   'intex_agent_runner_output',
   IntexAgentRunnerOutputSchema
 );
+const calendarUpdatePlanningProviderContract = strictProviderContract(
+  'intex_agent_calendar_update_planning',
+  IntexAgentCalendarUpdatePlanningOutputSchema
+);
 
 export const IntexAgentIntentClassifierProviderOutputSchema = z.preprocess(
   normalizeStrictProviderOutput(intentClassifierProviderContract),
@@ -37,10 +42,17 @@ export const IntexAgentRunnerProviderOutputSchema = z.preprocess(
   IntexAgentRunnerOutputSchema
 ) as z.ZodType<z.infer<typeof IntexAgentRunnerOutputSchema>>;
 
+export const IntexAgentCalendarUpdatePlanningProviderOutputSchema = z.preprocess(
+  normalizeStrictProviderOutput(calendarUpdatePlanningProviderContract),
+  IntexAgentCalendarUpdatePlanningOutputSchema
+) as z.ZodType<z.infer<typeof IntexAgentCalendarUpdatePlanningOutputSchema>>;
+
 export const INTEX_AGENT_INTENT_CLASSIFIER_RESPONSE_FORMAT =
   intentClassifierProviderContract.responseFormat;
 
 export const INTEX_AGENT_RUNNER_RESPONSE_FORMAT = runnerProviderContract.responseFormat;
+export const INTEX_AGENT_CALENDAR_UPDATE_PLANNING_RESPONSE_FORMAT =
+  calendarUpdatePlanningProviderContract.responseFormat;
 
 function strictProviderContract(
   name: string,

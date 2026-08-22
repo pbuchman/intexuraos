@@ -143,7 +143,7 @@ export async function runMatrixCorpusPreflight(input: {
     if (
       !snapshot.catalogMatchesTracked ||
       snapshot.scenarioCount !== 20 ||
-      snapshot.turnCount !== 59 ||
+      snapshot.turnCount !== 60 ||
       snapshot.catalogDigest !== catalog.catalogDigest
     ) {
       return failed('CATALOG_INVALID');

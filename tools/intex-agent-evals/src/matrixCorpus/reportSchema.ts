@@ -23,8 +23,9 @@ const CANONICAL_PASS_TOOL_ROWS = new Set([
   'intex-eval-006:1:create_note',
   'intex-eval-006:3:create_note',
   'intex-eval-007:1:create_note',
-  'intex-eval-008:1:query_calendar_events',
-  'intex-eval-008:2:update_calendar_event',
+  'intex-eval-008:0:query_calendar_events',
+  'intex-eval-008:2:query_calendar_events',
+  'intex-eval-008:3:update_calendar_event',
   'intex-eval-010:1:create_note',
   'intex-eval-011:0:query_calendar_events',
   'intex-eval-012:1:create_research',
@@ -38,7 +39,7 @@ const CANONICAL_PASS_TOOL_ROWS = new Set([
   'intex-eval-020:19:create_note',
 ]);
 const CANONICAL_PASS_TURN_COUNTS = [
-  2, 2, 3, 3, 1, 4, 2, 3, 1, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 20,
+  2, 2, 3, 3, 1, 4, 2, 4, 1, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 20,
 ] as const;
 
 const usage = z
@@ -60,7 +61,7 @@ const totals = z
     scenariosPassed: safeInteger,
     scenariosFailed: safeInteger,
     scenariosNotRun: safeInteger,
-    turnsPlanned: z.literal(59),
+    turnsPlanned: z.literal(60),
     turnsSent: safeInteger,
     turnsCorrelated: safeInteger,
     turnsCompleted: safeInteger,
@@ -168,7 +169,7 @@ export const MatrixCorpusReportV1Schema = z
     runnerHost: z.literal('home-dev'),
     runtimeAudience: z.literal('hetzner-prod'),
     environmentAlias: z.literal('prod'),
-    catalog: z.object({ digest, scenarioCount: z.literal(20), turnCount: z.literal(59) }).strict(),
+    catalog: z.object({ digest, scenarioCount: z.literal(20), turnCount: z.literal(60) }).strict(),
     agentModel: matrixCorpusAgentModelSchema,
     evaluatorModel: matrixCorpusEvaluatorModelSchema,
     executionMode: z.literal('real_matrix_whatsapp_strict_mock_tools'),
@@ -398,21 +399,21 @@ export const MatrixCorpusReportV1Schema = z
         report.totals.scenariosPassed === 20 &&
         report.totals.scenariosFailed === 0 &&
         report.totals.scenariosNotRun === 0 &&
-        report.totals.turnsSent === 59 &&
-        report.totals.turnsCorrelated === 59 &&
-        report.totals.turnsCompleted === 59 &&
+        report.totals.turnsSent === 60 &&
+        report.totals.turnsCorrelated === 60 &&
+        report.totals.turnsCompleted === 60 &&
         report.totals.sessionsCreated === 20 &&
-        report.totals.sessionsContinued === 38 &&
+        report.totals.sessionsContinued === 39 &&
         report.totals.sessionsClosed === 1 &&
         report.totals.confirmationsRequested === 17 &&
         report.totals.confirmationsAccepted === 17 &&
         report.totals.confirmationsRejected === 0 &&
         report.totals.confirmationsCompleted === 17 &&
-        report.totals.repliesExpected === 59 &&
-        report.totals.repliesObserved === 59 &&
-        report.totals.repliesJudged === 59 &&
-        report.totals.toolSelections === 20 &&
-        report.totals.mockCompletions === 20 &&
+        report.totals.repliesExpected === 60 &&
+        report.totals.repliesObserved === 60 &&
+        report.totals.repliesJudged === 60 &&
+        report.totals.toolSelections === 24 &&
+        report.totals.mockCompletions === 24 &&
         report.totals.mockFailures === 0 &&
         (report.artifactDelivery.status === 'pending' ||
           report.artifactDelivery.status === 'ready') &&
@@ -428,9 +429,9 @@ export const MatrixCorpusReportV1Schema = z
         report.usage.agent.totalTokens > 0 &&
         report.usage.agent.costComplete &&
         report.usage.agent.costNanoUsd !== null &&
-        report.usage.evaluator.logicalCalls >= 59 &&
-        report.usage.evaluator.logicalCalls <= 59 * 3 &&
-        (report.usage.evaluator.logicalCalls - 59) % 2 === 0 &&
+        report.usage.evaluator.logicalCalls >= 60 &&
+        report.usage.evaluator.logicalCalls <= 60 * 3 &&
+        (report.usage.evaluator.logicalCalls - 60) % 2 === 0 &&
         report.usage.evaluator.repairCount <= report.usage.evaluator.logicalCalls &&
         report.usage.evaluator.totalTokens > 0 &&
         report.usage.evaluator.costComplete &&
@@ -449,14 +450,21 @@ export const MatrixCorpusReportV1Schema = z
             entry.transport.whatsappEgress === entry.plannedTurns &&
             entry.transport.assistantReplies === entry.plannedTurns &&
             entry.transport.matrixMirrors === entry.plannedTurns &&
-            entry.tools.every(
-              (tool) =>
+            entry.tools.every((tool) => {
+              const canonicalExpectedCount =
+                entry.scenarioId === 'intex-eval-008' &&
+                tool.turnIndex === 3 &&
+                tool.toolName === 'update_calendar_event'
+                  ? 4
+                  : 1;
+              return (
                 tool.expected > 0 &&
-                tool.expected === 1 &&
+                tool.expected === canonicalExpectedCount &&
                 tool.expected === tool.selected &&
                 tool.selected === tool.completed &&
                 tool.failed === 0
-            ) &&
+              );
+            }) &&
             entry.deterministic.failed === 0 &&
             entry.judge.status === 'passed' &&
             entry.judge.passed === true &&

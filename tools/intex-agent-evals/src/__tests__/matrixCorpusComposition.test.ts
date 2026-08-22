@@ -17,7 +17,7 @@ describe('production Matrix corpus composition', () => {
     await Promise.all(cleanup.splice(0).map(async (remove) => await remove()));
   });
 
-  it('composes the real live executor across all 20 scenarios and 59 strict-mock turns', async () => {
+  it('composes the real live executor across all 20 scenarios and 60 strict-mock turns', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const harness = await createPassingMatrixCorpusCompositionHarness(catalog);
     cleanup.push(harness.cleanup);
@@ -50,8 +50,8 @@ describe('production Matrix corpus composition', () => {
         terminalAcknowledged: true,
         cleanupCompleted: true,
         totals: {
-          completedTurns: 59,
-          judgedReplies: 59,
+          completedTurns: 60,
+          judgedReplies: 60,
         },
       },
     });
@@ -62,15 +62,15 @@ describe('production Matrix corpus composition', () => {
     expect(harness.metrics.initialCursorCaptures).toBe(1);
     expect(harness.metrics.matrixSyncSince).toEqual([
       undefined,
-      ...Array.from({ length: 118 }, (_, index) => `batch_${String(index + 1)}`),
+      ...Array.from({ length: 120 }, (_, index) => `batch_${String(index + 1)}`),
     ]);
-    expect(harness.metrics.matrixMessages).toHaveLength(59);
+    expect(harness.metrics.matrixMessages).toHaveLength(60);
     expect(
       harness.metrics.matrixMessages.filter((message) => message.startsWith('new session:'))
     ).toHaveLength(20);
     expect(harness.metrics.matrixMessages[0]).toContain('Scenario 001/020');
     expect(harness.metrics.matrixMessages.at(-1)).toContain('Scenario 020/020');
-    expect(harness.metrics.leaseRenewalKeys).toHaveLength(59 * 3);
+    expect(harness.metrics.leaseRenewalKeys).toHaveLength(60 * 3);
     expect(harness.metrics.leaseRenewalKeys).toEqual(
       expect.arrayContaining([
         expect.stringContaining('renew:intex-eval-001:0'),
@@ -95,7 +95,7 @@ describe('production Matrix corpus composition', () => {
     expect(firstJudgeRenewal).toBeLessThan(firstJudge);
     expect(harness.metrics.deepSeekAgentCalls).toBeGreaterThan(0);
     expect(harness.metrics.confirmationAgentCalls).toBe(0);
-    expect(harness.metrics.miniMaxJudgeCalls).toBe(59);
+    expect(harness.metrics.miniMaxJudgeCalls).toBe(60);
     expect(harness.metrics.judgeAssistantTexts[0]).toContain('Content: [redacted]');
     expect(harness.metrics.judgeAssistantTexts.join('\n')).not.toContain('INTEX-EVAL-001-F01');
     expect(harness.metrics.productionExecutorResolutions).toBe(0);
@@ -134,14 +134,14 @@ describe('production Matrix corpus composition', () => {
     expect(report.evaluatorModel).toBe('or:minimax/minimax-m3');
     expect(report.totals).toMatchObject({
       scenariosPassed: 20,
-      turnsCompleted: 59,
+      turnsCompleted: 60,
       confirmationsAccepted: 17,
       confirmationsRejected: 0,
-      repliesJudged: 59,
-      toolSelections: 20,
-      mockCompletions: 20,
+      repliesJudged: 60,
+      toolSelections: 24,
+      mockCompletions: 24,
       mockFailures: 0,
-      sessionsContinued: 38,
+      sessionsContinued: 39,
       sessionsClosed: 1,
       productionExecutorResolutions: 0,
       productionExecutorAdmissions: 0,
@@ -187,7 +187,7 @@ describe('production Matrix corpus composition', () => {
       exitCode: 1,
       effectiveKind: 'behavioral_failure',
       failureCodes: ['deterministic_evidence_failed'],
-      totals: { completedTurns: 59 },
+      totals: { completedTurns: 60 },
     });
     expect(result.run.scenarios[1]).toMatchObject({
       scenarioId: 'intex-eval-002',
@@ -236,7 +236,7 @@ describe('production Matrix corpus composition', () => {
         'deterministic_evidence_failed',
         'required_confirmation_missing',
       ]),
-      totals: { completedTurns: 58 },
+      totals: { completedTurns: 59 },
     });
     expect(result.run.scenarios[13]).toMatchObject({
       scenarioId: 'intex-eval-014',
@@ -330,9 +330,9 @@ describe('production Matrix corpus composition', () => {
     expect(result.run).toMatchObject({
       exitCode: 0,
       effectiveKind: 'passed',
-      totals: { completedTurns: 59 },
+      totals: { completedTurns: 60 },
     });
-    expect(harness.metrics.matrixMessages).toHaveLength(59);
+    expect(harness.metrics.matrixMessages).toHaveLength(60);
     expect(harness.metrics.transportReadinessChecks).toBeGreaterThanOrEqual(3);
   });
 
@@ -543,9 +543,9 @@ describe('production Matrix corpus composition', () => {
         terminalAcknowledged: true,
         cleanupCompleted: true,
         totals: {
-          completedTurns: 25,
-          judgedReplies: 24,
-          evaluatorCostNanoUsd: 32_000,
+          completedTurns: 26,
+          judgedReplies: 25,
+          evaluatorCostNanoUsd: 33_000,
         },
       },
     });
@@ -571,7 +571,7 @@ describe('production Matrix corpus composition', () => {
       )
     );
     expect(report.artifactDelivery).toMatchObject({ status: 'ready', failureCode: null });
-    expect(report.totals.turnsCompleted).toBe(25);
+    expect(report.totals.turnsCompleted).toBe(26);
     expect(report.scenarios[11]).toMatchObject({
       lifecycle: 'stopped',
       verdict: 'not_evaluated',
@@ -590,12 +590,12 @@ describe('production Matrix corpus composition', () => {
       },
     });
     expect(report.usage.evaluator).toEqual({
-      logicalCalls: 28,
+      logicalCalls: 29,
       repairCount: 4,
-      inputTokens: 320,
-      outputTokens: 160,
-      totalTokens: 480,
-      costNanoUsd: 32_000,
+      inputTokens: 330,
+      outputTokens: 165,
+      totalTokens: 495,
+      costNanoUsd: 33_000,
       costComplete: true,
     });
   });

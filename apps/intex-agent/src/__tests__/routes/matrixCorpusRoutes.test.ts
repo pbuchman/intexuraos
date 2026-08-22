@@ -336,7 +336,7 @@ function fixture(): RouteFixture {
         agentUsage: [
           {
             turnIndex: 0,
-            stage: 'agent_generation' as const,
+            stage: 'calendar_update_planning' as const,
             callOrdinal: 1,
             inputTokens: 5,
             outputTokens: 2,
@@ -1281,7 +1281,7 @@ describe('Matrix corpus private routes', () => {
       agentUsage: [
         {
           turnIndex: 0,
-          stage: 'agent_generation',
+          stage: 'calendar_update_planning',
           callOrdinal: 1,
           inputTokens: 5,
           outputTokens: 2,

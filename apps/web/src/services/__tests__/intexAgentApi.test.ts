@@ -63,8 +63,8 @@ function testRunHeader(): Record<string, unknown> {
         failed: 0,
         notRun: 0,
       },
-      turns: { planned: 59, completed: 0 },
-      replies: { expected: 59, observed: 0, judged: 0 },
+      turns: { planned: 60, completed: 0 },
+      replies: { expected: 60, observed: 0, judged: 0 },
       tools: { selected: 0, mockCompleted: 0, mockFailed: 0, unexpectedKnown: 0 },
       evaluations: {
         deterministicPassed: 0,

@@ -71,7 +71,7 @@ const MARKER_EVIDENCE_CASES = [
   markerCase('intex-eval-006', 0, 1, ['INTEX-EVAL-006', 'INTEX-EVAL-006-F01']),
   markerCase('intex-eval-006', 2, 3, ['INTEX-EVAL-006', 'INTEX-EVAL-006-F02']),
   markerCase('intex-eval-007', 0, 1, ['INTEX-EVAL-007', 'INTEX-EVAL-007-F01']),
-  markerCase('intex-eval-008', 1, 2, ['INTEX-EVAL-008', 'INTEX-EVAL-008-F01'], [0, 1]),
+  markerCase('intex-eval-008', 2, 3, ['INTEX-EVAL-008', 'INTEX-EVAL-008-F01'], [0, 1, 2]),
   markerCase('intex-eval-010', 0, 1, ['INTEX-EVAL-010', 'INTEX-EVAL-010-F01']),
   markerCase('intex-eval-012', 0, 1, [
     'INTEX-EVAL-012',
@@ -124,11 +124,6 @@ const REDACTED_CONFIRMATION_CASES = [
     scenarioId: 'intex-eval-006',
     turnIndex: 2,
     labels: ['Title: [redacted]', 'Content: [redacted]'],
-  },
-  {
-    scenarioId: 'intex-eval-008',
-    turnIndex: 1,
-    labels: ['Title: [redacted]', 'Start: [redacted]', 'End: [redacted]', 'Attendees: [redacted]'],
   },
   {
     scenarioId: 'intex-eval-010',
@@ -378,7 +373,7 @@ describe('tracked scenario catalog', () => {
             "query_calendar_events",
             "update_calendar_event",
           ],
-          "turnCount": 3,
+          "turnCount": 4,
         },
         {
           "id": "intex-eval-009",
@@ -474,7 +469,9 @@ describe('tracked scenario catalog', () => {
 
     for (const scenario of scenarios) {
       expect(scenario.schemaVersion).toBe('1');
-      expect(scenario.currentDateTime).toBe('2026-07-16T10:00:00+02:00');
+      expect(scenario.currentDateTime).toBe(
+        scenario.id === 'intex-eval-008' ? '2026-08-21T16:55:00+02:00' : '2026-07-16T10:00:00+02:00'
+      );
       expect(scenario.timeZone).toBe('Europe/Warsaw');
       expect(scenario.expected.turns).toHaveLength(scenario.turns.length);
 
@@ -611,7 +608,7 @@ describe('tracked scenario catalog', () => {
   });
 
   it('captures clarification, supersession, unsupported, and voice timeline evidence', () => {
-    for (const scenarioId of ['intex-eval-003', 'intex-eval-004', 'intex-eval-008']) {
+    for (const scenarioId of ['intex-eval-003', 'intex-eval-004']) {
       const firstTurn = findScenario(scenarios, scenarioId).expected.turns[0];
       expect(firstTurn?.requiredToolCalls).toEqual([]);
       expect(firstTurn?.forbiddenToolCalls).toEqual([...INTEX_AGENT_TOOL_NAMES]);
@@ -876,7 +873,7 @@ describe('tracked scenario catalog', () => {
     );
   });
 
-  it('uses endpoint-observable calendar ranges and complete attendee-update snapshot evidence', () => {
+  it('uses endpoint-observable calendar ranges and complete calendar-update snapshot evidence', () => {
     const calendar002 = findRequiredToolCall(
       findScenario(scenarios, 'intex-eval-002'),
       'create_calendar_event'
@@ -920,16 +917,24 @@ describe('tracked scenario catalog', () => {
         { path: 'queryLength', operator: 'exists' },
         { path: 'timeMin', operator: 'exists' },
         { path: 'timeMax', operator: 'exists' },
+        { path: 'startMatchesCatalog', operator: 'equals', value: true },
+        { path: 'endMatchesCatalog', operator: 'equals', value: true },
+        { path: 'queryMatchesCatalog', operator: 'equals', value: true },
       ])
     );
     expect(findRequiredToolCall(scenario008, 'update_calendar_event').argumentAssertions).toEqual(
       expect.arrayContaining([
-        { path: 'attendeesToAddCount', operator: 'equals', value: 1 },
+        { path: 'attendeesToAddCount', operator: 'absent' },
         { path: 'hasEventId', operator: 'equals', value: true },
         { path: 'hasCalendarId', operator: 'equals', value: true },
         { path: 'hasExpectedEtag', operator: 'equals', value: true },
         { path: 'hasEventStart', operator: 'equals', value: true },
         { path: 'hasEventEnd', operator: 'equals', value: true },
+        { path: 'eventIdMatchesCatalog', operator: 'equals', value: true },
+        { path: 'startMatchesCatalog', operator: 'equals', value: true },
+        { path: 'endMatchesCatalog', operator: 'equals', value: true },
+        { path: 'durationMatchesCatalog', operator: 'equals', value: true },
+        { path: 'changesMatchCatalog', operator: 'equals', value: true },
       ])
     );
 
@@ -952,6 +957,54 @@ describe('tracked scenario catalog', () => {
         },
       ])
     );
+  });
+
+  it('proves scenario 008 narrows a weekly lookup to four Google Photos updates behind one confirmation', () => {
+    const scenario = findScenario(scenarios, 'intex-eval-008');
+
+    expect(scenario.turns).toEqual([
+      expect.objectContaining({
+        kind: 'message',
+        text: expect.stringMatching(/week from 2026-08-10 through 2026-08-16/iu),
+      }),
+      expect.objectContaining({
+        kind: 'message',
+        text: expect.stringMatching(/move the four.*day by day.*2026-08-22.*proposal only/iu),
+      }),
+      expect.objectContaining({
+        kind: 'message',
+        text: expect.stringMatching(/apply that proposal.*all four.*fresh Photos lookup/iu),
+      }),
+      { kind: 'confirmation_button', previousTurnIndex: 2, decision: 'accept' },
+    ]);
+    expect(scenario.expected.turns[0]?.requiredToolCalls).toEqual([
+      expect.objectContaining({ toolName: 'query_calendar_events', count: 1 }),
+    ]);
+    expect(scenario.expected.turns[0]?.timeline.requiredEventTypes).not.toContain(
+      'clarification_requested'
+    );
+    expect(scenario.expected.turns[1]?.requiredToolCalls).toEqual([]);
+    expect(scenario.expected.turns[1]?.timeline.requiredEventTypes).not.toContain(
+      'confirmation_requested'
+    );
+    expect(scenario.expected.turns[2]?.requiredToolCalls).toEqual([
+      expect.objectContaining({ toolName: 'query_calendar_events', count: 1 }),
+    ]);
+    expect(scenario.expected.turns[2]?.timeline.requiredEventTypes).toContain(
+      'confirmation_requested'
+    );
+    expect(scenario.expected.turns[3]?.requiredToolCalls).toEqual([
+      expect.objectContaining({ toolName: 'update_calendar_event', count: 4 }),
+    ]);
+    expect(scenario.expected.turns[3]?.timeline.requiredEventTypes).toEqual(
+      expect.arrayContaining(['confirmation_resolved', 'tool_call_completed'])
+    );
+    expect(semanticCriteriaFor(scenario, 1)).toMatch(/four.*proposed/iu);
+    expect(semanticCriteriaFor(scenario, 0)).toMatch(/exactly nine.*exactly four/iu);
+    expect(semanticCriteriaFor(scenario, 2)).toMatch(
+      /fresh Photos lookup.*four.*single confirmation/iu
+    );
+    expect(semanticCriteriaFor(scenario, 3)).toMatch(/4 of 4/iu);
   });
 
   it('pins marker count and digest in both confirmation preview and executed arguments', () => {
@@ -1169,7 +1222,7 @@ describe('tracked scenario catalog', () => {
 
   it('matches the stable SHA-256 digest of the full canonical parsed catalog', () => {
     expect(fullCatalogDigest(scenarios)).toBe(
-      '47df465089fee3ff50711922d999b808820925c3964f7c9d92a6bc14f7ee148c'
+      '6793fab64ce0c69a161c1554161f6ea7a905f4a5525c574a861b6edad3b45109'
     );
   });
 });

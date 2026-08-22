@@ -191,7 +191,8 @@ export const testRunScenarioProjectionV1Schema = z
     );
     requireOrderedUnique(
       projection.deterministicChecks,
-      (entry) => `${String(entry.turnIndex)}:${String(entry.replyIndex)}:${entry.code}`,
+      (entry) =>
+        `${String(entry.turnIndex)}:${String(entry.replyIndex)}:${entry.code}:${String(entry.operationOrdinal ?? 0)}`,
       context,
       'deterministic checks'
     );

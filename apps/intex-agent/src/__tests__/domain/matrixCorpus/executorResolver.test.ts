@@ -62,6 +62,38 @@ describe('Intex Agent executor resolver', () => {
     }
   );
 
+  it('forwards optional catalog, overlay, and plural confirmation authority only to the strict executor', () => {
+    const createMatrixCorpusExecutor = vi.fn(() => unusedExecutor());
+    const resolver = createIntexAgentExecutorResolver({
+      createOrdinaryExecutor: vi.fn(() => unusedExecutor()),
+      createMatrixCorpusExecutor,
+    });
+    const expectedByCatalog = vi.fn(() => true);
+    const preferenceOverlay = { read: vi.fn(), mutate: vi.fn() } as never;
+    const preauthorizedSelections = [
+      { toolName: 'update_calendar_event' as const, turnIndex: 1, ordinal: 1 },
+      { toolName: 'update_calendar_event' as const, turnIndex: 1, ordinal: 2 },
+    ];
+
+    resolver.resolve({
+      session: matrixSession(),
+      matrixCorpus: {
+        ...matrixExecutionContext('confirmation'),
+        expectedByCatalog,
+        preferenceOverlay,
+        preauthorizedSelections,
+      },
+    });
+
+    expect(createMatrixCorpusExecutor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedByCatalog,
+        preferenceOverlay,
+        preauthorizedSelections,
+      })
+    );
+  });
+
   it('fails closed when Matrix execution context is absent', () => {
     const resolver = createIntexAgentExecutorResolver({
       createOrdinaryExecutor: vi.fn(() => unusedExecutor()),

@@ -150,7 +150,11 @@ export interface MatrixCorpusSafeToolEvidence {
 
 export interface MatrixCorpusSafeAgentUsage {
   readonly turnIndex: number;
-  readonly stage: 'intent_classification' | 'agent_generation' | 'response_schema_repair';
+  readonly stage:
+    | 'intent_classification'
+    | 'calendar_update_planning'
+    | 'agent_generation'
+    | 'response_schema_repair';
   readonly callOrdinal: number;
   readonly inputTokens: number;
   readonly outputTokens: number;

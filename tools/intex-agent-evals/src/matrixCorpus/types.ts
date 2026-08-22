@@ -22,7 +22,7 @@ export interface CanonicalMatrixCorpus {
   readonly agentModel: MatrixCorpusAgentModel;
   readonly evaluatorModel: MatrixCorpusEvaluatorModel;
   readonly scenarioCount: 20;
-  readonly turnCount: 59;
+  readonly turnCount: 60;
   readonly catalogDigest: string;
   readonly scenarios: readonly CanonicalMatrixCorpusScenario[];
 }

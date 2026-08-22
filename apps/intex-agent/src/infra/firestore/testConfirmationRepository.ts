@@ -14,6 +14,7 @@ import type {
   MatrixCorpusTestConfirmationFailure,
   MatrixCorpusTestConfirmationGetResult,
   MatrixCorpusTestConfirmationIdentity,
+  MatrixCorpusTestConfirmationOperation,
   MatrixCorpusTestConfirmationResolveResult,
   TestConfirmationRepository,
 } from '../../domain/matrixCorpus/ports/testConfirmationRepository.js';
@@ -46,6 +47,8 @@ const digestPattern = /^[a-f0-9]{64}$/u;
 const safeIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:|-]{0,127}$/;
 const fencePattern = /^[1-9][0-9]{0,19}$/;
 const MAX_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
+const MAX_CONFIRMATION_OPERATIONS = 20;
+const MAX_CONFIRMATION_PAYLOAD_BYTES = 64 * 1024;
 const toolNames = new Set([
   'create_note',
   'create_calendar_event',
@@ -103,6 +106,9 @@ export class FirestoreTestConfirmationRepository implements TestConfirmationRepo
         toolArgs: structuredClone(input.toolArgs),
         selectionTurnIndex: input.selectionTurnIndex,
         selectionOrdinal: input.selectionOrdinal,
+        ...(input.operations === undefined
+          ? {}
+          : { operations: structuredClone(input.operations) }),
         createdAt: input.createdAt,
         expiresAt: input.expiresAt,
         decision: null,
@@ -201,6 +207,7 @@ function sameCreation(
     confirmation.state === 'pending' &&
     confirmation.toolName === input.toolName &&
     stableJson(confirmation.toolArgs) === stableJson(input.toolArgs) &&
+    stableJson(confirmation.operations ?? null) === stableJson(input.operations ?? null) &&
     confirmation.selectionTurnIndex === input.selectionTurnIndex &&
     confirmation.selectionOrdinal === input.selectionOrdinal &&
     confirmation.createdAt === input.createdAt &&
@@ -215,12 +222,18 @@ function correlatedReplayConflict(): MatrixCorpusTestConfirmationFailure {
 function cloneConfirmation(
   confirmation: MatrixCorpusTestConfirmation
 ): MatrixCorpusTestConfirmation {
-  return { ...confirmation, toolArgs: structuredClone(confirmation.toolArgs) };
+  return {
+    ...confirmation,
+    toolArgs: structuredClone(confirmation.toolArgs),
+    ...(confirmation.operations === undefined
+      ? {}
+      : { operations: structuredClone(confirmation.operations) }),
+  };
 }
 
 type StoredMatrixCorpusTestConfirmationV1 = Omit<
   MatrixCorpusTestConfirmation,
-  'toolArgs' | 'userId'
+  'operations' | 'toolArgs' | 'userId'
 > &
   Readonly<{
     encryptedToolArgs: MatrixCorpusEncryptedValueV1;
@@ -267,10 +280,13 @@ function encryptConfirmation(
   confirmation: MatrixCorpusTestConfirmation,
   crypto: MatrixCorpusContextCrypto
 ): StoredMatrixCorpusTestConfirmationV1 {
-  const { toolArgs, userId, ...metadata } = confirmation;
+  const { operations, toolArgs, userId, ...metadata } = confirmation;
   return {
     ...metadata,
-    encryptedToolArgs: crypto.encrypt(stableJson(toolArgs), confirmationBinding(confirmation)),
+    encryptedToolArgs: crypto.encrypt(
+      stableJson(confirmationPayload(toolArgs, operations)),
+      confirmationBinding(confirmation)
+    ),
     userBindingDigest: sha256(userId),
   };
 }
@@ -337,11 +353,11 @@ function classifyConfirmation(
       stored.encryptedToolArgs,
       confirmationBinding({ ...stored, userId: identity.userId })
     );
-    const toolArgs: unknown = JSON.parse(plaintext);
+    const decrypted: unknown = JSON.parse(plaintext);
     if (
-      !isRecord(toolArgs) ||
-      Buffer.byteLength(plaintext, 'utf8') > 64 * 1024 ||
-      stableJson(toolArgs) !== plaintext
+      !isRecord(decrypted) ||
+      Buffer.byteLength(plaintext, 'utf8') > MAX_CONFIRMATION_PAYLOAD_BYTES ||
+      stableJson(decrypted) !== plaintext
     )
       return { ok: false, failure: { ok: false, code: 'CORRUPT_CONFIRMATION' } };
     const {
@@ -349,14 +365,123 @@ function classifyConfirmation(
       userBindingDigest: _userBindingDigest,
       ...metadata
     } = stored;
+    const payload = parseConfirmationPayload(decrypted, {
+      toolName: metadata.toolName,
+      selectionTurnIndex: metadata.selectionTurnIndex,
+      selectionOrdinal: metadata.selectionOrdinal,
+    });
+    if (payload === undefined)
+      return { ok: false, failure: { ok: false, code: 'CORRUPT_CONFIRMATION' } };
     return {
       ok: true,
-      confirmation: { ...metadata, userId: identity.userId, toolArgs },
+      confirmation: {
+        ...metadata,
+        userId: identity.userId,
+        toolArgs: payload.toolArgs,
+        ...(payload.operations === undefined ? {} : { operations: payload.operations }),
+      },
       stored: structuredClone(stored),
     };
   } catch {
     return { ok: false, failure: { ok: false, code: 'CORRUPT_CONFIRMATION' } };
   }
+}
+
+type ConfirmationSelectionBinding = Pick<
+  MatrixCorpusTestConfirmationOperation,
+  'selectionOrdinal' | 'selectionTurnIndex' | 'toolName'
+>;
+
+type ConfirmationPayload = Readonly<{
+  toolArgs: Record<string, unknown>;
+  operations?: readonly MatrixCorpusTestConfirmationOperation[];
+}>;
+
+function confirmationPayload(
+  toolArgs: Record<string, unknown>,
+  operations: readonly MatrixCorpusTestConfirmationOperation[] | undefined
+): Record<string, unknown> {
+  return operations === undefined ? toolArgs : { toolArgs, operations };
+}
+
+function parseConfirmationPayload(
+  decrypted: Record<string, unknown>,
+  singular: ConfirmationSelectionBinding
+): ConfirmationPayload | undefined {
+  if (!Object.hasOwn(decrypted, 'operations')) {
+    return { toolArgs: structuredClone(decrypted) };
+  }
+  const keys = Object.keys(decrypted).sort();
+  if (keys.length !== 2 || keys[0] !== 'operations' || keys[1] !== 'toolArgs') {
+    return undefined;
+  }
+  const toolArgs = decrypted['toolArgs'];
+  if (!isRecord(toolArgs)) return undefined;
+  const operations = parseConfirmationOperations(decrypted['operations'], {
+    ...singular,
+    toolArgs,
+  });
+  if (operations === undefined) return undefined;
+  return { toolArgs: structuredClone(toolArgs), operations };
+}
+
+function parseConfirmationOperations(
+  value: unknown,
+  singular: MatrixCorpusTestConfirmationOperation
+): readonly MatrixCorpusTestConfirmationOperation[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length < 2 ||
+    value.length > MAX_CONFIRMATION_OPERATIONS
+  )
+    return undefined;
+  const operations: MatrixCorpusTestConfirmationOperation[] = [];
+  const selectionKeys = new Set<string>();
+  for (const candidate of value) {
+    if (!isRecord(candidate)) return undefined;
+    const keys = Object.keys(candidate).sort();
+    if (
+      keys.length !== 4 ||
+      keys[0] !== 'selectionOrdinal' ||
+      keys[1] !== 'selectionTurnIndex' ||
+      keys[2] !== 'toolArgs' ||
+      keys[3] !== 'toolName'
+    )
+      return undefined;
+    const toolName = candidate['toolName'];
+    const toolArgs = candidate['toolArgs'];
+    const selectionTurnIndex = candidate['selectionTurnIndex'];
+    const selectionOrdinal = candidate['selectionOrdinal'];
+    if (
+      typeof toolName !== 'string' ||
+      !toolNames.has(toolName) ||
+      !isRecord(toolArgs) ||
+      !Number.isInteger(selectionTurnIndex) ||
+      Number(selectionTurnIndex) !== singular.selectionTurnIndex ||
+      !Number.isInteger(selectionOrdinal) ||
+      Number(selectionOrdinal) < 1 ||
+      Number(selectionOrdinal) > 20
+    )
+      return undefined;
+    const selectionKey = `${toolName}:${String(selectionTurnIndex)}:${String(selectionOrdinal)}`;
+    if (selectionKeys.has(selectionKey)) return undefined;
+    selectionKeys.add(selectionKey);
+    operations.push({
+      toolName: toolName as MatrixCorpusTestConfirmationOperation['toolName'],
+      toolArgs: structuredClone(toolArgs),
+      selectionTurnIndex: Number(selectionTurnIndex),
+      selectionOrdinal: Number(selectionOrdinal),
+    });
+  }
+  const first = operations[0];
+  if (
+    first?.toolName !== singular.toolName ||
+    stableJson(first.toolArgs) !== stableJson(singular.toolArgs) ||
+    first.selectionTurnIndex !== singular.selectionTurnIndex ||
+    first.selectionOrdinal !== singular.selectionOrdinal
+  )
+    return undefined;
+  return operations;
 }
 
 function storedIdentityMatches(
@@ -391,6 +516,10 @@ function isTransportMessageId(value: unknown): value is string {
 function isValidCreateInput(
   input: Parameters<TestConfirmationRepository['createOrGet']>[0]
 ): boolean {
+  const operations =
+    input.operations === undefined
+      ? undefined
+      : parseConfirmationOperations(input.operations, input);
   return (
     isSafeId(input.identity.confirmationId) &&
     isSafeId(input.identity.runId) &&
@@ -400,7 +529,11 @@ function isValidCreateInput(
     fencePattern.test(input.identity.leaseFence) &&
     toolNames.has(input.toolName) &&
     isRecord(input.toolArgs) &&
-    Buffer.byteLength(stableJson(input.toolArgs), 'utf8') <= 64 * 1024 &&
+    (input.operations === undefined || operations !== undefined) &&
+    Buffer.byteLength(
+      stableJson(confirmationPayload(input.toolArgs, operations)),
+      'utf8'
+    ) <= MAX_CONFIRMATION_PAYLOAD_BYTES &&
     Number.isInteger(input.selectionTurnIndex) &&
     input.selectionTurnIndex >= 0 &&
     input.selectionTurnIndex <= 19 &&

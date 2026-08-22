@@ -173,6 +173,7 @@ function readUsageEvent(event: IntexAgentSessionEvent): SafeAgentUsageTotalsV1 |
     !isSafeIndex(payload['costNanoUsd']) ||
     !isSafeIndex(payload['callOrdinal'], 1) ||
     (payload['stage'] !== 'intent_classification' &&
+      payload['stage'] !== 'calendar_update_planning' &&
       payload['stage'] !== 'agent_generation' &&
       payload['stage'] !== 'response_schema_repair')
   )

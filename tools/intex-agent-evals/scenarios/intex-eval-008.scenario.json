@@ -1,24 +1,29 @@
 {
   "schemaVersion": "1",
   "id": "intex-eval-008",
-  "title": "Add an attendee to an existing calendar event",
-  "description": "Requests a missing attendee email, finds one exact event, then confirms and adds the attendee without replacing event details.",
-  "currentDateTime": "2026-07-16T10:00:00+02:00",
+  "title": "Move four existing calendar events",
+  "description": "Lists a synthetic nine-event week, selects its four Google Photos events for a proposal-only consecutive move, explicitly applies that plan after a fresh four-event Photos lookup behind one confirmation, and completes all four singular updates.",
+  "currentDateTime": "2026-08-21T16:55:00+02:00",
   "timeZone": "Europe/Warsaw",
   "turns": [
     {
       "kind": "message",
-      "text": "Invite Marta to the existing INTEX-EVAL-008 project review INTEX-EVAL-008-F01.",
+      "text": "What events were in the week from 2026-08-10 through 2026-08-16? List all synthetic calendar events carrying both exact markers INTEX-EVAL-008 and INTEX-EVAL-008-F01.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "message",
-      "text": "Her email is marta.intex-eval-008@example.com.",
+      "text": "I need to move the four events related to Google Photos from that weekly lookup day by day, preserving their order and all-day duration, with the event from 2026-08-13 moved to 2026-08-22. What would the four new date mappings be? Show the proposal only and do not apply it yet.",
+      "sourceType": "whatsapp_text"
+    },
+    {
+      "kind": "message",
+      "text": "Apply that proposal now to all four Google Photos events. Perform a fresh Photos lookup first, then update exactly those four events.",
       "sourceType": "whatsapp_text"
     },
     {
       "kind": "confirmation_button",
-      "previousTurnIndex": 1,
+      "previousTurnIndex": 2,
       "decision": "accept"
     }
   ],
@@ -26,11 +31,24 @@
     "turns": [
       {
         "turnIndex": 0,
-        "requiredToolCalls": [],
+        "requiredToolCalls": [
+          {
+            "toolName": "query_calendar_events",
+            "count": 1,
+            "argumentAssertions": [
+              { "path": "mode", "operator": "equals", "value": "list" },
+              { "path": "queryLength", "operator": "exists" },
+              { "path": "timeMin", "operator": "exists" },
+              { "path": "timeMax", "operator": "exists" },
+              { "path": "startMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "endMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "queryMatchesCatalog", "operator": "equals", "value": true }
+            ]
+          }
+        ],
         "forbiddenToolCalls": [
           "create_note",
           "create_calendar_event",
-          "query_calendar_events",
           "update_calendar_event",
           "create_research",
           "create_link",
@@ -41,9 +59,7 @@
           "update_user_preference",
           "delete_user_preference"
         ],
-        "transition": {
-          "action": "started"
-        },
+        "transition": { "action": "started" },
         "sessionAfterTurn": {
           "allowedStatuses": ["waiting_for_user"],
           "startReason": "no_active_session"
@@ -52,16 +68,16 @@
           "requiredEventTypes": [
             "session_started",
             "user_message",
-            "clarification_requested",
+            "tool_call_completed",
             "assistant_message"
           ],
           "forbiddenEventTypes": [
             "session_closed",
             "agent_fallback",
+            "clarification_requested",
             "confirmation_requested",
             "confirmation_resolved",
             "tool_call_started",
-            "tool_call_completed",
             "tool_call_failed",
             "unsupported_request"
           ],
@@ -69,19 +85,16 @@
             {
               "eventType": "session_started",
               "assertions": [
-                {
-                  "path": "reason",
-                  "operator": "equals",
-                  "value": "no_active_session"
-                }
+                { "path": "reason", "operator": "equals", "value": "no_active_session" }
               ]
             },
             {
-              "eventType": "clarification_requested",
+              "eventType": "tool_call_completed",
               "assertions": [
                 {
-                  "path": "textPreview",
-                  "operator": "exists"
+                  "path": "toolName",
+                  "operator": "equals",
+                  "value": "query_calendar_events"
                 }
               ]
             }
@@ -91,36 +104,74 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Asks for Marta's email address before preparing an attendee update.",
-              "Does not query or update the calendar before the missing attendee email is supplied."
+              "Uses the read-only calendar lookup and reports exactly nine events for August 10 through August 16 2026, including exactly four all-day events related to Google Photos on August 13 through August 16.",
+              "Does not ask for clarification or confirmation and does not update any calendar event."
             ]
           }
         ]
       },
       {
         "turnIndex": 1,
+        "requiredToolCalls": [],
+        "forbiddenToolCalls": [
+          "create_note",
+          "create_calendar_event",
+          "update_calendar_event",
+          "query_calendar_events",
+          "create_research",
+          "create_link",
+          "create_code_task",
+          "save_external",
+          "get_user_preferences",
+          "add_user_preference",
+          "update_user_preference",
+          "delete_user_preference"
+        ],
+        "transition": { "action": "continued" },
+        "sessionAfterTurn": {
+          "allowedStatuses": ["waiting_for_user"],
+          "startReason": "no_active_session"
+        },
+        "timeline": {
+          "requiredEventTypes": ["user_message", "assistant_message"],
+          "forbiddenEventTypes": [
+            "session_started",
+            "session_closed",
+            "agent_fallback",
+            "clarification_requested",
+            "confirmation_requested",
+            "confirmation_resolved",
+            "tool_call_started",
+            "tool_call_completed",
+            "tool_call_failed",
+            "unsupported_request"
+          ],
+          "payloadAssertions": []
+        },
+        "replies": [
+          {
+            "replyIndex": 0,
+            "semanticCriteria": [
+              "Selects only the four Google Photos-related events from the prior nine-event weekly lookup and presents exactly four proposed all-day date mappings in their existing order: August 22-23, August 23-24, August 24-25, and August 25-26 2026.",
+              "Does not query or update the calendar, ask for confirmation, or claim any change was applied."
+            ]
+          }
+        ]
+      },
+      {
+        "turnIndex": 2,
         "requiredToolCalls": [
           {
             "toolName": "query_calendar_events",
             "count": 1,
             "argumentAssertions": [
-              {
-                "path": "mode",
-                "operator": "equals",
-                "value": "list"
-              },
-              {
-                "path": "queryLength",
-                "operator": "exists"
-              },
-              {
-                "path": "timeMin",
-                "operator": "exists"
-              },
-              {
-                "path": "timeMax",
-                "operator": "exists"
-              }
+              { "path": "mode", "operator": "equals", "value": "list" },
+              { "path": "queryLength", "operator": "exists" },
+              { "path": "timeMin", "operator": "exists" },
+              { "path": "timeMax", "operator": "exists" },
+              { "path": "startMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "endMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "queryMatchesCatalog", "operator": "equals", "value": true }
             ]
           }
         ],
@@ -137,9 +188,7 @@
           "update_user_preference",
           "delete_user_preference"
         ],
-        "transition": {
-          "action": "continued"
-        },
+        "transition": { "action": "continued" },
         "sessionAfterTurn": {
           "allowedStatuses": ["waiting_for_user"],
           "startReason": "no_active_session",
@@ -181,40 +230,16 @@
                   "operator": "equals",
                   "value": "update_calendar_event"
                 },
-                {
-                  "path": "argsSummary.eventSummaryLength",
-                  "operator": "exists"
-                },
-                {
-                  "path": "argsSummary.attendeesToAddCount",
-                  "operator": "equals",
-                  "value": 1
-                },
-                {
-                  "path": "argsSummary.hasEventId",
-                  "operator": "equals",
-                  "value": true
-                },
-                {
-                  "path": "argsSummary.hasCalendarId",
-                  "operator": "equals",
-                  "value": true
-                },
+                { "path": "argsSummary.eventSummaryLength", "operator": "exists" },
+                { "path": "argsSummary.hasEventId", "operator": "equals", "value": true },
+                { "path": "argsSummary.hasCalendarId", "operator": "equals", "value": true },
                 {
                   "path": "argsSummary.hasExpectedEtag",
                   "operator": "equals",
                   "value": true
                 },
-                {
-                  "path": "argsSummary.hasEventStart",
-                  "operator": "equals",
-                  "value": true
-                },
-                {
-                  "path": "argsSummary.hasEventEnd",
-                  "operator": "equals",
-                  "value": true
-                },
+                { "path": "argsSummary.hasEventStart", "operator": "equals", "value": true },
+                { "path": "argsSummary.hasEventEnd", "operator": "equals", "value": true },
                 {
                   "path": "argsSummary.syntheticMarkerCount",
                   "operator": "equals",
@@ -233,60 +258,33 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Uses the closed single-event lookup result and asks for explicit confirmation before adding the supplied attendee to the existing event.",
-              "Expected complete sanitized confirmation evidence: `Title: [redacted]`, `Start: [redacted]`, `End: [redacted]`, and `Attendees: [redacted]`.",
-              "The redacted values are complete expected evidence for the judge and are not missing information.",
-              "Does not claim the attendee was already added, create a replacement event, or expose raw argument content in the sanitized reply."
+              "Performs a fresh Photos lookup that returns exactly the four intended Google Photos-related events, then asks for a single confirmation covering exactly four singular calendar-event updates.",
+              "Presents the four events in their existing order with consecutive new all-day dates starting on August 22 2026 and does not claim that any update has completed.",
+              "The closed confirmation plan and expected four execution selections are complete authoritative evidence for the judge."
             ]
           }
         ]
       },
       {
-        "turnIndex": 2,
+        "turnIndex": 3,
         "requiredToolCalls": [
           {
             "toolName": "update_calendar_event",
-            "count": 1,
+            "count": 4,
             "argumentAssertions": [
-              {
-                "path": "eventSummaryLength",
-                "operator": "exists"
-              },
-              {
-                "path": "attendeesToAddCount",
-                "operator": "equals",
-                "value": 1
-              },
-              {
-                "path": "hasEventId",
-                "operator": "equals",
-                "value": true
-              },
-              {
-                "path": "hasCalendarId",
-                "operator": "equals",
-                "value": true
-              },
-              {
-                "path": "hasExpectedEtag",
-                "operator": "equals",
-                "value": true
-              },
-              {
-                "path": "hasEventStart",
-                "operator": "equals",
-                "value": true
-              },
-              {
-                "path": "hasEventEnd",
-                "operator": "equals",
-                "value": true
-              },
-              {
-                "path": "syntheticMarkerCount",
-                "operator": "equals",
-                "value": 2
-              },
+              { "path": "eventSummaryLength", "operator": "exists" },
+              { "path": "attendeesToAddCount", "operator": "absent" },
+              { "path": "hasEventId", "operator": "equals", "value": true },
+              { "path": "hasCalendarId", "operator": "equals", "value": true },
+              { "path": "hasExpectedEtag", "operator": "equals", "value": true },
+              { "path": "hasEventStart", "operator": "equals", "value": true },
+              { "path": "hasEventEnd", "operator": "equals", "value": true },
+              { "path": "eventIdMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "startMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "endMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "durationMatchesCatalog", "operator": "equals", "value": true },
+              { "path": "changesMatchCatalog", "operator": "equals", "value": true },
+              { "path": "syntheticMarkerCount", "operator": "equals", "value": 2 },
               {
                 "path": "syntheticMarkerDigest",
                 "operator": "equals",
@@ -308,9 +306,7 @@
           "update_user_preference",
           "delete_user_preference"
         ],
-        "transition": {
-          "action": "continued"
-        },
+        "transition": { "action": "continued" },
         "sessionAfterTurn": {
           "allowedStatuses": ["waiting_for_user"],
           "startReason": "no_active_session"
@@ -335,13 +331,7 @@
           "payloadAssertions": [
             {
               "eventType": "confirmation_resolved",
-              "assertions": [
-                {
-                  "path": "resolution",
-                  "operator": "equals",
-                  "value": "accepted"
-                }
-              ]
+              "assertions": [{ "path": "resolution", "operator": "equals", "value": "accepted" }]
             },
             {
               "eventType": "tool_call_completed",
@@ -359,8 +349,8 @@
           {
             "replyIndex": 0,
             "semanticCriteria": [
-              "Clearly communicates that the attendee was added to the existing calendar event successfully.",
-              "Does not claim a new event was created or request another confirmation."
+              "Clearly communicates that all four calendar events were updated successfully, 4 of 4.",
+              "Does not claim a partial failure, create replacement events, or request another confirmation."
             ]
           }
         ]

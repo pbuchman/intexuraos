@@ -19,7 +19,11 @@ import type {
 } from '../../../domain/matrixCorpus/ports/ingestReceiptRepository.js';
 import type { TestConfirmationRepository } from '../../../domain/matrixCorpus/ports/testConfirmationRepository.js';
 import type { MatrixCorpusSessionRepository } from '../../../domain/ports/sessionRepository.js';
-import type { IntexAgentRunner } from '../../../domain/messages/handleIncomingMessage.js';
+import type {
+  IntexAgentConfirmedOperation,
+  IntexAgentRunner,
+  IntexAgentToolSelectionMetadata,
+} from '../../../domain/messages/handleIncomingMessage.js';
 import type { IntexAgentSession } from '../../../domain/sessions/types.js';
 
 const now = '2026-07-20T10:00:00.000Z';
@@ -370,6 +374,68 @@ function matrixProfile(
 ): NonNullable<IntexAgentSession['matrixCorpusProfile']> {
   if (session.matrixCorpusProfile === undefined) throw new Error('missing Matrix profile fixture');
   return session.matrixCorpusProfile;
+}
+
+type SelectedCalendarUpdateOperation = IntexAgentConfirmedOperation &
+  Readonly<{ toolSelection: IntexAgentToolSelectionMetadata }>;
+
+type PersistedCalendarUpdateOperation = IntexAgentConfirmedOperation &
+  Readonly<{ selectionTurnIndex: number; selectionOrdinal: number }>;
+
+function selectedCalendarUpdateOperations(): readonly SelectedCalendarUpdateOperation[] {
+  return [1, 2, 3, 4].map((ordinal) => ({
+    toolName: 'update_calendar_event' as const,
+    toolArgs: {
+      eventId: `mock_event_${String(ordinal)}`,
+      eventSummary: `Synthetic Google Photos ${String(ordinal)}`,
+      changes: {
+        start: { date: `2026-08-${String(21 + ordinal).padStart(2, '0')}` },
+        end: { date: `2026-08-${String(22 + ordinal).padStart(2, '0')}` },
+      },
+      calendarId: 'mock_calendar_1',
+      expectedEtag: `"mock-event-${String(ordinal)}-v1"`,
+      eventStart: { date: `2026-08-${String(12 + ordinal).padStart(2, '0')}` },
+      eventEnd: { date: `2026-08-${String(13 + ordinal).padStart(2, '0')}` },
+    },
+    toolSelection: { turnIndex: 1, ordinal },
+  }));
+}
+
+function persistedCalendarUpdateOperations(
+  operations: readonly SelectedCalendarUpdateOperation[]
+): readonly PersistedCalendarUpdateOperation[] {
+  return operations.map(({ toolName, toolArgs, toolSelection }) => ({
+    toolName,
+    toolArgs,
+    selectionTurnIndex: toolSelection.turnIndex,
+    selectionOrdinal: toolSelection.ordinal,
+  }));
+}
+
+function batchCalendarUpdateProfile(): StrictToolMockProfileV1 {
+  return {
+    version: 1,
+    calls: [1, 2, 3, 4].map((ordinal) => ({
+      turnIndex: 1,
+      toolName: 'update_calendar_event' as const,
+      ordinal,
+      outcome: {
+        kind: 'success' as const,
+        result: {
+          toolName: 'update_calendar_event' as const,
+          status: 'completed' as const,
+          eventId: `mock_event_${String(ordinal)}`,
+          summary: `Synthetic Google Photos ${String(ordinal)}`,
+          changes: {
+            start: { date: `2026-08-${String(21 + ordinal).padStart(2, '0')}` },
+            end: { date: `2026-08-${String(22 + ordinal).padStart(2, '0')}` },
+          },
+        },
+      },
+    })),
+    forbiddenSelections: [{ turnIndex: 0, toolName: 'update_calendar_event' }],
+    unexpectedKnownToolPolicy: 'behavioral_failure_no_execution',
+  };
 }
 
 describe('Matrix corpus execution service', () => {
@@ -1177,6 +1243,88 @@ describe('Matrix corpus execution service', () => {
     expect(JSON.stringify(confirmationEvent)).not.toContain('raw synthetic argument');
   });
 
+  it('persists all four selected calendar updates in one Matrix confirmation', async () => {
+    const operations = selectedCalendarUpdateOperations();
+    const firstOperation = operations[0];
+    if (firstOperation === undefined) throw new Error('missing first batch operation fixture');
+    const mockProfile = batchCalendarUpdateProfile();
+    const expectedToolSchedule = mockProfile.calls.map(
+      ({ turnIndex, toolName, ordinal }) => ({ turnIndex, toolName, ordinal })
+    );
+    const runner = {
+      run: vi.fn(async () => ({
+        outcome: 'needs_confirmation' as const,
+        reply: 'Confirm all four calendar updates.',
+        toolName: firstOperation.toolName,
+        toolArgs: firstOperation.toolArgs,
+        operations,
+      })),
+      executeConfirmed: vi.fn(),
+    } as unknown as IntexAgentRunner;
+    const current = fixture(runner, { mockProfile, expectedToolSchedule });
+    current.confirmationRepository.createOrGet.mockResolvedValueOnce({
+      ok: true,
+      disposition: 'applied',
+      confirmation: {} as never,
+    });
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events', {
+          mockProfile,
+          mockProfileDigest: sha256(
+            canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile)
+          ),
+          expectedToolSchedule,
+        }),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: true });
+
+    expect(current.confirmationRepository.createOrGet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: firstOperation.toolName,
+        toolArgs: firstOperation.toolArgs,
+        selectionTurnIndex: firstOperation.toolSelection.turnIndex,
+        selectionOrdinal: firstOperation.toolSelection.ordinal,
+        operations: persistedCalendarUpdateOperations(operations),
+      })
+    );
+  });
+
+  it('rejects a batch confirmation when any operation lacks strict selection metadata', async () => {
+    const selectedOperations = selectedCalendarUpdateOperations();
+    const firstOperation = selectedOperations[0];
+    if (firstOperation === undefined) throw new Error('missing first batch operation fixture');
+    const operations = selectedOperations.map((operation, index) =>
+      index === 2
+        ? { toolName: operation.toolName, toolArgs: operation.toolArgs }
+        : operation
+    );
+    const runner = {
+      run: vi.fn(async () => ({
+        outcome: 'needs_confirmation' as const,
+        reply: 'Confirm all four calendar updates.',
+        toolName: firstOperation.toolName,
+        toolArgs: firstOperation.toolArgs,
+        toolSelection: firstOperation.toolSelection,
+        operations,
+      })),
+      executeConfirmed: vi.fn(),
+    } as unknown as IntexAgentRunner;
+    const current = fixture(runner);
+
+    await expect(
+      current.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow(
+      'Matrix corpus batch confirmation is missing strict selection metadata'
+    );
+    expect(current.confirmationRepository.createOrGet).not.toHaveBeenCalled();
+  });
+
   it('persists a safe supporting lookup completion before an update confirmation', async () => {
     const lookupResult = {
       status: 'completed',
@@ -1453,6 +1601,191 @@ describe('Matrix corpus execution service', () => {
         toolName: 'create_note',
         toolArgs: { content: 'raw synthetic argument' },
       })
+    );
+  });
+
+  it('resolves an accepted batch with all four preauthorized selections and operations', async () => {
+    const selectedOperations = selectedCalendarUpdateOperations();
+    const persistedOperations = persistedCalendarUpdateOperations(selectedOperations);
+    const firstOperation = persistedOperations[0];
+    if (firstOperation === undefined) throw new Error('missing first persisted operation fixture');
+    const mockProfile = batchCalendarUpdateProfile();
+    const expectedToolSchedule = mockProfile.calls.map(
+      ({ turnIndex, toolName, ordinal }) => ({ turnIndex, toolName, ordinal })
+    );
+    const runner = {
+      run: vi.fn(),
+      executeConfirmed: vi.fn(async () => ({
+        outcome: 'completed' as const,
+        reply: 'Updated 4 of 4 calendar events.',
+        operationResults: selectedOperations.map(({ toolName, toolSelection }, index) => ({
+          toolName,
+          status: 'completed' as const,
+          toolSelection,
+          ...(index === 0
+            ? {}
+            : {
+                toolResult: {
+                  toolName,
+                  status: 'completed',
+                  eventId: `mock_event_${String(index + 1)}`,
+                },
+              }),
+        })),
+      })),
+    } as unknown as IntexAgentRunner;
+    const current = fixture(runner, { mockProfile, expectedToolSchedule });
+    current.confirmationRepository.getExact.mockResolvedValueOnce({
+      ok: true,
+      confirmation: {
+        version: 1,
+        lane: 'matrix_corpus',
+        runtimeAudience: 'hetzner-prod',
+        confirmationId: 'confirmation_1',
+        runId: 'run_1',
+        scenarioId: 'scenario_001',
+        sessionId: stableKeys.sessionId,
+        userId: 'auth0:user_1',
+        leaseFence: '7',
+        state: 'resolved',
+        toolName: firstOperation.toolName,
+        toolArgs: firstOperation.toolArgs,
+        selectionTurnIndex: firstOperation.selectionTurnIndex,
+        selectionOrdinal: firstOperation.selectionOrdinal,
+        operations: persistedOperations,
+        createdAt: now,
+        expiresAt: '2026-07-20T10:05:00.000Z',
+        decision: 'confirm',
+        resolutionMessageId: 'transport_message_1',
+        resolvedAt: now,
+      },
+    } as never);
+    const confirmationClaims = claims('query_calendar_events', {
+      turnIndex: 1,
+      phase: 'confirmation',
+      startNewSession: false,
+      expectedSessionId: stableKeys.sessionId,
+      pendingConfirmationId: 'confirmation_1',
+      expectedDecision: 'confirm',
+      mockProfile,
+      mockProfileDigest: sha256(canonicalMatrixCorpusStrictToolMockProfileV1(mockProfile)),
+      expectedToolSchedule,
+    });
+
+    await expect(
+      current.service.executeVerifiedIngest({ claims: confirmationClaims, stableKeys })
+    ).resolves.toEqual({ ok: true });
+
+    expect.soft(current.createRunner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execution: expect.objectContaining({
+          flow: 'confirmation',
+          preauthorizedSelections: persistedOperations.map(
+            ({ toolName, selectionTurnIndex, selectionOrdinal }) => ({
+              toolName,
+              turnIndex: selectionTurnIndex,
+              ordinal: selectionOrdinal,
+            })
+          ),
+        }),
+      })
+    );
+    expect.soft(runner.executeConfirmed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operations: persistedOperations.map(
+          ({ toolName, toolArgs, selectionTurnIndex, selectionOrdinal }) => ({
+          toolName,
+          toolArgs,
+            toolSelection: { turnIndex: selectionTurnIndex, ordinal: selectionOrdinal },
+          })
+        ),
+      })
+    );
+    expect(runner.run).not.toHaveBeenCalled();
+    const operationEvents = current.sessionRepository.appendMatrixCorpusEvent.mock.calls
+      .map(([append]) => append.event)
+      .filter(
+        (event) =>
+          event.type === 'tool_call_completed' || event.type === 'tool_call_failed'
+      );
+    expect(operationEvents).toHaveLength(4);
+    expect(operationEvents).toEqual(
+      persistedOperations.map((operation) => ({
+        id: expect.any(String),
+        sessionId: stableKeys.sessionId,
+        userId: 'auth0:user_1',
+        type: 'tool_call_completed',
+        payload: {
+          toolName: operation.toolName,
+          turnIndex: operation.selectionTurnIndex,
+          ordinal: operation.selectionOrdinal,
+          status: 'mock_completed',
+          facts: [],
+        },
+        createdAt: now,
+      }))
+    );
+  });
+
+  it('persists a correlated failed batch operation and rejects an uncorrelated batch result', async () => {
+    const failedRunner = {
+      run: vi.fn(async () => ({
+        outcome: 'completed' as const,
+        reply: 'Updated 0 of 1 calendar events.',
+        operationResults: [
+          {
+            toolName: 'update_calendar_event' as const,
+            status: 'failed' as const,
+            error: 'Synthetic failure',
+            toolSelection: { turnIndex: 0, ordinal: 1 },
+          },
+        ],
+      })),
+      executeConfirmed: vi.fn(),
+    } as unknown as IntexAgentRunner;
+    const failed = fixture(failedRunner);
+
+    await expect(
+      failed.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).resolves.toEqual({ ok: true });
+    const failedEvent = failed.sessionRepository.appendMatrixCorpusEvent.mock.calls
+      .map(([append]) => append.event)
+      .find((event) => event.type === 'tool_call_failed');
+    expect(failedEvent).toMatchObject({
+      type: 'tool_call_failed',
+      payload: {
+        toolName: 'update_calendar_event',
+        turnIndex: 0,
+        ordinal: 1,
+        status: 'mock_failed',
+        failureCode: 'MOCK_TOOL_FAILURE',
+        facts: [],
+      },
+    });
+
+    const uncorrelated = fixture({
+      run: vi.fn(async () => ({
+        outcome: 'completed' as const,
+        reply: 'Updated 1 of 1 calendar events.',
+        operationResults: [
+          {
+            toolName: 'update_calendar_event' as const,
+            status: 'completed' as const,
+          },
+        ],
+      })),
+      executeConfirmed: vi.fn(),
+    } as unknown as IntexAgentRunner);
+    await expect(
+      uncorrelated.service.executeVerifiedIngest({
+        claims: claims('query_calendar_events'),
+        stableKeys,
+      })
+    ).rejects.toThrow(
+      'Matrix corpus batch operation result is missing strict selection metadata'
     );
   });
 

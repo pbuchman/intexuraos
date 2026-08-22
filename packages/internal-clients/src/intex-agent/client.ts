@@ -199,10 +199,14 @@ const factNameSchema = z.enum([
   'hasExpectedEtag',
   'hasEventStart',
   'hasEventEnd',
+  'eventIdMatchesCatalog',
   'hasItemId',
   'hasLinearIssueId',
   'startMatchesCatalog',
   'endMatchesCatalog',
+  'durationMatchesCatalog',
+  'changesMatchCatalog',
+  'queryMatchesCatalog',
   'timeZoneMatchesCatalog',
   'mode',
   'workerType',
@@ -237,7 +241,12 @@ const evidenceSchema = z
         z
           .object({
             turnIndex: z.number().int().min(0).max(19),
-            stage: z.enum(['intent_classification', 'agent_generation', 'response_schema_repair']),
+            stage: z.enum([
+              'intent_classification',
+              'calendar_update_planning',
+              'agent_generation',
+              'response_schema_repair',
+            ]),
             callOrdinal: z.number().int().min(1).max(60),
             inputTokens: safeInteger,
             outputTokens: safeInteger,

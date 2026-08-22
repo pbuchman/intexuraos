@@ -17,6 +17,20 @@ const createdAt = '2026-07-20T10:00:00.000Z';
 const expiresAt = '2026-07-20T10:05:00.000Z';
 const paddedWamid = `wamid.${'A'.repeat(58)}==`;
 
+function stableJson(value: unknown): string {
+  return JSON.stringify(sortValue(value));
+}
+
+function sortValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortValue);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, nested]) => [key, sortValue(nested)])
+  );
+}
+
 function identity(
   overrides: Partial<MatrixCorpusTestConfirmationIdentity> = {}
 ): MatrixCorpusTestConfirmationIdentity {
@@ -44,6 +58,30 @@ function pendingInput(
     expiresAt,
     ...overrides,
   };
+}
+
+type ConfirmationOperation = NonNullable<
+  Parameters<TestConfirmationRepository['createOrGet']>[0]['operations']
+>[number];
+
+function calendarUpdateOperations(): ConfirmationOperation[] {
+  return [1, 2, 3, 4].map((ordinal) => ({
+    toolName: 'update_calendar_event' as const,
+    toolArgs: {
+      eventId: `mock_event_${String(ordinal)}`,
+      eventSummary: `Private Google Photos ${String(ordinal)}`,
+      changes: {
+        start: { date: `2026-08-${String(21 + ordinal).padStart(2, '0')}` },
+        end: { date: `2026-08-${String(22 + ordinal).padStart(2, '0')}` },
+      },
+      calendarId: 'mock_calendar_private',
+      expectedEtag: `"private-event-${String(ordinal)}-v1"`,
+      eventStart: { date: `2026-08-${String(12 + ordinal).padStart(2, '0')}` },
+      eventEnd: { date: `2026-08-${String(13 + ordinal).padStart(2, '0')}` },
+    },
+    selectionTurnIndex: 1,
+    selectionOrdinal: ordinal,
+  }));
 }
 
 function fixture(): Readonly<{
@@ -196,6 +234,67 @@ describe('FirestoreTestConfirmationRepository', () => {
     }
     expect(stored.data()).not.toHaveProperty('toolArgs');
     expect(stored.data()).toHaveProperty('encryptedToolArgs');
+  });
+
+  it('round-trips all four selected calendar updates in one encrypted confirmation', async () => {
+    const { firestore, repository } = fixture();
+    const operations = calendarUpdateOperations();
+    const input = {
+      ...pendingInput({
+        toolName: 'update_calendar_event',
+        toolArgs: operations[0]?.toolArgs ?? {},
+        selectionTurnIndex: 1,
+        selectionOrdinal: 1,
+      }),
+      operations,
+    };
+
+    await repository.createOrGet(input);
+
+    await expect(repository.getExact({ ...identity(), now: createdAt })).resolves.toMatchObject({
+      ok: true,
+      confirmation: { operations },
+    });
+    const stored = await firestore
+      .collection(INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION)
+      .doc('confirmation_1')
+      .get();
+    const serialized = JSON.stringify(stored.data());
+    for (const operation of operations) {
+      expect(serialized).not.toContain(operation.toolArgs['eventSummary']);
+      expect(serialized).not.toContain(operation.toolArgs['expectedEtag']);
+    }
+  });
+
+  it('rejects malformed, duplicate, or singularly mismatched batch operations', async () => {
+    const valid = calendarUpdateOperations();
+    const first = valid[0];
+    if (first === undefined) throw new Error('missing first batch operation fixture');
+    const invalidBatches: unknown[] = [
+      valid.slice(0, 1),
+      [...valid.slice(0, 1), null],
+      [{ ...first, extra: true }, ...valid.slice(1)],
+      [{ ...first, toolName: 'unknown_tool' }, ...valid.slice(1)],
+      [first, first],
+      [{ ...first, toolArgs: { eventId: 'different' } }, ...valid.slice(1)],
+    ];
+
+    for (const operations of invalidBatches) {
+      const { repository } = fixture();
+      const input = {
+        ...pendingInput({
+          toolName: first.toolName,
+          toolArgs: first.toolArgs,
+          selectionTurnIndex: first.selectionTurnIndex,
+          selectionOrdinal: first.selectionOrdinal,
+        }),
+        operations,
+      } as unknown as Parameters<TestConfirmationRepository['createOrGet']>[0];
+      await expect(repository.createOrGet(input)).resolves.toEqual({
+        ok: false,
+        code: 'CORRUPT_CONFIRMATION',
+      });
+    }
   });
 
   it('rejects tampered ciphertext and ciphertext replay under another confirmation identity', async () => {
@@ -384,6 +483,57 @@ describe('FirestoreTestConfirmationRepository', () => {
       ok: false,
       code: 'CORRUPT_CONFIRMATION',
     });
+  });
+
+  it('rejects every malformed encrypted batch envelope', async () => {
+    const operations = calendarUpdateOperations();
+    const first = operations[0];
+    if (first === undefined) throw new Error('missing first batch operation fixture');
+    const invalidPayloads = [
+      { extra: true, operations, toolArgs: first.toolArgs },
+      { operations, toolArgs: [] },
+      { operations: operations.slice(0, 1), toolArgs: first.toolArgs },
+    ];
+
+    for (const payload of invalidPayloads) {
+      const { firestore, crypto, repository } = fixture();
+      await repository.createOrGet(
+        pendingInput({
+          toolName: first.toolName,
+          toolArgs: first.toolArgs,
+          selectionTurnIndex: first.selectionTurnIndex,
+          selectionOrdinal: first.selectionOrdinal,
+          operations,
+        })
+      );
+      const ref = firestore
+        .collection(INTEX_AGENT_TEST_CONFIRMATIONS_COLLECTION)
+        .doc('confirmation_1');
+      const stored = (await ref.get()).data() as Record<string, unknown>;
+      await ref.set({
+        ...stored,
+        encryptedToolArgs: crypto.encrypt(stableJson(payload), {
+          version: 1,
+          kind: 'test_confirmation_tool_args',
+          runtimeAudience: 'hetzner-prod',
+          ...identity(),
+          toolName: first.toolName,
+          selectionTurnIndex: first.selectionTurnIndex,
+          selectionOrdinal: first.selectionOrdinal,
+          createdAt,
+          expiresAt,
+          state: 'pending',
+          decision: null,
+          resolutionMessageId: null,
+          resolvedAt: null,
+        }),
+      });
+
+      await expect(repository.getExact({ ...identity(), now: createdAt })).resolves.toEqual({
+        ok: false,
+        code: 'CORRUPT_CONFIRMATION',
+      });
+    }
   });
 
   it('rejects a non-object encrypted value with an otherwise exact stored shape', async () => {

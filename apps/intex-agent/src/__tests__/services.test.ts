@@ -29,6 +29,7 @@ import {
   DEFAULT_INTEX_AGENT_MODEL,
   IntexAgentModels,
   type MatrixCorpusLlmCallContextV1,
+  type MatrixCorpusProviderCallUsageV1,
 } from '@intexuraos/llm-contract';
 import { err, ok } from '@intexuraos/common-core';
 import { createOpenRouterCatalogClient } from '@intexuraos/infra-openrouter';
@@ -764,6 +765,219 @@ describe('Matrix corpus runner composition', () => {
     expect(client.run).toHaveBeenCalledOnce();
   });
 
+  it('records a distinct Matrix planning stage while staging four grounded calendar updates', async () => {
+    const calendarEvents = [1, 2, 3, 4].map((ordinal) => ({
+      eventId: `mock_event_${String(ordinal)}`,
+      etag: `"mock-event-${String(ordinal)}-v1"`,
+      summary: `Synthetic Google Photos ${String(ordinal)}`,
+      calendarId: 'mock_calendar_1',
+      start: { date: `2026-08-${String(12 + ordinal).padStart(2, '0')}` },
+      end: { date: `2026-08-${String(13 + ordinal).padStart(2, '0')}` },
+      status: 'confirmed' as const,
+    }));
+    const plannedOperations = calendarEvents.map((event, index) => ({
+      eventId: event.eventId,
+      eventSummary: event.summary,
+      changes: {
+        start: { date: `2026-08-${String(22 + index).padStart(2, '0')}` },
+        end: { date: `2026-08-${String(23 + index).padStart(2, '0')}` },
+      },
+    }));
+    const lookupResult = {
+      toolName: 'query_calendar_events' as const,
+      status: 'completed' as const,
+      mode: 'list' as const,
+      count: calendarEvents.length,
+      truncated: false,
+      events: calendarEvents,
+    };
+    const queryArgs = {
+      mode: 'list' as const,
+      timeMin: '2026-08-13T00:00:00+02:00',
+      timeMax: '2026-08-17T00:00:00+02:00',
+      query: 'Google Photos',
+      calendarId: 'mock_calendar_1',
+      maxResults: 10,
+    };
+    const profile = strictProfile({
+      calls: [
+        {
+          turnIndex: 0,
+          toolName: 'query_calendar_events',
+          ordinal: 1,
+          outcome: { kind: 'success', result: lookupResult },
+        },
+        ...calendarEvents.map((event, index) => ({
+          turnIndex: 1,
+          toolName: 'update_calendar_event' as const,
+          ordinal: index + 1,
+          outcome: {
+            kind: 'success' as const,
+            result: {
+              toolName: 'update_calendar_event' as const,
+              status: 'completed' as const,
+              eventId: event.eventId,
+              summary: event.summary,
+              attendeesAdded: [`synthetic${String(index + 1)}@example.com`],
+            },
+          },
+        })),
+      ],
+      forbiddenSelections: [{ turnIndex: 0, toolName: 'update_calendar_event' }],
+    });
+    const executionOrder: string[] = [];
+    const client = {
+      run: vi.fn(
+        async (
+          params: Parameters<import('@intexuraos/llm-contract').ToolCallingClient['run']>[0]
+        ) => {
+          expect(params.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+          const queryTool = params.tools[0];
+          if (queryTool === undefined || params.matrixCorpusContext === undefined) {
+            throw new Error('missing Matrix query tool or provider context');
+          }
+          await queryTool.run(queryArgs);
+          executionOrder.push('query_calendar_events');
+          const providerCall = {
+            context: params.matrixCorpusContext,
+            modelId: 'or:deepseek/deepseek-v4-flash',
+            inputTokens: 4,
+            outputTokens: 1,
+            totalTokens: 5,
+            providerReportedUsd: 0.0001,
+          };
+          return ok({
+            content: JSON.stringify({ outcome: 'no_action', reply: 'Lookup complete.' }),
+            toolCallsMade: 1,
+            iterationCount: 1,
+            usage: { inputTokens: 4, outputTokens: 1, totalTokens: 5, costUsd: 0.0001 },
+            providerCalls: [providerCall],
+          });
+        }
+      ),
+    };
+    const responseRepairClient = {
+      generate: vi.fn(
+        async (
+          _prompt: string,
+          options: Parameters<import('@intexuraos/llm-utils').StructuredClient['generate']>[1]
+        ) => {
+          const context = options['matrixCorpusContext'] as
+            | MatrixCorpusLlmCallContextV1
+            | undefined;
+          if (context === undefined) throw new Error('missing Matrix planning context');
+          executionOrder.push('calendar_update_planning');
+          return ok({
+            content: JSON.stringify({ outcome: 'updates', operations: plannedOperations }),
+            usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5, costUsd: 0.0002 },
+            providerCall: {
+              context,
+              modelId: 'or:deepseek/deepseek-v4-flash',
+              inputTokens: 3,
+              outputTokens: 2,
+              totalTokens: 5,
+              providerReportedUsd: 0.0002,
+            },
+          });
+        }
+      ),
+    };
+    const recordToolCallStarted = vi.fn(async () => undefined);
+    const registerExpectedProviderCall = vi.fn();
+    const recordProviderCall = vi.fn(
+      async (_call: MatrixCorpusProviderCallUsageV1) => undefined
+    );
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'normal',
+        turnIndex: 0,
+        ingestReceiptId: 'receipt_calendar_update_planning',
+        expectedSchedule: profile.calls.map(({ turnIndex, toolName, ordinal }) => ({
+          turnIndex,
+          toolName,
+          ordinal,
+        })),
+        recordExecutionBoundary: vi.fn(async () => undefined),
+        recordToolCallStarted,
+        registerExpectedProviderCall,
+        recordProviderCall,
+      },
+      client,
+      responseRepairClient,
+      intentClassifier: {
+        async classify() {
+          return { kind: 'tool' as const, allowedToolNames: ['update_calendar_event'] };
+        },
+      },
+      userPreferences: null,
+    });
+
+    const result = await runner.run({
+      session: matrixCorpusSession(profile),
+      events: [],
+      message:
+        'Przenieś wszystkie cztery wydarzenia Google Photos dzień po dniu od 22 sierpnia.',
+      currentDateTime: '2026-08-22T10:00:00.000Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: plannedOperations.map((operation, index) => ({
+        toolName: 'update_calendar_event',
+        toolArgs: {
+          ...operation,
+          eventSummary: operation.eventSummary,
+          changes: operation.changes,
+          calendarId: 'mock_calendar_1',
+          expectedEtag: calendarEvents[index]?.etag,
+          eventStart: calendarEvents[index]?.start,
+          eventEnd: calendarEvents[index]?.end,
+        },
+        toolSelection: { turnIndex: 1, ordinal: index + 1 },
+      })),
+      supportingToolCompletions: [
+        expect.objectContaining({
+          toolName: 'query_calendar_events',
+          toolSelection: { turnIndex: 0, ordinal: 1 },
+        }),
+      ],
+    });
+    if (result.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
+    expect(result.operations).toHaveLength(4);
+    expect(executionOrder).toEqual(['query_calendar_events', 'calendar_update_planning']);
+    expect(recordToolCallStarted).toHaveBeenCalledOnce();
+    expect(recordToolCallStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'query_calendar_events',
+        turnIndex: 0,
+        ordinal: 1,
+      })
+    );
+    const expectedProviderContexts = registerExpectedProviderCall.mock.calls.map(
+      ([context]) => context as MatrixCorpusLlmCallContextV1
+    );
+    expect(
+      expectedProviderContexts.map(({ stage, callOrdinal }) => ({ stage, callOrdinal }))
+    ).toEqual([
+      { stage: 'agent_generation', callOrdinal: 1 },
+      { stage: 'calendar_update_planning', callOrdinal: 1 },
+    ]);
+    expect(
+      new Set(expectedProviderContexts.map(({ stage, callOrdinal }) => `${stage}:${callOrdinal}`))
+        .size
+    ).toBe(2);
+    expect(
+      recordProviderCall.mock.calls.map(([call]) => ({
+        stage: call.context.stage,
+        callOrdinal: call.context.callOrdinal,
+      }))
+    ).toEqual([
+      { stage: 'agent_generation', callOrdinal: 1 },
+      { stage: 'calendar_update_planning', callOrdinal: 1 },
+    ]);
+  });
+
   it('executes an accepted confirmation with the exact preauthorized mock and zero LLM calls', async () => {
     const profile = strictProfile({
       calls: [
@@ -828,6 +1042,106 @@ describe('Matrix corpus runner composition', () => {
       ordinal: 1,
       facts: expect.any(Array),
     });
+    expect(recordExecutionBoundary).toHaveBeenCalledWith('strict_mock_executor_resolved');
+  });
+
+  it('executes four accepted calendar updates through four preauthorized strict mocks', async () => {
+    const profile = strictProfile({
+      calls: [1, 2, 3, 4].map((ordinal) => ({
+        turnIndex: 1,
+        toolName: 'update_calendar_event' as const,
+        ordinal,
+        outcome: {
+          kind: 'success' as const,
+          result: {
+            toolName: 'update_calendar_event' as const,
+            status: 'completed' as const,
+            eventId: `mock_event_${String(ordinal)}`,
+            summary: `Synthetic Google Photos ${String(ordinal)}`,
+            attendeesAdded: [`synthetic${String(ordinal)}@example.com`],
+          },
+        },
+      })),
+    });
+    const operations = [1, 2, 3, 4].map((ordinal) => ({
+      toolName: 'update_calendar_event' as const,
+      toolArgs: {
+        eventId: `mock_event_${String(ordinal)}`,
+        eventSummary: `Synthetic Google Photos ${String(ordinal)}`,
+        changes: {
+          start: { date: `2026-08-${String(21 + ordinal).padStart(2, '0')}` },
+          end: { date: `2026-08-${String(22 + ordinal).padStart(2, '0')}` },
+        },
+        calendarId: 'mock_calendar_1',
+        expectedEtag: `"mock-event-${String(ordinal)}-v1"`,
+        eventStart: { date: `2026-08-${String(12 + ordinal).padStart(2, '0')}` },
+        eventEnd: { date: `2026-08-${String(13 + ordinal).padStart(2, '0')}` },
+      },
+      toolSelection: { turnIndex: 1, ordinal },
+    }));
+    const preauthorizedSelections = profile.calls.map(
+      ({ toolName, turnIndex, ordinal }) => ({ toolName, turnIndex, ordinal })
+    );
+    const recordToolCallStarted = vi.fn(
+      async (_selection: Readonly<{ toolName: string; turnIndex: number; ordinal: number }>) =>
+        undefined
+    );
+    const recordExecutionBoundary = vi.fn(async () => undefined);
+    const runner = createMatrixCorpusRunner({
+      execution: {
+        flow: 'confirmation',
+        turnIndex: 1,
+        ingestReceiptId: 'receipt_batch_confirmation',
+        expectedSchedule: preauthorizedSelections,
+        recordExecutionBoundary,
+        recordToolCallStarted,
+        registerExpectedProviderCall: vi.fn(),
+        recordProviderCall: vi.fn(async () => undefined),
+        preauthorizedSelections,
+      } as never,
+      userPreferences: null,
+    });
+
+    await expect(
+      runner.executeConfirmed({
+        session: matrixCorpusSession(profile),
+        events: [],
+        operations,
+        currentDateTime: '2026-07-20T10:00:01.000Z',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      operationResults: [
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolSelection: { turnIndex: 1, ordinal: 1 },
+        },
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolSelection: { turnIndex: 1, ordinal: 2 },
+        },
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolSelection: { turnIndex: 1, ordinal: 3 },
+        },
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolSelection: { turnIndex: 1, ordinal: 4 },
+        },
+      ],
+    });
+    expect(recordToolCallStarted).toHaveBeenCalledTimes(4);
+    expect(
+      recordToolCallStarted.mock.calls.map(([selection]) => ({
+        toolName: selection.toolName,
+        turnIndex: selection.turnIndex,
+        ordinal: selection.ordinal,
+      }))
+    ).toEqual(preauthorizedSelections);
     expect(recordExecutionBoundary).toHaveBeenCalledWith('strict_mock_executor_resolved');
   });
 

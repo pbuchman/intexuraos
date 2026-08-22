@@ -10,10 +10,14 @@ import type {
   ToolCallingMessage,
 } from '@intexuraos/llm-contract';
 import {
+  IntexAgentCalendarUpdatePlanningProviderOutputSchema,
   IntexAgentRunnerProviderOutputSchema,
   IntexAgentRunnerOutputSchema,
+  INTEX_AGENT_CALENDAR_UPDATE_PLANNING_RESPONSE_FORMAT,
   INTEX_AGENT_RUNNER_RESPONSE_FORMAT,
+  intexAgentCalendarUpdatePlanningPrompt,
   intexAgentRunnerOutputRepairPrompt,
+  type IntexAgentCalendarUpdatePlanningOutput,
   type IntexAgentBlockerReason,
   type IntexAgentRunnerOutput,
 } from '@intexuraos/llm-prompts';
@@ -77,6 +81,7 @@ import type {
 } from './intentClassifier.js';
 
 const DEFAULT_WEB_APP_URL = 'https://intexuraos.cloud';
+const INTEX_AGENT_CALENDAR_UPDATE_PLANNING_PROMPT_TYPE = 'intex-agent-calendar-update-planning';
 const CLARIFICATION_ONLY_BLOCKER_REASONS = new Set<IntexAgentBlockerReason>([
   'missing_required_details',
   'not_enough_context',
@@ -153,6 +158,7 @@ interface TodayAndTomorrowCalendarQueryScope {
 const TODAY_AND_TOMORROW_CALENDAR_QUERY_MAX_RESULTS = 100;
 const TODAY_AND_TOMORROW_VISIBLE_EVENTS_PER_DAY = 10;
 const CALENDAR_EVENT_REPLY_LINE_MAX_LENGTH = 180;
+const CALENDAR_UPDATE_BATCH_EVENT_SUMMARY_MAX_LENGTH = 180;
 
 const GENERIC_EXECUTION_FAILURE_PREFIX: LocalizedText = {
   en: 'I could not execute this action: ',
@@ -251,8 +257,7 @@ const CALENDAR_DIRECT_DATE_SIGNAL_PATTERN =
 
 const CALENDAR_TODAY_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])(?:today|dzisiaj|dziś|dzis)(?![\p{L}\p{N}])/iu;
-const CALENDAR_TOMORROW_SIGNAL_PATTERN =
-  /(?<![\p{L}\p{N}])(?:tomorrow|jutro)(?![\p{L}\p{N}])/iu;
+const CALENDAR_TOMORROW_SIGNAL_PATTERN = /(?<![\p{L}\p{N}])(?:tomorrow|jutro)(?![\p{L}\p{N}])/iu;
 const CALENDAR_DAY_AFTER_TOMORROW_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])(?:day(?:\s+|-)after(?:\s+|-)tomorrow|pojutrze)(?![\p{L}\p{N}])/iu;
 const CALENDAR_SIMPLE_WHOLE_DAY_LIST_REQUEST_PATTERN =
@@ -275,10 +280,8 @@ const CALENDAR_CONTEXTUAL_MONTH_SIGNAL_PATTERN =
   /(?<![\p{L}\p{N}])(?:\d{1,2}(?:st|nd|rd|th)?\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)|(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2}(?:st|nd|rd|th)?)(?=$|[^\p{L}\p{N}])/iu;
 const CALENDAR_COLON_CLOCK_PATTERN =
   /(?<![\p{L}\p{N}])(\d{1,2}):(\d{2})(?:\s*(am|pm))?(?![\p{L}\p{N}])/iu;
-const CALENDAR_MERIDIEM_CLOCK_PATTERN =
-  /(?<![\p{L}\p{N}])(\d{1,2})\s*(am|pm)(?![\p{L}\p{N}])/iu;
-const CALENDAR_CONTEXTUAL_HOUR_PATTERN =
-  /(?<![\p{L}\p{N}])(?:at|o)\s+(\d{1,2})(?![\p{L}\p{N}:])/iu;
+const CALENDAR_MERIDIEM_CLOCK_PATTERN = /(?<![\p{L}\p{N}])(\d{1,2})\s*(am|pm)(?![\p{L}\p{N}])/iu;
+const CALENDAR_CONTEXTUAL_HOUR_PATTERN = /(?<![\p{L}\p{N}])(?:at|o)\s+(\d{1,2})(?![\p{L}\p{N}:])/iu;
 const CALENDAR_ENGLISH_DURATION_PATTERN =
   /(?<![\p{L}\p{N}])(?:for|lasting|will\s+last)\s+(?:(\d+(?:[.,]\d+)?|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|half(?:\s+an?)?)\s*)?(hours?|hrs?|h|minutes?|mins?|min)(?![\p{L}\p{N}])/iu;
 const CALENDAR_POLISH_DURATION_PATTERN =
@@ -426,13 +429,23 @@ const CALENDAR_UPDATE_MALFORMED_NEXT_STEPS: LocalizedText = {
 };
 
 const CALENDAR_UPDATE_LOOKUP_REPLIES: LocalizedText = {
-  en: 'I could not identify exactly one calendar event to update. Please clarify which event you mean.',
-  pl: 'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+  en: 'I could not reliably identify the requested calendar event or event set to update. Please clarify which event or events you mean.',
+  pl: 'Nie udało mi się wiarygodnie wskazać wydarzenia lub zestawu wydarzeń do zmiany. Doprecyzuj, o które wydarzenie lub wydarzenia chodzi.',
 };
 
 const CALENDAR_UPDATE_LOOKUP_NEXT_STEPS: LocalizedText = {
-  en: 'Identify exactly one existing calendar event.',
-  pl: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+  en: 'Identify one or more existing calendar events.',
+  pl: 'Wskaż jedno lub więcej istniejących wydarzeń.',
+};
+
+const CALENDAR_UPDATE_BATCH_PREVIEW_TOO_LARGE_REPLIES: LocalizedText = {
+  en: 'This calendar update plan is too large to show completely in one confirmation. Please narrow the event set or requested fields.',
+  pl: 'Ten plan zmian w kalendarzu jest zbyt duży, aby pokazać go w całości w jednym potwierdzeniu. Ogranicz zestaw wydarzeń lub zakres zmian.',
+};
+
+const CALENDAR_UPDATE_BATCH_PREVIEW_TOO_LARGE_NEXT_STEPS: LocalizedText = {
+  en: 'Request a smaller calendar update plan that can be shown completely.',
+  pl: 'Poproś o mniejszy plan zmian, który można pokazać w całości.',
 };
 
 const CALENDAR_UPDATE_EMAIL_CLARIFICATION_REPLIES: LocalizedText = {
@@ -446,7 +459,16 @@ const CALENDAR_UPDATE_EMAIL_CLARIFICATION_NEXT_STEPS: LocalizedText = {
 };
 
 const CALENDAR_NON_ATTENDEE_UPDATE_SIGNAL_PATTERN =
-  /(?<![\p{L}\p{N}])(?:mov\p{L}*|reschedul\p{L}*|renam\p{L}*|chang\p{L}*|updat\p{L}*|shift\p{L}*|przeni\p{L}*|przesu\p{L}*|zmie(?:ń|n)\p{L}*|zaktualiz\p{L}*|ustaw\p{L}*|tytu\p{L}*|title\p{L}*|dat\p{L}*|time\p{L}*|godzin\p{L}*|location\p{L}*|lokalizacj\p{L}*|miejsce\p{L}*|description\p{L}*|opis\p{L}*)(?![\p{L}\p{N}])/iu;
+  /(?<![\p{L}\p{N}])(?:mov\p{L}*|reschedul\p{L}*|postpon\p{L}*|push|renam\p{L}*|chang\p{L}*|updat\p{L}*|shift\p{L}*|all[- ]day|przeni\p{L}*|przesu\p{L}*|przeł\p{L}*|przeloz\p{L}*|zmie(?:ń|n)\p{L}*|zaktualiz\p{L}*|ustaw\p{L}*|tytu\p{L}*|title\p{L}*|dat\p{L}*|time\p{L}*|godzin\p{L}*|location\p{L}*|lokalizacj\p{L}*|miejsce\p{L}*|description\p{L}*|opis\p{L}*)(?![\p{L}\p{N}])/iu;
+
+const CALENDAR_UPDATE_TARGET_SET_PATTERN =
+  /(?<![\p{L}\p{N}])(?:all(?![- ]day\b)|both|every(?! day\b)|wszystk\p{L}*|oba|obie|każd\p{L}*(?!\s+dzień\b)|kazd\p{L}*(?!\s+dzien\b))(?![\p{L}\p{N}])/iu;
+const CALENDAR_UPDATE_COMPLETE_TARGET_SET_PATTERN =
+  /(?<![\p{L}\p{N}])(?:all(?![- ]day\b)|every(?! day\b)|wszystk\p{L}*|każd\p{L}*(?!\s+dzień\b)|kazd\p{L}*(?!\s+dzien\b))(?![\p{L}\p{N}])/iu;
+const CALENDAR_UPDATE_PLURAL_TARGET_PATTERN =
+  /(?<![\p{L}\p{N}])(?:events|meetings|appointments|wydarzeni\p{L}*|spotkani\p{L}*)(?![\p{L}\p{N}])/iu;
+const CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN =
+  /(?:\b(?:apply|use|execute)\s+(?:exactly\s+)?(?:it|that|this|those\s+dates|the\s+(?:proposal|plan|mapping))\b|\b(?:zastosuj|wykonaj|uzyj)\s+(?:dokladnie\s+)?(?:to|tego|te\s+daty|ten\s+plan|ta\s+propozycj\w*|to\s+mapowani\w*)\b)/u;
 
 const CONFIRMATION_LABELS = {
   title: { en: 'Title', pl: 'Tytuł' },
@@ -454,6 +476,7 @@ const CONFIRMATION_LABELS = {
   start: { en: 'Start', pl: 'Początek' },
   end: { en: 'End', pl: 'Koniec' },
   location: { en: 'Location', pl: 'Miejsce' },
+  description: { en: 'Description', pl: 'Opis' },
   attendees: { en: 'Attendees', pl: 'Uczestnicy' },
   prompt: { en: 'Prompt', pl: 'Polecenie' },
   mode: { en: 'Mode', pl: 'Tryb' },
@@ -511,10 +534,12 @@ export interface IntexAgentRunnerConfig {
   intentClassifier?: IntexAgentIntentClassifier;
   webAppUrl?: string;
   userPreferences?: string | null;
-  toolSelectionGate?: (input: Readonly<{
-    toolName: IntexAgentToolName;
-    args: Record<string, unknown>;
-  }>) => Promise<
+  toolSelectionGate?: (
+    input: Readonly<{
+      toolName: IntexAgentToolName;
+      args: Record<string, unknown>;
+    }>
+  ) => Promise<
     | Readonly<{ decision: 'allow'; metadata: IntexAgentToolSelectionMetadata }>
     | Readonly<{
         decision: 'reject';
@@ -533,7 +558,11 @@ async function executeConfirmedOperation(
   replyLanguage: IntexAgentReplyLanguage
 ): Promise<IntexAgentRunnerResult> {
   if (!isMutatingToolName(toolName)) {
-    return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch', 'confirmed_execution');
+    return fallbackClarificationResult(
+      replyLanguage,
+      'tool_result_mismatch',
+      'confirmed_execution'
+    );
   }
 
   const toolExecutions: IntexAgentToolExecution[] = [];
@@ -543,7 +572,11 @@ async function executeConfirmedOperation(
   const tool = tools.find((candidate) => candidate.name === toolName);
   /* v8 ignore start -- schema: mutating tool registry and tool definitions cannot diverge without breaking startup tests @preserve */
   if (tool === undefined) {
-    return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch', 'confirmed_execution');
+    return fallbackClarificationResult(
+      replyLanguage,
+      'tool_result_mismatch',
+      'confirmed_execution'
+    );
   }
   /* v8 ignore stop @preserve */
 
@@ -552,7 +585,11 @@ async function executeConfirmedOperation(
     const toolExecution = getCompletedToolExecution(toolExecutions);
     /* v8 ignore start -- schema: every mutating tool definition executes through the tracking executor after argument validation @preserve */
     if (toolExecution === undefined) {
-      return fallbackClarificationResult(replyLanguage, 'tool_result_mismatch', 'confirmed_execution');
+      return fallbackClarificationResult(
+        replyLanguage,
+        'tool_result_mismatch',
+        'confirmed_execution'
+      );
     }
     /* v8 ignore stop @preserve */
     const parsedResult = parseToolResult(rawResult);
@@ -601,11 +638,17 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
               ? {
                   toolName: operation.toolName,
                   status: 'completed' as const,
+                  ...(operation.toolSelection === undefined
+                    ? {}
+                    : { toolSelection: operation.toolSelection }),
                   ...(result.toolResult !== undefined ? { toolResult: result.toolResult } : {}),
                 }
               : {
                   toolName: operation.toolName,
                   status: 'failed' as const,
+                  ...(operation.toolSelection === undefined
+                    ? {}
+                    : { toolSelection: operation.toolSelection }),
                   error:
                     result.outcome === 'tool_failed'
                       ? result.error
@@ -625,12 +668,7 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
           operationResults,
         };
       }
-      return await executeConfirmedOperation(
-        config,
-        input.toolName,
-        input.toolArgs,
-        replyLanguage
-      );
+      return await executeConfirmedOperation(config, input.toolName, input.toolArgs, replyLanguage);
     },
     async run(input): Promise<IntexAgentRunnerResult> {
       const detectedReplyLanguage = detectReplyLanguage(input.events, {
@@ -641,7 +679,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
 
       if (input.sourceType === 'whatsapp_image' && input.sourceUrl !== undefined) {
         const args = {
-          message: input.message.trim() === '' ? 'Image shared via WhatsApp.' : input.message.trim(),
+          message:
+            input.message.trim() === '' ? 'Image shared via WhatsApp.' : input.message.trim(),
           sourceUrl: input.sourceUrl,
         };
         return {
@@ -708,15 +747,19 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         replyContext: input.replyContext,
         replyLanguage: replyLanguageForIntent(queryNormalizedIntent, detectedReplyLanguage),
       });
-      const calendarDefaultIntent = applyCalendarEndDefaultIntent(
-        dateNormalizedIntent,
+      const calendarDefaultIntent = applyCalendarEndDefaultIntent(dateNormalizedIntent, {
+        message: input.message,
+        events: input.events,
+        replyContext: input.replyContext,
+      });
+      const calendarUpdateTargetIntent = applyCalendarUpdateTargetSetClarification(
+        calendarDefaultIntent,
         {
           message: input.message,
           events: input.events,
-          replyContext: input.replyContext,
         }
       );
-      const intent = applyMissingCalendarAttendeeEmailClarification(calendarDefaultIntent, {
+      const intent = applyMissingCalendarAttendeeEmailClarification(calendarUpdateTargetIntent, {
         message: input.message,
         events: input.events,
         replyContext: input.replyContext,
@@ -807,7 +850,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
             )
           : undefined;
       const toolExecutions: IntexAgentToolExecution[] = [];
-      const allowedToolNames = resolveRunnerToolNames(intent);
+      const useStructuredCalendarUpdatePlanning =
+        isCalendarUpdateIntent(intent) && config.responseRepairClient !== undefined;
+      const allowedToolNames = resolveRunnerToolNames(intent, useStructuredCalendarUpdatePlanning);
       const trackingToolExecutor = createTrackingToolExecutor(
         createConfirmationPreviewExecutor(config.toolExecutor),
         toolExecutions,
@@ -816,13 +861,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         calendarUpdateAttendeeEmails,
         todayAndTomorrowCalendarQueryScope
       );
-      const tools = createIntexAgentToolDefinitions(
-        trackingToolExecutor
-      )
-        .filter(
-          (tool) =>
-            allowedToolNames.includes(tool.name as IntexAgentToolName)
-        )
+      const allTools = createIntexAgentToolDefinitions(trackingToolExecutor);
+      const tools = allTools
+        .filter((tool) => allowedToolNames.includes(tool.name as IntexAgentToolName))
         .map((tool) =>
           (isMutatingToolName(tool.name as IntexAgentToolName) &&
             tool.name !== 'update_calendar_event') ||
@@ -888,13 +929,38 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         }
       }
 
-      const synthesizedCalendarUpdatePreview = await appendDeterministicCalendarUpdatePreview({
+      const deterministicCalendarAttendeePreview = await appendDeterministicCalendarUpdatePreview({
         intent,
         toolExecutions,
-        tools,
+        tools: allTools,
         attendeesToAdd: calendarUpdateAttendeeEmails,
         activeUserTexts: calendarUpdateRelevantTexts,
       });
+      const structuredCalendarUpdatePlan = deterministicCalendarAttendeePreview
+        ? { outcome: 'not_applicable' as const }
+        : useStructuredCalendarUpdatePlanning && config.responseRepairClient !== undefined
+          ? await appendStructuredCalendarUpdatePreview({
+              client: config.responseRepairClient,
+              intent,
+              toolExecutions,
+              tools: allTools,
+              currentDateTime: input.currentDateTime,
+              timeZone: input.timeZone,
+              messages,
+              events: input.events,
+              currentMessage: input.message,
+              ...(matrixCorpusLlm === undefined
+                ? {}
+                : {
+                    matrixCorpusLlm,
+                    recordProviderCall: async (providerCall): Promise<void> => {
+                      await recordProviderCallOnce(matrixCorpusLlm, providerCall);
+                    },
+                  }),
+            })
+          : { outcome: 'not_applicable' as const };
+      const synthesizedCalendarUpdatePreview =
+        deterministicCalendarAttendeePreview || structuredCalendarUpdatePlan.outcome === 'updates';
       const currentCalendarEvidence = currentCalendarEvidenceTexts(
         input.message,
         input.replyContext
@@ -905,73 +971,94 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         input.replyContext
       );
 
-      const runnerResult = await parseRunnerContent(
-        {
-          content: result.value.content,
-          repairClient: config.responseRepairClient,
-          systemPrompt,
-          messages,
-          intent,
-          exposedToolNames,
-          currentMessage: input.message,
-          ...(intent.kind === 'tool' && intent.allowedToolNames.includes('create_calendar_event')
-            ? {
-                calendarCreateReadiness: {
-                  evidenceTexts: calendarCreateEvidenceTexts(
-                    input.message,
-                    input.events,
-                    input.replyContext
-                  ),
-                  hasExplicitStart: hasCalendarStartSignal(
-                    input.message,
-                    input.events,
-                    input.replyContext
-                  ),
-                  hasExplicitEnd: hasCalendarExplicitEndTimeSignal(
-                    input.message,
-                    input.events,
-                    input.replyContext
-                  ),
-                  ...(explicitDurationMinutes === undefined
-                    ? {}
-                    : { explicitDurationMinutes }),
-                  hasCurrentExplicitSummary: currentCalendarEvidence.some(
-                    containsExplicitCalendarSummarySignal
-                  ),
-                  hasCurrentExplicitStart: currentCalendarEvidence.some(
-                    containsCalendarClockTimeSignal
-                  ),
-                  hasCurrentExplicitEnd: currentCalendarEvidence.some(
-                    containsCalendarEndTimeSignal
-                  ),
-                  ...(activeCalendarDraft === null
-                    ? {}
-                    : { activeDraft: activeCalendarDraft }),
-                },
-              }
-            : {}),
-          ...(todayAndTomorrowCalendarQueryScope !== undefined
-            ? { todayAndTomorrowCalendarQueryScope }
-            : {}),
-          ...(calendarUpdateAttendeeEmails !== undefined
-            ? { calendarUpdateAttendeeEmails }
-            : {}),
-          ...(calendarUpdateExplicitAttendeeEmails !== undefined
-            ? { calendarUpdateExplicitAttendeeEmails }
-            : {}),
-          ...(synthesizedCalendarUpdatePreview
-            ? { synthesizedCalendarUpdatePreview: true }
-            : {}),
-          ...(config.matrixCorpusLlm === undefined
-            ? {}
-            : { matrixCorpusLlm: config.matrixCorpusLlm }),
-        },
-        toolExecutions,
-        config.webAppUrl ?? DEFAULT_WEB_APP_URL,
-        config.userPreferences ?? null,
-        replyLanguage,
-        input.timeZone
-      );
+      const runnerResult =
+        structuredCalendarUpdatePlan.outcome === 'proposal_only'
+          ? ({
+              outcome: 'no_action',
+              reply: structuredCalendarUpdatePlan.reply,
+            } satisfies IntexAgentRunnerResult)
+          : structuredCalendarUpdatePlan.outcome === 'invalid_scope'
+            ? calendarUpdateLookupResult(replyLanguage)
+            : structuredCalendarUpdatePlan.outcome === 'needs_clarification'
+              ? ({
+                  outcome: 'needs_clarification',
+                  reply: structuredCalendarUpdatePlan.question,
+                  clarification: structuredCalendarUpdatePlan.question,
+                  blockerReason: 'missing_required_details',
+                  candidateIntents: ['update_calendar_event'],
+                  suggestedNextStep:
+                    replyLanguage === 'pl'
+                      ? 'Doprecyzuj zakres wydarzeń albo zmianę do zastosowania.'
+                      : 'Clarify the event scope or the change to apply.',
+                } satisfies IntexAgentRunnerResult)
+              : await parseRunnerContent(
+                  {
+                    content: result.value.content,
+                    repairClient: config.responseRepairClient,
+                    systemPrompt,
+                    messages,
+                    intent,
+                    exposedToolNames,
+                    currentMessage: input.message,
+                    ...(intent.kind === 'tool' &&
+                    intent.allowedToolNames.includes('create_calendar_event')
+                      ? {
+                          calendarCreateReadiness: {
+                            evidenceTexts: calendarCreateEvidenceTexts(
+                              input.message,
+                              input.events,
+                              input.replyContext
+                            ),
+                            hasExplicitStart: hasCalendarStartSignal(
+                              input.message,
+                              input.events,
+                              input.replyContext
+                            ),
+                            hasExplicitEnd: hasCalendarExplicitEndTimeSignal(
+                              input.message,
+                              input.events,
+                              input.replyContext
+                            ),
+                            ...(explicitDurationMinutes === undefined
+                              ? {}
+                              : { explicitDurationMinutes }),
+                            hasCurrentExplicitSummary: currentCalendarEvidence.some(
+                              containsExplicitCalendarSummarySignal
+                            ),
+                            hasCurrentExplicitStart: currentCalendarEvidence.some(
+                              containsCalendarClockTimeSignal
+                            ),
+                            hasCurrentExplicitEnd: currentCalendarEvidence.some(
+                              containsCalendarEndTimeSignal
+                            ),
+                            ...(activeCalendarDraft === null
+                              ? {}
+                              : { activeDraft: activeCalendarDraft }),
+                          },
+                        }
+                      : {}),
+                    ...(todayAndTomorrowCalendarQueryScope !== undefined
+                      ? { todayAndTomorrowCalendarQueryScope }
+                      : {}),
+                    ...(calendarUpdateAttendeeEmails !== undefined
+                      ? { calendarUpdateAttendeeEmails }
+                      : {}),
+                    ...(calendarUpdateExplicitAttendeeEmails !== undefined
+                      ? { calendarUpdateExplicitAttendeeEmails }
+                      : {}),
+                    ...(synthesizedCalendarUpdatePreview
+                      ? { synthesizedCalendarUpdatePreview: true }
+                      : {}),
+                    ...(config.matrixCorpusLlm === undefined
+                      ? {}
+                      : { matrixCorpusLlm: config.matrixCorpusLlm }),
+                  },
+                  toolExecutions,
+                  config.webAppUrl ?? DEFAULT_WEB_APP_URL,
+                  config.userPreferences ?? null,
+                  replyLanguage,
+                  input.timeZone
+                );
       return {
         ...runnerResult,
         reply: formatReplyDateRecords(runnerResult.reply, input.timeZone, replyLanguage),
@@ -1165,6 +1252,45 @@ function applyCalendarEndDefaultIntent(
   return clarificationToToolIntent(intent, 'create_calendar_event');
 }
 
+function applyCalendarUpdateTargetSetClarification(
+  intent: IntexAgentIntentClassification,
+  context: Readonly<{
+    message: string;
+    events: readonly IntexAgentSessionEvent[];
+  }>
+): IntexAgentIntentClassification {
+  if (
+    intent.kind !== 'needs_clarification' ||
+    intent.blockerReason !== 'missing_required_details' ||
+    intent.candidateIntents?.length !== 1 ||
+    intent.candidateIntents[0] !== 'update_calendar_event' ||
+    intent.missingFields?.some((field) => field.trim().toLocaleLowerCase('en-US') === 'event') !==
+      true ||
+    !CALENDAR_UPDATE_TARGET_SET_PATTERN.test(context.message)
+  ) {
+    return intent;
+  }
+
+  const activeClarification = findActiveClarificationEvent(context.events);
+  if (activeClarification === undefined) return intent;
+  const activeCandidateIntents = activeClarification.event.payload['candidateIntents'];
+  const activeMissingFields = activeClarification.event.payload['missingFields'];
+  if (
+    activeClarification.event.payload['blockerReason'] !== 'missing_required_details' ||
+    !Array.isArray(activeCandidateIntents) ||
+    activeCandidateIntents.length !== 1 ||
+    activeCandidateIntents[0] !== 'update_calendar_event' ||
+    !Array.isArray(activeMissingFields) ||
+    !activeMissingFields.some(
+      (field) => typeof field === 'string' && field.trim().toLocaleLowerCase('en-US') === 'event'
+    )
+  ) {
+    return intent;
+  }
+
+  return clarificationToToolIntent(intent, 'update_calendar_event');
+}
+
 function isSatisfiedCalendarClarificationField(
   field: string,
   context: Readonly<{
@@ -1175,7 +1301,10 @@ function isSatisfiedCalendarClarificationField(
   }>,
   activeClarificationIndex: number
 ): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   if (isCalendarSummaryField(field)) {
     return activeCalendarClarificationChainContainsSummary(
       context.events,
@@ -1192,11 +1321,7 @@ function isSatisfiedCalendarClarificationField(
     canonical === 'startdatetime' ||
     canonical === 'time'
   ) {
-    return hasCalendarSignal(
-      context,
-      activeClarificationIndex,
-      containsCalendarClockTimeSignal
-    );
+    return hasCalendarSignal(context, activeClarificationIndex, containsCalendarClockTimeSignal);
   }
   if (
     canonical === 'end' ||
@@ -1332,15 +1457,10 @@ function findActiveCalendarDraft(
   events: readonly IntexAgentSessionEvent[]
 ): CalendarEventDraftV1 | null {
   const activeClarification = findActiveClarificationEvent(events);
-  if (
-    activeClarification === undefined ||
-    !isCalendarClarification(activeClarification.event)
-  ) {
+  if (activeClarification === undefined || !isCalendarClarification(activeClarification.event)) {
     return null;
   }
-  const draft = parseCalendarEventDraft(
-    activeClarification.event.payload['calendarEventDraft']
-  );
+  const draft = parseCalendarEventDraft(activeClarification.event.payload['calendarEventDraft']);
   return draft;
 }
 
@@ -1397,10 +1517,7 @@ function calendarCreateEvidenceTexts(
   const texts = [message];
   if (replyContext?.source === 'inbound_user_message') texts.push(replyContext.text);
   const activeClarification = findActiveClarificationEvent(events);
-  if (
-    activeClarification === undefined ||
-    !isCalendarClarification(activeClarification.event)
-  ) {
+  if (activeClarification === undefined || !isCalendarClarification(activeClarification.event)) {
     return texts;
   }
 
@@ -1432,10 +1549,7 @@ function currentCalendarEvidenceTexts(
   message: string,
   replyContext: IntexIncomingMessageReplyContext | undefined
 ): string[] {
-  return [
-    message,
-    ...(replyContext?.source === 'inbound_user_message' ? [replyContext.text] : []),
-  ];
+  return [message, ...(replyContext?.source === 'inbound_user_message' ? [replyContext.text] : [])];
 }
 
 function resolveCalendarDurationMinutes(
@@ -1555,13 +1669,11 @@ function applyMissingCalendarAttendeeEmailClarification(
     return intent;
   }
 
-  if (
-    activeCalendarAttendeeUserTurns(context)
-      .flat()
-      .some((text) => CALENDAR_NON_ATTENDEE_UPDATE_SIGNAL_PATTERN.test(text))
-  ) {
-    return intent;
-  }
+  const activeUserTexts = activeCalendarAttendeeUserTurns(context).flat();
+  const hasExplicitAttendeeRequest = activeUserTexts.some(
+    (text) => extractCalendarAttendeeSegments(text).length > 0
+  );
+  if (!hasExplicitAttendeeRequest) return intent;
 
   if (hasCalendarAttendeeEmailContext(context)) {
     return isSingleUpdateClarification &&
@@ -1668,14 +1780,14 @@ function extractAssociatedAttendeeEmails(message: string): string[] {
   if (attendeeSegmentEmails.length > 0) {
     return attendeeSegmentEmails.flat();
   }
-  return containsStandaloneAttendeeEmailSignal(message)
-    ? uniqueValidAttendeeEmails(message)
-    : [];
+  return containsStandaloneAttendeeEmailSignal(message) ? uniqueValidAttendeeEmails(message) : [];
 }
 
 function uniqueValidAttendeeEmails(message: string): string[] {
   const byNormalizedEmail = new Map<string, string>();
-  for (const email of extractAttendeeEmailCandidates(message).filter(isValidCalendarAttendeeEmail)) {
+  for (const email of extractAttendeeEmailCandidates(message).filter(
+    isValidCalendarAttendeeEmail
+  )) {
     byNormalizedEmail.set(normalizeAttendeeEmail(email), email);
   }
   return [...byNormalizedEmail.values()];
@@ -1821,7 +1933,9 @@ function resolveUnambiguousMatchingAttendeeEmailPreference(
       }
       continue;
     }
-    if (!attendeeObjects.some((attendee) => isExactPersonLabelMatch(attendee, parsedMapping.person))) {
+    if (
+      !attendeeObjects.some((attendee) => isExactPersonLabelMatch(attendee, parsedMapping.person))
+    ) {
       continue;
     }
     if (parsedMapping.email === null) return undefined;
@@ -1936,7 +2050,8 @@ function isSpecificPersonLabel(value: string): boolean {
 function isExactPersonLabelMatch(attendeeObject: string, person: string): boolean {
   const attendeeTokens = personTokens(attendeeObject);
   const personLabelTokens = personTokens(person);
-  if (personLabelTokens.length === 0 || personLabelTokens.length > attendeeTokens.length) return false;
+  if (personLabelTokens.length === 0 || personLabelTokens.length > attendeeTokens.length)
+    return false;
 
   return attendeeTokens.some((_token, startIndex) =>
     personLabelTokens.every(
@@ -1952,11 +2067,13 @@ function sharesPersonToken(attendeeObject: string, preferenceText: string): bool
 }
 
 function personTokens(value: string): string[] {
-  return value
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .toLocaleLowerCase('en-US')
-    .match(/[\p{L}\p{N}]+/gu) ?? [];
+  return (
+    value
+      .normalize('NFKD')
+      .replace(/\p{M}/gu, '')
+      .toLocaleLowerCase('en-US')
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  );
 }
 
 function containsStandaloneAttendeeEmailSignal(message: string): boolean {
@@ -2007,7 +2124,8 @@ function applyMissingCalendarDateClarification(
     replyLanguage: IntexAgentReplyLanguage;
   }>
 ): IntexAgentIntentClassification {
-  const candidateIntents = intent.kind === 'needs_clarification' ? intent.candidateIntents : undefined;
+  const candidateIntents =
+    intent.kind === 'needs_clarification' ? intent.candidateIntents : undefined;
   const singleCalendarCandidate =
     candidateIntents?.length === 1 && candidateIntents[0] === 'create_calendar_event';
   const safelyNarrowedCalendarCandidate =
@@ -2052,32 +2170,55 @@ function containsExplicitNoteActionSignal(message: string): boolean {
 }
 
 function isOptionalNoteField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return canonical === 'title' || canonical === 'tags' || canonical === 'sourcemessageids';
 }
 
 function isCalendarSummaryField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return canonical === 'summary' || canonical === 'title' || canonical === 'eventtitle';
 }
 
 function isCalendarEndField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
-  return canonical === 'end' || canonical === 'endtime' || canonical === 'enddatetime' || canonical === 'duration';
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
+  return (
+    canonical === 'end' ||
+    canonical === 'endtime' ||
+    canonical === 'enddatetime' ||
+    canonical === 'duration'
+  );
 }
 
 function isOmittableCalendarCreateField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return canonical === 'location' || canonical === 'description';
 }
 
 function isOptionalCodeTaskField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return canonical === 'title' || canonical === 'name' || canonical === 'tasktitle';
 }
 
 function isOptionalPreferenceReadField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return (
     canonical === 'preferencekeyortarget' ||
     canonical === 'preferencekey' ||
@@ -2152,11 +2293,7 @@ function containsCalendarClockTimeSignal(message: string): boolean {
 
   const colonClock = CALENDAR_COLON_CLOCK_PATTERN.exec(normalized);
   if (colonClock !== null) {
-    return isValidCalendarClock(
-      Number(colonClock[1]),
-      Number(colonClock[2]),
-      colonClock[3]
-    );
+    return isValidCalendarClock(Number(colonClock[1]), Number(colonClock[2]), colonClock[3]);
   }
 
   const meridiemClock = CALENDAR_MERIDIEM_CLOCK_PATTERN.exec(normalized);
@@ -2165,10 +2302,7 @@ function containsCalendarClockTimeSignal(message: string): boolean {
   }
 
   const contextualHour = CALENDAR_CONTEXTUAL_HOUR_PATTERN.exec(normalized);
-  return (
-    contextualHour !== null &&
-    isValidCalendarClock(Number(contextualHour[1]), 0, undefined)
-  );
+  return contextualHour !== null && isValidCalendarClock(Number(contextualHour[1]), 0, undefined);
 }
 
 function containsCalendarEndTimeSignal(message: string): boolean {
@@ -2198,10 +2332,7 @@ function extractCalendarDurationMinutes(message: string): number | undefined {
   return undefined;
 }
 
-function durationMinutes(
-  quantityValue: string | undefined,
-  unitValue: string
-): number | undefined {
+function durationMinutes(quantityValue: string | undefined, unitValue: string): number | undefined {
   const normalizedQuantity = quantityValue
     ?.normalize('NFKD')
     .replace(/\p{M}/gu, '')
@@ -2219,9 +2350,7 @@ function durationMinutes(
     .replace(/\p{M}/gu, '')
     .replaceAll('ł', 'l')
     .toLocaleLowerCase('en-US');
-  const multiplier = /^(?:h|hr|hrs|hour|hours|godz|godzin)/u.test(normalizedUnit)
-    ? 60
-    : 1;
+  const multiplier = /^(?:h|hr|hrs|hour|hours|godz|godzin)/u.test(normalizedUnit) ? 60 : 1;
   const minutes = quantity * multiplier;
   return Number.isInteger(minutes) ? minutes : undefined;
 }
@@ -2255,11 +2384,7 @@ function containsCalendarExplicitEndTimeSignal(message: string): boolean {
   );
 }
 
-function isValidCalendarClock(
-  hour: number,
-  minute: number,
-  meridiem: string | undefined
-): boolean {
+function isValidCalendarClock(hour: number, minute: number, meridiem: string | undefined): boolean {
   if (!Number.isInteger(hour) || !Number.isInteger(minute) || minute < 0 || minute > 59) {
     return false;
   }
@@ -2283,7 +2408,10 @@ function isExplicitUnscopedPreferenceRead(message: string): boolean {
 }
 
 function isDerivedCalendarQueryField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return (
     canonical === 'start' ||
     canonical === 'end' ||
@@ -2297,7 +2425,10 @@ function isDerivedCalendarQueryField(field: string): boolean {
 }
 
 function isRuntimeTimeZoneMissingField(field: string): boolean {
-  const canonical = field.trim().toLocaleLowerCase('en-US').replace(/[\s_-]+/gu, '');
+  const canonical = field
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[\s_-]+/gu, '');
   return RUNTIME_TIME_ZONE_MISSING_FIELDS.has(canonical);
 }
 
@@ -2426,10 +2557,7 @@ function buildNaturalTimeZoneNames(): ReadonlySet<string> {
 function isKnownNaturalTimeZoneName(value: string): boolean {
   const words = normalizeNaturalTimeZoneName(value).split(' ');
   if (hasKnownNaturalTimeZoneNameSuffix(words)) return true;
-  while (
-    words.length > 0 &&
-    NATURAL_TIME_ZONE_QUALIFIERS.has(words[words.length - 1] as string)
-  ) {
+  while (words.length > 0 && NATURAL_TIME_ZONE_QUALIFIERS.has(words[words.length - 1] as string)) {
     words.pop();
   }
   return hasKnownNaturalTimeZoneNameSuffix(words);
@@ -2551,9 +2679,7 @@ function isCalendarClarification(event: IntexAgentSessionEvent): boolean {
 function detectRetainOnlyLanguage(message: string): IntexAgentReplyLanguage | null {
   const normalized = message.normalize('NFKC').toLowerCase();
   if (/https?:\/\//u.test(normalized)) return null;
-  const englishNoSaveMatch = /\b(?:do not|don['’]?t)\s+(?:save|store|persist)\b/u.exec(
-    normalized
-  );
+  const englishNoSaveMatch = /\b(?:do not|don['’]?t)\s+(?:save|store|persist)\b/u.exec(normalized);
   const polishNoSaveMatch = /\bnie\s+(?:zapisuj|utrwalaj)\b/u.exec(normalized);
   const englishNoSave = englishNoSaveMatch !== null;
   const englishRetainOnlyMatch =
@@ -2939,7 +3065,13 @@ async function parseRunnerContent(
           );
           return args === undefined
             ? undefined
-            : { toolName: 'update_calendar_event' as const, toolArgs: args };
+            : {
+                toolName: 'update_calendar_event' as const,
+                toolArgs: args,
+                ...(execution.selectionMetadata === undefined
+                  ? {}
+                  : { toolSelection: execution.selectionMetadata }),
+              };
         })
       : undefined;
   if (calendarUpdateOperations?.some((operation) => operation === undefined) === true) {
@@ -3004,15 +3136,22 @@ async function parseRunnerContent(
       toolExecutions,
       toolExecution
     );
+    const confirmationReply = buildCalendarUpdateOperationsConfirmationReply(
+      operations,
+      replyLanguage,
+      runtimeTimeZone
+    );
+    if (confirmationReply === undefined) {
+      return calendarUpdateBatchPreviewTooLargeResult(replyLanguage);
+    }
     return {
       outcome: 'needs_confirmation',
-      reply: buildCalendarUpdateOperationsConfirmationReply(
-        operations,
-        replyLanguage,
-        runtimeTimeZone
-      ),
+      reply: confirmationReply,
       toolName: 'update_calendar_event',
       toolArgs: firstOperation.toolArgs,
+      ...(firstOperation.toolSelection === undefined
+        ? {}
+        : { toolSelection: firstOperation.toolSelection }),
       operations,
       supportingToolCompletions,
     };
@@ -3262,21 +3401,950 @@ function isSingleCalendarUpdateIntent(
     toolNames.size === intent.allowedToolNames.length &&
     toolNames.has('update_calendar_event') &&
     [...toolNames].every(
-      (toolName) =>
-        toolName === 'query_calendar_events' || toolName === 'update_calendar_event'
+      (toolName) => toolName === 'query_calendar_events' || toolName === 'update_calendar_event'
     )
   );
 }
 
-async function appendDeterministicCalendarUpdatePreview(input: Readonly<{
-  intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
-  toolExecutions: IntexAgentToolExecution[];
-  tools: readonly ToolDefinition[];
-  attendeesToAdd: string[] | undefined;
-  activeUserTexts: string[] | undefined;
-}>): Promise<boolean> {
+type StructuredCalendarUpdatePreviewResult =
+  | Readonly<{ outcome: 'not_applicable' }>
+  | Readonly<{ outcome: 'invalid_scope' }>
+  | Readonly<{ outcome: 'proposal_only'; reply: string }>
+  | Readonly<{ outcome: 'needs_clarification'; question: string }>
+  | Readonly<{ outcome: 'updates' }>;
+
+type CalendarUpdatePlanningOperation = Extract<
+  IntexAgentCalendarUpdatePlanningOutput,
+  Readonly<{ outcome: 'updates' }>
+>['operations'][number];
+
+type CompleteCalendarUpdateLookupSnapshot = Required<
+  Pick<
+    UpdateCalendarEventToolArgs,
+    'eventId' | 'eventSummary' | 'calendarId' | 'expectedEtag' | 'eventStart' | 'eventEnd'
+  >
+>;
+
+async function appendStructuredCalendarUpdatePreview(
+  input: Readonly<{
+    client: StructuredClient;
+    intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
+    toolExecutions: IntexAgentToolExecution[];
+    tools: readonly ToolDefinition[];
+    currentDateTime: string;
+    timeZone: string;
+    messages: ToolCallingMessage[];
+    events: readonly IntexAgentSessionEvent[];
+    currentMessage: string;
+    matrixCorpusLlm?: MatrixCorpusLlmRecorder;
+    recordProviderCall?: (call: MatrixCorpusProviderCallUsageV1) => Promise<void>;
+  }>
+): Promise<StructuredCalendarUpdatePreviewResult> {
+  /* v8 ignore start -- upstream: the prior check in the sole caller guarantees a calendar-update intent and cannot expose the hidden update tool during structured planning @preserve */
+  if (
+    !isCalendarUpdateIntent(input.intent) ||
+    input.toolExecutions.some((execution) => execution.toolName === 'update_calendar_event')
+  ) {
+    return { outcome: 'not_applicable' };
+  }
+  /* v8 ignore stop @preserve */
+
+  const queryExecutions = input.toolExecutions.filter(
+    (execution) => execution.toolName === 'query_calendar_events'
+  );
+  if (queryExecutions.length === 0) return { outcome: 'not_applicable' };
+  const queryExecution = queryExecutions.at(-1);
+  /* v8 ignore start -- ts-type: the non-empty guard above guarantees a final query execution @preserve */
+  if (queryExecution === undefined) return { outcome: 'not_applicable' };
+  /* v8 ignore stop @preserve */
+  const lookupSnapshots = readCompleteCalendarUpdateLookupSnapshots(queryExecution);
+  if (lookupSnapshots === undefined) return { outcome: 'not_applicable' };
+  const supersededQueryExecutions = queryExecutions.slice(0, -1);
+  if (
+    supersededQueryExecutions.some(
+      (execution) => !isSupersededTruncatedCalendarUpdateLookup(execution)
+    )
+  ) {
+    return { outcome: 'invalid_scope' };
+  }
+
+  const prompt = intexAgentCalendarUpdatePlanningPrompt.build({
+    currentDateTime: input.currentDateTime,
+    timeZone: input.timeZone,
+    messages: input.messages,
+    lookup: {
+      query: queryExecution.args,
+      /* v8 ignore start -- schema: complete lookup validation above requires a parsed result @preserve */
+      result: queryExecution.result as Record<string, unknown>,
+      /* v8 ignore stop @preserve */
+    },
+  });
+  const planResult = await generateStructured<IntexAgentCalendarUpdatePlanningOutput>({
+    client: input.client,
+    prompt,
+    schema: IntexAgentCalendarUpdatePlanningProviderOutputSchema,
+    promptType: INTEX_AGENT_CALENDAR_UPDATE_PLANNING_PROMPT_TYPE,
+    options: {
+      responseFormat: INTEX_AGENT_CALENDAR_UPDATE_PLANNING_RESPONSE_FORMAT,
+      ...(input.matrixCorpusLlm === undefined
+        ? {}
+        : {
+            matrixCorpusContext: input.matrixCorpusLlm.nextContext('calendar_update_planning'),
+          }),
+    },
+    maxRepairAttempts: 0,
+    ...(input.matrixCorpusLlm === undefined
+      ? {}
+      : {
+          onProviderCall: async (call: MatrixCorpusProviderCallUsageV1): Promise<void> => {
+            await input.recordProviderCall?.(call);
+          },
+        }),
+  });
+  if (!planResult.ok) return { outcome: 'not_applicable' };
+
+  const plan = planResult.value.data;
+  if (plan.outcome === 'proposal_only') {
+    return { outcome: plan.outcome, reply: plan.reply };
+  }
+  if (plan.outcome === 'needs_clarification') {
+    return { outcome: plan.outcome, question: plan.question };
+  }
+
+  if (
+    !isGroundedCalendarUpdatePlan({
+      operations: plan.operations,
+      lookupSnapshots,
+      queryExecution,
+      events: input.events,
+      currentMessage: input.currentMessage,
+      runtimeTimeZone: input.timeZone,
+      hadSupersededTruncatedLookup: supersededQueryExecutions.length > 0,
+    })
+  ) {
+    return { outcome: 'invalid_scope' };
+  }
+
+  const updateTool = input.tools.find((tool) => tool.name === 'update_calendar_event');
+  /* v8 ignore start -- schema: tool-registry validation guarantees update intent always has the private update tool @preserve */
+  if (updateTool === undefined) return { outcome: 'not_applicable' };
+  /* v8 ignore stop @preserve */
+  const updateExecutionCountBefore = input.toolExecutions.length;
+  try {
+    for (const operation of plan.operations) {
+      await updateTool.run({
+        eventId: operation.eventId,
+        eventSummary: operation.eventSummary,
+        changes: operation.changes,
+      });
+    }
+  } catch {
+    input.toolExecutions.splice(updateExecutionCountBefore);
+    return { outcome: 'invalid_scope' };
+  }
+  const plannedExecutions = input.toolExecutions
+    .slice(updateExecutionCountBefore)
+    .filter((execution) => execution.toolName === 'update_calendar_event');
+  /* v8 ignore start -- upstream: prior validated operation iteration guarantees one tracked invocation per item, while a thrown invocation cannot pass the catch above @preserve */
+  if (plannedExecutions.length !== plan.operations.length) {
+    input.toolExecutions.splice(updateExecutionCountBefore);
+    return { outcome: 'invalid_scope' };
+  }
+  /* v8 ignore stop @preserve */
+  return { outcome: 'updates' };
+}
+
+function isSupersededTruncatedCalendarUpdateLookup(execution: IntexAgentToolExecution): boolean {
+  if (execution.error !== undefined || execution.result === undefined) return false;
+  const result = execution.result;
+  return (
+    result['status'] === 'completed' && result['mode'] === 'list' && result['truncated'] === true
+  );
+}
+
+function isGroundedCalendarUpdatePlan(
+  input: Readonly<{
+    operations: readonly CalendarUpdatePlanningOperation[];
+    lookupSnapshots: readonly CompleteCalendarUpdateLookupSnapshot[];
+    queryExecution: IntexAgentToolExecution;
+    events: readonly IntexAgentSessionEvent[];
+    currentMessage: string;
+    runtimeTimeZone: string;
+    hadSupersededTruncatedLookup: boolean;
+  }>
+): boolean {
+  const lookupByEventId = new Map(
+    input.lookupSnapshots.map((snapshot) => [snapshot.eventId, snapshot] as const)
+  );
+  const operationIds = input.operations.map((operation) => operation.eventId);
+  const lookupIds = input.lookupSnapshots.map((snapshot) => snapshot.eventId);
+  const activeInstruction = readCalendarUpdateActiveInstruction(input.events, input.currentMessage);
+
+  if (
+    input.operations.some((operation) => {
+      const snapshot = lookupByEventId.get(operation.eventId);
+      return (
+        snapshot?.eventSummary !== operation.eventSummary ||
+        !isGroundedCalendarUpdateChanges(
+          operation.changes,
+          snapshot,
+          activeInstruction.text,
+          input.runtimeTimeZone,
+          activeInstruction.isProposalContinuation
+        )
+      );
+    })
+  ) {
+    return false;
+  }
+
+  const explicitCount = readExplicitCalendarUpdateTargetCount(input.currentMessage);
+  if (!explicitCount.valid) return false;
+  const priorTargetIds = readPriorCalendarUpdateTargetIds({
+    events: input.events,
+    queryExecution: input.queryExecution,
+    currentMessage: input.currentMessage,
+    currentLookupSnapshots: input.lookupSnapshots,
+    explicitCount: explicitCount.count,
+  });
+  if (priorTargetIds === null) return false;
+  if (priorTargetIds !== undefined) {
+    return (
+      sameEventIdSet(lookupIds, priorTargetIds) && sameEventIdSet(operationIds, priorTargetIds)
+    );
+  }
+
+  const requestsCompleteLookup =
+    CALENDAR_UPDATE_COMPLETE_TARGET_SET_PATTERN.test(input.currentMessage) ||
+    CALENDAR_UPDATE_PLURAL_TARGET_PATTERN.test(input.currentMessage);
+  if (
+    input.hadSupersededTruncatedLookup &&
+    explicitCount.count === undefined &&
+    requestsCompleteLookup
+  ) {
+    return false;
+  }
+
+  if (explicitCount.count !== undefined) {
+    if (
+      input.lookupSnapshots.length < explicitCount.count ||
+      input.operations.length !== explicitCount.count
+    ) {
+      return false;
+    }
+    if (input.lookupSnapshots.length === explicitCount.count) {
+      return sameEventIdSet(operationIds, lookupIds);
+    }
+    const selectedSubset = readExplicitCalendarUpdateSubsetIds(
+      input.currentMessage,
+      explicitCount.count,
+      lookupIds
+    );
+    return selectedSubset !== undefined && sameOrderedEventIds(operationIds, selectedSubset);
+  }
+
+  if (requestsCompleteLookup) return sameEventIdSet(operationIds, lookupIds);
+  if (input.operations.length !== 1) return false;
+  if (input.lookupSnapshots.length === 1) return true;
+  const normalizedMessage = normalizeCalendarTargetText(input.currentMessage);
+  const namedLookupTargets = input.lookupSnapshots.filter((snapshot) =>
+    normalizedMessage.includes(normalizeCalendarTargetText(snapshot.eventSummary))
+  );
+  const longestMatchLength = Math.max(
+    ...namedLookupTargets.map(
+      (snapshot) => normalizeCalendarTargetText(snapshot.eventSummary).length
+    )
+  );
+  const mostSpecificTargets = namedLookupTargets.filter(
+    (snapshot) => normalizeCalendarTargetText(snapshot.eventSummary).length === longestMatchLength
+  );
+  return (
+    mostSpecificTargets.length === 1 &&
+    mostSpecificTargets[0]?.eventId === input.operations[0]?.eventId
+  );
+}
+
+function readCalendarUpdateActiveInstruction(
+  events: readonly IntexAgentSessionEvent[],
+  currentMessage: string
+): Readonly<{ text: string; isProposalContinuation: boolean }> {
+  const isProposalReference = CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(
+    normalizeCalendarTargetText(currentMessage)
+  );
+  const isTargetClarificationContinuation = hasActiveCalendarUpdateTargetClarification(
+    events,
+    currentMessage
+  );
+  if (!isProposalReference && !isTargetClarificationContinuation) {
+    return { text: currentMessage, isProposalContinuation: false };
+  }
+  for (const event of [...events].reverse()) {
+    if (event.type !== 'user_message') continue;
+    const text = event.payload['text'];
+    if (typeof text === 'string' && text.trim() !== '') {
+      return { text: `${text}\n${currentMessage}`, isProposalContinuation: true };
+    }
+  }
+  return {
+    text: currentMessage,
+    isProposalContinuation:
+      isTargetClarificationContinuation || readLatestAssistantText(events) !== undefined,
+  };
+}
+
+function hasActiveCalendarUpdateTargetClarification(
+  events: readonly IntexAgentSessionEvent[],
+  currentMessage: string
+): boolean {
+  if (!CALENDAR_UPDATE_TARGET_SET_PATTERN.test(currentMessage)) return false;
+  const active = findActiveClarificationEvent(events);
+  if (active === undefined) return false;
+  const candidates = active.event.payload['candidateIntents'];
+  const missingFields = active.event.payload['missingFields'];
+  return (
+    active.event.payload['blockerReason'] === 'missing_required_details' &&
+    Array.isArray(candidates) &&
+    candidates.length === 1 &&
+    candidates[0] === 'update_calendar_event' &&
+    Array.isArray(missingFields) &&
+    missingFields.some(
+      (field) => typeof field === 'string' && field.trim().toLowerCase() === 'event'
+    )
+  );
+}
+
+function isGroundedCalendarUpdateChanges(
+  changes: CalendarUpdatePlanningOperation['changes'],
+  snapshot: CompleteCalendarUpdateLookupSnapshot | undefined,
+  activeUserText: string,
+  runtimeTimeZone: string,
+  isProposalContinuation: boolean
+): boolean {
+  /* v8 ignore start -- upstream: the preceding optional-chain identity guard guarantees a defined snapshot before this helper is called @preserve */
+  if (snapshot === undefined) return false;
+  /* v8 ignore stop @preserve */
+  if (
+    changes.summary !== undefined &&
+    !hasExplicitCalendarTextFieldChange(activeUserText, 'summary', changes.summary)
+  ) {
+    return false;
+  }
+  if (
+    changes.description !== undefined &&
+    !hasExplicitCalendarTextFieldChange(activeUserText, 'description', changes.description)
+  ) {
+    return false;
+  }
+  if (
+    changes.location !== undefined &&
+    !hasExplicitCalendarTextFieldChange(activeUserText, 'location', changes.location)
+  ) {
+    return false;
+  }
+  if (
+    changes.attendeesToAdd !== undefined &&
+    !hasExplicitCalendarAttendeeDirection(activeUserText, 'add')
+  ) {
+    return false;
+  }
+  if (
+    changes.attendeesToRemove !== undefined &&
+    !hasExplicitCalendarAttendeeDirection(activeUserText, 'remove')
+  ) {
+    return false;
+  }
+
+  const hasStart = changes.start !== undefined;
+  const hasEnd = changes.end !== undefined;
+  /* v8 ignore start -- schema: calendar update planning schema validation guarantees start and end are either both present or both absent @preserve */
+  if (hasStart !== hasEnd) return false;
+  /* v8 ignore stop @preserve */
+  if (!hasStart) return true;
+  if (!isProposalContinuation && !hasExplicitCalendarTemporalChange(activeUserText)) return false;
+
+  const changesRecord = changes as Record<string, unknown>;
+  const start = readCalendarEventDateTimeSnapshot(changesRecord, 'start');
+  const end = readCalendarEventDateTimeSnapshot(changesRecord, 'end');
+  if (start === undefined || end === undefined || !isOrderedCalendarRange(start, end)) {
+    return false;
+  }
+  if (
+    (start.timeZone ?? '') !== (end.timeZone ?? '') ||
+    (start.dateTime !== undefined && !hasExplicitDateTimeOffset(start.dateTime)) ||
+    (end.dateTime !== undefined && !hasExplicitDateTimeOffset(end.dateTime)) ||
+    !doesDateTimeOffsetMatchTimeZone(start) ||
+    !doesDateTimeOffsetMatchTimeZone(end) ||
+    !isGroundedCalendarUpdateTimeZoneChange(
+      start,
+      snapshot.eventStart,
+      activeUserText,
+      runtimeTimeZone
+    ) ||
+    !isGroundedCalendarUpdateTimeZoneChange(end, snapshot.eventEnd, activeUserText, runtimeTimeZone)
+  ) {
+    return false;
+  }
+
+  if (hasExplicitCalendarDurationChange(activeUserText)) return true;
+  const originalDuration = calendarRangeDuration(snapshot.eventStart, snapshot.eventEnd);
+  const plannedDuration = calendarRangeDuration(start, end);
+  return (
+    originalDuration !== undefined &&
+    plannedDuration?.kind === originalDuration.kind &&
+    plannedDuration.milliseconds === originalDuration.milliseconds
+  );
+}
+
+function hasExplicitCalendarTextFieldChange(
+  value: string,
+  field: 'summary' | 'description' | 'location',
+  plannedValue: string | null
+): boolean {
+  const normalized = normalizeCalendarTargetText(value);
+  const fieldSignal =
+    field === 'summary'
+      ? /\b(?:title|name|summary|tytul|nazw\w*)\b/u
+      : field === 'description'
+        ? /\b(?:description|details|opis\w*|szczegol\w*)\b/u
+        : /\b(?:location|place|address|miejsce|lokalizacj\w*|adres\w*)\b/u;
+  const actionSignal =
+    field === 'summary'
+      ? /\b(?:rename|retitle|name|change|set|update|nazwij\w*|zmien\w*|ustaw\w*|aktualizuj\w*)\b/u
+      : /\b(?:add|change|set|update|clear|remove|delete|dodaj\w*|zmien\w*|ustaw\w*|aktualizuj\w*|wyczysc\w*|usun\w*)\b/u;
+  if (!actionSignal.test(normalized)) return false;
+  if (field === 'summary' && /\b(?:rename|retitle|nazwij\w*)\b/u.test(normalized)) {
+    // Rename verbs already identify the mutable field.
+  } else if (!fieldSignal.test(normalized)) {
+    return false;
+  }
+  if (plannedValue === null) {
+    return /\b(?:clear|remove|delete|wyczysc\w*|usun\w*)\b/u.test(normalized);
+  }
+  return normalized.includes(normalizeCalendarTargetText(plannedValue));
+}
+
+function hasExplicitCalendarTemporalChange(value: string): boolean {
+  const normalized = normalizeCalendarTargetText(value);
+  const hasUpdateAction = /\b(?:change|set|update|zmien\w*|ustaw\w*|aktualizuj\w*)\b/u.test(
+    normalized
+  );
+  return (
+    /\b(?:move|reschedul\w*|postpon\w*|push|shift|delay|advance|przenies\w*|przesun\w*|przeloz\w*|odloz\w*)\b/u.test(
+      normalized
+    ) ||
+    (hasUpdateAction &&
+      (containsCalendarDateSignal(value) || containsCalendarClockTimeSignal(value))) ||
+    /\b(?:change|set|update|zmien\w*|ustaw\w*|aktualizuj\w*)\b.{0,32}\b(?:date|day|time|start|end|data|dzien|godzin\w*|poczatek|koniec|calodni\w*)\b/u.test(
+      normalized
+    ) ||
+    /\b(?:make|set|change|ustaw\w*|zmien\w*)\b.{0,24}\b(?:all day|all-day|calodni\w*)\b/u.test(
+      normalized
+    )
+  );
+}
+
+function isOrderedCalendarRange(
+  start: CalendarEventDateTimeSnapshot,
+  end: CalendarEventDateTimeSnapshot
+): boolean {
+  const range = calendarRangeDuration(start, end);
+  return range !== undefined && range.milliseconds > 0;
+}
+
+function calendarRangeDuration(
+  start: CalendarEventDateTimeSnapshot,
+  end: CalendarEventDateTimeSnapshot
+): Readonly<{ kind: 'date' | 'dateTime'; milliseconds: number }> | undefined {
+  if (start.date !== undefined && end.date !== undefined) {
+    const startInstant = Date.parse(`${start.date}T00:00:00.000Z`);
+    const endInstant = Date.parse(`${end.date}T00:00:00.000Z`);
+    /* v8 ignore start -- schema: lookup and planning schema validation guarantees both calendar dates parse to finite instants @preserve */
+    return Number.isFinite(startInstant) && Number.isFinite(endInstant)
+      ? { kind: 'date', milliseconds: endInstant - startInstant }
+      : undefined;
+    /* v8 ignore stop @preserve */
+  }
+  if (start.dateTime !== undefined && end.dateTime !== undefined) {
+    const startInstant = Date.parse(start.dateTime);
+    const endInstant = Date.parse(end.dateTime);
+    /* v8 ignore start -- schema: lookup and planning schema validation guarantees both offset date-times parse to finite instants @preserve */
+    return Number.isFinite(startInstant) && Number.isFinite(endInstant)
+      ? { kind: 'dateTime', milliseconds: endInstant - startInstant }
+      : undefined;
+    /* v8 ignore stop @preserve */
+  }
+  return undefined;
+}
+
+function hasExplicitDateTimeOffset(value: string): boolean {
+  return /(?:Z|[+-]\d{2}:\d{2})$/u.test(value);
+}
+
+function doesDateTimeOffsetMatchTimeZone(value: CalendarEventDateTimeSnapshot): boolean {
+  if (value.dateTime === undefined || value.timeZone === undefined) return true;
+  const explicitOffset = readIsoDateTimeOffsetMinutes(value.dateTime);
+  const timeZoneOffset = readIanaTimeZoneOffsetMinutes(value.dateTime, value.timeZone);
+  return (
+    explicitOffset !== undefined &&
+    timeZoneOffset !== undefined &&
+    explicitOffset === timeZoneOffset
+  );
+}
+
+function readIsoDateTimeOffsetMinutes(value: string): number | undefined {
+  if (value.endsWith('Z')) return 0;
+  const match = /([+-])(\d{2}):(\d{2})$/u.exec(value);
+  /* v8 ignore start -- schema: planning schema validation plus the prior explicit-offset guard guarantees this regex and all captures match @preserve */
+  if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
+    return undefined;
+  }
+  /* v8 ignore stop @preserve */
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return match[1] === '-' ? -minutes : minutes;
+}
+
+function readIanaTimeZoneOffsetMinutes(dateTime: string, timeZone: string): number | undefined {
+  const instant = new Date(dateTime);
+  /* v8 ignore start -- schema: planning schema validation guarantees the supplied offset date-time is a valid instant @preserve */
+  if (Number.isNaN(instant.getTime())) return undefined;
+  /* v8 ignore stop @preserve */
+  try {
+    const offsetPart = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      timeZoneName: 'longOffset',
+    })
+      .formatToParts(instant)
+      .find((part) => part.type === 'timeZoneName')?.value;
+    /* v8 ignore start -- upstream: Intl longOffset with a schema-validated IANA zone always returns a timeZoneName part @preserve */
+    const match = /^GMT([+-])(\d{2}):(\d{2})$/u.exec(offsetPart ?? '');
+    /* v8 ignore stop @preserve */
+    /* v8 ignore start -- upstream: Intl longOffset for a validated IANA zone guarantees the numeric GMT format and regex captures @preserve */
+    if (match?.[1] === undefined || match[2] === undefined || match[3] === undefined) {
+      return undefined;
+    }
+    /* v8 ignore stop @preserve */
+    const minutes = Number(match[2]) * 60 + Number(match[3]);
+    return match[1] === '-' ? -minutes : minutes;
+  } catch {
+    return undefined;
+  }
+}
+
+function isGroundedCalendarUpdateTimeZoneChange(
+  planned: CalendarEventDateTimeSnapshot,
+  original: CalendarEventDateTimeSnapshot,
+  activeUserText: string,
+  runtimeTimeZone: string
+): boolean {
+  if (planned.timeZone === original.timeZone) return true;
+  if (
+    planned.date !== undefined &&
+    original.date !== undefined &&
+    original.timeZone === undefined &&
+    planned.timeZone === runtimeTimeZone
+  ) {
+    return true;
+  }
+  return (
+    planned.timeZone !== undefined &&
+    hasExactCalendarUpdateTimeZoneRequest(activeUserText, planned.timeZone)
+  );
+}
+
+function hasExactCalendarUpdateTimeZoneRequest(value: string, timeZone: string): boolean {
+  const normalizedValue = value.normalize('NFKC').toLocaleLowerCase('en-US');
+  const normalizedTimeZone = timeZone.normalize('NFKC').toLocaleLowerCase('en-US');
+  let startIndex = normalizedValue.indexOf(normalizedTimeZone);
+  while (startIndex >= 0) {
+    const before = normalizedValue[startIndex - 1];
+    const after = normalizedValue[startIndex + normalizedTimeZone.length];
+    if (
+      !isTimeZoneIdentityCharacter(before) &&
+      !isTimeZoneIdentityCharacter(after) &&
+      !isNegatedCalendarUpdateTimeZoneRequest(normalizedValue, startIndex)
+    ) {
+      return true;
+    }
+    startIndex = normalizedValue.indexOf(normalizedTimeZone, startIndex + 1);
+  }
+  return false;
+}
+
+function isNegatedCalendarUpdateTimeZoneRequest(value: string, startIndex: number): boolean {
+  const prefix = value.slice(0, startIndex);
+  const clauseStart = Math.max(
+    prefix.lastIndexOf('.'),
+    prefix.lastIndexOf('!'),
+    prefix.lastIndexOf('?'),
+    prefix.lastIndexOf(';'),
+    prefix.lastIndexOf(','),
+    prefix.lastIndexOf('\n')
+  );
+  const clause = prefix.slice(clauseStart + 1);
+  return /(?:\bdo\s+not\b|\bdon['’]?t\b|\bnot\b|\bwithout\b|\bavoid\b|\bnie\b|\bbez\b|\bunikaj\b)[^.!?;,\n]{0,80}$/u.test(
+    clause
+  );
+}
+
+function isTimeZoneIdentityCharacter(value: string | undefined): boolean {
+  return value !== undefined && /[\p{L}\p{N}_/+-]/u.test(value);
+}
+
+function hasExplicitCalendarDurationChange(value: string): boolean {
+  const normalized = normalizeCalendarTargetText(value);
+  if (
+    /\b(?:preserv\w*|keep|same|unchanged|zachow\w*|bez zmian|nie zmien\w*)\b.{0,40}\b(?:duration|length|all day|all-day|czas trwania|dlugosc|calodni\w*)\b/u.test(
+      normalized
+    ) ||
+    /\b(?:duration|length|all day|all-day|czas trwania|dlugosc|calodni\w*)\b.{0,24}\b(?:same|unchanged|bez zmian)\b/u.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+  return (
+    (containsCalendarEndTimeSignal(value) && !containsCalendarTimeWithdrawalSignal(value)) ||
+    /\b(?:from|od)\b.{1,80}\b(?:to|until|do)\b/u.test(normalized) ||
+    /\b(?:wydluz\w*|skroc\w*|extend\w*|shorten\w*|resize\w*)\b/u.test(normalized) ||
+    /\b(?:make|set|change|ustaw\w*|zmien\w*)\b.{0,24}\b(?:all day|all-day|calodni\w*)\b/u.test(
+      normalized
+    ) ||
+    /\b(?:for|lasting|przez|na okres|czas trwania(?: to)?|duration(?: of)?)\s+\d+\s*(?:minut\w*|minutes?|godzin\w*|hours?|dni|dzien|days?)\b/u.test(
+      normalized
+    ) ||
+    /\b(?:make|set|change|ustaw\w*|zmien\w*)\b.{0,24}\b\d+\s*(?:minut\w*|minutes?|godzin\w*|hours?|dni|dzien|days?)\b/u.test(
+      normalized
+    )
+  );
+}
+
+function hasExplicitCalendarAttendeeDirection(value: string, direction: 'add' | 'remove'): boolean {
+  const normalized = normalizeCalendarTargetText(value);
+  const signal =
+    direction === 'add'
+      ? /\b(?:add|invite|include|dodaj\w*|zapros\w*|dolacz\w*)\b/u
+      : /\b(?:remove|uninvite|exclude|usun\w*|wypros\w*|odwolaj zaproszenie)\b/u;
+  const negated =
+    direction === 'add'
+      ? /\b(?:do not|dont|nie)\s+(?:\w+\s+){0,2}(?:add|invite|include|dodaj\w*|zapros\w*|dolacz\w*)\b/u
+      : /\b(?:do not|dont|nie)\s+(?:\w+\s+){0,2}(?:remove|uninvite|exclude|usun\w*|wypros\w*)\b/u;
+  return signal.test(normalized) && !negated.test(normalized);
+}
+
+function readExplicitCalendarUpdateTargetCount(
+  value: string
+): Readonly<{ valid: boolean; count?: number }> {
+  const countWords = new Map<string, number>([
+    ['two', 2],
+    ['both', 2],
+    ['dwa', 2],
+    ['dwie', 2],
+    ['oba', 2],
+    ['obie', 2],
+    ['three', 3],
+    ['trzy', 3],
+    ['four', 4],
+    ['cztery', 4],
+    ['five', 5],
+    ['piec', 5],
+    ['six', 6],
+    ['szesc', 6],
+    ['seven', 7],
+    ['siedem', 7],
+    ['eight', 8],
+    ['osiem', 8],
+    ['nine', 9],
+    ['dziewiec', 9],
+    ['ten', 10],
+    ['dziesiec', 10],
+    ['eleven', 11],
+    ['jedenascie', 11],
+    ['twelve', 12],
+    ['dwanascie', 12],
+    ['thirteen', 13],
+    ['trzynascie', 13],
+    ['fourteen', 14],
+    ['czternascie', 14],
+    ['fifteen', 15],
+    ['pietnascie', 15],
+    ['sixteen', 16],
+    ['szesnascie', 16],
+    ['seventeen', 17],
+    ['siedemnascie', 17],
+    ['eighteen', 18],
+    ['osiemnascie', 18],
+    ['nineteen', 19],
+    ['dziewietnascie', 19],
+    ['twenty', 20],
+    ['dwadziescia', 20],
+  ]);
+  const words = calendarTargetWords(
+    value
+      .replace(/\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b/gu, ' ')
+      .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/gu, ' ')
+  );
+  const counts = new Set<number>();
+  words.forEach((word, index) => {
+    const numeric = /^\d{1,2}$/u.test(word) ? Number(word) : countWords.get(word);
+    if (numeric === undefined || numeric < 2 || numeric > 20) return;
+    if (['both', 'oba', 'obie'].includes(word)) {
+      counts.add(numeric);
+      return;
+    }
+    const isNumeric = /^\d{1,2}$/u.test(word);
+    if (isNumeric && isCalendarDateContextWord(words[index - 1])) return;
+    if (!isNumeric) {
+      const nearbyTarget = words.slice(index + 1, index + 6).find(isCalendarEventTargetWord);
+      if (nearbyTarget !== undefined) counts.add(numeric);
+      return;
+    }
+    const nextWord = words[index + 1];
+    const targetWord =
+      nextWord === 'calendar' || nextWord?.startsWith('kalendar') === true
+        ? words[index + 2]
+        : nextWord;
+    if (targetWord !== undefined && isCalendarEventTargetWord(targetWord)) {
+      counts.add(numeric);
+    }
+  });
+  if (counts.size > 1) return { valid: false };
+  const count = [...counts][0];
+  return count === undefined ? { valid: true } : { valid: true, count };
+}
+
+function isCalendarEventTargetWord(value: string): boolean {
+  return (
+    value.startsWith('event') ||
+    value.startsWith('meeting') ||
+    value.startsWith('appointment') ||
+    value.startsWith('wydarzen') ||
+    value.startsWith('spotkan')
+  );
+}
+
+function isCalendarDateContextWord(value: string | undefined): boolean {
+  return (
+    value !== undefined &&
+    /^(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|stycz\w*|lut\w*|marzec|marca|kwiec\w*|maj\w*|czerw\w*|lip\w*|sierp\w*|wrzes\w*|pazdz\w*|listopad\w*|grud\w*)$/u.test(
+      value
+    )
+  );
+}
+
+function sameOrderedEventIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((eventId, index) => eventId === right[index]);
+}
+
+function sameEventIdSet(left: readonly string[], right: readonly string[]): boolean {
+  return (
+    left.length === right.length &&
+    new Set(left).size === left.length &&
+    left.every((id) => right.includes(id))
+  );
+}
+
+function readExplicitCalendarUpdateSubsetIds(
+  message: string,
+  count: number,
+  lookupIds: readonly string[]
+): string[] | undefined {
+  const normalized = normalizeCalendarTargetText(message);
+  if (/\b(?:first|pierwsz\w*)\b/u.test(normalized)) return lookupIds.slice(0, count);
+  if (/\b(?:last|ostatn\w*)\b/u.test(normalized)) return lookupIds.slice(-count);
+  return undefined;
+}
+
+function readPriorCalendarUpdateTargetIds(
+  input: Readonly<{
+    events: readonly IntexAgentSessionEvent[];
+    queryExecution: IntexAgentToolExecution;
+    currentMessage: string;
+    currentLookupSnapshots: readonly CompleteCalendarUpdateLookupSnapshot[];
+    explicitCount: number | undefined;
+  }>
+): string[] | null | undefined {
+  const priorEvents = readLatestCompletePriorCalendarLookupIdentities(input.events);
+  if (priorEvents === undefined || priorEvents.length < 2) return undefined;
+
+  const normalizedCurrentMessage = normalizeCalendarTargetText(input.currentMessage);
+  const hasStrongSetReference =
+    /\b(?:those|these|them|te|tych|nimi|je|im)\b/u.test(normalizedCurrentMessage) ||
+    CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(normalizedCurrentMessage);
+  const hasGenericSetReference = CALENDAR_UPDATE_TARGET_SET_PATTERN.test(input.currentMessage);
+  if (!hasStrongSetReference && !hasGenericSetReference) return undefined;
+  const currentLookupIds = new Set(
+    input.currentLookupSnapshots.map((snapshot) => snapshot.eventId)
+  );
+
+  const query = readNonEmptyString(input.queryExecution.args, 'query') ?? '';
+  const currentLookupWords = new Set(
+    input.currentLookupSnapshots.flatMap((snapshot) => calendarTargetWords(snapshot.eventSummary))
+  );
+  const candidates = new Set(
+    calendarTargetWords(`${query} ${input.currentMessage}`).filter(
+      (word) =>
+        word.length >= 4 &&
+        currentLookupWords.has(word) &&
+        !CALENDAR_TARGET_SCOPE_STOP_WORDS.has(word)
+    )
+  );
+  let selectedIds: string[] | undefined;
+  let selectedCount = 0;
+  for (const candidate of candidates) {
+    const matchingIds = priorEvents
+      .filter((event) => calendarTargetWords(event.eventSummary).includes(candidate))
+      .map((event) => event.eventId);
+    if (
+      matchingIds.length < 2 ||
+      matchingIds.length === priorEvents.length ||
+      matchingIds.length < selectedCount
+    ) {
+      continue;
+    }
+    if (matchingIds.length > selectedCount) {
+      selectedIds = matchingIds;
+      selectedCount = matchingIds.length;
+      continue;
+    }
+    if (selectedIds !== undefined && !sameOrderedEventIds(selectedIds, matchingIds)) return null;
+  }
+  if (selectedIds !== undefined) {
+    if (!hasStrongSetReference && !selectedIds.some((eventId) => currentLookupIds.has(eventId))) {
+      return undefined;
+    }
+    return selectedIds;
+  }
+
+  const latestAssistantText = readLatestAssistantText(input.events);
+  if (latestAssistantText === undefined) return undefined;
+  const normalizedAssistantText = normalizeCalendarTargetText(latestAssistantText);
+  const referencedIds = priorEvents
+    .filter((event) =>
+      normalizedAssistantText.includes(normalizeCalendarTargetText(event.eventSummary))
+    )
+    .map((event) => event.eventId);
+  if (referencedIds.length < 2) return undefined;
+  if (!hasStrongSetReference && !referencedIds.some((eventId) => currentLookupIds.has(eventId))) {
+    return undefined;
+  }
+  if (input.explicitCount !== undefined && referencedIds.length !== input.explicitCount)
+    return null;
+  return referencedIds;
+}
+
+function readLatestCompletePriorCalendarLookupIdentities(
+  events: readonly IntexAgentSessionEvent[]
+): readonly Readonly<{ eventId: string; eventSummary: string }>[] | undefined {
+  for (const event of [...events].reverse()) {
+    if (
+      event.type !== 'tool_call_completed' ||
+      event.payload['toolName'] !== 'query_calendar_events'
+    ) {
+      continue;
+    }
+    const result = event.payload['result'];
+    if (result === null || typeof result !== 'object' || Array.isArray(result)) continue;
+    const record = result as Record<string, unknown>;
+    const rawEvents = record['events'];
+    if (
+      record['status'] !== 'completed' ||
+      record['mode'] !== 'list' ||
+      record['truncated'] !== false ||
+      !Array.isArray(rawEvents) ||
+      record['count'] !== rawEvents.length
+    ) {
+      continue;
+    }
+    const identities = rawEvents.map((rawEvent) => {
+      if (rawEvent === null || typeof rawEvent !== 'object' || Array.isArray(rawEvent))
+        return undefined;
+      const eventRecord = rawEvent as Record<string, unknown>;
+      const eventId =
+        readNonEmptyString(eventRecord, 'id') ?? readNonEmptyString(eventRecord, 'eventId');
+      const eventSummary = readNonEmptyString(eventRecord, 'summary');
+      return eventId === undefined || eventSummary === undefined
+        ? undefined
+        : { eventId, eventSummary };
+    });
+    if (
+      identities.length === 0 ||
+      identities.some((identity) => identity === undefined) ||
+      new Set(identities.map((identity) => identity?.eventId)).size !== identities.length
+    ) {
+      return undefined;
+    }
+    return identities as readonly Readonly<{ eventId: string; eventSummary: string }>[];
+  }
+  return undefined;
+}
+
+function readLatestAssistantText(events: readonly IntexAgentSessionEvent[]): string | undefined {
+  for (const event of [...events].reverse()) {
+    if (event.type !== 'assistant_message') continue;
+    const text = event.payload['text'];
+    if (typeof text === 'string' && text.trim() !== '') return text;
+  }
+  return undefined;
+}
+
+const CALENDAR_TARGET_SCOPE_STOP_WORDS = new Set([
+  'event',
+  'events',
+  'wydarzenia',
+  'wydarzen',
+  'spotkania',
+  'spotkan',
+  'move',
+  'moved',
+  'update',
+  'change',
+  'przenies',
+  'przeniesc',
+  'przesun',
+  'zmien',
+  'calendar',
+  'kalendarzu',
+  'dzien',
+  'daily',
+  'starting',
+  'zaczynajac',
+  'related',
+  'zwiazane',
+  'from',
+  'with',
+  'those',
+  'these',
+  'wszystkie',
+  'cztery',
+  'four',
+]);
+
+function calendarTargetWords(value: string): string[] {
+  return normalizeCalendarTargetText(value).match(/[a-z0-9]+/gu) ?? [];
+}
+
+function normalizeCalendarTargetText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .toLocaleLowerCase('en-US')
+    .replace(/[’']/gu, '');
+}
+
+async function appendDeterministicCalendarUpdatePreview(
+  input: Readonly<{
+    intent: IntexAgentIntentClassification | IntexAgentIntentDecision;
+    toolExecutions: IntexAgentToolExecution[];
+    tools: readonly ToolDefinition[];
+    attendeesToAdd: string[] | undefined;
+    activeUserTexts: string[] | undefined;
+  }>
+): Promise<boolean> {
   if (
     input.attendeesToAdd === undefined ||
+    input.activeUserTexts?.some((text) =>
+      CALENDAR_NON_ATTENDEE_UPDATE_SIGNAL_PATTERN.test(text)
+    ) === true ||
     !isSingleCalendarUpdateIntent(input.intent) ||
     input.toolExecutions.length !== 1
   ) {
@@ -3302,6 +4370,50 @@ async function appendDeterministicCalendarUpdatePreview(input: Readonly<{
     // Match the regular tool-calling path: the tracked failure is normalized downstream.
     return false;
   }
+}
+
+function readCompleteCalendarUpdateLookupSnapshots(
+  queryExecution: IntexAgentToolExecution
+):
+  | Required<
+      Pick<
+        UpdateCalendarEventToolArgs,
+        'eventId' | 'eventSummary' | 'calendarId' | 'expectedEtag' | 'eventStart' | 'eventEnd'
+      >
+    >[]
+  | undefined {
+  if (
+    queryExecution.error !== undefined ||
+    queryExecution.args['mode'] !== 'list' ||
+    queryExecution.result?.['status'] !== 'completed' ||
+    queryExecution.result['mode'] !== 'list' ||
+    queryExecution.result['truncated'] !== false
+  ) {
+    return undefined;
+  }
+  const events = queryExecution.result['events'];
+  if (
+    !Array.isArray(events) ||
+    events.length === 0 ||
+    queryExecution.result['count'] !== events.length
+  ) {
+    return undefined;
+  }
+  const snapshots = events.map((event) => {
+    if (event === null || typeof event !== 'object' || Array.isArray(event)) return undefined;
+    const record = event as Record<string, unknown>;
+    const eventId = readNonEmptyString(record, 'id') ?? readNonEmptyString(record, 'eventId');
+    const eventSummary = readNonEmptyString(record, 'summary');
+    if (eventId === undefined || eventSummary === undefined) return undefined;
+    return readCalendarUpdateLookupSnapshot(queryExecution, { eventId, eventSummary });
+  });
+  if (snapshots.some((snapshot) => snapshot === undefined)) return undefined;
+  return snapshots as Required<
+    Pick<
+      UpdateCalendarEventToolArgs,
+      'eventId' | 'eventSummary' | 'calendarId' | 'expectedEtag' | 'eventStart' | 'eventEnd'
+    >
+  >[];
 }
 
 function calendarUpdateMalformedResult(
@@ -3331,6 +4443,20 @@ function calendarUpdateLookupResult(
   };
 }
 
+function calendarUpdateBatchPreviewTooLargeResult(
+  replyLanguage: IntexAgentReplyLanguage
+): IntexAgentRunnerResult {
+  const clarification = CALENDAR_UPDATE_BATCH_PREVIEW_TOO_LARGE_REPLIES[replyLanguage];
+  return {
+    outcome: 'needs_clarification',
+    reply: clarification,
+    clarification,
+    blockerReason: 'missing_required_details',
+    candidateIntents: ['update_calendar_event'],
+    suggestedNextStep: CALENDAR_UPDATE_BATCH_PREVIEW_TOO_LARGE_NEXT_STEPS[replyLanguage],
+  };
+}
+
 function buildCalendarUpdateConfirmationArgs(
   toolExecutions: IntexAgentToolExecution[],
   updateExecution: IntexAgentToolExecution,
@@ -3353,9 +4479,7 @@ function buildCalendarUpdateConfirmationArgs(
   if (snapshot === undefined) return undefined;
 
   const requestedCalendarId = readNonEmptyString(updateExecution.args, 'calendarId');
-  if (
-    (requestedCalendarId !== undefined && requestedCalendarId !== snapshot.calendarId)
-  ) {
+  if (requestedCalendarId !== undefined && requestedCalendarId !== snapshot.calendarId) {
     return undefined;
   }
 
@@ -3422,9 +4546,7 @@ function buildCalendarUpdateArgsFromUniqueLookup(
   if (
     normalizedQuery === '' ||
     normalizeCalendarLookupIdentity(snapshot.eventSummary) !== normalizedQuery ||
-    !activeUserTexts.some((text) =>
-      normalizeCalendarLookupIdentity(text).includes(normalizedQuery)
-    )
+    !activeUserTexts.some((text) => normalizeCalendarLookupIdentity(text).includes(normalizedQuery))
   ) {
     return undefined;
   }
@@ -3438,13 +4560,14 @@ function normalizeCalendarLookupIdentity(value: string): string {
 function readCalendarUpdateLookupSnapshot(
   queryExecution: IntexAgentToolExecution,
   target?: Readonly<{ eventId: string; eventSummary: string }>
-): Required<
-  Pick<
-    UpdateCalendarEventToolArgs,
-    'eventId' | 'eventSummary' | 'calendarId' | 'expectedEtag' | 'eventStart' | 'eventEnd'
-  >
-> | undefined {
-
+):
+  | Required<
+      Pick<
+        UpdateCalendarEventToolArgs,
+        'eventId' | 'eventSummary' | 'calendarId' | 'expectedEtag' | 'eventStart' | 'eventEnd'
+      >
+    >
+  | undefined {
   if (
     queryExecution.error !== undefined ||
     queryExecution.args['mode'] !== 'list' ||
@@ -3459,9 +4582,6 @@ function readCalendarUpdateLookupSnapshot(
   const events: unknown[] = Array.isArray(eventsValue) ? (eventsValue as unknown[]) : [];
   if (queryExecution.result['count'] !== events.length) return undefined;
   if (target === undefined && events.length !== 1) return undefined;
-  const maxResults = queryExecution.args['maxResults'];
-  if (typeof maxResults === 'number' && events.length >= maxResults) return undefined;
-
   const matchingEvents =
     target === undefined
       ? events
@@ -3474,8 +4594,7 @@ function readCalendarUpdateLookupSnapshot(
           const record = candidate as Record<string, unknown>;
           return (
             (readNonEmptyString(record, 'id') ?? readNonEmptyString(record, 'eventId')) ===
-              target.eventId &&
-            readNonEmptyString(record, 'summary') === target.eventSummary
+              target.eventId && readNonEmptyString(record, 'summary') === target.eventSummary
           );
         });
   if (matchingEvents.length !== 1) return undefined;
@@ -3484,7 +4603,8 @@ function readCalendarUpdateLookupSnapshot(
   if (event === null || typeof event !== 'object' || Array.isArray(event)) return undefined;
   /* v8 ignore stop @preserve */
   const eventRecord = event as Record<string, unknown>;
-  const eventId = readNonEmptyString(eventRecord, 'id') ?? readNonEmptyString(eventRecord, 'eventId');
+  const eventId =
+    readNonEmptyString(eventRecord, 'id') ?? readNonEmptyString(eventRecord, 'eventId');
   const eventSummary = readNonEmptyString(eventRecord, 'summary');
   const expectedEtag = readNonEmptyString(eventRecord, 'etag');
   const calendarId = readNonEmptyString(eventRecord, 'calendarId');
@@ -3514,10 +4634,7 @@ function readCalendarUpdateLookupSnapshot(
   };
 }
 
-function readNonEmptyString(
-  record: Record<string, unknown>,
-  key: string
-): string | undefined {
+function readNonEmptyString(record: Record<string, unknown>, key: string): string | undefined {
   const value = record[key];
   return typeof value === 'string' && value.trim() !== '' ? value : undefined;
 }
@@ -3647,8 +4764,7 @@ async function validateRunnerOutput(
       ...(input.matrixCorpusLlm === undefined
         ? {}
         : {
-            matrixCorpusContext:
-              input.matrixCorpusLlm.nextContext('response_schema_repair'),
+            matrixCorpusContext: input.matrixCorpusLlm.nextContext('response_schema_repair'),
           }),
     },
     maxRepairAttempts: 0,
@@ -3682,7 +4798,9 @@ function emptyStructuredUsage(): StructuredGenerateResult['usage'] {
   return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0 };
 }
 
-function createConfirmationPreviewExecutor(executor: IntexAgentToolExecutor): IntexAgentToolExecutor {
+function createConfirmationPreviewExecutor(
+  executor: IntexAgentToolExecutor
+): IntexAgentToolExecutor {
   return {
     createNote(): Promise<string> {
       return Promise.resolve(previewToolResult());
@@ -3728,12 +4846,14 @@ function previewToolResult(): string {
 }
 
 function resolveRunnerToolNames(
-  intent: IntexAgentIntentClassification | IntexAgentIntentDecision
+  intent: IntexAgentIntentClassification | IntexAgentIntentDecision,
+  useStructuredCalendarUpdatePlanning = false
 ): IntexAgentToolName[] {
   if (intent.kind !== 'tool') return [];
   if (!intent.allowedToolNames.includes('update_calendar_event')) {
     return intent.allowedToolNames;
   }
+  if (useStructuredCalendarUpdatePlanning) return ['query_calendar_events'];
   return [
     'query_calendar_events',
     ...intent.allowedToolNames.filter((toolName) => toolName !== 'query_calendar_events'),
@@ -3779,9 +4899,7 @@ function createTrackingToolExecutor(
       toolExecutions.push({
         toolName,
         args,
-        ...(selection?.metadata !== undefined
-          ? { selectionMetadata: selection.metadata }
-          : {}),
+        ...(selection?.metadata !== undefined ? { selectionMetadata: selection.metadata } : {}),
         ...(parsedResult !== undefined ? { result: parsedResult } : {}),
       });
       return rawResult;
@@ -3792,9 +4910,7 @@ function createTrackingToolExecutor(
         args,
         error: getErrorMessage(error, 'Unknown external save error'),
         ...(typedCategory !== undefined ? { errorCategory: typedCategory } : {}),
-        ...(selection?.metadata !== undefined
-          ? { selectionMetadata: selection.metadata }
-          : {}),
+        ...(selection?.metadata !== undefined ? { selectionMetadata: selection.metadata } : {}),
       });
       throw error;
     }
@@ -3802,7 +4918,11 @@ function createTrackingToolExecutor(
 
   return {
     async createNote(args: CreateNoteToolArgs): Promise<string> {
-      return await track('create_note', toRecord(args), async () => await executor.createNote(args));
+      return await track(
+        'create_note',
+        toRecord(args),
+        async () => await executor.createNote(args)
+      );
     },
     async createCalendarEvent(args: CreateCalendarEventToolArgs): Promise<string> {
       return await track(
@@ -3842,19 +4962,39 @@ function createTrackingToolExecutor(
       );
     },
     async createResearch(args: CreateResearchToolArgs): Promise<string> {
-      return await track('create_research', toRecord(args), async () => await executor.createResearch(args));
+      return await track(
+        'create_research',
+        toRecord(args),
+        async () => await executor.createResearch(args)
+      );
     },
     async createLink(args: CreateLinkToolArgs): Promise<string> {
-      return await track('create_link', toRecord(args), async () => await executor.createLink(args));
+      return await track(
+        'create_link',
+        toRecord(args),
+        async () => await executor.createLink(args)
+      );
     },
     async createCodeTask(args: CreateCodeTaskToolArgs): Promise<string> {
-      return await track('create_code_task', toRecord(args), async () => await executor.createCodeTask(args));
+      return await track(
+        'create_code_task',
+        toRecord(args),
+        async () => await executor.createCodeTask(args)
+      );
     },
     async saveExternal(args: SaveExternalToolArgs): Promise<string> {
-      return await track('save_external', toRecord(args), async () => await executor.saveExternal(args));
+      return await track(
+        'save_external',
+        toRecord(args),
+        async () => await executor.saveExternal(args)
+      );
     },
     async getUserPreferences(): Promise<string> {
-      return await track('get_user_preferences', {}, async () => await executor.getUserPreferences());
+      return await track(
+        'get_user_preferences',
+        {},
+        async () => await executor.getUserPreferences()
+      );
     },
     async addUserPreference(args: AddUserPreferenceToolArgs): Promise<string> {
       const normalizedArgs =
@@ -3884,7 +5024,9 @@ function createTrackingToolExecutor(
   };
 }
 
-function resolveCurrentPreferenceVersion(userPreferences: string | null | undefined): number | undefined {
+function resolveCurrentPreferenceVersion(
+  userPreferences: string | null | undefined
+): number | undefined {
   if (userPreferences === undefined) return undefined;
   if (userPreferences === null) return 0;
 
@@ -3912,11 +5054,7 @@ function isMatrixPromptContextEnvelope(
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   /* v8 ignore stop @preserve */
   const keys = Object.keys(value);
-  if (
-    keys.length !== 2 ||
-    !keys.includes('version') ||
-    !keys.includes('userPreferences')
-  ) {
+  if (keys.length !== 2 || !keys.includes('version') || !keys.includes('userPreferences')) {
     return false;
   }
   const record = value as Record<string, unknown>;
@@ -4047,41 +5185,173 @@ function buildCalendarUpdateOperationsConfirmationReply(
   operations: readonly IntexAgentConfirmedOperation[],
   replyLanguage: IntexAgentReplyLanguage,
   runtimeTimeZone: string
-): string {
+): string | undefined {
   const lines = [
     replyLanguage === 'pl'
       ? `Czy wykonać ${String(operations.length)} zmiany wydarzeń w kalendarzu?`
       : `Apply ${String(operations.length)} calendar event updates?`,
   ];
-  operations.forEach((operation, index) => {
+  for (const [index, operation] of operations.entries()) {
     /* v8 ignore start -- schema: staged calendar update operations cannot omit their validated event summary @preserve */
-    const summary = readRawString(operation.toolArgs, 'eventSummary') ?? '(untitled)';
+    const summary = formatCalendarUpdateBatchEventSummary(
+      readRawString(operation.toolArgs, 'eventSummary') ?? '(untitled)',
+      runtimeTimeZone,
+      replyLanguage
+    );
     /* v8 ignore stop @preserve */
     lines.push('', `${String(index + 1)}. ${summary}`);
     const changes = readCalendarUpdateChanges(operation.toolArgs);
     /* v8 ignore start -- schema: staged calendar update operations cannot omit validated changes @preserve */
-    if (changes === undefined) return;
+    if (changes === undefined) return undefined;
     /* v8 ignore stop @preserve */
-    appendConfirmationLine(
-      lines,
-      replyLanguage === 'pl' ? 'Początek po zmianie' : 'New start',
-      formatCalendarEventDateTimeSnapshot(changes['start'], runtimeTimeZone, replyLanguage)
+    const currentStart = formatCalendarEventDateTimeSnapshot(
+      operation.toolArgs['eventStart'],
+      runtimeTimeZone,
+      replyLanguage
+    );
+    /* v8 ignore start -- schema: staged calendar update operations always include a validated lookup start snapshot @preserve */
+    if (currentStart === undefined) return undefined;
+    /* v8 ignore stop @preserve */
+    const newStart = formatCalendarEventDateTimeSnapshot(
+      changes['start'],
+      runtimeTimeZone,
+      replyLanguage
     );
     appendConfirmationLine(
       lines,
-      replyLanguage === 'pl' ? 'Koniec po zmianie' : 'New end',
-      formatCalendarEventDateTimeSnapshot(changes['end'], runtimeTimeZone, replyLanguage)
+      CONFIRMATION_LABELS.start[replyLanguage],
+      formatCalendarUpdateOccurrenceTransition(currentStart, newStart)
     );
-  });
+    const newEnd = formatCalendarEventDateTimeSnapshot(
+      changes['end'],
+      runtimeTimeZone,
+      replyLanguage
+    );
+    if (newEnd !== undefined) {
+      const currentEnd = formatCalendarEventDateTimeSnapshot(
+        operation.toolArgs['eventEnd'],
+        runtimeTimeZone,
+        replyLanguage
+      );
+      /* v8 ignore start -- schema: staged calendar date updates always include a validated lookup end snapshot @preserve */
+      if (currentEnd === undefined) return undefined;
+      /* v8 ignore stop @preserve */
+      appendConfirmationLine(
+        lines,
+        CONFIRMATION_LABELS.end[replyLanguage],
+        formatCalendarUpdateOccurrenceTransition(currentEnd, newEnd)
+      );
+    }
+    appendConfirmationLine(
+      lines,
+      replyLanguage === 'pl' ? 'Nowy tytuł' : 'New title',
+      formatCalendarUpdateConfirmationScalar(readRawString(changes, 'summary'))
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.description[replyLanguage],
+      formatCalendarUpdateNullableField(changes, 'description', replyLanguage)
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.location[replyLanguage],
+      formatCalendarUpdateNullableField(changes, 'location', replyLanguage)
+    );
+    appendConfirmationListLine(
+      lines,
+      replyLanguage === 'pl' ? 'Uczestnicy do dodania' : 'Attendees to add',
+      readStringArray(changes, 'attendeesToAdd')
+    );
+    appendConfirmationListLine(
+      lines,
+      replyLanguage === 'pl' ? 'Uczestnicy do usunięcia' : 'Attendees to remove',
+      readStringArray(changes, 'attendeesToRemove')
+    );
+  }
   lines.push('', CALENDAR_UPDATE_PRESERVATION_NOTICE[replyLanguage]);
-  return limitConfirmationReply(lines.join('\n'), replyLanguage);
+  const reply = lines.join('\n');
+  return reply.length <= WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH ? reply : undefined;
 }
 
-function readCalendarUpdateChanges(args: Record<string, unknown>): Record<string, unknown> | undefined {
+function formatCalendarUpdateOccurrenceTransition(
+  currentValue: string,
+  newValue: string | undefined
+): string {
+  return newValue === undefined ? currentValue : `${currentValue} → ${newValue}`;
+}
+
+function formatCalendarUpdateBatchEventSummary(
+  summary: string,
+  runtimeTimeZone: string,
+  replyLanguage: IntexAgentReplyLanguage
+): string {
+  const singleLineSummary = summary
+    .replace(/[\p{Cc}\p{Cf}]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  if (singleLineSummary === '') return '(untitled)';
+  const limitedSummary = limitConfirmationField(
+    formatReplyDateRecords(singleLineSummary, runtimeTimeZone, replyLanguage),
+    CALENDAR_UPDATE_BATCH_EVENT_SUMMARY_MAX_LENGTH
+  );
+  /* v8 ignore start -- ts-type: the nullish coalescing fallback cannot execute because the defined string input above always returns a defined limited string @preserve */
+  return limitedSummary ?? '(untitled)';
+  /* v8 ignore stop @preserve */
+}
+
+function readCalendarUpdateChanges(
+  args: Record<string, unknown>
+): Record<string, unknown> | undefined {
   const value = args['changes'];
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function formatCalendarUpdateNullableField(
+  changes: Record<string, unknown>,
+  field: 'description' | 'location',
+  replyLanguage: IntexAgentReplyLanguage
+): string | undefined {
+  const value = changes[field];
+  if (value === null)
+    return replyLanguage === 'pl' ? '(usuń obecną wartość)' : '(clear current value)';
+  if (typeof value !== 'string') return undefined;
+  return value === ''
+    ? replyLanguage === 'pl'
+      ? '(pusta wartość)'
+      : '(empty value)'
+    : formatCalendarUpdateConfirmationScalar(value);
+}
+
+function formatCalendarUpdateConfirmationScalar(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  let formatted = '';
+  for (const character of value) {
+    if (character === '\\') {
+      formatted += '\\\\';
+      continue;
+    }
+    if (character === '\n') {
+      formatted += '\\n';
+      continue;
+    }
+    if (character === '\r') {
+      formatted += '\\r';
+      continue;
+    }
+    if (character === '\t') {
+      formatted += '\\t';
+      continue;
+    }
+    if (/^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]$/u.test(character)) {
+      const codePoint = character.codePointAt(0) as number;
+      formatted += `\\u{${codePoint.toString(16).toUpperCase()}}`;
+      continue;
+    }
+    formatted += character;
+  }
+  return formatted;
 }
 
 function buildUnboundedConfirmationReply(
@@ -4095,7 +5365,8 @@ function buildUnboundedConfirmationReply(
     const lines = [CONFIRMATION_INTROS.create_note[replyLanguage]];
     const title = readRawString(args, 'title');
     const content = readRawString(args, 'content');
-    if (title !== undefined) lines.push('', `${CONFIRMATION_LABELS.title[replyLanguage]}: ${title}`);
+    if (title !== undefined)
+      lines.push('', `${CONFIRMATION_LABELS.title[replyLanguage]}: ${title}`);
     /* v8 ignore start -- schema: create_note preview args cannot omit content because validation runs before confirmation text is built @preserve */
     if (content !== undefined) {
       lines.push(`${CONFIRMATION_LABELS.content[replyLanguage]}: ${content}`);
@@ -4109,7 +5380,11 @@ function buildUnboundedConfirmationReply(
     const timeZone = readRawString(args, 'timeZone');
     const start = readRawString(args, 'start');
     const end = readRawString(args, 'end');
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'summary'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.title[replyLanguage],
+      readRawString(args, 'summary')
+    );
     appendConfirmationLine(
       lines,
       CONFIRMATION_LABELS.start[replyLanguage],
@@ -4143,16 +5418,19 @@ function buildUnboundedConfirmationReply(
 
   if (toolName === 'update_calendar_event') {
     const changes = readCalendarUpdateChanges(args);
+    const eventSummary = readRawString(args, 'eventSummary');
     const lines = [
       changes === undefined
         ? CONFIRMATION_INTROS.update_calendar_event[replyLanguage]
         : CALENDAR_UPDATE_CONFIRMATION_INTRO[replyLanguage],
     ];
-    appendConfirmationLine(
-      lines,
-      CONFIRMATION_LABELS.title[replyLanguage],
-      limitConfirmationField(readRawString(args, 'eventSummary'), 240)
-    );
+    /* v8 ignore start -- schema: after validation an update_calendar_event confirmation cannot omit its required non-empty eventSummary @preserve */
+    const formattedEventSummary =
+      eventSummary === undefined
+        ? undefined
+        : formatCalendarUpdateBatchEventSummary(eventSummary, runtimeTimeZone, replyLanguage);
+    /* v8 ignore stop @preserve */
+    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], formattedEventSummary);
     if (changes === undefined) {
       appendConfirmationLine(
         lines,
@@ -4173,7 +5451,7 @@ function buildUnboundedConfirmationReply(
       appendConfirmationLine(
         lines,
         replyLanguage === 'pl' ? 'Nowy tytuł' : 'New title',
-        readRawString(changes, 'summary')
+        formatCalendarUpdateConfirmationScalar(readRawString(changes, 'summary'))
       );
       appendConfirmationLine(
         lines,
@@ -4187,8 +5465,13 @@ function buildUnboundedConfirmationReply(
       );
       appendConfirmationLine(
         lines,
+        CONFIRMATION_LABELS.description[replyLanguage],
+        formatCalendarUpdateNullableField(changes, 'description', replyLanguage)
+      );
+      appendConfirmationLine(
+        lines,
         CONFIRMATION_LABELS.location[replyLanguage],
-        readRawString(changes, 'location')
+        formatCalendarUpdateNullableField(changes, 'location', replyLanguage)
       );
       appendConfirmationListLine(
         lines,
@@ -4207,8 +5490,16 @@ function buildUnboundedConfirmationReply(
 
   if (toolName === 'create_research') {
     const lines = [CONFIRMATION_INTROS.create_research[replyLanguage]];
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'title'));
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.prompt[replyLanguage], readRawString(args, 'prompt'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.title[replyLanguage],
+      readRawString(args, 'title')
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.prompt[replyLanguage],
+      readRawString(args, 'prompt')
+    );
     return lines.join('\n');
   }
 
@@ -4219,33 +5510,57 @@ function buildUnboundedConfirmationReply(
       '',
     ];
     appendConfirmationLine(lines, 'URL', readRawString(args, 'url'));
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.title[replyLanguage], readRawString(args, 'title'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.title[replyLanguage],
+      readRawString(args, 'title')
+    );
     return lines.join('\n');
   }
 
   if (toolName === 'create_code_task') {
     const lines = [CONFIRMATION_INTROS.create_code_task[replyLanguage]];
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.prompt[replyLanguage], readRawString(args, 'prompt'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.prompt[replyLanguage],
+      readRawString(args, 'prompt')
+    );
     appendConfirmationLine(
       lines,
       CONFIRMATION_LABELS.mode[replyLanguage],
       readRawString(args, 'taskMode')
     );
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.worker[replyLanguage], readRawString(args, 'workerType'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.worker[replyLanguage],
+      readRawString(args, 'workerType')
+    );
     appendConfirmationLine(lines, 'Linear', readRawString(args, 'linearIssueId'));
     return lines.join('\n');
   }
 
   if (toolName === 'save_external') {
     const lines = [CONFIRMATION_INTROS.save_external[replyLanguage]];
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.content[replyLanguage], readRawString(args, 'message'));
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.source[replyLanguage], readRawString(args, 'sourceUrl'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.content[replyLanguage],
+      readRawString(args, 'message')
+    );
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.source[replyLanguage],
+      readRawString(args, 'sourceUrl')
+    );
     return lines.join('\n');
   }
 
   if (toolName === 'add_user_preference') {
     const lines = [CONFIRMATION_INTROS.add_user_preference[replyLanguage]];
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.newEntry[replyLanguage], readRawString(args, 'text'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.newEntry[replyLanguage],
+      readRawString(args, 'text')
+    );
     return lines.join('\n');
   }
 
@@ -4258,7 +5573,11 @@ function buildUnboundedConfirmationReply(
       CONFIRMATION_LABELS.before[replyLanguage],
       findPreferenceText(userPreferences, itemId)
     );
-    appendConfirmationLine(lines, CONFIRMATION_LABELS.after[replyLanguage], readRawString(args, 'text'));
+    appendConfirmationLine(
+      lines,
+      CONFIRMATION_LABELS.after[replyLanguage],
+      readRawString(args, 'text')
+    );
     return lines.join('\n');
   }
 
@@ -4273,10 +5592,7 @@ function buildUnboundedConfirmationReply(
   return lines.join('\n');
 }
 
-function limitConfirmationReply(
-  reply: string,
-  replyLanguage: IntexAgentReplyLanguage
-): string {
+function limitConfirmationReply(reply: string, replyLanguage: IntexAgentReplyLanguage): string {
   if (reply.length <= WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH) return reply;
   const suffix = `\n\n…\n${CONFIRMATION_PREVIEW_TRUNCATION_NOTICE[replyLanguage]}`;
   const headLimit = WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH - suffix.length;
@@ -4453,11 +5769,16 @@ function readStringArray(record: Record<string, unknown>, key: string): string[]
   return value;
 }
 
-function findPreferenceText(userPreferences: string | null, itemId: string | undefined): string | undefined {
+function findPreferenceText(
+  userPreferences: string | null,
+  itemId: string | undefined
+): string | undefined {
   if (userPreferences === null || itemId === undefined) {
     return undefined;
   }
-  const line = userPreferences.split('\n').find((candidate) => candidate.includes(`(id: ${itemId}) `));
+  const line = userPreferences
+    .split('\n')
+    .find((candidate) => candidate.includes(`(id: ${itemId}) `));
   if (line === undefined) {
     return undefined;
   }
@@ -4533,12 +5854,10 @@ function renderTodayAndTomorrowCalendarList(
   const todayEvents: string[] = [];
   const tomorrowEvents: string[] = [];
   for (const event of events) {
-    const renderedEvent = renderCalendarEventFallback(
-      event,
-      replyLanguage,
-      runtimeTimeZone,
-      { allowUntitled: true, displayTimeZone: runtimeTimeZone }
-    );
+    const renderedEvent = renderCalendarEventFallback(event, replyLanguage, runtimeTimeZone, {
+      allowUntitled: true,
+      displayTimeZone: runtimeTimeZone,
+    });
     const coveredDays = calendarEventCoveredDays(event, scope);
     if (renderedEvent === undefined || coveredDays === undefined || coveredDays.length === 0) {
       return undefined;
@@ -4746,9 +6065,7 @@ function buildCompletedReply(
     const overlayBlock = renderPreferenceOverlayItems(result);
     return {
       reply:
-        renderedPromptBlock ??
-        overlayBlock ??
-        COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
+        renderedPromptBlock ?? overlayBlock ?? COMPLETED_REPLIES.preferencesEmpty[replyLanguage],
     };
   }
 
@@ -4952,10 +6269,9 @@ function parseJsonObject(content: string): Record<string, unknown> | null {
   }
 }
 
-function fallbackReasonForInvalidRunnerContent(content: string): Extract<
-  IntexAgentFallbackReason,
-  'runner_output_malformed' | 'tool_result_mismatch'
-> {
+function fallbackReasonForInvalidRunnerContent(
+  content: string
+): Extract<IntexAgentFallbackReason, 'runner_output_malformed' | 'tool_result_mismatch'> {
   const parsed = parseJsonObject(content);
   if (parsed?.['outcome'] === 'completed' && typeof parsed['toolName'] !== 'string') {
     return 'tool_result_mismatch';
@@ -4980,8 +6296,7 @@ function fallbackClarificationResult(
     blockerReason: 'not_enough_context',
     suggestedNextStep: FALLBACK_CLARIFICATION_NEXT_STEPS[replyLanguage],
     fallbackReason,
-    fallbackSourceOutcome:
-      fallbackSourceOutcome ?? defaultFallbackSourceOutcome(fallbackReason),
+    fallbackSourceOutcome: fallbackSourceOutcome ?? defaultFallbackSourceOutcome(fallbackReason),
   };
 }
 

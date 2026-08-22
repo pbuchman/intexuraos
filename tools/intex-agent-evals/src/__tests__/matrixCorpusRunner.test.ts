@@ -19,7 +19,7 @@ import type { IntexEvalScenario } from '../scenarioSchema.js';
 const scenariosDirectory = fileURLToPath(new URL('../../scenarios/', import.meta.url));
 
 describe('sequential Matrix corpus state machine', () => {
-  it('runs all 20 scenarios and 59 turns with concurrency one before terminal release', async () => {
+  it('runs all 20 scenarios and 60 turns with concurrency one before terminal release', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const trace: string[] = [];
     let activeTurns = 0;
@@ -38,9 +38,9 @@ describe('sequential Matrix corpus state machine', () => {
     expect(result.exitCode).toBe(0);
     expect(result.scenarios).toHaveLength(20);
     expect(result.scenarios.every(({ status }) => status === 'passed')).toBe(true);
-    expect(result.totals.completedTurns).toBe(59);
+    expect(result.totals.completedTurns).toBe(60);
     expect(maxActiveTurns).toBe(1);
-    expect(ports.projectScenario).toHaveBeenCalledTimes(79);
+    expect(ports.projectScenario).toHaveBeenCalledTimes(80);
     expect(
       vi
         .mocked(ports.projectScenario)
@@ -104,7 +104,7 @@ describe('sequential Matrix corpus state machine', () => {
         .filter(({ scenario }) => scenario.id === 'intex-eval-003')
         .map(({ turnIndex }) => turnIndex)
     ).toEqual([0, 1, 2]);
-    expect(result.totals.completedTurns).toBe(59);
+    expect(result.totals.completedTurns).toBe(60);
   });
 
   it('ends only the current scenario when a dependent turn cannot run after behavioral failure', async () => {
@@ -137,7 +137,7 @@ describe('sequential Matrix corpus state machine', () => {
         .filter(({ scenario }) => scenario.id === 'intex-eval-003')
         .map(({ turnIndex }) => turnIndex)
     ).toEqual([0, 1]);
-    expect(result.totals.completedTurns).toBe(57);
+    expect(result.totals.completedTurns).toBe(58);
     expect(ports.reconcileStoppedScenario).not.toHaveBeenCalled();
   });
 
@@ -467,8 +467,8 @@ describe('sequential Matrix corpus state machine', () => {
     const result = await runMatrixCorpus({ runId: 'run_behavioral', catalog }, ports);
 
     expect(result.exitCode).toBe(1);
-    expect(ports.judgeReply).toHaveBeenCalledTimes(59);
-    expect(result.totals.completedTurns).toBe(59);
+    expect(ports.judgeReply).toHaveBeenCalledTimes(60);
+    expect(result.totals.completedTurns).toBe(60);
     expect(result.scenarios.every(({ status }) => status === 'failed')).toBe(true);
   });
 
@@ -680,7 +680,7 @@ describe('sequential Matrix corpus state machine', () => {
         Math.ceil(
           MATRIX_CORPUS_MAX_REPLIES_PER_TURN / MATRIX_CORPUS_JUDGE_CALLS_PER_LEASE_RENEWAL
         ));
-    expect(maximumRenewalReceipts).toBe(236);
+    expect(maximumRenewalReceipts).toBe(240);
     expect(maximumRenewalReceipts).toBeLessThan(400);
   });
 

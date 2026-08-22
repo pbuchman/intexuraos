@@ -624,17 +624,7 @@ export async function inspectHomeDevRuntime(
       deps.fetchDeploymentDocument(),
     ]);
     const runnerRevision = revision.stdout.trim();
-    const deployedRevision =
-      isRecord(deploymentDocument) &&
-      Object.keys(deploymentDocument).length === 3 &&
-      typeof deploymentDocument['commitSha'] === 'string' &&
-      typeof deploymentDocument['workflowRunId'] === 'string' &&
-      typeof deploymentDocument['deployedAt'] === 'string' &&
-      /^[0-9a-f]{40}$/u.test(deploymentDocument['commitSha']) &&
-      deploymentDocument['workflowRunId'].length > 0 &&
-      Number.isFinite(Date.parse(deploymentDocument['deployedAt']))
-        ? deploymentDocument['commitSha']
-        : '';
+    const deployedRevision = productionDeploymentRevision(deploymentDocument) ?? '';
     return {
       ready:
         deps.hostname() === 'home-dev' &&
@@ -648,6 +638,46 @@ export async function inspectHomeDevRuntime(
   } catch {
     return { ready: false, deployedRevision: '', criticalPathsClean: false };
   }
+}
+
+const PRODUCTION_DEPLOYMENT_DOCUMENT_KEYS = [
+  'commitMessage',
+  'commitSha',
+  'deployedAt',
+  'secretPackageVersion',
+  'workflowRunId',
+] as const;
+
+function productionDeploymentRevision(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const keys = Object.keys(value).sort();
+  if (
+    keys.length !== PRODUCTION_DEPLOYMENT_DOCUMENT_KEYS.length ||
+    keys.some((key, index) => key !== PRODUCTION_DEPLOYMENT_DOCUMENT_KEYS[index])
+  ) {
+    return undefined;
+  }
+
+  const commitSha = value['commitSha'];
+  const commitMessage = value['commitMessage'];
+  const workflowRunId = value['workflowRunId'];
+  const secretPackageVersion = value['secretPackageVersion'];
+  const deployedAt = value['deployedAt'];
+  if (
+    typeof commitSha !== 'string' ||
+    !/^[0-9a-f]{40}$/u.test(commitSha) ||
+    typeof commitMessage !== 'string' ||
+    commitMessage.length === 0 ||
+    typeof workflowRunId !== 'string' ||
+    workflowRunId.length === 0 ||
+    typeof secretPackageVersion !== 'string' ||
+    !/^[1-9][0-9]*$/u.test(secretPackageVersion) ||
+    typeof deployedAt !== 'string' ||
+    !Number.isFinite(Date.parse(deployedAt))
+  ) {
+    return undefined;
+  }
+  return commitSha;
 }
 
 export function createProductionMatrixCorpusCatalogLoader(

@@ -527,8 +527,8 @@ describe('runCli evaluation orchestration and projection', () => {
               { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
             ],
             totals: {
-              completedTurns: 59,
-              judgedReplies: 59,
+              completedTurns: 60,
+              judgedReplies: 60,
               agentCostNanoUsd: 1,
               evaluatorCostNanoUsd: 1,
             },
@@ -582,8 +582,8 @@ describe('runCli evaluation orchestration and projection', () => {
             { scenarioId: 'intex-eval-001', status: 'passed' as const, completedTurns: 2 },
           ],
           totals: {
-            completedTurns: 59,
-            judgedReplies: 59,
+            completedTurns: 60,
+            judgedReplies: 60,
             agentCostNanoUsd: 1,
             evaluatorCostNanoUsd: 1,
           },

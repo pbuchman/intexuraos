@@ -266,9 +266,9 @@ describe('matrix corpus exact-ID retention', () => {
           removed: {
             runs: 1,
             sessions: 20,
-            events: 59,
+            events: 60,
             confirmations: 2,
-            ingestReceipts: 59,
+            ingestReceipts: 60,
             scenarioProjections: 20,
             scenarioContexts: 20,
             runContexts: 1,
@@ -607,9 +607,9 @@ describe('matrix corpus exact-ID retention', () => {
             removed: {
               runs: 1,
               sessions: 20,
-              events: 59,
+              events: 60,
               confirmations: 1,
-              ingestReceipts: 59,
+              ingestReceipts: 60,
               scenarioProjections: 20,
               scenarioContexts: 20,
               runContexts: 1,

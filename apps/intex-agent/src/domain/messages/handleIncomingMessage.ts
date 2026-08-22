@@ -1,4 +1,8 @@
 import { getErrorMessage, type Result } from '@intexuraos/common-core';
+import {
+  calendarEventDateTimeSchema,
+  calendarUpdateEventChangesSchema,
+} from '@intexuraos/http-contracts';
 import type {
   IntexAgentRuntimeSettingsClientError,
   IntexAgentRuntimeSettingsV1,
@@ -82,11 +86,13 @@ export interface IntexAgentSupportingToolCompletion {
 export interface IntexAgentConfirmedOperation {
   toolName: IntexAgentToolName;
   toolArgs: Record<string, unknown>;
+  toolSelection?: IntexAgentToolSelectionMetadata;
 }
 
 export interface IntexAgentConfirmedOperationResult {
   toolName: IntexAgentToolName;
   status: 'completed' | 'failed';
+  toolSelection?: IntexAgentToolSelectionMetadata;
   toolResult?: Record<string, unknown>;
   error?: string;
 }
@@ -255,6 +261,24 @@ const CONFIRMABLE_TOOL_NAMES = new Set<IntexAgentToolName>([
   'update_user_preference',
   'delete_user_preference',
 ]);
+const CONFIRMED_CALENDAR_UPDATE_BATCH_MIN_OPERATIONS = 2;
+const CONFIRMED_CALENDAR_UPDATE_BATCH_MAX_OPERATIONS = 20;
+const CONFIRMED_CALENDAR_UPDATE_OPERATION_KEYS = new Set([
+  'toolName',
+  'toolArgs',
+  'toolSelection',
+]);
+const CONFIRMED_CALENDAR_UPDATE_ARG_KEYS = new Set([
+  'eventId',
+  'eventSummary',
+  'calendarId',
+  'expectedEtag',
+  'eventStart',
+  'eventEnd',
+  'changes',
+]);
+const CONFIRMED_CALENDAR_DATE_TIME_KEYS = new Set(['date', 'dateTime', 'timeZone']);
+const CONFIRMED_TOOL_SELECTION_KEYS = new Set(['turnIndex', 'ordinal']);
 
 const STALE_CONFIRMATION_REPLIES: Record<IntexAgentReplyLanguage, string> = {
   en: 'This confirmation is no longer current. Send the request again.',
@@ -1068,11 +1092,15 @@ function findLatestPendingConfirmation(
     const confirmationId = event.payload['confirmationId'];
     const toolName = event.payload['toolName'];
     const toolArgs = event.payload['toolArgs'];
-    const operations = parseConfirmedOperations(event.payload['operations']);
+    const hasOperations = Object.hasOwn(event.payload, 'operations');
+    const operations = hasOperations
+      ? parseConfirmedOperations(event.payload['operations'])
+      : undefined;
     if (
       typeof confirmationId !== 'string' ||
       resolvedConfirmationIds.has(confirmationId) ||
-      (operations === undefined && (!isConfirmableToolName(toolName) || !isRecord(toolArgs)))
+      (hasOperations && operations === undefined) ||
+      (!hasOperations && (!isConfirmableToolName(toolName) || !isRecord(toolArgs)))
     ) {
       continue;
     }
@@ -1089,16 +1117,123 @@ function findLatestPendingConfirmation(
 }
 
 function parseConfirmedOperations(value: unknown): IntexAgentConfirmedOperation[] | undefined {
-  if (!Array.isArray(value) || value.length === 0) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length < CONFIRMED_CALENDAR_UPDATE_BATCH_MIN_OPERATIONS ||
+    value.length > CONFIRMED_CALENDAR_UPDATE_BATCH_MAX_OPERATIONS
+  ) {
+    return undefined;
+  }
   const operations: IntexAgentConfirmedOperation[] = [];
+  const eventIds = new Set<string>();
   for (const operation of value) {
-    if (!isRecord(operation)) return undefined;
+    if (
+      !isRecord(operation) ||
+      !hasOnlyKeys(operation, CONFIRMED_CALENDAR_UPDATE_OPERATION_KEYS)
+    ) {
+      return undefined;
+    }
     const toolName = operation['toolName'];
-    const toolArgs = operation['toolArgs'];
-    if (!isConfirmableToolName(toolName) || !isRecord(toolArgs)) return undefined;
+    const toolArgs = parseConfirmedCalendarUpdateArgs(operation['toolArgs']);
+    if (toolName !== 'update_calendar_event' || toolArgs === undefined) return undefined;
+    const eventId = toolArgs['eventId'] as string;
+    const eventIdentity = eventId.trim();
+    if (eventIds.has(eventIdentity)) {
+      return undefined;
+    }
+    eventIds.add(eventIdentity);
+    if (Object.hasOwn(operation, 'toolSelection')) {
+      const toolSelection = parseConfirmedToolSelection(operation['toolSelection']);
+      if (toolSelection === undefined) return undefined;
+      operations.push({ toolName, toolArgs, toolSelection });
+      continue;
+    }
     operations.push({ toolName, toolArgs });
   }
   return operations;
+}
+
+function parseConfirmedCalendarUpdateArgs(
+  value: unknown
+): Record<string, unknown> | undefined {
+  if (!isRecord(value) || !hasOnlyKeys(value, CONFIRMED_CALENDAR_UPDATE_ARG_KEYS)) {
+    return undefined;
+  }
+  if (
+    !isNonBlankString(value['eventId']) ||
+    !isNonBlankString(value['eventSummary']) ||
+    !isNonBlankString(value['calendarId']) ||
+    !isNonBlankString(value['expectedEtag']) ||
+    !isConfirmedCalendarDateTime(value['eventStart']) ||
+    !isConfirmedCalendarDateTime(value['eventEnd']) ||
+    !isConfirmedCalendarUpdateChanges(value['changes'])
+  ) {
+    return undefined;
+  }
+  return value;
+}
+
+function isConfirmedCalendarDateTime(value: unknown): boolean {
+  if (!isRecord(value) || !hasOnlyKeys(value, CONFIRMED_CALENDAR_DATE_TIME_KEYS)) {
+    return false;
+  }
+  const parsed = calendarEventDateTimeSchema.safeParse(value);
+  if (!parsed.success) return false;
+  const hasDate = isNonBlankString(parsed.data.date);
+  const hasDateTime = isNonBlankString(parsed.data.dateTime);
+  return (
+    hasDate !== hasDateTime &&
+    (parsed.data.timeZone === undefined || isNonBlankString(parsed.data.timeZone))
+  );
+}
+
+function isConfirmedCalendarUpdateChanges(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const normalized = {
+    ...value,
+    ...(Object.hasOwn(value, 'attendeesToAdd')
+      ? { attendeesToAdd: normalizeConfirmedAttendees(value['attendeesToAdd']) }
+      : {}),
+    ...(Object.hasOwn(value, 'attendeesToRemove')
+      ? { attendeesToRemove: normalizeConfirmedAttendees(value['attendeesToRemove']) }
+      : {}),
+  };
+  return calendarUpdateEventChangesSchema.safeParse(normalized).success;
+}
+
+function normalizeConfirmedAttendees(value: unknown): unknown {
+  return Array.isArray(value)
+    ? (value as unknown[]).map((email: unknown) => ({ email }))
+    : value;
+}
+
+function parseConfirmedToolSelection(
+  value: unknown
+): IntexAgentToolSelectionMetadata | undefined {
+  if (!isRecord(value) || !hasOnlyKeys(value, CONFIRMED_TOOL_SELECTION_KEYS)) {
+    return undefined;
+  }
+  const turnIndex = value['turnIndex'];
+  const ordinal = value['ordinal'];
+  if (
+    typeof turnIndex !== 'number' ||
+    !Number.isInteger(turnIndex) ||
+    turnIndex < 0 ||
+    typeof ordinal !== 'number' ||
+    !Number.isInteger(ordinal) ||
+    ordinal < 1
+  ) {
+    return undefined;
+  }
+  return { turnIndex, ordinal };
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowedKeys: ReadonlySet<string>): boolean {
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== '';
 }
 
 async function supersedePendingConfirmationIfNeeded(

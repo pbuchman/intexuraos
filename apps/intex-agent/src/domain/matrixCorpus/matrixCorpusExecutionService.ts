@@ -458,7 +458,17 @@ async function executeConfirmation(
     turnIndex: exact.confirmation.selectionTurnIndex,
     ordinal: exact.confirmation.selectionOrdinal,
   } as const;
-  if (!isExpectedSelection(context.expectedToolSchedule, selection))
+  const preauthorizedSelections =
+    exact.confirmation.operations?.map((operation) => ({
+      toolName: operation.toolName,
+      turnIndex: operation.selectionTurnIndex,
+      ordinal: operation.selectionOrdinal,
+    })) ?? [selection];
+  if (
+    preauthorizedSelections.some(
+      (preauthorized) => !isExpectedSelection(context.expectedToolSchedule, preauthorized)
+    )
+  )
     return failure('CONFIRMATION_REJECTED');
   const execution = createExecutionContext({
     flow: 'confirmation',
@@ -486,7 +496,9 @@ async function executeConfirmation(
     recordProviderCall: async (providerCall) => {
       await usageRecorder.recordProviderCall(providerCall);
     },
-    preauthorizedSelection: selection,
+    ...(exact.confirmation.operations === undefined
+      ? { preauthorizedSelection: selection }
+      : { preauthorizedSelections }),
   });
   const runner = input.deps.createRunner({
     execution,
@@ -498,14 +510,32 @@ async function executeConfirmation(
   });
   let result: IntexAgentRunnerResult;
   try {
-    result = await runner.executeConfirmed({
+    const commonConfirmedInput = {
       session: input.session,
       events: [...input.previousEvents],
-      toolName: exact.confirmation.toolName,
-      toolArgs: structuredClone(exact.confirmation.toolArgs),
       currentDateTime: context.currentDateTime,
       messageId: ordinaryIngest.messageId,
-    });
+    };
+    result =
+      exact.confirmation.operations === undefined
+        ? await runner.executeConfirmed({
+            ...commonConfirmedInput,
+            toolName: exact.confirmation.toolName,
+            toolArgs: structuredClone(exact.confirmation.toolArgs),
+          })
+        : await runner.executeConfirmed({
+            ...commonConfirmedInput,
+            operations: exact.confirmation.operations.map(
+              ({ toolName, toolArgs, selectionTurnIndex, selectionOrdinal }) => ({
+                toolName,
+                toolArgs: structuredClone(toolArgs),
+                toolSelection: {
+                  turnIndex: selectionTurnIndex,
+                  ordinal: selectionOrdinal,
+                },
+              })
+            ),
+          });
   } catch (error) {
     await usageRecorder.finalize('confirmation', 'failed');
     throw error;
@@ -578,7 +608,27 @@ async function persistAndPublishResult(
 ): Promise<MatrixCorpusExecutionResult> {
   const { result } = input;
   if (result.outcome === 'needs_confirmation') {
-    if (result.toolSelection === undefined)
+    const confirmationOperations = result.operations?.map((operation) => {
+      if (operation.toolSelection === undefined) {
+        throw new Error('Matrix corpus batch confirmation is missing strict selection metadata');
+      }
+      return {
+        toolName: operation.toolName,
+        toolArgs: structuredClone(operation.toolArgs),
+        selectionTurnIndex: operation.toolSelection.turnIndex,
+        selectionOrdinal: operation.toolSelection.ordinal,
+      };
+    });
+    const firstOperation = confirmationOperations?.[0];
+    const selection =
+      result.toolSelection ??
+      (firstOperation === undefined
+        ? undefined
+        : {
+            turnIndex: firstOperation.selectionTurnIndex,
+            ordinal: firstOperation.selectionOrdinal,
+          });
+    if (selection === undefined)
       throw new Error('Matrix corpus confirmation is missing strict selection metadata');
     const confirmationId = deterministicId(
       'imc_confirmation',
@@ -631,8 +681,9 @@ async function persistAndPublishResult(
       },
       toolName: result.toolName,
       toolArgs: structuredClone(result.toolArgs),
-      selectionTurnIndex: result.toolSelection.turnIndex,
-      selectionOrdinal: result.toolSelection.ordinal,
+      selectionTurnIndex: selection.turnIndex,
+      selectionOrdinal: selection.ordinal,
+      ...(confirmationOperations === undefined ? {} : { operations: confirmationOperations }),
       createdAt,
       expiresAt,
     });
@@ -670,13 +721,61 @@ async function persistAndPublishResult(
     });
   }
 
-  const event = resultEvent(
-    input.input.claims.payload.context.ingestReceiptId,
-    input.input.claims.payload.ordinaryIngest.timestamp,
-    input.identity,
-    result
-  );
-  if (event !== null) await appendEvent({ deps: input.deps, identity: input.identity, event });
+  if (result.outcome === 'completed' && result.operationResults !== undefined) {
+    for (const [index, operation] of result.operationResults.entries()) {
+      if (operation.toolSelection === undefined) {
+        throw new Error('Matrix corpus batch operation result is missing strict selection metadata');
+      }
+      await appendEvent({
+        deps: input.deps,
+        identity: input.identity,
+        event: {
+          id: deterministicId(
+            'imc_event',
+            input.input.claims.payload.context.ingestReceiptId,
+            `batch_operation_${String(index)}_${operation.status}`
+          ),
+          sessionId: input.identity.sessionId,
+          userId: input.identity.userId,
+          type:
+            operation.status === 'completed' ? 'tool_call_completed' : 'tool_call_failed',
+          payload:
+            operation.status === 'completed'
+              ? {
+                  toolName: operation.toolName,
+                  turnIndex: operation.toolSelection.turnIndex,
+                  ordinal: operation.toolSelection.ordinal,
+                  status: 'mock_completed',
+                  facts:
+                    operation.toolResult === undefined
+                      ? []
+                      : mapSafeToolFacts({
+                          toolName: operation.toolName,
+                          source: 'result',
+                          value: operation.toolResult,
+                        }),
+                }
+              : {
+                  toolName: operation.toolName,
+                  turnIndex: operation.toolSelection.turnIndex,
+                  ordinal: operation.toolSelection.ordinal,
+                  status: 'mock_failed',
+                  failureCode: 'MOCK_TOOL_FAILURE',
+                  facts: [],
+                },
+          createdAt: input.input.claims.payload.ordinaryIngest.timestamp,
+        },
+      });
+    }
+  } else {
+    const event = resultEvent(
+      input.input.claims.payload.context.ingestReceiptId,
+      input.input.claims.payload.ordinaryIngest.timestamp,
+      input.identity,
+      result
+    );
+    if (event !== null) await appendEvent({ deps: input.deps, identity: input.identity, event });
+  }
   return await persistAssistantAndPublish({
     deps: input.deps,
     input: input.input,

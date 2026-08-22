@@ -820,10 +820,26 @@ describe('handleIncomingMessage', () => {
     const operations = [
       {
         toolName: 'update_calendar_event' as const,
+        toolSelection: { turnIndex: 2, ordinal: 1 },
         toolArgs: {
           eventId: 'event-2019',
           eventSummary: 'Google Photos od 04.2019',
-          changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
+          calendarId: 'primary',
+          expectedEtag: '"event-2019-v1"',
+          eventStart: {
+            dateTime: '2026-08-13T19:00:00+02:00',
+            timeZone: 'Europe/Warsaw',
+          },
+          eventEnd: {
+            dateTime: '2026-08-13T20:00:00+02:00',
+            timeZone: 'Europe/Warsaw',
+          },
+          changes: {
+            start: { dateTime: '2026-08-22T19:00:00+02:00' },
+            end: { dateTime: '2026-08-22T20:00:00+02:00' },
+            attendeesToAdd: ['new@example.com'],
+            attendeesToRemove: ['old@example.com'],
+          },
         },
       },
       {
@@ -831,6 +847,10 @@ describe('handleIncomingMessage', () => {
         toolArgs: {
           eventId: 'event-2018',
           eventSummary: 'Wyczyścić Photos 2018',
+          calendarId: 'primary',
+          expectedEtag: '"event-2018-v1"',
+          eventStart: { date: '2026-08-14' },
+          eventEnd: { date: '2026-08-15' },
           changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
         },
       },
@@ -874,10 +894,10 @@ describe('handleIncomingMessage', () => {
       toolName: 'update_calendar_event',
       toolArgs: { eventId: 'event-1' },
       operations: [
-        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-1' } },
-        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-2' } },
-        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-3' } },
-        { toolName: 'update_calendar_event', toolArgs: { eventId: 'event-4' } },
+        calendarUpdateOperation('event-1'),
+        calendarUpdateOperation('event-2'),
+        calendarUpdateOperation('event-3'),
+        calendarUpdateOperation('event-4'),
       ],
     });
     const runner = new FakeRunner([], [
@@ -940,13 +960,239 @@ describe('handleIncomingMessage', () => {
     expect(replies.messages[0]?.message).toBe('Zaktualizowano 1 z 2 wydarzeń w kalendarzu.');
   });
 
-  it.each([
-    { name: 'a non-object operation', operations: [null] },
+  it.each<{ name: string; operations: unknown }>([
+    { name: 'a non-array value', operations: { toolName: 'update_calendar_event' } },
+    { name: 'an empty batch', operations: [] },
+    { name: 'a one-operation batch', operations: [calendarUpdateOperation('event-1')] },
     {
-      name: 'an operation for a non-confirmable tool',
-      operations: [{ toolName: 'query_calendar_events', toolArgs: {} }],
+      name: 'a batch above the operation limit',
+      operations: Array.from({ length: 21 }, (_, index) =>
+        calendarUpdateOperation(`event-${String(index + 1)}`)
+      ),
     },
-  ])('falls back to the valid legacy confirmation when operations contain $name', async ({ operations }) => {
+    { name: 'a non-object operation', operations: [null, calendarUpdateOperation('event-2')] },
+    {
+      name: 'an operation for a non-update tool',
+      operations: [
+        { toolName: 'create_note', toolArgs: { content: 'Do not execute this.' } },
+        calendarUpdateOperation('event-2'),
+      ],
+    },
+    {
+      name: 'duplicate event IDs',
+      operations: [calendarUpdateOperation('event-1'), calendarUpdateOperation('event-1')],
+    },
+    {
+      name: 'an operation with an incomplete event snapshot',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            expectedEtag: undefined,
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with a non-object event date-time',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            eventStart: null,
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with an unknown event date-time field',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            eventStart: { date: '2026-08-13', unsupported: true },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with a schema-invalid event date-time',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            eventStart: { date: 42 },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with both event date forms',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            eventStart: {
+              date: '2026-08-13',
+              dateTime: '2026-08-13T19:00:00+02:00',
+            },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with a blank event time zone',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            eventStart: { date: '2026-08-13', timeZone: ' ' },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with empty changes',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: { ...calendarUpdateOperation('event-2').toolArgs, changes: {} },
+        },
+      ],
+    },
+    {
+      name: 'an operation with non-object changes',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: { ...calendarUpdateOperation('event-2').toolArgs, changes: null },
+        },
+      ],
+    },
+    {
+      name: 'an operation with an unpaired temporal change',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            changes: { start: { date: '2026-08-22' } },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with an invalid attendee email',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            changes: { attendeesToAdd: ['not-an-email'] },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with a non-array attendee addition',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            changes: { attendeesToAdd: 'not-an-array' },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with a non-array attendee removal',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            changes: { attendeesToRemove: 'not-an-array' },
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with a non-object tool selection',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        { ...calendarUpdateOperation('event-2'), toolSelection: null },
+      ],
+    },
+    {
+      name: 'an operation with an unknown tool selection field',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolSelection: { turnIndex: 2, ordinal: 1, unsupported: true },
+        },
+      ],
+    },
+    ...[
+      { name: 'a non-numeric selection turn', toolSelection: { turnIndex: '2', ordinal: 1 } },
+      { name: 'a fractional selection turn', toolSelection: { turnIndex: 2.5, ordinal: 1 } },
+      { name: 'a negative selection turn', toolSelection: { turnIndex: -1, ordinal: 1 } },
+      { name: 'a non-numeric selection ordinal', toolSelection: { turnIndex: 2, ordinal: '1' } },
+      { name: 'a fractional selection ordinal', toolSelection: { turnIndex: 2, ordinal: 1.5 } },
+      { name: 'a zero selection ordinal', toolSelection: { turnIndex: 2, ordinal: 0 } },
+    ].map(({ name, toolSelection }) => ({
+      name: `an operation with ${name}`,
+      operations: [
+        calendarUpdateOperation('event-1'),
+        { ...calendarUpdateOperation('event-2'), toolSelection },
+      ],
+    })),
+    {
+      name: 'an operation with an unknown argument',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            unconfirmedField: 'must not execute',
+          },
+        },
+      ],
+    },
+    {
+      name: 'an operation with an unknown nested change',
+      operations: [
+        calendarUpdateOperation('event-1'),
+        {
+          ...calendarUpdateOperation('event-2'),
+          toolArgs: {
+            ...calendarUpdateOperation('event-2').toolArgs,
+            changes: { summary: 'Updated event-2', unsupported: true },
+          },
+        },
+      ],
+    },
+  ])('invalidates a stored confirmation when operations contain $name', async ({ operations }) => {
     const repo = new FakeSessionRepository();
     seedPendingConfirmation(repo, {
       confirmationId: 'confirm-malformed-operations',
@@ -956,14 +1202,7 @@ describe('handleIncomingMessage', () => {
     const confirmation = eventPayloads(repo, 'confirmation_requested')[0];
     if (confirmation === undefined) throw new Error('Expected seeded confirmation');
     confirmation['operations'] = operations;
-    const runner = new FakeRunner([], [
-      {
-        outcome: 'completed',
-        reply: 'Done.',
-        toolName: 'create_note',
-        toolResult: { status: 'completed' },
-      },
-    ]);
+    const runner = new FakeRunner([]);
     const replies = new FakeReplyPublisher();
 
     await handleIncomingMessage(
@@ -980,10 +1219,11 @@ describe('handleIncomingMessage', () => {
       deps(repo, runner, replies)
     );
 
-    expect(runner.executeConfirmedCalls[0]).toMatchObject({
-      toolName: 'create_note',
-      toolArgs: { content: 'Keep the legacy action.' },
-    });
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_resolved')).toEqual([]);
+    expect(replies.messages[0]?.message).toBe(
+      'This confirmation is no longer current. Send the request again.'
+    );
   });
 
   it('records a failed confirmed execution without optional failure metadata', async () => {
@@ -2808,6 +3048,24 @@ function eventPayloads(
   type: IntexAgentSessionEventType
 ): Record<string, unknown>[] {
   return repo.events.filter((event) => event.type === type).map((event) => event.payload);
+}
+
+function calendarUpdateOperation(eventId: string): {
+  toolName: 'update_calendar_event';
+  toolArgs: Record<string, unknown>;
+} {
+  return {
+    toolName: 'update_calendar_event',
+    toolArgs: {
+      eventId,
+      eventSummary: `Event ${eventId}`,
+      calendarId: 'primary',
+      expectedEtag: `"${eventId}-v1"`,
+      eventStart: { date: '2026-08-13' },
+      eventEnd: { date: '2026-08-14' },
+      changes: { summary: `Updated ${eventId}` },
+    },
+  };
 }
 
 function seedPendingConfirmation(

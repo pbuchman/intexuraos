@@ -9,6 +9,13 @@ export interface MatrixCorpusTestConfirmationIdentity {
   leaseFence: string;
 }
 
+export interface MatrixCorpusTestConfirmationOperation {
+  toolName: IntexAgentToolName;
+  toolArgs: Record<string, unknown>;
+  selectionTurnIndex: number;
+  selectionOrdinal: number;
+}
+
 export interface MatrixCorpusTestConfirmation extends MatrixCorpusTestConfirmationIdentity {
   version: 1;
   lane: 'matrix_corpus';
@@ -18,6 +25,7 @@ export interface MatrixCorpusTestConfirmation extends MatrixCorpusTestConfirmati
   toolArgs: Record<string, unknown>;
   selectionTurnIndex: number;
   selectionOrdinal: number;
+  operations?: readonly MatrixCorpusTestConfirmationOperation[];
   createdAt: string;
   expiresAt: string;
   decision: 'confirm' | 'reject' | null;
@@ -63,6 +71,7 @@ export interface TestConfirmationRepository {
     toolArgs: Record<string, unknown>;
     selectionTurnIndex: number;
     selectionOrdinal: number;
+    operations?: readonly MatrixCorpusTestConfirmationOperation[];
     createdAt: string;
     expiresAt: string;
   }>): Promise<MatrixCorpusTestConfirmationCreateResult>;

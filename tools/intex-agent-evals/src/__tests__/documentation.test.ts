@@ -100,7 +100,7 @@ describe('Intex Agent evaluation documentation', () => {
     expect(runbook).toContain(
       '`scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any'
     );
-    expect(runbook).toContain('20 scenarios and 59 turns');
+    expect(runbook).toContain('20 scenarios and 60 turns');
     expect(runbook).toContain('or:deepseek/deepseek-v4-flash');
 
     for (const field of CONFIG_FIELDS) {
