@@ -30,6 +30,8 @@ const PREPARING_PATTERN =
   /^\.preparing-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/u;
 const PREPARING_OWNER_PATTERN =
   /^\.preparing-owner-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.json$/u;
+const RELEASING_PATTERN =
+  /^\.releasing-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/u;
 const OWNER_TEMP_PATTERN =
   /^\.sync-lock-owner-temp-([0-9a-f]{16})-([0-9a-f]{16})-([1-9][0-9]*)-([0-9a-f]{16})-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/u;
 const OWNER_KEYS = [
@@ -344,6 +346,23 @@ function scavengeOwnerTemporaries(context) {
   if (changed) syncDirectory(context.packageRoot);
 }
 
+function scavengeReleasedClaims(context) {
+  let changed = false;
+  let names;
+  try {
+    names = readdirSync(context.lockRoot);
+  } catch {
+    fail();
+  }
+  for (const name of names) {
+    if (!name.startsWith('.releasing-')) continue;
+    if (RELEASING_PATTERN.exec(name) === null) fail();
+    rmSync(join(context.lockRoot, name), { force: true, recursive: true });
+    changed = true;
+  }
+  if (changed) syncDirectory(context.lockRoot);
+}
+
 function readPreparingOwner(context, preparingPath, token) {
   validatePrivateDirectory(preparingPath);
   const installedPath = join(preparingPath, 'owner.json');
@@ -376,6 +395,7 @@ function scanClaims(context) {
       { kind: 'claim', match: CLAIM_PATTERN.exec(name) },
       { kind: 'preparing', match: PREPARING_PATTERN.exec(name) },
       { kind: 'preparing-owner', match: PREPARING_OWNER_PATTERN.exec(name) },
+      { kind: 'releasing', match: RELEASING_PATTERN.exec(name) },
     ].filter((entry) => entry.match !== null);
     if (matches.length !== 1 || matches[0]?.match?.[1] === undefined) fail();
     return { kind: matches[0].kind, name, token: matches[0].match[1] };
@@ -385,6 +405,7 @@ function scanClaims(context) {
   );
   for (const entry of entries) {
     const { kind, name, token } = entry;
+    if (kind === 'releasing') continue;
     if (kind === 'preparing-owner' && preparingTokens.has(token)) continue;
     const claimPath = join(context.lockRoot, name);
     let state;
@@ -507,6 +528,7 @@ function acquire(options) {
     syncScript: options.syncScript,
   };
   scavengeOwnerTemporaries(context);
+  scavengeReleasedClaims(context);
   const ownClaimPath = createClaim(options, context);
   try {
     const ownTicket = chooseTicket(context, ownClaimPath);
@@ -539,7 +561,10 @@ function release(options) {
   if (!existsSync(claimPath)) return;
   const owner = parseOwner(claimPath, options.ownerToken);
   if (owner.ownerPid !== options.ownerPid || owner.syncScript !== options.syncScript) fail();
-  rmSync(claimPath, { recursive: true });
+  const releasingPath = join(options.lockRoot, `.releasing-${options.ownerToken}`);
+  renameSync(claimPath, releasingPath);
+  syncDirectory(options.lockRoot);
+  rmSync(releasingPath, { recursive: true });
   syncDirectory(options.lockRoot);
 }
 

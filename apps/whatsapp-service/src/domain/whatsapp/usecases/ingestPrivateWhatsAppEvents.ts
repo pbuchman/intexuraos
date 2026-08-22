@@ -8,6 +8,7 @@ import type {
   PrivateWhatsAppIngestOutcome,
   PrivateWhatsAppMessageDirection,
   PrivateWhatsAppMessageType,
+  PrivateWhatsAppRelationTargetUnavailableReason,
   StorePrivateWhatsAppMessageInput,
 } from '../models/PrivateWhatsApp.js';
 import type { EventPublisherPort } from '../ports/eventPublisher.js';
@@ -60,11 +61,13 @@ export interface IngestPrivateWhatsAppEventInput {
     reaction?: {
       emoji: string;
       targetMatrixEventId: string;
+      targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
     };
     relation?: {
       kind: 'replacement' | 'redaction';
       targetMatrixEventId: string;
       applicationStatus: 'pending';
+      targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
     };
   };
   rawMatrixEvent: unknown;
@@ -86,6 +89,9 @@ type ParseMediaResult =
   | RejectedEvent;
 type ParseRelationResult =
   | { ok: true; relation?: IngestPrivateWhatsAppEventInput['message']['relation'] }
+  | RejectedEvent;
+type ParseReactionResult =
+  | { ok: true; reaction?: IngestPrivateWhatsAppEventInput['message']['reaction'] }
   | RejectedEvent;
 
 interface RejectedEvent {
@@ -109,6 +115,10 @@ const MESSAGE_TYPES = new Set<PrivateWhatsAppMessageType>([
 const CHAT_TYPES = new Set<PrivateWhatsAppChatType>(['direct', 'group', 'unknown']);
 const MESSAGE_DIRECTIONS = new Set<PrivateWhatsAppMessageDirection>(['incoming', 'outgoing']);
 const PRIVATE_WHATSAPP_EVENT_TIME_ZONE = 'Europe/Warsaw';
+const RELATION_TARGET_UNAVAILABLE_REASONS = new Set<PrivateWhatsAppRelationTargetUnavailableReason>([
+  'matrix_notice',
+  'redacted_reaction_tombstone',
+]);
 
 export class IngestPrivateWhatsAppEventsUseCase {
   constructor(private readonly deps: IngestPrivateWhatsAppEventsDeps) {}
@@ -120,7 +130,7 @@ export class IngestPrivateWhatsAppEventsUseCase {
     const messages: PrivateWhatsAppIngestEventResult[] = [];
 
     for (const rawEvent of input.events) {
-      const parsedEvent = parseEvent(rawEvent);
+      const parsedEvent = parseEvent(rawEvent, input.deliveryMode);
       if (!parsedEvent.ok) {
         messages.push({
           matrixEventId: parsedEvent.matrixEventId,
@@ -214,7 +224,7 @@ async function publishPrivateTranscriptionRequestIfNeeded(
   return ok(undefined);
 }
 
-function parseEvent(rawEvent: unknown): ParseEventResult {
+function parseEvent(rawEvent: unknown, deliveryMode: PrivateWhatsAppDeliveryMode): ParseEventResult {
   if (!isRecord(rawEvent)) {
     return rejectEvent('<unknown>', 'invalid_event');
   }
@@ -241,6 +251,12 @@ function parseEvent(rawEvent: unknown): ParseEventResult {
 
   const message = parseMessage(rawEvent, matrixEventId);
   if (!message.ok) return message;
+  const targetUnavailableReason =
+    message.message.relation?.targetUnavailableReason ??
+    message.message.reaction?.targetUnavailableReason;
+  if (targetUnavailableReason !== undefined && deliveryMode !== 'backfill') {
+    return rejectEvent(matrixEventId, 'reviewed_relation_target_requires_backfill');
+  }
 
   const chat = parseChat(rawEvent);
   const event: IngestPrivateWhatsAppEventInput = {
@@ -342,9 +358,10 @@ function parseMessage(
     message.media = media.media;
   }
 
-  const reaction = parseReaction(rawEvent, rawMessage);
-  if (reaction !== undefined) {
-    message.reaction = reaction;
+  const reaction = parseReaction(rawEvent, rawMessage, matrixEventId);
+  if (!reaction.ok) return reaction;
+  if (reaction.reaction !== undefined) {
+    message.reaction = reaction.reaction;
   }
 
   return { ok: true, message };
@@ -425,8 +442,9 @@ function parseMedia(
 
 function parseReaction(
   rawEvent: Record<string, unknown>,
-  rawMessage: Record<string, unknown>
-): IngestPrivateWhatsAppEventInput['message']['reaction'] | undefined {
+  rawMessage: Record<string, unknown>,
+  matrixEventId: string
+): ParseReactionResult {
   const explicitReaction = rawMessage['reaction'];
   if (isRecord(explicitReaction)) {
     const emoji = readOptionalString(explicitReaction, 'emoji');
@@ -437,21 +455,46 @@ function parseReaction(
       typeof targetMatrixEventId === 'string' &&
       targetMatrixEventId.trim() !== ''
     ) {
-      return { emoji, targetMatrixEventId };
+      const targetUnavailableReason = readOptionalString(
+        explicitReaction,
+        'targetUnavailableReason'
+      );
+      if (
+        targetUnavailableReason === null ||
+        (targetUnavailableReason !== undefined &&
+          !RELATION_TARGET_UNAVAILABLE_REASONS.has(
+            targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason
+          ))
+      ) {
+        return rejectEvent(matrixEventId, 'invalid_relation_target_unavailable_reason');
+      }
+      return {
+        ok: true,
+        reaction: {
+          emoji,
+          targetMatrixEventId,
+          ...(targetUnavailableReason === undefined
+            ? {}
+            : {
+                targetUnavailableReason:
+                  targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason,
+              }),
+        },
+      };
     }
   }
 
   const rawMatrixEvent = rawEvent['rawMatrixEvent'] ?? rawEvent;
   if (!isRecord(rawMatrixEvent)) {
-    return undefined;
+    return { ok: true };
   }
   const content = rawMatrixEvent['content'];
   if (!isRecord(content)) {
-    return undefined;
+    return { ok: true };
   }
   const relatesTo = content['m.relates_to'];
   if (!isRecord(relatesTo)) {
-    return undefined;
+    return { ok: true };
   }
   const relType = readOptionalString(relatesTo, 'rel_type');
   const targetMatrixEventId = readOptionalString(relatesTo, 'event_id');
@@ -463,9 +506,9 @@ function parseReaction(
     typeof key !== 'string' ||
     key.trim() === ''
   ) {
-    return undefined;
+    return { ok: true };
   }
-  return { emoji: key, targetMatrixEventId };
+  return { ok: true, reaction: { emoji: key, targetMatrixEventId } };
 }
 
 function parseRelation(
@@ -483,9 +526,32 @@ function parseRelation(
     if (!isContextRelationKind(kind) || !isValidRelationTarget(targetMatrixEventId, matrixEventId)) {
       return rejectEvent(matrixEventId, 'invalid_context_relation');
     }
+    const targetUnavailableReason = readOptionalString(
+      explicitRelation,
+      'targetUnavailableReason'
+    );
+    if (
+      targetUnavailableReason === null ||
+      (targetUnavailableReason !== undefined &&
+        !RELATION_TARGET_UNAVAILABLE_REASONS.has(
+          targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason
+        ))
+    ) {
+      return rejectEvent(matrixEventId, 'invalid_relation_target_unavailable_reason');
+    }
     return {
       ok: true,
-      relation: { kind, targetMatrixEventId, applicationStatus: 'pending' },
+      relation: {
+        kind,
+        targetMatrixEventId,
+        applicationStatus: 'pending',
+        ...(targetUnavailableReason === undefined
+          ? {}
+          : {
+              targetUnavailableReason:
+                targetUnavailableReason as PrivateWhatsAppRelationTargetUnavailableReason,
+            }),
+      },
     };
   }
 

@@ -28,6 +28,10 @@ const MEDIA_UNAVAILABLE_REASONS = new Set([
   'unsupported_application_pdf',
   'matrix_media_too_large',
 ]);
+const RELATION_TARGET_POLICY_SKIP_REASONS = new Set([
+  'matrix_notice',
+  'redacted_reaction_tombstone',
+]);
 
 export async function discoverRecoverySegment({
   name,
@@ -217,9 +221,13 @@ export async function applyRecoverySegment(segment, deps) {
     mediaPending: 0,
     mediaUnavailable: [],
   };
+  const relationTargetPolicySkips = indexRelationTargetPolicySkips(segment);
 
   for (let index = 0; index < segment.events.length; index += MAX_INGEST_BATCH) {
-    const batch = segment.events.slice(index, index + MAX_INGEST_BATCH);
+    const originalBatch = segment.events.slice(index, index + MAX_INGEST_BATCH);
+    const batch = originalBatch.map((event) =>
+      annotateReviewedRelationTarget(event, relationTargetPolicySkips)
+    );
     const result = await retryTransientIngest(
       () => deps.postBatch(batch, 'backfill'),
       deps.waitBeforeRetry
@@ -235,7 +243,7 @@ export async function applyRecoverySegment(segment, deps) {
     }
     summary.accepted += result.accepted;
     summary.duplicates += result.duplicates;
-    await deps.enqueueMedia(batch);
+    await deps.enqueueMedia(originalBatch);
   }
 
   const media = await deps.drainMedia();
@@ -252,6 +260,181 @@ export async function applyRecoverySegment(segment, deps) {
   summary.mediaPending = media.pending;
   summary.mediaUnavailable = media.unavailable;
   return summary;
+}
+
+export function mergeRelationTargetPolicySkipEvidence(segment, evidenceRecords) {
+  if (
+    !isRecord(segment) ||
+    !Array.isArray(evidenceRecords) ||
+    evidenceRecords.some((evidence) => !isValidRelationTargetPolicySkipEvidence(evidence)) ||
+    (segment.relationTargetPolicySkips !== undefined &&
+      (!Array.isArray(segment.relationTargetPolicySkips) ||
+        segment.relationTargetPolicySkips.some(
+          (evidence) => !isValidRelationTargetPolicySkipEvidence(evidence)
+        )))
+  ) {
+    throw new Error('recovery_relation_target_policy_skip_evidence_invalid');
+  }
+
+  const byEventHash = new Map();
+  for (const evidence of [...(segment.relationTargetPolicySkips ?? []), ...evidenceRecords]) {
+    const existing = byEventHash.get(evidence.eventHash);
+    if (
+      existing !== undefined &&
+      (existing.targetHash !== evidence.targetHash || existing.reason !== evidence.reason)
+    ) {
+      throw new Error('recovery_relation_target_policy_skip_evidence_conflict');
+    }
+    byEventHash.set(evidence.eventHash, evidence);
+  }
+  segment.relationTargetPolicySkips = [...byEventHash.values()].sort((left, right) =>
+    left.eventHash.localeCompare(right.eventHash)
+  );
+}
+
+export async function reviewPolicySkippedRelationTargets(segment, sourceAccountId, deps) {
+  if (!isRecord(segment) || !Array.isArray(segment.events)) {
+    throw new Error('invalid_recovery_segment');
+  }
+  const mainMessageIds = [];
+  const referencesByTarget = new Map();
+  for (const event of segment.events) {
+    if (!isRecord(event) || typeof event.matrixEventId !== 'string') {
+      throw new Error('invalid_recovery_segment');
+    }
+    mainMessageIds.push(createPrivateWhatsAppMessageId(sourceAccountId, event.matrixEventId));
+    const targetMatrixEventId = getRelationTargetMatrixEventId(event);
+    if (targetMatrixEventId === undefined) continue;
+    const references = referencesByTarget.get(targetMatrixEventId) ?? [];
+    references.push(event);
+    referencesByTarget.set(targetMatrixEventId, references);
+  }
+  const targetMessageIds = [...referencesByTarget.keys()].map((targetMatrixEventId) =>
+    createPrivateWhatsAppMessageId(sourceAccountId, targetMatrixEventId)
+  );
+  const documents = await deps.fetchDocuments([
+    ...new Set([...mainMessageIds, ...targetMessageIds]),
+  ]);
+  const missingMainCount = mainMessageIds.filter((messageId) => !documents.has(messageId)).length;
+  if (missingMainCount > 0) {
+    throw new Error(`recovery_verify_missing_documents_${missingMainCount}`);
+  }
+
+  const evidence = [];
+  let blockedTargetCount = 0;
+  let reviewedTargetCount = 0;
+  for (const [targetMatrixEventId, references] of referencesByTarget) {
+    const targetMessageId = createPrivateWhatsAppMessageId(sourceAccountId, targetMatrixEventId);
+    if (documents.has(targetMessageId)) continue;
+    reviewedTargetCount += 1;
+    const roomIds = new Set(
+      references.map((event) => event.matrixRoomId).filter((roomId) => typeof roomId === 'string')
+    );
+    if (roomIds.size !== 1) {
+      blockedTargetCount += 1;
+      continue;
+    }
+    const roomId = [...roomIds][0];
+    const target = await deps.fetchMatrixEvent(roomId, targetMatrixEventId);
+    const classified = deps.classifyTarget(
+      roomId,
+      target,
+      segment.roomContexts?.[roomId] ?? { memberDisplayNames: {} }
+    );
+    if (
+      classified?.classification !== 'policy_skip' ||
+      !RELATION_TARGET_POLICY_SKIP_REASONS.has(classified.reason)
+    ) {
+      blockedTargetCount += 1;
+      continue;
+    }
+    for (const event of references) {
+      evidence.push({
+        eventHash: sha256(Buffer.from(event.matrixEventId)),
+        targetHash: sha256(Buffer.from(targetMatrixEventId)),
+        reason: classified.reason,
+      });
+    }
+  }
+  if (blockedTargetCount > 0) {
+    throw new Error(`recovery_relation_target_review_blocked_${blockedTargetCount}`);
+  }
+  mergeRelationTargetPolicySkipEvidence(segment, evidence);
+  return { reviewedTargetCount, repairedEventCount: evidence.length };
+}
+
+function isValidRelationTargetPolicySkipEvidence(evidence) {
+  return (
+    isRecord(evidence) &&
+    /^[a-f0-9]{64}$/u.test(evidence.eventHash) &&
+    /^[a-f0-9]{64}$/u.test(evidence.targetHash) &&
+    RELATION_TARGET_POLICY_SKIP_REASONS.has(evidence.reason)
+  );
+}
+
+function indexRelationTargetPolicySkips(segment) {
+  const evidenceRecords = segment.relationTargetPolicySkips ?? [];
+  if (
+    !Array.isArray(evidenceRecords) ||
+    evidenceRecords.some((evidence) => !isValidRelationTargetPolicySkipEvidence(evidence))
+  ) {
+    throw new Error('recovery_relation_target_policy_skip_evidence_invalid');
+  }
+  const byEventHash = new Map();
+  for (const evidence of evidenceRecords) {
+    if (byEventHash.has(evidence.eventHash)) {
+      throw new Error('recovery_relation_target_policy_skip_evidence_conflict');
+    }
+    byEventHash.set(evidence.eventHash, evidence);
+  }
+  const knownEventHashes = new Set();
+  for (const event of segment.events) {
+    if (!isRecord(event) || typeof event.matrixEventId !== 'string') {
+      throw new Error('invalid_recovery_segment');
+    }
+    const eventHash = sha256(Buffer.from(event.matrixEventId));
+    knownEventHashes.add(eventHash);
+    const evidence = byEventHash.get(eventHash);
+    if (evidence === undefined) continue;
+    const targetMatrixEventId = getRelationTargetMatrixEventId(event);
+    if (
+      targetMatrixEventId === undefined ||
+      sha256(Buffer.from(targetMatrixEventId)) !== evidence.targetHash
+    ) {
+      throw new Error('recovery_relation_target_policy_skip_evidence_mismatch');
+    }
+  }
+  if ([...byEventHash.keys()].some((eventHash) => !knownEventHashes.has(eventHash))) {
+    throw new Error('recovery_relation_target_policy_skip_evidence_unused');
+  }
+  return byEventHash;
+}
+
+function annotateReviewedRelationTarget(event, evidenceByEventHash) {
+  const evidence = evidenceByEventHash.get(sha256(Buffer.from(event.matrixEventId)));
+  if (evidence === undefined) return event;
+  const relation = event?.message?.relation;
+  const reaction = event?.message?.reaction;
+  if ((relation === undefined) === (reaction === undefined)) {
+    throw new Error('recovery_relation_target_policy_skip_evidence_mismatch');
+  }
+  return {
+    ...event,
+    message: {
+      ...event.message,
+      ...(relation === undefined
+        ? { reaction: { ...reaction, targetUnavailableReason: evidence.reason } }
+        : { relation: { ...relation, targetUnavailableReason: evidence.reason } }),
+    },
+  };
+}
+
+function getRelationTargetMatrixEventId(event) {
+  const targetMatrixEventId =
+    event?.message?.relation?.targetMatrixEventId ?? event?.message?.reaction?.targetMatrixEventId;
+  return typeof targetMatrixEventId === 'string' && targetMatrixEventId !== ''
+    ? targetMatrixEventId
+    : undefined;
 }
 
 export function mergeMediaUnavailableEvidence(segment, evidenceRecords) {
@@ -325,17 +508,25 @@ export async function verifyRecoveryEvidence(segment, sourceAccountId, expectedU
   }
   const messageIds = new Map();
   const targetIds = new Set();
+  const requiredTargetIds = new Set();
+  const relationTargetPolicySkips = indexRelationTargetPolicySkips(segment);
+  const policySkippedTargetHashes = new Set();
   for (const event of segment.events) {
     const messageId = createPrivateWhatsAppMessageId(sourceAccountId, event.matrixEventId);
     messageIds.set(event.matrixEventId, messageId);
-    const targetMatrixEventId =
-      event?.message?.relation?.targetMatrixEventId ??
-      event?.message?.reaction?.targetMatrixEventId;
-    if (typeof targetMatrixEventId === 'string' && targetMatrixEventId !== '') {
-      targetIds.add(createPrivateWhatsAppMessageId(sourceAccountId, targetMatrixEventId));
+    const targetMatrixEventId = getRelationTargetMatrixEventId(event);
+    if (targetMatrixEventId !== undefined) {
+      const targetMessageId = createPrivateWhatsAppMessageId(sourceAccountId, targetMatrixEventId);
+      targetIds.add(targetMessageId);
+      const evidence = relationTargetPolicySkips.get(sha256(Buffer.from(event.matrixEventId)));
+      if (evidence === undefined) {
+        requiredTargetIds.add(targetMessageId);
+      } else {
+        policySkippedTargetHashes.add(evidence.targetHash);
+      }
     }
   }
-  const requestedIds = [...new Set([...messageIds.values(), ...targetIds])];
+  const requestedIds = [...new Set([...messageIds.values(), ...requiredTargetIds])];
   const documents = await deps.fetchDocuments(requestedIds);
   const missing = requestedIds.filter((messageId) => !documents.has(messageId));
   if (missing.length > 0) {
@@ -355,10 +546,8 @@ export async function verifyRecoveryEvidence(segment, sourceAccountId, expectedU
     ) {
       throw new Error('recovery_verify_deterministic_id_mismatch');
     }
-    const targetMatrixEventId =
-      event?.message?.relation?.targetMatrixEventId ??
-      event?.message?.reaction?.targetMatrixEventId;
-    if (typeof targetMatrixEventId === 'string' && targetMatrixEventId !== '') {
+    const targetMatrixEventId = getRelationTargetMatrixEventId(event);
+    if (targetMatrixEventId !== undefined) {
       const storedRelation =
         event?.message?.reaction?.targetMatrixEventId === targetMatrixEventId
           ? document.reaction
@@ -367,11 +556,15 @@ export async function verifyRecoveryEvidence(segment, sourceAccountId, expectedU
         sourceAccountId,
         targetMatrixEventId
       );
+      const evidence = relationTargetPolicySkips.get(sha256(Buffer.from(event.matrixEventId)));
       if (
         storedRelation?.targetMatrixEventId !== targetMatrixEventId ||
         storedRelation?.targetMessageId !== expectedTargetMessageId ||
-        (storedRelation?.applicationStatus !== 'applied' &&
-          storedRelation?.applicationStatus !== 'superseded')
+        (evidence === undefined
+          ? storedRelation?.applicationStatus !== 'applied' &&
+            storedRelation?.applicationStatus !== 'superseded'
+          : storedRelation?.applicationStatus !== 'superseded' ||
+            storedRelation?.targetUnavailableReason !== evidence.reason)
       ) {
         throw new Error('recovery_verify_relation_not_resolved');
       }
@@ -408,6 +601,7 @@ export async function verifyRecoveryEvidence(segment, sourceAccountId, expectedU
     messageCount: segment.events.length,
     relationTargetCount: targetIds.size,
     verifiedRelationCount,
+    policySkippedRelationTargetCount: policySkippedTargetHashes.size,
     storedMediaCount,
     mediaUnavailableCount,
     accountMessageCount: counters.accountMessageCount,
@@ -681,6 +875,14 @@ async function fetchMatrixRoomMessagesForRecovery(
   return await fetchMatrixJson(url, accessToken, 'matrix_recovery_messages');
 }
 
+async function fetchMatrixEventForRecovery(config, accessToken, roomId, eventId) {
+  const url = new URL(
+    `/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/event/${encodeURIComponent(eventId)}`,
+    config.homeserverUrl
+  );
+  return await fetchMatrixJson(url, accessToken, 'matrix_recovery_event');
+}
+
 async function joinMatrixRoomForRecovery(config, accessToken, roomId) {
   const url = new URL(
     `/_matrix/client/v3/join/${encodeURIComponent(roomId)}`,
@@ -894,7 +1096,7 @@ export async function main(argv, env) {
     } else if (stage === 'apply') {
       result = await runApplyStage({ config, manifestFile });
     } else if (stage === 'verify') {
-      result = await runVerifyStage({ config, manifestFile, env });
+      result = await runVerifyStage({ config, manifestFile, env, options });
     } else {
       const manifest = await readPrivateRecoveryJson(manifestFile);
       result = await finalizeRecoveryState({
@@ -1049,7 +1251,7 @@ async function runApplyStage({ config, manifestFile }) {
   return { status: 'applied', segment: segment.name, ...result };
 }
 
-async function runVerifyStage({ config, manifestFile, env }) {
+async function runVerifyStage({ config, manifestFile, env, options }) {
   const manifest = await readPrivateRecoveryJson(manifestFile);
   if (!Array.isArray(manifest.segments) || manifest.segments.length === 0) {
     throw new Error('recovery_verify_missing_segment');
@@ -1082,6 +1284,24 @@ async function runVerifyStage({ config, manifestFile, env }) {
     userId: config.userId,
     bucket: env.WHATSAPP_RECOVERY_MEDIA_BUCKET ?? 'intexuraos-whatsapp-media-dev',
   });
+  if (options['review-policy-skipped-relations'] === 'true') {
+    const beforeEvidence = JSON.stringify(segment.relationTargetPolicySkips ?? []);
+    const matrixAccessToken = await readPrivateToken(config.matrixAccessTokenFile);
+    const review = await reviewPolicySkippedRelationTargets(segment, config.sourceAccountId, {
+      fetchDocuments: verifier.fetchDocuments,
+      fetchMatrixEvent: (roomId, eventId) =>
+        fetchMatrixEventForRecovery(config, matrixAccessToken, roomId, eventId),
+      classifyTarget: (roomId, event, roomContext) =>
+        classifyMatrixEventForRecovery(roomId, event, roomContext, config),
+    });
+    if (JSON.stringify(segment.relationTargetPolicySkips ?? []) !== beforeEvidence) {
+      segment.applied = false;
+      delete segment.verified;
+      delete segment.verification;
+      await writePrivateRecoveryJson(manifestFile, manifest);
+      throw new Error(`recovery_relation_target_repairs_required_${review.repairedEventCount}`);
+    }
+  }
   const result = await verifyRecoveryEvidence(
     segment,
     config.sourceAccountId,

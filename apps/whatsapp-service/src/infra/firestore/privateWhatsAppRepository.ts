@@ -81,6 +81,10 @@ const PRIVATE_WHATSAPP_MESSAGE_TYPES = new Set<PrivateWhatsAppMessage['messageTy
   'redaction',
   'unknown',
 ]);
+const REVIEWED_RELATION_TARGET_UNAVAILABLE_REASONS = new Set<string>([
+  'matrix_notice',
+  'redacted_reaction_tombstone',
+]);
 type FirestoreClient = ReturnType<typeof getFirestore>;
 type FirestoreTransaction = Parameters<Parameters<FirestoreClient['runTransaction']>[0]>[0];
 
@@ -465,6 +469,14 @@ async function storeIncomingMessage(
           typeof existingData?.chatId === 'string'
             ? existingData.chatId
             : createPrivateWhatsAppChatId(input.sourceAccountId, input.chat.matrixRoomId);
+        const reviewedPolicySkipRepair = buildReviewedPolicySkipRepair(
+          existingData,
+          input,
+          existingChatId
+        );
+        if (reviewedPolicySkipRepair !== undefined) {
+          transaction.set(messageRef, reviewedPolicySkipRepair, { merge: true });
+        }
         return {
           outcome: 'duplicate' as const,
           chatId: existingChatId,
@@ -641,9 +653,12 @@ async function storeIncomingMessage(
       let operationalTargetToWrite: PrivateWhatsAppMessage | undefined;
       const pendingOperationalWrites: PrivateWhatsAppMessage[] = [];
       let shouldResolvePendingOperationalRedactions = false;
+      const reviewedPolicySkipRepair = buildReviewedPolicySkipRepair(message, input, chatId);
 
       const allPendingRedactions = pendingOperationalRedactionsSnapshot?.docs ?? [];
-      if (allPendingRedactions.length > 0) {
+      if (reviewedPolicySkipRepair !== undefined) {
+        message = { ...message, ...reviewedPolicySkipRepair };
+      } else if (allPendingRedactions.length > 0) {
         const pendingRedactions = allPendingRedactions.slice(
           0,
           PENDING_OPERATION_RESOLUTION_BATCH_SIZE
@@ -3417,6 +3432,9 @@ function buildMessage(
         input.message.reaction.targetMatrixEventId
       ),
       applicationStatus: 'pending',
+      ...(input.message.reaction.targetUnavailableReason === undefined
+        ? {}
+        : { targetUnavailableReason: input.message.reaction.targetUnavailableReason }),
     };
   }
   if (input.message.relation !== undefined) {
@@ -3424,6 +3442,82 @@ function buildMessage(
   }
 
   return message;
+}
+
+function buildReviewedPolicySkipRepair(
+  existing: Partial<StoredPrivateWhatsAppMessage> | undefined,
+  input: StorePrivateWhatsAppMessageInput,
+  expectedChatId: string
+): Pick<StoredPrivateWhatsAppMessage, 'relation'> | Pick<StoredPrivateWhatsAppMessage, 'reaction'> | undefined {
+  if (
+    input.deliveryMode !== 'backfill' ||
+    existing?.userId !== input.userId ||
+    existing.sourceAccountId !== input.sourceAccountId ||
+    existing.chatId !== expectedChatId ||
+    existing.matrixEventId !== input.message.matrixEventId ||
+    existing.matrixRoomId !== input.message.matrixRoomId
+  ) {
+    return undefined;
+  }
+
+  const relationReason = input.message.relation?.targetUnavailableReason;
+  const reactionReason = input.message.reaction?.targetUnavailableReason;
+  if ((relationReason === undefined) === (reactionReason === undefined)) {
+    return undefined;
+  }
+  const now = new Date().toISOString();
+
+  if (relationReason !== undefined && input.message.relation !== undefined) {
+    if (
+      !REVIEWED_RELATION_TARGET_UNAVAILABLE_REASONS.has(relationReason) ||
+      (existing.relation !== undefined &&
+        (existing.relation.kind !== input.message.relation.kind ||
+          existing.relation.targetMatrixEventId !==
+            input.message.relation.targetMatrixEventId))
+    ) {
+      return undefined;
+    }
+    return {
+      relation: {
+        kind: input.message.relation.kind,
+        targetMatrixEventId: input.message.relation.targetMatrixEventId,
+        targetMessageId: createPrivateWhatsAppMessageId(
+          input.sourceAccountId,
+          input.message.relation.targetMatrixEventId
+        ),
+        applicationStatus: 'superseded',
+        targetUnavailableReason: relationReason,
+        appliedAt: existing.relation?.appliedAt ?? now,
+      },
+    };
+  }
+
+  const reaction = input.message.reaction as NonNullable<
+    StorePrivateWhatsAppMessageInput['message']['reaction']
+  >;
+  const reviewedReactionReason = reactionReason as NonNullable<typeof reactionReason>;
+  if (
+    !REVIEWED_RELATION_TARGET_UNAVAILABLE_REASONS.has(reviewedReactionReason) ||
+    existing.messageType !== 'reaction' ||
+    (existing.reaction !== undefined &&
+      (existing.reaction.emoji !== reaction.emoji ||
+        existing.reaction.targetMatrixEventId !== reaction.targetMatrixEventId))
+  ) {
+    return undefined;
+  }
+  return {
+    reaction: {
+      emoji: reaction.emoji,
+      targetMatrixEventId: reaction.targetMatrixEventId,
+      targetMessageId: createPrivateWhatsAppMessageId(
+        input.sourceAccountId,
+        reaction.targetMatrixEventId
+      ),
+      applicationStatus: 'superseded',
+      targetUnavailableReason: reviewedReactionReason,
+      appliedAt: existing.reaction?.appliedAt ?? now,
+    },
+  };
 }
 
 function createContextChangeId(chatId: string, sequence: number): string {

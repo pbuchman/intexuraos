@@ -563,6 +563,132 @@ describe('IngestPrivateWhatsAppEventsUseCase', () => {
     ]);
   });
 
+  it('accepts reviewed unavailable relation targets only for backfill delivery', async () => {
+    const reviewedEvents = [
+      createEvent({
+        matrixEventId: '$reviewed-replacement',
+        message: {
+          direction: 'incoming',
+          type: 'text',
+          text: 'replacement text',
+          relation: {
+            kind: 'replacement',
+            targetMatrixEventId: '$notice-target',
+            applicationStatus: 'pending',
+            targetUnavailableReason: 'matrix_notice',
+          },
+        },
+      }),
+      createEvent({
+        matrixEventId: '$reviewed-reaction',
+        message: {
+          direction: 'incoming',
+          type: 'reaction',
+          reaction: {
+            emoji: '👍',
+            targetMatrixEventId: '$redacted-reaction-target',
+            targetUnavailableReason: 'redacted_reaction_tombstone',
+          },
+        },
+      }),
+    ];
+
+    const backfill = await useCase.execute(
+      createInput({ deliveryMode: 'backfill', events: reviewedEvents }),
+      logger
+    );
+    expect(backfill).toMatchObject({
+      ok: true,
+      value: { accepted: 2, duplicates: 0, rejected: 0 },
+    });
+    expect(repository.stored.map((entry) => entry.message)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          relation: expect.objectContaining({ targetUnavailableReason: 'matrix_notice' }),
+        }),
+        expect.objectContaining({
+          reaction: expect.objectContaining({
+            targetUnavailableReason: 'redacted_reaction_tombstone',
+          }),
+        }),
+      ])
+    );
+
+    const live = await useCase.execute(
+      createInput({
+        deliveryMode: 'live',
+        events: [
+          {
+            ...reviewedEvents[0],
+            matrixEventId: '$live-reviewed-replacement',
+          },
+        ],
+      }),
+      logger
+    );
+    expect(live).toMatchObject({
+      ok: true,
+      value: {
+        accepted: 0,
+        duplicates: 0,
+        rejected: 1,
+        messages: [
+          {
+            matrixEventId: '$live-reviewed-replacement',
+            outcome: 'rejected',
+            reason: 'reviewed_relation_target_requires_backfill',
+          },
+        ],
+      },
+    });
+
+    const invalidReasons = await useCase.execute(
+      createInput({
+        deliveryMode: 'backfill',
+        events: [
+          {
+            ...createEvent({ matrixEventId: '$invalid-reviewed-relation' }),
+            message: {
+              direction: 'incoming',
+              type: 'text',
+              relation: {
+                kind: 'replacement',
+                targetMatrixEventId: '$target',
+                applicationStatus: 'pending',
+                targetUnavailableReason: 'unapproved',
+              },
+            },
+          },
+          {
+            ...createEvent({ matrixEventId: '$invalid-reviewed-reaction' }),
+            message: {
+              direction: 'incoming',
+              type: 'reaction',
+              reaction: {
+                emoji: '👍',
+                targetMatrixEventId: '$target',
+                targetUnavailableReason: 123,
+              },
+            },
+          },
+        ],
+      }),
+      logger
+    );
+    expect(invalidReasons).toMatchObject({
+      ok: true,
+      value: {
+        accepted: 0,
+        duplicates: 0,
+        rejected: 2,
+        messages: [
+          { reason: 'invalid_relation_target_unavailable_reason' },
+          { reason: 'invalid_relation_target_unavailable_reason' },
+        ],
+      },
+    });
+  });
+
   it('normalizes replacement and redaction relations before repository storage', async () => {
     const result = await useCase.execute(
       createInput({
