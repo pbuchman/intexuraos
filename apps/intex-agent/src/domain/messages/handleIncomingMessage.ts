@@ -320,7 +320,37 @@ export async function handleIncomingMessage(
   const currentSession = await deps.sessionRepository.findContinuableSession(input.userId);
 
   if (input.sourceType === 'whatsapp_button') {
-    return await handleConfirmationButton(input, deps, currentSession, now, normalizedUserTimestamp);
+    return await handleConfirmationResponse(
+      input,
+      deps,
+      currentSession,
+      now,
+      normalizedUserTimestamp
+    );
+  }
+
+  const textConfirmationDecision =
+    input.buttonResponse === undefined ? parsePlainTextConfirmationDecision(input.text) : null;
+  if (currentSession !== null && textConfirmationDecision !== null) {
+    const confirmationEvents = await deps.sessionRepository.listEvents(
+      currentSession.id,
+      input.userId
+    );
+    const pendingConfirmation = findLatestDirectTextConfirmation(confirmationEvents);
+    if (pendingConfirmation !== null) {
+      return await handleConfirmationResponse(
+        input,
+        deps,
+        currentSession,
+        now,
+        normalizedUserTimestamp,
+        {
+          decision: textConfirmationDecision,
+          events: confirmationEvents,
+          pendingConfirmation,
+        }
+      );
+    }
   }
 
   const decision = decideSessionTransition({
@@ -469,12 +499,17 @@ async function applyRuntimeResolutionFailure(
   await publishReply(input, deps, session.id, reply);
 }
 
-async function handleConfirmationButton(
+async function handleConfirmationResponse(
   input: IntexIncomingMessage,
   deps: HandleIncomingMessageDeps,
   currentSession: IntexAgentSession | null,
   now: string,
-  normalizedUserTimestamp: string
+  normalizedUserTimestamp: string,
+  directTextConfirmation?: Readonly<{
+    decision: 'yes' | 'no';
+    events: IntexAgentSessionEvent[];
+    pendingConfirmation: PendingConfirmation;
+  }>
 ): Promise<IncomingMessageHandlerResult> {
   if (currentSession === null) {
     const reply = staleConfirmationReply(
@@ -492,7 +527,9 @@ async function handleConfirmationButton(
   const buttonResponse = input.buttonResponse;
   const parsedButton =
     buttonResponse === undefined ? null : parseConfirmationButtonId(buttonResponse.buttonId);
-  const events = await deps.sessionRepository.listEvents(currentSession.id, input.userId);
+  const events =
+    directTextConfirmation?.events ??
+    (await deps.sessionRepository.listEvents(currentSession.id, input.userId));
 
   await appendEvent(deps, currentSession, 'user_message', {
     messageId: input.messageId,
@@ -505,12 +542,15 @@ async function handleConfirmationButton(
     lastUserMessageAt: normalizedUserTimestamp,
   });
 
-  const pendingConfirmation = findLatestPendingConfirmation(events);
+  const pendingConfirmation =
+    directTextConfirmation?.pendingConfirmation ?? findLatestPendingConfirmation(events);
+  const confirmationDecision = directTextConfirmation?.decision ?? parsedButton?.decision;
   const replyLanguage = selectReplyLanguage(input, events);
   if (
-    buttonResponse === undefined ||
-    parsedButton === null ||
-    parsedButton.confirmationId !== pendingConfirmation?.confirmationId
+    confirmationDecision === undefined ||
+    pendingConfirmation === null ||
+    (directTextConfirmation === undefined &&
+      parsedButton?.confirmationId !== pendingConfirmation.confirmationId)
   ) {
     const reply = staleConfirmationReply(replyLanguage);
     const assistantAt = await appendAssistantMessage(currentSession, deps, reply);
@@ -524,13 +564,17 @@ async function handleConfirmationButton(
 
   await appendEvent(deps, currentSession, 'confirmation_resolved', {
     confirmationId: pendingConfirmation.confirmationId,
-    resolution: parsedButton.decision === 'yes' ? 'accepted' : 'rejected',
-    buttonId: buttonResponse.buttonId,
-    buttonTitle: buttonResponse.buttonTitle,
-    replyToWamid: buttonResponse.replyToWamid,
+    resolution: confirmationDecision === 'yes' ? 'accepted' : 'rejected',
+    ...(buttonResponse === undefined
+      ? {}
+      : {
+          buttonId: buttonResponse.buttonId,
+          buttonTitle: buttonResponse.buttonTitle,
+          replyToWamid: buttonResponse.replyToWamid,
+        }),
   });
 
-  if (parsedButton.decision === 'no') {
+  if (confirmationDecision === 'no') {
     const reply = REJECTED_CONFIRMATION_REPLIES[replyLanguage];
     const assistantAt = await appendAssistantMessage(currentSession, deps, reply);
     await deps.sessionRepository.updateSession(currentSession.id, {
@@ -1071,6 +1115,18 @@ function parseConfirmationButtonId(buttonId: string): ParsedConfirmationButton |
   };
 }
 
+function parsePlainTextConfirmationDecision(value: string): 'yes' | 'no' | null {
+  const normalized = value
+    .normalize('NFKC')
+    .trim()
+    .toLocaleLowerCase('en-US')
+    .replace(/[.!]+$/u, '')
+    .trim();
+  if (normalized === 'tak' || normalized === 'yes') return 'yes';
+  if (normalized === 'nie' || normalized === 'no') return 'no';
+  return null;
+}
+
 function findLatestPendingConfirmation(
   events: IntexAgentSessionEvent[]
 ): PendingConfirmation | null {
@@ -1114,6 +1170,20 @@ function findLatestPendingConfirmation(
   }
 
   return null;
+}
+
+function findLatestDirectTextConfirmation(
+  events: IntexAgentSessionEvent[]
+): PendingConfirmation | null {
+  const latestRequestedEvent = [...events]
+    .reverse()
+    .find((event) => event.type === 'confirmation_requested');
+  const latestConfirmationId = latestRequestedEvent?.payload['confirmationId'];
+  if (typeof latestConfirmationId !== 'string') return null;
+  const pendingConfirmation = findLatestPendingConfirmation(events);
+  return pendingConfirmation?.confirmationId === latestConfirmationId
+    ? pendingConfirmation
+    : null;
 }
 
 function parseConfirmedOperations(value: unknown): IntexAgentConfirmedOperation[] | undefined {

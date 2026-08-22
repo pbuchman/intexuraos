@@ -10,7 +10,7 @@ describe('intexAgentIntentClassifierPrompt', () => {
   it('exposes prompt metadata with a semver version', () => {
     expect(intexAgentIntentClassifierPrompt.name).toBe('intex-agent-intent-classifier');
     expect(intexAgentIntentClassifierPrompt.description).toContain('Classifies');
-    expect(intexAgentIntentClassifierPrompt.version).toBe('12.0.0');
+    expect(intexAgentIntentClassifierPrompt.version).toBe('13.0.0');
     expect(intexAgentIntentClassifierRepairPrompt.version).toBe('3.0.0');
   });
 
@@ -90,16 +90,47 @@ describe('intexAgentIntentClassifierPrompt', () => {
     });
 
     expect(prompt).toContain(
-      'A request to calculate, show, or preview how proposed calendar changes would look is read-only until the user explicitly asks to apply those changes now'
+      'A purely hypothetical request to calculate, show, or preview possible calendar changes is read-only until the user asks to apply them'
     );
     expect(prompt).toContain(
-      'Return conversation when the transcript already contains the events needed for the preview; use query_calendar_events only when a live lookup is needed'
+      'Return conversation for a genuinely hypothetical preview when the transcript already contains the events needed'
     );
     expect(prompt).toContain(
       'Pierwsze wydarzenie byłoby 22 sierpnia, a kolejne dzień po dniu. Jak wyglądałyby daty poszczególnych wydarzeń?'
     );
     expect(prompt).toContain(
       '"outcome":"conversation","confidence":0.95,"stylePreferenceAction":"none","reason":"preview proposed dates without applying calendar changes"'
+    );
+  });
+
+  it('treats the exact explicit Photos move preview and its Tak continuation as an update', () => {
+    const prompt = intexAgentIntentClassifierPrompt.build({
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+      messages: [
+        {
+          role: 'user',
+          content:
+            'Musimy przenieść wydarzenia związane z Google Photos. Zmienić im daty tak, żeby następowało dzień po dniu. Zaczynamy od wydarzenia z 13 sierpnia, które będzie ustawione na 23 sierpnia. Jakbyś widział daty poszczególnych wydarzeń?',
+        },
+        {
+          role: 'assistant',
+          content:
+            'Oto pełny harmonogram czterech zmian. Czy chcesz, abym zaktualizował te wydarzenia?',
+        },
+        { role: 'user', content: 'Tak' },
+      ],
+    });
+
+    expect(prompt).toContain('explicitly states that existing events must be moved or changed');
+    expect(prompt).toContain(
+      'An affirmative reply such as "Tak" or "Yes" to the assistant\'s immediately preceding explicit offer'
+    );
+    expect(prompt).toContain(
+      'explicit commitment to reschedule existing events; the requested mapping is the confirmation preview'
+    );
+    expect(prompt).toContain(
+      'affirmative continuation of the immediately preceding calendar-update offer'
     );
   });
 

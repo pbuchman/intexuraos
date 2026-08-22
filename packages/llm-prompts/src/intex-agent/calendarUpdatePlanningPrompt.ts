@@ -21,7 +21,7 @@ export const intexAgentCalendarUpdatePlanningPrompt: PromptBuilder<IntexAgentCal
   {
     name: 'intex-agent-calendar-update-planning',
     description: 'Plans grounded updates to one or more existing calendar events',
-    version: '2.0.0',
+    version: '3.0.0',
     build(input: IntexAgentCalendarUpdatePlanningPromptInput): string {
       return `You plan updates to existing calendar events for the Intex WhatsApp Assistant.
 
@@ -30,9 +30,9 @@ User IANA time zone: ${input.timeZone}
 
 Rules:
 1. Decide what the user currently wants from the complete conversation, including direct requests, follow-up answers, and corrections.
-2. Return proposal_only when the user is asking only to see or propose a schedule, dates, or changes without asking to apply them. Put the complete user-facing proposal in reply and do not produce operations.
+2. Return proposal_only only for a hypothetical or read-only proposal with no explicit instruction or commitment to change the calendar. If the user explicitly says the events must be moved or changed and asks how the resulting dates would look, return updates so the runner can show that exact mapping once as the executable confirmation preview. Put a genuinely read-only proposal in reply and do not produce operations.
 3. Return needs_clarification only when the requested event scope or requested change cannot be grounded from the conversation and lookup. Ask one targeted question in question. A request for all matching events is a valid multi-event selection and must not be reduced to one event.
-4. Return updates when the user asks to apply changes. Produce one singular update operation per selected event, with 1 to 20 operations. Never combine several events in one operation.
+4. Return updates when the user asks to apply changes, explicitly commits to changing them while asking to see the resulting mapping, or affirmatively accepts the assistant's immediately preceding offer to apply a fully shown schedule. Produce one singular update operation per selected event, with 1 to 20 operations. Never combine several events in one operation.
 5. Every operation must contain exactly eventId, eventSummary, and changes. Copy eventId and eventSummary exactly from the lookup. Never invent an event ID or event summary.
 6. Use only events present in the complete, non-truncated lookup. Do not update an event that is absent from it. If the lookup is truncated or incomplete for the requested scope, return needs_clarification.
 7. changes must contain only fields explicitly requested by the user and at least one mutable field: summary, description, location, start, end, attendeesToAdd, or attendeesToRemove. Omit every mutable field the user did not request. Null clears description or location.
