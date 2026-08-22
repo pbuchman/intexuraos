@@ -146,6 +146,38 @@ test('discover replays known limited room history, context, skips, and mapped ev
   assert.deepEqual(segment.errors, []);
 });
 
+test('discover can exclude mapped events proven by a verified known-message list', async () => {
+  const knownMessageId = createHash('sha256').update('private-source\0$known').digest('hex');
+  const segment = await discoverRecoverySegment({
+    name: 's0-s1',
+    fromToken: 's0',
+    syncResponse: {
+      next_batch: 's1',
+      rooms: {
+        join: {
+          '!known:home-dev': {
+            state: { events: [] },
+            timeline: { events: [matrixText('$known'), matrixText('$new')] },
+          },
+        },
+      },
+    },
+    stateRoomContexts: { '!known:home-dev': { memberDisplayNames: {} } },
+    config: recoveryConfig,
+    knownMessageIds: new Set([knownMessageId]),
+    excludeKnownMessageIds: true,
+    fetchRoomMessages: async () => ({ chunk: [] }),
+    joinRoom: async () => assert.fail('no invite should be joined'),
+  });
+
+  assert.deepEqual(
+    segment.events.map((event) => event.matrixEventId),
+    ['$new']
+  );
+  assert.equal(segment.summary.mappedCount, 1);
+  assert.equal(segment.summary.excludedKnownMappedCount, 1);
+});
+
 test('discover joins eligible WhatsApp invites and requires rediscovery from unchanged token', async () => {
   const joined = [];
   await assert.rejects(
