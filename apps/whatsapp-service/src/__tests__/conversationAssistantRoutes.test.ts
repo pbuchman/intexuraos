@@ -700,6 +700,46 @@ describe('Conversation Assistant routes', () => {
     ).toHaveLength(1);
   });
 
+  it('creates a smaller analysis from an owned source session without returning chatId', async () => {
+    const token = await seed();
+    const source = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        requestId: 'request-source-route',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+    });
+    const sourceSessionId = (
+      JSON.parse(source.body) as { data: { session: { id: string } } }
+    ).data.session.id;
+
+    const smaller = await ctx.app.inject({
+      method: 'POST',
+      url: '/conversation-assistant/sessions',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        requestId: 'request-smaller-route',
+        sourceSessionId,
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+    });
+
+    expect(smaller.statusCode).toBe(202);
+    expect(JSON.parse(smaller.body).data.session).toMatchObject({
+      chatDisplayName: 'Alice',
+      range: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+    });
+    expect(smaller.body).not.toContain('chatId');
+  });
+
   it('surfaces a failed preparation enqueue and lets the user retry it', async () => {
     const token = await seed();
     ctx.eventPublisher.setConversationAssistantPreparationFailure('Queue unavailable');

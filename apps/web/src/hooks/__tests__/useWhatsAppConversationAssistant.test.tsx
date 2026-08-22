@@ -1005,6 +1005,64 @@ describe('useWhatsAppConversationAssistant', () => {
     });
   });
 
+  it('creates a smaller analysis from the same contact and transfers the saved draft', async () => {
+    const createdSession: ConversationAssistantSession = {
+      ...session,
+      id: 'session-smaller',
+      status: 'preparing',
+      preparationStage: 'queued',
+    };
+    mocks.createConversationAssistantSession.mockResolvedValue(createdSession);
+    mocks.getConversationAssistantSession.mockResolvedValue(createdSession);
+    mocks.listConversationAssistantTurns.mockResolvedValue({ turns: [] });
+    const sourceIdentity = {
+      origin: window.location.origin,
+      userId: 'user-1',
+      sessionId: session.id,
+    };
+    saveConversationAssistantDraft(window.sessionStorage, sourceIdentity, {
+      question: 'Please compare the tone changes.',
+      warningAcknowledged: false,
+    });
+
+    const { result } = renderHook(
+      () =>
+        useWhatsAppConversationAssistant({
+          loadChats: false,
+          loadSessions: false,
+          sourceSessionId: session.id,
+          initialFrom: '2026-06-21T00:00:00.000Z',
+          initialTo: '2026-06-21T10:00:00.000Z',
+          initialModel: ConversationAssistantModels.MiniMaxM3,
+        }),
+      { wrapper: createWrapper('/whatsapp/conversation-assistant/new') }
+    );
+
+    await act(async () => {
+      await result.current.createSession();
+    });
+
+    expect(mocks.createConversationAssistantSession).toHaveBeenCalledWith('tok', {
+      requestId: expect.any(String),
+      sourceSessionId: session.id,
+      from: '2026-06-21T00:00:00.000Z',
+      to: '2026-06-21T10:00:00.000Z',
+      model: ConversationAssistantModels.MiniMaxM3,
+      displayTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    await waitFor(() => {
+      expect(result.current.followUpQuestion).toBe('Please compare the tone changes.');
+    });
+    expect(
+      window.sessionStorage.getItem(
+        getConversationAssistantDraftStorageKey({
+          ...sourceIdentity,
+          sessionId: createdSession.id,
+        })
+      )
+    ).toContain('Please compare the tone changes.');
+  });
+
   it('recovers the created analysis when the create response times out', async () => {
     const createdSession: ConversationAssistantSession = {
       ...session,
@@ -4734,7 +4792,7 @@ describe('useWhatsAppConversationAssistant', () => {
     expect.soft(mocks.sendConversationAssistantTurn).toHaveBeenCalledTimes(0);
     expect.soft(result.current.followUpQuestion).toBe('A very large plain question');
     expect.soft(result.current.error).toBe(
-      'This question is too large for the model context. Shorten it or start a new analysis.'
+      'The selected conversation context does not fit this model. Create a smaller analysis with a shorter date range. Your draft was kept.'
     );
     const stored = JSON.parse(
       window.sessionStorage.getItem(getConversationAssistantDraftStorageKey(identity)) ?? '{}'
@@ -6195,7 +6253,7 @@ describe('useWhatsAppConversationAssistant', () => {
       'Replay this oversized plain question once'
     );
     expect.soft(result.current.error).toBe(
-      'This question is too large for the model context. Shorten it or start a new analysis.'
+      'The selected conversation context does not fit this model. Create a smaller analysis with a shorter date range. Your draft was kept.'
     );
     const stored = JSON.parse(
       window.sessionStorage.getItem(getConversationAssistantDraftStorageKey(identity)) ?? '{}'

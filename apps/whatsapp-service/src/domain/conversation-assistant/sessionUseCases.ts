@@ -21,6 +21,12 @@ import {
   recordConversationAssistantTelemetry,
   type ConversationAssistantTelemetryInput,
 } from './operationalTelemetry.js';
+import {
+  buildConversationAssistantTurnPromptMessages,
+  estimateConversationAssistantTurnPromptTokens,
+  getConversationAssistantTurnPromptTokenBudget,
+  isConversationAssistantTurnPromptWithinBudget,
+} from './turnPromptBudget.js';
 import type { ConversationAssistantDeps } from './ports.js';
 import type {
   CheckConversationAssistantContextInput,
@@ -48,6 +54,7 @@ import {
 } from './types.js';
 import type {
   PrivateWhatsAppChat,
+  PrivateConversationContextMessage,
   PrivateWhatsAppContextChange,
   PrivateWhatsAppMessage,
 } from '../whatsapp/index.js';
@@ -84,6 +91,54 @@ export function deriveEffectiveRange(
   return { from: first.eventTimestamp, to: last.eventTimestamp };
 }
 
+function buildInitialConversationAssistantTranscript(
+  session: ConversationAssistantSession,
+  messages: PrivateConversationContextMessage[]
+): string {
+  return buildPrivateConversationTranscriptText(
+    messages,
+    session.generationId === undefined
+      ? undefined
+      : { sessionId: session.id, sessionGenerationId: session.generationId }
+  );
+}
+
+function findRecommendedConversationAssistantRange(
+  session: ConversationAssistantSession,
+  messages: PrivateConversationContextMessage[]
+): ConversationAssistantSession['range'] | undefined {
+  let lower = 1;
+  let upper = messages.length - 1;
+  let earliestFittingIndex: number | undefined;
+  while (lower <= upper) {
+    const middle = Math.floor((lower + upper) / 2);
+    const suffix = messages.slice(middle);
+    const effectiveRange = deriveEffectiveRange(suffix, session.range);
+    const prompt = buildConversationAssistantTurnPromptMessages({
+      userId: session.userId,
+      sessionId: session.id,
+      model: session.model,
+      transcriptText: buildInitialConversationAssistantTranscript(session, suffix),
+      ...(session.chatDisplayName === undefined
+        ? {}
+        : { chatDisplayName: session.chatDisplayName }),
+      range: { from: effectiveRange.from, to: session.range.to },
+      effectiveRange,
+      history: [],
+      currentQuestion: 'Summarize this conversation.',
+    });
+    if (isConversationAssistantTurnPromptWithinBudget(session.model, prompt)) {
+      earliestFittingIndex = middle;
+      upper = middle - 1;
+    } else {
+      lower = middle + 1;
+    }
+  }
+  const first = earliestFittingIndex === undefined ? undefined : messages[earliestFittingIndex];
+  if (first === undefined || first.eventTimestamp >= session.range.to) return undefined;
+  return { from: first.eventTimestamp, to: session.range.to };
+}
+
 export async function createConversationAssistantSession(
   input: CreateConversationAssistantSessionInput,
   deps: ConversationAssistantDeps
@@ -105,7 +160,15 @@ export async function createConversationAssistantSession(
   const creationRequestId =
     trimmedRequestId === undefined || trimmedRequestId === '' ? randomUUID() : trimmedRequestId;
   const sessionId = deps.ids.sessionId({ userId: input.userId, requestId: creationRequestId });
-  const chatLoadResult = await loadOwnedDirectChat(input, deps);
+  let chatId = input.chatId ?? '';
+  if (input.sourceSessionId !== undefined) {
+    const sourceSession = await deps.repository.getSessionById(input.sourceSessionId);
+    if (!isOwnedSession(sourceSession, input.userId)) {
+      return err({ code: 'NOT_FOUND', message: 'Source analysis not found' });
+    }
+    chatId = sourceSession.chatId;
+  }
+  const chatLoadResult = await loadOwnedDirectChat({ userId: input.userId, chatId }, deps);
   if (!chatLoadResult.ok) {
     return chatLoadResult;
   }
@@ -114,7 +177,7 @@ export async function createConversationAssistantSession(
   const session: ConversationAssistantSession = {
     id: sessionId,
     userId: input.userId,
-    chatId: input.chatId,
+    chatId,
     sourceAccountId: chatLoadResult.value.sourceAccountId,
     sourceAccountGeneration: chatLoadResult.value.accountGeneration,
     status: 'preparing',
@@ -306,6 +369,45 @@ export async function prepareConversationAssistantSession(
     return err(emptyError);
   }
 
+  const transcriptText = buildInitialConversationAssistantTranscript(workingSession, context.messages);
+  const effectiveRange = deriveEffectiveRange(context.messages, workingSession.range);
+  const promptSnapshot = {
+    userId: workingSession.userId,
+    sessionId: workingSession.id,
+    model: workingSession.model,
+    transcriptText,
+    ...(workingSession.chatDisplayName === undefined
+      ? {}
+      : { chatDisplayName: workingSession.chatDisplayName }),
+    range: workingSession.range,
+    effectiveRange,
+    history: [],
+    currentQuestion: 'Summarize this conversation.',
+  };
+  const promptMessages = buildConversationAssistantTurnPromptMessages(promptSnapshot);
+  if (!isConversationAssistantTurnPromptWithinBudget(workingSession.model, promptMessages)) {
+    const tooLargeError: ConversationAssistantError = {
+      code: 'CONTEXT_WINDOW_EXCEEDED',
+      message: `The selected conversation context is too large for ${getConversationAssistantModelDisplayName(workingSession.model)}. Create a smaller analysis with a shorter date range.`,
+      estimatedPromptTokens: estimateConversationAssistantTurnPromptTokens(promptMessages),
+      promptTokenBudget: getConversationAssistantTurnPromptTokenBudget(workingSession.model),
+    };
+    const recommendedRange = findRecommendedConversationAssistantRange(
+      workingSession,
+      context.messages
+    );
+    if (recommendedRange !== undefined) tooLargeError.recommendedRange = recommendedRange;
+    const saved = await markClaimedConversationAssistantPreparationFailed(
+      workingSession,
+      tooLargeError,
+      attempt,
+      claimId,
+      deps
+    );
+    if (!saved) return await currentPreparationResult(session.id, input.userId, deps);
+    return err(tooLargeError);
+  }
+
   const contextSnapshotId = createContextSnapshotId(workingSession.id, attempt, claimId);
   try {
     const contextSaved = await deps.repository.saveContextSnapshot(
@@ -332,19 +434,11 @@ export async function prepareConversationAssistantSession(
     ...workingSession,
     status: 'ready',
     preparationStage: 'ready',
-    effectiveRange: deriveEffectiveRange(context.messages, workingSession.range),
+    effectiveRange,
     transcriptSha256: context.transcriptSha256,
     contextSnapshotId,
     transcriptMessageCount: context.messageCount,
-    transcriptText: buildPrivateConversationTranscriptText(
-      context.messages,
-      workingSession.generationId === undefined
-        ? undefined
-        : {
-            sessionId: workingSession.id,
-            sessionGenerationId: workingSession.generationId,
-          }
-    ),
+    transcriptText,
     omitted: context.omitted,
     continuation: {
       sourceAccountId: chatLoadResult.value.sourceAccountId,
@@ -427,6 +521,12 @@ export async function retryConversationAssistantPreparation(
   }
   if (session.status !== 'failed') {
     return err({ code: 'INVALID_REQUEST', message: 'Conversation context is already preparing' });
+  }
+  if (session.preparationError?.code === 'CONTEXT_WINDOW_EXCEEDED') {
+    return err({
+      code: 'INVALID_REQUEST',
+      message: 'Create a smaller analysis with a shorter date range',
+    });
   }
   const requeued = await requeueConversationAssistantPreparation(session, deps);
   if (requeued === null) {
@@ -900,6 +1000,9 @@ async function reuseOrRequeueConversationAssistantSession(
   if (isSessionReady(session) || session.status === 'preparing') {
     return ok({ session });
   }
+  if (session.preparationError?.code === 'CONTEXT_WINDOW_EXCEEDED') {
+    return ok({ session });
+  }
   const requeued = await requeueConversationAssistantPreparation(session, deps);
   if (requeued === null) {
     return err({ code: 'NOT_FOUND', message: 'Conversation Assistant session not found' });
@@ -1089,7 +1192,7 @@ async function markClaimedConversationAssistantPreparationFailed(
     ...session,
     status: 'failed',
     preparationStage: 'failed',
-    preparationError: { code: error.code, message: error.message },
+    preparationError: { ...error },
     updatedAt: deps.clock.now(),
   };
   delete failedSession.preparationClaimId;
@@ -1274,6 +1377,12 @@ function createTurn(
 function validateCreateInput(
   input: CreateConversationAssistantSessionInput
 ): { code: 'INVALID_REQUEST'; message: string } | null {
+  if ((input.chatId === undefined) === (input.sourceSessionId === undefined)) {
+    return {
+      code: 'INVALID_REQUEST',
+      message: 'Provide exactly one of chatId or sourceSessionId',
+    };
+  }
   const fromTime = parseIsoUtcTimestamp(input.from);
   const toTime = parseIsoUtcTimestamp(input.to);
   if (fromTime === null || toTime === null) {

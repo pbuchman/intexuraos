@@ -85,7 +85,8 @@ const CONVERSATION_ASSISTANT_INTERNAL_ERROR_MESSAGE = 'Conversation Assistant re
 
 interface CreateSessionBody {
   requestId: string;
-  chatId: string;
+  chatId?: string;
+  sourceSessionId?: string;
   from: string;
   to: string;
   model?: string;
@@ -236,6 +237,7 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
           properties: {
             requestId: { type: 'string', minLength: 1, maxLength: 128 },
             chatId: { type: 'string', minLength: 1 },
+            sourceSessionId: { type: 'string', minLength: 1 },
             from: { type: 'string', minLength: 1 },
             to: { type: 'string', minLength: 1 },
             model: { type: 'string', minLength: 1 },
@@ -243,7 +245,8 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
             displayTimeZone: { type: 'string', minLength: 1, maxLength: 128 },
             question: false,
           },
-          required: ['requestId', 'chatId', 'from', 'to'],
+          required: ['requestId', 'from', 'to'],
+          oneOf: [{ required: ['chatId'] }, { required: ['sourceSessionId'] }],
         },
         response: routeResponseSchema('ConversationAssistantSessionResponse', 202),
       },
@@ -265,10 +268,13 @@ export const conversationAssistantRoutes: FastifyPluginCallback = (fastify, _opt
       const input: CreateConversationAssistantSessionInput = {
         userId: user.userId,
         requestId: request.body.requestId,
-        chatId: request.body.chatId,
         from: request.body.from,
         to: request.body.to,
       };
+      if (request.body.chatId !== undefined) input.chatId = request.body.chatId;
+      if (request.body.sourceSessionId !== undefined) {
+        input.sourceSessionId = request.body.sourceSessionId;
+      }
       if (request.body.model !== undefined) {
         input.model = request.body.model as ConversationAssistantModel;
       }

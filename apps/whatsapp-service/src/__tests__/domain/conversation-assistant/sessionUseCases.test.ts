@@ -366,6 +366,45 @@ describe('Conversation Assistant session use cases', () => {
     ]);
   });
 
+  it('creates a smaller analysis from an owned source session without exposing its chat id', async () => {
+    const { deps, privateRepository } = makeDeps();
+    await seedDirectMessage(privateRepository);
+    const source = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-source-analysis',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(source.ok).toBe(true);
+    if (!source.ok) return;
+
+    const smaller = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-smaller-analysis',
+        sourceSessionId: source.value.session.id,
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+
+    expect(smaller.ok).toBe(true);
+    if (!smaller.ok) return;
+    expect(smaller.value.session).toMatchObject({
+      chatId: CHAT_ID,
+      chatDisplayName: 'Alice',
+      range: {
+        from: '2026-06-30T10:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+    });
+  });
+
   it('fails closed when erasure starts between source lookup and atomic session creation', async () => {
     const { deps, privateRepository, conversationRepository, preparationEvents } = makeDeps();
     await seedDirectMessage(privateRepository);
@@ -449,6 +488,169 @@ describe('Conversation Assistant session use cases', () => {
       prepared.value.context?.messages
     );
     expect(llmFactoryCalls).toEqual([]);
+  });
+
+  it('persists an actionable failure before ready when the selected context cannot fit', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T09:00:00.000Z',
+      matrixEventId: '$oversized',
+      text: 'x'.repeat(2_000_000),
+    });
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T09:30:00.000Z',
+      matrixEventId: '$also-oversized',
+      text: 'y'.repeat(2_000_000),
+    });
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      matrixEventId: '$recent',
+      text: 'Recent message that fits.',
+    });
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-context-too-large',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const prepared = await prepareConversationAssistantSession(
+      preparationInput(created.value.session),
+      deps
+    );
+
+    expect(prepared).toEqual({
+      ok: false,
+      error: expect.objectContaining({
+        code: 'CONTEXT_WINDOW_EXCEEDED',
+        message:
+          'The selected conversation context is too large for Gemini 3.5 Flash Thinking. Create a smaller analysis with a shorter date range.',
+        estimatedPromptTokens: expect.any(Number),
+        promptTokenBudget: 934_464,
+        recommendedRange: {
+          from: '2026-06-30T10:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+      }),
+    });
+    const failed = conversationRepository.getAllSessions()[0];
+    expect(failed).toMatchObject({
+      status: 'failed',
+      preparationStage: 'failed',
+      preparationError: {
+        code: 'CONTEXT_WINDOW_EXCEEDED',
+        promptTokenBudget: 934_464,
+        recommendedRange: {
+          from: '2026-06-30T10:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+      },
+    });
+    await expect(
+      retryConversationAssistantPreparation(preparationInput(created.value.session), deps)
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: 'INVALID_REQUEST',
+        message: 'Create a smaller analysis with a shorter date range',
+      },
+    });
+  });
+
+  it('omits a recommended range when even the smallest context cannot fit', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, {
+      displayName: undefined,
+      eventTimestamp: '2026-06-30T09:00:00.000Z',
+      matrixEventId: '$no-fitting-range-1',
+      text: 'x'.repeat(2_000_000),
+    });
+    await seedDirectMessage(privateRepository, {
+      displayName: undefined,
+      eventTimestamp: '2026-06-30T10:00:00.000Z',
+      matrixEventId: '$no-fitting-range-2',
+      text: 'y'.repeat(2_000_000),
+    });
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-no-fitting-range',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const legacySession = { ...created.value.session };
+    delete legacySession.generationId;
+    await conversationRepository.saveSession(legacySession);
+
+    const prepared = await prepareConversationAssistantSession(
+      preparationInput(legacySession),
+      deps
+    );
+
+    expect(prepared.ok).toBe(false);
+    if (prepared.ok) return;
+    expect(prepared.error.code).toBe('CONTEXT_WINDOW_EXCEEDED');
+    expect(prepared.error).not.toHaveProperty('recommendedRange');
+    expect(conversationRepository.getAllSessions()[0]?.preparationError).not.toHaveProperty(
+      'recommendedRange'
+    );
+  });
+
+  it('returns the current state when a too-large failure loses its preparation fence', async () => {
+    const { deps, privateRepository, conversationRepository } = makeDeps();
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-06-30T09:00:00.000Z',
+      matrixEventId: '$oversized-before-boundary',
+      text: 'x'.repeat(2_000_000),
+    });
+    await seedDirectMessage(privateRepository, {
+      eventTimestamp: '2026-07-01T00:00:00.000Z',
+      matrixEventId: '$range-boundary',
+      text: 'Range boundary message.',
+    });
+    const created = await createQueuedConversationAssistantSession(
+      {
+        userId: USER_ID,
+        requestId: 'request-too-large-fence-loss',
+        chatId: CHAT_ID,
+        from: '2026-06-30T00:00:00.000Z',
+        to: '2026-07-01T00:00:00.000Z',
+      },
+      deps
+    );
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const saveClaimed = conversationRepository.saveClaimedPreparationSession.bind(
+      conversationRepository
+    );
+    let saveCount = 0;
+    vi.spyOn(conversationRepository, 'saveClaimedPreparationSession').mockImplementation(
+      async (input) => {
+        saveCount += 1;
+        return saveCount === 2 ? false : await saveClaimed(input);
+      }
+    );
+
+    const prepared = await prepareConversationAssistantSession(
+      preparationInput(created.value.session),
+      deps
+    );
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      value: { session: { status: 'preparing', preparationStage: 'building_context' } },
+    });
   });
 
   it('reconciles source changes committed while the initial message range is being scanned', async () => {
@@ -1342,6 +1544,33 @@ describe('Conversation Assistant session use cases', () => {
     });
     const reusedReady = await createQueuedConversationAssistantSession(input, readyCase.deps);
     expect(reusedReady.ok && reusedReady.value.session.status).toBe('ready');
+
+    const tooLargeCase = makeDeps();
+    await seedDirectMessage(tooLargeCase.privateRepository);
+    const tooLargeInput = { ...input, requestId: 'request-too-large-reuse' };
+    const createdTooLarge = await createQueuedConversationAssistantSession(
+      tooLargeInput,
+      tooLargeCase.deps
+    );
+    expect(createdTooLarge.ok).toBe(true);
+    if (!createdTooLarge.ok) return;
+    await tooLargeCase.conversationRepository.saveSession({
+      ...createdTooLarge.value.session,
+      status: 'failed',
+      preparationStage: 'failed',
+      preparationError: {
+        code: 'CONTEXT_WINDOW_EXCEEDED',
+        message: 'Selected context is too large',
+      },
+    });
+    const reusedTooLarge = await createQueuedConversationAssistantSession(
+      tooLargeInput,
+      tooLargeCase.deps
+    );
+    expect(reusedTooLarge).toMatchObject({
+      ok: true,
+      value: { session: { status: 'failed', preparationAttempt: 1 } },
+    });
 
     const legacyCase = makeDeps();
     await seedDirectMessage(legacyCase.privateRepository);
@@ -3343,6 +3572,34 @@ describe('Conversation Assistant session use cases', () => {
   it('validates create and follow-up inputs and session ownership', async () => {
     const { deps, privateRepository } = makeDeps();
     await seedDirectMessage(privateRepository);
+
+    for (const selection of [
+      {},
+      { chatId: CHAT_ID, sourceSessionId: 'source-session' },
+    ]) {
+      await expect(
+        createConversationAssistantSession(
+          {
+            userId: USER_ID,
+            ...selection,
+            from: '2026-06-30T00:00:00.000Z',
+            to: '2026-07-01T00:00:00.000Z',
+          },
+          deps
+        )
+      ).resolves.toMatchObject({ ok: false, error: { code: 'INVALID_REQUEST' } });
+    }
+    await expect(
+      createConversationAssistantSession(
+        {
+          userId: USER_ID,
+          sourceSessionId: 'missing-source-session',
+          from: '2026-06-30T00:00:00.000Z',
+          to: '2026-07-01T00:00:00.000Z',
+        },
+        deps
+      )
+    ).resolves.toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
 
     const invalidDate = await createConversationAssistantSession(
       {

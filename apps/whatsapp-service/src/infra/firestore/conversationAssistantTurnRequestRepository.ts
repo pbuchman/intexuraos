@@ -8,9 +8,9 @@ import type {
   TurnRequestConversationTurn,
 } from '../../domain/conversation-assistant/turnRequestPorts.js';
 import {
-  CONVERSATION_ASSISTANT_HARD_PROMPT_TOKEN_UPPER_BOUND,
   buildConversationAssistantTurnPromptMessages,
-  estimateConversationAssistantTurnPromptTokens,
+  getConversationAssistantTurnPromptTokenBudget,
+  isConversationAssistantTurnPromptWithinBudget,
 } from '../../domain/conversation-assistant/turnPromptBudget.js';
 import { buildConversationAssistantContextAttachmentAcknowledgment } from '../../domain/conversation-assistant/contextAttachmentAcknowledgment.js';
 import { isLatestRetryableConversationAssistantAnswer } from '../../domain/conversation-assistant/answerRetryCapability.js';
@@ -48,7 +48,7 @@ import { PRIVATE_WHATSAPP_ACCOUNTS_COLLECTION } from './privateWhatsAppRepositor
 export const WHATSAPP_CONVERSATION_ASSISTANT_TURN_REQUESTS_COLLECTION =
   'whatsapp_conversation_assistant_turn_requests';
 export const CONVERSATION_ASSISTANT_TURN_REQUEST_HARD_INPUT_TOKEN_LIMIT =
-  CONVERSATION_ASSISTANT_HARD_PROMPT_TOKEN_UPPER_BOUND;
+  getConversationAssistantTurnPromptTokenBudget('or:minimax/minimax-m3');
 export const CONVERSATION_ASSISTANT_INITIAL_TRANSCRIPT_MAX_CHUNKS = 400;
 
 interface StoredContinuation {
@@ -306,9 +306,10 @@ export function createConversationAssistantTurnRequestRepository(
           return { status: 'not_found' as const };
         }
         if (
-          estimateConversationAssistantTurnPromptTokens(
+          !isConversationAssistantTurnPromptWithinBudget(
+            promptPreflight.snapshot.model,
             buildConversationAssistantTurnPromptMessages(promptPreflight.snapshot)
-          ) > CONVERSATION_ASSISTANT_TURN_REQUEST_HARD_INPUT_TOKEN_LIMIT
+          )
         ) {
           return { status: 'context_window_exceeded' as const };
         }

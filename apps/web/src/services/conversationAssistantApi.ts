@@ -181,6 +181,20 @@ function toPublicSession(session: ConversationAssistantSessionWire): Conversatio
     result.preparationError = {
       code: session.preparationError.code,
       message: session.preparationError.message,
+      ...(session.preparationError.estimatedPromptTokens === undefined
+        ? {}
+        : { estimatedPromptTokens: session.preparationError.estimatedPromptTokens }),
+      ...(session.preparationError.promptTokenBudget === undefined
+        ? {}
+        : { promptTokenBudget: session.preparationError.promptTokenBudget }),
+      ...(session.preparationError.recommendedRange === undefined
+        ? {}
+        : {
+            recommendedRange: {
+              from: session.preparationError.recommendedRange.from,
+              to: session.preparationError.recommendedRange.to,
+            },
+          }),
     };
   }
   if (session.lastTurnAt !== undefined) result.lastTurnAt = session.lastTurnAt;

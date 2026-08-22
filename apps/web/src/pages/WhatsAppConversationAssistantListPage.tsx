@@ -252,7 +252,9 @@ function ConversationAssistantListSummary({
         {session.deletionPending !== true && session.status === 'failed' ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:bg-red-950/50 dark:text-red-300">
             <AlertTriangle className="h-3.5 w-3.5" />
-            Needs attention
+            {session.preparationError?.code === 'CONTEXT_WINDOW_EXCEEDED'
+              ? 'Context too large'
+              : 'Needs attention'}
           </span>
         ) : null}
         {session.deletionPending !== true ? (

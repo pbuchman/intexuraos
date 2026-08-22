@@ -123,6 +123,38 @@ function request(): PublicConversationAssistantTurnRequest {
 }
 
 describe('Conversation Assistant public DTO projections', () => {
+  it('projects actionable context-window preparation details', () => {
+    const input = session();
+    input.preparationError = {
+      code: 'CONTEXT_WINDOW_EXCEEDED',
+      message: 'Selected context is too large',
+      estimatedPromptTokens: 1_000_001,
+      promptTokenBudget: 934_464,
+      recommendedRange: {
+        from: '2026-07-01T12:00:00.000Z',
+        to: '2026-07-02T00:00:00.000Z',
+      },
+    };
+
+    expect(
+      toPublicConversationAssistantSessionDto(input, {
+        deletionToken: 'delete-token',
+        deletionPending: false,
+        modelDisplayName: 'MiniMax M3',
+        contextSummary: {
+          displayTimeZone: 'UTC',
+          availability: { state: 'legacy_session' },
+          contextVersion: 0,
+          snapshotCount: 0,
+          totalAttachedMessageCount: 0,
+          totalAttachedOmittedCount: 0,
+          completedConversationRevision: 0,
+          activeTurn: null,
+        },
+      }).preparationError
+    ).toEqual(input.preparationError);
+  });
+
   it('projects every optional session, turn, request, recovery, and usage field', () => {
     const publicSession = toPublicConversationAssistantSessionDto(session(), {
       deletionToken: 'delete-token',
