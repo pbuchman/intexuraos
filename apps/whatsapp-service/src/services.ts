@@ -121,6 +121,7 @@ export function composeWhatsAppMatrixCorpusFeature<T>(
 export interface ServiceConfig {
   mediaBucket: string;
   gcpProjectId: string;
+  googleApplicationCredentialsFile?: string;
   mediaCleanupTopic: string;
   audioStoredTopic: string;
   intexMessageIngestTopic: string;
@@ -280,7 +281,12 @@ export function getServices(): ServiceContainer {
       cloudflareAccessClientId: serviceConfig.matrixOutboundCloudflareAccessClientId,
       cloudflareAccessClientSecret: serviceConfig.matrixOutboundCloudflareAccessClientSecret,
     }),
-    mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket),
+    mediaStorage: new GcsMediaStorageAdapter(serviceConfig.mediaBucket, {
+      projectId: serviceConfig.gcpProjectId,
+      ...(serviceConfig.googleApplicationCredentialsFile === undefined
+        ? {}
+        : { keyFilename: serviceConfig.googleApplicationCredentialsFile }),
+    }),
     eventPublisher,
     messageSender: new WhatsAppCloudApiSender(
       serviceConfig.whatsappAccessToken,

@@ -43,6 +43,10 @@ if (process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']?.startsWith('https://'
   );
 }
 
+if (process.env['INTEXURAOS_ENVIRONMENT'] === 'prod') {
+  REQUIRED_ENV.push('GOOGLE_APPLICATION_CREDENTIALS');
+}
+
 if (process.env['INTEXURAOS_MATRIX_CORPUS_ENABLED']?.trim() === 'true') {
   REQUIRED_ENV.push(
     'INTEXURAOS_ENVIRONMENT',

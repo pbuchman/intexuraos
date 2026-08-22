@@ -286,6 +286,7 @@ describe('config validation', () => {
     process.env['INTEXURAOS_WHATSAPP_WABA_ID'] = 'waba1,waba2';
     process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'] = '123,456,789';
     process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'] = 'test-bucket';
+    process.env['GOOGLE_APPLICATION_CREDENTIALS'] = '/safe/runtime-sa-key.json';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'] = 'test-cleanup';
     process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'] = 'test-cleanup-sub';
     process.env['INTEXURAOS_PUBSUB_INTEX_MESSAGE_INGEST_TOPIC'] = 'test-intex-message-ingest';
@@ -301,6 +302,7 @@ describe('config validation', () => {
     const config = loadConfig();
     expect(config.allowedWabaIds).toEqual(['waba1', 'waba2']);
     expect(config.allowedPhoneNumberIds).toEqual(['123', '456', '789']);
+    expect(config.googleApplicationCredentialsFile).toBe('/safe/runtime-sa-key.json');
     expect(config.llmUsageServiceUrl).toBe('http://llm-usage.test');
     expect(config.userServiceUrl).toBe('http://user-service.test');
     expect(config.messageDigestServiceUrl).toBe('http://message-digest-service.test');
