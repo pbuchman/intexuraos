@@ -13,7 +13,6 @@ import {
   IntexAgentCalendarUpdatePlanningProviderOutputSchema,
   IntexAgentRunnerProviderOutputSchema,
   IntexAgentRunnerOutputSchema,
-  INTEX_AGENT_CALENDAR_UPDATE_PLANNING_RESPONSE_FORMAT,
   INTEX_AGENT_RUNNER_RESPONSE_FORMAT,
   intexAgentCalendarUpdatePlanningPrompt,
   intexAgentRunnerOutputRepairPrompt,
@@ -153,6 +152,11 @@ interface CalendarQueryFallbackText {
 interface TodayAndTomorrowCalendarQueryScope {
   today: IntexAgentLocalDayBounds;
   tomorrow: IntexAgentLocalDayBounds;
+}
+
+interface CalendarUpdateReferentialQueryScope {
+  timeMin: string;
+  timeMax: string;
 }
 
 const TODAY_AND_TOMORROW_CALENDAR_QUERY_MAX_RESULTS = 100;
@@ -849,6 +853,9 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
               input.timeZone
             )
           : undefined;
+      const calendarUpdateReferentialQueryScope = isCalendarUpdateIntent(intent)
+        ? resolveCalendarUpdateReferentialQueryScope(input.events, input.message)
+        : undefined;
       const toolExecutions: IntexAgentToolExecution[] = [];
       const useStructuredCalendarUpdatePlanning =
         isCalendarUpdateIntent(intent) && config.responseRepairClient !== undefined;
@@ -859,7 +866,8 @@ export function createIntexAgentRunner(config: IntexAgentRunnerConfig): IntexAge
         config.toolSelectionGate,
         resolveCurrentPreferenceVersion(config.userPreferences),
         calendarUpdateAttendeeEmails,
-        todayAndTomorrowCalendarQueryScope
+        todayAndTomorrowCalendarQueryScope,
+        calendarUpdateReferentialQueryScope
       );
       const allTools = createIntexAgentToolDefinitions(trackingToolExecutor);
       const tools = allTools
@@ -1128,6 +1136,45 @@ function resolveTodayAndTomorrowCalendarQueryScope(
     today: calendarContext.today,
     tomorrow: calendarContext.tomorrow,
   };
+}
+
+function resolveCalendarUpdateReferentialQueryScope(
+  events: readonly IntexAgentSessionEvent[],
+  message: string
+): CalendarUpdateReferentialQueryScope | undefined {
+  if (!hasStrongCalendarUpdateSetReference(message)) return undefined;
+
+  for (const event of [...events].reverse()) {
+    if (
+      event.type !== 'tool_call_completed' ||
+      event.payload['toolName'] !== 'query_calendar_events'
+    ) {
+      continue;
+    }
+    const result = event.payload['result'];
+    if (result === null || typeof result !== 'object' || Array.isArray(result)) continue;
+    const record = result as Record<string, unknown>;
+    const rawEvents = record['events'];
+    const timeMin = readNonEmptyString(record, 'timeMin');
+    const timeMax = readNonEmptyString(record, 'timeMax');
+    if (
+      record['status'] !== 'completed' ||
+      record['mode'] !== 'list' ||
+      record['truncated'] !== false ||
+      !Array.isArray(rawEvents) ||
+      rawEvents.length === 0 ||
+      record['count'] !== rawEvents.length ||
+      timeMin === undefined ||
+      timeMax === undefined ||
+      !Number.isFinite(Date.parse(timeMin)) ||
+      !Number.isFinite(Date.parse(timeMax)) ||
+      Date.parse(timeMin) >= Date.parse(timeMax)
+    ) {
+      continue;
+    }
+    return { timeMin, timeMax };
+  }
+  return undefined;
 }
 
 function applyOptionalNoteFieldClarification(
@@ -3462,7 +3509,7 @@ async function appendStructuredCalendarUpdatePreview(
   const supersededQueryExecutions = queryExecutions.slice(0, -1);
   if (
     supersededQueryExecutions.some(
-      (execution) => !isSupersededTruncatedCalendarUpdateLookup(execution)
+      (execution) => !isSafelySupersededCalendarUpdateLookup(execution)
     )
   ) {
     return { outcome: 'invalid_scope' };
@@ -3485,7 +3532,6 @@ async function appendStructuredCalendarUpdatePreview(
     schema: IntexAgentCalendarUpdatePlanningProviderOutputSchema,
     promptType: INTEX_AGENT_CALENDAR_UPDATE_PLANNING_PROMPT_TYPE,
     options: {
-      responseFormat: INTEX_AGENT_CALENDAR_UPDATE_PLANNING_RESPONSE_FORMAT,
       ...(input.matrixCorpusLlm === undefined
         ? {}
         : {
@@ -3519,7 +3565,9 @@ async function appendStructuredCalendarUpdatePreview(
       events: input.events,
       currentMessage: input.currentMessage,
       runtimeTimeZone: input.timeZone,
-      hadSupersededTruncatedLookup: supersededQueryExecutions.length > 0,
+      hadSupersededTruncatedLookup: supersededQueryExecutions.some(
+        (execution) => execution.result?.['truncated'] === true
+      ),
     })
   ) {
     return { outcome: 'invalid_scope' };
@@ -3554,11 +3602,17 @@ async function appendStructuredCalendarUpdatePreview(
   return { outcome: 'updates' };
 }
 
-function isSupersededTruncatedCalendarUpdateLookup(execution: IntexAgentToolExecution): boolean {
+function isSafelySupersededCalendarUpdateLookup(execution: IntexAgentToolExecution): boolean {
   if (execution.error !== undefined || execution.result === undefined) return false;
   const result = execution.result;
   return (
-    result['status'] === 'completed' && result['mode'] === 'list' && result['truncated'] === true
+    result['status'] === 'completed' &&
+    result['mode'] === 'list' &&
+    (result['truncated'] === true ||
+      (result['truncated'] === false &&
+        result['count'] === 0 &&
+        Array.isArray(result['events']) &&
+        result['events'].length === 0))
   );
 }
 
@@ -3610,7 +3664,8 @@ function isGroundedCalendarUpdatePlan(
   if (priorTargetIds === null) return false;
   if (priorTargetIds !== undefined) {
     return (
-      sameEventIdSet(lookupIds, priorTargetIds) && sameEventIdSet(operationIds, priorTargetIds)
+      priorTargetIds.every((eventId) => lookupByEventId.has(eventId)) &&
+      sameEventIdSet(operationIds, priorTargetIds)
     );
   }
 
@@ -4166,10 +4221,7 @@ function readPriorCalendarUpdateTargetIds(
   const priorEvents = readLatestCompletePriorCalendarLookupIdentities(input.events);
   if (priorEvents === undefined || priorEvents.length < 2) return undefined;
 
-  const normalizedCurrentMessage = normalizeCalendarTargetText(input.currentMessage);
-  const hasStrongSetReference =
-    /\b(?:those|these|them|te|tych|nimi|je|im)\b/u.test(normalizedCurrentMessage) ||
-    CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(normalizedCurrentMessage);
+  const hasStrongSetReference = hasStrongCalendarUpdateSetReference(input.currentMessage);
   const hasGenericSetReference = CALENDAR_UPDATE_TARGET_SET_PATTERN.test(input.currentMessage);
   if (!hasStrongSetReference && !hasGenericSetReference) return undefined;
   const currentLookupIds = new Set(
@@ -4230,6 +4282,14 @@ function readPriorCalendarUpdateTargetIds(
   if (input.explicitCount !== undefined && referencedIds.length !== input.explicitCount)
     return null;
   return referencedIds;
+}
+
+function hasStrongCalendarUpdateSetReference(message: string): boolean {
+  const normalizedMessage = normalizeCalendarTargetText(message);
+  return (
+    /\b(?:those|these|them|te|tych|nimi|je|im)\b/u.test(normalizedMessage) ||
+    CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(normalizedMessage)
+  );
 }
 
 function readLatestCompletePriorCalendarLookupIdentities(
@@ -4870,7 +4930,8 @@ function createTrackingToolExecutor(
   toolSelectionGate?: IntexAgentRunnerConfig['toolSelectionGate'],
   currentPreferenceVersion?: number,
   authoritativeCalendarAttendeeEmails?: string[],
-  todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope
+  todayAndTomorrowCalendarQueryScope?: TodayAndTomorrowCalendarQueryScope,
+  calendarUpdateReferentialQueryScope?: CalendarUpdateReferentialQueryScope
 ): IntexAgentToolExecutor {
   async function track(
     toolName: IntexAgentToolName,
@@ -4946,15 +5007,21 @@ function createTrackingToolExecutor(
     },
     async queryCalendarEvents(args: QueryCalendarEventsToolArgs): Promise<string> {
       const normalizedArgs =
-        todayAndTomorrowCalendarQueryScope === undefined
-          ? args
-          : {
+        todayAndTomorrowCalendarQueryScope !== undefined
+          ? {
               ...args,
               mode: 'list' as const,
               timeMin: todayAndTomorrowCalendarQueryScope.today.timeMin,
               timeMax: todayAndTomorrowCalendarQueryScope.tomorrow.timeMax,
               maxResults: TODAY_AND_TOMORROW_CALENDAR_QUERY_MAX_RESULTS,
-            };
+            }
+          : calendarUpdateReferentialQueryScope !== undefined
+            ? {
+                mode: 'list' as const,
+                timeMin: calendarUpdateReferentialQueryScope.timeMin,
+                timeMax: calendarUpdateReferentialQueryScope.timeMax,
+              }
+            : args;
       return await track(
         'query_calendar_events',
         toRecord(normalizedArgs),

@@ -6,7 +6,11 @@ import {
 import type { LLMError, ToolCallingClient, ToolCallingResult } from '@intexuraos/llm-contract';
 import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
 import { describe, expect, it } from 'vitest';
-import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
+import type {
+  IntexAgentToolExecutor,
+  QueryCalendarEventsToolArgs,
+  UpdateCalendarEventToolArgs,
+} from '../../domain/agent/toolDefinitions.js';
 import { createIntexAgentRunner as createBaseIntexAgentRunner } from '../../domain/agent/intexAgentRunner.js';
 import {
   INTEX_AGENT_RUNNER_PROMPT_TYPE,
@@ -214,7 +218,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('28.0.0');
     expect(client.calls[0]?.systemPrompt).toContain(
       'You are Intex in WhatsApp Assistant conversations.'
     );
@@ -7090,7 +7094,7 @@ describe('createIntexAgentRunner', () => {
       reply: 'Do tej pory powiedziałeś, że chcesz zbierać fragmenty notatki.',
     });
 
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('28.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
     expect(client.calls[0]?.systemPrompt).toContain(
       'Do not claim you cannot review the current conversation'
@@ -9602,7 +9606,78 @@ describe('createIntexAgentRunner', () => {
     expect(responseRepairClient.calls[0]?.options.promptType).toBe(
       'intex-agent-calendar-update-planning'
     );
+    expect(responseRepairClient.calls[0]?.options['responseFormat']).toBeUndefined();
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+  });
+
+  it('uses the final complete lookup after the model corrects an empty calendar search', async () => {
+    const firstQuery = {
+      toolName: 'query_calendar_events' as const,
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-22T00:00:00+02:00',
+        timeMax: '2026-12-31T23:59:59+02:00',
+        query: 'Google Photos',
+      },
+    };
+    const finalQuery = {
+      toolName: 'query_calendar_events' as const,
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-01T00:00:00+02:00',
+        timeMax: '2026-12-31T23:59:59+02:00',
+        query: 'Photos',
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient([firstQuery, finalQuery], [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async (args) =>
+          JSON.stringify(
+            args.query === 'Photos'
+              ? {
+                  ...googlePhotosCalendarQueryResult(),
+                  timeMin: args.timeMin,
+                  timeMax: args.timeMax,
+                  query: args.query,
+                }
+              : {
+                  status: 'completed',
+                  mode: 'list',
+                  count: 0,
+                  truncated: false,
+                  timeMin: args.timeMin,
+                  timeMax: args.timeMax,
+                  query: args.query,
+                  events: [],
+                }
+          ),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message:
+          'Przenieś wszystkie wydarzenia związane z Google Photos dzień po dniu, zaczynając od 22 sierpnia.',
+        currentDateTime: '2026-08-22T15:46:28.018Z',
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
   });
 
   it('stages all four updates when an authoritative complete lookup exactly hits maxResults', async () => {
@@ -10991,6 +11066,118 @@ describe('createIntexAgentRunner', () => {
         timeZone: 'Europe/Warsaw',
       })
     ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('reuses the source window from a prior calendar list for a referential reschedule', async () => {
+    const priorResultWithSixEvents = googlePhotosCalendarQueryResultWithUnrelatedEvents();
+    const priorEventsWithSixEvents = priorResultWithSixEvents['events'];
+    if (!Array.isArray(priorEventsWithSixEvents)) throw new Error('Expected prior calendar events');
+    const priorQueryResult = {
+      ...priorResultWithSixEvents,
+      count: 9,
+      timeMin: '2026-08-10T00:00:00+02:00',
+      timeMax: '2026-08-17T00:00:00+02:00',
+      events: [
+        ...priorEventsWithSixEvents,
+        completeCalendarEvent('event-haircut-1', 'Strzyżenie męskie', 11),
+        completeCalendarEvent('event-haircut-2', 'Pracownia fryzur', 11),
+        completeCalendarEvent('event-tournament', 'turniej OPEN B++ Tarnów', 14),
+      ],
+    };
+    const receivedQueryArgs: QueryCalendarEventsToolArgs[] = [];
+    const updateCalls: UpdateCalendarEventToolArgs[] = [];
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-22T00:00:00+02:00',
+          timeMax: '2026-08-26T00:00:00+02:00',
+        },
+      },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async (args) => {
+          receivedQueryArgs.push(args);
+          return JSON.stringify({
+            ...priorQueryResult,
+            timeMin: args.timeMin,
+            timeMax: args.timeMax,
+          });
+        },
+        updateCalendarEvent: async (args) => {
+          updateCalls.push(args);
+          return JSON.stringify({ status: 'completed', eventId: args.eventId });
+        },
+      }),
+    });
+
+    const sessionEvents = [
+      event('tool_call_completed', {
+        toolName: 'query_calendar_events',
+        result: priorQueryResult,
+      }),
+      event('assistant_message', {
+        text: [
+          '13 sierpnia: Google Photos od 04.2019',
+          '14 sierpnia: Wyczyścić Photos 2018',
+          '15 sierpnia: Wyczyścić Photos 2017',
+          '16 sierpnia: Wyczyścić Photos 2016',
+        ].join('\n'),
+      }),
+    ];
+    const result = await runner.run({
+      session: session(),
+      events: sessionEvents,
+      message:
+        'Przenieś te od 13 sierpnia, google Photos, na kolejne dni zaczynając od dzisiaj',
+      currentDateTime: '2026-08-22T15:48:02.967Z',
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(receivedQueryArgs).toEqual([
+      {
+        mode: 'list',
+        timeMin: '2026-08-10T00:00:00+02:00',
+        timeMax: '2026-08-17T00:00:00+02:00',
+      },
+    ]);
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
+    if (result.outcome !== 'needs_confirmation' || result.operations === undefined) {
+      throw new Error('Expected one confirmation containing four calendar updates');
+    }
+    await expect(
+      runner.executeConfirmed({
+        session: session(),
+        events: sessionEvents,
+        currentDateTime: '2026-08-22T15:48:02.967Z',
+        operations: result.operations,
+      })
+    ).resolves.toMatchObject({
+      outcome: 'completed',
+      operationResults: [
+        { toolName: 'update_calendar_event', status: 'completed' },
+        { toolName: 'update_calendar_event', status: 'completed' },
+        { toolName: 'update_calendar_event', status: 'completed' },
+        { toolName: 'update_calendar_event', status: 'completed' },
+      ],
+    });
+    expect(updateCalls).toEqual(
+      googlePhotosCalendarExpectedOperations().map((operation) => operation.toolArgs)
+    );
   });
 
   it('applies a previously proposed four-event mapping as one confirmed batch', async () => {

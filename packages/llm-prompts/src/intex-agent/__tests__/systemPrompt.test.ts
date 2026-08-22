@@ -7,10 +7,10 @@ const TIME_ZONE = 'UTC';
 describe('buildIntexAgentSystemPrompt', () => {
   it('exposes prompt metadata with semver versions', () => {
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
+    expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('28.0.0');
     expect(buildIntexAgentSystemPrompt.name).toBe('intex-agent-system-prompt');
     expect(buildIntexAgentSystemPrompt.version).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(buildIntexAgentSystemPrompt.version).toBe('20.0.0');
+    expect(buildIntexAgentSystemPrompt.version).toBe('21.0.0');
   });
 
   it('builds the base prompt with the current date-time', () => {
@@ -128,6 +128,16 @@ describe('buildIntexAgentSystemPrompt', () => {
     );
     expect(prompt).toContain(
       'If the lookup returns truncated: true, narrow the title or time range and query again before updating. Each requested target must match exactly one complete result'
+    );
+    expect(prompt).toContain(
+      'search the existing source occurrences in their current date range, never the requested destination dates'
+    );
+    expect(prompt).toContain("reuse that lookup's source time range for the required fresh lookup");
+    expect(prompt).toContain(
+      'After a complete non-truncated lookup contains every requested target, stop searching'
+    );
+    expect(prompt).toContain(
+      'Retry with a corrected query only after an empty or truncated result'
     );
     expect(prompt).toContain('call update_calendar_event once per event');
     expect(prompt).toContain('one confirmation');
