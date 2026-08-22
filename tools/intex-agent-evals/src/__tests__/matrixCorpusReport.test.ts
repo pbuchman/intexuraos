@@ -44,6 +44,7 @@ const PASS_TOOL_ROWS: Readonly<
     readonly {
       toolName: MatrixCorpusReportV1['scenarios'][number]['tools'][number]['toolName'];
       turnIndex: number;
+      count?: number;
     }[]
   >
 > = {
@@ -57,8 +58,9 @@ const PASS_TOOL_ROWS: Readonly<
   ],
   'intex-eval-007': [{ turnIndex: 1, toolName: 'create_note' }],
   'intex-eval-008': [
-    { turnIndex: 1, toolName: 'query_calendar_events' },
-    { turnIndex: 2, toolName: 'update_calendar_event' },
+    { turnIndex: 0, toolName: 'query_calendar_events' },
+    { turnIndex: 2, toolName: 'query_calendar_events' },
+    { turnIndex: 3, toolName: 'update_calendar_event', count: 4 },
   ],
   'intex-eval-010': [{ turnIndex: 1, toolName: 'create_note' }],
   'intex-eval-011': [{ turnIndex: 0, toolName: 'query_calendar_events' }],
@@ -72,7 +74,7 @@ const PASS_TOOL_ROWS: Readonly<
   'intex-eval-019': [{ turnIndex: 1, toolName: 'delete_user_preference' }],
   'intex-eval-020': [{ turnIndex: 19, toolName: 'create_note' }],
 };
-const PASS_TURN_COUNTS = [2, 2, 3, 3, 1, 4, 2, 3, 1, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 20] as const;
+const PASS_TURN_COUNTS = [2, 2, 3, 3, 1, 4, 2, 4, 1, 2, 1, 2, 2, 2, 2, 1, 2, 2, 2, 20] as const;
 
 function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
   return {
@@ -85,7 +87,7 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
     runnerHost: 'home-dev',
     runtimeAudience: 'hetzner-prod',
     environmentAlias: 'prod',
-    catalog: { digest, scenarioCount: 20, turnCount: 59 },
+    catalog: { digest, scenarioCount: 20, turnCount: 60 },
     agentModel: 'or:deepseek/deepseek-v4-flash',
     evaluatorModel: 'or:minimax/minimax-m3',
     executionMode: 'real_matrix_whatsapp_strict_mock_tools',
@@ -123,28 +125,28 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
       scenariosPassed: 20,
       scenariosFailed: 0,
       scenariosNotRun: 0,
-      turnsPlanned: 59,
-      turnsSent: 59,
-      turnsCorrelated: 59,
-      turnsCompleted: 59,
+      turnsPlanned: 60,
+      turnsSent: 60,
+      turnsCorrelated: 60,
+      turnsCompleted: 60,
       sessionsExpected: 20,
       sessionsCreated: 20,
-      sessionsContinued: 38,
+      sessionsContinued: 39,
       sessionsClosed: 1,
       confirmationsRequested: 17,
       confirmationsAccepted: 17,
       confirmationsRejected: 0,
       confirmationsCompleted: 17,
-      repliesExpected: 59,
-      repliesObserved: 59,
-      repliesJudged: 59,
-      toolSelections: 20,
-      mockCompletions: 20,
+      repliesExpected: 60,
+      repliesObserved: 60,
+      repliesJudged: 60,
+      toolSelections: 24,
+      mockCompletions: 24,
       mockFailures: 0,
       productionExecutorResolutions: 0,
       productionExecutorAdmissions: 0,
     },
-    usage: { agent: usage(20), evaluator: usage(59), totalCostNanoUsd: 79, costComplete: true },
+    usage: { agent: usage(20), evaluator: usage(60), totalCostNanoUsd: 80, costComplete: true },
     scenarios: Array.from({ length: 20 }, (_, offset) => {
       const scenarioId = `intex-eval-${String(offset + 1).padStart(3, '0')}`;
       const plannedTurns = PASS_TURN_COUNTS[offset] ?? 0;
@@ -168,11 +170,11 @@ function report(status: 'pending' | 'ready' = 'pending'): MatrixCorpusReportV1 {
           assistantReplies: plannedTurns,
           matrixMirrors: plannedTurns,
         },
-        tools: (PASS_TOOL_ROWS[scenarioId] ?? []).map((tool) => ({
+        tools: (PASS_TOOL_ROWS[scenarioId] ?? []).map(({ count = 1, ...tool }) => ({
           ...tool,
-          expected: 1,
-          selected: 1,
-          completed: 1,
+          expected: count,
+          selected: count,
+          completed: count,
           failed: 0,
         })),
         deterministic: { passed: 1, failed: 0 },
@@ -525,7 +527,7 @@ describe('matrix corpus artifact lifecycle', () => {
     ).toBe(false);
   });
 
-  it('rejects PASS/exit 0 unless all 20 scenarios and 59 turns have closed passing evidence', () => {
+  it('rejects PASS/exit 0 unless all 20 scenarios and 60 turns have closed passing evidence', () => {
     const valid = report('ready');
     const contradictory = {
       ...valid,
@@ -558,8 +560,8 @@ describe('matrix corpus artifact lifecycle', () => {
       ...valid,
       usage: {
         ...valid.usage,
-        evaluator: usage(61),
-        totalCostNanoUsd: 81,
+        evaluator: usage(62),
+        totalCostNanoUsd: 82,
       },
       scenarios: valid.scenarios.map((scenario, offset) =>
         offset === 0
@@ -580,8 +582,8 @@ describe('matrix corpus artifact lifecycle', () => {
         ...withQuorum,
         usage: {
           ...withQuorum.usage,
-          evaluator: usage(64),
-          totalCostNanoUsd: 84,
+          evaluator: usage(65),
+          totalCostNanoUsd: 85,
         },
         scenarios: withQuorum.scenarios.map((scenario, offset) =>
           offset === 0

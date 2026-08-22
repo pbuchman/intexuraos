@@ -15,6 +15,9 @@ const context = {
 describe('MatrixCorpusLlmCallContextV1', () => {
   it('accepts the exact closed provider-call context', () => {
     expect(isMatrixCorpusLlmCallContextV1(context)).toBe(true);
+    expect(isMatrixCorpusLlmCallContextV1({ ...context, stage: 'calendar_update_planning' })).toBe(
+      true
+    );
   });
 
   it.each([

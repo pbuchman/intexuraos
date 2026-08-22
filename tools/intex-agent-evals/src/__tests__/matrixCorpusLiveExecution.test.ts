@@ -236,6 +236,171 @@ describe('production Matrix corpus technical facts', () => {
     );
   });
 
+  it('checks catalog matches independently for every ordered calendar update operation', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const expectation = catalog.scenarios[7]?.scenario.expected.turns[3];
+    if (expectation === undefined) throw new Error('missing scenario 008 execution expectation');
+    const matchingFacts = [
+      { name: 'hasCalendarId' as const, value: true },
+      { name: 'hasExpectedEtag' as const, value: true },
+      { name: 'hasEventStart' as const, value: true },
+      { name: 'hasEventEnd' as const, value: true },
+      { name: 'eventIdMatchesCatalog' as const, value: true },
+      { name: 'startMatchesCatalog' as const, value: true },
+      { name: 'endMatchesCatalog' as const, value: true },
+      { name: 'durationMatchesCatalog' as const, value: true },
+      { name: 'changesMatchCatalog' as const, value: true },
+    ];
+    const evidence = [1, 2, 3, 4].flatMap((ordinal) => [
+      {
+        event: 'selected' as const,
+        toolName: 'update_calendar_event' as const,
+        turnIndex: 3,
+        ordinal,
+        facts: matchingFacts,
+      },
+      {
+        event: 'mock_completed' as const,
+        toolName: 'update_calendar_event' as const,
+        turnIndex: 3,
+        ordinal,
+        facts: [],
+      },
+    ]);
+
+    const passing = buildMatrixCorpusTurnChecks({
+      turnIndex: 3,
+      expectation,
+      actualReplyCount: 1,
+      actualReplyFormatViolationCount: 0,
+      expectedTransition: 'continued',
+      actualTransition: 'continued',
+      actualLifecycle: 'completed',
+      expectedUserMessageCount: null,
+      actualUserMessageCount: 3,
+      expectedAgentUsageCount: null,
+      actualAgentUsageCount: 3,
+      expectedPendingConfirmationCount: 0,
+      actualPendingConfirmationCount: 0,
+      toolEvidence: evidence,
+    });
+    expect(passing.filter(({ code }) => code === 'tool_fact')).toEqual(
+      [1, 2, 3, 4].map((operationOrdinal) =>
+        expect.objectContaining({ status: 'passed', operationOrdinal })
+      )
+    );
+
+    const mismatched = structuredClone(evidence);
+    const fourthSelection = mismatched.find(
+      (item) => item.event === 'selected' && item.ordinal === 4
+    );
+    if (fourthSelection === undefined) throw new Error('missing fourth selection');
+    fourthSelection.facts = fourthSelection.facts.map((fact) =>
+      fact.name === 'endMatchesCatalog' ? { ...fact, value: false } : fact
+    );
+    const failing = buildMatrixCorpusTurnChecks({
+      turnIndex: 3,
+      expectation,
+      actualReplyCount: 1,
+      actualReplyFormatViolationCount: 0,
+      expectedTransition: 'continued',
+      actualTransition: 'continued',
+      actualLifecycle: 'completed',
+      expectedUserMessageCount: null,
+      actualUserMessageCount: 3,
+      expectedAgentUsageCount: null,
+      actualAgentUsageCount: 3,
+      expectedPendingConfirmationCount: 0,
+      actualPendingConfirmationCount: 0,
+      toolEvidence: mismatched,
+    });
+    expect(failing.filter(({ code }) => code === 'tool_fact')).toEqual([
+      expect.objectContaining({ status: 'passed' }),
+      expect.objectContaining({ status: 'passed' }),
+      expect.objectContaining({ status: 'passed' }),
+      expect.objectContaining({ status: 'failed' }),
+    ]);
+  });
+
+  it('fails deterministic evidence when either scheduled calendar query misses its exact catalog scope', async () => {
+    const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
+    const scenario = catalog.scenarios[7]?.scenario;
+    if (scenario === undefined) throw new Error('missing scenario 008');
+
+    for (const turnIndex of [0, 2]) {
+      const expectation = scenario.expected.turns[turnIndex];
+      if (expectation === undefined) throw new Error('missing scenario 008 query expectation');
+      const matchingFacts = [
+        { name: 'queryLength' as const, value: 40 },
+        { name: 'startMatchesCatalog' as const, value: true },
+        { name: 'endMatchesCatalog' as const, value: true },
+        { name: 'queryMatchesCatalog' as const, value: true },
+        { name: 'mode' as const, value: 'list' as const },
+      ];
+      const evidence = [
+        {
+          event: 'selected' as const,
+          toolName: 'query_calendar_events' as const,
+          turnIndex,
+          ordinal: 1,
+          facts: matchingFacts,
+        },
+        {
+          event: 'mock_completed' as const,
+          toolName: 'query_calendar_events' as const,
+          turnIndex,
+          ordinal: 1,
+          facts: [],
+        },
+      ];
+      const checks = buildMatrixCorpusTurnChecks({
+        turnIndex,
+        expectation,
+        actualReplyCount: 1,
+        actualReplyFormatViolationCount: 0,
+        expectedTransition: turnIndex === 0 ? 'created' : 'continued',
+        actualTransition: turnIndex === 0 ? 'created' : 'continued',
+        actualLifecycle: 'completed',
+        expectedUserMessageCount: null,
+        actualUserMessageCount: turnIndex + 1,
+        expectedAgentUsageCount: null,
+        actualAgentUsageCount: 1,
+        expectedPendingConfirmationCount: turnIndex === 2 ? 1 : 0,
+        actualPendingConfirmationCount: turnIndex === 2 ? 1 : 0,
+        toolEvidence: evidence,
+      });
+      expect(checks.filter(({ code }) => code === 'tool_fact')).toEqual([
+        expect.objectContaining({ status: 'passed', operationOrdinal: 1 }),
+      ]);
+
+      const wrongScope = structuredClone(evidence);
+      const selected = wrongScope[0];
+      if (selected?.event !== 'selected') throw new Error('missing query selection');
+      selected.facts = selected.facts.map((fact) =>
+        fact.name === 'queryMatchesCatalog' ? { ...fact, value: false } : fact
+      );
+      const failing = buildMatrixCorpusTurnChecks({
+        turnIndex,
+        expectation,
+        actualReplyCount: 1,
+        actualReplyFormatViolationCount: 0,
+        expectedTransition: turnIndex === 0 ? 'created' : 'continued',
+        actualTransition: turnIndex === 0 ? 'created' : 'continued',
+        actualLifecycle: 'completed',
+        expectedUserMessageCount: null,
+        actualUserMessageCount: turnIndex + 1,
+        expectedAgentUsageCount: null,
+        actualAgentUsageCount: 1,
+        expectedPendingConfirmationCount: turnIndex === 2 ? 1 : 0,
+        actualPendingConfirmationCount: turnIndex === 2 ? 1 : 0,
+        toolEvidence: wrongScope,
+      });
+      expect(failing.filter(({ code }) => code === 'tool_fact')).toEqual([
+        expect.objectContaining({ status: 'failed' }),
+      ]);
+    }
+  });
+
   it('fails deterministic evidence when an expected confirmation was not created', async () => {
     const catalog = await loadCanonicalMatrixCorpus(scenariosDirectory);
     const scenario = catalog.scenarios[13]?.scenario;

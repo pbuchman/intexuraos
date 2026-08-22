@@ -700,10 +700,14 @@ const SAFE_FACT_NAMES = new Set<SafeToolFactNameV1>([
   'hasExpectedEtag',
   'hasEventStart',
   'hasEventEnd',
+  'eventIdMatchesCatalog',
   'hasItemId',
   'hasLinearIssueId',
   'startMatchesCatalog',
   'endMatchesCatalog',
+  'durationMatchesCatalog',
+  'changesMatchCatalog',
+  'queryMatchesCatalog',
   'timeZoneMatchesCatalog',
   'mode',
   'workerType',
@@ -720,6 +724,7 @@ const SAFE_FACT_ENUMS = new Set<SafeToolFactV1['value']>([
 ]);
 const USAGE_STAGES = new Set<SafeAgentUsageV1['stage']>([
   'intent_classification',
+  'calendar_update_planning',
   'agent_generation',
   'response_schema_repair',
 ]);

@@ -1267,6 +1267,7 @@ async function executeLiveTurn(input: {
     correlated.replies.length === expectation.replies.length &&
     sameToolSchedule(selected, expectation.requiredToolCalls) &&
     outcomes.every((item) => item.status === 'completed') &&
+    requiredToolFactsPass(expectation, toolEvidence) &&
     unexpectedKnownToolCount === 0 &&
     replyFormatViolationCount === 0 &&
     idleSessionProofPassed &&
@@ -1487,7 +1488,7 @@ function createInitialProjectionRecord(
         failed: 0,
         notRun: 20,
       },
-      turns: { planned: 59, completed: 0 },
+      turns: { planned: 60, completed: 0 },
       replies: { expected: expectedReplies, observed: 0, judged: 0 },
       tools: { selected: 0, mockCompleted: 0, mockFailed: 0, unexpectedKnown: 0 },
       evaluations: {
@@ -1828,7 +1829,7 @@ function buildReport(
     catalog: {
       digest: state.catalog.catalogDigest,
       scenarioCount: 20,
-      turnCount: 59,
+      turnCount: 60,
     },
     agentModel: state.catalog.agentModel,
     evaluatorModel: state.catalog.evaluatorModel,
@@ -1861,7 +1862,7 @@ function buildReport(
       scenariosPassed: scenarios.filter((scenario) => scenario.verdict === 'passed').length,
       scenariosFailed: scenarios.filter((scenario) => scenario.verdict === 'failed').length,
       scenariosNotRun: scenarios.filter((scenario) => scenario.lifecycle === 'not_run').length,
-      turnsPlanned: 59,
+      turnsPlanned: 60,
       turnsSent: state.turnsSent,
       turnsCorrelated: state.turnsCorrelated,
       turnsCompleted: run.totals.completedTurns,
@@ -2370,20 +2371,25 @@ export function buildMatrixCorpusTurnChecks(
     );
     const expectedFacts = safeFactExpectations(required.argumentAssertions);
     if (expectedFacts.length > 0) {
-      const actualFacts = firstSelected?.facts ?? [];
-      checks.push(
-        check(
-          'tool_fact',
-          expectedFacts.every((expected) => safeFactExpectationPasses(expected, actualFacts)),
-          input.turnIndex,
-          evidence({
-            expectedToolName: required.toolName,
-            actualToolName: firstSelected?.toolName ?? null,
-            expectedFacts,
-            actualFacts: [...actualFacts],
-          })
-        )
-      );
+      const factSelections: (SafeToolEvidenceV1 | undefined)[] =
+        selected.length === 0 ? [undefined] : selected;
+      for (const selection of factSelections) {
+        const actualFacts = selection?.facts ?? [];
+        checks.push(
+          check(
+            'tool_fact',
+            expectedFacts.every((expected) => safeFactExpectationPasses(expected, actualFacts)),
+            input.turnIndex,
+            evidence({
+              expectedToolName: required.toolName,
+              actualToolName: selection?.toolName ?? null,
+              expectedFacts,
+              actualFacts: [...actualFacts],
+            }),
+            selection?.ordinal
+          )
+        );
+      }
     }
   } else {
     const selected = input.toolEvidence.filter(
@@ -2459,13 +2465,15 @@ function check(
   code: SafeDeterministicCheckV1['code'],
   passed: boolean,
   turnIndex: number,
-  safeEvidence: SafeDeterministicEvidenceV1
+  safeEvidence: SafeDeterministicEvidenceV1,
+  operationOrdinal?: number
 ): SafeDeterministicCheckV1 {
   return {
     code,
     status: passed ? 'passed' : 'failed',
     turnIndex,
     replyIndex: null,
+    ...(operationOrdinal === undefined ? {} : { operationOrdinal }),
     evidence: safeEvidence,
   };
 }
@@ -2523,6 +2531,25 @@ function safeFactExpectationPasses(
   if (expected.operator === 'exists') return actual !== undefined;
   if (expected.operator === 'absent') return actual === undefined || actual.value === false;
   return actual?.value === expected.value;
+}
+
+function requiredToolFactsPass(
+  expectation: IntexEvalScenario['expected']['turns'][number],
+  toolEvidence: readonly SafeToolEvidenceV1[]
+): boolean {
+  return expectation.requiredToolCalls.every((required) => {
+    const expectedFacts = safeFactExpectations(required.argumentAssertions);
+    if (expectedFacts.length === 0) return true;
+    const selected = toolEvidence.filter(
+      (item) => item.event === 'selected' && item.toolName === required.toolName
+    );
+    return (
+      selected.length === required.count &&
+      selected.every((item) =>
+        expectedFacts.every((expected) => safeFactExpectationPasses(expected, item.facts))
+      )
+    );
+  });
 }
 
 function reportUsageFromAgent(entries: readonly SafeAgentUsageV1[]): CompleteUsageReport {
@@ -2598,8 +2625,8 @@ function compareDeterministicChecks(
   right: SafeDeterministicCheckV1
 ): number {
   return compareCanonicalKeys(
-    `${String(left.turnIndex)}:${String(left.replyIndex)}:${left.code}`,
-    `${String(right.turnIndex)}:${String(right.replyIndex)}:${right.code}`
+    `${String(left.turnIndex)}:${String(left.replyIndex)}:${left.code}:${String(left.operationOrdinal ?? 0)}`,
+    `${String(right.turnIndex)}:${String(right.replyIndex)}:${right.code}:${String(right.operationOrdinal ?? 0)}`
   );
 }
 

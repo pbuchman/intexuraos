@@ -521,7 +521,7 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
     });
   });
 
-  it('accepts only the exact Home Dev runner whose commit matches the production deployment', async () => {
+  it('accepts the exact five-field production deployment attestation for the Home Dev runner', async () => {
     const deps = runtimeInspectionDeps();
 
     await expect(inspectHomeDevRuntime('/repo/current', deps)).resolves.toEqual({
@@ -554,7 +554,9 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
       runtimeInspectionDeps({
         fetchDeploymentDocument: vi.fn(async () => ({
           commitSha: 'b'.repeat(40),
+          commitMessage: 'feat: deploy the reviewed revision',
           workflowRunId: '654321',
+          secretPackageVersion: '4',
           deployedAt: '2026-07-22T12:30:00.000Z',
         })),
       })
@@ -563,6 +565,90 @@ describe('production Hetzner runtime inspection from the Home Dev runner', () =>
     expect(result).toEqual({
       ready: false,
       deployedRevision: 'b'.repeat(40),
+      criticalPathsClean: true,
+    });
+  });
+
+  it.each([
+    [
+      'an unknown field',
+      {
+        commitSha: 'a'.repeat(40),
+        commitMessage: 'feat: deploy the reviewed revision',
+        workflowRunId: '123456',
+        secretPackageVersion: '4',
+        deployedAt: '2026-07-22T12:00:00.000Z',
+        unexpected: true,
+      },
+    ],
+    [
+      'a missing commit message',
+      {
+        commitSha: 'a'.repeat(40),
+        workflowRunId: '123456',
+        secretPackageVersion: '4',
+        deployedAt: '2026-07-22T12:00:00.000Z',
+      },
+    ],
+    [
+      'a non-string commit message',
+      {
+        commitSha: 'a'.repeat(40),
+        commitMessage: 42,
+        workflowRunId: '123456',
+        secretPackageVersion: '4',
+        deployedAt: '2026-07-22T12:00:00.000Z',
+      },
+    ],
+    [
+      'a non-exact secret package version',
+      {
+        commitSha: 'a'.repeat(40),
+        commitMessage: 'feat: deploy the reviewed revision',
+        workflowRunId: '123456',
+        secretPackageVersion: 'latest',
+        deployedAt: '2026-07-22T12:00:00.000Z',
+      },
+    ],
+    [
+      'a non-string secret package version',
+      {
+        commitSha: 'a'.repeat(40),
+        commitMessage: 'feat: deploy the reviewed revision',
+        workflowRunId: '123456',
+        secretPackageVersion: 4,
+        deployedAt: '2026-07-22T12:00:00.000Z',
+      },
+    ],
+    [
+      'a malformed workflow run ID',
+      {
+        commitSha: 'a'.repeat(40),
+        commitMessage: 'feat: deploy the reviewed revision',
+        workflowRunId: 123456,
+        secretPackageVersion: '4',
+        deployedAt: '2026-07-22T12:00:00.000Z',
+      },
+    ],
+    [
+      'an invalid deployment timestamp',
+      {
+        commitSha: 'a'.repeat(40),
+        commitMessage: 'feat: deploy the reviewed revision',
+        workflowRunId: '123456',
+        secretPackageVersion: '4',
+        deployedAt: 'not-a-timestamp',
+      },
+    ],
+  ] as const)('rejects a deployment attestation with %s', async (_name, deploymentDocument) => {
+    const result = await inspectHomeDevRuntime(
+      '/repo/current',
+      runtimeInspectionDeps({ fetchDeploymentDocument: vi.fn(async () => deploymentDocument) })
+    );
+
+    expect(result).toEqual({
+      ready: false,
+      deployedRevision: '',
       criticalPathsClean: true,
     });
   });
@@ -612,7 +698,9 @@ function runtimeInspectionDeps(
     })),
     fetchDeploymentDocument: vi.fn(async () => ({
       commitSha: 'a'.repeat(40),
+      commitMessage: 'feat: deploy the reviewed revision',
       workflowRunId: '123456',
+      secretPackageVersion: '4',
       deployedAt: '2026-07-22T12:00:00.000Z',
     })),
     ...overrides,
@@ -691,7 +779,7 @@ function snapshot(catalogDigest: string): MatrixCorpusPreflightSnapshot {
     strictMockToolCount: 11,
     catalogDigest,
     scenarioCount: 20,
-    turnCount: 59,
+    turnCount: 60,
     catalogMatchesTracked: true,
     agentModel: 'or:deepseek/deepseek-v4-flash',
     evaluatorModel: 'or:minimax/minimax-m3',
@@ -725,8 +813,8 @@ function runResult(runId: string): MatrixCorpusRunResult {
     failureCodes: [],
     scenarios: [],
     totals: {
-      completedTurns: 59,
-      judgedReplies: 59,
+      completedTurns: 60,
+      judgedReplies: 60,
       agentCostNanoUsd: 1,
       evaluatorCostNanoUsd: 1,
     },

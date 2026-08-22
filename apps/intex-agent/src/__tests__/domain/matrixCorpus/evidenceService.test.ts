@@ -30,7 +30,7 @@ describe('Matrix corpus evidence service', () => {
       }),
       event(4, 'llm_call_usage', {
         turnIndex: 0,
-        stage: 'agent_generation',
+        stage: 'calendar_update_planning',
         callOrdinal: 1,
         inputTokens: 10,
         outputTokens: 2,
@@ -96,7 +96,7 @@ describe('Matrix corpus evidence service', () => {
         agentUsage: [
           {
             turnIndex: 0,
-            stage: 'agent_generation',
+            stage: 'calendar_update_planning',
             callOrdinal: 1,
             inputTokens: 10,
             outputTokens: 2,

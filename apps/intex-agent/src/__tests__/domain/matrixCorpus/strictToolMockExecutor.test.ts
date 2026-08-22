@@ -14,6 +14,7 @@ import {
   createStrictToolMockExecutor,
   MatrixCorpusStrictToolMockError,
   type MatrixCorpusStrictPreferenceOverlay,
+  type MatrixCorpusStrictToolSelectionRecord,
 } from '../../../domain/matrixCorpus/strictToolMockExecutor.js';
 import {
   decodeStrictToolMockProfile,
@@ -73,9 +74,20 @@ describe('strict Matrix corpus tool-mock executor', () => {
         },
       ],
     };
-    const recordToolCallStarted = vi.fn(async () => undefined);
+    const recordToolCallStarted = vi.fn(
+      async (_selection: MatrixCorpusStrictToolSelectionRecord) => undefined
+    );
+    const queryCall = {
+      ...successCall('query_calendar_events', 1, expected),
+      argumentCatalog: {
+        toolName: 'query_calendar_events' as const,
+        timeMin: '2026-07-20T00:00:00Z',
+        timeMax: '2026-07-21T00:00:00Z',
+        query: 'Photos',
+      },
+    };
     const boundary = createStrictToolMockBoundary({
-      profile: decode(baseProfile({ calls: [successCall('query_calendar_events', 1, expected)] })),
+      profile: decode(baseProfile({ calls: [queryCall] })),
       turnIndex: 0,
       ingestReceiptId: 'receipt_1',
       recordToolCallStarted,
@@ -84,6 +96,7 @@ describe('strict Matrix corpus tool-mock executor', () => {
       mode: 'list' as const,
       timeMin: '2026-07-20T00:00:00Z',
       timeMax: '2026-07-21T00:00:00Z',
+      query: 'Photos',
     };
 
     await expect(
@@ -92,6 +105,15 @@ describe('strict Matrix corpus tool-mock executor', () => {
     const result = await boundary.executor.queryCalendarEvents(args);
     expect(JSON.parse(result)).toEqual(expected);
     expect(recordToolCallStarted).toHaveBeenCalledOnce();
+    expect(recordToolCallStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        facts: expect.arrayContaining([
+          { name: 'startMatchesCatalog', value: true },
+          { name: 'endMatchesCatalog', value: true },
+          { name: 'queryMatchesCatalog', value: true },
+        ]),
+      })
+    );
   });
 
   it('returns a typed no-execution rejection from the runner gate', async () => {
@@ -168,6 +190,50 @@ describe('strict Matrix corpus tool-mock executor', () => {
     await expect(
       boundary.selectionGate({ toolName: 'create_note', args: { content: 'private' } })
     ).resolves.toEqual({ decision: 'allow', metadata: { turnIndex: 1, ordinal: 1 } });
+    expect(recordToolCallStarted).not.toHaveBeenCalled();
+  });
+
+  it('authorizes four ordered calendar-update previews from one future confirmation turn', async () => {
+    const result = resultFor('update_calendar_event');
+    const profile = baseProfile({
+      calls: [1, 2, 3, 4].map((ordinal) => ({
+        ...successCall('update_calendar_event', ordinal, result),
+        turnIndex: 1,
+      })),
+      forbiddenSelections: [{ turnIndex: 0, toolName: 'update_calendar_event' }],
+    });
+    const recordToolCallStarted = vi.fn(async () => undefined);
+    const boundary = createStrictToolMockBoundary({
+      profile: decode(profile),
+      turnIndex: 0,
+      ingestReceiptId: 'receipt_batch_preview',
+      recordToolCallStarted,
+      expectedByCatalog: ({ turnIndex, toolName, ordinal }) =>
+        turnIndex === 1 &&
+        toolName === 'update_calendar_event' &&
+        ordinal >= 1 &&
+        ordinal <= 4,
+    });
+
+    const decisions: Awaited<ReturnType<typeof boundary.selectionGate>>[] = [];
+    for (const ordinal of [1, 2, 3, 4]) {
+      decisions.push(
+        await boundary.selectionGate({
+          toolName: 'update_calendar_event',
+          args: {
+            eventId: `mock_event_${String(ordinal)}`,
+            eventSummary: `Synthetic ${String(ordinal)}`,
+          },
+        })
+      );
+    }
+
+    expect(decisions).toEqual(
+      [1, 2, 3, 4].map((ordinal) => ({
+        decision: 'allow',
+        metadata: { turnIndex: 1, ordinal },
+      }))
+    );
     expect(recordToolCallStarted).not.toHaveBeenCalled();
   });
 
@@ -287,6 +353,58 @@ describe('strict Matrix corpus tool-mock executor', () => {
     await expect(executor.createNote({ content: 'one' })).resolves.toBe(JSON.stringify(first));
     await expect(executor.createNote({ content: 'two' })).resolves.toBe(JSON.stringify(second));
     expect(recordedOrdinals).toEqual([1, 2]);
+  });
+
+  it('records closed per-operation catalog matches for ordered general calendar updates', async () => {
+    const recordToolCallStarted = vi.fn(
+      async (_selection: MatrixCorpusStrictToolSelectionRecord) => undefined
+    );
+    const calls = [1, 2, 3, 4].map((ordinal) => {
+      const day = 21 + ordinal;
+      const result: StrictMockResultV1 = {
+        toolName: 'update_calendar_event',
+        status: 'completed',
+        eventId: `mock_event_${String(ordinal)}`,
+        summary: `Synthetic ${String(ordinal)}`,
+        changes: {
+          start: { date: `2026-08-${String(day).padStart(2, '0')}` },
+          end: { date: `2026-08-${String(day + 1).padStart(2, '0')}` },
+        },
+      };
+      return successCall('update_calendar_event', ordinal, result);
+    });
+    const executor = executorFor(calls, { recordToolCallStarted });
+
+    for (const ordinal of [1, 2, 3, 4]) {
+      const day = 21 + ordinal;
+      await executor.updateCalendarEvent({
+        eventId: `mock_event_${String(ordinal)}`,
+        eventSummary: `Synthetic ${String(ordinal)}`,
+        changes: {
+          start: { date: `2026-08-${String(day).padStart(2, '0')}` },
+          end: { date: `2026-08-${String(day + 1).padStart(2, '0')}` },
+        },
+        calendarId: 'primary',
+        expectedEtag: `"mock_event_${String(ordinal)}_v1"`,
+        eventStart: { date: `2026-08-${String(12 + ordinal).padStart(2, '0')}` },
+        eventEnd: { date: `2026-08-${String(13 + ordinal).padStart(2, '0')}` },
+      });
+    }
+
+    expect(recordToolCallStarted).toHaveBeenCalledTimes(4);
+    for (const [index, recorded] of recordToolCallStarted.mock.calls.entries()) {
+      expect(recorded[0]).toMatchObject({
+        toolName: 'update_calendar_event',
+        ordinal: index + 1,
+        facts: expect.arrayContaining([
+          { name: 'eventIdMatchesCatalog', value: true },
+          { name: 'startMatchesCatalog', value: true },
+          { name: 'endMatchesCatalog', value: true },
+          { name: 'durationMatchesCatalog', value: true },
+          { name: 'changesMatchCatalog', value: true },
+        ]),
+      });
+    }
   });
 
   it('records selection before the policy gate and never executes forbidden selection', async () => {

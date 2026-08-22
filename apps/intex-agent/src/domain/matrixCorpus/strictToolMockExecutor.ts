@@ -20,7 +20,11 @@ import type {
   UpdateCalendarEventToolArgs,
   UpdateUserPreferenceToolArgs,
 } from '../agent/toolDefinitions.js';
-import { mapSafeToolFacts, type SafeToolFactV1 } from './safeEvidence.js';
+import {
+  mapSafeToolFacts,
+  type MapSafeToolFactsInput,
+  type SafeToolFactV1,
+} from './safeEvidence.js';
 import type { DecodedStrictToolMockProfile } from './strictToolMockProfile.js';
 import {
   evaluateMatrixCorpusToolSelection,
@@ -163,13 +167,19 @@ export function createStrictToolMockBoundary(
     selectionGate: async (selection): Promise<MatrixCorpusStrictToolSelectionGateResult> => {
       const ordinal = (ordinals.get(selection.toolName) ?? 0) + 1;
       ordinals.set(selection.toolName, ordinal);
-      const previewCall = confirmationPreviewCall(input, selection.toolName);
+      const previewCall = confirmationPreviewCall(input, selection.toolName, ordinal);
       if (previewCall !== undefined) {
         return {
           decision: 'allow',
           metadata: { turnIndex: previewCall.turnIndex, ordinal: previewCall.ordinal },
         };
       }
+      const configuredCall = input.profile.findCall({
+        toolName: selection.toolName,
+        turnIndex: input.turnIndex,
+        ordinal,
+      });
+      const catalog = argumentCatalog(configuredCall);
       await input.recordToolCallStarted({
         toolName: selection.toolName,
         turnIndex: input.turnIndex,
@@ -178,6 +188,7 @@ export function createStrictToolMockBoundary(
           toolName: selection.toolName,
           source: 'arguments',
           value: selection.args,
+          ...(catalog === undefined ? {} : { catalog }),
         }),
       });
       const expectedByCatalog = input.expectedByCatalog?.({
@@ -231,21 +242,38 @@ export function createStrictToolMockExecutor(
       ordinal = preauthorized.ordinal;
       call = preauthorized;
       if (input.recordPreauthorizedCallStarted === true) {
+        const catalog = argumentCatalog(call);
         await input.recordToolCallStarted({
           toolName,
           turnIndex: call.turnIndex,
           ordinal,
-          facts: mapSafeToolFacts({ toolName, source: 'arguments', value: args }),
+          facts: mapSafeToolFacts({
+            toolName,
+            source: 'arguments',
+            value: args,
+            ...(catalog === undefined ? {} : { catalog }),
+          }),
         });
       }
     } else {
       ordinal = (ordinals.get(toolName) ?? 0) + 1;
       ordinals.set(toolName, ordinal);
+      const configuredCall = input.profile.findCall({
+        toolName,
+        turnIndex: input.turnIndex,
+        ordinal,
+      });
+      const catalog = argumentCatalog(configuredCall);
       await input.recordToolCallStarted({
         toolName,
         turnIndex: input.turnIndex,
         ordinal,
-        facts: mapSafeToolFacts({ toolName, source: 'arguments', value: args }),
+        facts: mapSafeToolFacts({
+          toolName,
+          source: 'arguments',
+          value: args,
+          ...(catalog === undefined ? {} : { catalog }),
+        }),
       });
 
       const expectedByCatalog = input.expectedByCatalog?.({
@@ -351,7 +379,8 @@ export function createStrictToolMockExecutor(
 
 function confirmationPreviewCall(
   input: Omit<CreateStrictToolMockExecutorInput, 'takePreauthorizedCall'>,
-  toolName: IntexAgentToolNameV1
+  toolName: IntexAgentToolNameV1,
+  ordinal: number
 ): NonNullable<ReturnType<DecodedStrictToolMockProfile['findCall']>> | undefined {
   if (!CONFIRMATION_MUTATION_TOOL_NAMES.has(toolName)) return undefined;
   const futureCandidates = input.profile.profile.calls.filter(
@@ -361,12 +390,10 @@ function confirmationPreviewCall(
       (toolName === 'create_calendar_event' || call.turnIndex === input.turnIndex + 1)
   );
   const nearestTurn = Math.min(...futureCandidates.map(({ turnIndex }) => turnIndex));
-  const candidates = futureCandidates.filter((call) => call.turnIndex === nearestTurn);
-  if (candidates.length !== 1) return undefined;
-  const candidate = candidates[0];
-  /* v8 ignore start -- ts-type: length check above guarantees index zero is defined; this guard exists only for noUncheckedIndexedAccess narrowing @preserve */
+  const candidate = futureCandidates.find(
+    (call) => call.turnIndex === nearestTurn && call.ordinal === ordinal
+  );
   if (candidate === undefined) return undefined;
-  /* v8 ignore stop @preserve */
   if (
     input.expectedByCatalog?.({
       toolName,
@@ -440,6 +467,26 @@ function hasCompleteCalendarUpdateSnapshot(args: UpdateCalendarEventToolArgs): b
     args.eventStart !== undefined &&
     args.eventEnd !== undefined
   );
+}
+
+function argumentCatalog(
+  call: ReturnType<DecodedStrictToolMockProfile['findCall']>
+): MapSafeToolFactsInput['catalog'] | undefined {
+  if (call === undefined) return undefined;
+  if (call.argumentCatalog?.toolName === 'query_calendar_events') {
+    return {
+      start: call.argumentCatalog.timeMin,
+      end: call.argumentCatalog.timeMax,
+      query: call.argumentCatalog.query,
+    };
+  }
+  if (call.outcome.kind !== 'success') return undefined;
+  const result = call.outcome.result;
+  if (result.toolName !== 'update_calendar_event') return undefined;
+  return {
+    eventId: result.eventId,
+    ...(result.changes === undefined ? {} : { changes: result.changes }),
+  };
 }
 
 function isPreferenceMutationTool(

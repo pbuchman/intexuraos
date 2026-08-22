@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ok } from '@intexuraos/common-core';
 import { intexuraFastifyPlugin } from '@intexuraos/common-http';
+import type { SafeDeterministicCheckV1, StrictMockResultV1 } from '@intexuraos/http-contracts';
 import { createFakeFirestore } from '@intexuraos/infra-firestore';
 import {
   createIntexAgentServiceClient,
@@ -18,9 +19,12 @@ import {
 import {
   DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   IntexAgentModels,
+  isMatrixCorpusLlmCallContextV1,
+  type MatrixCorpusLlmStageV1,
   type ToolCallingClient,
   type ToolDefinition,
 } from '@intexuraos/llm-contract';
+import type { StructuredClient } from '@intexuraos/llm-utils';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { IntexAgentIntentClassifier } from '../../apps/intex-agent/src/domain/agent/intentClassifier.js';
@@ -77,6 +81,7 @@ export interface IntexAgentMatrixCorpusRuntimeMetrics {
     readonly modelId: typeof AGENT_MODEL;
     readonly scenarioId: string;
     readonly turnIndex: number;
+    readonly stage: MatrixCorpusLlmStageV1;
     readonly callOrdinal: number;
   }>;
   miniMaxJudgeCalls: number;
@@ -93,6 +98,11 @@ export interface IntexAgentMatrixCorpusRuntimeMetrics {
   readonly repositoryProjectionFailures: string[];
   readonly stateMachineProjectionFailures: string[];
   readonly projectionCommandValidationFailures: string[];
+  readonly scenarioProjectionDeterministicChecks: Array<{
+    readonly scenarioId: string;
+    readonly lifecycle: string;
+    readonly checks: SafeDeterministicCheckV1[];
+  }>;
   readonly retentionPlans: Array<{
     readonly outcome: 'ok' | 'failed';
     readonly recordCount?: number;
@@ -173,6 +183,7 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
     repositoryProjectionFailures: [],
     stateMachineProjectionFailures: [],
     projectionCommandValidationFailures: [],
+    scenarioProjectionDeterministicChecks: [],
     retentionPlans: [],
     retentionSagaProbe: 'not_run',
     retentionSagaLoads: [],
@@ -191,6 +202,7 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
   const logger = privacySafeLogger();
   const promptPreferences = promptPreferencesRepository();
   const deepSeek = createDeepSeekBoundary(catalog, metrics);
+  const deepSeekStructured = createDeepSeekStructuredBoundary(catalog, metrics);
   const classifier = createCatalogIntentClassifier(catalog);
   const sessionRepository = new FirestoreSessionRepository({ firestore: firestore as never });
   const intexRuntime = createIntexMatrixCorpusRuntime(
@@ -224,6 +236,7 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
         createMatrixCorpusRunner({
           execution,
           client: deepSeek,
+          responseRepairClient: deepSeekStructured,
           intentClassifier: classifier,
           userPreferences,
         }),
@@ -371,6 +384,12 @@ export async function createIntexAgentMatrixCorpusRuntimeHarness(): Promise<Inte
               ({ path, message }) => `${path.map(String).join('.')}:${message}`
             )
           );
+        } else if (parsed.data.scenario !== null) {
+          metrics.scenarioProjectionDeterministicChecks.push({
+            scenarioId: parsed.data.scenario.scenarioId,
+            lifecycle: parsed.data.scenario.lifecycle,
+            checks: structuredClone(parsed.data.scenario.projection.deterministicChecks),
+          });
         }
       }
       const result = await rawIntex.mutateMatrixCorpusProjection(input);
@@ -738,7 +757,8 @@ function createDeepSeekBoundary(
           const args = toolArgs(
             entry,
             selectedTool.toolName,
-            params.messages.map(({ content }) => content)
+            params.messages.map(({ content }) => content),
+            context.turnIndex
           );
           await tool.run(args);
           terminalSelection = selectedTool;
@@ -764,6 +784,7 @@ function createDeepSeekBoundary(
           modelId: AGENT_MODEL,
           scenarioId: context.scenarioId,
           turnIndex: context.turnIndex,
+          stage: context.stage,
           callOrdinal,
         });
         return {
@@ -791,10 +812,111 @@ function createDeepSeekBoundary(
   };
 }
 
+function createDeepSeekStructuredBoundary(
+  catalog: CanonicalMatrixCorpus,
+  metrics: IntexAgentMatrixCorpusRuntimeMetrics
+): StructuredClient {
+  return {
+    async generate(_prompt, options) {
+      const context = options['matrixCorpusContext'];
+      if (!isMatrixCorpusLlmCallContextV1(context)) {
+        throw new Error('DeepSeek structured boundary requires Matrix context');
+      }
+      const entry = requiredEntry(catalog, context.scenarioId);
+      let content: string;
+      if (context.stage === 'calendar_update_planning') {
+        if (
+          entry.scenario.id !== 'intex-eval-008' ||
+          (context.turnIndex !== 1 && context.turnIndex !== 2)
+        ) {
+          throw new Error('DeepSeek calendar planner received an unexpected scenario turn');
+        }
+        const events = scenario008LookupEvents(entry);
+        const operations = events.map((event, index) => {
+          const startDay = 22 + index;
+          return {
+            eventId: event.eventId,
+            eventSummary: event.summary,
+            changes: {
+              start: { date: `2026-08-${String(startDay).padStart(2, '0')}` },
+              end: { date: `2026-08-${String(startDay + 1).padStart(2, '0')}` },
+            },
+          };
+        });
+        content =
+          context.turnIndex === 1
+            ? JSON.stringify({
+                outcome: 'proposal_only',
+                reply:
+                  'Proposed all-day moves: 1) 22-23 August 2026, 2) 23-24 August 2026, 3) 24-25 August 2026, 4) 25-26 August 2026. Nothing has been applied.',
+              })
+            : JSON.stringify({ outcome: 'updates', operations });
+      } else if (context.stage === 'response_schema_repair') {
+        const expectedTurn = entry.scenario.expected.turns[context.turnIndex];
+        const isUnsupported =
+          expectedTurn?.timeline.requiredEventTypes.includes('unsupported_request') === true;
+        content = JSON.stringify(
+          entry.scenario.id === 'intex-eval-008' && context.turnIndex === 1
+            ? {
+                outcome: 'no_action',
+                reply:
+                  'Proposed all-day dates: Google Photos od 04.2019 — August 22-23; Wyczyścić Photos 2018 — August 23-24; Wyczyścić Photos 2017 — August 24-25; Wyczyścić Photos 2016 — August 25-26 2026. Nothing has been applied.',
+              }
+            : isUnsupported
+              ? {
+                  outcome: 'unsupported',
+                  reply: 'That synthetic request is outside the supported Intex capabilities.',
+                  blockerReason: 'unsupported_capability',
+                  suggestedNextStep: 'I can help with notes, calendar events, or research instead.',
+                }
+              : {
+                  outcome: 'no_action',
+                  reply: `Scenario ${String(entry.scenarioNumber).padStart(3, '0')} acknowledged.`,
+                }
+        );
+      } else {
+        throw new Error('DeepSeek structured boundary received an unexpected Matrix stage');
+      }
+      const providerCall = {
+        context,
+        modelId: AGENT_MODEL,
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2,
+        providerReportedUsd: 0.000001,
+      } as const;
+      metrics.deepSeekCalls.push({
+        modelId: AGENT_MODEL,
+        scenarioId: context.scenarioId,
+        turnIndex: context.turnIndex,
+        stage: context.stage,
+        callOrdinal: context.callOrdinal,
+      });
+      return ok({
+        content,
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2,
+          costUsd: 0.000001,
+          providerReportedUsd: 0.000001,
+        },
+        providerCall,
+      });
+    },
+  };
+}
+
 function createCatalogIntentClassifier(catalog: CanonicalMatrixCorpus): IntexAgentIntentClassifier {
   return {
     async classify(input) {
       const located = locateMessage(catalog, input.message);
+      if (
+        located.entry.scenario.id === 'intex-eval-008' &&
+        (located.turnIndex === 1 || located.turnIndex === 2)
+      ) {
+        return { kind: 'tool' as const, allowedToolNames: ['update_calendar_event'] as const };
+      }
       const expected = expectedToolsForNormalTurn(located.entry, located.turnIndex);
       return expected.length === 0
         ? { kind: 'no_action' as const, reason: 'conversation' as const }
@@ -818,6 +940,8 @@ function expectedToolsForNormalTurn(
       toolName,
       confirmationPreview: false,
     })) ?? [];
+  if (entry.scenario.id === 'intex-eval-008' && (turnIndex === 1 || turnIndex === 2))
+    return current;
   const nextTurn = entry.scenario.turns[turnIndex + 1];
   const next = entry.scenario.expected.turns[turnIndex + 1]?.requiredToolCalls[0];
   if (entry.scenario.id === 'intex-eval-003' && turnIndex === 0) {
@@ -831,6 +955,47 @@ function expectedToolsForNormalTurn(
   return nextTurn?.kind === 'confirmation_button' && next !== undefined
     ? [...current, { toolName: next.toolName, confirmationPreview: true }]
     : current;
+}
+
+type CalendarListMockEvent = Extract<
+  StrictMockResultV1,
+  { toolName: 'query_calendar_events'; mode: 'list' }
+>['events'][number];
+
+type Scenario008LookupEvent = Readonly<
+  Pick<CalendarListMockEvent, 'eventId' | 'summary' | 'start' | 'end' | 'calendarId'> & {
+    etag: string;
+  }
+>;
+
+function scenario008LookupEvents(
+  entry: CanonicalMatrixCorpusScenario
+): ReadonlyArray<Scenario008LookupEvent> {
+  const queryCall = entry.mockProfile.calls.find(
+    (call) =>
+      call.turnIndex === 2 &&
+      call.toolName === 'query_calendar_events' &&
+      call.outcome.kind === 'success'
+  );
+  if (
+    queryCall?.outcome.kind !== 'success' ||
+    queryCall.outcome.result.toolName !== 'query_calendar_events' ||
+    queryCall.outcome.result.mode !== 'list' ||
+    queryCall.outcome.result.events.length !== 4
+  ) {
+    throw new Error('scenario 008 requires exactly four calendar lookup events');
+  }
+  return queryCall.outcome.result.events.map((event) => {
+    if (event.etag === undefined) throw new Error('scenario 008 lookup events require etags');
+    return {
+      eventId: event.eventId,
+      etag: event.etag,
+      summary: event.summary,
+      start: event.start,
+      end: event.end,
+      calendarId: event.calendarId,
+    };
+  });
 }
 
 function locateMessage(
@@ -864,7 +1029,8 @@ function requiredTool(tools: readonly ToolDefinition[], toolName: string): ToolD
 function toolArgs(
   entry: CanonicalMatrixCorpusScenario,
   toolName: CanonicalMatrixCorpusScenario['expectedToolSchedule'][number]['toolName'],
-  messageHistory: readonly string[]
+  messageHistory: readonly string[],
+  turnIndex: number
 ): Record<string, unknown> {
   const message = messageHistory.at(-1) ?? 'Synthetic Matrix corpus message.';
   const history = messageHistory.join('\n');
@@ -885,6 +1051,25 @@ function toolArgs(
           : {}),
       };
     case 'update_calendar_event':
+      if (entry.scenario.id === 'intex-eval-008') {
+        const event = scenario008LookupEvents(entry)[0];
+        if (
+          event === undefined ||
+          configuredResult?.toolName !== 'update_calendar_event' ||
+          configuredResult.changes === undefined
+        ) {
+          throw new Error('scenario 008 requires a configured general calendar update');
+        }
+        return {
+          eventId: event.eventId,
+          eventSummary: event.summary,
+          calendarId: event.calendarId,
+          expectedEtag: event.etag,
+          eventStart: event.start,
+          eventEnd: event.end,
+          changes: configuredResult.changes,
+        };
+      }
       return {
         eventId: mockCalendarEventField(configuredResult, 'eventId'),
         eventSummary: mockCalendarEventField(configuredResult, 'summary'),
@@ -892,12 +1077,19 @@ function toolArgs(
       };
     case 'query_calendar_events':
       if (entry.scenario.id === 'intex-eval-008') {
-        return {
-          mode: 'list',
-          timeMin: '2026-07-16T10:00:00+02:00',
-          timeMax: '2026-08-16T10:00:00+02:00',
-          query: 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01',
-        };
+        return turnIndex === 0
+          ? {
+              mode: 'list',
+              timeMin: '2026-08-10T00:00:00+02:00',
+              timeMax: '2026-08-17T00:00:00+02:00',
+              query: 'INTEX-EVAL-008 INTEX-EVAL-008-F01',
+            }
+          : {
+              mode: 'list',
+              timeMin: '2026-08-13T00:00:00+02:00',
+              timeMax: '2026-08-17T00:00:00+02:00',
+              query: 'Photos INTEX-EVAL-008 INTEX-EVAL-008-F01',
+            };
       }
       return {
         mode: 'list',
@@ -1075,7 +1267,7 @@ function passingPreflight(
       strictMockToolCount: 11,
       catalogDigest: catalog.catalogDigest,
       scenarioCount: 20,
-      turnCount: 59,
+      turnCount: 60,
       catalogMatchesTracked: true,
       agentModel: AGENT_MODEL,
       evaluatorModel: 'or:minimax/minimax-m3',

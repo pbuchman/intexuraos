@@ -33,7 +33,7 @@ async function passingSnapshot(): Promise<MatrixCorpusPreflightSnapshot> {
     strictMockToolCount: 11,
     catalogDigest: catalog.catalogDigest,
     scenarioCount: 20,
-    turnCount: 59,
+    turnCount: 60,
     catalogMatchesTracked: true,
     agentModel: 'or:deepseek/deepseek-v4-flash',
     evaluatorModel: 'or:minimax/minimax-m3',

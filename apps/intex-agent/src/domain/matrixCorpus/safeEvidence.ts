@@ -24,10 +24,14 @@ export type SafeToolFactNameV1 =
   | 'hasExpectedEtag'
   | 'hasEventStart'
   | 'hasEventEnd'
+  | 'eventIdMatchesCatalog'
   | 'hasItemId'
   | 'hasLinearIssueId'
   | 'startMatchesCatalog'
   | 'endMatchesCatalog'
+  | 'durationMatchesCatalog'
+  | 'changesMatchCatalog'
+  | 'queryMatchesCatalog'
   | 'timeZoneMatchesCatalog'
   | 'mode'
   | 'workerType'
@@ -54,9 +58,12 @@ export interface MapSafeToolFactsInput {
   source: 'arguments' | 'result';
   value: unknown;
   catalog?: Readonly<{
-    start?: string;
-    end?: string;
+    eventId?: string;
+    start?: unknown;
+    end?: unknown;
     timeZone?: string;
+    changes?: unknown;
+    query?: string;
   }>;
 }
 
@@ -91,26 +98,44 @@ function mapArgumentFacts(
         lengthFact('locationLength', value['location']),
         lengthFact('descriptionLength', value['description']),
         arrayCountFact('attendeesCount', value['attendees']),
-        exactMatchFact('startMatchesCatalog', value['start'], catalog?.start),
-        exactMatchFact('endMatchesCatalog', value['end'], catalog?.end),
+        exactMatchFact('startMatchesCatalog', value['start'], stringValue(catalog?.start)),
+        exactMatchFact('endMatchesCatalog', value['end'], stringValue(catalog?.end)),
         exactMatchFact('timeZoneMatchesCatalog', value['timeZone'], catalog?.timeZone)
       );
-    case 'update_calendar_event':
+    case 'update_calendar_event': {
+      const changes = asRecord(value['changes']);
+      const catalogChanges = asRecord(catalog?.changes);
       return facts(
         lengthFact('summaryLength', value['eventSummary']),
-        arrayCountFact('attendeesCount', value['attendeesToAdd']),
+        arrayCountFact('attendeesCount', changes?.['attendeesToAdd'] ?? value['attendeesToAdd']),
         presenceFact('hasCalendarId', value['calendarId']),
         presenceFact('hasExpectedEtag', value['expectedEtag']),
         recordPresenceFact('hasEventStart', value['eventStart']),
-        recordPresenceFact('hasEventEnd', value['eventEnd'])
+        recordPresenceFact('hasEventEnd', value['eventEnd']),
+        exactMatchFact('eventIdMatchesCatalog', value['eventId'], catalog?.eventId),
+        canonicalMatchFact(
+          'startMatchesCatalog',
+          changes?.['start'],
+          catalogChanges?.['start']
+        ),
+        canonicalMatchFact('endMatchesCatalog', changes?.['end'], catalogChanges?.['end']),
+        durationMatchFact(
+          changes?.['start'],
+          changes?.['end'],
+          catalogChanges?.['start'],
+          catalogChanges?.['end']
+        ),
+        canonicalMatchFact('changesMatchCatalog', value['changes'], catalog?.changes)
       );
+    }
     case 'query_calendar_events':
       return facts(
         lengthFact('queryLength', value['query']),
         integerFact('maxResults', value['maxResults']),
         presenceFact('hasCalendarId', value['calendarId']),
-        exactMatchFact('startMatchesCatalog', value['timeMin'], catalog?.start),
-        exactMatchFact('endMatchesCatalog', value['timeMax'], catalog?.end),
+        exactMatchFact('startMatchesCatalog', value['timeMin'], stringValue(catalog?.start)),
+        exactMatchFact('endMatchesCatalog', value['timeMax'], stringValue(catalog?.end)),
+        exactMatchFact('queryMatchesCatalog', value['query'], catalog?.query),
         enumFact('mode', value['mode'], ['list', 'count'])
       );
     case 'create_research':
@@ -242,6 +267,88 @@ function exactMatchFact(
   return typeof value === 'string' && expected !== undefined
     ? { name, value: value === expected }
     : null;
+}
+
+function canonicalMatchFact(
+  name: SafeToolFactNameV1,
+  value: unknown,
+  expected: unknown
+): SafeToolFactV1 | null {
+  if (expected === undefined) return null;
+  const actualCanonical = canonicalJson(value);
+  const expectedCanonical = canonicalJson(expected);
+  return {
+    name,
+    value:
+      actualCanonical !== null &&
+      expectedCanonical !== null &&
+      actualCanonical === expectedCanonical,
+  };
+}
+
+function durationMatchFact(
+  start: unknown,
+  end: unknown,
+  expectedStart: unknown,
+  expectedEnd: unknown
+): SafeToolFactV1 | null {
+  if (expectedStart === undefined || expectedEnd === undefined) return null;
+  const actualDuration = calendarDurationMs(start, end);
+  const expectedDuration = calendarDurationMs(expectedStart, expectedEnd);
+  return {
+    name: 'durationMatchesCatalog',
+    value:
+      actualDuration !== null &&
+      expectedDuration !== null &&
+      actualDuration === expectedDuration,
+  };
+}
+
+function calendarDurationMs(start: unknown, end: unknown): number | null {
+  const startInstant = calendarInstant(start);
+  const endInstant = calendarInstant(end);
+  if (
+    startInstant === null ||
+    endInstant?.kind !== startInstant.kind ||
+    endInstant.ms <= startInstant.ms
+  )
+    return null;
+  return endInstant.ms - startInstant.ms;
+}
+
+function calendarInstant(value: unknown): Readonly<{ kind: 'date' | 'dateTime'; ms: number }> | null {
+  const record = asRecord(value);
+  if (record === null) return null;
+  const date = record['date'];
+  const dateTime = record['dateTime'];
+  if ((typeof date === 'string') === (typeof dateTime === 'string')) return null;
+  const kind = typeof date === 'string' ? 'date' : 'dateTime';
+  const raw = typeof date === 'string' ? `${date}T00:00:00.000Z` : String(dateTime);
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? { kind, ms } : null;
+}
+
+function canonicalJson(value: unknown): string | null {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string')
+    return JSON.stringify(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? JSON.stringify(value) : null;
+  if (Array.isArray(value)) {
+    const items = value.map(canonicalJson);
+    return items.some((item) => item === null) ? null : `[${items.join(',')}]`;
+  }
+  const record = asRecord(value);
+  if (record === null) return null;
+  const entries: string[] = [];
+  for (const key of Object.keys(record).sort()) {
+    const nested = canonicalJson(record[key]);
+    if (nested === null) return null;
+    entries.push(`${JSON.stringify(key)}:${nested}`);
+  }
+  return `{${entries.join(',')}}`;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
 function enumFact(

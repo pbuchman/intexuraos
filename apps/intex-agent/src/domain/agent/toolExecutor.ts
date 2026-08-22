@@ -213,12 +213,11 @@ export function createIntexAgentToolExecutor(
       if (typeof paginationVerdict !== 'boolean') {
         throw new Error('Calendar query response has no pagination verdict');
       }
-      const truncated = paginationVerdict || events.length >= maxResults;
       return JSON.stringify({
         status: 'completed',
         mode: args.mode,
         count: events.length,
-        truncated,
+        truncated: paginationVerdict,
         timeMin: args.timeMin,
         timeMax: args.timeMax,
         ...(args.query !== undefined ? { query: args.query } : {}),

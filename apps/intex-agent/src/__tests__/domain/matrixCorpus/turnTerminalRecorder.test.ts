@@ -219,7 +219,12 @@ describe('Matrix corpus turn terminal recorder', () => {
     }
   });
 
-  it.each(['intent_classification', 'agent_generation', 'response_schema_repair'] as const)(
+  it.each([
+    'intent_classification',
+    'calendar_update_planning',
+    'agent_generation',
+    'response_schema_repair',
+  ] as const)(
     'aggregates a valid %s usage record before a failed terminal',
     async (stage) => {
       const repository = repositoryFixture('applied', [

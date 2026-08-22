@@ -169,8 +169,18 @@ describe('Intex Agent Matrix corpus internal client', () => {
               ],
             },
           ],
-          agentUsage: [],
-          agentUsageTotals: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costNanoUsd: 0 },
+          agentUsage: [
+            {
+              turnIndex: 2,
+              stage: 'calendar_update_planning',
+              callOrdinal: 1,
+              inputTokens: 3,
+              outputTokens: 2,
+              totalTokens: 5,
+              costNanoUsd: 1,
+            },
+          ],
+          agentUsageTotals: { inputTokens: 3, outputTokens: 2, totalTokens: 5, costNanoUsd: 1 },
           sessionProof: {
             status: 'waiting_for_user',
             startReason: 'no_active_session',

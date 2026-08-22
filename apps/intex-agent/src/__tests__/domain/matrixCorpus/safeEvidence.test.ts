@@ -82,6 +82,41 @@ describe('mapSafeToolFacts', () => {
       ],
     },
     {
+      toolName: 'update_calendar_event' as const,
+      source: 'arguments' as const,
+      value: {
+        eventId: 'raw-id-123',
+        eventSummary: 'Photos cleanup',
+        changes: {
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+        },
+        calendarId: 'raw-id-123',
+        expectedEtag: 'private-etag',
+        eventStart: { date: '2026-08-13' },
+        eventEnd: { date: '2026-08-14' },
+      },
+      expected: [
+        fact('summaryLength', 14),
+        fact('hasCalendarId', true),
+        fact('hasExpectedEtag', true),
+        fact('hasEventStart', true),
+        fact('hasEventEnd', true),
+        fact('eventIdMatchesCatalog', true),
+        fact('startMatchesCatalog', true),
+        fact('endMatchesCatalog', true),
+        fact('durationMatchesCatalog', true),
+        fact('changesMatchCatalog', true),
+      ],
+      catalog: {
+        eventId: 'raw-id-123',
+        changes: {
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+        },
+      },
+    },
+    {
       toolName: 'query_calendar_events' as const,
       source: 'arguments' as const,
       value: {
@@ -98,11 +133,13 @@ describe('mapSafeToolFacts', () => {
         fact('hasCalendarId', true),
         fact('startMatchesCatalog', true),
         fact('endMatchesCatalog', true),
+        fact('queryMatchesCatalog', true),
         fact('mode', 'list'),
       ],
       catalog: {
         start: '2026-07-20T10:00:00.000Z',
         end: '2026-07-20T11:00:00.000Z',
+        query: 'private query',
       },
     },
     {
@@ -290,10 +327,130 @@ describe('mapSafeToolFacts', () => {
       mapSafeToolFacts({
         toolName: 'query_calendar_events',
         source: 'arguments',
+        value: {
+          timeMin: '2026-08-11T00:00:00+02:00',
+          timeMax: '2026-08-18T00:00:00+02:00',
+          query: 'wrong private scope',
+        },
+        catalog: {
+          start: '2026-08-10T00:00:00+02:00',
+          end: '2026-08-17T00:00:00+02:00',
+          query: 'private expected scope',
+        },
+      })
+    ).toEqual([
+      fact('queryLength', 19),
+      fact('startMatchesCatalog', false),
+      fact('endMatchesCatalog', false),
+      fact('queryMatchesCatalog', false),
+    ]);
+    expect(
+      mapSafeToolFacts({
+        toolName: 'query_calendar_events',
+        source: 'arguments',
         value: { calendarId: '', maxResults: -1, mode: 'private' },
       })
     ).toEqual([fact('hasCalendarId', false)]);
+    expect(
+      mapSafeToolFacts({
+        toolName: 'update_calendar_event',
+        source: 'arguments',
+        value: {
+          eventId: 'raw-id-123',
+          changes: {
+            start: { date: '2026-08-24' },
+            end: { date: '2026-08-26' },
+            attendeesToAdd: ['contact+private@pbuchman.com'],
+          },
+        },
+        catalog: {
+          eventId: 'expected-private-id',
+          changes: {
+            start: { date: '2026-08-22' },
+            end: { date: '2026-08-23' },
+          },
+        },
+      })
+    ).toEqual([
+      fact('attendeesCount', 1),
+      fact('eventIdMatchesCatalog', false),
+      fact('startMatchesCatalog', false),
+      fact('endMatchesCatalog', false),
+      fact('durationMatchesCatalog', false),
+      fact('changesMatchCatalog', false),
+    ]);
   });
+
+  it('fails duration evidence closed for malformed, mixed-kind, invalid, and non-positive ranges', () => {
+    const expectedChanges = {
+      start: { date: '2026-08-22' },
+      end: { date: '2026-08-23' },
+    };
+    const malformedRanges: readonly Readonly<{ start: unknown; end: unknown }>[] = [
+      { start: null, end: { date: '2026-08-23' } },
+      {
+        start: { date: '2026-08-22' },
+        end: { dateTime: '2026-08-23T00:00:00Z' },
+      },
+      { start: { date: '2026-08-22' }, end: { date: '2026-08-22' } },
+      { start: {}, end: { date: '2026-08-23' } },
+      {
+        start: { date: '2026-08-22', dateTime: '2026-08-22T00:00:00Z' },
+        end: { date: '2026-08-23' },
+      },
+      { start: { date: 'not-a-date' }, end: { date: '2026-08-23' } },
+    ];
+
+    for (const changes of malformedRanges) {
+      expect(
+        mapSafeToolFacts({
+          toolName: 'update_calendar_event',
+          source: 'arguments',
+          value: { changes },
+          catalog: { changes: expectedChanges },
+        })
+      ).toContainEqual(fact('durationMatchesCatalog', false));
+    }
+
+    const timedChanges = {
+      start: { dateTime: '2026-08-22T19:00:00+02:00' },
+      end: { dateTime: '2026-08-22T20:00:00+02:00' },
+    };
+    expect(
+      mapSafeToolFacts({
+        toolName: 'update_calendar_event',
+        source: 'arguments',
+        value: { changes: timedChanges },
+        catalog: { changes: timedChanges },
+      })
+    ).toEqual([
+      fact('startMatchesCatalog', true),
+      fact('endMatchesCatalog', true),
+      fact('durationMatchesCatalog', true),
+      fact('changesMatchCatalog', true),
+    ]);
+  });
+
+  it.each([
+    ['a finite number', 42, 42, true],
+    ['a non-finite number', Number.POSITIVE_INFINITY, 42, false],
+    ['an array', [1], [1], true],
+    ['an array with an unsupported value', [undefined], [1], false],
+    ['an unsupported primitive', undefined, {}, false],
+    ['an object with an unsupported nested value', { summary: undefined }, { summary: 'x' }, false],
+  ] as const)(
+    'canonicalizes %s without exposing its source value',
+    (_name, changes, expectedChanges, expectedMatch) => {
+      expect(
+        mapSafeToolFacts({
+          toolName: 'update_calendar_event',
+          source: 'arguments',
+          value: { changes },
+          catalog: { changes: expectedChanges },
+        })
+      ).toContainEqual(fact('changesMatchCatalog', expectedMatch));
+    }
+  );
 
   it.each([
     ['create_note', { content: 1, title: null, tags: {}, sourceMessageIds: 'private' }],

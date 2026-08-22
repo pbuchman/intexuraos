@@ -577,8 +577,9 @@ const testRunSafeToolFactJsonSchema = closedJsonObject(['name', 'value'], ['name
       'textLength', 'tagsCount', 'sourceMessageIdsCount', 'attendeesCount', 'resultCount',
       'maxResults', 'expectedVersion', 'currentVersion', 'hasUrl', 'hasSourceUrl',
       'hasCalendarId', 'hasExpectedEtag', 'hasEventStart', 'hasEventEnd', 'hasItemId',
-      'hasLinearIssueId', 'startMatchesCatalog',
-      'endMatchesCatalog', 'timeZoneMatchesCatalog', 'mode', 'workerType', 'taskMode',
+      'hasLinearIssueId', 'eventIdMatchesCatalog', 'startMatchesCatalog',
+      'endMatchesCatalog', 'durationMatchesCatalog', 'changesMatchCatalog',
+      'queryMatchesCatalog', 'timeZoneMatchesCatalog', 'mode', 'workerType', 'taskMode',
     ],
   },
   value: {
@@ -618,8 +619,9 @@ const testRunSafeExpectedToolFactJsonSchema = closedJsonObject(
         'textLength', 'tagsCount', 'sourceMessageIdsCount', 'attendeesCount', 'resultCount',
         'maxResults', 'expectedVersion', 'currentVersion', 'hasUrl', 'hasSourceUrl',
         'hasCalendarId', 'hasExpectedEtag', 'hasEventStart', 'hasEventEnd', 'hasItemId',
-        'hasLinearIssueId', 'startMatchesCatalog',
-        'endMatchesCatalog', 'timeZoneMatchesCatalog', 'mode', 'workerType', 'taskMode',
+        'hasLinearIssueId', 'eventIdMatchesCatalog', 'startMatchesCatalog',
+        'endMatchesCatalog', 'durationMatchesCatalog', 'changesMatchCatalog',
+        'queryMatchesCatalog', 'timeZoneMatchesCatalog', 'mode', 'workerType', 'taskMode',
       ],
     },
     operator: { type: 'string', enum: ['exists', 'absent', 'equals'] },
@@ -671,7 +673,7 @@ const testRunSafeDeterministicEvidenceJsonSchema = closedJsonObject(
   }
 );
 const safeDeterministicCheckJsonSchema = closedJsonObject(
-  ['code', 'status', 'turnIndex', 'replyIndex', 'evidence'],
+  ['code', 'status', 'turnIndex', 'replyIndex', 'operationOrdinal', 'evidence'],
   ['code', 'status', 'turnIndex', 'replyIndex', 'evidence'],
   {
     code: {
@@ -685,6 +687,7 @@ const safeDeterministicCheckJsonSchema = closedJsonObject(
     status: { type: 'string', enum: ['pending', 'passed', 'failed'] },
     turnIndex: nullableJsonSchema({ ...safeIntegerJsonSchema, maximum: 19 }),
     replyIndex: nullableJsonSchema({ type: 'integer', minimum: 1, maximum: 100 }),
+    operationOrdinal: nullableJsonSchema({ type: 'integer', minimum: 1, maximum: 20 }),
     evidence: testRunSafeDeterministicEvidenceJsonSchema,
   }
 );
@@ -733,7 +736,12 @@ const testRunSafeAgentUsageJsonSchema = closedJsonObject(
     turnIndex: { ...safeIntegerJsonSchema, maximum: 19 },
     stage: {
       type: 'string',
-      enum: ['intent_classification', 'agent_generation', 'response_schema_repair'],
+      enum: [
+        'intent_classification',
+        'calendar_update_planning',
+        'agent_generation',
+        'response_schema_repair',
+      ],
     },
     callOrdinal: {
       type: 'integer',
@@ -1379,8 +1387,9 @@ const safeToolFactJsonSchema = closedJsonObject(
         'textLength', 'tagsCount', 'sourceMessageIdsCount', 'attendeesCount', 'resultCount',
         'maxResults', 'expectedVersion', 'currentVersion', 'hasUrl', 'hasSourceUrl',
         'hasCalendarId', 'hasExpectedEtag', 'hasEventStart', 'hasEventEnd', 'hasItemId',
-        'hasLinearIssueId', 'startMatchesCatalog',
-        'endMatchesCatalog', 'timeZoneMatchesCatalog', 'mode', 'workerType', 'taskMode',
+        'hasLinearIssueId', 'eventIdMatchesCatalog', 'startMatchesCatalog',
+        'endMatchesCatalog', 'durationMatchesCatalog', 'changesMatchCatalog',
+        'queryMatchesCatalog', 'timeZoneMatchesCatalog', 'mode', 'workerType', 'taskMode',
       ],
     },
     value: {
@@ -1423,7 +1432,12 @@ const safeAgentUsageJsonSchema = closedJsonObject(
     turnIndex: { type: 'integer', minimum: 0, maximum: 19 },
     stage: {
       type: 'string',
-      enum: ['intent_classification', 'agent_generation', 'response_schema_repair'],
+      enum: [
+        'intent_classification',
+        'calendar_update_planning',
+        'agent_generation',
+        'response_schema_repair',
+      ],
     },
     callOrdinal: { type: 'integer', minimum: 1, maximum: 60 },
     inputTokens: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER },

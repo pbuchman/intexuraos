@@ -349,6 +349,16 @@ describe('Matrix corpus shared contract', () => {
         attendeesAdded: ['patryk@example.com'],
       },
       {
+        toolName: 'update_calendar_event',
+        status: 'completed',
+        eventId: 'mock_event_2',
+        summary: 'all-day cleanup',
+        changes: {
+          start: { date: '2026-08-22' },
+          end: { date: '2026-08-23' },
+        },
+      },
+      {
         toolName: 'query_calendar_events',
         status: 'completed',
         mode: 'count',
@@ -423,20 +433,47 @@ describe('Matrix corpus shared contract', () => {
     ).toBe(false);
     expect(
       strictMockResultV1Schema.safeParse({
-        ...results[4],
+        ...results[5],
         count: 21,
-        events: Array.from({ length: 21 }, () => results[4]?.events?.[0]),
+        events: Array.from({ length: 21 }, () => results[5]?.events?.[0]),
       }).success
     ).toBe(false);
     expect(
       strictMockResultV1Schema.safeParse({
-        ...results[9],
+        ...results[10],
         items: Array.from({ length: 51 }, (_, index) => ({
           id: `mock_pref_${String(index)}`,
           text: 'bounded',
         })),
       }).success
     ).toBe(false);
+    const updateResult = {
+      toolName: 'update_calendar_event',
+      status: 'completed',
+      eventId: 'mock_event_refinement',
+      summary: 'refinement fixture',
+    } as const;
+    expect(
+      strictMockResultV1Schema.safeParse({
+        ...updateResult,
+        changes: { summary: 'Updated summary' },
+      }).success
+    ).toBe(true);
+    for (const changes of [
+      {},
+      { start: { date: '2026-08-22' } },
+      { end: { date: '2026-08-23' } },
+      {
+        start: { date: '2026-08-22' },
+        end: { dateTime: '2026-08-23T00:00:00Z' },
+      },
+      {
+        start: { date: '2026-08-22' },
+        end: { date: '2026-08-22' },
+      },
+    ]) {
+      expect(strictMockResultV1Schema.safeParse({ ...updateResult, changes }).success).toBe(false);
+    }
   });
 
   it('accepts only a bounded unique catalog-owned expected tool schedule', () => {
@@ -498,6 +535,50 @@ describe('Matrix corpus shared contract', () => {
       strictToolMockProfileV1Schema.safeParse({
         ...profile,
         calls: [{ ...profile.calls[0], ordinal: 2 }],
+      }).success
+    ).toBe(false);
+    const queryProfile = {
+      ...profile,
+      calls: [
+        {
+          turnIndex: 0,
+          toolName: 'query_calendar_events',
+          ordinal: 1,
+          argumentCatalog: {
+            toolName: 'query_calendar_events',
+            timeMin: '2026-08-10T00:00:00+02:00',
+            timeMax: '2026-08-17T00:00:00+02:00',
+            query: 'Photos',
+          },
+          outcome: {
+            kind: 'success',
+            result: {
+              toolName: 'query_calendar_events',
+              status: 'completed',
+              mode: 'list',
+              count: 0,
+              events: [],
+            },
+          },
+        },
+      ],
+    } as const;
+    expect(strictToolMockProfileV1Schema.safeParse(queryProfile).success).toBe(true);
+    expect(
+      strictToolMockProfileV1Schema.safeParse({
+        ...queryProfile,
+        calls: [
+          {
+            ...queryProfile.calls[0],
+            argumentCatalog: { ...queryProfile.calls[0].argumentCatalog, timeMax: 'invalid' },
+          },
+        ],
+      }).success
+    ).toBe(false);
+    expect(
+      strictToolMockProfileV1Schema.safeParse({
+        ...profile,
+        calls: [{ ...profile.calls[0], argumentCatalog: queryProfile.calls[0].argumentCatalog }],
       }).success
     ).toBe(false);
     expect(

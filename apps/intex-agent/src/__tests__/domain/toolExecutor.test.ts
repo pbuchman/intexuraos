@@ -502,7 +502,7 @@ describe('createIntexAgentToolExecutor', () => {
     });
   });
 
-  it('marks calendar event counts as truncated when they hit the query cap', async () => {
+  it('trusts the calendar client pagination verdict when a count exactly hits the query cap', async () => {
     const calendarClient = new FakeCalendarClient();
     calendarClient.listResult = ok({
       events: [
@@ -528,11 +528,11 @@ describe('createIntexAgentToolExecutor', () => {
       status: 'completed',
       mode: 'count',
       count: 2,
-      truncated: true,
+      truncated: false,
     });
   });
 
-  it('marks calendar event lists as truncated when they hit the query cap', async () => {
+  it('trusts the calendar client pagination verdict when a list exactly hits the query cap', async () => {
     const calendarClient = new FakeCalendarClient();
     calendarClient.listResult = ok({
       events: [event('event-1', 'Dentist', '2026-05-03T09:00:00.000Z')],
@@ -555,7 +555,7 @@ describe('createIntexAgentToolExecutor', () => {
       status: 'completed',
       mode: 'list',
       count: 1,
-      truncated: true,
+      truncated: false,
     });
   });
 

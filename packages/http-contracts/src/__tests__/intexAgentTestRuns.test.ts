@@ -527,6 +527,9 @@ describe('Intex Agent Test Runs public contracts', () => {
       costNanoUsd: 1,
     };
     expect(safeAgentUsageV1Schema.safeParse(usage).success).toBe(true);
+    expect(
+      safeAgentUsageV1Schema.safeParse({ ...usage, stage: 'calendar_update_planning' }).success
+    ).toBe(true);
     expect(safeAgentUsageV1Schema.safeParse({ ...usage, callOrdinal: 6 }).success).toBe(true);
     expect(safeAgentUsageV1Schema.safeParse({ ...usage, callOrdinal: 60 }).success).toBe(true);
     expect(safeAgentUsageV1Schema.safeParse({ ...usage, callOrdinal: 61 }).success).toBe(false);

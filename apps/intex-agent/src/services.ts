@@ -360,12 +360,14 @@ export function createMatrixCorpusRunner(
         createMatrixCorpusExecutor(factoryInput) {
           if (
             factoryInput.flow !== 'normal' ||
-            factoryInput.preauthorizedSelection !== undefined
+            factoryInput.preauthorizedSelection !== undefined ||
+            factoryInput.preauthorizedSelections !== undefined
           )
             throw new MatrixCorpusExecutorResolutionError('INVALID_PREAUTHORIZED_SELECTION');
           const {
             flow: _flow,
             preauthorizedSelection: _preauthorizedSelection,
+            preauthorizedSelections: _preauthorizedSelections,
             ...strictInput
           } = factoryInput;
           boundary = createStrictToolMockBoundary(strictInput);
@@ -420,38 +422,61 @@ export function createMatrixCorpusRunner(
     },
 
     async executeConfirmed(confirmedInput): Promise<IntexAgentRunnerResult> {
+      const hasSingularSelection = input.execution.preauthorizedSelection !== undefined;
+      const hasBatchSelections = input.execution.preauthorizedSelections !== undefined;
       if (
         input.execution.flow !== 'confirmation' ||
-        input.execution.preauthorizedSelection === undefined
+        hasSingularSelection === hasBatchSelections ||
+        input.execution.preauthorizedSelections?.length === 0
       )
         throw new MatrixCorpusExecutorResolutionError('INVALID_PREAUTHORIZED_SELECTION');
+      let remainingPreauthorizedCalls = 0;
       const resolver = createIntexAgentExecutorResolver({
         createOrdinaryExecutor() {
           throw new MatrixCorpusExecutorResolutionError('CROSS_LANE_EXECUTION_CONTEXT');
         },
         createMatrixCorpusExecutor(factoryInput) {
-          const selection = factoryInput.preauthorizedSelection;
-          if (factoryInput.flow !== 'confirmation' || selection === undefined)
-            throw new MatrixCorpusExecutorResolutionError('INVALID_PREAUTHORIZED_SELECTION');
-          const call = factoryInput.profile.findCall(selection);
+          const factoryHasSingular = factoryInput.preauthorizedSelection !== undefined;
+          const factoryHasBatch = factoryInput.preauthorizedSelections !== undefined;
           if (
-            call === undefined ||
-            factoryInput.turnIndex !== selection.turnIndex ||
-            call.toolName !== selection.toolName
+            factoryInput.flow !== 'confirmation' ||
+            factoryHasSingular === factoryHasBatch ||
+            factoryInput.preauthorizedSelections?.length === 0
           )
             throw new MatrixCorpusExecutorResolutionError('INVALID_PREAUTHORIZED_SELECTION');
-          let consumed = false;
+          const selections = factoryInput.preauthorizedSelections ?? [
+            factoryInput.preauthorizedSelection as NonNullable<
+              typeof factoryInput.preauthorizedSelection
+            >,
+          ];
+          const calls = selections.map((selection) => {
+            const call = factoryInput.profile.findCall(selection);
+            if (
+              call === undefined ||
+              factoryInput.turnIndex !== selection.turnIndex ||
+              call.toolName !== selection.toolName
+            )
+              throw new MatrixCorpusExecutorResolutionError(
+                'INVALID_PREAUTHORIZED_SELECTION'
+              );
+            return call;
+          });
+          let consumed = 0;
+          remainingPreauthorizedCalls = calls.length;
           const {
             flow: _flow,
             preauthorizedSelection: _preauthorizedSelection,
+            preauthorizedSelections: _preauthorizedSelections,
             ...strictInput
           } = factoryInput;
           return createStrictToolMockExecutor({
             ...strictInput,
             recordPreauthorizedCallStarted: true,
             takePreauthorizedCall(toolName) {
-              if (consumed || toolName !== selection.toolName) return undefined;
-              consumed = true;
+              const call = calls[consumed];
+              if (toolName !== call?.toolName) return undefined;
+              consumed += 1;
+              remainingPreauthorizedCalls = calls.length - consumed;
               return call;
             },
           });
@@ -462,7 +487,7 @@ export function createMatrixCorpusRunner(
         matrixCorpus: input.execution,
       });
       await input.execution.recordExecutionBoundary('strict_mock_executor_resolved');
-      return await createIntexAgentRunner({
+      const result = await createIntexAgentRunner({
         client: {
           run() {
             return Promise.reject(
@@ -474,6 +499,9 @@ export function createMatrixCorpusRunner(
         ...(input.webAppUrl !== undefined ? { webAppUrl: input.webAppUrl } : {}),
         userPreferences: input.userPreferences,
       }).executeConfirmed(confirmedInput);
+      if (remainingPreauthorizedCalls !== 0)
+        throw new MatrixCorpusExecutorResolutionError('INVALID_PREAUTHORIZED_SELECTION');
+      return result;
     },
   };
 }

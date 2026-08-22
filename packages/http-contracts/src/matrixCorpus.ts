@@ -285,6 +285,46 @@ const calendarEventSchema = z
     message: 'Calendar event end must follow start',
   });
 
+const calendarUpdateMockChangesSchema = z
+  .object({
+    summary: z.string().min(1).max(256).optional(),
+    description: z.string().max(1024).nullable().optional(),
+    location: z.string().max(256).nullable().optional(),
+    start: calendarDateTimeSnapshotSchema.optional(),
+    end: calendarDateTimeSnapshotSchema.optional(),
+    attendeesToAdd: z.array(z.string().email().max(320)).min(1).max(50).optional(),
+    attendeesToRemove: z.array(z.string().email().max(320)).min(1).max(50).optional(),
+  })
+  .strict()
+  .superRefine((changes, context) => {
+    if (Object.values(changes).every((value) => value === undefined)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Expected at least one applied calendar change',
+      });
+    }
+    if ((changes.start === undefined) !== (changes.end === undefined)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Applied calendar start and end must be reported together',
+      });
+      return;
+    }
+    if (changes.start === undefined || changes.end === undefined) return;
+    const startUsesDate = changes.start.date !== undefined;
+    const endUsesDate = changes.end.date !== undefined;
+    if (startUsesDate !== endUsesDate) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Applied calendar start and end must use the same date type',
+      });
+      return;
+    }
+    if (calendarEventTimeMs(changes.end) <= calendarEventTimeMs(changes.start)) {
+      context.addIssue({ code: 'custom', message: 'Applied calendar end must follow start' });
+    }
+  });
+
 export const strictMockResultV1Schema = z.union([
   z
     .object({
@@ -307,9 +347,13 @@ export const strictMockResultV1Schema = z.union([
       status: z.literal('completed'),
       eventId: syntheticIdSchema,
       summary: z.string().min(1).max(256),
-      attendeesAdded: z.array(z.string().email().max(320)).min(1).max(50),
+      attendeesAdded: z.array(z.string().email().max(320)).min(1).max(50).optional(),
+      changes: calendarUpdateMockChangesSchema.optional(),
     })
-    .strict(),
+    .strict()
+    .refine((result) => result.attendeesAdded !== undefined || result.changes !== undefined, {
+      message: 'Calendar update mock result requires applied-change evidence',
+    }),
   z
     .object({
       toolName: z.literal('query_calendar_events'),
@@ -406,11 +450,24 @@ export const strictMockResultV1Schema = z.union([
 ]);
 export type StrictMockResultV1 = z.infer<typeof strictMockResultV1Schema>;
 
+const strictMockArgumentCatalogSchema = z
+  .object({
+    toolName: z.literal('query_calendar_events'),
+    timeMin: rfc3339Schema,
+    timeMax: rfc3339Schema,
+    query: z.string().min(1).max(256),
+  })
+  .strict()
+  .refine((catalog) => Date.parse(catalog.timeMax) > Date.parse(catalog.timeMin), {
+    message: 'Query argument catalog end must follow start',
+  });
+
 const strictMockCallSchema = z
   .object({
     turnIndex: z.number().int().min(0).max(19),
     toolName: intexAgentToolNameV1Schema,
     ordinal: z.number().int().min(1).max(20),
+    argumentCatalog: strictMockArgumentCatalogSchema.optional(),
     outcome: z.discriminatedUnion('kind', [
       z.object({ kind: z.literal('success'), result: strictMockResultV1Schema }).strict(),
       z.object({ kind: z.literal('failure'), code: z.literal('MOCK_TOOL_FAILURE') }).strict(),
@@ -448,6 +505,12 @@ export const strictToolMockProfileV1Schema = z
       ordinalsByToolAndTurn.set(key, ordinals);
       if (call.outcome.kind === 'success' && call.outcome.result.toolName !== call.toolName) {
         context.addIssue({ code: z.ZodIssueCode.custom, message: 'Mock result tool mismatch' });
+      }
+      if (call.argumentCatalog !== undefined && call.argumentCatalog.toolName !== call.toolName) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Argument catalog tool mismatch',
+        });
       }
     }
     for (const [key, ordinals] of ordinalsByToolAndTurn) {

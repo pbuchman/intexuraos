@@ -432,10 +432,14 @@ export const safeToolFactNameV1Schema = z.enum([
   'hasExpectedEtag',
   'hasEventStart',
   'hasEventEnd',
+  'eventIdMatchesCatalog',
   'hasItemId',
   'hasLinearIssueId',
   'startMatchesCatalog',
   'endMatchesCatalog',
+  'durationMatchesCatalog',
+  'changesMatchCatalog',
+  'queryMatchesCatalog',
   'timeZoneMatchesCatalog',
   'mode',
   'workerType',
@@ -524,6 +528,7 @@ export const safeDeterministicCheckV1Schema = z
     status: z.enum(['pending', 'passed', 'failed']),
     turnIndex: safeIntegerSchema.max(19).nullable(),
     replyIndex: positiveSafeIntegerSchema.max(INTEX_AGENT_TEST_RUN_MAX_REPLIES_PER_TURN).nullable(),
+    operationOrdinal: positiveSafeIntegerSchema.max(20).nullable().optional(),
     evidence: safeDeterministicEvidenceV1Schema,
   })
   .strict();
@@ -601,7 +606,12 @@ export type SafeReplyEvaluationV1 = z.infer<typeof safeReplyEvaluationV1Schema>;
 export const safeAgentUsageV1Schema = z
   .object({
     turnIndex: safeIntegerSchema.max(19),
-    stage: z.enum(['intent_classification', 'agent_generation', 'response_schema_repair']),
+    stage: z.enum([
+      'intent_classification',
+      'calendar_update_planning',
+      'agent_generation',
+      'response_schema_repair',
+    ]),
     callOrdinal: positiveSafeIntegerSchema.max(INTEX_AGENT_TEST_RUN_MAX_AGENT_CALL_ORDINAL),
     inputTokens: safeIntegerSchema,
     outputTokens: safeIntegerSchema,

@@ -98,6 +98,7 @@ export interface NormalizedUsage {
 
 export type MatrixCorpusLlmStageV1 =
   | 'intent_classification'
+  | 'calendar_update_planning'
   | 'agent_generation'
   | 'response_schema_repair';
 
@@ -132,6 +133,7 @@ const MATRIX_CORPUS_CONTEXT_KEYS = [
 const MATRIX_CORPUS_SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u;
 const MATRIX_CORPUS_LLM_STAGES = new Set<MatrixCorpusLlmStageV1>([
   'intent_classification',
+  'calendar_update_planning',
   'agent_generation',
   'response_schema_repair',
 ]);

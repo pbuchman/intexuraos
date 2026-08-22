@@ -575,6 +575,16 @@ describe('Intex Agent Test Run foundation types', () => {
       totalTokens: 2,
       costNanoUsd: 1,
     };
+    expect(
+      testRunScenarioProjectionV1Schema.safeParse({
+        ...projection,
+        deterministicChecks: [1, 2].map((operationOrdinal) => ({
+          ...deterministic,
+          code: 'tool_fact' as const,
+          operationOrdinal,
+        })),
+      }).success
+    ).toBe(true);
     for (const invalid of [
       { ...projection, plannedTurns: 0, completedTurns: 1 },
       { ...projection, toolEvidence: [tool, tool] },

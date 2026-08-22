@@ -173,6 +173,7 @@ export function usdDecimalToNanoUsd(
 const STAGE_ORDER: readonly MatrixCorpusLlmStageV1[] = [
   'intent_classification',
   'agent_generation',
+  'calendar_update_planning',
   'response_schema_repair',
 ];
 

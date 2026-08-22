@@ -3,11 +3,7 @@ import {
   sanitizeIntexAgentReplyText,
   WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH,
 } from '@intexuraos/http-contracts';
-import type {
-  LLMError,
-  ToolCallingClient,
-  ToolCallingResult,
-} from '@intexuraos/llm-contract';
+import type { LLMError, ToolCallingClient, ToolCallingResult } from '@intexuraos/llm-contract';
 import type { StructuredClient, StructuredGenerateResult } from '@intexuraos/llm-utils';
 import { describe, expect, it } from 'vitest';
 import type { IntexAgentToolExecutor } from '../../domain/agent/toolDefinitions.js';
@@ -181,12 +177,13 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses the versioned prompt, transcript messages, and supported tools', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'The door code is 1234.', title: 'Door code' },
-    }, [
-      ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' })),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'The door code is 1234.', title: 'Door code' },
+      },
+      [ok(toolResult({ outcome: 'completed', reply: 'Saved.', toolName: 'create_note' }))]
+    );
 
     const runner = createIntexAgentRunner({
       client,
@@ -218,7 +215,9 @@ describe('createIntexAgentRunner', () => {
       'today: timeMin=2026-06-24T00:00:00.000+00:00; timeMax=2026-06-25T00:00:00.000+00:00'
     );
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
-    expect(client.calls[0]?.systemPrompt).toContain('You are Intex in WhatsApp Assistant conversations.');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'You are Intex in WhatsApp Assistant conversations.'
+    );
     expect(client.calls[0]?.systemPrompt).not.toContain('You are IntexuraOS');
     expect(client.calls[0]?.systemPrompt).toContain(
       'Default to the language of the last reasonable user message in the current session'
@@ -229,16 +228,28 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.systemPrompt).toContain(
       'When bold text is useful in the reply value, wrap it in single asterisks'
     );
-    expect(client.calls[0]?.systemPrompt).toContain('Do not use create_research to inspect personal IntexuraOS data');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Do not use create_research to inspect personal IntexuraOS data'
+    );
     expect(client.calls[0]?.systemPrompt).toContain('look up or count calendar events');
-    expect(client.calls[0]?.systemPrompt).toContain('For "next week", use the next calendar week after the current week');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'For "next week", use the next calendar week after the current week'
+    );
     expect(client.calls[0]?.systemPrompt).toContain(
       'copy the exact timeMin and timeMax from Whole-day local bounds'
     );
-    expect(client.calls[0]?.systemPrompt).toContain('previous calendar month unless the user says "last 30 days"');
-    expect(client.calls[0]?.systemPrompt).toContain('put the event name in query and set mode to count');
-    expect(client.calls[0]?.systemPrompt).toContain('required lookup step before update_calendar_event');
-    expect(client.calls[0]?.systemPrompt).toContain('Never claim query_calendar_events changed an event');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'previous calendar month unless the user says "last 30 days"'
+    );
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'put the event name in query and set mode to count'
+    );
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'required lookup step before update_calendar_event'
+    );
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Never claim query_calendar_events changed an event'
+    );
     expect(client.calls[0]?.systemPrompt).toContain('Plain URL shares are the exception');
     expect(client.calls[0]?.systemPrompt).toContain('keywords inside URLs');
     expect(client.calls[0]?.systemPrompt).toContain(
@@ -250,7 +261,9 @@ describe('createIntexAgentRunner', () => {
       'Do as much useful work as possible before naming a blocker'
     );
     expect(client.calls[0]?.systemPrompt).toContain('show every event candidate you can identify');
-    expect(client.calls[0]?.systemPrompt).not.toMatch(/approval|command classification|action queue|voice/i);
+    expect(client.calls[0]?.systemPrompt).not.toMatch(
+      /approval|command classification|action queue|voice/i
+    );
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'create event tomorrow' },
       { role: 'assistant', content: 'What time?' },
@@ -264,18 +277,21 @@ describe('createIntexAgentRunner', () => {
 
   it('returns a confirmation preview for note creation without writing the note', async () => {
     let createNoteCalls = 0;
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'Door code is 1234.', title: 'Door code' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'The note is ready.',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Door code is 1234.', title: 'Door code' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'The note is ready.',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_note']),
@@ -474,10 +490,9 @@ describe('createIntexAgentRunner', () => {
 
   it('does not duplicate current-message opaque references already present across note fields', async () => {
     const args = { content: 'Parking is on level P3 CASE-006-F02.', title: 'CASE-006 parking' };
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_note', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
-    );
+    const client = new ToolExecutingFakeToolCallingClient({ toolName: 'create_note', args }, [
+      ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' })),
+    ]);
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_note']),
@@ -496,10 +511,9 @@ describe('createIntexAgentRunner', () => {
 
   it('leaves natural hyphenated note text without letter-digit references unchanged', async () => {
     const args = { content: 'Keep the well-known follow-up.', title: 'Follow-up' };
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_note', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
-    );
+    const client = new ToolExecutingFakeToolCallingClient({ toolName: 'create_note', args }, [
+      ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' })),
+    ]);
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_note']),
@@ -519,27 +533,29 @@ describe('createIntexAgentRunner', () => {
   it.each([
     'Create a note saying parking is on level P3, but do not include CASE-006.',
     'Zapisz notatkę, że parking jest na P3, ale pomiń CASE-006.',
-  ])('does not restore an opaque reference when the current message explicitly excludes it: %s', async (message) => {
-    const args = { content: 'Parking is on level P3.', title: 'Parking' };
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_note', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
-    );
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: toolIntentClassifier(['create_note']),
-      toolExecutor: fakeToolExecutor(),
-    });
+  ])(
+    'does not restore an opaque reference when the current message explicitly excludes it: %s',
+    async (message) => {
+      const args = { content: 'Parking is on level P3.', title: 'Parking' };
+      const client = new ToolExecutingFakeToolCallingClient({ toolName: 'create_note', args }, [
+        ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' })),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['create_note']),
+        toolExecutor: fakeToolExecutor(),
+      });
 
-    await expect(
-      runner.run({
-        session: session(),
-        events: [],
-        message,
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toMatchObject({ toolArgs: args });
-  });
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({ toolArgs: args });
+    }
+  );
 
   it.each([
     {
@@ -552,39 +568,36 @@ describe('createIntexAgentRunner', () => {
       args: { content: 'Parking CASE-006-F02.', title: 'Parking' },
       expectedContent: 'Parking CASE-006-F02. CASE-006',
     },
-  ])('restores included opaque references when a different phrase or reference is excluded: $message', async ({
-    message,
-    args,
-    expectedContent,
-  }) => {
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_note', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' }))]
-    );
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: toolIntentClassifier(['create_note']),
-      toolExecutor: fakeToolExecutor(),
-    });
+  ])(
+    'restores included opaque references when a different phrase or reference is excluded: $message',
+    async ({ message, args, expectedContent }) => {
+      const client = new ToolExecutingFakeToolCallingClient({ toolName: 'create_note', args }, [
+        ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_note' })),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['create_note']),
+        toolExecutor: fakeToolExecutor(),
+      });
 
-    await expect(
-      runner.run({
-        session: session(),
-        events: [],
-        message,
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toMatchObject({
-      toolArgs: { ...args, content: expectedContent },
-    });
-  });
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        toolArgs: { ...args, content: expectedContent },
+      });
+    }
+  );
 
   it('does not rewrite non-note tool arguments that contain opaque references', async () => {
     const args = { title: 'CASE-006-F02', prompt: 'Research parking.' };
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_research', args },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_research' }))]
-    );
+    const client = new ToolExecutingFakeToolCallingClient({ toolName: 'create_research', args }, [
+      ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_research' })),
+    ]);
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_research']),
@@ -1938,50 +1951,50 @@ describe('createIntexAgentRunner', () => {
   it.each(['That time no longer works.', 'Ta godzina już nie pasuje.'])(
     'does not restore an older clock after the user says: %s',
     async (withdrawalMessage) => {
-    const client = new FakeToolCallingClient([]);
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: {
-        async classify() {
-          return {
-            kind: 'needs_clarification',
-            question: 'Provide a replacement start time.',
-            blockerReason: 'missing_required_details',
-            missingFields: ['start', 'summary'],
-            candidateIntents: ['create_calendar_event'],
-          };
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: {
+          async classify() {
+            return {
+              kind: 'needs_clarification',
+              question: 'Provide a replacement start time.',
+              blockerReason: 'missing_required_details',
+              missingFields: ['start', 'summary'],
+              candidateIntents: ['create_calendar_event'],
+            };
+          },
         },
-      },
-      toolExecutor: fakeToolExecutor(),
-    });
+        toolExecutor: fakeToolExecutor(),
+      });
 
-    await expect(
-      runner.run({
-        session: session(),
-        events: [
-          event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
-          event('clarification_requested', {
-            message: 'Which date should I use?',
-            missingFields: ['date'],
-            candidateIntents: ['create_calendar_event'],
-          }),
-          event('assistant_message', { text: 'Which date should I use?' }),
-          event('user_message', { text: withdrawalMessage }),
-          event('clarification_requested', {
-            message: 'Which date and replacement time should I use?',
-            missingFields: ['date', 'start'],
-            candidateIntents: ['create_calendar_event'],
-          }),
-        ],
-        message: 'Next Tuesday.',
-        currentDateTime: CURRENT_DATE_TIME,
-        timeZone: 'Europe/Warsaw',
-      })
-    ).resolves.toMatchObject({
-      outcome: 'needs_clarification',
-      reply: 'Provide a replacement start time.',
-    });
-    expect(client.calls).toEqual([]);
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', { text: 'Add lunch with Marta at 3 PM.' }),
+            event('clarification_requested', {
+              message: 'Which date should I use?',
+              missingFields: ['date'],
+              candidateIntents: ['create_calendar_event'],
+            }),
+            event('assistant_message', { text: 'Which date should I use?' }),
+            event('user_message', { text: withdrawalMessage }),
+            event('clarification_requested', {
+              message: 'Which date and replacement time should I use?',
+              missingFields: ['date', 'start'],
+              candidateIntents: ['create_calendar_event'],
+            }),
+          ],
+          message: 'Next Tuesday.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        reply: 'Provide a replacement start time.',
+      });
+      expect(client.calls).toEqual([]);
     }
   );
 
@@ -2708,9 +2721,7 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('widens a today-and-tomorrow calendar query before execution', async () => {
-    const receivedQueryArgs: Parameters<
-      IntexAgentToolExecutor['queryCalendarEvents']
-    >[0][] = [];
+    const receivedQueryArgs: Parameters<IntexAgentToolExecutor['queryCalendarEvents']>[0][] = [];
     const client = new ToolExecutingFakeToolCallingClient(
       {
         toolName: 'query_calendar_events',
@@ -2798,16 +2809,19 @@ describe('createIntexAgentRunner', () => {
     'What is the number of events today and tomorrow?',
     'Jakie wydarzenia mam dzisiaj rano i jutro po 15:00?',
     'What events do I have after 3 today and tomorrow?',
-  ])('does not force the two-day list path for a different calendar meaning: %s', async (message) => {
-    const captured = await runCapturedTodayAndTomorrowCalendarQuery(message);
+  ])(
+    'does not force the two-day list path for a different calendar meaning: %s',
+    async (message) => {
+      const captured = await runCapturedTodayAndTomorrowCalendarQuery(message);
 
-    expect(captured.args).toEqual({
-      mode: 'list',
-      timeMin: '2026-08-11T00:00:00.000+02:00',
-      timeMax: '2026-08-12T00:00:00.000+02:00',
-    });
-    expect(captured.stopAfterRun).toBeUndefined();
-  });
+      expect(captured.args).toEqual({
+        mode: 'list',
+        timeMin: '2026-08-11T00:00:00.000+02:00',
+        timeMax: '2026-08-12T00:00:00.000+02:00',
+      });
+      expect(captured.stopAfterRun).toBeUndefined();
+    }
+  );
 
   it('normalizes calendar classifier outputs when optional metadata is absent', async () => {
     const queryClient = new ToolExecutingFakeToolCallingClient(
@@ -2988,7 +3002,9 @@ describe('createIntexAgentRunner', () => {
     expect(result.reply.length).toBeLessThanOrEqual(WHATSAPP_INTERACTIVE_BODY_MAX_LENGTH);
     expect(result.reply).toContain('Content: INTEX-EVAL-020-F01');
     expect(result.reply).not.toContain('INTEX-EVAL-020-F18');
-    expect(result.reply).toContain('Preview shortened. The full content will be used after confirmation.');
+    expect(result.reply).toContain(
+      'Preview shortened. The full content will be used after confirmation.'
+    );
   });
 
   it('keeps an exactly-at-limit confirmation unchanged', async () => {
@@ -3054,7 +3070,10 @@ describe('createIntexAgentRunner', () => {
     },
     {
       message: 'Add lunch with Marta at noon.',
-      events: [event('assistant_message', { text: 'What should I add?' }), event('user_message', { text: 123 })],
+      events: [
+        event('assistant_message', { text: 'What should I add?' }),
+        event('user_message', { text: 123 }),
+      ],
       expectedReply: 'Which day or date should I use for this calendar event?',
       expectedNextStep: 'Provide the day or date for the calendar event.',
     },
@@ -3292,22 +3311,25 @@ describe('createIntexAgentRunner', () => {
   ])(
     'allows calendar confirmation when explicit date, start, and end signals exist: $message',
     async ({ events, message, replyContext }) => {
-      const client = new ToolExecutingFakeToolCallingClient({
-        toolName: 'create_calendar_event',
-        args: {
-          summary: 'Lunch with Marta',
-          start: '2026-07-21T12:00:00+02:00',
-          end: '2026-07-21T13:00:00+02:00',
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'create_calendar_event',
+          args: {
+            summary: 'Lunch with Marta',
+            start: '2026-07-21T12:00:00+02:00',
+            end: '2026-07-21T13:00:00+02:00',
+          },
         },
-      }, [
-        ok(
-          toolResult({
-            outcome: 'completed',
-            reply: 'Ready for confirmation.',
-            toolName: 'create_calendar_event',
-          })
-        ),
-      ]);
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Ready for confirmation.',
+              toolName: 'create_calendar_event',
+            })
+          ),
+        ]
+      );
       const runner = createIntexAgentRunner({
         client,
         intentClassifier: toolIntentClassifier(['create_calendar_event']),
@@ -3561,23 +3583,26 @@ describe('createIntexAgentRunner', () => {
   ])(
     'uses a one-hour default in the final confirmation: $message',
     async ({ events, message, replyContext, summary }) => {
-      const client = new ToolExecutingFakeToolCallingClient({
-        toolName: 'create_calendar_event',
-        args: {
-          summary,
-          start: '2026-07-21T12:00:00+02:00',
-          end: '2026-07-21T15:00:00+02:00',
-          location: '',
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'create_calendar_event',
+          args: {
+            summary,
+            start: '2026-07-21T12:00:00+02:00',
+            end: '2026-07-21T15:00:00+02:00',
+            location: '',
+          },
         },
-      }, [
-        ok(
-          toolResult({
-            outcome: 'completed',
-            reply: 'Ready for confirmation.',
-            toolName: 'create_calendar_event',
-          })
-        ),
-      ]);
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Ready for confirmation.',
+              toolName: 'create_calendar_event',
+            })
+          ),
+        ]
+      );
       const runner = createIntexAgentRunner({
         client,
         intentClassifier: toolIntentClassifier(['create_calendar_event']),
@@ -3665,27 +3690,30 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses the deterministic default despite a provider request for end clarification', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_calendar_event',
-      args: {
-        summary:
-          'Przeanalizowałem szczegóły turnieju OPEN B++ i przygotowałem propozycję wydarzenia kalendarzowego. Brakuje informacji o lokalizacji oraz czasie zakończenia, więc potrzebuję krótkiego doprecyzowania, zanim dodam wydarzenie do kalendarza.',
-        start: '2026-08-14T18:00:00+02:00',
-        end: '2026-08-14T21:00:00+02:00',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary:
+            'Przeanalizowałem szczegóły turnieju OPEN B++ i przygotowałem propozycję wydarzenia kalendarzowego. Brakuje informacji o lokalizacji oraz czasie zakończenia, więc potrzebuję krótkiego doprecyzowania, zanim dodam wydarzenie do kalendarza.',
+          start: '2026-08-14T18:00:00+02:00',
+          end: '2026-08-14T21:00:00+02:00',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'needs_clarification',
-          reply: 'Nie znam czasu zakończenia.',
-          blockerReason: 'missing_required_details',
-          missingFields: ['end'],
-          candidateIntents: ['create_calendar_event'],
-          suggestedNextStep: 'Ask whether the one-hour default is acceptable.',
-          clarification: 'Czy przyjąć 60 minut?',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'needs_clarification',
+            reply: 'Nie znam czasu zakończenia.',
+            blockerReason: 'missing_required_details',
+            missingFields: ['end'],
+            candidateIntents: ['create_calendar_event'],
+            suggestedNextStep: 'Ask whether the one-hour default is acceptable.',
+            clarification: 'Czy przyjąć 60 minut?',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_calendar_event']),
@@ -3727,41 +3755,45 @@ describe('createIntexAgentRunner', () => {
         truncated: false,
       },
     },
-  ])('does not treat a withdrawn calendar clock as explicit: $label', async ({
-    message,
-    replyContext,
-  }) => {
-    const client = new ToolExecutingFakeToolCallingClient(
-      {
-        toolName: 'create_calendar_event',
-        args: {
-          summary: 'Dentist',
-          start: '2026-08-18T15:00:00+02:00',
-          end: '2026-08-18T16:00:00+02:00',
+  ])(
+    'does not treat a withdrawn calendar clock as explicit: $label',
+    async ({ message, replyContext }) => {
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'create_calendar_event',
+          args: {
+            summary: 'Dentist',
+            start: '2026-08-18T15:00:00+02:00',
+            end: '2026-08-18T16:00:00+02:00',
+          },
         },
-      },
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_calendar_event' }))]
-    );
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: toolIntentClassifier(['create_calendar_event']),
-      toolExecutor: fakeToolExecutor(),
-    });
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'create_calendar_event' })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['create_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
 
-    await expect(
-      runner.run({
-        session: session(),
-        events: [],
-        message,
-        ...(replyContext === undefined ? {} : { replyContext }),
-        currentDateTime: CURRENT_DATE_TIME,
-        timeZone: 'Europe/Warsaw',
-      })
-    ).resolves.toMatchObject({
-      outcome: 'needs_clarification',
-      missingFields: ['start'],
-    });
-  });
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          ...(replyContext === undefined ? {} : { replyContext }),
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['start'],
+      });
+    }
+  );
 
   it.each([
     {
@@ -3978,22 +4010,25 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses an injected intent classifier to expose context-derived tools', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'query_calendar_events',
-      args: {
-        timeMin: '2026-06-25T00:00:00+02:00',
-        timeMax: '2026-06-26T00:00:00+02:00',
-        mode: 'list',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          timeMin: '2026-06-25T00:00:00+02:00',
+          timeMax: '2026-06-26T00:00:00+02:00',
+          mode: 'list',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'You have no calendar events tomorrow.',
-          toolName: 'query_calendar_events',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'You have no calendar events tomorrow.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
     const classifications: Parameters<IntexAgentIntentClassifier['classify']>[0][] = [];
     const intentClassifier: IntexAgentIntentClassifier = {
       async classify(input) {
@@ -4141,9 +4176,7 @@ describe('createIntexAgentRunner', () => {
         timeZone: 'Europe/Warsaw',
       },
     });
-    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual([
-      'create_calendar_event',
-    ]);
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['create_calendar_event']);
   });
 
   it('preserves a time-zone clarification for an explicit zone in the current reply context', async () => {
@@ -4260,12 +4293,7 @@ describe('createIntexAgentRunner', () => {
     }
   );
 
-  it.each([
-    '2026-08-18T14:30:00-04:00',
-    '2026-08-18T14:30:00Z',
-    '14:30-04:00',
-    '14:30Z',
-  ])(
+  it.each(['2026-08-18T14:30:00-04:00', '2026-08-18T14:30:00Z', '14:30-04:00', '14:30Z'])(
     'preserves a time-zone clarification for an explicitly zoned ISO instant: %s',
     async (explicitDateTime) => {
       const client = new FakeToolCallingClient([]);
@@ -4870,14 +4898,12 @@ describe('createIntexAgentRunner', () => {
       label: 'Polish',
       message:
         'Fragment kontekstu: Projekt Atlas używa zielonego folderu. Nie zapisuj tego jeszcze; tylko zachowaj ten kontekst.',
-      expectedReply:
-        'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
+      expectedReply: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
     },
     {
       label: 'short Polish without diacritics',
       message: 'Nie zapisuj tego jeszcze; tylko zachowaj ten kontekst.',
-      expectedReply:
-        'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
+      expectedReply: 'Zachowuję to tylko w tej sesji. Nie utworzono notatki ani innego zasobu.',
     },
   ])(
     'handles an explicit retain-only turn in $label after classification without calling the runner LLM',
@@ -4958,8 +4984,7 @@ describe('createIntexAgentRunner', () => {
     expect(client.calls[0]?.messages).toEqual([
       {
         role: 'user',
-        content:
-          'Project Atlas uses a green folder. Do not save yet; only retain this context.',
+        content: 'Project Atlas uses a green folder. Do not save yet; only retain this context.',
       },
       {
         role: 'assistant',
@@ -5306,12 +5331,14 @@ describe('createIntexAgentRunner', () => {
       }),
     });
 
-    await expect(runner.run({
-      session: session(),
-      events: [],
-      message: SCENARIO_017_MESSAGE,
-      currentDateTime: CURRENT_DATE_TIME,
-    })).resolves.toEqual({
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: SCENARIO_017_MESSAGE,
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
       outcome: 'needs_confirmation',
       reply:
         'Add this instruction memory entry?\n\nNew entry: reply in concise Polish INTEX-EVAL-017 INTEX-EVAL-017-F01.',
@@ -5753,7 +5780,11 @@ describe('createIntexAgentRunner', () => {
             timeMax: '2026-08-12T00:00:00.000+02:00',
           },
         },
-        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' })
+          ),
+        ]
       ),
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
@@ -5812,7 +5843,11 @@ describe('createIntexAgentRunner', () => {
             timeMax: '2026-08-12T00:00:00.000+02:00',
           },
         },
-        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' })
+          ),
+        ]
       ),
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
@@ -5865,7 +5900,11 @@ describe('createIntexAgentRunner', () => {
             timeMax: '2026-08-12T00:00:00.000+02:00',
           },
         },
-        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' })
+          ),
+        ]
       ),
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
@@ -5911,7 +5950,11 @@ describe('createIntexAgentRunner', () => {
             timeMax: '2026-08-12T00:00:00.000+02:00',
           },
         },
-        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' })
+          ),
+        ]
       ),
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
@@ -6092,7 +6135,11 @@ describe('createIntexAgentRunner', () => {
             timeMax: '2026-08-12T00:00:00.000+02:00',
           },
         },
-        [ok(toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' }))]
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Done.', toolName: 'query_calendar_events' })
+          ),
+        ]
       ),
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
       toolExecutor: fakeToolExecutor({
@@ -6257,10 +6304,7 @@ describe('createIntexAgentRunner', () => {
     };
 
     await expect(
-      runMalformedCalendarResult(
-        JSON.stringify(toolResultValue),
-        'Ile wydarzeń mam w kalendarzu?'
-      )
+      runMalformedCalendarResult(JSON.stringify(toolResultValue), 'Ile wydarzeń mam w kalendarzu?')
     ).resolves.toEqual({
       outcome: 'completed',
       reply: 'Wydarzenia w kalendarzu w podanym okresie: co najmniej 2500.',
@@ -6298,11 +6342,26 @@ describe('createIntexAgentRunner', () => {
   it.each([
     ['a non-JSON tool result', 'calendar-query-1'],
     ['a missing completion status', JSON.stringify({ mode: 'list', count: 0, events: [] })],
-    ['a non-integer count', JSON.stringify({ status: 'completed', mode: 'list', count: '1', events: [] })],
-    ['a negative count', JSON.stringify({ status: 'completed', mode: 'list', count: -1, events: [] })],
-    ['an excessive count', JSON.stringify({ status: 'completed', mode: 'list', count: 2501, events: [] })],
-    ['an unknown mode', JSON.stringify({ status: 'completed', mode: 'search', count: 0, events: [] })],
-    ['a scalar event collection', JSON.stringify({ status: 'completed', mode: 'list', count: 0, events: 'none' })],
+    [
+      'a non-integer count',
+      JSON.stringify({ status: 'completed', mode: 'list', count: '1', events: [] }),
+    ],
+    [
+      'a negative count',
+      JSON.stringify({ status: 'completed', mode: 'list', count: -1, events: [] }),
+    ],
+    [
+      'an excessive count',
+      JSON.stringify({ status: 'completed', mode: 'list', count: 2501, events: [] }),
+    ],
+    [
+      'an unknown mode',
+      JSON.stringify({ status: 'completed', mode: 'search', count: 0, events: [] }),
+    ],
+    [
+      'a scalar event collection',
+      JSON.stringify({ status: 'completed', mode: 'list', count: 0, events: 'none' }),
+    ],
     ['a null event', calendarListResult(null)],
     ['an array event', calendarListResult([])],
     ['a scalar event', calendarListResult('event')],
@@ -6311,12 +6370,23 @@ describe('createIntexAgentRunner', () => {
     ['a null start', calendarListResult({ summary: 'Planning', start: null })],
     ['an array start', calendarListResult({ summary: 'Planning', start: [] })],
     ['a scalar start', calendarListResult({ summary: 'Planning', start: 'today' })],
-    ['an invalid date-time', calendarListResult({ summary: 'Planning', start: { dateTime: 'later' } })],
+    [
+      'an invalid date-time',
+      calendarListResult({ summary: 'Planning', start: { dateTime: 'later' } }),
+    ],
     ['a missing date', calendarListResult({ summary: 'Planning', start: {} })],
-    ['a malformed date', calendarListResult({ summary: 'Planning', start: { date: '2026/08/10' } })],
-    ['an impossible date', calendarListResult({ summary: 'Planning', start: { date: '2026-02-30' } })],
+    [
+      'a malformed date',
+      calendarListResult({ summary: 'Planning', start: { date: '2026/08/10' } }),
+    ],
+    [
+      'an impossible date',
+      calendarListResult({ summary: 'Planning', start: { date: '2026-02-30' } }),
+    ],
   ])('keeps the malformed calendar fallback fail-closed for $label', async (_label, rawResult) => {
-    await expect(runMalformedCalendarResult(rawResult, 'Show my calendar today.')).resolves.toMatchObject({
+    await expect(
+      runMalformedCalendarResult(rawResult, 'Show my calendar today.')
+    ).resolves.toMatchObject({
       outcome: 'needs_clarification',
       fallbackReason: 'runner_output_malformed',
     });
@@ -6348,8 +6418,7 @@ describe('createIntexAgentRunner', () => {
       runner.run({
         session: session(),
         events: [],
-        message:
-          'Zaproś Patryka (patryk@example.com) na istniejące wydarzenie Bagrowa jutro.',
+        message: 'Zaproś Patryka (patryk@example.com) na istniejące wydarzenie Bagrowa jutro.',
         currentDateTime: CURRENT_DATE_TIME,
         timeZone: 'Europe/Warsaw',
       })
@@ -6714,7 +6783,9 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses prior session context when the current message cannot classify reply language', async () => {
-    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const client = new FakeToolCallingClient([
+      err({ code: 'API_ERROR', message: 'provider failed' }),
+    ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -6753,7 +6824,9 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('ignores bare links when falling back to wider session context for reply language', async () => {
-    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const client = new FakeToolCallingClient([
+      err({ code: 'API_ERROR', message: 'provider failed' }),
+    ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -6777,7 +6850,9 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('ignores historical attachment-only messages with source URLs for reply language', async () => {
-    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const client = new FakeToolCallingClient([
+      err({ code: 'API_ERROR', message: 'provider failed' }),
+    ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -6833,18 +6908,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses English deterministic confirmation text for substantive English requests', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'Door code is 1234.', title: 'Door code' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'The note is ready.',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Door code is 1234.', title: 'Door code' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'The note is ready.',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -6863,18 +6941,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses classifier language override for deterministic confirmation text', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'The note is ready.',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'The note is ready.',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const intentClassifier: IntexAgentIntentClassifier = {
       async classify() {
         return {
@@ -6906,18 +6987,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('falls back to detected language for unknown classifier language overrides', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'The note is ready.',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Kod do drzwi to 1234.', title: 'Kod do drzwi' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'The note is ready.',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const intentClassifier: IntexAgentIntentClassifier = {
       async classify() {
         return {
@@ -6997,7 +7081,8 @@ describe('createIntexAgentRunner', () => {
             text: 'Rozumiem. Mogę zbierać kontekst w tej sesji.',
           }),
         ],
-        message: 'A co do tej pory powiedziałem? Możesz streścić to, co powiedziałem do tej pory w konwersacji?',
+        message:
+          'A co do tej pory powiedziałem? Możesz streścić to, co powiedziałem do tej pory w konwersacji?',
         currentDateTime: CURRENT_DATE_TIME,
       })
     ).resolves.toEqual({
@@ -7007,7 +7092,9 @@ describe('createIntexAgentRunner', () => {
 
     expect(INTEX_AGENT_SYSTEM_PROMPT.version).toBe('27.0.0');
     expect(client.calls[0]?.systemPrompt).toContain('You can use the current session transcript');
-    expect(client.calls[0]?.systemPrompt).toContain('Do not claim you cannot review the current conversation');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Do not claim you cannot review the current conversation'
+    );
     expect(client.calls[0]?.tools).toEqual([]);
     expect(client.calls[0]?.messages).toEqual([
       { role: 'user', content: 'Będę dyktować fragmenty notatki.' },
@@ -7117,23 +7204,26 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('executes the calendar query tool for Polish podaj liste event requests', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'query_calendar_events',
-      args: {
-        mode: 'list',
-        timeMin: '2026-06-25T00:00:00.000Z',
-        timeMax: '2026-06-26T00:00:00.000Z',
-        maxResults: 20,
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00.000Z',
+          timeMax: '2026-06-26T00:00:00.000Z',
+          maxResults: 20,
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Jutro masz jedno wydarzenie: Dentist o 09:00.',
-          toolName: 'query_calendar_events',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Jutro masz jedno wydarzenie: Dentist o 09:00.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
@@ -7173,23 +7263,26 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('exposes the calendar query tool and current date for next-week calendar questions', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'query_calendar_events',
-      args: {
-        mode: 'list',
-        timeMin: '2026-06-29T00:00:00.000Z',
-        timeMax: '2026-07-06T00:00:00.000Z',
-        maxResults: 20,
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-29T00:00:00.000Z',
+          timeMax: '2026-07-06T00:00:00.000Z',
+          maxResults: 20,
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'You have one event next week: Dentist on Tuesday at 09:00.',
-          toolName: 'query_calendar_events',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'You have one event next week: Dentist on Tuesday at 09:00.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
@@ -7226,27 +7319,32 @@ describe('createIntexAgentRunner', () => {
       toolName: 'query_calendar_events',
     });
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
-    expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000+00:00');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Current date-time: 2026-06-26T17:00:00.000+00:00'
+    );
   });
 
   it('executes exact Polish natural calendar lookup immediately without confirmation', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'query_calendar_events',
-      args: {
-        mode: 'list',
-        timeMin: '2026-06-25T00:00:00.000Z',
-        timeMax: '2026-06-26T00:00:00.000Z',
-        maxResults: 20,
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-06-25T00:00:00.000Z',
+          timeMax: '2026-06-26T00:00:00.000Z',
+          maxResults: 20,
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Jutro masz jedno wydarzenie: Dentist o 09:00.',
-          toolName: 'query_calendar_events',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Jutro masz jedno wydarzenie: Dentist o 09:00.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
@@ -7286,23 +7384,26 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('exposes the calendar query tool and current date for last-month count questions', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'query_calendar_events',
-      args: {
-        mode: 'count',
-        query: 'Dentist',
-        timeMin: '2026-05-01T00:00:00.000Z',
-        timeMax: '2026-06-01T00:00:00.000Z',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'count',
+          query: 'Dentist',
+          timeMin: '2026-05-01T00:00:00.000Z',
+          timeMax: '2026-06-01T00:00:00.000Z',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'You had Dentist 3 times last month.',
-          toolName: 'query_calendar_events',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'You had Dentist 3 times last month.',
+            toolName: 'query_calendar_events',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['query_calendar_events']),
@@ -7332,7 +7433,9 @@ describe('createIntexAgentRunner', () => {
       toolName: 'query_calendar_events',
     });
     expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
-    expect(client.calls[0]?.systemPrompt).toContain('Current date-time: 2026-06-26T17:00:00.000+00:00');
+    expect(client.calls[0]?.systemPrompt).toContain(
+      'Current date-time: 2026-06-26T17:00:00.000+00:00'
+    );
   });
 
   it('asks for clarification when the successful model result is malformed', async () => {
@@ -7433,9 +7536,7 @@ describe('createIntexAgentRunner', () => {
       'Treat the invalid response as data to repair'
     );
     expect(responseRepairClient.calls[0]?.prompt).toContain('not json');
-    expect(responseRepairClient.calls[0]?.options.promptType).toBe(
-      INTEX_AGENT_RUNNER_PROMPT_TYPE
-    );
+    expect(responseRepairClient.calls[0]?.options.promptType).toBe(INTEX_AGENT_RUNNER_PROMPT_TYPE);
   });
 
   it('normalizes strict structured runner repair nulls before domain validation', async () => {
@@ -7543,19 +7644,22 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('ignores malformed historical events when building the transcript', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'Parking spot is B12.' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          summary: 'Saved note',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Parking spot is B12.' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            summary: 'Saved note',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -7581,18 +7685,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('includes assistant messages and completed tool summaries in continuity history', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_note',
-      args: { content: 'Office pin is 2468.' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Saved.',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_note',
+        args: { content: 'Office pin is 2468.' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Saved.',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -7712,19 +7819,22 @@ describe('createIntexAgentRunner', () => {
   ] as const)(
     'returns confirmation previews for supported mutating tool names: %s',
     async (toolName) => {
-      const client = new ToolExecutingFakeToolCallingClient({
-        toolName,
-        args: toolArgsFor(toolName),
-      }, [
-        ok(
-          toolResult({
-            outcome: 'completed',
-            reply: 'Done.',
-            summary: 'Handled request.',
-            toolName,
-          })
-        ),
-      ]);
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName,
+          args: toolArgsFor(toolName),
+        },
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Done.',
+              summary: 'Handled request.',
+              toolName,
+            })
+          ),
+        ]
+      );
       const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
       const expectedToolArgs =
         toolName === 'create_calendar_event'
@@ -7754,6 +7864,10 @@ describe('createIntexAgentRunner', () => {
       'Musimy przenieść istniejące wydarzenia Google Photos.',
       'Zmienić im daty tak, żeby następowały dzień po dniu.',
       'Ustaw datę istniejącego wydarzenia na 22 sierpnia.',
+      'Przełóż spotkanie na jutro.',
+      'Postpone the meeting until tomorrow.',
+      'Push the meeting back one day.',
+      'Make the event all-day.',
     ])('does not ask for an attendee email for a non-attendee update: %s', async (message) => {
       const client = new FakeToolCallingClient([passThroughResult]);
       const runner = createIntexAgentRunner({
@@ -7790,6 +7904,25 @@ describe('createIntexAgentRunner', () => {
         suggestedNextStep: 'Identify one event.',
       })
     );
+
+    it('asks for an attendee email when a general update also explicitly invites someone', async () => {
+      const client = new FakeToolCallingClient([]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Przenieś istniejące wydarzenie Bagrowa na jutro i zaproś Martę do niego.',
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toEqual(emailClarification);
+      expect(client.calls).toHaveLength(0);
+    });
 
     it('asks for the attendee email before invoking the runner or calendar lookup', async () => {
       let queryCalls = 0;
@@ -7974,8 +8107,7 @@ describe('createIntexAgentRunner', () => {
       {
         label: 'one address for multiple named attendees',
         replyContext: undefined,
-        message:
-          'Invite Jakub and Anna (anna@example.com) to the existing Bagrowa event.',
+        message: 'Invite Jakub and Anna (anna@example.com) to the existing Bagrowa event.',
       },
       {
         label: 'alternative addresses for one attendee',
@@ -7988,16 +8120,6 @@ describe('createIntexAgentRunner', () => {
         replyContext: undefined,
         message:
           'Invite Jakub (jakub.one@example.com jakub.two@example.com) to the existing Bagrowa event.',
-      },
-      {
-        label: 'alternative addresses in an email reply',
-        replyContext: undefined,
-        message: 'Email: jakub.one@example.com or jakub.two@example.com.',
-      },
-      {
-        label: 'multiple bare addresses in an email reply',
-        replyContext: undefined,
-        message: 'jakub.one@example.com jakub.two@example.com',
       },
       {
         label: 'an outbound assistant quote',
@@ -8030,6 +8152,33 @@ describe('createIntexAgentRunner', () => {
         missingFields: ['attendeeEmail'],
       });
       expect(client.calls).toHaveLength(0);
+    });
+
+    it.each([
+      {
+        label: 'an email replacement instruction',
+        message: 'Email: jakub.one@example.com or jakub.two@example.com.',
+      },
+      {
+        label: 'multiple bare addresses',
+        message: 'jakub.one@example.com jakub.two@example.com',
+      },
+    ])('does not infer an attendee request from $label', async ({ message }) => {
+      const client = new FakeToolCallingClient([passThroughResult]);
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor(),
+      });
+
+      await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+      });
+
+      expect(client.calls).toHaveLength(1);
     });
 
     it('rejects conflicting attendee addresses between the request and an inbound quote', async () => {
@@ -8599,26 +8748,22 @@ describe('createIntexAgentRunner', () => {
           event('assistant_message', { text: 'Which event?' }),
         ],
       },
-    ])('does not inherit an email across $label', async ({ events }) => {
-      const client = new FakeToolCallingClient([]);
+    ])('does not infer an attendee update across $label', async ({ events }) => {
+      const client = new FakeToolCallingClient([passThroughResult]);
       const runner = createIntexAgentRunner({
         client,
         intentClassifier: toolIntentClassifier(['update_calendar_event']),
         toolExecutor: fakeToolExecutor(),
       });
 
-      await expect(
-        runner.run({
-          session: session(),
-          events,
-          message: 'The Bagrowa event tomorrow.',
-          currentDateTime: CURRENT_DATE_TIME,
-        })
-      ).resolves.toMatchObject({
-        outcome: 'needs_clarification',
-        missingFields: ['attendeeEmail'],
+      await runner.run({
+        session: session(),
+        events,
+        message: 'The Bagrowa event tomorrow.',
+        currentDateTime: CURRENT_DATE_TIME,
       });
-      expect(client.calls).toHaveLength(0);
+
+      expect(client.calls).toHaveLength(1);
     });
 
     it.each([
@@ -8726,24 +8871,27 @@ describe('createIntexAgentRunner', () => {
         userPreferences:
           'User Preferences v1:\n1. (id: pref_jakub) "When I invite Jakub, use jakub@example.com."',
       },
-    ])('uses one unambiguous matching person-to-email mapping from $label', async ({ userPreferences }) => {
-      const client = new FakeToolCallingClient([passThroughResult]);
-      const runner = createIntexAgentRunner({
-        client,
-        intentClassifier: toolIntentClassifier(['update_calendar_event']),
-        toolExecutor: fakeToolExecutor(),
-        userPreferences,
-      });
+    ])(
+      'uses one unambiguous matching person-to-email mapping from $label',
+      async ({ userPreferences }) => {
+        const client = new FakeToolCallingClient([passThroughResult]);
+        const runner = createIntexAgentRunner({
+          client,
+          intentClassifier: toolIntentClassifier(['update_calendar_event']),
+          toolExecutor: fakeToolExecutor(),
+          userPreferences,
+        });
 
-      await runner.run({
-        session: session(),
-        events: [],
-        message: 'Invite Jakub to the existing Bagrowa event tomorrow.',
-        currentDateTime: CURRENT_DATE_TIME,
-      });
+        await runner.run({
+          session: session(),
+          events: [],
+          message: 'Invite Jakub to the existing Bagrowa event tomorrow.',
+          currentDateTime: CURRENT_DATE_TIME,
+        });
 
-      expect(client.calls).toHaveLength(1);
-    });
+        expect(client.calls).toHaveLength(1);
+      }
+    );
 
     it.each([
       {
@@ -8951,42 +9099,42 @@ describe('createIntexAgentRunner', () => {
         }),
       });
 
-    const preview = await runner.run({
-      session: session(),
-      events: [],
-      message: 'Zaproś Patryka (patryk@example.com) na Bagrową jutro.',
-      currentDateTime: CURRENT_DATE_TIME,
-      timeZone: 'Europe/Warsaw',
-    });
+      const preview = await runner.run({
+        session: session(),
+        events: [],
+        message: 'Zaproś Patryka (patryk@example.com) na Bagrową jutro.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
 
-    expect(preview).toEqual({
-      outcome: 'needs_confirmation',
-      reply: [
-        'Czy dodać uczestników do istniejącego wydarzenia w kalendarzu?',
-        '',
-        'Tytuł: Bagrowa',
-        'Początek: 25 czerwca 2026, 18:00',
-        'Koniec: 25 czerwca 2026, 20:30',
-        'Uczestnicy: patryk@example.com',
-        'Pozostałe dane wydarzenia pozostaną bez zmian.',
-      ].join('\n'),
-      toolName: 'update_calendar_event',
-      toolArgs: {
-        eventId: 'event-bagrowa',
-        eventSummary: 'Bagrowa',
-        attendeesToAdd: ['patryk@example.com'],
-        calendarId: 'primary',
-        expectedEtag: '"event-bagrowa-v1"',
-        eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
-        eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
-      },
-      supportingToolCompletions: [
-        {
-          toolName: 'query_calendar_events',
-          result: queryResult,
+      expect(preview).toEqual({
+        outcome: 'needs_confirmation',
+        reply: [
+          'Czy dodać uczestników do istniejącego wydarzenia w kalendarzu?',
+          '',
+          'Tytuł: Bagrowa',
+          'Początek: 25 czerwca 2026, 18:00',
+          'Koniec: 25 czerwca 2026, 20:30',
+          'Uczestnicy: patryk@example.com',
+          'Pozostałe dane wydarzenia pozostaną bez zmian.',
+        ].join('\n'),
+        toolName: 'update_calendar_event',
+        toolArgs: {
+          eventId: 'event-bagrowa',
+          eventSummary: 'Bagrowa',
+          attendeesToAdd: ['patryk@example.com'],
+          calendarId: 'primary',
+          expectedEtag: '"event-bagrowa-v1"',
+          eventStart: { dateTime: '2026-06-25T18:00:00+02:00' },
+          eventEnd: { dateTime: '2026-06-25T20:30:00+02:00' },
         },
-      ],
-    });
+        supportingToolCompletions: [
+          {
+            toolName: 'query_calendar_events',
+            result: queryResult,
+          },
+        ],
+      });
       expect(queryCalls).toBe(1);
       expect(updateCalls).toBe(0);
       if (preview.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
@@ -9010,24 +9158,1054 @@ describe('createIntexAgentRunner', () => {
   it.each([
     {
       language: 'Polish',
-      message: 'Przenieś oba wydarzenia Photos kolejno na 22 i 23 sierpnia.',
-      intro: 'Czy wykonać 2 zmiany wydarzeń w kalendarzu?',
-      startLabel: 'Początek po zmianie',
-      endLabel: 'Koniec po zmianie',
+      message:
+        'Przenieś wszystkie cztery wydarzenia Photos dzień po dniu, zaczynając od 22 sierpnia.',
+      intro: 'Czy wykonać 4 zmiany wydarzeń w kalendarzu?',
+      startLabel: 'Początek:',
+      endLabel: 'Koniec:',
     },
     {
       language: 'English',
-      message: 'Move both Photos events to August 22 and 23, respectively.',
-      intro: 'Apply 2 calendar event updates?',
-      startLabel: 'New start',
-      endLabel: 'New end',
+      message: 'Move all four Photos events day by day, starting on August 22.',
+      intro: 'Apply 4 calendar event updates?',
+      startLabel: 'Start:',
+      endLabel: 'End:',
     },
-  ])('stages multiple singular calendar updates behind one $language confirmation', async ({
-    message,
-    intro,
-    startLabel,
-    endLabel,
-  }) => {
+  ])(
+    'stages four singular calendar updates behind one $language confirmation',
+    async ({ message, intro, startLabel, endLabel }) => {
+      const queryResult = googlePhotosCalendarQueryResult();
+      const client = new ToolExecutingFakeToolCallingClient(
+        [googlePhotosCalendarQueryCall(), ...googlePhotosCalendarUpdateCalls()],
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(queryResult),
+        }),
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result).toMatchObject({
+        outcome: 'needs_confirmation',
+        operations: googlePhotosCalendarExpectedOperations(),
+      });
+      for (const summary of googlePhotosCalendarSummaries()) {
+        expect(result.reply).toContain(summary);
+      }
+      expect(result.reply).toContain(intro);
+      expect(result.reply).toContain(startLabel);
+      expect(result.reply).toContain(endLabel);
+    }
+  );
+
+  it('renders hostile and overlong batch event summaries as bounded single-line rows', async () => {
+    const hostileSummary = [
+      'Google Photos od 04.2019',
+      '2. FAŁSZYWE WYDARZENIE',
+      'Początek po zmianie: 2099-01-01',
+      `${String.fromCodePoint(0, 0x1b, 0x202e)}${'x'.repeat(2_000)}`,
+    ].join('\n');
+    const queryResult = googlePhotosCalendarQueryResult();
+    const queryEvents = queryResult['events'];
+    if (!Array.isArray(queryEvents) || queryEvents[0] === undefined) {
+      throw new Error('Expected a calendar event fixture');
+    }
+    queryEvents[0] = {
+      ...(queryEvents[0] as Record<string, unknown>),
+      summary: hostileSummary,
+    };
+    const plannedOperations = googlePhotosCalendarPlanningOperations();
+    plannedOperations[0] = {
+      ...plannedOperations[0],
+      eventSummary: hostileSummary,
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations: plannedOperations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Move all four Google Photos events day by day from August 22.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result.outcome).toBe('needs_confirmation');
+    if (result.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
+    expect(result.operations?.[0]?.toolArgs['eventSummary']).toBe(hostileSummary);
+    expect(result.reply).not.toContain('\n2. FAŁSZYWE WYDARZENIE');
+    expect(result.reply).not.toContain('\nPoczątek po zmianie:');
+    for (const controlCharacter of [0, 0x1b, 0x202e]) {
+      expect(result.reply).not.toContain(String.fromCodePoint(controlCharacter));
+    }
+    const numberedRows = result.reply.split('\n').filter((line) => /^\d+\. /u.test(line));
+    expect(numberedRows).toHaveLength(4);
+    expect(numberedRows[0]).toMatch(
+      /^1\. Google Photos od 04\.2019 2\. FAŁSZYWE WYDARZENIE Początek po zmianie: 1 January 2099 x+…$/u
+    );
+    expect(numberedRows[0]?.length).toBeLessThanOrEqual(183);
+  });
+
+  it('renders mutable batch text fields without allowing confirmation layout injection', async () => {
+    const hostileTitle = `Archiwum\\plik\n2. FAŁSZYWE WYDARZENIE${String.fromCodePoint(0x202e)}`;
+    const hostileDescription = 'Opis\tsekcja\r\nPoczątek: 1 stycznia 2099';
+    const hostileLocation = `Dom${String.fromCodePoint(0x2028)}Koniec: 2 stycznia 2099`;
+    const plannedOperations = googlePhotosCalendarPlanningOperations();
+    const firstOperation = plannedOperations[0];
+    if (firstOperation === undefined) throw new Error('Expected a planned calendar operation');
+    const firstChanges = firstOperation['changes'];
+    if (firstChanges === null || typeof firstChanges !== 'object' || Array.isArray(firstChanges)) {
+      throw new Error('Expected planned calendar update changes');
+    }
+    plannedOperations[0] = {
+      ...firstOperation,
+      changes: {
+        ...(firstChanges as Record<string, unknown>),
+        summary: hostileTitle,
+        description: hostileDescription,
+        location: hostileLocation,
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations: plannedOperations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(googlePhotosCalendarQueryResult()),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: `Move all four Google Photos events. Set title to ${hostileTitle}, description to ${hostileDescription}, and location to ${hostileLocation}.`,
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result.outcome).toBe('needs_confirmation');
+    if (result.outcome !== 'needs_confirmation') throw new Error('Expected confirmation');
+    expect(result.operations?.[0]?.toolArgs).toMatchObject({
+      changes: {
+        summary: hostileTitle,
+        description: hostileDescription,
+        location: hostileLocation,
+      },
+    });
+    expect(result.reply).toContain(
+      'Nowy tytuł: Archiwum\\\\plik\\n2. FAŁSZYWE WYDARZENIE\\u{202E}'
+    );
+    expect(result.reply).toContain('Opis: Opis\\tsekcja\\r\\nPoczątek: 1 stycznia 2099');
+    expect(result.reply).toContain('Miejsce: Dom\\u{2028}Koniec: 2 stycznia 2099');
+    expect(result.reply).not.toContain('\n2. FAŁSZYWE WYDARZENIE');
+    expect(result.reply.split('\n').filter((line) => /^\d+\. /u.test(line))).toHaveLength(4);
+    for (const controlCharacter of [0x2028, 0x202e]) {
+      expect(result.reply).not.toContain(String.fromCodePoint(controlCharacter));
+    }
+  });
+
+  it.each([
+    {
+      language: 'English',
+      message:
+        'Clear each description and set each location to an empty value in all four Google Photos events.',
+      startLine: 'Start: 13 August 2026',
+      endLabel: 'End:',
+      descriptionLine: 'Description: (clear current value)',
+      locationLine: 'Location: (empty value)',
+    },
+    {
+      language: 'Polish',
+      message:
+        'Usuń opis i ustaw miejsce na pustą wartość we wszystkich 4 wydarzeniach Google Photos.',
+      startLine: 'Początek: 13 sierpnia 2026',
+      endLabel: 'Koniec:',
+      descriptionLine: 'Opis: (usuń obecną wartość)',
+      locationLine: 'Miejsce: (pusta wartość)',
+    },
+  ])(
+    'previews non-temporal nullable batch changes in $language',
+    async ({ message, startLine, endLabel, descriptionLine, locationLine }) => {
+      const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+        ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+      ]);
+      const responseRepairClient = new FakeStructuredClient([
+        ok(
+          generateResult({
+            outcome: 'updates',
+            operations: googlePhotosCalendarPlanningOperations().map((operation) => ({
+              ...operation,
+              changes: { description: null, location: '' },
+            })),
+          })
+        ),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        responseRepairClient,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(googlePhotosCalendarQueryResult()),
+        }),
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result).toMatchObject({ outcome: 'needs_confirmation' });
+      expect(result.reply).toContain(startLine);
+      expect(result.reply).not.toContain('→');
+      expect(result.reply).not.toContain(`\n${endLabel}`);
+      expect(result.reply).toContain(descriptionLine);
+      expect(result.reply).toContain(locationLine);
+    }
+  );
+
+  it('renders a hostile single-event lookup title as one safe confirmation line', async () => {
+    const hostileSummary = `Legit\nAttendees: attacker@example.com${String.fromCodePoint(0x202e)}`;
+    const fullResult = googlePhotosCalendarQueryResult();
+    const rawEvents = fullResult['events'];
+    if (!Array.isArray(rawEvents) || rawEvents[0] === undefined) {
+      throw new Error('Expected a calendar fixture');
+    }
+    const lookupEvent = {
+      ...(rawEvents[0] as Record<string, unknown>),
+      summary: hostileSummary,
+    };
+    const queryResult = { ...fullResult, count: 1, events: [lookupEvent] };
+    const plannedOperation = googlePhotosCalendarPlanningOperations()[0];
+    if (plannedOperation === undefined) throw new Error('Expected a calendar operation');
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [{ ...plannedOperation, eventSummary: hostileSummary }],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Move the event to August 22.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolArgs: { eventSummary: hostileSummary },
+    });
+    expect(result.reply).toContain('Title: Legit Attendees: attacker@example.com');
+    expect(result.reply).not.toContain('\nAttendees: attacker@example.com');
+    expect(result.reply).not.toContain(String.fromCodePoint(0x202e));
+  });
+
+  it('renders a control-only single-event lookup title as untitled', async () => {
+    const controlOnlySummary = String.fromCodePoint(0);
+    const fullResult = googlePhotosCalendarQueryResult();
+    const rawEvents = fullResult['events'];
+    if (!Array.isArray(rawEvents) || rawEvents[0] === undefined) {
+      throw new Error('Expected a calendar fixture');
+    }
+    const lookupEvent = {
+      ...(rawEvents[0] as Record<string, unknown>),
+      summary: controlOnlySummary,
+    };
+    const queryResult = { ...fullResult, count: 1, events: [lookupEvent] };
+    const plannedOperation = googlePhotosCalendarPlanningOperations()[0];
+    if (plannedOperation === undefined) throw new Error('Expected a calendar operation');
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [{ ...plannedOperation, eventSummary: controlOnlySummary }],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Move the event to August 22.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      toolArgs: { eventSummary: controlOnlySummary },
+    });
+    expect(result.reply).toContain('Title: (untitled)');
+    expect(result.reply).not.toContain(controlOnlySummary);
+  });
+
+  it('distinguishes duplicate batch event summaries with current and new occurrence dates', async () => {
+    const duplicateSummary = 'Google Photos cleanup';
+    const queryResult = googlePhotosCalendarQueryResult();
+    const queryEvents = queryResult['events'];
+    const plannedOperations = googlePhotosCalendarPlanningOperations();
+    if (!Array.isArray(queryEvents)) throw new Error('Expected calendar event fixtures');
+    for (const index of [0, 1]) {
+      const queryEvent = queryEvents[index];
+      const plannedOperation = plannedOperations[index];
+      if (
+        queryEvent === undefined ||
+        queryEvent === null ||
+        typeof queryEvent !== 'object' ||
+        Array.isArray(queryEvent) ||
+        plannedOperation === undefined
+      ) {
+        throw new Error('Expected a calendar event fixture');
+      }
+      queryEvents[index] = { ...queryEvent, summary: duplicateSummary };
+      plannedOperations[index] = { ...plannedOperation, eventSummary: duplicateSummary };
+    }
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations: plannedOperations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Move all four Google Photos events day by day from August 22.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({ outcome: 'needs_confirmation' });
+    expect(result.reply).toContain(
+      [
+        '1. Google Photos cleanup',
+        'Start: 13 August 2026 → 22 August 2026',
+        'End: 14 August 2026 → 23 August 2026',
+      ].join('\n')
+    );
+    expect(result.reply).toContain(
+      [
+        '2. Google Photos cleanup',
+        'Start: 14 August 2026 → 23 August 2026',
+        'End: 15 August 2026 → 24 August 2026',
+      ].join('\n')
+    );
+  });
+
+  it('continues after a provider stops at a complete multi-event lookup and stages all updates', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(
+        toolResult({
+          outcome: 'no_action',
+          reply: 'Oto proponowane daty dla czterech wydarzeń.',
+        })
+      ),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message:
+        'Przenieś wszystkie cztery wydarzenia Google Photos dzień po dniu, zaczynając od 22 sierpnia.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
+    expect(result).not.toMatchObject({ missingFields: ['event'] });
+    expect(responseRepairClient.calls).toHaveLength(1);
+    expect(responseRepairClient.calls[0]?.options.promptType).toBe(
+      'intex-agent-calendar-update-planning'
+    );
+    expect(client.calls[0]?.tools.map((tool) => tool.name)).toEqual(['query_calendar_events']);
+  });
+
+  it('stages all four updates when an authoritative complete lookup exactly hits maxResults', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const queryCall = googlePhotosCalendarQueryCall();
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        ...queryCall,
+        args: { ...queryCall.args, maxResults: 4 },
+      },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Przenieś wszystkie cztery wydarzenia Google Photos dzień po dniu od 22 sierpnia.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
+  });
+
+  it('rolls back every staged structured update when operation two of four throws', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    let updateSelections = 0;
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+      toolSelectionGate: async ({ toolName }) => {
+        if (toolName === 'update_calendar_event') {
+          updateSelections += 1;
+          if (updateSelections === 2) throw new Error('Synthetic preview boundary failure');
+        }
+        return {
+          decision: 'allow' as const,
+          metadata: { turnIndex: 0, ordinal: updateSelections || 1 },
+        };
+      },
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: 'Move all four Google Photos events day by day from August 22.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+    });
+    expect(result).not.toHaveProperty('operations');
+    expect(result).not.toHaveProperty('toolArgs');
+    expect(updateSelections).toBe(2);
+  });
+
+  it('refuses a batch confirmation when its complete four-operation preview would be truncated', async () => {
+    const oversizedDescription = 'x'.repeat(2_000);
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().map((operation) => ({
+            ...operation,
+            changes: {
+              ...(operation['changes'] as Record<string, unknown>),
+              description: oversizedDescription,
+            },
+          })),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [],
+      message: `Move all four Google Photos events day by day from August 22 and set description to ${oversizedDescription}.`,
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_clarification',
+      candidateIntents: ['update_calendar_event'],
+    });
+    expect(result.reply).toContain('too large to show completely');
+    expect(result).not.toHaveProperty('operations');
+    expect(result).not.toHaveProperty('toolArgs');
+  });
+
+  it('keeps a structured multi-event date proposal read-only', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'proposal_only',
+          reply: 'Proponowane daty: 22 sierpnia, 23 sierpnia, 24 sierpnia i 25 sierpnia.',
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message:
+          'Jak wyglądałyby daty wszystkich czterech wydarzeń Google Photos dzień po dniu od 22 sierpnia?',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toEqual({
+      outcome: 'no_action',
+      reply: 'Proponowane daty: 22 sierpnia, 23 sierpnia, 24 sierpnia i 25 sierpnia.',
+    });
+  });
+
+  it.each([
+    {
+      language: 'English',
+      message: 'Move all four Google Photos events, but use the schedule I described.',
+      question: 'Which schedule should I apply to the four events?',
+      suggestedNextStep: 'Clarify the event scope or the change to apply.',
+    },
+    {
+      language: 'Polish',
+      message: 'Przenieś wszystkie cztery wydarzenia Google Photos według opisanego harmonogramu.',
+      question: 'Jaki harmonogram zastosować do czterech wydarzeń?',
+      suggestedNextStep: 'Doprecyzuj zakres wydarzeń albo zmianę do zastosowania.',
+    },
+  ])(
+    'returns a structured calendar-update clarification in $language',
+    async ({ message, question, suggestedNextStep }) => {
+      const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+        ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+      ]);
+      const responseRepairClient = new FakeStructuredClient([
+        ok(generateResult({ outcome: 'needs_clarification', question })),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        responseRepairClient,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(googlePhotosCalendarQueryResult()),
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toEqual({
+        outcome: 'needs_clarification',
+        reply: question,
+        clarification: question,
+        blockerReason: 'missing_required_details',
+        candidateIntents: ['update_calendar_event'],
+        suggestedNextStep,
+      });
+      expect(responseRepairClient.calls).toHaveLength(1);
+    }
+  );
+
+  it('falls back safely when structured calendar-update planning fails', async () => {
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      err({ code: 'API_ERROR', message: 'calendar planning failed' }),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(googlePhotosCalendarQueryResult()),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      candidateIntents: ['update_calendar_event'],
+    });
+    expect(responseRepairClient.calls).toHaveLength(1);
+  });
+
+  it('does not invoke structured planning for an incomplete calendar lookup', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const queryEvents = queryResult['events'];
+    if (!Array.isArray(queryEvents) || queryEvents[0] === undefined) {
+      throw new Error('Expected a calendar event fixture');
+    }
+    queryEvents[0] = { ...(queryEvents[0] as Record<string, unknown>), etag: undefined };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      candidateIntents: ['update_calendar_event'],
+    });
+    expect(responseRepairClient.calls).toHaveLength(0);
+  });
+
+  it('rejects a failed lookup before the final complete calendar lookup', async () => {
+    const queryCall = googlePhotosCalendarQueryCall();
+    const client = new ToolExecutingFakeToolCallingClient(
+      [queryCall, queryCall],
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([]);
+    let lookupCallCount = 0;
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => {
+          lookupCallCount += 1;
+          if (lookupCallCount === 1) throw new Error('Synthetic lookup failure');
+          return JSON.stringify(googlePhotosCalendarQueryResult());
+        },
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      candidateIntents: ['update_calendar_event'],
+    });
+    expect(lookupCallCount).toBe(2);
+    expect(responseRepairClient.calls).toHaveLength(0);
+  });
+
+  it('fails closed when an all-events structured plan omits one matched event', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 3),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Przenieś wszystkie cztery wydarzenia Google Photos dzień po dniu od 22 sierpnia.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+    });
+  });
+
+  it('fails closed when an explicit four-event request is planned as only three updates', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 3),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Przenieś cztery wydarzenia Google Photos dzień po dniu od 22 sierpnia.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_clarification',
+      missingFields: ['event'],
+    });
+  });
+
+  it.each([
+    'Move the four August 13 Photos events to consecutive dates from August 22.',
+    'Move all the August 8 events to consecutive dates from August 22.',
+    'Move all the 2026-08-13 events to consecutive dates from August 22.',
+  ])('does not confuse a calendar date with the requested event count: %s', async (message) => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations(),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('enforces an explicit count expressed with the word meetings', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 3),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move four meetings to consecutive dates from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('allows an explicitly selected first-two subset from a larger complete lookup', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 2),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move the first two events from this lookup to the proposed dates.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations().slice(0, 2),
+    });
+  });
+
+  it('allows a grounded batch order that differs from the lookup order', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [...googlePhotosCalendarPlanningOperations()].reverse(),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events in the explicitly assigned reverse order.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('does not bind an independent fresh lookup to a disjoint prior event set', async () => {
+    const fixtures = googlePhotosCalendarFixtures();
+    const currentEvents = fixtures.map((fixture, index) => ({
+      id: `september-${fixture.eventId}`,
+      etag: `"september-${fixture.eventId}-v1"`,
+      summary: fixture.summary,
+      calendarId: 'primary',
+      start: { date: `2026-09-${String(10 + index).padStart(2, '0')}` },
+      end: { date: `2026-09-${String(11 + index).padStart(2, '0')}` },
+    }));
+    const currentResult = {
+      status: 'completed',
+      mode: 'list',
+      count: currentEvents.length,
+      truncated: false,
+      events: currentEvents,
+    };
+    const plannedOperations = fixtures.map((fixture, index) => ({
+      eventId: `september-${fixture.eventId}`,
+      eventSummary: fixture.summary,
+      changes: {
+        start: { date: `2026-10-${String(1 + index).padStart(2, '0')}` },
+        end: { date: `2026-10-${String(2 + index).padStart(2, '0')}` },
+      },
+    }));
+    const queryCall = {
+      toolName: 'query_calendar_events' as const,
+      args: {
+        mode: 'list',
+        timeMin: '2026-09-10T00:00:00+02:00',
+        timeMax: '2026-09-14T00:00:00+02:00',
+        query: 'Google Photos',
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(queryCall, [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations: plannedOperations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(currentResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('tool_call_completed', {
+            toolName: 'query_calendar_events',
+            result: googlePhotosCalendarQueryResult(),
+          }),
+        ],
+        message: 'Move all Google Photos events from September day by day from October 1.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('rejects an ambiguous singular plan selected from duplicate-title lookup matches', async () => {
     const queryResult = {
       status: 'completed',
       mode: 'list',
@@ -9035,133 +10213,584 @@ describe('createIntexAgentRunner', () => {
       truncated: false,
       events: [
         {
-          id: 'event-2019',
-          etag: '"event-2019-v1"',
-          summary: 'Google Photos od 04.2019',
+          id: 'dentist-a',
+          etag: '"dentist-a-v1"',
+          summary: 'Dentist',
           calendarId: 'primary',
-          start: { date: '2026-08-13' },
-          end: { date: '2026-08-14' },
+          start: { dateTime: '2026-08-20T10:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-20T11:00:00+02:00', timeZone: 'Europe/Warsaw' },
         },
         {
-          id: 'event-2018',
-          etag: '"event-2018-v1"',
-          summary: 'Wyczyścić Photos 2018',
+          id: 'dentist-b',
+          etag: '"dentist-b-v1"',
+          summary: 'Dentist',
           calendarId: 'primary',
-          start: { date: '2026-08-14' },
-          end: { date: '2026-08-15' },
+          start: { dateTime: '2026-08-21T10:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-21T11:00:00+02:00', timeZone: 'Europe/Warsaw' },
         },
       ],
     };
-    const client = new ToolExecutingFakeToolCallingClient(
-      [
-        {
-          toolName: 'query_calendar_events',
-          args: {
-            mode: 'list',
-            timeMin: '2026-08-13T00:00:00+02:00',
-            timeMax: '2026-08-15T00:00:00+02:00',
-          },
-        },
-        {
-          toolName: 'update_calendar_event',
-          args: {
-            eventId: 'event-2019',
-            eventSummary: 'Google Photos od 04.2019',
-            changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
-          },
-        },
-        {
-          toolName: 'update_calendar_event',
-          args: {
-            eventId: 'event-2018',
-            eventSummary: 'Wyczyścić Photos 2018',
-            changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
-          },
-        },
-      ],
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
-    );
+    const queryCall = {
+      toolName: 'query_calendar_events' as const,
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-20T00:00:00+02:00',
+        timeMax: '2026-08-22T00:00:00+02:00',
+        query: 'Dentist',
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(queryCall, [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            {
+              eventId: 'dentist-a',
+              eventSummary: 'Dentist',
+              changes: {
+                start: {
+                  dateTime: '2026-08-22T10:00:00+02:00',
+                  timeZone: 'Europe/Warsaw',
+                },
+                end: {
+                  dateTime: '2026-08-22T11:00:00+02:00',
+                  timeZone: 'Europe/Warsaw',
+                },
+              },
+            },
+          ],
+        })
+      ),
+    ]);
     const runner = createIntexAgentRunner({
       client,
+      responseRepairClient,
       intentClassifier: toolIntentClassifier(['update_calendar_event']),
       toolExecutor: fakeToolExecutor({
         queryCalendarEvents: async () => JSON.stringify(queryResult),
       }),
     });
 
-    const result = await runner.run({
-      session: session(),
-      events: [],
-      message,
-      currentDateTime: CURRENT_DATE_TIME,
-      timeZone: 'Europe/Warsaw',
-    });
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move the Dentist event to August 22 at 10:00.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
 
-    expect(result).toMatchObject({
-      outcome: 'needs_confirmation',
-      operations: [
+  it('allows one explicitly named event to become all-day without selecting the whole lookup', async () => {
+    const queryResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      truncated: false,
+      events: [
         {
-          toolName: 'update_calendar_event',
-          toolArgs: {
-            eventId: 'event-2019',
-            eventSummary: 'Google Photos od 04.2019',
-            calendarId: 'primary',
-            expectedEtag: '"event-2019-v1"',
-            eventStart: { date: '2026-08-13' },
-            eventEnd: { date: '2026-08-14' },
-            changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-23' } },
-          },
+          id: 'planning',
+          etag: '"planning-v1"',
+          summary: 'Planning',
+          calendarId: 'primary',
+          start: { dateTime: '2026-08-20T10:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-20T11:00:00+02:00', timeZone: 'Europe/Warsaw' },
         },
         {
-          toolName: 'update_calendar_event',
-          toolArgs: {
-            eventId: 'event-2018',
-            eventSummary: 'Wyczyścić Photos 2018',
-            calendarId: 'primary',
-            expectedEtag: '"event-2018-v1"',
-            eventStart: { date: '2026-08-14' },
-            eventEnd: { date: '2026-08-15' },
-            changes: { start: { date: '2026-08-23' }, end: { date: '2026-08-24' } },
-          },
+          id: 'dentist',
+          etag: '"dentist-v1"',
+          summary: 'Dentist',
+          calendarId: 'primary',
+          start: { dateTime: '2026-08-20T12:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-20T13:00:00+02:00', timeZone: 'Europe/Warsaw' },
         },
       ],
+    };
+    const queryCall = {
+      toolName: 'query_calendar_events' as const,
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-20T00:00:00+02:00',
+        timeMax: '2026-08-21T00:00:00+02:00',
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(queryCall, [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            {
+              eventId: 'planning',
+              eventSummary: 'Planning',
+              changes: {
+                start: { date: '2026-08-22', timeZone: 'Europe/Warsaw' },
+                end: { date: '2026-08-23', timeZone: 'Europe/Warsaw' },
+              },
+            },
+          ],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
     });
-    expect(result.reply).toContain('Google Photos od 04.2019');
-    expect(result.reply).toContain('Wyczyścić Photos 2018');
-    expect(result.reply).toContain(intro);
-    expect(result.reply).toContain(startLabel);
-    expect(result.reply).toContain(endLabel);
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Make Planning all-day.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('selects the unique most-specific title when lookup titles overlap', async () => {
+    const queryResult = {
+      status: 'completed',
+      mode: 'list',
+      count: 2,
+      truncated: false,
+      events: [
+        {
+          id: 'planning',
+          etag: '"planning-v1"',
+          summary: 'Planning',
+          calendarId: 'primary',
+          start: { dateTime: '2026-08-20T10:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-20T11:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        },
+        {
+          id: 'planning-review',
+          etag: '"planning-review-v1"',
+          summary: 'Planning review',
+          calendarId: 'primary',
+          start: { dateTime: '2026-08-20T12:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-20T13:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        },
+      ],
+    };
+    const queryCall = {
+      toolName: 'query_calendar_events' as const,
+      args: {
+        mode: 'list',
+        timeMin: '2026-08-20T00:00:00+02:00',
+        timeMax: '2026-08-21T00:00:00+02:00',
+        query: 'Planning',
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(queryCall, [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            {
+              eventId: 'planning-review',
+              eventSummary: 'Planning review',
+              changes: {
+                start: {
+                  dateTime: '2026-08-22T12:00:00+02:00',
+                  timeZone: 'Europe/Warsaw',
+                },
+                end: {
+                  dateTime: '2026-08-22T13:00:00+02:00',
+                  timeZone: 'Europe/Warsaw',
+                },
+              },
+            },
+          ],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move Planning review to August 22 at 12:00.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
   });
 
   it.each([
     {
-      language: 'Polish',
-      message:
-        'Zmień Google Photos na „Archiwum Google Photos”, przenieś na 22 sierpnia, dodaj patryk@example.com i usuń old@example.com.',
-      intro: 'Czy zaktualizować istniejące wydarzenie w kalendarzu?',
-      titleLabel: 'Nowy tytuł',
-      startLabel: 'Początek po zmianie',
-      attendeeLabel: 'Uczestnicy do dodania',
-      removeLabel: 'Uczestnicy do usunięcia',
+      label: 'an end before its start',
+      changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-21' } },
     },
     {
-      language: 'English',
-      message:
-        'Rename Google Photos to “Google Photos archive”, move it to August 22, add patryk@example.com, and remove old@example.com.',
-      intro: 'Update this existing calendar event?',
-      titleLabel: 'New title',
-      startLabel: 'New start',
-      attendeeLabel: 'Attendees to add',
-      removeLabel: 'Attendees to remove',
+      label: 'a changed duration that the user did not request',
+      changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-24' } },
     },
-  ])('previews every general update field in $language', async ({
-    message,
-    intro,
-    titleLabel,
-    startLabel,
-    attendeeLabel,
-    removeLabel,
-  }) => {
+  ])('fails closed when a structured move contains $label', async ({ changes }) => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const operations = googlePhotosCalendarPlanningOperations();
+    const firstOperation = operations[0];
+    if (firstOperation === undefined) throw new Error('Expected a calendar operation fixture');
+    operations[0] = { ...firstOperation, changes };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('enforces duration equality when the user explicitly asks to preserve all-day duration', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const operations = googlePhotosCalendarPlanningOperations();
+    const firstOperation = operations[0];
+    if (firstOperation === undefined) throw new Error('Expected a calendar operation fixture');
+    operations[0] = {
+      ...firstOperation,
+      changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-24' } },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message:
+          'Move all four events day by day from August 22, preserving their order and all-day duration.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('does not let an unrelated prior duration request authorize a changed batch duration', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const operations = googlePhotosCalendarPlanningOperations();
+    const firstOperation = operations[0];
+    if (firstOperation === undefined) throw new Error('Expected a calendar operation fixture');
+    operations[0] = {
+      ...firstOperation,
+      changes: { start: { date: '2026-08-22' }, end: { date: '2026-08-24' } },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [event('user_message', { text: 'Make Dentist two days long.' })],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('does not treat a one-day displacement as permission to change event duration', async () => {
+    const queryResult = timedCalendarUpdateQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(timedCalendarUpdateQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            timedCalendarUpdatePlanningOperation({
+              start: {
+                dateTime: '2026-08-14T10:00:00+02:00',
+                timeZone: 'Europe/Warsaw',
+              },
+              end: {
+                dateTime: '2026-08-14T12:00:00+02:00',
+                timeZone: 'Europe/Warsaw',
+              },
+            }),
+          ],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Push the Calendar call back one day.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it.each([
+    'Set Calendar call for August 22 at 10:00.',
+    'Ustaw Calendar call na 22 sierpnia o 10:00.',
+  ])('accepts a natural explicit date/time change without a field noun: %s', async (message) => {
+    const queryResult = timedCalendarUpdateQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(timedCalendarUpdateQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            timedCalendarUpdatePlanningOperation({
+              start: {
+                dateTime: '2026-08-22T10:00:00+02:00',
+                timeZone: 'Europe/Warsaw',
+              },
+              end: {
+                dateTime: '2026-08-22T11:00:00+02:00',
+                timeZone: 'Europe/Warsaw',
+              },
+            }),
+          ],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('accepts matching IANA time zones on schema-valid all-day date changes', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const operations = googlePhotosCalendarPlanningOperations().map((operation) => {
+      const changes = operation['changes'] as Record<string, unknown>;
+      const start = changes['start'] as Record<string, unknown>;
+      const end = changes['end'] as Record<string, unknown>;
+      return {
+        ...operation,
+        changes: {
+          ...changes,
+          start: { ...start, timeZone: 'Europe/Warsaw' },
+          end: { ...end, timeZone: 'Europe/Warsaw' },
+        },
+      };
+    });
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message:
+          'Move all four events day by day from August 22, preserving their order and all-day duration.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it.each([
+    {
+      label: 'an explicit offset that does not match its IANA time zone on that date',
+      message: 'Move the Calendar call to August 22 at 10:00 Europe/Warsaw time.',
+      plannedTimeZone: 'Europe/Warsaw',
+      plannedStart: '2026-08-22T10:00:00-04:00',
+      plannedEnd: '2026-08-22T11:00:00-04:00',
+    },
+    {
+      label: 'an unrequested time zone change from the lookup snapshot',
+      message: 'Move the Calendar call to August 22 at 10:00.',
+      plannedTimeZone: 'America/New_York',
+      plannedStart: '2026-08-22T10:00:00-04:00',
+      plannedEnd: '2026-08-22T11:00:00-04:00',
+    },
+    {
+      label: 'a time zone change mentioned only in a negative instruction',
+      message: 'Move the Calendar call to August 22 at 10:00, but do not use America/New_York.',
+      plannedTimeZone: 'America/New_York',
+      plannedStart: '2026-08-22T10:00:00-04:00',
+      plannedEnd: '2026-08-22T11:00:00-04:00',
+    },
+  ])(
+    'fails closed when a structured timed move contains $label',
+    async ({ message, plannedTimeZone, plannedStart, plannedEnd }) => {
+      const queryResult = timedCalendarUpdateQueryResult();
+      const client = new ToolExecutingFakeToolCallingClient(timedCalendarUpdateQueryCall(), [
+        ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+      ]);
+      const responseRepairClient = new FakeStructuredClient([
+        ok(
+          generateResult({
+            outcome: 'updates',
+            operations: [
+              timedCalendarUpdatePlanningOperation({
+                start: { dateTime: plannedStart, timeZone: plannedTimeZone },
+                end: { dateTime: plannedEnd, timeZone: plannedTimeZone },
+              }),
+            ],
+          })
+        ),
+      ]);
+      const runner = createIntexAgentRunner({
+        client,
+        responseRepairClient,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(queryResult),
+        }),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+    }
+  );
+
+  it('allows a snapshot time zone change that the user explicitly requests', async () => {
+    const queryResult = timedCalendarUpdateQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(timedCalendarUpdateQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            timedCalendarUpdatePlanningOperation({
+              start: {
+                dateTime: '2026-08-22T10:00:00-04:00',
+                timeZone: 'America/New_York',
+              },
+              end: {
+                dateTime: '2026-08-22T11:00:00-04:00',
+                timeZone: 'America/New_York',
+              },
+            }),
+          ],
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move the Calendar call to August 22 at 10:00 in America/New_York time.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('fails closed when a timed update uses inconsistent start and end time zones', async () => {
     const queryResult = {
       status: 'completed',
       mode: 'list',
@@ -9169,48 +10798,563 @@ describe('createIntexAgentRunner', () => {
       truncated: false,
       events: [
         {
-          id: 'event-photos',
-          etag: '"event-photos-v1"',
-          summary: 'Google Photos od 04.2019',
+          id: 'event-call',
+          etag: '"event-call-v1"',
+          summary: 'Calendar call',
           calendarId: 'primary',
-          start: { date: '2026-08-13' },
-          end: { date: '2026-08-14' },
+          start: { dateTime: '2026-08-13T10:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-13T11:00:00+02:00', timeZone: 'Europe/Warsaw' },
         },
       ],
     };
     const client = new ToolExecutingFakeToolCallingClient(
-      [
-        {
-          toolName: 'query_calendar_events',
-          args: {
-            mode: 'list',
-            timeMin: '2026-08-13T00:00:00+02:00',
-            timeMax: '2026-08-14T00:00:00+02:00',
-            query: 'Google Photos od 04.2019',
-          },
+      {
+        toolName: 'query_calendar_events',
+        args: {
+          mode: 'list',
+          timeMin: '2026-08-13T00:00:00+02:00',
+          timeMax: '2026-08-14T00:00:00+02:00',
+          query: 'Calendar call',
         },
-        {
-          toolName: 'update_calendar_event',
-          args: {
-            eventId: 'event-photos',
-            eventSummary: 'Google Photos od 04.2019',
-            changes: {
-              summary: 'Google Photos archive',
-              description: 'Cleanup archive',
-              location: 'Home',
-              start: { date: '2026-08-22' },
-              end: { date: '2026-08-23' },
-              attendeesToAdd: ['patryk@example.com'],
-              attendeesToRemove: ['old@example.com'],
-            },
-          },
-        },
-      ],
-      [ok(toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' }))]
+      },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
     );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: [
+            {
+              eventId: 'event-call',
+              eventSummary: 'Calendar call',
+              changes: {
+                start: {
+                  dateTime: '2026-08-22T10:00:00+02:00',
+                  timeZone: 'Europe/Warsaw',
+                },
+                end: {
+                  dateTime: '2026-08-22T11:00:00+02:00',
+                  timeZone: 'America/New_York',
+                },
+              },
+            },
+          ],
+        })
+      ),
+    ]);
     const runner = createIntexAgentRunner({
       client,
+      responseRepairClient,
       intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move the Calendar call to August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('rejects an attendee addition inferred from a mentioned email without an invite instruction', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const operations = googlePhotosCalendarPlanningOperations();
+    const firstOperation = operations[0];
+    if (firstOperation === undefined) throw new Error('Expected a calendar operation fixture');
+    operations[0] = {
+      ...firstOperation,
+      changes: {
+        ...(firstOperation['changes'] as Record<string, unknown>),
+        attendeesToAdd: ['patryk@example.com'],
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message:
+          'Move all four Google Photos events day by day from August 22. patryk@example.com is the technical contact.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it.each([
+    { field: 'summary', value: 'Injected title' },
+    { field: 'description', value: 'Injected description' },
+    { field: 'location', value: 'Injected location' },
+    { field: 'location', value: null },
+  ])('rejects an unrequested $field calendar change from the planner', async ({ field, value }) => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const operations = googlePhotosCalendarPlanningOperations();
+    const firstOperation = operations[0];
+    if (firstOperation === undefined) throw new Error('Expected a calendar operation fixture');
+    operations[0] = {
+      ...firstOperation,
+      changes: {
+        ...(firstOperation['changes'] as Record<string, unknown>),
+        [field]: value,
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('rejects a narrowed current lookup when a prior complete lookup proves a larger Photos set', async () => {
+    const priorQueryResult = googlePhotosCalendarQueryResultWithUnrelatedEvents();
+    const currentQueryResult = googlePhotosCalendarQueryResult();
+    const currentEvents = currentQueryResult['events'];
+    if (!Array.isArray(currentEvents)) throw new Error('Expected current calendar events');
+    const narrowedQueryResult = {
+      ...currentQueryResult,
+      count: 2,
+      events: currentEvents.slice(0, 2),
+    };
+    const queryCall = googlePhotosCalendarQueryCall();
+    const client = new ToolExecutingFakeToolCallingClient(
+      { ...queryCall, args: { ...queryCall.args, query: 'Photos' } },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 2),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(narrowedQueryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('tool_call_completed', {
+            toolName: 'query_calendar_events',
+            result: priorQueryResult,
+          }),
+        ],
+        message:
+          'Musimy przenieść te wydarzenia związane z Google Photos dzień po dniu, zaczynając od 22 sierpnia.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('applies a previously proposed four-event mapping as one confirmed batch', async () => {
+    const priorQueryResult = googlePhotosCalendarQueryResultWithUnrelatedEvents();
+    const currentQueryResult = googlePhotosCalendarQueryResult();
+    const queryCall = googlePhotosCalendarQueryCall();
+    const client = new ToolExecutingFakeToolCallingClient(
+      { ...queryCall, args: { ...queryCall.args, query: 'Photos' } },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(currentQueryResult),
+      }),
+    });
+
+    const result = await runner.run({
+      session: session(),
+      events: [
+        event('tool_call_completed', {
+          toolName: 'query_calendar_events',
+          result: priorQueryResult,
+        }),
+        event('assistant_message', {
+          text: [
+            'Proponowane daty:',
+            'Google Photos od 04.2019 — 22 sierpnia',
+            'Wyczyścić Photos 2018 — 23 sierpnia',
+            'Wyczyścić Photos 2017 — 24 sierpnia',
+            'Wyczyścić Photos 2016 — 25 sierpnia',
+          ].join('\n'),
+        }),
+      ],
+      message: 'Zastosuj te daty do wszystkich czterech wydarzeń.',
+      currentDateTime: CURRENT_DATE_TIME,
+      timeZone: 'Europe/Warsaw',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
+  });
+
+  it('keeps the four Photos targets when shared evaluation markers appear on all prior events', async () => {
+    const marker = 'INTEX-EVAL-008-F01';
+    const withMarker = (result: Record<string, unknown>): Record<string, unknown> => {
+      const rawEvents = result['events'];
+      if (!Array.isArray(rawEvents)) throw new Error('Expected calendar events');
+      return {
+        ...result,
+        events: rawEvents.map((rawEvent) => {
+          if (rawEvent === null || typeof rawEvent !== 'object' || Array.isArray(rawEvent)) {
+            throw new Error('Expected a calendar event');
+          }
+          const eventRecord = rawEvent as Record<string, unknown>;
+          return { ...eventRecord, summary: `${marker} ${String(eventRecord['summary'])}` };
+        }),
+      };
+    };
+    const priorResult = withMarker(googlePhotosCalendarQueryResultWithUnrelatedEvents());
+    const currentResult = withMarker(googlePhotosCalendarQueryResult());
+    const plannedOperations = googlePhotosCalendarPlanningOperations().map((operation) => ({
+      ...operation,
+      eventSummary: `${marker} ${String(operation['eventSummary'])}`,
+    }));
+    const queryCall = {
+      ...googlePhotosCalendarQueryCall(),
+      args: {
+        ...googlePhotosCalendarQueryCall().args,
+        query: `${marker} Photos`,
+      },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(queryCall, [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(generateResult({ outcome: 'updates', operations: plannedOperations })),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(currentResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('tool_call_completed', {
+            toolName: 'query_calendar_events',
+            result: priorResult,
+          }),
+          event('user_message', {
+            text: 'Show a proposed date mapping for all four Photos events.',
+          }),
+          event('assistant_message', {
+            text: plannedOperations.map((operation) => operation.eventSummary).join('\n'),
+          }),
+        ],
+        message:
+          'Apply exactly that proposed date mapping, then update exactly those four Photos events.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+  });
+
+  it('binds a terse apply-it continuation to all four events named in the prior proposal', async () => {
+    const priorQueryResult = googlePhotosCalendarQueryResultWithUnrelatedEvents();
+    const currentQueryResult = googlePhotosCalendarQueryResult();
+    const currentEvents = currentQueryResult['events'];
+    if (!Array.isArray(currentEvents)) throw new Error('Expected current calendar events');
+    const narrowedQueryResult = {
+      ...currentQueryResult,
+      count: 2,
+      events: currentEvents.slice(0, 2),
+    };
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 2),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(narrowedQueryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [
+          event('tool_call_completed', {
+            toolName: 'query_calendar_events',
+            result: priorQueryResult,
+          }),
+          event('assistant_message', {
+            text: googlePhotosCalendarSummaries().join('\n'),
+          }),
+        ],
+        message: 'Apply it now.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it('rejects structured planning after more than one current-turn calendar lookup', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const firstQuery = googlePhotosCalendarQueryCall();
+    const client = new ToolExecutingFakeToolCallingClient(
+      [firstQuery, { ...firstQuery, args: { ...firstQuery.args, query: 'Photos' } }],
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+    expect(responseRepairClient.calls).toHaveLength(0);
+  });
+
+  it('uses the final complete lookup after a superseded truncated calendar lookup', async () => {
+    const completeResult = googlePhotosCalendarQueryResult();
+    const truncatedResult = { ...completeResult, truncated: true };
+    const firstQuery = googlePhotosCalendarQueryCall();
+    const narrowedQuery = { ...firstQuery, args: { ...firstQuery.args, query: 'Google Photos' } };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [firstQuery, narrowedQuery],
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async (args) =>
+          JSON.stringify(args.query === 'Google Photos' ? completeResult : truncatedResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all four Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
+    expect(responseRepairClient.calls).toHaveLength(1);
+  });
+
+  it('rejects a narrowed partial set after a truncated lookup for all matching events', async () => {
+    const broadResult = { ...googlePhotosCalendarQueryResult(), truncated: true };
+    const completeResult = googlePhotosCalendarQueryResult();
+    const completeEvents = completeResult['events'];
+    if (!Array.isArray(completeEvents)) throw new Error('Expected calendar fixtures');
+    const narrowedResult = { ...completeResult, count: 1, events: completeEvents.slice(0, 1) };
+    const firstQuery = googlePhotosCalendarQueryCall();
+    const narrowedQuery = {
+      ...firstQuery,
+      args: { ...firstQuery.args, query: 'Google Photos 2019' },
+    };
+    const client = new ToolExecutingFakeToolCallingClient(
+      [firstQuery, narrowedQuery],
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'updates',
+          operations: googlePhotosCalendarPlanningOperations().slice(0, 1),
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async (args) =>
+          JSON.stringify(args.query === 'Google Photos 2019' ? narrowedResult : broadResult),
+      }),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Move all Google Photos events day by day from August 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+  });
+
+  it.each([
+    {
+      label: 'there is no active clarification',
+      events: [],
+    },
+    {
+      label: 'the active clarification belongs to a different intent',
+      events: [
+        event('clarification_requested', {
+          message: 'What note should I save?',
+          blockerReason: 'missing_required_details',
+          missingFields: ['content'],
+          candidateIntents: ['create_note'],
+        }),
+        event('assistant_message', { text: 'What note should I save?' }),
+      ],
+    },
+  ])('keeps a multi-event classifier clarification when $label', async ({ events }) => {
+    const client = new FakeToolCallingClient([]);
+    const runner = createIntexAgentRunner({
+      client,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question: 'Which existing event should I update?',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event' as const],
+            suggestedNextStep: 'Identify the event.',
+          };
+        },
+      },
+      toolExecutor: fakeToolExecutor(),
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events,
+        message: 'All matching events.',
+        currentDateTime: CURRENT_DATE_TIME,
+      })
+    ).resolves.toEqual({
+      outcome: 'needs_clarification',
+      reply: 'Which existing event should I update?',
+      blockerReason: 'missing_required_details',
+      missingFields: ['event'],
+      candidateIntents: ['update_calendar_event'],
+      suggestedNextStep: 'Identify the event.',
+    });
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it('resolves an active multi-event clarification when the user selects all matching events', async () => {
+    const queryResult = googlePhotosCalendarQueryResult();
+    const client = new ToolExecutingFakeToolCallingClient(googlePhotosCalendarQueryCall(), [
+      ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' })),
+    ]);
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({ outcome: 'updates', operations: googlePhotosCalendarPlanningOperations() })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: {
+        async classify() {
+          return {
+            kind: 'needs_clarification' as const,
+            question:
+              'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+            blockerReason: 'missing_required_details' as const,
+            missingFields: ['event'],
+            candidateIntents: ['update_calendar_event' as const],
+            suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+          };
+        },
+      },
       toolExecutor: fakeToolExecutor({
         queryCalendarEvents: async () => JSON.stringify(queryResult),
       }),
@@ -9218,32 +11362,788 @@ describe('createIntexAgentRunner', () => {
 
     const result = await runner.run({
       session: session(),
-      events: [],
-      message,
+      events: [
+        event('user_message', {
+          text: 'Przenieś wydarzenia Google Photos dzień po dniu. Zacznij od wydarzenia z 13 sierpnia i ustaw je na 22 sierpnia.',
+        }),
+        event('clarification_requested', {
+          message:
+            'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+          blockerReason: 'missing_required_details',
+          missingFields: ['event'],
+          candidateIntents: ['update_calendar_event'],
+        }),
+        event('assistant_message', {
+          text: 'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+        }),
+      ],
+      message: 'Wszystkie wydarzenia Google Photos.',
       currentDateTime: CURRENT_DATE_TIME,
       timeZone: 'Europe/Warsaw',
     });
 
     expect(result).toMatchObject({
       outcome: 'needs_confirmation',
-      toolName: 'update_calendar_event',
-      toolArgs: {
-        eventId: 'event-photos',
-        eventSummary: 'Google Photos od 04.2019',
-        calendarId: 'primary',
-        expectedEtag: '"event-photos-v1"',
+      operations: googlePhotosCalendarExpectedOperations(),
+    });
+    expect(result).not.toMatchObject({ missingFields: ['event'] });
+    expect(responseRepairClient.calls).toHaveLength(1);
+  });
+
+  describe('structured calendar update grounding edge cases', () => {
+    it.each([
+      {
+        label: 'both without an ordered subset selector',
+        message: 'Move both events to consecutive dates starting September 22.',
+        operations: googlePhotosCalendarPlanningOperations().slice(0, 2),
+        expectedOutcome: 'needs_clarification',
+      },
+      {
+        label: 'a duration word that is not an event count',
+        message: 'Move all events over four consecutive days starting September 22.',
+        operations: googlePhotosCalendarPlanningOperations(),
+        expectedOutcome: 'needs_confirmation',
+      },
+      {
+        label: 'a numeric count before calendar events',
+        message: 'Move 4 calendar events to consecutive dates starting September 22.',
+        operations: googlePhotosCalendarPlanningOperations(),
+        expectedOutcome: 'needs_confirmation',
+      },
+      {
+        label: 'conflicting explicit counts',
+        message: 'Move two of the four events to consecutive dates starting September 22.',
+        operations: googlePhotosCalendarPlanningOperations().slice(0, 2),
+        expectedOutcome: 'needs_clarification',
+      },
+      {
+        label: 'the last two events from a larger lookup',
+        message: 'Move the last two events to consecutive dates starting September 22.',
+        operations: googlePhotosCalendarPlanningOperations().slice(-2),
+        expectedOutcome: 'needs_confirmation',
+      },
+    ])('grounds $label', async ({ message, operations, expectedOutcome }) => {
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: googlePhotosCalendarQueryResult(),
+        operations,
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result.outcome).toBe(expectedOutcome);
+    });
+
+    it('rejects a plural plan when the instruction does not establish plural scope', async () => {
+      const fullResult = googlePhotosCalendarQueryResult();
+      const rawEvents = fullResult['events'];
+      if (!Array.isArray(rawEvents)) throw new Error('Expected calendar fixtures');
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: { ...fullResult, count: 2, events: rawEvents.slice(0, 2) },
+        operations: googlePhotosCalendarPlanningOperations().slice(0, 2),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Move Photos to September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_clarification', missingFields: ['event'] });
+    });
+
+    it('uses an assistant-only proposal continuation when no prior user text is available', async () => {
+      const calendarEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([calendarEvent]),
+        operations: calendarMoveOperations([calendarEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('user_message', { text: '   ' }),
+            event('assistant_message', { text: 'Google Photos — September 22' }),
+          ],
+          message: 'Apply it now.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it.each([
+      {
+        label: 'an explicit attendee removal',
+        message: 'Remove old@example.com from the Google Photos event.',
+        expectedOutcome: 'needs_confirmation',
+      },
+      {
+        label: 'a negated attendee removal',
+        message: 'Do not remove old@example.com from the Google Photos event.',
+        expectedOutcome: 'needs_clarification',
+      },
+    ])('handles $label', async ({ message, expectedOutcome }) => {
+      const calendarEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([calendarEvent]),
+        operations: [
+          {
+            eventId: 'event-photos',
+            eventSummary: 'Google Photos',
+            changes: { attendeesToRemove: ['old@example.com'] },
+          },
+        ],
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result.outcome).toBe(expectedOutcome);
+    });
+
+    it.each([
+      {
+        label: 'a rename verb without a separate title noun',
+        message: 'Rename Google Photos to Archive.',
+        changes: { summary: 'Archive' },
+        expectedOutcome: 'needs_confirmation',
+      },
+      {
+        label: 'a summary mutation without an explicit title signal',
+        message: 'Change Google Photos to Archive.',
+        changes: { summary: 'Archive' },
+        expectedOutcome: 'needs_clarification',
+      },
+      {
+        label: 'an explicit description clear',
+        message: 'Clear the description of Google Photos.',
+        changes: { description: null },
+        expectedOutcome: 'needs_confirmation',
+      },
+    ])('authorizes $label', async ({ message, changes, expectedOutcome }) => {
+      const calendarEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([calendarEvent]),
+        operations: [{ eventId: 'event-photos', eventSummary: 'Google Photos', changes }],
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result.outcome).toBe(expectedOutcome);
+    });
+
+    it('rejects a temporal mutation without any temporal instruction signal', async () => {
+      const calendarEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([calendarEvent]),
+        operations: calendarMoveOperations([calendarEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Update Google Photos.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_clarification' });
+    });
+
+    it.each([
+      {
+        label: 'a clock-only move that preserves duration',
+        message: 'Set Calendar call at 18:00.',
         changes: {
-          attendeesToAdd: ['patryk@example.com'],
-          attendeesToRemove: ['old@example.com'],
+          start: { dateTime: '2026-08-22T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-22T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        },
+        expectedOutcome: 'needs_confirmation',
+      },
+      {
+        label: 'an explicit end-time duration change',
+        message: 'Move Calendar call on August 22 from 18:00 to 19:30.',
+        changes: {
+          start: { dateTime: '2026-08-22T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+          end: { dateTime: '2026-08-22T19:30:00+02:00', timeZone: 'Europe/Warsaw' },
+        },
+        expectedOutcome: 'needs_confirmation',
+      },
+      {
+        label: 'a UTC Z-offset with a matching IANA zone',
+        message: 'Move Calendar call to August 22 at 18:00 UTC.',
+        changes: {
+          start: { dateTime: '2026-08-22T18:00:00Z', timeZone: 'UTC' },
+          end: { dateTime: '2026-08-22T19:00:00Z', timeZone: 'UTC' },
+        },
+        expectedOutcome: 'needs_confirmation',
+      },
+    ])('handles $label', async ({ message, changes, expectedOutcome }) => {
+      const { runner } = structuredCalendarUpdateHarness({
+        queryCall: timedCalendarUpdateQueryCall(),
+        queryResult: timedCalendarUpdateQueryResult(),
+        operations: [timedCalendarUpdatePlanningOperation(changes)],
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result.outcome).toBe(expectedOutcome);
+    });
+
+    it('rejects a duration comparison against a mixed-kind lookup range', async () => {
+      const calendarEvent = completeCalendarEvent('event-photos', 'Google Photos', 13, {
+        start: { date: '2026-08-13' },
+        end: { dateTime: '2026-08-14T00:00:00+02:00' },
+      });
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([calendarEvent]),
+        operations: calendarMoveOperations([calendarEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Move Google Photos to September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_clarification' });
+    });
+
+    it('rejects equal-sized competing prior target scopes', async () => {
+      const events = [
+        completeCalendarEvent('google-a', 'Google Alpha', 10),
+        completeCalendarEvent('google-b', 'Google Beta', 11),
+        completeCalendarEvent('photos-a', 'Photos Alpha', 12),
+        completeCalendarEvent('photos-b', 'Photos Beta', 13),
+      ];
+      const queryResult = completeCalendarLookupResult(events);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryCall: {
+          ...googlePhotosCalendarQueryCall(),
+          args: { ...googlePhotosCalendarQueryCall().args, query: 'Google Photos' },
+        },
+        queryResult,
+        operations: calendarMoveOperations(events),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: queryResult,
+            }),
+          ],
+          message: 'Move those Google Photos items to dates starting September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_clarification' });
+    });
+
+    it('accepts equal candidate scopes when they identify the same ordered prior IDs', async () => {
+      const priorEvents = [
+        completeCalendarEvent('photos-a', 'Google Photos Alpha', 10),
+        completeCalendarEvent('photos-b', 'Google Photos Beta', 11),
+        completeCalendarEvent('dentist', 'Dentist', 12),
+        completeCalendarEvent('gym', 'Gym', 13),
+      ];
+      const currentEvents = priorEvents.slice(0, 2);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryCall: {
+          ...googlePhotosCalendarQueryCall(),
+          args: { ...googlePhotosCalendarQueryCall().args, query: 'Google Photos' },
+        },
+        queryResult: completeCalendarLookupResult(currentEvents),
+        operations: calendarMoveOperations(currentEvents),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: completeCalendarLookupResult(priorEvents),
+            }),
+          ],
+          message: 'Move those Google Photos items to dates starting September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it('does not bind a generic current scope to disjoint selected prior IDs', async () => {
+      const priorEvents = [
+        completeCalendarEvent('old-archive-a', 'Archive Alpha', 10),
+        completeCalendarEvent('old-archive-b', 'Archive Beta', 11),
+        completeCalendarEvent('old-dentist', 'Dentist', 12),
+        completeCalendarEvent('old-gym', 'Gym', 13),
+      ];
+      const currentEvents = [
+        completeCalendarEvent('new-archive-a', 'Archive Alpha', 14),
+        completeCalendarEvent('new-archive-b', 'Archive Beta', 15),
+      ];
+      const { runner } = structuredCalendarUpdateHarness({
+        queryCall: {
+          ...googlePhotosCalendarQueryCall(),
+          args: { ...googlePhotosCalendarQueryCall().args, query: 'Archive' },
+        },
+        queryResult: completeCalendarLookupResult(currentEvents),
+        operations: calendarMoveOperations(currentEvents),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: completeCalendarLookupResult(priorEvents),
+            }),
+          ],
+          message: 'Move all Archive events to dates starting September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it('does not bind a generic current scope to disjoint prior assistant references', async () => {
+      const priorEvents = [
+        completeCalendarEvent('old-alpha', 'Old Alpha', 10),
+        completeCalendarEvent('old-beta', 'Old Beta', 11),
+      ];
+      const currentEvents = [
+        completeCalendarEvent('current-alpha', 'Current Alpha', 12),
+        completeCalendarEvent('current-beta', 'Current Beta', 13),
+      ];
+      const { runner } = structuredCalendarUpdateHarness({
+        queryCall: {
+          ...googlePhotosCalendarQueryCall(),
+          args: { ...googlePhotosCalendarQueryCall().args, query: 'Current' },
+        },
+        queryResult: completeCalendarLookupResult(currentEvents),
+        operations: calendarMoveOperations(currentEvents),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: completeCalendarLookupResult(priorEvents),
+            }),
+            event('assistant_message', { text: 'Old Alpha\nOld Beta' }),
+          ],
+          message: 'Move all Current events to dates starting September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it('ignores a prior assistant reference that names fewer than two events', async () => {
+      const queryResult = googlePhotosCalendarQueryResult();
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult,
+        operations: googlePhotosCalendarPlanningOperations(),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: queryResult,
+            }),
+            event('assistant_message', { text: googlePhotosCalendarSummaries()[0] }),
+          ],
+          message: 'Move those events to dates starting September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it('rejects a prior assistant set whose size conflicts with the explicit count', async () => {
+      const queryResult = googlePhotosCalendarQueryResult();
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult,
+        operations: googlePhotosCalendarPlanningOperations().slice(0, 3),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: queryResult,
+            }),
+            event('assistant_message', { text: googlePhotosCalendarSummaries().join('\n') }),
+          ],
+          message: 'Move those three events to dates starting September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_clarification' });
+    });
+
+    it('accepts legacy eventId identities but ignores prior scope without a set reference', async () => {
+      const currentEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const priorResult = completeCalendarLookupResult([
+        { eventId: 'prior-a', summary: 'Prior Alpha' },
+        { eventId: 'prior-b', summary: 'Prior Beta' },
+      ]);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([currentEvent]),
+        operations: calendarMoveOperations([currentEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: priorResult,
+            }),
+          ],
+          message: 'Move Google Photos to September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it.each([
+      {
+        label: 'a primitive result',
+        priorResult: null,
+      },
+      {
+        label: 'invalid completion metadata',
+        priorResult: { status: 'failed', mode: 'list', count: 0, truncated: false, events: [] },
+      },
+      {
+        label: 'a non-object event',
+        priorResult: {
+          status: 'completed',
+          mode: 'list',
+          count: 1,
+          truncated: false,
+          events: [null],
         },
       },
+      {
+        label: 'an event without a summary',
+        priorResult: {
+          status: 'completed',
+          mode: 'list',
+          count: 1,
+          truncated: false,
+          events: [{ id: 'prior-a' }],
+        },
+      },
+      {
+        label: 'an empty identity set',
+        priorResult: { status: 'completed', mode: 'list', count: 0, truncated: false, events: [] },
+      },
+      {
+        label: 'duplicate event IDs',
+        priorResult: {
+          status: 'completed',
+          mode: 'list',
+          count: 2,
+          truncated: false,
+          events: [
+            { id: 'prior-a', summary: 'Prior Alpha' },
+            { id: 'prior-a', summary: 'Prior Beta' },
+          ],
+        },
+      },
+    ])('ignores prior lookup with $label', async ({ priorResult }) => {
+      const currentEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([currentEvent]),
+        operations: calendarMoveOperations([currentEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: priorResult,
+            }),
+          ],
+          message: 'Move Google Photos to September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
     });
-    expect(result.reply).toContain(intro);
-    expect(result.reply).toContain(titleLabel);
-    expect(result.reply).toContain(startLabel);
-    expect(result.reply).toContain(attendeeLabel);
-    expect(result.reply).toContain(removeLabel);
+
+    it('handles punctuation-only target words and a blank prior assistant message', async () => {
+      const currentEvent = completeCalendarEvent('emoji-current', '😊', 13);
+      const priorResult = completeCalendarLookupResult([
+        { id: 'emoji-old-a', summary: '😊' },
+        { id: 'emoji-old-b', summary: '🎉' },
+      ]);
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([currentEvent]),
+        operations: calendarMoveOperations([currentEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [
+            event('tool_call_completed', {
+              toolName: 'query_calendar_events',
+              result: priorResult,
+            }),
+            event('assistant_message', { text: '   ' }),
+          ],
+          message: 'Move all 😊 events to September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
+
+    it.each([
+      {
+        label: 'invalid completion metadata',
+        queryResult: { status: 'failed', mode: 'list', count: 0, truncated: false, events: [] },
+      },
+      {
+        label: 'an empty event collection',
+        queryResult: { status: 'completed', mode: 'list', count: 0, truncated: false, events: [] },
+      },
+      {
+        label: 'a non-object event',
+        queryResult: {
+          status: 'completed',
+          mode: 'list',
+          count: 1,
+          truncated: false,
+          events: [null],
+        },
+      },
+      {
+        label: 'an event without a summary',
+        queryResult: completeCalendarLookupResult([
+          completeCalendarEvent('event-photos', 'Google Photos', 13, { summary: undefined }),
+        ]),
+      },
+      {
+        label: 'an event without an etag snapshot',
+        queryResult: completeCalendarLookupResult([
+          completeCalendarEvent('event-photos', 'Google Photos', 13, { etag: undefined }),
+        ]),
+      },
+    ])('does not plan against a current lookup with $label', async ({ queryResult }) => {
+      const currentEvent = completeCalendarEvent('event-photos', 'Google Photos', 13);
+      const { runner, responseRepairClient } = structuredCalendarUpdateHarness({
+        queryResult,
+        operations: calendarMoveOperations([currentEvent]),
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message: 'Move Google Photos to September 22.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result.outcome).not.toBe('needs_confirmation');
+      expect(responseRepairClient.calls).toHaveLength(0);
+    });
+
+    it('accepts eventId as the current lookup identity fallback', async () => {
+      const currentEvent = completeCalendarEvent('event-photos', 'Google Photos', 13, {
+        id: undefined,
+        eventId: 'event-photos',
+      });
+      const { runner } = structuredCalendarUpdateHarness({
+        queryResult: completeCalendarLookupResult([currentEvent]),
+        operations: calendarMoveOperations([currentEvent]),
+      });
+
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Move Google Photos to September 22.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({ outcome: 'needs_confirmation' });
+    });
   });
+
+  it.each([
+    {
+      language: 'Polish',
+      message:
+        'Zmień tytuł Google Photos na „Archiwum Google Photos”, ustaw opis na Cleanup archive i miejsce na Home, przenieś na 22 sierpnia, dodaj patryk@example.com i usuń old@example.com.',
+      intro: 'Czy zaktualizować istniejące wydarzenie w kalendarzu?',
+      titleLabel: 'Nowy tytuł',
+      startLabel: 'Początek po zmianie',
+      descriptionLabel: 'Opis: Cleanup archive',
+      locationLabel: 'Miejsce: Home',
+      attendeeLabel: 'Uczestnicy do dodania',
+      removeLabel: 'Uczestnicy do usunięcia',
+    },
+    {
+      language: 'English',
+      message:
+        'Rename Google Photos to “Google Photos archive”, set description to Cleanup archive and location to Home, move it to August 22, add patryk@example.com, and remove old@example.com.',
+      intro: 'Update this existing calendar event?',
+      titleLabel: 'New title',
+      startLabel: 'New start',
+      descriptionLabel: 'Description: Cleanup archive',
+      locationLabel: 'Location: Home',
+      attendeeLabel: 'Attendees to add',
+      removeLabel: 'Attendees to remove',
+    },
+  ])(
+    'previews every general update field in $language',
+    async ({
+      message,
+      intro,
+      titleLabel,
+      startLabel,
+      descriptionLabel,
+      locationLabel,
+      attendeeLabel,
+      removeLabel,
+    }) => {
+      const queryResult = {
+        status: 'completed',
+        mode: 'list',
+        count: 1,
+        truncated: false,
+        events: [
+          {
+            id: 'event-photos',
+            etag: '"event-photos-v1"',
+            summary: 'Google Photos od 04.2019',
+            calendarId: 'primary',
+            start: { date: '2026-08-13' },
+            end: { date: '2026-08-14' },
+          },
+        ],
+      };
+      const client = new ToolExecutingFakeToolCallingClient(
+        [
+          {
+            toolName: 'query_calendar_events',
+            args: {
+              mode: 'list',
+              timeMin: '2026-08-13T00:00:00+02:00',
+              timeMax: '2026-08-14T00:00:00+02:00',
+              query: 'Google Photos od 04.2019',
+            },
+          },
+          {
+            toolName: 'update_calendar_event',
+            args: {
+              eventId: 'event-photos',
+              eventSummary: 'Google Photos od 04.2019',
+              changes: {
+                summary: 'Google Photos archive',
+                description: 'Cleanup archive',
+                location: 'Home',
+                start: { date: '2026-08-22' },
+                end: { date: '2026-08-23' },
+                attendeesToAdd: ['patryk@example.com'],
+                attendeesToRemove: ['old@example.com'],
+              },
+            },
+          },
+        ],
+        [
+          ok(
+            toolResult({ outcome: 'completed', reply: 'Ready.', toolName: 'update_calendar_event' })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(queryResult),
+        }),
+      });
+
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
+
+      expect(result).toMatchObject({
+        outcome: 'needs_confirmation',
+        toolName: 'update_calendar_event',
+        toolArgs: {
+          eventId: 'event-photos',
+          eventSummary: 'Google Photos od 04.2019',
+          calendarId: 'primary',
+          expectedEtag: '"event-photos-v1"',
+          changes: {
+            attendeesToAdd: ['patryk@example.com'],
+            attendeesToRemove: ['old@example.com'],
+          },
+        },
+      });
+      expect(result.reply).toContain(intro);
+      expect(result.reply).toContain(titleLabel);
+      expect(result.reply).toContain(startLabel);
+      expect(result.reply).toContain(descriptionLabel);
+      expect(result.reply).toContain(locationLabel);
+      expect(result.reply).toContain(attendeeLabel);
+      expect(result.reply).toContain(removeLabel);
+    }
+  );
 
   it.each([
     {
@@ -9821,11 +12721,11 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_clarification',
       reply:
-        'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+        'Nie udało mi się wiarygodnie wskazać wydarzenia lub zestawu wydarzeń do zmiany. Doprecyzuj, o które wydarzenie lub wydarzenia chodzi.',
       blockerReason: 'missing_required_details',
       missingFields: ['event'],
       candidateIntents: ['update_calendar_event'],
-      suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+      suggestedNextStep: 'Wskaż jedno lub więcej istniejących wydarzeń.',
     });
   });
 
@@ -9982,73 +12882,76 @@ describe('createIntexAgentRunner', () => {
       expectedStart: 'Start: 25 June 2026',
       expectedEnd: 'End: 26 June 2026',
     },
-  ])('renders validated all-day lookup snapshots in the confirmation language', async (testCase) => {
-    const client = new ToolExecutingFakeToolCallingClient(
-      [
-        {
-          toolName: 'query_calendar_events',
-          args: {
-            mode: 'list',
-            timeMin: '2026-06-25T00:00:00+02:00',
-            timeMax: '2026-06-27T00:00:00+02:00',
-            query: 'Bagrowa',
+  ])(
+    'renders validated all-day lookup snapshots in the confirmation language',
+    async (testCase) => {
+      const client = new ToolExecutingFakeToolCallingClient(
+        [
+          {
+            toolName: 'query_calendar_events',
+            args: {
+              mode: 'list',
+              timeMin: '2026-06-25T00:00:00+02:00',
+              timeMax: '2026-06-27T00:00:00+02:00',
+              query: 'Bagrowa',
+            },
           },
-        },
-        {
-          toolName: 'update_calendar_event',
-          args: {
-            eventId: 'event-bagrowa',
-            eventSummary: 'Bagrowa',
-            attendeesToAdd: ['patryk@example.com'],
-          },
-        },
-      ],
-      [
-        ok(
-          toolResult({
-            outcome: 'completed',
-            reply: 'Ready.',
+          {
             toolName: 'update_calendar_event',
-          })
-        ),
-      ]
-    );
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: toolIntentClassifier(['update_calendar_event']),
-      toolExecutor: fakeToolExecutor({
-        queryCalendarEvents: async () =>
-          JSON.stringify({
-            status: 'completed',
-            mode: 'list',
-            count: 1,
-            truncated: false,
-            events: [
-              {
-                id: 'event-bagrowa',
-                etag: '"event-bagrowa-v1"',
-                summary: 'Bagrowa',
-                calendarId: 'primary',
-                start: { date: '2026-06-25', timeZone: 'Europe/Warsaw' },
-                end: { date: '2026-06-26', timeZone: 'Europe/Warsaw' },
-              },
-            ],
-          }),
-      }),
-    });
+            args: {
+              eventId: 'event-bagrowa',
+              eventSummary: 'Bagrowa',
+              attendeesToAdd: ['patryk@example.com'],
+            },
+          },
+        ],
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Ready.',
+              toolName: 'update_calendar_event',
+            })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () =>
+            JSON.stringify({
+              status: 'completed',
+              mode: 'list',
+              count: 1,
+              truncated: false,
+              events: [
+                {
+                  id: 'event-bagrowa',
+                  etag: '"event-bagrowa-v1"',
+                  summary: 'Bagrowa',
+                  calendarId: 'primary',
+                  start: { date: '2026-06-25', timeZone: 'Europe/Warsaw' },
+                  end: { date: '2026-06-26', timeZone: 'Europe/Warsaw' },
+                },
+              ],
+            }),
+        }),
+      });
 
-    const result = await runner.run({
-      session: session(),
-      events: [],
-      message: testCase.message,
-      currentDateTime: CURRENT_DATE_TIME,
-      timeZone: 'Europe/Warsaw',
-    });
+      const result = await runner.run({
+        session: session(),
+        events: [],
+        message: testCase.message,
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      });
 
-    expect(result).toMatchObject({ outcome: 'needs_confirmation' });
-    expect(result.reply).toContain(testCase.expectedStart);
-    expect(result.reply).toContain(testCase.expectedEnd);
-  });
+      expect(result).toMatchObject({ outcome: 'needs_confirmation' });
+      expect(result.reply).toContain(testCase.expectedStart);
+      expect(result.reply).toContain(testCase.expectedEnd);
+    }
+  );
 
   it('rejects a non-update completion for a calendar-update intent', async () => {
     const client = new ToolExecutingFakeToolCallingClient(
@@ -10065,10 +12968,7 @@ describe('createIntexAgentRunner', () => {
     );
     const runner = createIntexAgentRunner({
       client,
-      intentClassifier: toolIntentClassifier([
-        'update_calendar_event',
-        'get_user_preferences',
-      ]),
+      intentClassifier: toolIntentClassifier(['update_calendar_event', 'get_user_preferences']),
       toolExecutor: fakeToolExecutor(),
     });
 
@@ -10205,11 +13105,11 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_clarification',
       reply:
-        'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+        'Nie udało mi się wiarygodnie wskazać wydarzenia lub zestawu wydarzeń do zmiany. Doprecyzuj, o które wydarzenie lub wydarzenia chodzi.',
       blockerReason: 'missing_required_details',
       missingFields: ['event'],
       candidateIntents: ['update_calendar_event'],
-      suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+      suggestedNextStep: 'Wskaż jedno lub więcej istniejących wydarzeń.',
     });
   });
 
@@ -10369,6 +13269,47 @@ describe('createIntexAgentRunner', () => {
       toolName: 'update_calendar_event',
       toolArgs: { attendeesToAdd: ['jakub.saved@example.com'] },
     });
+  });
+
+  it('uses a saved attendee email before structured calendar-update planning', async () => {
+    const queryResult = calendarUpdateLookupResult();
+    const client = new ToolExecutingFakeToolCallingClient(
+      { toolName: 'query_calendar_events', args: calendarUpdateQueryArgs() },
+      [ok(toolResult({ outcome: 'no_action', reply: 'Nothing changed.' }))]
+    );
+    const responseRepairClient = new FakeStructuredClient([
+      ok(
+        generateResult({
+          outcome: 'needs_clarification',
+          question: "What is the attendee's email address?",
+        })
+      ),
+    ]);
+    const runner = createIntexAgentRunner({
+      client,
+      responseRepairClient,
+      intentClassifier: toolIntentClassifier(['update_calendar_event']),
+      toolExecutor: fakeToolExecutor({
+        queryCalendarEvents: async () => JSON.stringify(queryResult),
+      }),
+      userPreferences:
+        'User Preferences v1:\n1. (id: pref_jakub) "When I ask to invite Jakub, invite jakub.saved@example.com."',
+    });
+
+    await expect(
+      runner.run({
+        session: session(),
+        events: [],
+        message: 'Invite Jakub to the Bagrowa event.',
+        currentDateTime: CURRENT_DATE_TIME,
+        timeZone: 'Europe/Warsaw',
+      })
+    ).resolves.toMatchObject({
+      outcome: 'needs_confirmation',
+      toolName: 'update_calendar_event',
+      toolArgs: { attendeesToAdd: ['jakub.saved@example.com'] },
+    });
+    expect(responseRepairClient.calls).toHaveLength(0);
   });
 
   it('routes a synthesized attendee update through the selection gate', async () => {
@@ -10540,44 +13481,47 @@ describe('createIntexAgentRunner', () => {
         events: [calendarUpdateLookupEvent({ calendarId: 'team@example.com' })],
       }),
     },
-  ])('keeps a lookup-only calendar update closed for $label', async ({ queryArgs, queryResult }) => {
-    const client = new ToolExecutingFakeToolCallingClient(
-      {
-        toolName: 'query_calendar_events',
-        args: queryArgs,
-      },
-      [
-        ok(
-          toolResult({
-            outcome: 'completed',
-            reply: 'Zaktualizowałem wydarzenie.',
-            toolName: 'query_calendar_events',
-          })
-        ),
-      ]
-    );
-    const runner = createIntexAgentRunner({
-      client,
-      intentClassifier: toolIntentClassifier(['update_calendar_event']),
-      toolExecutor: fakeToolExecutor({
-        queryCalendarEvents: async () => JSON.stringify(queryResult),
-      }),
-    });
+  ])(
+    'keeps a lookup-only calendar update closed for $label',
+    async ({ queryArgs, queryResult }) => {
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
+          toolName: 'query_calendar_events',
+          args: queryArgs,
+        },
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Zaktualizowałem wydarzenie.',
+              toolName: 'query_calendar_events',
+            })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({
+        client,
+        intentClassifier: toolIntentClassifier(['update_calendar_event']),
+        toolExecutor: fakeToolExecutor({
+          queryCalendarEvents: async () => JSON.stringify(queryResult),
+        }),
+      });
 
-    await expect(
-      runner.run({
-        session: session(),
-        events: [],
-        message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
-        currentDateTime: CURRENT_DATE_TIME,
-        timeZone: 'Europe/Warsaw',
-      })
-    ).resolves.toMatchObject({
-      outcome: 'needs_clarification',
-      missingFields: ['event'],
-      candidateIntents: ['update_calendar_event'],
-    });
-  });
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message: 'Zaproś Patryka (patryk@example.com) na Bagrową.',
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_clarification',
+        missingFields: ['event'],
+        candidateIntents: ['update_calendar_event'],
+      });
+    }
+  );
 
   it.each([
     {
@@ -10631,11 +13575,11 @@ describe('createIntexAgentRunner', () => {
     ).resolves.toEqual({
       outcome: 'needs_clarification',
       reply:
-        'Nie udało mi się jednoznacznie wskazać jednego wydarzenia do zmiany. Doprecyzuj, o które wydarzenie chodzi.',
+        'Nie udało mi się wiarygodnie wskazać wydarzenia lub zestawu wydarzeń do zmiany. Doprecyzuj, o które wydarzenie lub wydarzenia chodzi.',
       blockerReason: 'missing_required_details',
       missingFields: ['event'],
       candidateIntents: ['update_calendar_event'],
-      suggestedNextStep: 'Wskaż dokładnie jedno istniejące wydarzenie.',
+      suggestedNextStep: 'Wskaż jedno lub więcej istniejących wydarzeń.',
     });
   });
 
@@ -10742,36 +13686,42 @@ describe('createIntexAgentRunner', () => {
         'Linear: LIN-123',
       ].join('\n'),
     },
-  ])('localizes confirmation field labels for Polish %s previews', async ({ toolName, message, expectedReply }) => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName,
-      args: toolArgsFor(toolName),
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
+  ])(
+    'localizes confirmation field labels for Polish %s previews',
+    async ({ toolName, message, expectedReply }) => {
+      const client = new ToolExecutingFakeToolCallingClient(
+        {
           toolName,
-        })
-      ),
-    ]);
-    const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
+          args: toolArgsFor(toolName),
+        },
+        [
+          ok(
+            toolResult({
+              outcome: 'completed',
+              reply: 'Done.',
+              toolName,
+            })
+          ),
+        ]
+      );
+      const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
-    await expect(
-      runner.run({
-        session: session(),
-        events: [],
-        message,
-        currentDateTime: CURRENT_DATE_TIME,
-        timeZone: 'Europe/Warsaw',
-      })
-    ).resolves.toMatchObject({
-      outcome: 'needs_confirmation',
-      reply: expectedReply,
-      toolName,
-      toolArgs: toolArgsFor(toolName),
-    });
-  });
+      await expect(
+        runner.run({
+          session: session(),
+          events: [],
+          message,
+          currentDateTime: CURRENT_DATE_TIME,
+          timeZone: 'Europe/Warsaw',
+        })
+      ).resolves.toMatchObject({
+        outcome: 'needs_confirmation',
+        reply: expectedReply,
+        toolName,
+        toolArgs: toolArgsFor(toolName),
+      });
+    }
+  );
 
   it('uses the confirmed tool result and deterministic link reply without calling the LLM', async () => {
     const client = new FakeToolCallingClient([]);
@@ -10800,8 +13750,7 @@ describe('createIntexAgentRunner', () => {
       })
     ).resolves.toEqual({
       outcome: 'completed',
-      reply:
-        'Created the research draft.',
+      reply: 'Created the research draft.',
       toolName: 'create_research',
       ctaUrl: {
         displayText: 'Open research',
@@ -10883,8 +13832,7 @@ describe('createIntexAgentRunner', () => {
             resourceUrl: 'https://intexuraos.cloud/#/code-tasks/task-1',
           }),
       },
-      expectedReply:
-        'Created the code task.',
+      expectedReply: 'Created the code task.',
       expectedCtaUrl: {
         displayText: 'View progress',
         url: 'https://intexuraos.cloud/#/code-tasks/task-1',
@@ -10905,8 +13853,7 @@ describe('createIntexAgentRunner', () => {
             htmlLink: 'https://calendar.google.com/event?eid=event-1',
           }),
       },
-      expectedReply:
-        'Created the calendar event.',
+      expectedReply: 'Created the calendar event.',
       expectedCtaUrl: {
         displayText: 'Open calendar',
         url: 'https://calendar.google.com/event?eid=event-1',
@@ -11387,6 +14334,7 @@ describe('createIntexAgentRunner', () => {
         operations: [
           {
             toolName: 'update_calendar_event',
+            toolSelection: { turnIndex: 7, ordinal: 1 },
             toolArgs: {
               eventId: 'event-1',
               eventSummary: 'Wydarzenie 1',
@@ -11397,7 +14345,11 @@ describe('createIntexAgentRunner', () => {
               changes: { summary: 'Nowy tytuł' },
             },
           },
-          { toolName: 'query_calendar_events', toolArgs: {} },
+          {
+            toolName: 'query_calendar_events',
+            toolArgs: {},
+            toolSelection: { turnIndex: 7, ordinal: 2 },
+          },
         ],
         currentDateTime: CURRENT_DATE_TIME,
       })
@@ -11405,10 +14357,15 @@ describe('createIntexAgentRunner', () => {
       outcome: 'completed',
       reply: 'Zaktualizowano 1 z 2 wydarzeń w kalendarzu.',
       operationResults: [
-        { toolName: 'update_calendar_event', status: 'completed' },
+        {
+          toolName: 'update_calendar_event',
+          status: 'completed',
+          toolSelection: { turnIndex: 7, ordinal: 1 },
+        },
         {
           toolName: 'query_calendar_events',
           status: 'failed',
+          toolSelection: { turnIndex: 7, ordinal: 2 },
           error: 'Confirmed calendar operation could not be executed',
         },
       ],
@@ -11959,12 +14916,13 @@ describe('createIntexAgentRunner', () => {
 
   it('returns confirmation when the model hides an external-save tool call behind no_action', async () => {
     let saveCalls = 0;
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'save_external',
-      args: { message: 'Save externally this copied LinkedIn detail' },
-    }, [
-      ok(toolResult({ outcome: 'no_action', reply: 'The model should not hide this failure.' })),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'save_external',
+        args: { message: 'Save externally this copied LinkedIn detail' },
+      },
+      [ok(toolResult({ outcome: 'no_action', reply: 'The model should not hide this failure.' }))]
+    );
     const runner = createIntexAgentRunner({
       client,
       toolExecutor: fakeToolExecutor({
@@ -11993,18 +14951,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('normalizes a missing code-task mode at the typed tool boundary', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_code_task',
-      args: { prompt: 'Investigate the webhook retry path.', workerType: 'openrouter-free' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          toolName: 'create_code_task',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_code_task',
+        args: { prompt: 'Investigate the webhook retry path.', workerType: 'openrouter-free' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_code_task',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -12049,18 +15010,21 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('preserves an explicit code-task execution mode without synthesizing optional fields', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_code_task',
-      args: { prompt: 'Execute the webhook retry fix.', taskMode: 'execution' },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          toolName: 'create_code_task',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_code_task',
+        args: { prompt: 'Execute the webhook retry fix.', taskMode: 'execution' },
+      },
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_code_task',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -12079,22 +15043,25 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('requires a tool call for explicit code-task intents before producing a reply', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_code_task',
-      args: {
-        prompt: 'Investigate why direct WhatsApp requests fall back to generic clarification.',
-        taskMode: 'planning',
-        workerType: 'codex-xhigh',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_code_task',
+        args: {
+          prompt: 'Investigate why direct WhatsApp requests fall back to generic clarification.',
+          taskMode: 'planning',
+          workerType: 'codex-xhigh',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Prepared the code task.',
-          toolName: 'create_code_task',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Prepared the code task.',
+            toolName: 'create_code_task',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_code_task']),
@@ -12117,22 +15084,25 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('omits optional calendar confirmation fields when they are absent', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_calendar_event',
-      args: {
-        summary: 'Dentist',
-        start: '2026-06-25T09:00:00+02:00',
-        end: '2026-06-25T10:00:00+02:00',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Dentist',
+          start: '2026-06-25T09:00:00+02:00',
+          end: '2026-06-25T10:00:00+02:00',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          toolName: 'create_calendar_event',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -12158,23 +15128,26 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('renders calendar confirmation instants in the supplied local time zone without ISO metadata', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_calendar_event',
-      args: {
-        summary: 'Dentist',
-        start: '2026-12-25T08:00:00.000Z',
-        end: '2026-12-25T09:00:00.000Z',
-        timeZone: 'Europe/Warsaw',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Dentist',
+          start: '2026-12-25T08:00:00.000Z',
+          end: '2026-12-25T09:00:00.000Z',
+          timeZone: 'Europe/Warsaw',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          toolName: 'create_calendar_event',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     const result = await runner.run({
@@ -12194,23 +15167,26 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('preserves offset-less calendar wall time in the tool time zone', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_calendar_event',
-      args: {
-        summary: 'Dentist',
-        start: '2026-07-15T09:00:00',
-        end: '2026-07-15T10:00:00',
-        timeZone: 'Europe/Warsaw',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Dentist',
+          start: '2026-07-15T09:00:00',
+          end: '2026-07-15T10:00:00',
+          timeZone: 'Europe/Warsaw',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          toolName: 'create_calendar_event',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     const result = await runner.run({
@@ -12229,22 +15205,25 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('uses the validated account time zone when calendar arguments omit one', async () => {
-    const client = new ToolExecutingFakeToolCallingClient({
-      toolName: 'create_calendar_event',
-      args: {
-        summary: 'Dentist',
-        start: '2026-07-15T09:00:00.000Z',
-        end: '2026-07-15T10:00:00.000Z',
+    const client = new ToolExecutingFakeToolCallingClient(
+      {
+        toolName: 'create_calendar_event',
+        args: {
+          summary: 'Dentist',
+          start: '2026-07-15T09:00:00.000Z',
+          end: '2026-07-15T10:00:00.000Z',
+        },
       },
-    }, [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          toolName: 'create_calendar_event',
-        })
-      ),
-    ]);
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            toolName: 'create_calendar_event',
+          })
+        ),
+      ]
+    );
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     const result = await runner.run({
@@ -12326,19 +15305,22 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('asks for clarification when multiple tools ran in one turn', async () => {
-    const client = new ToolExecutingFakeToolCallingClient([
-      { toolName: 'create_note', args: { content: 'Visit Lisbon.' } },
-      { toolName: 'create_link', args: { url: 'https://example.com', title: 'Example' } },
-    ], [
-      ok(
-        toolResult({
-          outcome: 'completed',
-          reply: 'Done.',
-          summary: 'Handled request.',
-          toolName: 'create_note',
-        })
-      ),
-    ]);
+    const client = new ToolExecutingFakeToolCallingClient(
+      [
+        { toolName: 'create_note', args: { content: 'Visit Lisbon.' } },
+        { toolName: 'create_link', args: { url: 'https://example.com', title: 'Example' } },
+      ],
+      [
+        ok(
+          toolResult({
+            outcome: 'completed',
+            reply: 'Done.',
+            summary: 'Handled request.',
+            toolName: 'create_note',
+          })
+        ),
+      ]
+    );
     const intentClassifier: IntexAgentIntentClassifier = {
       async classify() {
         return { kind: 'tool', allowedToolNames: ['create_note', 'create_link'] };
@@ -12398,7 +15380,9 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('asks for clarification when the tool-calling client fails', async () => {
-    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const client = new FakeToolCallingClient([
+      err({ code: 'API_ERROR', message: 'provider failed' }),
+    ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -12419,7 +15403,9 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('asks for Polish clarification when the tool-calling client fails for a Polish message', async () => {
-    const client = new FakeToolCallingClient([err({ code: 'API_ERROR', message: 'provider failed' })]);
+    const client = new FakeToolCallingClient([
+      err({ code: 'API_ERROR', message: 'provider failed' }),
+    ]);
     const runner = createIntexAgentRunner({ client, toolExecutor: fakeToolExecutor() });
 
     await expect(
@@ -12547,10 +15533,7 @@ describe('createIntexAgentRunner', () => {
   });
 
   it('omits missing previous preference text when a stored preference row cannot be resolved', async () => {
-    const promptBlock = [
-      'User Preferences v2:',
-      '1. (id: pref_non_string) 123',
-    ].join('\n');
+    const promptBlock = ['User Preferences v2:', '1. (id: pref_non_string) 123'].join('\n');
     const updateClient = new ToolExecutingFakeToolCallingClient(
       {
         toolName: 'update_user_preference',
@@ -13087,10 +16070,7 @@ describe('createIntexAgentRunner', () => {
   });
 
   it.each([
-    [
-      'add_user_preference',
-      { text: 'Prefer focus blocks before noon.', expectedVersion: 0 },
-    ],
+    ['add_user_preference', { text: 'Prefer focus blocks before noon.', expectedVersion: 0 }],
     [
       'update_user_preference',
       {
@@ -13100,38 +16080,38 @@ describe('createIntexAgentRunner', () => {
       },
     ],
     ['delete_user_preference', { itemId: 'pref_focus', expectedVersion: 0 }],
-  ] as const)('keeps the updated preference block internal after confirmed %s succeeds', async (
-    toolName,
-    toolArgs
-  ) => {
-    const promptBlock =
-      'User Preferences v1:\n1. (id: pref_focus) "Prefer focus blocks before noon."';
-    const runner = createIntexAgentRunner({
-      client: new FakeToolCallingClient([]),
-      toolExecutor: fakeToolExecutor({
-        addUserPreference: async () =>
-          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
-        updateUserPreference: async () =>
-          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
-        deleteUserPreference: async () =>
-          JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
-      }),
-    });
+  ] as const)(
+    'keeps the updated preference block internal after confirmed %s succeeds',
+    async (toolName, toolArgs) => {
+      const promptBlock =
+        'User Preferences v1:\n1. (id: pref_focus) "Prefer focus blocks before noon."';
+      const runner = createIntexAgentRunner({
+        client: new FakeToolCallingClient([]),
+        toolExecutor: fakeToolExecutor({
+          addUserPreference: async () =>
+            JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+          updateUserPreference: async () =>
+            JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+          deleteUserPreference: async () =>
+            JSON.stringify({ status: 'completed', currentVersion: 1, promptBlock }),
+        }),
+      });
 
-    await expect(
-      runner.executeConfirmed({
-        session: session(),
+      await expect(
+        runner.executeConfirmed({
+          session: session(),
+          toolName,
+          toolArgs,
+          currentDateTime: CURRENT_DATE_TIME,
+        })
+      ).resolves.toMatchObject({
+        outcome: 'completed',
+        reply: 'Updated the instruction memory.',
         toolName,
-        toolArgs,
-        currentDateTime: CURRENT_DATE_TIME,
-      })
-    ).resolves.toMatchObject({
-      outcome: 'completed',
-      reply: 'Updated the instruction memory.',
-      toolName,
-      toolResult: { status: 'completed', currentVersion: 1, promptBlock },
-    });
-  });
+        toolResult: { status: 'completed', currentVersion: 1, promptBlock },
+      });
+    }
+  );
 
   it('localizes the confirmed preference reply without exposing the internal block', async () => {
     const promptBlock =
@@ -13322,10 +16302,9 @@ describe('createIntexAgentRunner', () => {
 
   it('does not invoke the selection gate when tool arguments fail schema validation', async () => {
     let selectionGateCalls = 0;
-    const client = new ToolExecutingFakeToolCallingClient(
-      { toolName: 'create_note', args: {} },
-      [ok(toolResult({ outcome: 'completed', reply: 'Invalid.', toolName: 'create_note' }))]
-    );
+    const client = new ToolExecutingFakeToolCallingClient({ toolName: 'create_note', args: {} }, [
+      ok(toolResult({ outcome: 'completed', reply: 'Invalid.', toolName: 'create_note' })),
+    ]);
     const runner = createIntexAgentRunner({
       client,
       intentClassifier: toolIntentClassifier(['create_note']),
@@ -13433,6 +16412,268 @@ describe('createIntexAgentRunner', () => {
   });
 });
 
+interface FakeToolCall {
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+interface GooglePhotosCalendarFixture {
+  eventId: string;
+  summary: string;
+  originalStart: string;
+  originalEnd: string;
+  newStart: string;
+  newEnd: string;
+}
+
+function googlePhotosCalendarFixtures(): GooglePhotosCalendarFixture[] {
+  return [
+    {
+      eventId: 'event-2019',
+      summary: 'Google Photos od 04.2019',
+      originalStart: '2026-08-13',
+      originalEnd: '2026-08-14',
+      newStart: '2026-08-22',
+      newEnd: '2026-08-23',
+    },
+    {
+      eventId: 'event-2018',
+      summary: 'Wyczyścić Photos 2018',
+      originalStart: '2026-08-14',
+      originalEnd: '2026-08-15',
+      newStart: '2026-08-23',
+      newEnd: '2026-08-24',
+    },
+    {
+      eventId: 'event-2017',
+      summary: 'Wyczyścić Photos 2017',
+      originalStart: '2026-08-15',
+      originalEnd: '2026-08-16',
+      newStart: '2026-08-24',
+      newEnd: '2026-08-25',
+    },
+    {
+      eventId: 'event-2016',
+      summary: 'Wyczyścić Photos 2016',
+      originalStart: '2026-08-16',
+      originalEnd: '2026-08-17',
+      newStart: '2026-08-25',
+      newEnd: '2026-08-26',
+    },
+  ];
+}
+
+function googlePhotosCalendarSummaries(): string[] {
+  return googlePhotosCalendarFixtures().map((fixture) => fixture.summary);
+}
+
+function googlePhotosCalendarQueryCall(): FakeToolCall {
+  return {
+    toolName: 'query_calendar_events',
+    args: {
+      mode: 'list',
+      timeMin: '2026-08-13T00:00:00+02:00',
+      timeMax: '2026-08-17T00:00:00+02:00',
+    },
+  };
+}
+
+function googlePhotosCalendarQueryResult(): Record<string, unknown> {
+  const fixtures = googlePhotosCalendarFixtures();
+  return {
+    status: 'completed',
+    mode: 'list',
+    count: fixtures.length,
+    truncated: false,
+    events: fixtures.map((fixture) => ({
+      id: fixture.eventId,
+      etag: `"${fixture.eventId}-v1"`,
+      summary: fixture.summary,
+      calendarId: 'primary',
+      start: { date: fixture.originalStart },
+      end: { date: fixture.originalEnd },
+    })),
+  };
+}
+
+function googlePhotosCalendarQueryResultWithUnrelatedEvents(): Record<string, unknown> {
+  const photosResult = googlePhotosCalendarQueryResult();
+  const photosEvents = photosResult['events'];
+  if (!Array.isArray(photosEvents)) throw new Error('Expected Google Photos calendar fixtures');
+  const unrelatedEvents = [
+    {
+      id: 'event-physio',
+      etag: '"event-physio-v1"',
+      summary: 'Fizjoterapia myśliwska',
+      calendarId: 'primary',
+      start: { dateTime: '2026-08-10T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-10T21:00:00+02:00', timeZone: 'Europe/Warsaw' },
+    },
+    {
+      id: 'event-squash',
+      etag: '"event-squash-v1"',
+      summary: 'Playmore: Paolo Squash Club',
+      calendarId: 'primary',
+      start: { dateTime: '2026-08-11T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-11T21:00:00+02:00', timeZone: 'Europe/Warsaw' },
+    },
+  ];
+  return {
+    ...photosResult,
+    count: photosEvents.length + unrelatedEvents.length,
+    events: [...unrelatedEvents, ...photosEvents],
+  };
+}
+
+function timedCalendarUpdateQueryCall(): FakeToolCall {
+  return {
+    toolName: 'query_calendar_events',
+    args: {
+      mode: 'list',
+      timeMin: '2026-08-13T00:00:00+02:00',
+      timeMax: '2026-08-14T00:00:00+02:00',
+      query: 'Calendar call',
+    },
+  };
+}
+
+function timedCalendarUpdateQueryResult(): Record<string, unknown> {
+  return {
+    status: 'completed',
+    mode: 'list',
+    count: 1,
+    truncated: false,
+    events: [
+      {
+        id: 'event-call',
+        etag: '"event-call-v1"',
+        summary: 'Calendar call',
+        calendarId: 'primary',
+        start: { dateTime: '2026-08-13T10:00:00+02:00', timeZone: 'Europe/Warsaw' },
+        end: { dateTime: '2026-08-13T11:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      },
+    ],
+  };
+}
+
+function timedCalendarUpdatePlanningOperation(
+  changes: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    eventId: 'event-call',
+    eventSummary: 'Calendar call',
+    changes,
+  };
+}
+
+function googlePhotosCalendarUpdateCalls(): FakeToolCall[] {
+  return googlePhotosCalendarFixtures().map((fixture) => ({
+    toolName: 'update_calendar_event',
+    args: {
+      eventId: fixture.eventId,
+      eventSummary: fixture.summary,
+      changes: {
+        start: { date: fixture.newStart },
+        end: { date: fixture.newEnd },
+      },
+    },
+  }));
+}
+
+function googlePhotosCalendarPlanningOperations(): Record<string, unknown>[] {
+  return googlePhotosCalendarUpdateCalls().map((call) => call.args);
+}
+
+function googlePhotosCalendarExpectedOperations(): {
+  toolName: 'update_calendar_event';
+  toolArgs: Record<string, unknown>;
+}[] {
+  return googlePhotosCalendarFixtures().map((fixture) => ({
+    toolName: 'update_calendar_event' as const,
+    toolArgs: {
+      eventId: fixture.eventId,
+      eventSummary: fixture.summary,
+      calendarId: 'primary',
+      expectedEtag: `"${fixture.eventId}-v1"`,
+      eventStart: { date: fixture.originalStart },
+      eventEnd: { date: fixture.originalEnd },
+      changes: {
+        start: { date: fixture.newStart },
+        end: { date: fixture.newEnd },
+      },
+    },
+  }));
+}
+
+function completeCalendarEvent(
+  eventId: string,
+  summary: string,
+  day: number,
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> {
+  const startDay = String(day).padStart(2, '0');
+  const endDay = String(day + 1).padStart(2, '0');
+  return {
+    id: eventId,
+    etag: `"${eventId}-v1"`,
+    summary,
+    calendarId: 'primary',
+    start: { date: `2026-08-${startDay}` },
+    end: { date: `2026-08-${endDay}` },
+    ...overrides,
+  };
+}
+
+function completeCalendarLookupResult(
+  events: readonly Record<string, unknown>[]
+): Record<string, unknown> {
+  return {
+    status: 'completed',
+    mode: 'list',
+    count: events.length,
+    truncated: false,
+    events,
+  };
+}
+
+function calendarMoveOperations(
+  events: readonly Record<string, unknown>[],
+  firstDay = 22
+): Record<string, unknown>[] {
+  return events.map((calendarEvent, index) => ({
+    eventId: calendarEvent['id'] ?? calendarEvent['eventId'],
+    eventSummary: calendarEvent['summary'],
+    changes: {
+      start: { date: `2026-09-${String(firstDay + index).padStart(2, '0')}` },
+      end: { date: `2026-09-${String(firstDay + index + 1).padStart(2, '0')}` },
+    },
+  }));
+}
+
+function structuredCalendarUpdateHarness(
+  input: Readonly<{
+    queryResult: Record<string, unknown>;
+    operations: Record<string, unknown>[];
+    queryCall?: FakeToolCall;
+  }>
+): Readonly<{ runner: TestRunner; responseRepairClient: FakeStructuredClient }> {
+  const responseRepairClient = new FakeStructuredClient([
+    ok(generateResult({ outcome: 'updates', operations: input.operations })),
+  ]);
+  const runner = createIntexAgentRunner({
+    client: new ToolExecutingFakeToolCallingClient(
+      input.queryCall ?? googlePhotosCalendarQueryCall(),
+      [ok(toolResult({ outcome: 'no_action', reply: 'Lookup complete.' }))]
+    ),
+    responseRepairClient,
+    intentClassifier: toolIntentClassifier(['update_calendar_event']),
+    toolExecutor: fakeToolExecutor({
+      queryCalendarEvents: async () => JSON.stringify(input.queryResult),
+    }),
+  });
+  return { runner, responseRepairClient };
+}
+
 function calendarUpdateQueryArgs(): Record<string, unknown> {
   return {
     mode: 'list',
@@ -13477,9 +16718,7 @@ async function runCapturedTodayAndTomorrowCalendarQuery(message: string): Promis
   args: Parameters<IntexAgentToolExecutor['queryCalendarEvents']>[0];
   stopAfterRun: boolean | undefined;
 }> {
-  const receivedQueryArgs: Parameters<
-    IntexAgentToolExecutor['queryCalendarEvents']
-  >[0][] = [];
+  const receivedQueryArgs: Parameters<IntexAgentToolExecutor['queryCalendarEvents']>[0][] = [];
   const client = new ToolExecutingFakeToolCallingClient(
     {
       toolName: 'query_calendar_events',
@@ -13606,7 +16845,10 @@ function session(): IntexAgentSession {
   };
 }
 
-function event(type: IntexAgentSessionEvent['type'], payload: Record<string, unknown>): IntexAgentSessionEvent {
+function event(
+  type: IntexAgentSessionEvent['type'],
+  payload: Record<string, unknown>
+): IntexAgentSessionEvent {
   return {
     id: `event-${type}`,
     sessionId: 'session-1',
@@ -13776,7 +17018,9 @@ class FakeToolCallingClient implements ToolCallingClient {
 
   constructor(private readonly results: Result<ToolCallingResult, LLMError>[]) {}
 
-  run(params: Parameters<ToolCallingClient['run']>[0]): Promise<Result<ToolCallingResult, LLMError>> {
+  run(
+    params: Parameters<ToolCallingClient['run']>[0]
+  ): Promise<Result<ToolCallingResult, LLMError>> {
     this.calls.push(params);
     const next = this.results.shift();
     if (next === undefined) {
@@ -13811,7 +17055,9 @@ class FakeStructuredClient implements StructuredClient {
 
 class ToolExecutingFakeToolCallingClient extends FakeToolCallingClient {
   constructor(
-    private readonly toolCalls: { toolName: string; args: Record<string, unknown> } | { toolName: string; args: Record<string, unknown> }[],
+    private readonly toolCalls:
+      | { toolName: string; args: Record<string, unknown> }
+      | { toolName: string; args: Record<string, unknown> }[],
     results: Result<ToolCallingResult, LLMError>[]
   ) {
     super(results);

@@ -32,7 +32,7 @@ export async function loadCanonicalMatrixCorpus(
     throw new Error('matrix_corpus_catalog_identity_mismatch');
   }
   const turnCount = scenarios.reduce((total, scenario) => total + scenario.turns.length, 0);
-  if (turnCount !== 59 || scenarios.some((scenario) => scenario.turns.length > 20)) {
+  if (turnCount !== 60 || scenarios.some((scenario) => scenario.turns.length > 20)) {
     throw new Error('matrix_corpus_catalog_cardinality_mismatch');
   }
   if (scenarios.some((scenario) => scenario.title.length > 128)) {
@@ -57,7 +57,7 @@ export async function loadCanonicalMatrixCorpus(
     agentModel,
     evaluatorModel: MATRIX_CORPUS_JUDGE_MODEL,
     scenarioCount: 20,
-    turnCount: 59,
+    turnCount: 60,
     catalogDigest,
     scenarios: Object.freeze(entries),
   });
@@ -97,9 +97,12 @@ function buildMockProfile(scenario: IntexEvalScenario): StrictToolMockProfileV1 
           turnIndex: expectation.turnIndex,
           toolName: required.toolName,
           ordinal,
+          ...(scenario.id === 'intex-eval-008' && required.toolName === 'query_calendar_events'
+            ? { argumentCatalog: scenario008QueryArgumentCatalog(expectation.turnIndex) }
+            : {}),
           outcome: {
             kind: 'success',
-            result: mockResult(scenario.id, required.toolName, ordinal),
+            result: mockResult(scenario.id, expectation.turnIndex, required.toolName, ordinal),
           },
         });
       }
@@ -119,6 +122,7 @@ function buildMockProfile(scenario: IntexEvalScenario): StrictToolMockProfileV1 
 
 function mockResult(
   scenarioId: string,
+  turnIndex: number,
   toolName: IntexAgentToolNameV1,
   ordinal: number
 ): StrictMockResultV1 {
@@ -134,34 +138,35 @@ function mockResult(
         summary: `Synthetic event for ${scenarioId}`,
       };
     case 'update_calendar_event':
+      if (scenarioId === 'intex-eval-008') {
+        const event = scenario008CalendarEvents()[ordinal - 1];
+        if (event === undefined) throw new Error('matrix_corpus_scenario_008_update_ordinal');
+        return {
+          toolName,
+          status: 'completed',
+          eventId: event.eventId,
+          summary: event.summary,
+          changes: scenario008CalendarUpdateChanges(ordinal),
+        };
+      }
       return {
         toolName,
         status: 'completed',
         eventId: `mock_event_${suffix}`,
-        summary:
-          scenarioId === 'intex-eval-008'
-            ? 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01'
-            : `Synthetic event for ${scenarioId}`,
+        summary: `Synthetic event for ${scenarioId}`,
         attendeesAdded: ['synthetic-attendee@example.com'],
       };
     case 'query_calendar_events':
       if (scenarioId === 'intex-eval-008') {
+        const events =
+          turnIndex === 0 ? scenario008WeeklyCalendarEvents() : scenario008CalendarEvents();
         return {
           toolName,
           status: 'completed',
           mode: 'list',
-          count: 1,
+          count: events.length,
           truncated: false,
-          events: [
-            {
-              eventId: `mock_event_${suffix}`,
-              etag: `"mock_event_${suffix}_v1"`,
-              summary: 'INTEX-EVAL-008 project review INTEX-EVAL-008-F01',
-              start: { dateTime: '2026-07-23T15:00:00+02:00' },
-              end: { dateTime: '2026-07-23T16:00:00+02:00' },
-              calendarId: 'primary',
-            },
-          ],
+          events,
         };
       }
       return { toolName, status: 'completed', mode: 'list', count: 0, events: [] };
@@ -207,6 +212,119 @@ function mockResult(
         changedItemId: `mock_pref_${suffix}`,
       };
   }
+}
+
+type CalendarListMockResult = Extract<
+  StrictMockResultV1,
+  { toolName: 'query_calendar_events'; mode: 'list' }
+>;
+
+function scenario008CalendarEvents(): CalendarListMockResult['events'] {
+  return [
+    { day: 13, title: 'Google Photos od 04.2019' },
+    { day: 14, title: 'Wyczyścić Photos 2018' },
+    { day: 15, title: 'Wyczyścić Photos 2017' },
+    { day: 16, title: 'Wyczyścić Photos 2016' },
+  ].map(({ day, title }, index) => {
+    const ordinal = index + 1;
+    const eventId = `mock_event_INTEX-EVAL-008_INTEX-EVAL-008-F01_photos_${String(ordinal)}`;
+    return {
+      eventId,
+      etag: `"${eventId}_v1"`,
+      summary: title,
+      description: 'Synthetic fixture INTEX-EVAL-008 INTEX-EVAL-008-F01',
+      start: { date: `2026-08-${String(day).padStart(2, '0')}` },
+      end: { date: `2026-08-${String(day + 1).padStart(2, '0')}` },
+      calendarId: 'primary',
+    };
+  });
+}
+
+function scenario008WeeklyCalendarEvents(): CalendarListMockResult['events'] {
+  const markers = 'INTEX-EVAL-008 INTEX-EVAL-008-F01';
+  return [
+    {
+      eventId: 'mock_event_intex_eval_008_physio',
+      etag: '"mock_event_intex_eval_008_physio_v1"',
+      summary: 'Synthetic Fizjoterapia myśliwska',
+      description: `Synthetic fixture ${markers}`,
+      start: { dateTime: '2026-08-10T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-10T21:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      calendarId: 'primary',
+    },
+    {
+      eventId: 'mock_event_intex_eval_008_haircut_1',
+      etag: '"mock_event_intex_eval_008_haircut_1_v1"',
+      summary: 'Synthetic Pracownia fryzur Pan & Pani',
+      description: `Synthetic fixture ${markers}`,
+      start: { dateTime: '2026-08-11T17:30:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-11T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      calendarId: 'primary',
+    },
+    {
+      eventId: 'mock_event_intex_eval_008_haircut_2',
+      etag: '"mock_event_intex_eval_008_haircut_2_v1"',
+      summary: 'Synthetic Strzyżenie męskie',
+      description: `Synthetic fixture ${markers}`,
+      start: { dateTime: '2026-08-11T17:30:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-11T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      location: 'Przemiarki 23/7, Kraków',
+      calendarId: 'primary',
+    },
+    {
+      eventId: 'mock_event_intex_eval_008_squash',
+      etag: '"mock_event_intex_eval_008_squash_v1"',
+      summary: 'Synthetic Playmore Squash',
+      description: `Synthetic fixture ${markers}`,
+      start: { dateTime: '2026-08-11T19:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-11T21:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      location: 'Paolo Squash Club, Księcia Józefa 54a',
+      calendarId: 'primary',
+    },
+    ...scenario008CalendarEvents().slice(0, 2),
+    {
+      eventId: 'mock_event_intex_eval_008_tournament',
+      etag: '"mock_event_intex_eval_008_tournament_v1"',
+      summary: 'Synthetic turniej OPEN B++ Tarnów',
+      description: `Synthetic fixture ${markers}`,
+      start: { dateTime: '2026-08-14T18:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      end: { dateTime: '2026-08-14T21:00:00+02:00', timeZone: 'Europe/Warsaw' },
+      calendarId: 'primary',
+    },
+    ...scenario008CalendarEvents().slice(2),
+  ];
+}
+
+function scenario008CalendarUpdateChanges(ordinal: number): {
+  start: { date: string };
+  end: { date: string };
+} {
+  const day = 21 + ordinal;
+  return {
+    start: { date: `2026-08-${String(day).padStart(2, '0')}` },
+    end: { date: `2026-08-${String(day + 1).padStart(2, '0')}` },
+  };
+}
+
+function scenario008QueryArgumentCatalog(turnIndex: number): {
+  toolName: 'query_calendar_events';
+  timeMin: string;
+  timeMax: string;
+  query: string;
+} {
+  return turnIndex === 0
+    ? {
+        toolName: 'query_calendar_events',
+        timeMin: '2026-08-10T00:00:00+02:00',
+        timeMax: '2026-08-17T00:00:00+02:00',
+        query: 'INTEX-EVAL-008 INTEX-EVAL-008-F01',
+      }
+    : {
+        toolName: 'query_calendar_events',
+        timeMin: '2026-08-13T00:00:00+02:00',
+        timeMax: '2026-08-17T00:00:00+02:00',
+        query: 'Photos INTEX-EVAL-008 INTEX-EVAL-008-F01',
+      };
 }
 
 function sha256(value: string): string {
