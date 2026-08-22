@@ -21,11 +21,15 @@ export type PrivateWhatsAppMessageType =
   | 'unknown';
 export type PrivateWhatsAppRelationKind = 'replacement' | 'redaction';
 export type PrivateWhatsAppRelationApplicationStatus = 'pending' | 'applied' | 'superseded';
+export type PrivateWhatsAppRelationTargetUnavailableReason =
+  | 'matrix_notice'
+  | 'redacted_reaction_tombstone';
 
 export interface PrivateWhatsAppRelationInput {
   kind: PrivateWhatsAppRelationKind;
   targetMatrixEventId: string;
   applicationStatus: 'pending';
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
 }
 
 export interface PrivateWhatsAppRelationInfo {
@@ -33,6 +37,7 @@ export interface PrivateWhatsAppRelationInfo {
   targetMatrixEventId: string;
   applicationStatus: PrivateWhatsAppRelationApplicationStatus;
   targetMessageId?: string;
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
   appliedAt?: string;
 }
 
@@ -59,12 +64,14 @@ export interface PrivateWhatsAppReactionInfo {
   targetMessageId: string;
   /** Optional for backward compatibility with reaction rows written before durable resolution. */
   applicationStatus?: PrivateWhatsAppRelationApplicationStatus;
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
   appliedAt?: string;
 }
 
 export interface PrivateWhatsAppReactionInput {
   emoji: string;
   targetMatrixEventId: string;
+  targetUnavailableReason?: PrivateWhatsAppRelationTargetUnavailableReason;
 }
 
 export interface PrivateWhatsAppReactionSummary {

@@ -1157,7 +1157,8 @@ describe('runtime configuration cutover', () => {
       const [firstResult, secondResult] = await Promise.all([first.completed, second.completed]);
       expect(firstResult).toMatchObject({ status: 0, stderr: '' });
       expect(secondResult).toMatchObject({ status: 0, stderr: '' });
-      expect(readlinkSync(join(outputDir, 'current'))).toMatch(/^dev-v8-/u);
+      expect(readlinkSync(join(outputDir, 'current'))).toMatch(/^dev-v(?:7|8)-/u);
+      expect(readdirSync(outputDir).filter((name) => /^dev-v(?:7|8)-/u.test(name))).toHaveLength(2);
       expect(existsSync(join(outputDir, '.intexuraos-dev-secret-projection'))).toBe(false);
       expect(readdirSync(join(outputDir, '.sync-lock'))).toEqual([]);
     }

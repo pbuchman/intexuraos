@@ -3522,6 +3522,220 @@ describe('privateWhatsAppRepository', () => {
     });
   });
 
+  it('idempotently repairs reviewed policy-skipped relation targets on duplicate replay', async () => {
+    const base = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$reviewed-policy-skip-replacement',
+        text: 'replacement content',
+      },
+    });
+    const created = await repository.storeIncomingMessage(base);
+    expect(created).toMatchObject({ ok: true, value: { outcome: 'created' } });
+
+    const reviewed = createStoreInput({
+      ...base,
+      message: {
+        ...base.message,
+        relation: {
+          kind: 'replacement',
+          targetMatrixEventId: '$policy-skipped-notice',
+          applicationStatus: 'pending',
+          targetUnavailableReason: 'matrix_notice',
+        },
+      },
+    });
+    const firstRepair = await repository.storeIncomingMessage(reviewed);
+    const secondRepair = await repository.storeIncomingMessage(reviewed);
+    expect(firstRepair).toMatchObject({ ok: true, value: { outcome: 'duplicate' } });
+    expect(secondRepair).toMatchObject({ ok: true, value: { outcome: 'duplicate' } });
+
+    const messageId = deterministicId(base.sourceAccountId, base.message.matrixEventId);
+    const message = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    expect(message).toMatchObject({
+      relation: {
+        kind: 'replacement',
+        targetMatrixEventId: '$policy-skipped-notice',
+        targetMessageId: deterministicId(base.sourceAccountId, '$policy-skipped-notice'),
+        applicationStatus: 'superseded',
+        targetUnavailableReason: 'matrix_notice',
+      },
+    });
+    expect(
+      (message?.['relation'] as { appliedAt?: string } | undefined)?.appliedAt
+    ).toBeTruthy();
+  });
+
+  it('stores a newly reviewed policy-skipped reaction as terminally superseded', async () => {
+    const input = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$new-reviewed-policy-skip-reaction',
+        type: 'reaction',
+        text: '👍',
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$missing-reviewed-reaction-target',
+          targetUnavailableReason: 'redacted_reaction_tombstone',
+        },
+      },
+    });
+
+    expect(await repository.storeIncomingMessage(input)).toMatchObject({
+      ok: true,
+      value: { outcome: 'created' },
+    });
+    const messageId = deterministicId(input.sourceAccountId, input.message.matrixEventId);
+    const stored = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    expect(stored).toMatchObject({
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$missing-reviewed-reaction-target',
+        targetMessageId: deterministicId(
+          input.sourceAccountId,
+          '$missing-reviewed-reaction-target'
+        ),
+        applicationStatus: 'superseded',
+        targetUnavailableReason: 'redacted_reaction_tombstone',
+      },
+    });
+    expect((stored?.['reaction'] as { appliedAt?: string } | undefined)?.appliedAt).toBeTruthy();
+  });
+
+  it('repairs a legacy reaction without resolution status for a reviewed tombstone target', async () => {
+    const input = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$reviewed-policy-skip-reaction',
+        type: 'reaction',
+        text: '👍',
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$policy-skipped-reaction-tombstone',
+        },
+      },
+    });
+    const created = await repository.storeIncomingMessage(input);
+    expect(created).toMatchObject({ ok: true, value: { outcome: 'created' } });
+    const messageId = deterministicId(input.sourceAccountId, input.message.matrixEventId);
+    const stored = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    if (stored?.['reaction'] === undefined) throw new Error('Expected stored reaction');
+    Reflect.deleteProperty(stored['reaction'] as Record<string, unknown>, 'applicationStatus');
+
+    const reviewed = createStoreInput({
+      ...input,
+      message: {
+        ...input.message,
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$policy-skipped-reaction-tombstone',
+          targetUnavailableReason: 'redacted_reaction_tombstone',
+        },
+      },
+    });
+    const repaired = await repository.storeIncomingMessage(reviewed);
+    expect(repaired).toMatchObject({ ok: true, value: { outcome: 'duplicate' } });
+    expect(stored).toMatchObject({
+      reaction: {
+        targetMatrixEventId: '$policy-skipped-reaction-tombstone',
+        targetMessageId: deterministicId(
+          input.sourceAccountId,
+          '$policy-skipped-reaction-tombstone'
+        ),
+        applicationStatus: 'superseded',
+        targetUnavailableReason: 'redacted_reaction_tombstone',
+      },
+    });
+  });
+
+  it('does not repair duplicate operations when reviewed metadata conflicts with stored identity', async () => {
+    const relationInput = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$conflicting-reviewed-relation',
+        relation: {
+          kind: 'replacement',
+          targetMatrixEventId: '$original-target',
+          applicationStatus: 'pending',
+        },
+      },
+    });
+    expect(await repository.storeIncomingMessage(relationInput)).toMatchObject({
+      ok: true,
+      value: { outcome: 'created' },
+    });
+    expect(
+      await repository.storeIncomingMessage({
+        ...relationInput,
+        message: {
+          ...relationInput.message,
+          relation: {
+            kind: 'replacement',
+            targetMatrixEventId: '$different-target',
+            applicationStatus: 'pending',
+            targetUnavailableReason: 'matrix_notice',
+          },
+        },
+      })
+    ).toMatchObject({ ok: true, value: { outcome: 'duplicate' } });
+
+    const ordinaryInput = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$conflicting-reviewed-reaction',
+      },
+    });
+    expect(await repository.storeIncomingMessage(ordinaryInput)).toMatchObject({
+      ok: true,
+      value: { outcome: 'created' },
+    });
+    expect(
+      await repository.storeIncomingMessage({
+        ...ordinaryInput,
+        message: {
+          ...ordinaryInput.message,
+          type: 'reaction',
+          reaction: {
+            emoji: '👍',
+            targetMatrixEventId: '$reaction-target',
+            targetUnavailableReason: 'redacted_reaction_tombstone',
+          },
+        },
+      })
+    ).toMatchObject({ ok: true, value: { outcome: 'duplicate' } });
+
+    const relationId = deterministicId(
+      relationInput.sourceAccountId,
+      relationInput.message.matrixEventId
+    );
+    const ordinaryId = deterministicId(
+      ordinaryInput.sourceAccountId,
+      ordinaryInput.message.matrixEventId
+    );
+    const storedMessages = fakeFirestore.getAllData().get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION);
+    expect(storedMessages?.get(relationId)).toMatchObject({
+      relation: {
+        targetMatrixEventId: '$original-target',
+        applicationStatus: 'pending',
+      },
+    });
+    expect(storedMessages?.get(ordinaryId)?.['reaction']).toBeUndefined();
+  });
+
   it('returns the room chat id for a duplicate legacy message without a stored chat id', async () => {
     const input = createStoreInput();
     const messageId = deterministicId(input.sourceAccountId, input.message.matrixEventId);

@@ -13,7 +13,9 @@ import {
   finalizeRecoveryState,
   main as runBackfillCli,
   mergeMediaUnavailableEvidence,
+  mergeRelationTargetPolicySkipEvidence,
   paginateMatrixRoomMessages,
+  reviewPolicySkippedRelationTargets,
   verifyRecoveryEvidence,
 } from './backfill-private-events.mjs';
 
@@ -413,6 +415,102 @@ test('media unavailable evidence is allowlisted and merged idempotently by event
   );
 });
 
+test('reviewed policy-skipped relation targets are hashed, applied as terminal repairs, and idempotent', async () => {
+  const sourceEventId = '$replacement';
+  const targetEventId = '$notice';
+  const eventHash = createHash('sha256').update(sourceEventId).digest('hex');
+  const targetHash = createHash('sha256').update(targetEventId).digest('hex');
+  const segment = {
+    name: 's0-s1',
+    events: [
+      {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: sourceEventId,
+        message: {
+          type: 'text',
+          relation: {
+            kind: 'replacement',
+            targetMatrixEventId: targetEventId,
+            applicationStatus: 'pending',
+          },
+        },
+      },
+    ],
+  };
+
+  const reviewed = await reviewPolicySkippedRelationTargets(segment, 'private-source', {
+    fetchDocuments: async (messageIds) =>
+      new Map([
+        [
+          messageIds[0],
+          {
+            matrixEventId: sourceEventId,
+            sourceAccountId: 'private-source',
+            userId: 'user-1',
+          },
+        ],
+      ]),
+    fetchMatrixEvent: async () => ({ type: 'm.room.message' }),
+    classifyTarget: () => ({ classification: 'policy_skip', reason: 'matrix_notice' }),
+  });
+
+  assert.deepEqual(reviewed, {
+    reviewedTargetCount: 1,
+    repairedEventCount: 1,
+  });
+  assert.deepEqual(segment.relationTargetPolicySkips, [
+    { eventHash, targetHash, reason: 'matrix_notice' },
+  ]);
+  mergeRelationTargetPolicySkipEvidence(segment, [
+    { eventHash, targetHash, reason: 'matrix_notice' },
+  ]);
+  assert.equal(segment.relationTargetPolicySkips.length, 1);
+
+  let posted;
+  await applyRecoverySegment(segment, {
+    postBatch: async (events) => {
+      posted = events;
+      return { accepted: 0, duplicates: events.length, rejected: 0 };
+    },
+    enqueueMedia: async () => {},
+    drainMedia: async () => ({ stored: 0, pending: 0, unavailable: [] }),
+  });
+  assert.equal(posted[0].message.relation.targetUnavailableReason, 'matrix_notice');
+  assert.equal(segment.events[0].message.relation.targetUnavailableReason, undefined);
+});
+
+test('relation target review fails closed for mapped, unavailable, and unapproved skip targets', async () => {
+  const segment = {
+    events: [
+      {
+        matrixRoomId: '!room:home-dev',
+        matrixEventId: '$reaction',
+        message: {
+          type: 'reaction',
+          reaction: { emoji: 'x', targetMatrixEventId: '$target' },
+        },
+      },
+    ],
+  };
+  const base = {
+    fetchDocuments: async (messageIds) => new Map([[messageIds[0], {}]]),
+    fetchMatrixEvent: async () => ({}),
+  };
+  for (const classified of [
+    { classification: 'mapped', event: {} },
+    { classification: 'error', reason: 'encrypted_event' },
+    { classification: 'policy_skip', reason: 'explicit_non_whatsapp_sender' },
+  ]) {
+    await assert.rejects(
+      reviewPolicySkippedRelationTargets(segment, 'private-source', {
+        ...base,
+        classifyTarget: () => classified,
+      }),
+      /recovery_relation_target_review_blocked_1/
+    );
+  }
+});
+
 test('apply retries transient ingest failures with bounded backoff and stops on non-retryable failures', async () => {
   const segment = {
     name: 's0-s1',
@@ -594,6 +692,7 @@ test('verify requires every deterministic message, relation target, stored media
     messageCount: 2,
     relationTargetCount: 1,
     verifiedRelationCount: 1,
+    policySkippedRelationTargetCount: 0,
     storedMediaCount: 1,
     mediaUnavailableCount: 0,
     accountMessageCount: 2,
@@ -608,6 +707,59 @@ test('verify requires every deterministic message, relation target, stored media
       readCounters: async () => ({ accountMessageCount: 0, totalMessageCount: 0 }),
     }),
     /recovery_verify_missing_documents/
+  );
+});
+
+test('verify requires reviewed policy-skipped relations to be durably superseded', async () => {
+  const event = {
+    matrixEventId: '$reaction',
+    message: {
+      type: 'reaction',
+      reaction: { emoji: 'x', targetMatrixEventId: '$notice' },
+    },
+  };
+  const eventId = createHashForTest('private-source\0$reaction');
+  const targetId = createHashForTest('private-source\0$notice');
+  const evidence = {
+    eventHash: createHashForTest('$reaction'),
+    targetHash: createHashForTest('$notice'),
+    reason: 'matrix_notice',
+  };
+  const document = {
+    matrixEventId: '$reaction',
+    sourceAccountId: 'private-source',
+    userId: 'user-1',
+    reaction: {
+      emoji: 'x',
+      targetMatrixEventId: '$notice',
+      targetMessageId: targetId,
+      targetUnavailableReason: 'matrix_notice',
+      applicationStatus: 'superseded',
+    },
+  };
+  const segment = { events: [event], relationTargetPolicySkips: [evidence] };
+  const deps = {
+    fetchDocuments: async () => new Map([[eventId, document]]),
+    verifyObject: async () => {},
+    readCounters: async () => ({ accountMessageCount: 1, totalMessageCount: 1 }),
+  };
+
+  const result = await verifyRecoveryEvidence(segment, 'private-source', 'user-1', deps);
+  assert.deepEqual(result, {
+    messageCount: 1,
+    relationTargetCount: 1,
+    verifiedRelationCount: 1,
+    policySkippedRelationTargetCount: 1,
+    storedMediaCount: 0,
+    mediaUnavailableCount: 0,
+    accountMessageCount: 1,
+    totalMessageCount: 1,
+  });
+
+  document.reaction.applicationStatus = 'pending';
+  await assert.rejects(
+    verifyRecoveryEvidence(segment, 'private-source', 'user-1', deps),
+    /recovery_verify_relation_not_resolved/
   );
 });
 
