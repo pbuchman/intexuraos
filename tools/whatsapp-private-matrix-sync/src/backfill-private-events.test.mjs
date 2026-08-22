@@ -12,6 +12,7 @@ import {
   discoverRecoverySegment,
   finalizeRecoveryState,
   main as runBackfillCli,
+  mergeMediaUnavailableEvidence,
   paginateMatrixRoomMessages,
   verifyRecoveryEvidence,
 } from './backfill-private-events.mjs';
@@ -324,6 +325,10 @@ test('CLI discovers exactly S0 to S1 and then verified S1 to S2', async () => {
 
 test('apply is idempotent, uses backfill batches, and drains media only after metadata', async () => {
   const trace = [];
+  const unavailableEvidence = {
+    eventHash: createHash('sha256').update('$two').digest('hex'),
+    reason: 'unsupported_application_pdf',
+  };
   const segment = {
     name: 's0-s1',
     events: [
@@ -343,7 +348,7 @@ test('apply is idempotent, uses backfill batches, and drains media only after me
     enqueueMedia: async (events) => trace.push(['enqueue', events.length]),
     drainMedia: async () => {
       trace.push(['drain']);
-      return { stored: 1, failed: 0, pending: 0 };
+      return { stored: 1, failed: 0, pending: 0, unavailable: [unavailableEvidence] };
     },
   });
   const retry = await applyRecoverySegment(segment, {
@@ -352,7 +357,7 @@ test('apply is idempotent, uses backfill batches, and drains media only after me
       return { accepted: 0, duplicates: events.length, rejected: 0 };
     },
     enqueueMedia: async (events) => trace.push(['enqueue-retry', events.length]),
-    drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+    drainMedia: async () => ({ stored: 0, failed: 0, pending: 0, unavailable: [] }),
   });
 
   assert.deepEqual(first, {
@@ -361,10 +366,51 @@ test('apply is idempotent, uses backfill batches, and drains media only after me
     rejected: 0,
     mediaStored: 1,
     mediaPending: 0,
+    mediaUnavailable: [unavailableEvidence],
   });
   assert.equal(retry.accepted, 0);
   assert.equal(retry.duplicates, 2);
   assert.deepEqual(trace.slice(0, 3), [['post', 'backfill', 2], ['enqueue', 2], ['drain']]);
+});
+
+test('media unavailable evidence is allowlisted and merged idempotently by event hash', () => {
+  const pdfHash = createHash('sha256').update('$pdf').digest('hex');
+  const oversizedHash = createHash('sha256').update('$oversized').digest('hex');
+  const segment = {};
+
+  mergeMediaUnavailableEvidence(segment, [
+    { eventHash: pdfHash, reason: 'unsupported_application_pdf' },
+  ]);
+  mergeMediaUnavailableEvidence(segment, [
+    { eventHash: pdfHash, reason: 'unsupported_application_pdf' },
+    { eventHash: oversizedHash, reason: 'matrix_media_too_large' },
+  ]);
+
+  assert.deepEqual(
+    segment.mediaUnavailableEvents,
+    [
+      { eventHash: pdfHash, reason: 'unsupported_application_pdf' },
+      { eventHash: oversizedHash, reason: 'matrix_media_too_large' },
+    ].sort((left, right) => left.eventHash.localeCompare(right.eventHash))
+  );
+  assert.deepEqual(
+    segment.mediaUnavailableEventHashes,
+    segment.mediaUnavailableEvents.map(({ eventHash }) => eventHash)
+  );
+  assert.throws(
+    () =>
+      mergeMediaUnavailableEvidence(segment, [
+        { eventHash: '$raw-event-id', reason: 'unsupported_application_pdf' },
+      ]),
+    /recovery_media_unavailable_evidence_invalid/
+  );
+  assert.throws(
+    () =>
+      mergeMediaUnavailableEvidence(segment, [
+        { eventHash: pdfHash, reason: 'intexuraos_private_media_upload_failed_400' },
+      ]),
+    /recovery_media_unavailable_evidence_invalid/
+  );
 });
 
 test('apply retries transient ingest failures with bounded backoff and stops on non-retryable failures', async () => {
@@ -382,7 +428,7 @@ test('apply retries transient ingest failures with bounded backoff and stops on 
       return { accepted: events.length, duplicates: 0, rejected: 0 };
     },
     enqueueMedia: async () => {},
-    drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+    drainMedia: async () => ({ stored: 0, failed: 0, pending: 0, unavailable: [] }),
     waitBeforeRetry: async (delayMs) => delays.push(delayMs),
   });
 
@@ -398,7 +444,7 @@ test('apply retries transient ingest failures with bounded backoff and stops on 
         throw new Error('intexuraos_ingest_failed_400');
       },
       enqueueMedia: async () => {},
-      drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+      drainMedia: async () => ({ stored: 0, failed: 0, pending: 0, unavailable: [] }),
       waitBeforeRetry: async () => assert.fail('non-retryable failures must not wait'),
     }),
     /intexuraos_ingest_failed_400/
@@ -414,7 +460,7 @@ test('apply retries transient ingest failures with bounded backoff and stops on 
         throw new Error('intexuraos_ingest_failed_503');
       },
       enqueueMedia: async () => {},
-      drainMedia: async () => ({ stored: 0, failed: 0, pending: 0 }),
+      drainMedia: async () => ({ stored: 0, failed: 0, pending: 0, unavailable: [] }),
       waitBeforeRetry: async (delayMs) => exhaustedDelays.push(delayMs),
     }),
     /intexuraos_ingest_failed_503/
