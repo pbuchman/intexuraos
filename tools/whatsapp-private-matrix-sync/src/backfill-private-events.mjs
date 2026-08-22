@@ -209,6 +209,15 @@ export async function paginateMatrixRoomMessages({
   return events;
 }
 
+export function parseRecoveryAnchorBefore(value) {
+  if (value === undefined) return DEFAULT_ANCHOR_BEFORE;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error('recovery_anchor_before_invalid');
+  }
+  return parsed;
+}
+
 export async function applyRecoverySegment(segment, deps) {
   if (!isRecord(segment) || !Array.isArray(segment.events)) {
     throw new Error('invalid_recovery_segment');
@@ -1273,6 +1282,7 @@ async function runDiscoverStage({ config, manifestFile, options }) {
       stateRoomContexts,
       config,
       knownMessageIds,
+      anchorBefore: parseRecoveryAnchorBefore(options['anchor-before']),
       fetchRoomMessages: (page) =>
         fetchMatrixRoomMessagesForRecovery(config, matrixAccessToken, page),
       joinRoom: (roomId) => joinMatrixRoomForRecovery(config, matrixAccessToken, roomId),

@@ -15,6 +15,7 @@ import {
   mergeMediaUnavailableEvidence,
   mergeRelationTargetPolicySkipEvidence,
   paginateMatrixRoomMessages,
+  parseRecoveryAnchorBefore,
   reviewMissingOperationMetadata,
   reviewPolicySkippedRelationTargets,
   verifyRecoveryEvidence,
@@ -68,6 +69,14 @@ test('Matrix pagination follows end tokens after empty chunks and rejects token 
       fetchPage: async () => ({ chunk: [], end: 'loop' }),
     }),
     /matrix_pagination_token_loop/
+  );
+});
+
+test('recovery anchor supports an explicit ISO cutoff and rejects malformed values', () => {
+  assert.equal(parseRecoveryAnchorBefore('2026-08-22T12:00:00.000Z'), 1787400000000);
+  assert.throws(
+    () => parseRecoveryAnchorBefore('not-a-timestamp'),
+    /recovery_anchor_before_invalid/
   );
 });
 
