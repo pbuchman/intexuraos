@@ -473,6 +473,10 @@ const CALENDAR_UPDATE_PLURAL_TARGET_PATTERN =
   /(?<![\p{L}\p{N}])(?:events|meetings|appointments|wydarzeni\p{L}*|spotkani\p{L}*)(?![\p{L}\p{N}])/iu;
 const CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN =
   /(?:\b(?:apply|use|execute)\s+(?:exactly\s+)?(?:it|that|this|those\s+dates|the\s+(?:proposal|plan|mapping))\b|\b(?:zastosuj|wykonaj|uzyj)\s+(?:dokladnie\s+)?(?:to|tego|te\s+daty|ten\s+plan|ta\s+propozycj\w*|to\s+mapowani\w*)\b)/u;
+const CALENDAR_UPDATE_PROPOSAL_AFFIRMATIVE_PATTERN =
+  /^(?:tak|yes|ok|okay|jasne|zgoda|potwierdzam|zrob to|do it|please do)$/u;
+const CALENDAR_UPDATE_PROPOSAL_CTA_PATTERN =
+  /(?:\bczy\s+(?:zastos\w*|wykon\w*)\b|\b(?:czy chcesz|czy mam|do you want me to|should i|shall i)\b.{0,100}\b(?:zaktualiz\w*|zmien\w*|przenies\w*|zastos\w*|wykon\w*|apply|update|change|move|execute)\b|\b(?:zaktualiz\w*|zmien\w*|przenies\w*|zastos\w*|wykon\w*|apply|update|change|move|execute)\b.{0,100}\b(?:czy chcesz|czy mam|do you want me to|should i|shall i)\b)/u;
 
 const CONFIRMATION_LABELS = {
   title: { en: 'Title', pl: 'Tytuł' },
@@ -1142,7 +1146,7 @@ function resolveCalendarUpdateReferentialQueryScope(
   events: readonly IntexAgentSessionEvent[],
   message: string
 ): CalendarUpdateReferentialQueryScope | undefined {
-  if (!hasStrongCalendarUpdateSetReference(message)) return undefined;
+  if (!hasStrongCalendarUpdateSetReference(message, events)) return undefined;
 
   for (const event of [...events].reverse()) {
     if (
@@ -3723,9 +3727,10 @@ function readCalendarUpdateActiveInstruction(
   events: readonly IntexAgentSessionEvent[],
   currentMessage: string
 ): Readonly<{ text: string; isProposalContinuation: boolean }> {
-  const isProposalReference = CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(
-    normalizeCalendarTargetText(currentMessage)
-  );
+  const isProposalReference =
+    CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(
+      normalizeCalendarTargetText(currentMessage)
+    ) || isAffirmativeCalendarUpdateProposalContinuation(events, currentMessage);
   const isTargetClarificationContinuation = hasActiveCalendarUpdateTargetClarification(
     events,
     currentMessage
@@ -4221,7 +4226,10 @@ function readPriorCalendarUpdateTargetIds(
   const priorEvents = readLatestCompletePriorCalendarLookupIdentities(input.events);
   if (priorEvents === undefined || priorEvents.length < 2) return undefined;
 
-  const hasStrongSetReference = hasStrongCalendarUpdateSetReference(input.currentMessage);
+  const hasStrongSetReference = hasStrongCalendarUpdateSetReference(
+    input.currentMessage,
+    input.events
+  );
   const hasGenericSetReference = CALENDAR_UPDATE_TARGET_SET_PATTERN.test(input.currentMessage);
   if (!hasStrongSetReference && !hasGenericSetReference) return undefined;
   const currentLookupIds = new Set(
@@ -4284,11 +4292,49 @@ function readPriorCalendarUpdateTargetIds(
   return referencedIds;
 }
 
-function hasStrongCalendarUpdateSetReference(message: string): boolean {
+function hasStrongCalendarUpdateSetReference(
+  message: string,
+  events: readonly IntexAgentSessionEvent[] = []
+): boolean {
   const normalizedMessage = normalizeCalendarTargetText(message);
   return (
     /\b(?:those|these|them|te|tych|nimi|je|im)\b/u.test(normalizedMessage) ||
-    CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(normalizedMessage)
+    CALENDAR_UPDATE_PRIOR_PROPOSAL_REFERENCE_PATTERN.test(normalizedMessage) ||
+    isAffirmativeCalendarUpdateProposalContinuation(events, message)
+  );
+}
+
+function isAffirmativeCalendarUpdateProposalContinuation(
+  events: readonly IntexAgentSessionEvent[],
+  message: string
+): boolean {
+  if (
+    !CALENDAR_UPDATE_PROPOSAL_AFFIRMATIVE_PATTERN.test(
+      normalizeCalendarTargetText(message)
+    )
+  ) {
+    return false;
+  }
+
+  let latestAssistantText: string | undefined;
+  for (const event of [...events].reverse()) {
+    if (event.type === 'user_message') return false;
+    if (event.type !== 'assistant_message') continue;
+    const text = event.payload['text'];
+    if (typeof text !== 'string' || text.trim() === '') return false;
+    latestAssistantText = text;
+    break;
+  }
+  if (latestAssistantText === undefined) return false;
+  const normalizedAssistantText = normalizeCalendarTargetText(latestAssistantText);
+  if (!CALENDAR_UPDATE_PROPOSAL_CTA_PATTERN.test(normalizedAssistantText)) return false;
+
+  const priorEvents = readLatestCompletePriorCalendarLookupIdentities(events);
+  if (priorEvents === undefined) return false;
+  return (
+    priorEvents.filter((event) =>
+      normalizedAssistantText.includes(normalizeCalendarTargetText(event.eventSummary))
+    ).length >= 2
   );
 }
 

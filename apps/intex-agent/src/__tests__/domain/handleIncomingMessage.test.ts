@@ -1554,17 +1554,28 @@ describe('handleIncomingMessage', () => {
     );
   });
 
-  it('treats plain text tak as a new message instead of executing a pending confirmation', async () => {
+  it('executes a pending four-event confirmation when the user replies with plain text Tak', async () => {
     const repo = new FakeSessionRepository();
+    const operations = [
+      calendarUpdateOperation('event-1'),
+      calendarUpdateOperation('event-2'),
+      calendarUpdateOperation('event-3'),
+      calendarUpdateOperation('event-4'),
+    ];
     seedPendingConfirmation(repo, {
       confirmationId: 'confirm-1',
-      toolName: 'create_note',
-      toolArgs: { content: 'The door code is 1234.' },
+      toolName: 'update_calendar_event',
+      toolArgs: operations[0]?.toolArgs ?? {},
+      operations,
     });
-    const runner = new FakeRunner([
+    const runner = new FakeRunner([], [
       {
-        outcome: 'no_action',
-        reply: 'Nie wykonuję żadnej akcji bez przycisku potwierdzenia.',
+        outcome: 'completed',
+        reply: 'Zaktualizowano 4 z 4 wydarzeń w kalendarzu.',
+        operationResults: operations.map(() => ({
+          toolName: 'update_calendar_event' as const,
+          status: 'completed' as const,
+        })),
       },
     ]);
     const replies = new FakeReplyPublisher();
@@ -1574,13 +1585,72 @@ describe('handleIncomingMessage', () => {
       deps(repo, runner, replies)
     );
 
-    expect(runner.calls).toHaveLength(1);
-    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toHaveLength(1);
+    expect(runner.executeConfirmedCalls[0]).toMatchObject({ operations });
     expect(eventPayloads(repo, 'confirmation_resolved')[0]).toEqual({
       confirmationId: 'confirm-1',
-      resolution: 'superseded',
+      resolution: 'accepted',
     });
-    expect(eventPayloads(repo, 'tool_call_completed')).toEqual([]);
+    expect(eventPayloads(repo, 'tool_call_completed')).toHaveLength(4);
+    expect(replies.messages[0]?.message).toBe(
+      'Zaktualizowano 4 z 4 wydarzeń w kalendarzu.'
+    );
+  });
+
+  it('rejects a pending confirmation when the user replies with plain text Nie', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-text-no',
+      toolName: 'create_note',
+      toolArgs: { content: 'The door code is 1234.' },
+    });
+    repo.seedEvent('session-existing', 'assistant_message', {
+      text: 'Czy wykonać tę akcję?',
+    });
+    const runner = new FakeRunner([]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-text-nie', text: 'Nie.', sourceType: 'whatsapp_text' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.calls).toEqual([]);
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(eventPayloads(repo, 'confirmation_resolved')[0]).toEqual({
+      confirmationId: 'confirm-text-no',
+      resolution: 'rejected',
+    });
+    expect(replies.messages[0]?.message).toBe('Okay, I will not run this action.');
+  });
+
+  it('does not let plain text Tak fall back from a malformed latest confirmation to older operations', async () => {
+    const repo = new FakeSessionRepository();
+    seedPendingConfirmation(repo, {
+      confirmationId: 'confirm-old',
+      toolName: 'create_note',
+      toolArgs: { content: 'Older action must not execute.' },
+    });
+    repo.seedEvent('session-existing', 'confirmation_requested', {
+      confirmationId: 'confirm-new-malformed',
+      operations: [calendarUpdateOperation('event-new')],
+      message: 'Malformed newer confirmation.',
+      sourceMessageId: 'wamid-newer-confirmation',
+    });
+    const runner = new FakeRunner([
+      { outcome: 'no_action', reply: 'Potwierdzenie nie zostało wykonane.' },
+    ]);
+    const replies = new FakeReplyPublisher();
+
+    await handleIncomingMessage(
+      message({ messageId: 'wamid-text-tak-malformed', text: 'Tak', sourceType: 'whatsapp_text' }),
+      deps(repo, runner, replies)
+    );
+
+    expect(runner.executeConfirmedCalls).toEqual([]);
+    expect(runner.calls).toHaveLength(1);
+    expect(replies.messages[0]?.message).toBe('Potwierdzenie nie zostało wykonane.');
   });
 
   it('supersedes a pending confirmation when a new text request arrives', async () => {

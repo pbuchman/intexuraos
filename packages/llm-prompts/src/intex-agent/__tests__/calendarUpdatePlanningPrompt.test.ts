@@ -56,7 +56,7 @@ describe('intexAgentCalendarUpdatePlanningPrompt', () => {
       'intex-agent-calendar-update-planning'
     );
     expect(intexAgentCalendarUpdatePlanningPrompt.description).toContain('calendar');
-    expect(intexAgentCalendarUpdatePlanningPrompt.version).toBe('2.0.0');
+    expect(intexAgentCalendarUpdatePlanningPrompt.version).toBe('3.0.0');
   });
 
   it('includes the complete lookup and full conversation as guarded data', () => {
@@ -129,7 +129,9 @@ describe('intexAgentCalendarUpdatePlanningPrompt', () => {
     expect(prompt).toContain('one singular update operation per selected event');
     expect(prompt).toContain('1 to 20');
     expect(prompt).toContain('Never invent an event ID or event summary');
-    expect(prompt).toContain('asking only to see or propose a schedule');
+    expect(prompt).toContain('only for a hypothetical or read-only proposal');
+    expect(prompt).toContain('asks how the resulting dates would look, return updates');
+    expect(prompt).toContain("affirmatively accepts the assistant's immediately preceding offer");
     expect(prompt).toContain('changes must contain only fields explicitly requested by the user');
     expect(prompt).toContain(
       'attendeesToAdd only for an explicit request to add attendees and attendeesToRemove only for an explicit request to remove attendees'
