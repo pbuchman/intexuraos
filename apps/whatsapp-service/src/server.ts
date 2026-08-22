@@ -158,6 +158,9 @@ export async function buildServer(
   const serviceConfig = {
     mediaBucket: config.mediaBucket,
     gcpProjectId: config.gcpProjectId,
+    ...(config.googleApplicationCredentialsFile === undefined
+      ? {}
+      : { googleApplicationCredentialsFile: config.googleApplicationCredentialsFile }),
     mediaCleanupTopic: config.mediaCleanupTopic,
     audioStoredTopic: config.audioStoredTopic,
     intexMessageIngestTopic: config.intexMessageIngestTopic,
