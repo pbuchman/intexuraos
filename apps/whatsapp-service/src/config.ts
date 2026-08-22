@@ -99,6 +99,11 @@ const configSchema = z.object({
   mediaBucket: z.string().min(1, 'INTEXURAOS_WHATSAPP_MEDIA_BUCKET is required'),
 
   /**
+   * Explicit service-account credential used by GCS outside Google-managed runtimes.
+   */
+  googleApplicationCredentialsFile: z.string().min(1).optional(),
+
+  /**
    * Pub/Sub topic for media cleanup events.
    */
   mediaCleanupTopic: z.string().min(1, 'INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC is required'),
@@ -292,6 +297,7 @@ export function loadConfig(): Config {
     allowedWabaIds: process.env['INTEXURAOS_WHATSAPP_WABA_ID'],
     allowedPhoneNumberIds: process.env['INTEXURAOS_WHATSAPP_PHONE_NUMBER_ID'],
     mediaBucket: process.env['INTEXURAOS_WHATSAPP_MEDIA_BUCKET'],
+    googleApplicationCredentialsFile: process.env['GOOGLE_APPLICATION_CREDENTIALS'],
     mediaCleanupTopic: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_TOPIC'],
     mediaCleanupSubscription: process.env['INTEXURAOS_PUBSUB_MEDIA_CLEANUP_SUBSCRIPTION'],
     gcpProjectId: process.env['INTEXURAOS_GCP_PROJECT_ID'],

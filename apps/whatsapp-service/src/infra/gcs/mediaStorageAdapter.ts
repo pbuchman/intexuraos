@@ -25,6 +25,11 @@ export type GcsFailureReason =
   | 'upstream'
   | 'unknown';
 
+export interface GcsMediaStorageOptions {
+  projectId?: string;
+  keyFilename?: string;
+}
+
 export function classifyGcsFailure(error: unknown): GcsFailureReason {
   const code =
     typeof error === 'object' && error !== null && 'code' in error
@@ -129,8 +134,11 @@ export class GcsMediaStorageAdapter implements MediaStoragePort {
   private readonly storage: Storage;
   private readonly bucketName: string;
 
-  constructor(bucketName: string) {
-    this.storage = new Storage();
+  constructor(bucketName: string, options: GcsMediaStorageOptions = {}) {
+    this.storage =
+      options.projectId === undefined && options.keyFilename === undefined
+        ? new Storage()
+        : new Storage(options);
     this.bucketName = bucketName;
   }
 

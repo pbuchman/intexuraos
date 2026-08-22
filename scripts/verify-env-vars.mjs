@@ -336,6 +336,7 @@ function isCommonServiceVar(varName) {
     'INTEXURAOS_INTERNAL_AUTH_TOKEN',
     'INTEXURAOS_ENVIRONMENT',
     'INTEXURAOS_SENTRY_DSN',
+    'GOOGLE_APPLICATION_CREDENTIALS',
     // Global infrastructure vars (set once, used by all services)
     'INTEXURAOS_GCP_PROJECT_ID',
     'INTEXURAOS_WEB_APP_URL',

@@ -9,6 +9,7 @@ const mockSave = vi.fn();
 const mockDelete = vi.fn();
 const mockGetSignedUrl = vi.fn();
 const mockGetFiles = vi.fn();
+const mockStorageConstructor = vi.fn();
 const mockFile = vi.fn(() => ({
   save: mockSave,
   delete: mockDelete,
@@ -22,6 +23,10 @@ const mockBucket = vi.fn(() => ({
 vi.mock('@google-cloud/storage', () => {
   return {
     Storage: class MockStorage {
+      constructor(options?: unknown) {
+        mockStorageConstructor(options);
+      }
+
       bucket = mockBucket;
     },
   };
@@ -47,6 +52,18 @@ describe('GcsMediaStorageAdapter', () => {
     expect(classifyGcsFailure({ code: 'ETIMEDOUT' })).toBe('network');
     expect(classifyGcsFailure({ code: 412 })).toBe('precondition_failed');
     expect(classifyGcsFailure(new Error('sensitive raw detail'))).toBe('unknown');
+  });
+
+  it('binds GCS to the configured runtime project and credential file', () => {
+    new GcsMediaStorageAdapter(testBucketName, {
+      projectId: 'intexuraos-dev-pbuchman',
+      keyFilename: '/home/deploy/runtime-sa-key.json',
+    });
+
+    expect(mockStorageConstructor).toHaveBeenLastCalledWith({
+      projectId: 'intexuraos-dev-pbuchman',
+      keyFilename: '/home/deploy/runtime-sa-key.json',
+    });
   });
 
   describe('upload', () => {
