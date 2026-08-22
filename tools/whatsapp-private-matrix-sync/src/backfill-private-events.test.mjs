@@ -10,6 +10,7 @@ import {
   assertRecoveryApplyIdentity,
   assertRecoveryVerificationEnvironment,
   discoverRecoverySegment,
+  discoverRecoverySegmentWithInviteRefresh,
   finalizeRecoveryState,
   main as runBackfillCli,
   mergeMediaUnavailableEvidence,
@@ -179,6 +180,115 @@ test('discover joins eligible WhatsApp invites and requires rediscovery from unc
     /eligible_invite_joined_rediscover/
   );
   assert.deepEqual(joined, ['!invite:home-dev']);
+});
+
+test('discover refreshes from the temporary sync token after joining an invite', async () => {
+  const joined = [];
+  const refreshedFrom = [];
+  const pagination = [];
+  const segment = await discoverRecoverySegmentWithInviteRefresh({
+    name: 's1-s2',
+    fromToken: 's1',
+    syncResponse: {
+      next_batch: 'after-invite',
+      rooms: {
+        invite: {
+          '!invite:home-dev': {
+            invite_state: {
+              events: [
+                {
+                  type: 'm.room.member',
+                  sender: '@whatsappbot:home-dev',
+                  state_key: '@owner:home-dev',
+                  content: { membership: 'invite' },
+                },
+              ],
+            },
+          },
+        },
+      },
+    },
+    refreshSync: async (since) => {
+      refreshedFrom.push(since);
+      return {
+        next_batch: 's2',
+        rooms: {
+          join: {
+            '!invite:home-dev': {
+              state: { events: [] },
+              timeline: { events: [matrixText('$after-join')] },
+            },
+          },
+        },
+      };
+    },
+    stateRoomContexts: {},
+    config: recoveryConfig,
+    knownMessageIds: new Set(),
+    fetchRoomMessages: async ({ fromToken, toToken, direction }) => {
+      pagination.push([fromToken, toToken, direction]);
+      return { chunk: [] };
+    },
+    joinRoom: async (roomId) => joined.push(roomId),
+  });
+
+  assert.deepEqual(joined, ['!invite:home-dev']);
+  assert.deepEqual(refreshedFrom, ['after-invite']);
+  assert.deepEqual(pagination, [
+    ['s1', 's2', 'f'],
+    ['s1', undefined, 'b'],
+  ]);
+  assert.equal(segment.toToken, 's2');
+  assert.deepEqual(
+    segment.events.map((event) => event.matrixEventId),
+    ['$after-join']
+  );
+});
+
+test('invite rediscovery fails closed when Matrix repeats the temporary sync token', async () => {
+  const stuckSync = {
+    next_batch: 'stuck',
+    rooms: {
+      invite: {
+        '!invite:home-dev': {
+          invite_state: {
+            events: [
+              {
+                type: 'm.room.member',
+                sender: '@whatsappbot:home-dev',
+                state_key: '@owner:home-dev',
+                content: { membership: 'invite' },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+  let joined = 0;
+  let refreshed = 0;
+
+  await assert.rejects(
+    discoverRecoverySegmentWithInviteRefresh({
+      name: 's1-s2',
+      fromToken: 's1',
+      syncResponse: stuckSync,
+      refreshSync: async () => {
+        refreshed += 1;
+        return stuckSync;
+      },
+      stateRoomContexts: {},
+      config: recoveryConfig,
+      knownMessageIds: new Set(),
+      fetchRoomMessages: async () => assert.fail('pagination must wait for rediscovery'),
+      joinRoom: async () => {
+        joined += 1;
+      },
+    }),
+    /recovery_invite_rediscovery_token_loop/
+  );
+  assert.equal(joined, 2);
+  assert.equal(refreshed, 1);
 });
 
 test('discover does not treat an owner-authored tail as WhatsApp room proof', async () => {

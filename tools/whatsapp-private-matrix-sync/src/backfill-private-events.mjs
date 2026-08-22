@@ -22,6 +22,7 @@ import {
 const MAX_INGEST_BATCH = 100;
 const MAX_TRANSIENT_INGEST_ATTEMPTS = 5;
 const INITIAL_TRANSIENT_INGEST_DELAY_MS = 1_000;
+const MAX_INVITE_REDISCOVERY_ATTEMPTS = 10;
 const RETAINED_PROJECT_ID = 'intexuraos-dev-pbuchman';
 const DEFAULT_ANCHOR_BEFORE = Date.parse('2026-08-09T22:00:00.000Z');
 const MEDIA_UNAVAILABLE_REASONS = new Set([
@@ -166,6 +167,35 @@ export async function discoverRecoverySegment({
       toTokenHash: sha256(Buffer.from(toToken)),
     },
   };
+}
+
+export async function discoverRecoverySegmentWithInviteRefresh({
+  syncResponse,
+  refreshSync,
+  ...input
+}) {
+  let currentSyncResponse = syncResponse;
+  const refreshedFromTokens = new Set();
+  for (let attempt = 0; attempt <= MAX_INVITE_REDISCOVERY_ATTEMPTS; attempt += 1) {
+    try {
+      return await discoverRecoverySegment({ ...input, syncResponse: currentSyncResponse });
+    } catch (error) {
+      if (safeError(error) !== 'eligible_invite_joined_rediscover') throw error;
+      if (attempt === MAX_INVITE_REDISCOVERY_ATTEMPTS) {
+        throw new Error('recovery_invite_rediscovery_limit');
+      }
+      const nextBatch = currentSyncResponse?.next_batch;
+      if (typeof nextBatch !== 'string' || nextBatch === '') {
+        throw new Error('recovery_invite_rediscovery_missing_next_batch');
+      }
+      if (refreshedFromTokens.has(nextBatch)) {
+        throw new Error('recovery_invite_rediscovery_token_loop');
+      }
+      refreshedFromTokens.add(nextBatch);
+      currentSyncResponse = await refreshSync(nextBatch);
+    }
+  }
+  throw new Error('recovery_invite_rediscovery_limit');
 }
 
 export async function paginateMatrixRoomMessages({
@@ -1274,38 +1304,32 @@ async function runDiscoverStage({ config, manifestFile, options }) {
   const matrixAccessToken = await readPrivateToken(config.matrixAccessTokenFile);
   const syncResponse = await fetchMatrixSyncForRecovery(config, matrixAccessToken, fromToken);
   const knownMessageIds = await readKnownMessageIds(options['known-message-ids']);
-  try {
-    const segment = await discoverRecoverySegment({
-      name: manifest.segments.length === 0 ? 's0-s1' : 's1-s2',
-      fromToken,
-      syncResponse,
-      stateRoomContexts,
-      config,
-      knownMessageIds,
-      anchorBefore: parseRecoveryAnchorBefore(options['anchor-before']),
-      fetchRoomMessages: (page) =>
-        fetchMatrixRoomMessagesForRecovery(config, matrixAccessToken, page),
-      joinRoom: (roomId) => joinMatrixRoomForRecovery(config, matrixAccessToken, roomId),
-    });
-    if (segment.errors.length > 0) {
-      manifest.lastDiscoveryException = {
-        segmentName: segment.name,
-        errors: segment.errors,
-        summary: segment.summary,
-      };
-      await writePrivateRecoveryJson(manifestFile, manifest);
-      throw new Error(`recovery_discovery_errors_${segment.errors.length}`);
-    }
-    delete manifest.lastDiscoveryException;
-    manifest.segments.push(segment);
+  const segment = await discoverRecoverySegmentWithInviteRefresh({
+    name: manifest.segments.length === 0 ? 's0-s1' : 's1-s2',
+    fromToken,
+    syncResponse,
+    refreshSync: (since) => fetchMatrixSyncForRecovery(config, matrixAccessToken, since),
+    stateRoomContexts,
+    config,
+    knownMessageIds,
+    anchorBefore: parseRecoveryAnchorBefore(options['anchor-before']),
+    fetchRoomMessages: (page) =>
+      fetchMatrixRoomMessagesForRecovery(config, matrixAccessToken, page),
+    joinRoom: (roomId) => joinMatrixRoomForRecovery(config, matrixAccessToken, roomId),
+  });
+  if (segment.errors.length > 0) {
+    manifest.lastDiscoveryException = {
+      segmentName: segment.name,
+      errors: segment.errors,
+      summary: segment.summary,
+    };
     await writePrivateRecoveryJson(manifestFile, manifest);
-    return { status: 'discovered', segment: segment.name, ...segment.summary };
-  } catch (error) {
-    if (safeError(error) === 'eligible_invite_joined_rediscover') {
-      return { status: 'invite_joined_rediscover', segmentCount: manifest.segments.length };
-    }
-    throw error;
+    throw new Error(`recovery_discovery_errors_${segment.errors.length}`);
   }
+  delete manifest.lastDiscoveryException;
+  manifest.segments.push(segment);
+  await writePrivateRecoveryJson(manifestFile, manifest);
+  return { status: 'discovered', segment: segment.name, ...segment.summary };
 }
 
 async function runApplyStage({ config, manifestFile }) {
