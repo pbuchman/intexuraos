@@ -222,9 +222,11 @@ export async function applyRecoverySegment(segment, deps) {
     mediaUnavailable: [],
   };
   const relationTargetPolicySkips = indexRelationTargetPolicySkips(segment);
+  const repairEvents = selectOperationMetadataRepairEvents(segment);
+  const events = repairEvents ?? segment.events;
 
-  for (let index = 0; index < segment.events.length; index += MAX_INGEST_BATCH) {
-    const originalBatch = segment.events.slice(index, index + MAX_INGEST_BATCH);
+  for (let index = 0; index < events.length; index += MAX_INGEST_BATCH) {
+    const originalBatch = events.slice(index, index + MAX_INGEST_BATCH);
     const batch = originalBatch.map((event) =>
       annotateReviewedRelationTarget(event, relationTargetPolicySkips)
     );
@@ -243,7 +245,9 @@ export async function applyRecoverySegment(segment, deps) {
     }
     summary.accepted += result.accepted;
     summary.duplicates += result.duplicates;
-    await deps.enqueueMedia(originalBatch);
+    if (repairEvents === undefined) {
+      await deps.enqueueMedia(originalBatch);
+    }
   }
 
   const media = await deps.drainMedia();
@@ -260,6 +264,101 @@ export async function applyRecoverySegment(segment, deps) {
   summary.mediaPending = media.pending;
   summary.mediaUnavailable = media.unavailable;
   return summary;
+}
+
+export async function reviewMissingOperationMetadata(segment, sourceAccountId, deps) {
+  if (!isRecord(segment) || !Array.isArray(segment.events)) {
+    throw new Error('invalid_recovery_segment');
+  }
+  const relationTargetPolicySkips = indexRelationTargetPolicySkips(segment);
+  const operations = [];
+  for (const event of segment.events) {
+    const targetMatrixEventId = getRelationTargetMatrixEventId(event);
+    if (targetMatrixEventId === undefined) continue;
+    operations.push({
+      event,
+      messageId: createPrivateWhatsAppMessageId(sourceAccountId, event.matrixEventId),
+      targetMatrixEventId,
+    });
+  }
+  const documents = await deps.fetchDocuments(operations.map(({ messageId }) => messageId));
+  const missingDocuments = operations.filter(({ messageId }) => !documents.has(messageId)).length;
+  if (missingDocuments > 0) {
+    throw new Error(`recovery_verify_missing_documents_${missingDocuments}`);
+  }
+
+  const eventHashes = [];
+  let blockedCount = 0;
+  for (const { event, messageId, targetMatrixEventId } of operations) {
+    const document = documents.get(messageId);
+    if (
+      document?.matrixEventId !== event.matrixEventId ||
+      document?.sourceAccountId !== sourceAccountId
+    ) {
+      blockedCount += 1;
+      continue;
+    }
+    const storedOperation =
+      event?.message?.reaction?.targetMatrixEventId === targetMatrixEventId
+        ? document.reaction
+        : document.relation;
+    if (storedOperation === undefined) {
+      eventHashes.push(sha256(Buffer.from(event.matrixEventId)));
+      continue;
+    }
+    const expectedTargetMessageId = createPrivateWhatsAppMessageId(
+      sourceAccountId,
+      targetMatrixEventId
+    );
+    const evidence = relationTargetPolicySkips.get(sha256(Buffer.from(event.matrixEventId)));
+    const resolved =
+      storedOperation.targetMatrixEventId === targetMatrixEventId &&
+      storedOperation.targetMessageId === expectedTargetMessageId &&
+      (evidence === undefined
+        ? storedOperation.applicationStatus === 'applied' ||
+          storedOperation.applicationStatus === 'superseded'
+        : storedOperation.applicationStatus === 'superseded' &&
+          storedOperation.targetUnavailableReason === evidence.reason);
+    if (!resolved) blockedCount += 1;
+  }
+  if (blockedCount > 0) {
+    throw new Error(`recovery_operation_metadata_review_blocked_${blockedCount}`);
+  }
+  return {
+    reviewedOperationCount: operations.length,
+    repairedEventCount: eventHashes.length,
+    eventHashes: eventHashes.sort(),
+  };
+}
+
+function selectOperationMetadataRepairEvents(segment) {
+  if (segment.operationMetadataRepairPending !== true) return undefined;
+  const eventHashes = segment.operationMetadataRepairEventHashes;
+  if (
+    !Array.isArray(eventHashes) ||
+    eventHashes.length === 0 ||
+    eventHashes.some((eventHash) => !/^[a-f0-9]{64}$/u.test(eventHash)) ||
+    new Set(eventHashes).size !== eventHashes.length
+  ) {
+    throw new Error('recovery_operation_metadata_repair_evidence_invalid');
+  }
+  const requested = new Set(eventHashes);
+  const selected = segment.events.filter((event) => {
+    if (!isRecord(event) || typeof event.matrixEventId !== 'string') {
+      throw new Error('invalid_recovery_segment');
+    }
+    const eventHash = sha256(Buffer.from(event.matrixEventId));
+    if (!requested.has(eventHash)) return false;
+    if (getRelationTargetMatrixEventId(event) === undefined) {
+      throw new Error('recovery_operation_metadata_repair_evidence_mismatch');
+    }
+    requested.delete(eventHash);
+    return true;
+  });
+  if (requested.size > 0) {
+    throw new Error('recovery_operation_metadata_repair_evidence_unused');
+  }
+  return selected;
 }
 
 export function mergeRelationTargetPolicySkipEvidence(segment, evidenceRecords) {
@@ -1244,6 +1343,9 @@ async function runApplyStage({ config, manifestFile }) {
   mergeMediaUnavailableEvidence(segment, result.mediaUnavailable);
   segment.lastApply = result;
   segment.applied = result.mediaPending === 0;
+  if (segment.applied && segment.operationMetadataRepairPending === true) {
+    segment.operationMetadataRepairPending = false;
+  }
   await writePrivateRecoveryJson(manifestFile, manifest);
   if (!segment.applied) {
     throw new Error(`recovery_apply_media_pending_${result.mediaPending}`);
@@ -1300,6 +1402,20 @@ async function runVerifyStage({ config, manifestFile, env, options }) {
       delete segment.verification;
       await writePrivateRecoveryJson(manifestFile, manifest);
       throw new Error(`recovery_relation_target_repairs_required_${review.repairedEventCount}`);
+    }
+  }
+  if (options['review-missing-operation-metadata'] === 'true') {
+    const review = await reviewMissingOperationMetadata(segment, config.sourceAccountId, {
+      fetchDocuments: verifier.fetchDocuments,
+    });
+    if (review.repairedEventCount > 0) {
+      segment.operationMetadataRepairEventHashes = review.eventHashes;
+      segment.operationMetadataRepairPending = true;
+      segment.applied = false;
+      delete segment.verified;
+      delete segment.verification;
+      await writePrivateRecoveryJson(manifestFile, manifest);
+      throw new Error(`recovery_operation_metadata_repairs_required_${review.repairedEventCount}`);
     }
   }
   const result = await verifyRecoveryEvidence(
