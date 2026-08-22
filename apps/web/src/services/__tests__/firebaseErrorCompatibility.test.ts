@@ -70,6 +70,7 @@ describe('ensureFirebaseErrorNameCompatibility', () => {
 
       return { App: (): null => null };
     });
+    vi.doMock('@/config', () => ({ config: { sentryDsn: '' } }));
     vi.doMock('../../config.js', () => ({ config: { sentryDsn: '' } }));
     vi.doMock('@sentry/react', () => ({ init: vi.fn() }));
     vi.doMock('react-dom/client', () => ({
