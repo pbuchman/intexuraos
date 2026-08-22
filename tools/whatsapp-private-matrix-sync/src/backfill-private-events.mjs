@@ -44,6 +44,7 @@ export async function discoverRecoverySegment({
   fetchRoomMessages,
   joinRoom,
   anchorBefore = DEFAULT_ANCHOR_BEFORE,
+  excludeKnownMessageIds = false,
 }) {
   const toToken =
     typeof syncResponse?.next_batch === 'string' && syncResponse.next_batch !== ''
@@ -84,6 +85,7 @@ export async function discoverRecoverySegment({
 
   const globalEventIds = new Set();
   const mappedEvents = [];
+  let excludedKnownMappedCount = 0;
   const skipCounts = {};
   const errors = [];
   for (const [roomId, room] of relevantRooms) {
@@ -127,7 +129,18 @@ export async function discoverRecoverySegment({
       contexts[roomId] = updated[roomId] ?? contexts[roomId] ?? { memberDisplayNames: {} };
       const classified = classifyMatrixEventForRecovery(roomId, event, contexts[roomId], config);
       if (classified.classification === 'mapped') {
-        mappedEvents.push(classified.event);
+        const messageId = createPrivateWhatsAppMessageId(
+          config.sourceAccountId,
+          classified.event.matrixEventId
+        );
+        if (
+          excludeKnownMessageIds === true &&
+          (knownMessageIds.has(messageId) || knownMessageIds.has(classified.event.matrixEventId))
+        ) {
+          excludedKnownMappedCount += 1;
+        } else {
+          mappedEvents.push(classified.event);
+        }
       } else if (classified.classification === 'policy_skip') {
         skipCounts[classified.reason] = (skipCounts[classified.reason] ?? 0) + 1;
       } else {
@@ -158,6 +171,7 @@ export async function discoverRecoverySegment({
     summary: {
       roomCount: relevantRooms.size,
       mappedCount: mappedEvents.length,
+      excludedKnownMappedCount,
       policySkipCount: Object.values(skipCounts).reduce((sum, count) => sum + count, 0),
       errorCount: errors.length,
       eventTypeCounts,
@@ -1304,6 +1318,10 @@ async function runDiscoverStage({ config, manifestFile, options }) {
   const matrixAccessToken = await readPrivateToken(config.matrixAccessTokenFile);
   const syncResponse = await fetchMatrixSyncForRecovery(config, matrixAccessToken, fromToken);
   const knownMessageIds = await readKnownMessageIds(options['known-message-ids']);
+  const excludeKnownMessageIds = options['exclude-known-message-ids'] === 'true';
+  if (excludeKnownMessageIds && options['known-message-ids'] === undefined) {
+    throw new Error('recovery_exclude_known_message_ids_missing_file');
+  }
   const segment = await discoverRecoverySegmentWithInviteRefresh({
     name: manifest.segments.length === 0 ? 's0-s1' : 's1-s2',
     fromToken,
@@ -1312,6 +1330,7 @@ async function runDiscoverStage({ config, manifestFile, options }) {
     stateRoomContexts,
     config,
     knownMessageIds,
+    excludeKnownMessageIds,
     anchorBefore: parseRecoveryAnchorBefore(options['anchor-before']),
     fetchRoomMessages: (page) =>
       fetchMatrixRoomMessagesForRecovery(config, matrixAccessToken, page),
