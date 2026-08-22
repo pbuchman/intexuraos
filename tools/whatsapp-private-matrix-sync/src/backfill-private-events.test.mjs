@@ -15,6 +15,7 @@ import {
   mergeMediaUnavailableEvidence,
   mergeRelationTargetPolicySkipEvidence,
   paginateMatrixRoomMessages,
+  reviewMissingOperationMetadata,
   reviewPolicySkippedRelationTargets,
   verifyRecoveryEvidence,
 } from './backfill-private-events.mjs';
@@ -373,6 +374,114 @@ test('apply is idempotent, uses backfill batches, and drains media only after me
   assert.equal(retry.accepted, 0);
   assert.equal(retry.duplicates, 2);
   assert.deepEqual(trace.slice(0, 3), [['post', 'backfill', 2], ['enqueue', 2], ['drain']]);
+});
+
+test('operation metadata repair replays only reviewed operations and does not requeue media', async () => {
+  const repairEventId = '$legacy-relation';
+  const repairEventHash = createHash('sha256').update(repairEventId).digest('hex');
+  const posted = [];
+  let enqueued = false;
+  const result = await applyRecoverySegment(
+    {
+      events: [
+        {
+          matrixEventId: '$media',
+          message: { type: 'image', media: { mxcUri: 'mxc://home-dev/media' } },
+        },
+        {
+          matrixEventId: repairEventId,
+          message: {
+            type: 'text',
+            relation: { kind: 'replacement', targetMatrixEventId: '$target' },
+          },
+        },
+      ],
+      operationMetadataRepairPending: true,
+      operationMetadataRepairEventHashes: [repairEventHash],
+    },
+    {
+      postBatch: async (events) => {
+        posted.push(...events);
+        return { accepted: 0, duplicates: events.length, rejected: 0 };
+      },
+      enqueueMedia: async () => {
+        enqueued = true;
+      },
+      drainMedia: async () => ({ stored: 0, pending: 0, unavailable: [] }),
+    }
+  );
+
+  assert.deepEqual(
+    posted.map(({ matrixEventId }) => matrixEventId),
+    [repairEventId]
+  );
+  assert.equal(enqueued, false);
+  assert.equal(result.duplicates, 1);
+  assert.equal(result.mediaPending, 0);
+});
+
+test('missing legacy operation metadata review returns only hash evidence and fails closed', async () => {
+  const relationEventId = '$legacy-relation';
+  const reactionEventId = '$resolved-reaction';
+  const relationHash = createHash('sha256').update(relationEventId).digest('hex');
+  const sourceAccountId = 'private-source';
+  const segment = {
+    events: [
+      {
+        matrixEventId: relationEventId,
+        message: {
+          type: 'text',
+          relation: { kind: 'replacement', targetMatrixEventId: '$relation-target' },
+        },
+      },
+      {
+        matrixEventId: reactionEventId,
+        message: {
+          type: 'reaction',
+          reaction: { emoji: 'x', targetMatrixEventId: '$reaction-target' },
+        },
+      },
+    ],
+  };
+  const relationMessageId = createHashForTest(`${sourceAccountId}\0${relationEventId}`);
+  const reactionMessageId = createHashForTest(`${sourceAccountId}\0${reactionEventId}`);
+  const documents = new Map([
+    [relationMessageId, { matrixEventId: relationEventId, sourceAccountId }],
+    [
+      reactionMessageId,
+      {
+        matrixEventId: reactionEventId,
+        sourceAccountId,
+        reaction: {
+          targetMatrixEventId: '$reaction-target',
+          targetMessageId: createHashForTest(`${sourceAccountId}\0$reaction-target`),
+          applicationStatus: 'applied',
+        },
+      },
+    ],
+  ]);
+
+  const review = await reviewMissingOperationMetadata(segment, sourceAccountId, {
+    fetchDocuments: async () => documents,
+  });
+  assert.deepEqual(review, {
+    reviewedOperationCount: 2,
+    repairedEventCount: 1,
+    eventHashes: [relationHash],
+  });
+  assert.equal(JSON.stringify(review).includes(relationEventId), false);
+
+  documents.get(reactionMessageId).reaction = {
+    targetMatrixEventId: '$wrong-target',
+    targetMessageId: 'wrong-id',
+    applicationStatus: 'applied',
+  };
+  await assert.rejects(
+    reviewMissingOperationMetadata(segment, sourceAccountId, {
+      fetchDocuments: async () => documents,
+    }),
+    /recovery_operation_metadata_review_blocked_1/
+  );
 });
 
 test('media unavailable evidence is allowlisted and merged idempotently by event hash', () => {

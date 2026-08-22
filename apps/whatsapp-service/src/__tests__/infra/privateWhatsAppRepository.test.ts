@@ -3522,6 +3522,121 @@ describe('privateWhatsAppRepository', () => {
     });
   });
 
+  it('idempotently restores missing legacy relation metadata during backfill replay', async () => {
+    const target = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$legacy-relation-target',
+      },
+    });
+    const legacy = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$legacy-relation-source',
+        text: 'legacy source',
+      },
+    });
+    expect(await repository.storeIncomingMessage(target)).toMatchObject({ ok: true });
+    expect(await repository.storeIncomingMessage(legacy)).toMatchObject({ ok: true });
+
+    const replay = createStoreInput({
+      ...legacy,
+      message: {
+        ...legacy.message,
+        relation: {
+          kind: 'replacement',
+          targetMatrixEventId: target.message.matrixEventId,
+          applicationStatus: 'pending',
+        },
+      },
+    });
+    expect(await repository.storeIncomingMessage(replay)).toMatchObject({
+      ok: true,
+      value: { outcome: 'duplicate' },
+    });
+    const messageId = deterministicId(legacy.sourceAccountId, legacy.message.matrixEventId);
+    const stored = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    const firstAppliedAt = (stored?.['relation'] as { appliedAt?: string } | undefined)?.appliedAt;
+    expect(stored).toMatchObject({
+      text: 'legacy source',
+      relation: {
+        kind: 'replacement',
+        targetMatrixEventId: target.message.matrixEventId,
+        targetMessageId: deterministicId(legacy.sourceAccountId, target.message.matrixEventId),
+        applicationStatus: 'superseded',
+      },
+    });
+    expect(firstAppliedAt).toBeTruthy();
+
+    expect(await repository.storeIncomingMessage(replay)).toMatchObject({
+      ok: true,
+      value: { outcome: 'duplicate' },
+    });
+    expect(
+      (stored?.['relation'] as { appliedAt?: string } | undefined)?.appliedAt
+    ).toBe(firstAppliedAt);
+  });
+
+  it('idempotently restores missing legacy reaction metadata during backfill replay', async () => {
+    const input = createStoreInput({
+      deliveryMode: 'backfill',
+      message: {
+        ...createStoreInput().message,
+        matrixEventId: '$legacy-reaction-source',
+        type: 'reaction',
+        text: '👍',
+        reaction: {
+          emoji: '👍',
+          targetMatrixEventId: '$legacy-reaction-target',
+        },
+      },
+    });
+    expect(await repository.storeIncomingMessage(input)).toMatchObject({ ok: true });
+    const messageId = deterministicId(input.sourceAccountId, input.message.matrixEventId);
+    const stored = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    if (stored === undefined) throw new Error('Expected stored legacy reaction');
+    const { reaction: _reaction, ...legacyStored } = stored;
+    await fakeFirestore
+      .collection(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      .doc(messageId)
+      .set(legacyStored);
+
+    expect(await repository.storeIncomingMessage(input)).toMatchObject({
+      ok: true,
+      value: { outcome: 'duplicate' },
+    });
+    const repaired = fakeFirestore
+      .getAllData()
+      .get(PRIVATE_WHATSAPP_MESSAGES_COLLECTION)
+      ?.get(messageId);
+    const firstAppliedAt = (repaired?.['reaction'] as { appliedAt?: string } | undefined)?.appliedAt;
+    expect(repaired).toMatchObject({
+      reaction: {
+        emoji: '👍',
+        targetMatrixEventId: '$legacy-reaction-target',
+        targetMessageId: deterministicId(input.sourceAccountId, '$legacy-reaction-target'),
+        applicationStatus: 'superseded',
+      },
+    });
+    expect(firstAppliedAt).toBeTruthy();
+
+    expect(await repository.storeIncomingMessage(input)).toMatchObject({
+      ok: true,
+      value: { outcome: 'duplicate' },
+    });
+    expect(
+      (repaired?.['reaction'] as { appliedAt?: string } | undefined)?.appliedAt
+    ).toBe(firstAppliedAt);
+  });
+
   it('idempotently repairs reviewed policy-skipped relation targets on duplicate replay', async () => {
     const base = createStoreInput({
       deliveryMode: 'backfill',
