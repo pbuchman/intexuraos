@@ -26,6 +26,7 @@ import {
   DEFAULT_CONVERSATION_ASSISTANT_MODEL,
   CONVERSATION_ASSISTANT_MODEL_OPTIONS,
   CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES,
+  getConversationAssistantModelInputTokenBudget,
   isConversationAssistantModel,
   getConversationAssistantModelDisplayName,
   IntexAgentModels,
@@ -586,20 +587,40 @@ describe('ConversationAssistantModel', () => {
           label: 'MiniMax M3',
           provider: 'MiniMax',
           supportsReasoning: true,
+          contextWindowTokens: 1_000_000,
+          reservedOutputTokens: 65_536,
         },
         {
           id: ConversationAssistantModels.ClaudeSonnet5,
           label: 'Claude Sonnet 5',
           provider: 'Anthropic',
           supportsReasoning: true,
+          contextWindowTokens: 1_000_000,
+          reservedOutputTokens: 65_536,
         },
         {
           id: ConversationAssistantModels.Gemini35FlashThinking,
           label: 'Gemini 3.5 Flash Thinking',
           provider: 'Google',
           supportsReasoning: true,
+          contextWindowTokens: 1_000_000,
+          reservedOutputTokens: 65_536,
         },
       ] satisfies readonly ConversationAssistantModelOption[]);
+    });
+
+    it('derives the model input budget after reserving answer and reasoning capacity', () => {
+      for (const option of CONVERSATION_ASSISTANT_MODEL_OPTIONS) {
+        expect(getConversationAssistantModelInputTokenBudget(option.id)).toBe(934_464);
+      }
+    });
+
+    it('fails closed when curated model metadata is missing', () => {
+      expect(() =>
+        getConversationAssistantModelInputTokenBudget(
+          'or:missing/model' as typeof ConversationAssistantModels.MiniMaxM3
+        )
+      ).toThrow('Missing Conversation Assistant model metadata');
     });
   });
 

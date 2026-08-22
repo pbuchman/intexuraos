@@ -1,6 +1,6 @@
 import { ArrowLeft, Bot } from 'lucide-react';
 import { useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CONVERSATION_ASSISTANT_MODEL_OPTIONS,
   type ConversationAssistantModel,
@@ -11,7 +11,23 @@ import { ErrorBanner } from '@/components/ui/ErrorBanner';
 import { useWhatsAppConversationAssistant } from '@/hooks/useWhatsAppConversationAssistant';
 
 export function WhatsAppConversationAssistantNewPage(): React.JSX.Element {
-  const assistant = useWhatsAppConversationAssistant({ loadChats: true, loadSessions: false });
+  const [searchParams] = useSearchParams();
+  const sourceSessionId = searchParams.get('sourceSession') ?? undefined;
+  const sourceChatDisplayName = searchParams.get('contact') ?? undefined;
+  const requestedModel = searchParams.get('model');
+  const requestedFrom = searchParams.get('from');
+  const requestedTo = searchParams.get('to');
+  const assistant = useWhatsAppConversationAssistant({
+    loadChats: sourceSessionId === undefined,
+    loadSessions: false,
+    ...(sourceSessionId === undefined ? {} : { sourceSessionId }),
+    ...(requestedFrom === null ? {} : { initialFrom: requestedFrom }),
+    ...(requestedTo === null ? {} : { initialTo: requestedTo }),
+    ...(requestedModel !== null &&
+    CONVERSATION_ASSISTANT_MODEL_OPTIONS.some((model) => model.id === requestedModel)
+      ? { initialModel: requestedModel as ConversationAssistantModel }
+      : {}),
+  });
   const navigate = useNavigate();
   const selectedModelLabel =
     CONVERSATION_ASSISTANT_MODEL_OPTIONS.find((model) => model.id === assistant.selectedModel)
@@ -49,7 +65,8 @@ export function WhatsAppConversationAssistantNewPage(): React.JSX.Element {
 
         <section className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 sm:p-6">
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-            <label className="block sm:col-span-2">
+            {sourceSessionId === undefined ? (
+              <label className="block sm:col-span-2">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                 Private direct chat
               </span>
@@ -69,7 +86,17 @@ export function WhatsAppConversationAssistantNewPage(): React.JSX.Element {
                   </option>
                 ))}
               </select>
-            </label>
+              </label>
+            ) : (
+              <div className="sm:col-span-2">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Private direct chat
+                </span>
+                <p className="mt-1.5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                  {sourceChatDisplayName ?? 'Same conversation as the previous analysis'}
+                </p>
+              </div>
+            )}
             <label className="block">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">From</span>
               <input
@@ -134,7 +161,10 @@ export function WhatsAppConversationAssistantNewPage(): React.JSX.Element {
               }}
               isLoading={assistant.creating}
               loadingText="Starting analysis"
-              disabled={assistant.selectedChatId === undefined || assistant.creating}
+              disabled={
+                (sourceSessionId === undefined && assistant.selectedChatId === undefined) ||
+                assistant.creating
+              }
               className="shrink-0"
             >
               Create analysis

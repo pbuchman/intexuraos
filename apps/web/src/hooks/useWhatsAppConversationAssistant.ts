@@ -66,7 +66,7 @@ const DURABLE_TURN_POLL_DELAYS_MS = [0, 500, 1000, 2000, 4000, 5000] as const;
 const BEST_EFFORT_RECONCILIATION_TIMEOUT_MS = 750;
 const MESSAGE_NOT_SENT_ERROR = 'Message was not sent. Your draft was kept. Try again.';
 const PLAIN_CONTEXT_WINDOW_ERROR =
-  'This question is too large for the model context. Shorten it or start a new analysis.';
+  'The selected conversation context does not fit this model. Create a smaller analysis with a shorter date range. Your draft was kept.';
 const ACKNOWLEDGED_TURN_RECOVERY_ERROR =
   'The live response was interrupted. Checking the saved answer.';
 const REQUEST_BODY_CONFLICT_ERROR =
@@ -197,9 +197,11 @@ function readPendingCreation(): StoredPendingCreation | null {
 function isStoredCreationRequest(value: unknown): value is CreateConversationAssistantSessionRequest {
   if (typeof value !== 'object' || value === null) return false;
   const request = value as Record<string, unknown>;
+  const hasChatId = typeof request['chatId'] === 'string';
+  const hasSourceSessionId = typeof request['sourceSessionId'] === 'string';
   return (
     typeof request['requestId'] === 'string' &&
-    typeof request['chatId'] === 'string' &&
+    hasChatId !== hasSourceSessionId &&
     typeof request['from'] === 'string' &&
     Number.isFinite(Date.parse(request['from'])) &&
     typeof request['to'] === 'string' &&
@@ -330,6 +332,10 @@ export interface UseWhatsAppConversationAssistantOptions {
   sessionId?: string;
   loadChats?: boolean;
   loadSessions?: boolean;
+  sourceSessionId?: string;
+  initialFrom?: string;
+  initialTo?: string;
+  initialModel?: ConversationAssistantModel;
 }
 
 async function listAllPrivateWhatsAppChats(
@@ -358,6 +364,7 @@ export function useWhatsAppConversationAssistant(
   const routeSessionId = typeof input === 'string' ? input : input?.sessionId;
   const loadChats = typeof input === 'string' ? true : (input?.loadChats ?? true);
   const loadSessions = typeof input === 'string' ? true : (input?.loadSessions ?? true);
+  const sourceSessionId = typeof input === 'string' ? undefined : input?.sourceSessionId;
   const selectedSessionId = routeSessionId ?? searchParams.get('session') ?? undefined;
   const createRequestIdRef = useRef(0);
   const createInFlightRef = useRef(false);
@@ -400,7 +407,20 @@ export function useWhatsAppConversationAssistant(
   const warningAcknowledgedRef = useRef(false);
   const runtimeOwnerNonceRef = useRef(newCreationRequestId());
 
-  const defaultRange = useMemo(() => getDefaultRange(), []);
+  const [defaultRange] = useState(() => {
+    const fallback = getDefaultRange();
+    if (typeof input === 'string') return fallback;
+    return {
+      from:
+        input?.initialFrom !== undefined && Number.isFinite(Date.parse(input.initialFrom))
+          ? toDateTimeLocalValue(new Date(input.initialFrom))
+          : fallback.from,
+      to:
+        input?.initialTo !== undefined && Number.isFinite(Date.parse(input.initialTo))
+          ? toDateTimeLocalValue(new Date(input.initialTo))
+          : fallback.to,
+    };
+  });
   const [sessions, setSessions] = useState<ConversationAssistantSession[]>([]);
   const [selectedSessionOverride, setSelectedSessionOverride] = useState<
     ConversationAssistantSession | undefined
@@ -412,8 +432,10 @@ export function useWhatsAppConversationAssistant(
   const [context, setContext] = useState<ConversationAssistantContextResponse | null>(null);
   const [directChats, setDirectChats] = useState<PrivateWhatsAppChat[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | undefined>(undefined);
-  const [selectedModel, setSelectedModel] = useState<ConversationAssistantModel>(
-    DEFAULT_CONVERSATION_ASSISTANT_MODEL
+  const [selectedModel, setSelectedModel] = useState<ConversationAssistantModel>(() =>
+    typeof input !== 'string' && input?.initialModel !== undefined
+      ? input.initialModel
+      : DEFAULT_CONVERSATION_ASSISTANT_MODEL
   );
   const [fromDateTimeLocal, setFromDateTimeLocalState] = useState(defaultRange.from);
   const [toDateTimeLocal, setToDateTimeLocalState] = useState(defaultRange.to);
@@ -1676,9 +1698,9 @@ export function useWhatsAppConversationAssistant(
   useEffect(() => {
     if (
       creationRecoveryStartedRef.current ||
-      !loadChats ||
       loadSessions ||
-      selectedSessionId !== undefined
+      selectedSessionId !== undefined ||
+      (!loadChats && sourceSessionId === undefined)
     ) {
       return;
     }
@@ -1709,7 +1731,7 @@ export function useWhatsAppConversationAssistant(
         );
       }
     })();
-  }, [getAccessToken, loadChats, loadSessions, selectedSessionId, setSessionParam]);
+  }, [getAccessToken, loadChats, loadSessions, selectedSessionId, setSessionParam, sourceSessionId]);
 
   useEffect(() => {
     if (
@@ -2007,6 +2029,25 @@ export function useWhatsAppConversationAssistant(
         return;
       }
       setSessions((current) => [session, ...current.filter((item) => item.id !== session.id)]);
+      const userId = user?.sub;
+      if (request.sourceSessionId !== undefined && typeof userId === 'string' && userId !== '') {
+        const sourceIdentity: ConversationAssistantDraftIdentity = {
+          origin: globalThis.location.origin,
+          userId,
+          sessionId: request.sourceSessionId,
+        };
+        const sourceDraft = loadConversationAssistantDraft(
+          globalThis.sessionStorage,
+          sourceIdentity
+        );
+        if (sourceDraft !== null) {
+          saveConversationAssistantDraft(
+            globalThis.sessionStorage,
+            { ...sourceIdentity, sessionId: session.id },
+            { question: sourceDraft.question, warningAcknowledged: false }
+          );
+        }
+      }
       setInvalidSelectedSessionId(undefined);
       setSelectedSessionOverride(session);
       followUpQuestionRef.current = '';
@@ -2021,12 +2062,12 @@ export function useWhatsAppConversationAssistant(
       setTurns([]);
       setSessionParam(session.id);
     },
-    [setSessionParam]
+    [setSessionParam, user?.sub]
   );
 
   const createSession = useCallback(async (): Promise<void> => {
     if (createInFlightRef.current) return;
-    if (selectedChatId === undefined) {
+    if (selectedChatId === undefined && sourceSessionId === undefined) {
       setError('Choose a private direct chat before creating a session.');
       return;
     }
@@ -2043,14 +2084,20 @@ export function useWhatsAppConversationAssistant(
       const clientRequestId =
         pendingRequest?.requestId ?? creationClientRequestIdRef.current ?? newCreationRequestId();
       creationClientRequestIdRef.current = clientRequestId;
-      const request: CreateConversationAssistantSessionRequest = pendingRequest ?? {
-        requestId: clientRequestId,
-        chatId: selectedChatId,
-        from: fromDateTimeLocalValue(fromDateTimeLocal),
-        to: fromDateTimeLocalValue(toDateTimeLocal),
-        model: selectedModel,
-        displayTimeZone: getBrowserTimeZone(),
-      };
+      let request = pendingRequest;
+      if (request === null) {
+        const commonRequest = {
+          requestId: clientRequestId,
+          from: fromDateTimeLocalValue(fromDateTimeLocal),
+          to: fromDateTimeLocalValue(toDateTimeLocal),
+          model: selectedModel,
+          displayTimeZone: getBrowserTimeZone(),
+        };
+        request =
+          sourceSessionId !== undefined
+            ? { ...commonRequest, sourceSessionId }
+            : { ...commonRequest, chatId: selectedChatId ?? '' };
+      }
       await createSessionFromRequest(token, request, requestId, originatingSessionId);
     } catch (err) {
       if (
@@ -2069,6 +2116,7 @@ export function useWhatsAppConversationAssistant(
     getAccessToken,
     selectedChatId,
     selectedModel,
+    sourceSessionId,
     toDateTimeLocal,
   ]);
 

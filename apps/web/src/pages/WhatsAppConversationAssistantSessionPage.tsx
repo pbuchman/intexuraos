@@ -120,6 +120,8 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
     !deletionPending && (session?.status === 'ready' || session?.status === 'active');
   const contextPreparing = !deletionPending && session?.status === 'preparing';
   const contextFailed = !deletionPending && session?.status === 'failed';
+  const contextTooLarge =
+    contextFailed && session.preparationError?.code === 'CONTEXT_WINDOW_EXCEEDED';
   const hasUserQuestion = assistant.turns.some((turn) => turn.role === 'user');
   const canExport =
     contextReady &&
@@ -292,24 +294,44 @@ export function WhatsAppConversationAssistantSessionPage(): React.JSX.Element {
               <div className="mx-auto mt-12 max-w-md rounded-lg border border-red-200 bg-white px-6 py-8 text-center dark:border-red-900 dark:bg-slate-900">
                 <AlertTriangle className="mx-auto h-6 w-6 text-red-600 dark:text-red-400" />
                 <h3 className="mt-3 text-sm font-semibold text-slate-950 dark:text-slate-50">
-                  Context preparation failed
+                  {contextTooLarge ? 'Selected context is too large' : 'Context preparation failed'}
                 </h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                   {session.preparationError?.message ??
                     'The conversation context could not be prepared.'}
                 </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="mt-4"
-                  onClick={(): void => {
-                    void assistant.retryPreparation();
-                  }}
-                  isLoading={assistant.retryingPreparation}
-                  loadingText="Retrying"
-                >
-                  Try again
-                </Button>
+                {contextTooLarge ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-4"
+                    onClick={(): void => {
+                      const range = session.preparationError?.recommendedRange;
+                      const params = new URLSearchParams({
+                        sourceSession: session.id,
+                        contact: session.chatDisplayName ?? session.title,
+                        model: session.model,
+                        ...(range === undefined ? {} : { from: range.from, to: range.to }),
+                      });
+                      void navigate(`/whatsapp/conversation-assistant/new?${params.toString()}`);
+                    }}
+                  >
+                    Create smaller analysis
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-4"
+                    onClick={(): void => {
+                      void assistant.retryPreparation();
+                    }}
+                    isLoading={assistant.retryingPreparation}
+                    loadingText="Retrying"
+                  >
+                    Try again
+                  </Button>
+                )}
               </div>
             ) : null}
             {!assistant.loadingTurns && contextReady && assistant.turns.length === 0 ? (

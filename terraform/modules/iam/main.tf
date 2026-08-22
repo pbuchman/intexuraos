@@ -351,6 +351,13 @@ resource "google_project_iam_member" "code_agent_monitoring_metric_writer" {
   member  = "serviceAccount:${google_service_account.code_agent.email}"
 }
 
+# WhatsApp Service: Conversation Assistant operational metrics
+resource "google_project_iam_member" "whatsapp_service_monitoring_metric_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.whatsapp_service.email}"
+}
+
 # Hellscript Agent
 resource "google_service_account" "hellscript_agent" {
   account_id   = "intexuraos-hellscript-${var.environment}"

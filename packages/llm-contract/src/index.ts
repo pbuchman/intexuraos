@@ -62,6 +62,7 @@ export {
   CONVERSATION_ASSISTANT_MODEL_OPTIONS,
   CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES,
   isConversationAssistantModel,
+  getConversationAssistantModelInputTokenBudget,
   getConversationAssistantModelDisplayName,
   IntexAgentModels,
   DEFAULT_INTEX_AGENT_MODEL,

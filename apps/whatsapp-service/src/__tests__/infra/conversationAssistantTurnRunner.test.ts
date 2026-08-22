@@ -19,7 +19,7 @@ function snapshot(
   return {
     userId: 'user-1',
     sessionId: 'session-1',
-    model: 'google/gemini-2.5-flash',
+    model: 'or:google/gemini-3.5-flash',
     transcriptText: '  [2026-07-14] Them: byte-stable\r\n\u0000evidence  ',
     chatDisplayName: 'A conversation',
     range: { from: '2026-07-14T00:00:00.000Z', to: '2026-07-18T00:00:00.000Z' },
@@ -145,11 +145,28 @@ describe('createConversationAssistantTurnRunner', () => {
     );
   });
 
-  it('rejects an oversized serialized prompt before creating a provider client', async () => {
+  it.each([214_215, 443_797, 1_086_886])(
+    'allows an observed production transcript of %i UTF-8 bytes',
+    async (transcriptBytes) => {
+      const client = streamingClient(async () => ok({ content: 'Answer', usage: USAGE }));
+      const factory = factoryFor(client);
+      const runner = createConversationAssistantTurnRunner({ llmClientFactory: factory });
+
+      const result = await runner.generateAnswer(
+        snapshot({ transcriptText: 'x'.repeat(transcriptBytes) }),
+        () => undefined
+      );
+
+      expect(result.ok).toBe(true);
+      expect(factory.createLlmClientForUser).toHaveBeenCalledOnce();
+    }
+  );
+
+  it('rejects a prompt that exceeds the selected model input budget', async () => {
     const client = streamingClient(async () => ok({ content: 'unused', usage: USAGE }));
     const factory = factoryFor(client);
     const runner = createConversationAssistantTurnRunner({ llmClientFactory: factory });
-    const input = snapshot({ transcriptText: 'x'.repeat(700_000) });
+    const input = snapshot({ transcriptText: 'x'.repeat(2_000_000) });
 
     const result = await runner.generateAnswer(input, () => undefined);
 
@@ -191,7 +208,7 @@ describe('createConversationAssistantTurnRunner', () => {
     expect(factory.createLlmClientForUser).toHaveBeenCalledOnce();
   });
 
-  it('uses serialized UTF-8 bytes as a conservative upper bound for adversarial tokenization', () => {
+  it('uses a conservative two UTF-8 bytes per token estimate', () => {
     const messages: LlmChatMessage[] = [
       {
         role: 'user',
@@ -200,7 +217,7 @@ describe('createConversationAssistantTurnRunner', () => {
     ];
 
     expect(estimateConversationAssistantTurnPromptTokens(messages)).toBe(
-      Buffer.byteLength(JSON.stringify(messages), 'utf8')
+      Math.ceil(Buffer.byteLength(JSON.stringify(messages), 'utf8') / 2)
     );
   });
 
@@ -240,5 +257,21 @@ describe('createConversationAssistantTurnRunner', () => {
       err({ code: 'LLM_ERROR', message: 'The answer could not be generated' })
     );
     expect(JSON.stringify(result)).not.toContain('private');
+  });
+
+  it('keeps a provider context-length rejection actionable', async () => {
+    const client = streamingClient(async () =>
+      err({ code: 'CONTEXT_LENGTH', message: 'private provider details' })
+    );
+    const runner = createConversationAssistantTurnRunner({
+      llmClientFactory: factoryFor(client),
+    });
+
+    await expect(runner.generateAnswer(snapshot(), () => undefined)).resolves.toEqual(
+      err({
+        code: 'CONTEXT_WINDOW_EXCEEDED',
+        message: 'This update is too large to include in one question.',
+      })
+    );
   });
 });

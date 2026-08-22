@@ -7,13 +7,14 @@ import type {
   ConversationAssistantTurnRequestRunner,
 } from '../../domain/conversation-assistant/turnRequestPorts.js';
 import {
-  CONVERSATION_ASSISTANT_HARD_PROMPT_TOKEN_UPPER_BOUND,
   buildConversationAssistantTurnPromptMessages,
   estimateConversationAssistantTurnPromptTokens,
+  getConversationAssistantTurnPromptTokenBudget,
+  isConversationAssistantTurnPromptWithinBudget,
 } from '../../domain/conversation-assistant/turnPromptBudget.js';
 
 export const CONVERSATION_ASSISTANT_TURN_RUNNER_HARD_PROMPT_TOKEN_LIMIT =
-  CONVERSATION_ASSISTANT_HARD_PROMPT_TOKEN_UPPER_BOUND;
+  getConversationAssistantTurnPromptTokenBudget('or:minimax/minimax-m3');
 export { estimateConversationAssistantTurnPromptTokens };
 
 const SAFE_LLM_ERROR = {
@@ -40,10 +41,7 @@ export function createConversationAssistantTurnRunner(
     ): ReturnType<ConversationAssistantTurnRequestRunner['generateAnswer']> {
       try {
         const messages = buildConversationAssistantTurnPromptMessages(input);
-        if (
-          estimateConversationAssistantTurnPromptTokens(messages) >
-          CONVERSATION_ASSISTANT_TURN_RUNNER_HARD_PROMPT_TOKEN_LIMIT
-        ) {
+        if (!isConversationAssistantTurnPromptWithinBudget(input.model, messages)) {
           return err(CONTEXT_WINDOW_EXCEEDED_ERROR);
         }
 
@@ -66,7 +64,11 @@ export function createConversationAssistantTurnRunner(
             if (event.type === 'delta') onDelta(event.text);
           }
         );
-        if (!generated.ok) return err(SAFE_LLM_ERROR);
+        if (!generated.ok) {
+          return generated.error.code === 'CONTEXT_LENGTH'
+            ? err(CONTEXT_WINDOW_EXCEEDED_ERROR)
+            : err(SAFE_LLM_ERROR);
+        }
         return ok({ text: generated.value.content, usage: generated.value.usage });
       } catch {
         return err(SAFE_LLM_ERROR);

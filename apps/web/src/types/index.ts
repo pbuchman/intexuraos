@@ -372,7 +372,13 @@ export interface ConversationAssistantSession {
   status: ConversationAssistantSessionStatus;
   preparationStage?: ConversationAssistantPreparationStage;
   preparationAttempt?: number;
-  preparationError?: { code: string; message: string };
+  preparationError?: {
+    code: string;
+    message: string;
+    estimatedPromptTokens?: number;
+    promptTokenBudget?: number;
+    recommendedRange?: ConversationAssistantDateRange;
+  };
   range: ConversationAssistantDateRange;
   effectiveRange: ConversationAssistantDateRange;
   model: ConversationAssistantModel | string;
@@ -695,7 +701,8 @@ export interface ConversationAssistantContextResponse {
 
 export interface CreateConversationAssistantSessionRequest {
   requestId: string;
-  chatId: string;
+  chatId?: string;
+  sourceSessionId?: string;
   from: string;
   to: string;
   model?: ConversationAssistantModel;

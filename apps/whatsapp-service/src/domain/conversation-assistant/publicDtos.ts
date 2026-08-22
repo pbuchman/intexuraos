@@ -120,7 +120,7 @@ export function toPublicConversationAssistantSessionDto(
     result.preparationAttempt = session.preparationAttempt;
   }
   if (session.preparationError !== undefined) {
-    result.preparationError = toPublicError(session.preparationError);
+    result.preparationError = toPublicPreparationError(session.preparationError);
   }
   if (session.lastTurnAt !== undefined) result.lastTurnAt = session.lastTurnAt;
   return result;
@@ -705,6 +705,23 @@ function toPublicError(error: { code: string; message: string }): {
         ? CONVERSATION_ASSISTANT_PUBLIC_LLM_ERROR_MESSAGE
         : error.message,
   };
+}
+
+function toPublicPreparationError(
+  error: NonNullable<ConversationAssistantSession['preparationError']>
+): NonNullable<PublicConversationAssistantSession['preparationError']> {
+  const result: NonNullable<PublicConversationAssistantSession['preparationError']> = {
+    code: error.code,
+    message: error.message,
+  };
+  if (error.estimatedPromptTokens !== undefined) {
+    result.estimatedPromptTokens = error.estimatedPromptTokens;
+  }
+  if (error.promptTokenBudget !== undefined) result.promptTokenBudget = error.promptTokenBudget;
+  if (error.recommendedRange !== undefined) {
+    result.recommendedRange = toPublicDateRange(error.recommendedRange);
+  }
+  return result;
 }
 
 function createDisplayReference(

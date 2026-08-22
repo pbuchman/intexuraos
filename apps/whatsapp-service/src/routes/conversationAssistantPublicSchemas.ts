@@ -36,6 +36,19 @@ const schemas: JsonSchema[] = [
     required: ['code', 'message'],
   },
   {
+    $id: 'ConversationAssistantPreparationErrorValue',
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      code: { type: 'string' },
+      message: { type: 'string' },
+      estimatedPromptTokens: { type: 'integer', minimum: 0 },
+      promptTokenBudget: { type: 'integer', minimum: 0 },
+      recommendedRange: { $ref: 'ConversationAssistantDateRange#' },
+    },
+    required: ['code', 'message'],
+  },
+  {
     $id: 'ConversationAssistantOmittedCounts',
     type: 'object',
     additionalProperties: false,
@@ -142,7 +155,7 @@ const schemas: JsonSchema[] = [
         enum: ['queued', 'loading_messages', 'building_context', 'ready', 'failed'],
       },
       preparationAttempt: { type: 'integer', minimum: 0 },
-      preparationError: { $ref: 'ConversationAssistantErrorValue#' },
+      preparationError: { $ref: 'ConversationAssistantPreparationErrorValue#' },
       range: { $ref: 'ConversationAssistantDateRange#' },
       effectiveRange: { $ref: 'ConversationAssistantDateRange#' },
       model: { type: 'string' },

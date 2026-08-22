@@ -24,6 +24,14 @@ export type ConversationAssistantPreparationStage =
   | 'failed';
 export type ConversationAssistantTurnRole = 'user' | 'assistant';
 
+export interface ConversationAssistantPreparationError {
+  code: string;
+  message: string;
+  estimatedPromptTokens?: number;
+  promptTokenBudget?: number;
+  recommendedRange?: ConversationAssistantDateRange;
+}
+
 export interface ConversationAssistantSessionContinuation {
   sourceAccountId: string;
   contextVersion: number;
@@ -236,7 +244,7 @@ export interface ConversationAssistantSession {
   preparationAttempt?: number;
   preparationClaimId?: string;
   preparationLeaseExpiresAt?: string;
-  preparationError?: { code: string; message: string };
+  preparationError?: ConversationAssistantPreparationError;
   range: ConversationAssistantDateRange;
   effectiveRange: ConversationAssistantDateRange;
   model: string;
@@ -280,7 +288,7 @@ export interface PublicConversationAssistantSession {
   status: ConversationAssistantSessionStatus;
   preparationStage?: ConversationAssistantPreparationStage;
   preparationAttempt?: number;
-  preparationError?: { code: string; message: string };
+  preparationError?: ConversationAssistantPreparationError;
   range: ConversationAssistantDateRange;
   effectiveRange: ConversationAssistantDateRange;
   model: string;
@@ -422,7 +430,8 @@ export interface PublicConversationAssistantContextResult {
 
 export interface CreateConversationAssistantSessionInput {
   userId: string;
-  chatId: string;
+  chatId?: string;
+  sourceSessionId?: string;
   from: string;
   to: string;
   model?: ConversationAssistantModel;
@@ -517,11 +526,15 @@ export interface ConversationAssistantError {
     | 'INVALID_REQUEST'
     | 'NOT_FOUND'
     | 'EMPTY_TRANSCRIPT'
+    | 'CONTEXT_WINDOW_EXCEEDED'
     | 'CONTEXT_NOT_READY'
     | 'LLM_ERROR'
     | 'PERSISTENCE_ERROR'
     | 'INTERNAL_ERROR';
   message: string;
+  estimatedPromptTokens?: number;
+  promptTokenBudget?: number;
+  recommendedRange?: ConversationAssistantDateRange;
 }
 
 export type ConversationAssistantResult<T> = import('@intexuraos/common-core').Result<

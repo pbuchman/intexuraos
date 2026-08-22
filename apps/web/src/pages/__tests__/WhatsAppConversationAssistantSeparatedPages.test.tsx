@@ -197,6 +197,10 @@ describe('separated Conversation Assistant pages', () => {
             title: 'Failed analysis',
             status: 'failed',
             preparationStage: 'failed',
+            preparationError: {
+              code: 'CONTEXT_WINDOW_EXCEEDED',
+              message: 'Selected context is too large',
+            },
           },
         ],
       })
@@ -209,7 +213,7 @@ describe('separated Conversation Assistant pages', () => {
     );
 
     expect(screen.getByText('Preparing')).toBeInTheDocument();
-    expect(screen.getByText('Needs attention')).toBeInTheDocument();
+    expect(screen.getByText('Context too large')).toBeInTheDocument();
   });
 
   it('shows an interrupted deletion as a retryable state instead of an openable analysis', async () => {
@@ -487,6 +491,24 @@ describe('separated Conversation Assistant pages', () => {
     expect(screen.queryByPlaceholderText('Optional first question')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Alice context/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the source contact and enables a prefilled smaller analysis', () => {
+    mockUseAssistant.mockReturnValue(createHookResult({ selectedChatId: undefined }));
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/whatsapp/conversation-assistant/new?sourceSession=session-1&contact=Maria+Maj+%28WA%29&from=2026-06-21T00%3A00%3A00.000Z&to=2026-06-21T10%3A00%3A00.000Z',
+        ]}
+      >
+        <WhatsAppConversationAssistantNewPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByLabelText('Private direct chat')).not.toBeInTheDocument();
+    expect(screen.getByText('Maria Maj (WA)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create analysis' })).toBeEnabled();
   });
 
   it('uses the session page only for the selected conversation', () => {
@@ -1020,6 +1042,51 @@ describe('separated Conversation Assistant pages', () => {
     expect(screen.queryByLabelText('Ask first question')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Ask follow-up')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument();
+  });
+
+  it('offers a smaller prefilled analysis for a context-window preparation failure', async () => {
+    const user = userEvent.setup();
+    const result = createHookResult();
+    const failedSession = {
+      ...firstSession(result),
+      status: 'failed' as const,
+      preparationStage: 'failed' as const,
+      preparationError: {
+        code: 'CONTEXT_WINDOW_EXCEEDED',
+        message:
+          'The selected conversation context is too large for MiniMax M3. Create a smaller analysis with a shorter date range.',
+        recommendedRange: {
+          from: '2026-06-21T00:00:00.000Z',
+          to: '2026-06-21T10:00:00.000Z',
+        },
+      },
+    };
+    mockUseAssistant.mockReturnValue(
+      createHookResult({
+        selectedSessionId: failedSession.id,
+        selectedSession: failedSession,
+      })
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/whatsapp/conversation-assistant/session-1']}>
+        <Routes>
+          <Route
+            path="/whatsapp/conversation-assistant/:sessionId"
+            element={<WhatsAppConversationAssistantSessionPage />}
+          />
+          <Route
+            path="/whatsapp/conversation-assistant/new"
+            element={<p>Smaller analysis form</p>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Selected context is too large')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Create smaller analysis' }));
+    expect(screen.getByText('Smaller analysis form')).toBeInTheDocument();
   });
 
   it('labels the composer as a follow-up after the first user question', () => {

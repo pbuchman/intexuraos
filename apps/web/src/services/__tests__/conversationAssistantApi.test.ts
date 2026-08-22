@@ -106,6 +106,27 @@ describe('conversationAssistantApi', () => {
     expect(result).toEqual({ sessions: [publicSession] });
   });
 
+  it('keeps actionable context-window preparation details in web state', async () => {
+    const { apiRequest } = await import('../apiClient.js');
+    const preparationError = {
+      code: 'CONTEXT_WINDOW_EXCEEDED',
+      message: 'Selected context is too large',
+      estimatedPromptTokens: 1_000_001,
+      promptTokenBudget: 934_464,
+      recommendedRange: {
+        from: '2026-06-01T12:00:00.000Z',
+        to: '2026-06-02T00:00:00.000Z',
+      },
+    };
+    vi.mocked(apiRequest).mockResolvedValue({
+      sessions: [{ ...privateSessionResponse, status: 'failed', preparationError }],
+    });
+
+    const result = await listConversationAssistantSessions(TOKEN);
+
+    expect(result.sessions[0]?.preparationError).toEqual(preparationError);
+  });
+
   it('degrades old or malformed server payloads to a safe legacy context summary during rollout', async () => {
     const { apiRequest } = await import('../apiClient.js');
     const { contextSummary: _contextSummary, ...oldServerSession } = privateSessionResponse;

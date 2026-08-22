@@ -318,6 +318,8 @@ export interface ConversationAssistantModelOption {
   label: string;
   provider: string;
   supportsReasoning: boolean;
+  contextWindowTokens: number;
+  reservedOutputTokens: number;
 }
 
 export const ConversationAssistantModels = {
@@ -336,18 +338,24 @@ export const CONVERSATION_ASSISTANT_MODEL_OPTIONS: readonly ConversationAssistan
     label: 'MiniMax M3',
     provider: 'MiniMax',
     supportsReasoning: true,
+    contextWindowTokens: 1_000_000,
+    reservedOutputTokens: 65_536,
   },
   {
     id: ConversationAssistantModels.ClaudeSonnet5,
     label: 'Claude Sonnet 5',
     provider: 'Anthropic',
     supportsReasoning: true,
+    contextWindowTokens: 1_000_000,
+    reservedOutputTokens: 65_536,
   },
   {
     id: ConversationAssistantModels.Gemini35FlashThinking,
     label: 'Gemini 3.5 Flash Thinking',
     provider: 'Google',
     supportsReasoning: true,
+    contextWindowTokens: 1_000_000,
+    reservedOutputTokens: 65_536,
   },
 ] as const;
 
@@ -362,6 +370,16 @@ export const CONVERSATION_ASSISTANT_MODEL_DISPLAY_NAMES: Readonly<Record<string,
 
 export function isConversationAssistantModel(model: string): model is ConversationAssistantModel {
   return CONVERSATION_ASSISTANT_MODEL_IDS.has(model);
+}
+
+export function getConversationAssistantModelInputTokenBudget(
+  model: ConversationAssistantModel
+): number {
+  const option = CONVERSATION_ASSISTANT_MODEL_OPTIONS.find((candidate) => candidate.id === model);
+  if (option === undefined) {
+    throw new Error(`Missing Conversation Assistant model metadata: ${model}`);
+  }
+  return option.contextWindowTokens - option.reservedOutputTokens;
 }
 
 export function getConversationAssistantModelDisplayName(model: string): string {
