@@ -88,6 +88,16 @@ describe('linearApiClient helper functions', () => {
       expect(result.message).toBe('Invalid Linear API key');
     });
 
+    it('returns INVALID_API_KEY for Linear authentication-required message', () => {
+      const error = new Error(
+        'Authentication required, not authenticated - You need to authenticate to access this operation.'
+      );
+      const result = mapLinearError(error);
+
+      expect(result.code).toBe('INVALID_API_KEY');
+      expect(result.message).toBe('Invalid Linear API key');
+    });
+
     it('returns RATE_LIMIT for 429 error', () => {
       const error = new Error('429 Too Many Requests');
       const result = mapLinearError(error);
