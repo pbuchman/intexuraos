@@ -1,0 +1,336 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://intexuraos.cloud/schemas/dev-hibernation-ledger-row-v1.json",
+  "title": "IntexuraOS DEV hibernation evidence ledger row",
+  "description": "One append-only, privacy-safe evidence row for the DEV hibernation run.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runId",
+    "milestone",
+    "stepId",
+    "observedAt",
+    "appendedAt",
+    "actorAlias",
+    "targetSystem",
+    "sourceRevisions",
+    "sourceRevisionsNotApplicableReason",
+    "externalObjectIds",
+    "externalObjectIdsNotApplicableReason",
+    "artifactRelativePath",
+    "artifactSha256",
+    "privacyClassification",
+    "result",
+    "conclusion"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-p[0-9a-f]{12}-b[0-9a-f]{12}$"
+    },
+    "milestone": {
+      "type": "string",
+      "pattern": "^M(?:[0-9]|1[01])$"
+    },
+    "stepId": {
+      "type": "string",
+      "pattern": "^M(?:[0-9]|1[01])(?:\\.[0-9]+)+$"
+    },
+    "observedAt": {
+      "$ref": "#/definitions/utcTimestamp"
+    },
+    "appendedAt": {
+      "$ref": "#/definitions/utcTimestamp"
+    },
+    "actorAlias": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 100,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "targetSystem": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"
+    },
+    "sourceRevisions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/definitions/sourceRevision"
+      }
+    },
+    "sourceRevisionsNotApplicableReason": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/notApplicableReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "externalObjectIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/definitions/externalObjectId"
+      }
+    },
+    "externalObjectIdsNotApplicableReason": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/notApplicableReason"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "artifactRelativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!/)(?![A-Za-z]:[\\\\/])[^\\r\\n]+$"
+    },
+    "artifactSha256": {
+      "$ref": "#/definitions/sha256"
+    },
+    "privacyClassification": {
+      "enum": ["private", "sanitized", "public"]
+    },
+    "result": {
+      "enum": ["PASS", "FAIL"]
+    },
+    "conclusion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "\\S"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "sourceRevisions": {
+            "type": "array",
+            "maxItems": 0
+          }
+        },
+        "required": ["sourceRevisions"]
+      },
+      "then": {
+        "properties": {
+          "sourceRevisionsNotApplicableReason": {
+            "$ref": "#/definitions/notApplicableReason"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "sourceRevisionsNotApplicableReason": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "externalObjectIds": {
+            "type": "array",
+            "maxItems": 0
+          }
+        },
+        "required": ["externalObjectIds"]
+      },
+      "then": {
+        "properties": {
+          "externalObjectIdsNotApplicableReason": {
+            "$ref": "#/definitions/notApplicableReason"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "externalObjectIdsNotApplicableReason": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{3})?Z$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "notApplicableReason": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 500,
+      "pattern": "\\S"
+    },
+    "sourceRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "ref", "commitSha", "treeSha"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "pattern": "\\S"
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 500,
+          "pattern": "^refs/[^\\s]+$"
+        },
+        "commitSha": {
+          "$ref": "#/definitions/gitSha"
+        },
+        "treeSha": {
+          "$ref": "#/definitions/gitSha"
+        }
+      }
+    },
+    "externalObjectId": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "objectType", "idKind", "id"],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        },
+        "objectType": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+        },
+        "idKind": {
+          "enum": ["provider-native", "derived-canonical"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "idKind": {
+                "const": "derived-canonical"
+              }
+            },
+            "required": ["idKind"]
+          },
+          "then": {
+            "properties": {
+              "provider": {
+                "const": "tasker"
+              },
+              "objectType": {
+                "const": "profile"
+              },
+              "id": {
+                "$ref": "#/definitions/sha256"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "tasker"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "objectType": {
+                "const": "profile"
+              },
+              "idKind": {
+                "const": "derived-canonical"
+              },
+              "id": {
+                "$ref": "#/definitions/sha256"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "provider": {
+                "const": "linear"
+              }
+            },
+            "required": ["provider"]
+          },
+          "then": {
+            "properties": {
+              "objectType": {
+                "const": "linear-issue"
+              },
+              "idKind": {
+                "const": "provider-native"
+              },
+              "id": {
+                "$ref": "#/definitions/uuid"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "objectType": {
+                "const": "linear-issue"
+              }
+            },
+            "required": ["objectType"]
+          },
+          "then": {
+            "properties": {
+              "provider": {
+                "const": "linear"
+              },
+              "idKind": {
+                "const": "provider-native"
+              },
+              "id": {
+                "$ref": "#/definitions/uuid"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+    }
+  }
+}

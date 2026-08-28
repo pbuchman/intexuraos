@@ -100,6 +100,7 @@
     "@types/node": "^22.10.2",
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^4.0.16",
+    "ajv": "^8.17.1",
     "axios": "^1.7.9",
     "blessed": "^0.1.81",
     "esbuild": "^0.25.0",

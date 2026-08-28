@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "runId": "20260828T002847Z-paddc4965d21e-b265702826912",
+  "milestone": "M0",
+  "stepId": "M0.1",
+  "observedAt": "2026-08-28T00:28:47Z",
+  "appendedAt": "2026-08-28T00:29:47Z",
+  "actorAlias": "operator-primary",
+  "targetSystem": "intexuraos-primary",
+  "sourceRevisions": [
+    {
+      "repository": "intexuraos",
+      "ref": "refs/heads/codex/intexuraos-dev-hibernation",
+      "commitSha": "265702826912a54cdbb1d39122a8cb7deece9d8f",
+      "treeSha": "9c90e447dc1b6c49cecf8ce6fe8a4b24ac350b5f"
+    }
+  ],
+  "sourceRevisionsNotApplicableReason": null,
+  "externalObjectIds": [],
+  "externalObjectIdsNotApplicableReason": "reasonCode=repository-observation;target=intexuraos-primary",
+  "artifactRelativePath": "m0-baseline/repositories.json",
+  "artifactSha256": "7572586fdbf974a3fcc4d0a016da40f29ba60639d24815b08fb28db5e0600353",
+  "privacyClassification": "private",
+  "result": "PASS",
+  "conclusion": "Frozen ref matrix matches the authoritative remotes."
+}
