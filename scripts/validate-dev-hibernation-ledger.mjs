@@ -109,6 +109,7 @@ export function validateEvidenceRows(rows, schema, options) {
 
   const validate = compileLedgerSchema(schema);
   const errors = [];
+  let previousBootstrapObservedAt;
   let previousAppendedAt;
 
   rows.forEach((row, index) => {
@@ -119,6 +120,24 @@ export function validateEvidenceRows(rows, schema, options) {
       }
     }
     errors.push(...validateRowSemantics(row, sourceLine, options));
+
+    if (
+      isRecord(row) &&
+      row.milestone === 'M0' &&
+      row.stepId === 'M0.1' &&
+      typeof row.observedAt === 'string' &&
+      isValidUtcTimestamp(row.observedAt)
+    ) {
+      if (
+        previousBootstrapObservedAt !== undefined &&
+        Date.parse(row.observedAt) < Date.parse(previousBootstrapObservedAt)
+      ) {
+        errors.push(
+          `ledger line ${String(sourceLine)}/observedAt: must be monotonic across ledger rows`
+        );
+      }
+      previousBootstrapObservedAt = row.observedAt;
+    }
 
     if (
       isRecord(row) &&

@@ -187,6 +187,43 @@ describe('dev hibernation evidence ledger validator', () => {
     expect(result.errors.join('\n')).toContain('monotonic');
   });
 
+  it('requires bootstrap observations to remain in observedAt order', () => {
+    const result = validateRows([
+      {
+        ...validRow(),
+        observedAt: '2026-08-28T00:28:47Z',
+        appendedAt: '2026-08-28T00:30:47Z',
+      },
+      {
+        ...validRow(),
+        observedAt: '2026-08-28T00:27:47Z',
+        appendedAt: '2026-08-28T00:31:47Z',
+      },
+    ]);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join('\n')).toContain('observedAt: must be monotonic');
+  });
+
+  it('allows a later milestone to record an older non-bootstrap observation', () => {
+    const result = validateRows([
+      {
+        ...validRow(),
+        observedAt: '2026-08-28T00:28:47Z',
+        appendedAt: '2026-08-28T00:30:47Z',
+      },
+      {
+        ...validRow(),
+        milestone: 'M1',
+        stepId: 'M1.1',
+        observedAt: '2026-08-27T23:58:47Z',
+        appendedAt: '2026-08-28T00:31:47Z',
+      },
+    ]);
+
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
   it('accepts empty identity arrays only with allow-listed reasons bound to targetSystem', () => {
     const row = validRow();
     row.sourceRevisions = [];
