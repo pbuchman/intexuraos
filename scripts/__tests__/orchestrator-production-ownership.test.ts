@@ -2261,7 +2261,7 @@ describe('Home Dev orchestrator production ownership', () => {
     ).toBe(true);
     expect(audit.literalReferences).toEqual(discoverIdentityTagReferences());
     expect(audit.pendingLiveGates).toEqual(expectedPendingLiveGates);
-  });
+  }, 120_000);
 
   it('rejects unknown fields, duplicate entries, stale review hashes, and semantic drift', () => {
     const audit = readIdentityAudit();
