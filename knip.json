@@ -19,6 +19,7 @@
     "memfs",
     "pino",
     "pino-pretty",
+    "pm2",
     "openai",
     "fastify-server",
     "@sentry/node",

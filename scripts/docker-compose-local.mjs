@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createDockerComposeEnv } from './lib/docker-compose-env.mjs';
 import { buildLocalEmulatorStartPlan } from './lib/local-emulator-lifecycle.mjs';
+import { runHomeDevRuntimeCommand } from './run-home-dev-runtime-command.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
@@ -11,11 +11,9 @@ const composeFile = join(rootDir, 'docker', 'docker-compose.local.yaml');
 const dockerEnv = createDockerComposeEnv();
 
 function runCompose(args) {
-  const result = spawnSync('docker', ['compose', '-f', composeFile, ...args], {
-    cwd: rootDir,
-    env: dockerEnv.env,
-    stdio: 'inherit',
-  });
+  const options = { cwd: rootDir, env: dockerEnv.env, stdio: 'inherit' };
+  const command = ['compose', '-f', composeFile, ...args];
+  const result = runHomeDevRuntimeCommand('docker', command, options);
 
   if (result.error) throw result.error;
   return result.status ?? 1;

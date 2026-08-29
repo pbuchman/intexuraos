@@ -2,7 +2,7 @@
 
 This is the application-side runbook for reversibly hibernating the IntexuraOS DEV environment on
 Home Dev. It owns dependency removal, release order, signed evidence, production cutover, external
-integrations, the observation window, and the recovery drill. The canonical
+integrations, the observation window, and the retained future recovery procedure. The canonical
 [Home Dev host runbook](https://github.com/pbuchman/pbuchman-dev/blob/main/machine-setup/dev-hibernation.md)
 owns immutable profile installation, the root mode controller, systemd ordering, container and
 port checks, and host rollback. Use both runbooks with one evidence run ID; neither replaces the
@@ -10,8 +10,10 @@ other.
 
 The accepted implementation plan is
 [`docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md`](../superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md).
-Its milestone gates are normative. A later step may not turn a failed, missing, or UNKNOWN earlier
-gate into PASS.
+The accepted scope reduction is
+[`docs/superpowers/plans/2026-08-29-intexuraos-dev-hibernation-amendment-4.md`](../superpowers/plans/2026-08-29-intexuraos-dev-hibernation-amendment-4.md).
+Its remaining milestone gates are normative. A later step may not turn a failed, missing, or
+UNKNOWN earlier gate into PASS.
 
 ## Safety rules
 
@@ -37,9 +39,11 @@ The private evidence root is outside Git:
 ```bash
 export EVIDENCE_RUN_ID=20260828T002847Z-paddc4965d21e-b265702826912
 export PLAN_SHA256=addc4965d21e9fdfcf2248a0896eb07e0ed1042be219071a9d5dcbc8bcfefcdb
+export AMENDMENT_4_SHA256=e91cfdfe832a3f0c4e85dacb3f13c15f0fcc2f44367091d04f2962b60af1ecc7
 export HOST_EVIDENCE_ROOT="/var/lib/intexuraos-dev/evidence/$EVIDENCE_RUN_ID"
 export OPERATOR_EVIDENCE_ROOT="$HOME/.local/state/intexuraos/dev-hibernation/$EVIDENCE_RUN_ID"
 test "$(sha256sum docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md | awk '{print $1}')" = "$PLAN_SHA256"
+test "$(sha256sum docs/superpowers/plans/2026-08-29-intexuraos-dev-hibernation-amendment-4.md | awk '{print $1}')" = "$AMENDMENT_4_SHA256"
 ```
 
 Every controller-consumed artifact is created atomically below the protected root-owned
@@ -131,6 +135,16 @@ Inventory GCP schedules/retries, GitHub webhooks or Actions, Linear, Tasker, Aut
 mobile automation, and any other producer found in M0. For each object record owner, current state,
 pause action, proof, resume action, order, and rollback. UNKNOWN ownership blocks M8. Do not pause a
 shared or production-owned object merely because its name contains `dev`.
+
+On Home Dev, every repository-provided PM2 command and every emulator-start command runs through
+`scripts/run-home-dev-runtime-command.mjs`. Install the stable root-owned
+`/var/lib/intexuraos-dev/runtime-start.lock` before deploying that wrapper or publishing any mode
+record, and never replace the lock inode. Once the lock exists, the wrapper holds it shared from
+the fail-closed mode check until the child exits, including while the mode record is genuinely
+absent; controller mutations hold it exclusively. Therefore a completed hibernation cannot race a
+previously accepted normal start command. Only hosts where both the Home Dev lock and mode record
+are genuinely absent run the original command without requiring `flock`; inspection errors,
+dangling links, or a lone state record deny the command.
 
 ### M6 — review and merge
 
@@ -268,7 +282,11 @@ usage, unexpected resurrection, and the deterministic DEV `503`. A gap or UNKNOW
 restarts the window unless the accepted plan explicitly classifies it otherwise. Do not resume DEV
 to investigate a production issue until rollback criteria require it and the event is recorded.
 
-## M10 — recovery drill and re-hibernation
+## Future recovery procedure — not executed by the current hibernation run
+
+Amendment 4 removes the M10 live reactivation and re-hibernation drill from the current execution.
+The procedure below remains as the reversible operator runbook for a separately authorized future
+resume; none of its commands or confirmations are required for the current closeout.
 
 Keep external producers paused and bind both transactions to the exact last-good manifest. Set the
 following to the reviewed values; do not discover or substitute a newer revision during the drill:
@@ -354,11 +372,12 @@ drill passes only when rollback can still restore the recorded last-good revisio
 
 ## M11 — closeout
 
-Create the tracked, redacted evidence index and link every M0–M11 gate to its private artifact hash.
-Run final full CI and verify both merged/deployed SHAs, the 24-hour window, the completed
-resume-to-rehibernate drill, production dependency scan, and rollback package. Keep the M1 recovery
-branch/package; deleting them is a separate user decision. Close the goal only when production is
-healthy and DEV is again hibernated, not merely because implementation PRs merged.
+Create the tracked, redacted evidence index and link every executed M0–M9 and M11 gate to its
+private artifact hash. Run final full CI and verify both merged/deployed SHAs, the 24-hour window,
+the retained non-mutating recovery configuration and runbook tests, production dependency scan,
+and rollback package. Amendment 4 requires no M10 artifact or live resume drill. Keep the M1
+recovery branch/package; deleting them is a separate user decision. Close the goal only when
+production is healthy and DEV remains hibernated, not merely because implementation PRs merged.
 
 ## Rollback rules
 
@@ -378,4 +397,5 @@ partial unit enablement, or inconsistent mode record.
   version, Terraform switch/state, and last-good route according to the reviewed plan.
 
 After rollback, append the failure and recovery artifacts to the private ledger and restart the
-affected milestone gate. Do not skip directly to M8, M9, or M10.
+affected milestone gate. Do not skip directly to M8 or M9, and do not invoke the future recovery
+procedure without separate authorization.

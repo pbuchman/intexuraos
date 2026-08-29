@@ -12,7 +12,11 @@ describe('DEV hibernation application runbook', () => {
       'https://github.com/pbuchman/pbuchman-dev/blob/main/machine-setup/dev-hibernation.md'
     );
     expect(runbook).toContain('docs/superpowers/plans/2026-08-27-intexuraos-dev-hibernation.md');
+    expect(runbook).toContain(
+      'docs/superpowers/plans/2026-08-29-intexuraos-dev-hibernation-amendment-4.md'
+    );
     expect(runbook).toContain('addc4965d21e9fdfcf2248a0896eb07e0ed1042be219071a9d5dcbc8bcfefcdb');
+    expect(runbook).toContain('e91cfdfe832a3f0c4e85dacb3f13c15f0fcc2f44367091d04f2962b60af1ecc7');
   });
 
   it('pins Chrome Computer Use and forbids browser substitution or extension installation', () => {
@@ -21,7 +25,7 @@ describe('DEV hibernation application runbook', () => {
     expect(runbook).toContain('kontakt@pbuchman.com');
   });
 
-  it('keeps internal resume separate from the confirmed public ingress cutover', () => {
+  it('keeps a future resume separate from public ingress and out of the current run', () => {
     expect(runbook).toMatch(
       /Internal runtime recovery and public ingress\s+activation are separate/u
     );
@@ -29,6 +33,9 @@ describe('DEV hibernation application runbook', () => {
     expect(runbook).toContain('M10.2 confirmation');
     expect(runbook).toMatch(/leaves `MODE=resuming` and the hibernated\s+public profile selected/u);
     expect(runbook).toContain('Never claim `MODE=hibernated`');
+    expect(runbook).toContain(
+      'none of its commands or confirmations are required for the current closeout'
+    );
   });
 
   it('defines signed independent drain evidence and fail-closed unknown handling', () => {
@@ -42,6 +49,15 @@ describe('DEV hibernation application runbook', () => {
     expect(runbook).toContain('exactly the signed read2 completion time');
     expect(runbook).toMatch(/Unsigned legacy\s+zero-work JSON is invalid/u);
     expect(runbook).toContain('consumes the operation nonce exactly once');
+  });
+
+  it('serializes normal Home Dev runtime commands with controller mutations', () => {
+    expect(runbook).toContain('`scripts/run-home-dev-runtime-command.mjs`');
+    expect(runbook).toContain('`/var/lib/intexuraos-dev/runtime-start.lock`');
+    expect(runbook).toContain('controller mutations hold it exclusively');
+    expect(runbook).toContain('before deploying that wrapper or publishing any mode');
+    expect(runbook).toContain('both the Home Dev lock and mode record');
+    expect(runbook).toContain('inspection errors');
   });
 
   it('closes ingress and pauses producers before starting the signed zero-work proof', () => {
@@ -61,7 +77,7 @@ describe('DEV hibernation application runbook', () => {
     expect(m8).toContain('`devDrainVerifierSources`');
   });
 
-  it('requires the exact release order through observation and re-hibernation', () => {
+  it('requires the exact current release order through observation and closeout', () => {
     const orderedHeadings = [
       '### M3',
       '### M4',
@@ -70,7 +86,7 @@ describe('DEV hibernation application runbook', () => {
       '### M7',
       '## M8',
       '## M9',
-      '## M10',
+      '## Future recovery procedure',
       '## M11',
     ];
     let previousIndex = -1;
@@ -80,7 +96,7 @@ describe('DEV hibernation application runbook', () => {
       previousIndex = index;
     }
     expect(runbook).toContain('24 continuous hours');
-    expect(runbook).toContain('DEV is again hibernated');
+    expect(runbook).toContain('Amendment 4 removes the M10 live reactivation');
   });
 
   it('activates frozen drain telemetry before every M7 cutover mutation', () => {
@@ -99,8 +115,11 @@ describe('DEV hibernation application runbook', () => {
     expect(m7).toContain('M7.0 freeze boundary');
   });
 
-  it('documents the split M10 resume and public cutover commands', () => {
-    const m10 = runbook.slice(runbook.indexOf('## M10'), runbook.indexOf('## M11'));
+  it('retains the split resume and public cutover commands for future recovery only', () => {
+    const m10 = runbook.slice(
+      runbook.indexOf('## Future recovery procedure'),
+      runbook.indexOf('## M11')
+    );
     const resumeIndex = m10.indexOf('intexuraos-dev-mode resume');
     const resumingIndex = m10.indexOf('MODE=resuming');
     const cutoverIndex = m10.indexOf('intexuraos-dev-mode cutover');
@@ -133,6 +152,13 @@ describe('DEV hibernation application runbook', () => {
     expect(runbook).toContain(
       'export LAST_GOOD_MANIFEST="$HOST_EVIDENCE_ROOT/last-good-active-state.json"'
     );
+  });
+
+  it('closes out without M10 evidence or a live resume drill', () => {
+    const m11 = runbook.slice(runbook.indexOf('## M11'), runbook.indexOf('## Rollback rules'));
+    expect(m11).toContain('every executed M0–M9 and M11 gate');
+    expect(m11).toContain('requires no M10 artifact or live resume drill');
+    expect(m11).not.toContain('completed resume-to-rehibernate drill');
   });
 
   it('requires real host validation and the tracked edge-profile gate', () => {
