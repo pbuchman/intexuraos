@@ -12,11 +12,12 @@ import {
 const FLOCK_COMMAND = '/usr/bin/flock';
 const BASH_COMMAND = '/bin/bash';
 const ENV_COMMAND = '/usr/bin/env';
+const BASH_CONTROL_ENVIRONMENT_NAMES = new Set(['BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS']);
 const assertScriptPath = fileURLToPath(
   new URL('./assert-home-dev-runtime-start.mjs', import.meta.url)
 );
 const lockedCommandScript = `set -eu
-"$1" -i PATH=/usr/bin:/bin LANG=C LC_ALL=C "$2" "$3"
+"$1" -i PATH=/usr/bin:/bin LANG=C LC_ALL=C "$2" "$3" || exit "$?"
 shift 3
 exec "$@"
 `;
@@ -30,10 +31,21 @@ function inspectPath(path, label) {
   }
 }
 
+export function sanitizeHomeDevRuntimeEnvironment(inputEnvironment = process.env) {
+  const environment = { ...inputEnvironment };
+  for (const name of Object.keys(environment)) {
+    if (BASH_CONTROL_ENVIRONMENT_NAMES.has(name) || name.startsWith('BASH_FUNC_')) {
+      delete environment[name];
+    }
+  }
+  return environment;
+}
+
 function shellSafeOptions(options) {
-  const environment = { ...(options.env ?? process.env) };
-  for (const name of ['BASH_ENV', 'ENV', 'SHELLOPTS', 'BASHOPTS']) delete environment[name];
-  return { ...options, env: environment };
+  return {
+    ...options,
+    env: sanitizeHomeDevRuntimeEnvironment(options.env ?? process.env),
+  };
 }
 
 function spawn(command, args, options) {
