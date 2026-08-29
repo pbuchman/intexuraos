@@ -142,6 +142,20 @@ describe('DockerContainer', () => {
     expect(list).toHaveLength(0);
   });
 
+  it('strict container count propagates Docker failures for drain evidence', async () => {
+    mockDocker.listContainers.mockRejectedValueOnce(new Error('docker unavailable'));
+
+    await expect(container.countDiscoveredContainersStrict()).rejects.toThrow('docker unavailable');
+  });
+
+  it('strict container count includes filtered records with unparseable names', async () => {
+    mockDocker.listContainers.mockResolvedValueOnce([
+      { Id: 'cx', Names: [], State: 'unknown', Created: 1 },
+    ]);
+
+    await expect(container.countDiscoveredContainersStrict()).resolves.toBe(1);
+  });
+
   describe('waitForExecCompletion', () => {
     /* eslint-disable @typescript-eslint/no-explicit-any */
     const makeStream = (): any => {

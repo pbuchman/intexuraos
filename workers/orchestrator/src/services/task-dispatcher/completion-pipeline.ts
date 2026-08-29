@@ -1208,6 +1208,28 @@ export class CompletionPipeline {
     payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean },
     keepLogForwarderOpen = false
   ): Promise<void> {
+    try {
+      await this.finalizeTaskKeepingLogForwarderOpen(task, statusParam, payload);
+    } finally {
+      if (!keepLogForwarderOpen) {
+        this.ctx.appendOrchestratorTaskLog(task.taskId, 'Finalizing: stopping log stream');
+        try {
+          await this.ctx.logForwarder.flushAndStop(task.taskId);
+        } catch (flushError) {
+          this.ctx.logger.error(
+            { taskId: task.taskId, error: flushError },
+            'Final log flush-and-stop failed during finalization'
+          );
+        }
+      }
+    }
+  }
+
+  private async finalizeTaskKeepingLogForwarderOpen(
+    task: Task,
+    statusParam: 'completed' | 'failed' | 'interrupted' | 'cancelled',
+    payload: { result?: TaskResult; error?: TaskError; resumedCompletion?: boolean }
+  ): Promise<void> {
     const ctx = this.ctx;
     const finalStatus = statusParam;
     const isNonPreservableAgentType =
@@ -1227,6 +1249,7 @@ export class CompletionPipeline {
       );
     }
 
+    ctx.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushing logs`);
     try {
       await ctx.logForwarder.flush(task.taskId);
     } catch (flushError) {
@@ -1234,11 +1257,6 @@ export class CompletionPipeline {
         { taskId: task.taskId, error: flushError },
         'Log flush failed during finalization'
       );
-    }
-
-    ctx.appendOrchestratorTaskLog(task.taskId, `Finalizing: flushed logs`);
-    if (!keepLogForwarderOpen) {
-      ctx.logForwarder.close(task.taskId);
     }
 
     ctx.isolation.tokenRefresher.unregisterTask(task.taskId);

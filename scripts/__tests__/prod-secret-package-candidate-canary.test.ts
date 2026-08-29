@@ -18,9 +18,9 @@ const validatorPath = resolve(repoRoot, 'scripts/hetzner/validate-prod-secret-ca
 const loaderPath = resolve(repoRoot, 'scripts/hetzner/load-secrets.sh');
 const terraformPath = resolve(repoRoot, 'terraform/environments/dev/main.tf');
 const operationsPath = resolve(repoRoot, 'docs/operations/secret-packages.md');
-const pubsubServerPath = resolve(repoRoot, 'tools/pubsub-ui/server.mjs');
 const pubsubUiPath = resolve(repoRoot, 'tools/pubsub-ui/index.html');
 const pubsubReadmePath = resolve(repoRoot, 'tools/pubsub-ui/README.md');
+const pubsubTopologyPath = resolve(repoRoot, 'tools/pubsub-ui/topology.mjs');
 const pubsubPublishTestPath = resolve(repoRoot, 'scripts/pubsub-publish-test.mjs');
 
 const tokenId = '0123456789abcdef0123456789abcdef';
@@ -394,7 +394,7 @@ describe('PROD package candidate credential canary', () => {
 
   it('defines a production topic without a subscription and registers its local emulator alias', () => {
     const terraform = readFileSync(terraformPath, 'utf8');
-    const pubsubServer = readFileSync(pubsubServerPath, 'utf8');
+    const pubsubTopology = readFileSync(pubsubTopologyPath, 'utf8');
     const pubsubUi = readFileSync(pubsubUiPath, 'utf8');
     const pubsubReadme = readFileSync(pubsubReadmePath, 'utf8');
     const pubsubPublishTest = readFileSync(pubsubPublishTestPath, 'utf8');
@@ -404,8 +404,8 @@ describe('PROD package candidate credential canary', () => {
     expect(terraform).toContain('source = "../../modules/pubsub-topic"');
     expect(terraform).toContain('intexuraos-runtime-credential-canary-${var.environment}');
     expect(terraform).not.toMatch(/google_pubsub_subscription[^}]+runtime_credential_canary/su);
-    expect(pubsubServer).toContain(`'${topic}'`);
-    expect(pubsubServer).toContain(`'${topic}': null`);
+    expect(pubsubTopology).toContain(`name: '${topic}'`);
+    expect(pubsubTopology).toContain(`{ name: '${topic}', endpoint: null }`);
     expect(pubsubUi.replace(/\s+/gu, ' ')).toContain(
       `<option value="${topic}"> ${topic} </option>`
     );

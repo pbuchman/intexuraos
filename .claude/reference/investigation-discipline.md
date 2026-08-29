@@ -24,9 +24,16 @@ Finding the cause is 50% of the work. Implementing and verifying the fix is the 
 
 ### 4. Act During Incident Triage
 
-During active incidents on dev environments: rebuild images, restart services, apply hotfixes immediately. Do NOT ask "should I rebuild?" — just rebuild.
+Act immediately inside the already active runtime that owns the incident, but do not expand the
+runtime boundary. On Home Dev, first read
+`/var/lib/intexuraos-dev/runtime-mode.env`. When DEV is draining or hibernated, never rebuild,
+restart, or directly start its PM2/emulator units; use the reviewed `intexuraos-dev-mode` resume
+workflow only when a DEV recovery has been separately authorized. The production-owned
+orchestrator and unrelated shared services remain independently diagnosable.
 
-The User Control gate applies to planned work, not incident response. Exception: destructive actions (deleting data, force-pushing) still require permission.
+The User Control gate applies to planned work, not ordinary incident response inside an active
+runtime. Destructive actions and crossing a hibernation/cutover boundary still require the
+applicable authorization.
 
 ### 5. Never Blame Upstream Without Evidence
 
@@ -74,12 +81,12 @@ When a tool, service, or container crashes:
 
 These are behavioral guidelines, not hook-enforced. When you catch yourself using these patterns, stop and investigate deeper.
 
-| Pattern                               | What to Do Instead                         |
-| ------------------------------------- | ------------------------------------------ |
-| "This is an upstream/tool bug"        | Investigate the environment first          |
-| "The tool is broken"                  | Check your inputs, config, and environment |
-| "I found the root cause" (at layer 1) | Ask "why?" at least 2 more times           |
-| "The problem is X" (with no fix)      | "The problem is X, fixing it by Y"         |
-| "Should I rebuild/restart?"           | During incidents: act, don't ask           |
-| Speculating about internal mechanisms | Reproduce it or cite evidence              |
-| Presenting findings without action    | Implement the fix, present results         |
+| Pattern                               | What to Do Instead                                        |
+| ------------------------------------- | --------------------------------------------------------- |
+| "This is an upstream/tool bug"        | Investigate the environment first                         |
+| "The tool is broken"                  | Check your inputs, config, and environment                |
+| "I found the root cause" (at layer 1) | Ask "why?" at least 2 more times                          |
+| "The problem is X" (with no fix)      | "The problem is X, fixing it by Y"                        |
+| "Should I rebuild/restart?"           | Check runtime mode, then act only inside the active owner |
+| Speculating about internal mechanisms | Reproduce it or cite evidence                             |
+| Presenting findings without action    | Implement the fix, present results                        |

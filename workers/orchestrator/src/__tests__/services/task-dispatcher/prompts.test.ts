@@ -52,8 +52,10 @@ describe('getTaskEventUrl', () => {
     );
   });
 
-  it('returns the input unchanged when the path is not the task-complete endpoint', () => {
-    expect(getTaskEventUrl('https://api.test/other/path')).toBe('https://api.test/other/path');
+  it('derives the task-event endpoint from a callback owner without the canonical marker', () => {
+    expect(getTaskEventUrl('https://api.test/other/path')).toBe(
+      'https://api.test/internal/webhooks/task-event'
+    );
   });
 });
 

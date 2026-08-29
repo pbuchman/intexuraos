@@ -120,6 +120,10 @@ export class DockerProvider implements IsolationProvider {
     return await this.container.listDiscoveredContainers('code-worker-');
   }
 
+  async getDrainWorkerContainerCount(): Promise<number> {
+    return await this.container.countDiscoveredContainersStrict('code-worker-');
+  }
+
   async createWorker(config: WorkerConfig): Promise<WorkerHandle> {
     return await createWorkerOrchestration({
       config,

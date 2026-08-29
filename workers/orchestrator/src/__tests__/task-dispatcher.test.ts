@@ -202,6 +202,7 @@ describe('TaskDispatcher', () => {
   } as unknown as WorktreeManager;
 
   // Mock IsolationProvider
+  const mockGetDrainWorkerContainerCount = vi.fn(async () => 0);
   const mockIsolationProvider: IsolationProvider = {
     createWorker: vi.fn(
       async (config): Promise<WorkerHandle> => ({
@@ -224,6 +225,7 @@ describe('TaskDispatcher', () => {
     copyOut: vi.fn(async () => undefined),
     statsSnapshot: vi.fn(async () => ({ cpuTotalUsage: 0, memoryUsage: 0, pidsCurrent: 0 })),
     listWorkers: vi.fn(async () => []),
+    getDrainWorkerContainerCount: mockGetDrainWorkerContainerCount,
     cleanupTaskSession: vi.fn(async () => undefined),
     isResumeAvailable: vi.fn(async () => true),
     isHealthy: vi.fn(() => true),
@@ -302,6 +304,12 @@ describe('TaskDispatcher', () => {
     send: vi.fn(async () => ({ ok: true, value: undefined })),
     retryPending: vi.fn(async () => undefined),
     getPendingCount: vi.fn(async () => 0),
+    getInFlightCount: vi.fn(() => 0),
+    getTerminalCallbackActivityTotal: vi.fn(() => 0),
+    getDrainCallbackSnapshot: vi.fn(async () => ({
+      pendingTerminalCallbacks: 0,
+      terminalCallbackActivityTotal: 0,
+    })),
   } as unknown as WebhookClient;
 
   // Mock StatusUpdateClient
@@ -884,6 +892,107 @@ describe('TaskDispatcher', () => {
 
     it('should return configured capacity', () => {
       expect(dispatcher.getCapacity()).toBe(5);
+    });
+
+    it('returns authoritative worker and terminal callback ownership for drain evidence', async () => {
+      mockGetDrainWorkerContainerCount.mockResolvedValueOnce(2);
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockResolvedValueOnce({
+        pendingTerminalCallbacks: 4,
+        terminalCallbackActivityTotal: 12,
+      });
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: 2,
+        pendingTerminalCallbacks: 4,
+        terminalCallbackActivityTotal: 12,
+      });
+    });
+
+    it('fails closed when authoritative drain ownership cannot be read', async () => {
+      mockGetDrainWorkerContainerCount.mockRejectedValueOnce(new Error('docker unavailable'));
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockRejectedValueOnce(
+        new Error('state unavailable')
+      );
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: null,
+        pendingTerminalCallbacks: null,
+        terminalCallbackActivityTotal: 0,
+      });
+    });
+
+    it('fails closed when the isolation provider has no drain ownership counter', async () => {
+      const providerWithoutDrainCount: IsolationProvider = { ...mockIsolationProvider };
+      delete providerWithoutDrainCount.getDrainWorkerContainerCount;
+      const localDispatcher = new TaskDispatcher(
+        mockConfig,
+        statePersistence,
+        mockWorktreeManager,
+        mockLogForwarder,
+        mockWebhookClient,
+        mockStatusUpdateClient,
+        mockGitHubTokenService,
+        mockLogger,
+        { ...mockIsolationConfig, provider: providerWithoutDrainCount },
+        singleAttemptCompletionControl
+      );
+
+      await expect(localDispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: null,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
+      });
+      expect(mockGetDrainWorkerContainerCount).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid worker and terminal activity drain counters', async () => {
+      mockGetDrainWorkerContainerCount.mockResolvedValueOnce(-1);
+      vi.mocked(mockWebhookClient.getTerminalCallbackActivityTotal).mockReturnValueOnce(-1);
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockResolvedValueOnce({
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: -1,
+      });
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: null,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: null,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        { count: -1 },
+        'Invalid worker container drain count'
+      );
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          snapshot: {
+            pendingTerminalCallbacks: 0,
+            terminalCallbackActivityTotal: -1,
+          },
+        },
+        'Invalid pending terminal callback drain count'
+      );
+    });
+
+    it('rejects an invalid pending terminal callback count without hiding valid activity', async () => {
+      vi.mocked(mockWebhookClient.getDrainCallbackSnapshot).mockResolvedValueOnce({
+        pendingTerminalCallbacks: -1,
+        terminalCallbackActivityTotal: 12,
+      });
+
+      await expect(dispatcher.getDrainOwnershipSnapshot()).resolves.toEqual({
+        workerContainers: 0,
+        pendingTerminalCallbacks: null,
+        terminalCallbackActivityTotal: 12,
+      });
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        {
+          snapshot: {
+            pendingTerminalCallbacks: -1,
+            terminalCallbackActivityTotal: 12,
+          },
+        },
+        'Invalid pending terminal callback drain count'
+      );
     });
   });
 
@@ -5683,11 +5792,13 @@ describe('TaskDispatcher', () => {
   });
 
   describe('log flush in finalizeTask', () => {
-    it('calls flush and close before terminal webhook', async () => {
+    it('flushes before terminal webhook and stops after final cleanup', async () => {
       const drainState = createStatePersistence();
+      const drainFlushAndStop = vi.fn(async () => undefined);
       const drainLogForwarder = {
         ...mockLogForwarder,
         flush: vi.fn(async () => undefined),
+        flushAndStop: drainFlushAndStop,
         close: vi.fn(),
       } as unknown as LogForwarder;
 
@@ -5741,14 +5852,28 @@ describe('TaskDispatcher', () => {
       };
       await internal.finalizeTask(task as unknown as Record<string, unknown>, 'completed', {});
 
+      expect(drainFlushAndStop).toHaveBeenCalledWith('drain-test');
       expect(drainLogForwarder.flush).toHaveBeenCalledWith('drain-test');
-      expect(drainLogForwarder.close).toHaveBeenCalledWith('drain-test');
+      expect(drainLogForwarder.close).not.toHaveBeenCalledWith('drain-test');
 
       const webhookCalls = vi.mocked(mockWebhookClient.send).mock.calls;
-      const terminalCall = webhookCalls.find(
-        (c) => (c[0] as { payload: { taskId: string } }).payload.taskId === 'drain-test'
+      const terminalCallIndex = webhookCalls.findIndex(
+        (c) =>
+          (c[0] as { payload: { taskId: string; status?: string } }).payload.taskId ===
+            'drain-test' &&
+          (c[0] as { payload: { taskId: string; status?: string } }).payload.status === 'completed'
       );
-      expect(terminalCall).toBeDefined();
+      expect(terminalCallIndex).toBeGreaterThanOrEqual(0);
+      const flushOrder = vi.mocked(drainLogForwarder.flush).mock.invocationCallOrder.at(0);
+      const stopOrder = drainFlushAndStop.mock.invocationCallOrder.at(0);
+      const webhookOrder = vi
+        .mocked(mockWebhookClient.send)
+        .mock.invocationCallOrder.at(terminalCallIndex);
+      if (flushOrder === undefined || stopOrder === undefined || webhookOrder === undefined) {
+        throw new Error('Missing flush, stop, or terminal webhook invocation order');
+      }
+      expect(flushOrder).toBeLessThan(webhookOrder);
+      expect(stopOrder).toBeGreaterThan(webhookOrder);
     });
   });
 
@@ -6564,7 +6689,7 @@ describe('TaskDispatcher', () => {
       startedAt: new Date().toISOString(),
     } as unknown as Task;
 
-    it('skips logForwarder.close when keepLogForwarderOpen is true', async () => {
+    it('flushes without stopping when keepLogForwarderOpen is true', async () => {
       const internal = dispatcher as unknown as {
         finalizeTask: (
           task: Task,
@@ -6576,14 +6701,16 @@ describe('TaskDispatcher', () => {
 
       vi.mocked(mockLogForwarder.close).mockClear();
       vi.mocked(mockLogForwarder.flush).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
 
       await internal.finalizeTask(testTask, 'completed', { result: {} }, true);
 
       expect(mockLogForwarder.flush).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flushAndStop).not.toHaveBeenCalledWith(testTask.taskId);
       expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
     });
 
-    it('calls logForwarder.close when keepLogForwarderOpen is false', async () => {
+    it('atomically flushes and stops when keepLogForwarderOpen is false', async () => {
       const internal = dispatcher as unknown as {
         finalizeTask: (
           task: Task,
@@ -6594,13 +6721,28 @@ describe('TaskDispatcher', () => {
       };
 
       vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flush).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
+      vi.mocked(mockLogForwarder.appendChunk).mockClear();
 
       await internal.finalizeTask(testTask, 'completed', { result: {} }, false);
 
-      expect(mockLogForwarder.close).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flush).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
+      const finalizationLogs = vi
+        .mocked(mockLogForwarder.appendChunk)
+        .mock.calls.filter(([taskId]) => taskId === testTask.taskId)
+        .map(([, content]) => content);
+      expect(
+        finalizationLogs.some((content) => content.includes('Finalizing: flushing logs'))
+      ).toBe(true);
+      expect(finalizationLogs.some((content) => content.includes('Finalizing: flushed logs'))).toBe(
+        false
+      );
     });
 
-    it('calls logForwarder.close when keepLogForwarderOpen is omitted (default)', async () => {
+    it('atomically flushes and stops when keepLogForwarderOpen is omitted', async () => {
       const internal = dispatcher as unknown as {
         finalizeTask: (
           task: Task,
@@ -6611,26 +6753,30 @@ describe('TaskDispatcher', () => {
       };
 
       vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
 
       await internal.finalizeTask(testTask, 'completed', { result: {} });
 
-      expect(mockLogForwarder.close).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith(testTask.taskId);
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith(testTask.taskId);
     });
   });
 
   describe('flushAndCloseLogForwarder', () => {
-    it('flushes and closes log forwarder for a task', async () => {
+    it('atomically flushes and stops log forwarder for a task', async () => {
       const internal = dispatcher as unknown as {
         flushAndCloseLogForwarder: (taskId: string) => Promise<void>;
       };
 
       vi.mocked(mockLogForwarder.flush).mockClear();
       vi.mocked(mockLogForwarder.close).mockClear();
+      vi.mocked(mockLogForwarder.flushAndStop).mockClear();
 
       await internal.flushAndCloseLogForwarder('flush-close-test');
 
-      expect(mockLogForwarder.flush).toHaveBeenCalledWith('flush-close-test');
-      expect(mockLogForwarder.close).toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.flushAndStop).toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.flush).not.toHaveBeenCalledWith('flush-close-test');
+      expect(mockLogForwarder.close).not.toHaveBeenCalledWith('flush-close-test');
     });
   });
 
@@ -8295,6 +8441,10 @@ describe('TaskDispatcher', () => {
         expect(result.ok).toBe(true);
         expect(mockWorktreeManager.isWorktreeRegistered).toHaveBeenCalledWith('adopt-needs-repair');
         expect(mockWorktreeManager.repairWorktree).toHaveBeenCalledWith('adopt-needs-repair');
+        expect(vi.mocked(mockLogForwarder.registerTask).mock.invocationCallOrder[0]).toBeLessThan(
+          vi.mocked(mockWorktreeManager.isWorktreeRegistered).mock.invocationCallOrder[0] ??
+            Number.MAX_VALUE
+        );
         expect(mockIsolationProvider.createWorker).toHaveBeenCalled();
       });
 
@@ -8318,9 +8468,13 @@ describe('TaskDispatcher', () => {
         }
         // No worker should be started when the worktree cannot be repaired.
         expect(mockIsolationProvider.createWorker).not.toHaveBeenCalled();
-        // Log forwarder must not be registered when adoption short-circuits
-        // on a lost worktree — nothing is going to emit on it.
-        expect(mockLogForwarder.registerTask).not.toHaveBeenCalled();
+        // Repair/finalization logs must use the persisted task callback owner, then release it.
+        expect(mockLogForwarder.registerTask).toHaveBeenCalledWith(
+          'adopt-lost',
+          'secret-123',
+          task.webhookUrl
+        );
+        expect(mockLogForwarder.unregisterTask).toHaveBeenCalledWith('adopt-lost');
         // Running count must be released so capacity is not permanently leaked.
         expect(dispatcher.getRunningCount()).toBe(0);
         expect(mockLogger.error).toHaveBeenCalledWith(
@@ -12696,16 +12850,16 @@ describe('getTaskEventUrl', () => {
     );
   });
 
-  it('should return the original URL if task-complete is not present', () => {
+  it('should derive the task-event endpoint from the callback owner when marker is absent', () => {
     const url = 'https://code-agent.example.com/internal/webhooks/other';
-    expect(getTaskEventUrl(url)).toBe(url);
+    expect(getTaskEventUrl(url)).toBe(
+      'https://code-agent.example.com/internal/webhooks/task-event'
+    );
   });
 
-  it('should only replace the first occurrence', () => {
+  it('should discard callback-specific query data when deriving the task-event endpoint', () => {
     const url =
       'https://example.com/internal/webhooks/task-complete?fallback=/internal/webhooks/task-complete';
-    expect(getTaskEventUrl(url)).toBe(
-      'https://example.com/internal/webhooks/task-event?fallback=/internal/webhooks/task-complete'
-    );
+    expect(getTaskEventUrl(url)).toBe('https://example.com/internal/webhooks/task-event');
   });
 });

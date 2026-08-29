@@ -2,9 +2,15 @@
 
 This is the canonical guide for running IntexuraOS locally from the current checkout.
 
-Local is a first-class runtime environment with the same data and async pattern as dev: services run on `localhost` with PM2 watch/Vite, use shared GCP/Auth0 resources for data and actual secrets, read non-secret configuration from the repository, and use their own host-local Pub/Sub emulator.
+Local is a first-class active developer runtime: services run on `localhost` with PM2 watch/Vite,
+use shared GCP/Auth0 resources for data and actual secrets, read non-secret configuration from the
+repository, and use a host-local Pub/Sub emulator.
 
-The only practical difference from dev is where the process tree runs. Local runs from the current checkout on the developer host; dev runs from the deployed checkout on `home-dev`.
+Home Dev is a production-owned worker host, not an always-running DEV application environment. The
+retained DEV configuration and application profile are normally hibernated there and may be started
+only by the explicitly authorized resume procedure in
+[the DEV hibernation runbook](../operations/dev-hibernation.md). Every command in this guide targets
+the current developer machine; it neither starts nor authorizes a Home Dev resume.
 
 ## 1. Prerequisites
 
@@ -103,7 +109,9 @@ What starts locally:
 | Secret Manager        | Actual secrets from retained GCP project |
 | Auth0                 | Shared Auth0 tenant                    |
 
-Local PM2 intentionally clears inherited `FIRESTORE_EMULATOR_HOST` and `STORAGE_EMULATOR_HOST`; localhost services must use real GCP Firestore/Storage. PM2 pins `PUBSUB_EMULATOR_HOST=localhost:8102`, matching the dev pattern of using a per-host Pub/Sub emulator.
+Local PM2 intentionally clears inherited `FIRESTORE_EMULATOR_HOST` and `STORAGE_EMULATOR_HOST`;
+localhost services must use real GCP Firestore/Storage. PM2 pins
+`PUBSUB_EMULATOR_HOST=localhost:8102` to the local-only Pub/Sub emulator.
 
 `scripts/dev-setup.mjs` also handles Docker Desktop configs that use `"credsStore": "desktop"` by creating a temporary Docker config for compose startup. It does not modify `~/.docker/config.json`.
 
@@ -119,7 +127,9 @@ Rules:
 
 - The file must be mode `0600`; `~/.intexuraos` must be mode `0700`.
 - It must contain at least two Auth0 accounts using `kontakt+...@pbuchman.com`.
-- The same credentials are intended to work on local, dev, and prod because all three use the shared Auth0 tenant/configuration.
+- The same credentials are intended to work on local and production because they use the shared
+  Auth0 tenant/configuration. They may also be used during an explicitly authorized retained DEV
+  recovery drill, but a hibernated DEV URL is not a routine test target.
 - Never commit the file or paste passwords into logs/chats.
 
 The browser/e2e login path uses the SPA Auth0 client and Universal Login. Do not use Resource Owner Password Grant as the required verification path for the SPA client; Auth0 blocks that grant for the browser client.

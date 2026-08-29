@@ -5,6 +5,17 @@ import type { Logger } from '@intexuraos/common-core';
 import type { PendingWebhook, OrchestratorState } from '../types/state.js';
 
 describe('WebhookClient', () => {
+  function deferredResponse(): {
+    promise: Promise<Response>;
+    resolve: (response: Response) => void;
+  } {
+    let resolve!: (response: Response) => void;
+    const promise = new Promise<Response>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  }
+
   // Mock StatePersistence
   const createStatePersistence = (): StatePersistence => {
     const state: OrchestratorState = {
@@ -28,6 +39,7 @@ describe('WebhookClient', () => {
         await fn(current);
         Object.assign(state, current);
       }),
+      getPendingWebhookCountForDrain: vi.fn(async () => state.pendingWebhooks.length),
       detectOrphanWorktrees: vi.fn(async () => []),
       emptyState: () => ({ tasks: {}, githubToken: null, pendingWebhooks: [] }),
     } as unknown as StatePersistence;
@@ -56,6 +68,78 @@ describe('WebhookClient', () => {
   });
 
   describe('send', () => {
+    it('keeps an in-flight terminal callback observable until send settles', async () => {
+      const response = deferredResponse();
+      mockFetch.mockReturnValue(response.promise);
+      const client = new WebhookClient(
+        createStatePersistence(),
+        mockLogger,
+        'test-internal-auth-token'
+      );
+
+      const sending = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload: { taskId: 'task-observed', status: 'completed', duration: 1000 },
+        taskId: 'task-observed',
+      });
+      await Promise.resolve();
+
+      expect(client.getInFlightCount()).toBe(1);
+      await expect(client.getDrainCallbackSnapshot()).resolves.toEqual({
+        pendingTerminalCallbacks: 1,
+        terminalCallbackActivityTotal: 1,
+      });
+      response.resolve(new Response('{}', { status: 200 }));
+      await sending;
+      expect(client.getInFlightCount()).toBe(0);
+      await expect(client.getDrainCallbackSnapshot()).resolves.toEqual({
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 2,
+      });
+    });
+
+    it('returns unknown instead of a false zero when callback state changes during snapshot', async () => {
+      const statePersistence = createStatePersistence();
+      let resolveSnapshotLoad!: (state: OrchestratorState) => void;
+      const snapshotLoad = new Promise<OrchestratorState>((resolve) => {
+        resolveSnapshotLoad = resolve;
+      });
+      vi.mocked(statePersistence.getPendingWebhookCountForDrain).mockReturnValueOnce(
+        snapshotLoad.then((state) => state.pendingWebhooks.length)
+      );
+      const response = deferredResponse();
+      mockFetch.mockReturnValue(response.promise);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const snapshot = client.getDrainCallbackSnapshot();
+      const sending = client.send({
+        url: 'https://example.com/webhook',
+        secret: 'test-secret',
+        payload: { taskId: 'task-race', status: 'completed', duration: 1000 },
+        taskId: 'task-race',
+      });
+      resolveSnapshotLoad({ tasks: {}, githubToken: null, pendingWebhooks: [] });
+
+      await expect(snapshot).resolves.toEqual({
+        pendingTerminalCallbacks: null,
+        terminalCallbackActivityTotal: 1,
+      });
+      response.resolve(new Response('{}', { status: 200 }));
+      await sending;
+    });
+
+    it('preserves unknown when the persisted callback count is unavailable', async () => {
+      const statePersistence = createStatePersistence();
+      vi.mocked(statePersistence.getPendingWebhookCountForDrain).mockResolvedValueOnce(null);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      await expect(client.getDrainCallbackSnapshot()).resolves.toEqual({
+        pendingTerminalCallbacks: null,
+        terminalCallbackActivityTotal: 0,
+      });
+    });
+
     it('should send webhook with correct signature', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -572,6 +656,120 @@ describe('WebhookClient', () => {
   });
 
   describe('retryPending', () => {
+    it('keeps an in-flight pending retry observable until delivery settles', async () => {
+      const statePersistence = createStatePersistence();
+      const state = await statePersistence.load();
+      state.pendingWebhooks = [
+        {
+          url: 'https://example.com/webhook',
+          secret: 'secret',
+          payload: { taskId: 'task-observed-retry', status: 'completed', duration: 1000 },
+          taskId: 'task-observed-retry',
+          attempts: 3,
+          createdAt: Date.now(),
+        },
+      ];
+      await statePersistence.save(state);
+
+      const response = deferredResponse();
+      mockFetch.mockReturnValue(response.promise);
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const retrying = client.retryPending();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(client.getInFlightCount()).toBe(1);
+      response.resolve(new Response('{}', { status: 200 }));
+      await retrying;
+      expect(client.getInFlightCount()).toBe(0);
+    });
+
+    it('preserves a webhook enqueued while an older pending delivery is in flight', async () => {
+      vi.useFakeTimers();
+      const statePersistence = createStatePersistence();
+      const state = await statePersistence.load();
+      state.pendingWebhooks = [
+        {
+          url: 'https://example.com/old-webhook',
+          secret: 'old-secret',
+          payload: { taskId: 'task-old', status: 'completed', duration: 1000 },
+          taskId: 'task-old',
+          attempts: 3,
+          createdAt: Date.now(),
+        },
+      ];
+      await statePersistence.save(state);
+
+      const oldDelivery = deferredResponse();
+      mockFetch.mockImplementation((url: string) => {
+        if (url.includes('old-webhook')) return oldDelivery.promise;
+        return Promise.resolve(new Response('', { status: 500 }));
+      });
+      const client = new WebhookClient(statePersistence, mockLogger, 'test-internal-auth-token');
+
+      const retrying = client.retryPending();
+      await Promise.resolve();
+      await Promise.resolve();
+      const sending = client.send({
+        url: 'https://example.com/new-webhook',
+        secret: 'new-secret',
+        payload: { taskId: 'task-new', status: 'failed', duration: 500 },
+        taskId: 'task-new',
+      });
+      await vi.advanceTimersByTimeAsync(20_000);
+      await sending;
+
+      oldDelivery.resolve(new Response('{}', { status: 200 }));
+      await retrying;
+
+      const finalState = await statePersistence.load();
+      expect(finalState.pendingWebhooks).toHaveLength(1);
+      expect(finalState.pendingWebhooks[0]?.taskId).toBe('task-new');
+      vi.useRealTimers();
+    });
+
+    it('does not recreate a pending webhook removed during delivery', async () => {
+      const statePersistence = createStatePersistence();
+      const state = await statePersistence.load();
+      state.pendingWebhooks = [
+        {
+          url: 'https://example.com/webhook',
+          secret: 'secret',
+          payload: { taskId: 'task-concurrent-remove', status: 'completed', duration: 1000 },
+          taskId: 'task-concurrent-remove',
+          attempts: 3,
+          createdAt: Date.now(),
+        },
+      ];
+      await statePersistence.save(state);
+
+      const response = deferredResponse();
+      mockFetch.mockReturnValue(response.promise);
+      const warn = vi.fn();
+      const client = new WebhookClient(
+        statePersistence,
+        { ...mockLogger, warn },
+        'test-internal-auth-token'
+      );
+
+      const retrying = client.retryPending();
+      await vi.waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledOnce();
+      });
+      await statePersistence.modify((current) => {
+        current.pendingWebhooks = [];
+      });
+      response.resolve(new Response('{}', { status: 200 }));
+      await retrying;
+
+      expect((await statePersistence.load()).pendingWebhooks).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        { taskId: 'task-concurrent-remove' },
+        'Pending webhook changed before retry reconciliation'
+      );
+    });
+
     it('should retry pending webhooks and remove successful ones', async () => {
       vi.useFakeTimers();
 

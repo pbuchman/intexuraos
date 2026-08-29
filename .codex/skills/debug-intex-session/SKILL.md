@@ -25,9 +25,11 @@ Do not use this skill for code-task investigations.
 ## Workflow
 
 1. Extract the session ID from the URL `session=` query parameter or direct `intex_session_*` input.
-2. Detect the environment from the URL.
-   - `dev.intexuraos.cloud` = dev
-   - `intexuraos.cloud` without `dev.` = prod
+2. Record link provenance without treating it as runtime routing.
+   - `dev.intexuraos.cloud` is accepted only for historical investigations.
+   - `intexuraos.cloud` is the live production UI.
+   - Home Dev is a production-owned worker host, not a live DEV application runtime.
+   - Never infer data ownership, credential mode, or callback ownership from the link hostname.
 3. Never fetch the SPA URL. The page is hash-routed; the session data lives in Firestore.
 4. Confirm the current machine with `uname -n`.
 5. Use the bundled wrapper `.codex/skills/debug-intex-session/scripts/fetch-session.sh`, which resolves the local repo and runs the Firestore fetcher from the checked-out repo.

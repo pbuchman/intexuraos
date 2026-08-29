@@ -112,7 +112,7 @@ For outbound Matrix delivery, also mount:
 - `MATRIX_OUTBOUND_AUTH_TOKEN_FILE`
 - `MATRIX_OUTBOUND_TARGETS_FILE`
 
-`MATRIX_OUTBOUND_AUTH_TOKEN_FILE` contains an adapter-local bearer token used by trusted internal callers on the Matrix host. `MATRIX_OUTBOUND_TARGETS_FILE` contains source-account to target-room mappings, for example:
+`MATRIX_OUTBOUND_AUTH_TOKEN_FILE` contains an adapter-local bearer token used by trusted internal callers on the Matrix host. It must be distinct from `MATRIX_ACCESS_TOKEN_FILE`: the outbound bearer authorizes adapter-local HTTP routes and is never a Matrix homeserver access token. The adapter fails closed before sync and rejects HTTP authorization when the two paths or their trimmed token values are equal. `MATRIX_OUTBOUND_TARGETS_FILE` contains source-account to target-room mappings, for example:
 
 ```json
 {
@@ -130,7 +130,7 @@ For outbound Matrix delivery, also mount:
 4. Copy the displayed `sourceAccountId` into the Home Dev adapter configuration as `INTEXURAOS_SOURCE_ACCOUNT_ID`.
 5. Add the same `sourceAccountId` to `MATRIX_OUTBOUND_TARGETS_FILE` with an `intex_agent` room mapping that points at the WhatsApp/Intex Agent portal room.
 6. Generate and mount `MATRIX_OUTBOUND_AUTH_TOKEN_FILE` for the trusted backend caller that will use the outbound adapter endpoints.
-7. Set `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` separately in `dev.json` and `prod.json`. Home-dev uses the loopback adapter on port 8099; production must use a base URL that `whatsapp-service` on the Hetzner host can reach, such as an HTTPS endpoint on the Matrix host or an explicitly provisioned tunnel endpoint.
+7. Keep `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` environment-specific. The retained DEV recovery profile uses the loopback adapter on port 8099. Production uses exactly `https://matrix-outbound.intexuraos.cloud/api/matrix-outbound`; it must never fall back to the DEV hostname or an unprovisioned Hetzner-local address.
 8. Store `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN` in Secret Manager with the same bearer token mounted in `MATRIX_OUTBOUND_AUTH_TOKEN_FILE`.
 9. Keep Matrix tokens, WhatsApp bridge state, `.env`, and Google credential JSON out of Git.
 
@@ -152,20 +152,24 @@ Deployment order: stop the Matrix sync adapter, deploy `whatsapp-service`, deplo
 
 ## Outbound Adapter API
 
-The adapter also exposes adapter-local outbound routes for scheduled delivery:
+The adapter exposes one health route and adapter-local outbound routes for scheduled delivery:
 
+- `GET /health`
 - `GET /internal/matrix/outbound/readiness/:sourceAccountId/:target`
 - `POST /internal/matrix/outbound/messages`
 
-Both require `Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>`.
+All three require the exact
+`Authorization: Bearer <token-from-MATRIX_OUTBOUND_AUTH_TOKEN_FILE>` header. The health route
+returns `401` before evaluating readiness when the bearer is absent or invalid.
 
 Hetzner production renders `INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL` from the
 production overlay in versioned configuration when `scripts/hetzner/load-secrets.sh` writes
 `/etc/intexuraos/.env.prod`; only the adjacent adapter auth token comes from
-Secret Manager. Do not point the URL at `localhost` unless an operator has
-explicitly provisioned a localhost tunnel on the Hetzner host that forwards to
-the Matrix machine. Without a reachable base URL from Hetzner to the Matrix
-host, readiness remains blocked and scheduled notifications cannot deliver.
+Secret Manager. The tracked production value is the production-owned
+`https://matrix-outbound.intexuraos.cloud/api/matrix-outbound` route. Do not point
+production at `localhost` or `dev.intexuraos.cloud`; without the reviewed route
+from Hetzner to the Matrix host, readiness remains blocked and scheduled
+notifications cannot deliver.
 
 Readiness returns:
 

@@ -9,9 +9,7 @@ function readRepoFile(relativePath: string): string {
 }
 
 function getStartCodeAgentStep(workflow: string): string {
-  const match = workflow.match(
-    /- name: Start code-agent service[\s\S]*?(?=\n      - name: |\n\s*$)/
-  );
+  const match = workflow.match(/- name: Start code-agent service[\s\S]*?(?=\n {6}- name: |\n\s*$)/);
   if (match === null) {
     throw new Error('Start code-agent service step not found in .github/workflows/e2e.yml');
   }
@@ -36,6 +34,8 @@ describe('E2E workflow code-agent startup env', () => {
       'INTEXURAOS_CODE_TASK_CALLBACK_BASE_URL=http://127.0.0.1:8128 \\'
     );
     expect(startCodeAgentStep).toContain('INTEXURAOS_WEB_APP_URL=');
+    expect(startCodeAgentStep).toContain('INTEXURAOS_WEB_APP_URL=http://localhost:3000 \\');
+    expect(startCodeAgentStep).not.toContain('dev.intexuraos.cloud');
   });
 
   it('does not require Sentry automation env vars during E2E startup', () => {

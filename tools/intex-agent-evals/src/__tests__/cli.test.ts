@@ -320,7 +320,7 @@ describe('runCli setup and preflight', () => {
     expect(harness.stderr.mock.calls).toEqual([['setup result FAIL SETUP_TTY_REQUIRED']]);
   });
 
-  it.each(['created', 'already_configured'] as const)(
+  it.each(['created', 'upgraded', 'already_configured'] as const)(
     'collects the exact candidate once, closes input, and renders setup %s',
     async (state) => {
       const setupInput = createSetupInput({
@@ -329,6 +329,7 @@ describe('runCli setup and preflight', () => {
           canonical_user_id: ' user-id-input-sentinel ',
           matrix_user_id: ' matrix-id-input-sentinel ',
           matrix_access_token_file: ' token-path-input-sentinel ',
+          matrix_outbound_auth_token_file: ' outbound-token-path-input-sentinel ',
           matrix_targets_file: ' targets-path-input-sentinel ',
         },
       });
@@ -352,15 +353,17 @@ describe('runCli setup and preflight', () => {
         ['canonical_user_id'],
         ['matrix_user_id'],
         ['matrix_access_token_file'],
+        ['matrix_outbound_auth_token_file'],
         ['matrix_targets_file'],
       ]);
       expect(setup).toHaveBeenCalledOnce();
       expect(setup).toHaveBeenCalledWith({
-        schemaVersion: 1,
+        schemaVersion: 2,
         accountAlias: ' alias-input-sentinel ',
         userId: ' user-id-input-sentinel ',
         matrixUserId: ' matrix-id-input-sentinel ',
         matrixAccessTokenFile: ' token-path-input-sentinel ',
+        matrixOutboundAuthTokenFile: ' outbound-token-path-input-sentinel ',
         matrixTargetsFile: ' targets-path-input-sentinel ',
       });
       expect(setupInput.close).toHaveBeenCalledOnce();
@@ -369,6 +372,7 @@ describe('runCli setup and preflight', () => {
         ['setup input canonical_user_id'],
         ['setup input matrix_user_id'],
         ['setup input matrix_access_token_file'],
+        ['setup input matrix_outbound_auth_token_file'],
         ['setup input matrix_targets_file'],
         ['setup check runtime PASS'],
         ['setup check config PASS'],
@@ -2106,6 +2110,7 @@ function createSetupInput(
     canonical_user_id: 'canonical-user',
     matrix_user_id: '@matrix:example.test',
     matrix_access_token_file: '/private/token',
+    matrix_outbound_auth_token_file: '/private/outbound-token',
     matrix_targets_file: '/private/targets',
     ...options.hidden,
   };

@@ -53,11 +53,6 @@ export interface BootstrapEnvConfig {
   gitUserEmailOverride?: string;
   logLevel: string;
   /**
-   * Logical environment name forwarded to `initWorker()` (INT-1565 §S5).
-   * Used as Sentry `environment` and on log-stream tags.
-   */
-  environment: string;
-  /**
    * Sentry DSN read from `INTEXURAOS_SENTRY_DSN`. When unset, `initWorker()`
    * skips Sentry initialization (per `initWorker.ts`).
    */
@@ -213,16 +208,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
   const openRouterApiKey = getRequiredEnv('INTEXURAOS_OPENROUTER_APP_API_KEY', env);
 
   const logLevel = getOptionalEnv('LOG_LEVEL', 'info', env);
-  // Environment name for the unified worker bootstrap (INT-1565 §S5). The
-  // INTEXURAOS_ENVIRONMENT var is the canonical source; NODE_ENV is consulted
-  // as a fallback for dev shells that don't export it. Defaults to
-  // `development` so a missing value never crashes initWorker().
-  const environment = getOptionalEnv(
-    'INTEXURAOS_ENVIRONMENT',
-    getOptionalEnv('NODE_ENV', 'development', env),
-    env
-  );
-
   const repoPath = readOptionalString(env, 'INTEXURAOS_REPOSITORY_PATH');
   const workerForensicsBasePath = readOptionalString(env, 'INTEXURAOS_CODE_WORKER_FORENSICS_PATH');
   const gitUserNameOverride = readOptionalString(env, 'INTEXURAOS_GIT_USER_NAME');
@@ -261,7 +246,6 @@ export function loadEnvConfig(env: EnvReader = process.env): BootstrapEnvConfig 
     ...(gitUserNameOverride !== undefined ? { gitUserNameOverride } : {}),
     ...(gitUserEmailOverride !== undefined ? { gitUserEmailOverride } : {}),
     logLevel,
-    environment,
     ...(sentryDsn !== undefined ? { sentryDsn } : {}),
     ...(release !== undefined ? { release } : {}),
   };

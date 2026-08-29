@@ -5,6 +5,7 @@ import type { ExecutionMemoryPromptContext } from '../../types/execution-memory.
 import type { Task, TaskResult } from '../../types/task.js';
 import type { Logger } from '@intexuraos/common-core';
 import { parseCodeTaskRebaseResult } from '@intexuraos/code-task-domain';
+import { buildRequiredTaskCallbackUrl } from '../callback-url.js';
 
 export const FATAL_EXIT_CODE_PREFIX = 'fatal_exit_code_';
 
@@ -13,7 +14,7 @@ Continue working on the task from where you left off. Review your progress so fa
 resume the next incomplete step.`;
 
 export function getTaskEventUrl(webhookUrl: string): string {
-  return webhookUrl.replace('/internal/webhooks/task-complete', '/internal/webhooks/task-event');
+  return buildRequiredTaskCallbackUrl(webhookUrl, '/internal/webhooks/task-event');
 }
 
 export function hasFatalExitCodeField(missingFields: string[]): string | undefined {

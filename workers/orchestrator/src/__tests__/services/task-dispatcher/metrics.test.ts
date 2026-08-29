@@ -331,7 +331,7 @@ describe('executeComplianceValidation', () => {
     mockLogForwarder.getDroppedChunkCount.mockReturnValue(0);
   });
 
-  it('skips the webhook when the task URL does not match the expected path', async () => {
+  it('delivers to the task owner when its valid URL has no canonical path marker', async () => {
     const task = makeTask({
       webhookUrl: 'https://example.test/not-the-expected-path',
     });
@@ -344,7 +344,9 @@ describe('executeComplianceValidation', () => {
         transcriptTooLong: false,
       }),
     };
-    const webhookClient = { send: vi.fn() };
+    const webhookClient = {
+      send: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+    };
     await executeComplianceValidation(
       validator as never,
       webhookClient as never,
@@ -353,11 +355,13 @@ describe('executeComplianceValidation', () => {
       task,
       makeInput()
     );
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ webhookUrl: task.webhookUrl }),
-      'Compliance report webhook URL does not contain expected path — skipping delivery'
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(webhookClient.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://example.test/internal/webhooks/compliance-report',
+      })
     );
-    expect(webhookClient.send).not.toHaveBeenCalled();
   });
 
   it('posts the compliance report when the task URL matches and the validator returns a result', async () => {

@@ -24,8 +24,8 @@ describe('linear-agent OpenAPI routes', () => {
     expect(response.statusCode).toBe(200);
     const body = response.json() as { servers: { url: string }[] };
     const serverUrls = body.servers.map((server) => server.url);
-    expect(serverUrls).toContain('https://intexuraos.cloud/api/linear');
-    expect(serverUrls).toContain('https://dev.intexuraos.cloud/api/linear');
+    expect(serverUrls).toEqual(['https://intexuraos.cloud/api/linear']);
+    expect(serverUrls).not.toContain('https://dev.intexuraos.cloud/api/linear');
     expect(serverUrls).not.toContain('https://intexuraos-linear-agent-cj44trunra-lm.a.run.app');
   });
 });

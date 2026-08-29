@@ -5,6 +5,7 @@ import {
   mkdir,
   mkdtemp,
   open,
+  readdir,
   readFile,
   rename,
   rm,
@@ -12,7 +13,7 @@ import {
   unlink,
   writeFile,
 } from 'node:fs/promises';
-import type { Stats } from 'node:fs';
+import { constants, type Stats } from 'node:fs';
 import { homedir, hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,6 +36,7 @@ import {
   INTEX_AGENT_HEALTH_URL,
   JUDGE_MODEL,
   MATRIX_ADAPTER_HEALTH_URL,
+  MATRIX_OUTBOUND_AUTH_TOKEN_MAX_BYTES,
   MATRIX_TARGETS_MAX_BYTES,
   MATRIX_TOKEN_MAX_BYTES,
   WHATSAPP_HEALTH_URL,
@@ -79,12 +81,22 @@ afterEach(() => {
 });
 
 const VALID_CONFIG: EvaluatorConfig = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   accountAlias: 'operator-one',
   userId: 'auth0|synthetic-user',
   matrixUserId: '@operator:home-dev',
   matrixAccessTokenFile: '/home/operator/.config/matrix-token',
+  matrixOutboundAuthTokenFile: '/home/operator/.config/matrix-outbound-auth-token',
   matrixTargetsFile: '/home/operator/.config/matrix-targets.json',
+};
+
+const LEGACY_CONFIG_V1 = {
+  schemaVersion: 1,
+  accountAlias: VALID_CONFIG.accountAlias,
+  userId: VALID_CONFIG.userId,
+  matrixUserId: VALID_CONFIG.matrixUserId,
+  matrixAccessTokenFile: VALID_CONFIG.matrixAccessTokenFile,
+  matrixTargetsFile: VALID_CONFIG.matrixTargetsFile,
 };
 
 function standardHealth(serviceName: string): Record<string, unknown> {
@@ -136,6 +148,9 @@ function createFakeProtectedFiles(config: EvaluatorConfig): ProtectedFilePort {
       if (path === config.matrixAccessTokenFile) {
         return { ok: true as const, contents: 'synthetic-matrix-token\n' };
       }
+      if (path === config.matrixOutboundAuthTokenFile) {
+        return { ok: true as const, contents: 'synthetic-outbound-token\n' };
+      }
       if (path === config.matrixTargetsFile) {
         return {
           ok: true as const,
@@ -151,12 +166,17 @@ function createFakeProtectedFiles(config: EvaluatorConfig): ProtectedFilePort {
     }),
     validatePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
     ensurePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
+    isAtomicReplaceIdle: vi.fn(async () => true),
     createExclusive: vi.fn(async (_path: string, contents: string) => {
       if (storedConfig !== undefined) {
         return { state: 'exists' as const };
       }
       storedConfig = contents;
       return { state: 'created' as const };
+    }),
+    replaceAtomic: vi.fn(async (_path: string, _expected: string, contents: string) => {
+      storedConfig = contents;
+      return { state: 'replaced' as const };
     }),
   };
 }
@@ -201,6 +221,9 @@ function createPreflightProtectedFiles(config: EvaluatorConfig): ProtectedFilePo
       if (path === config.matrixAccessTokenFile) {
         return { ok: true as const, contents: 'synthetic-matrix-token\n' };
       }
+      if (path === config.matrixOutboundAuthTokenFile) {
+        return { ok: true as const, contents: 'synthetic-outbound-token\n' };
+      }
       if (path === config.matrixTargetsFile) {
         return {
           ok: true as const,
@@ -213,7 +236,9 @@ function createPreflightProtectedFiles(config: EvaluatorConfig): ProtectedFilePo
     }),
     validatePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
     ensurePrivateDirectory: vi.fn(async () => ({ ok: true as const })),
+    isAtomicReplaceIdle: vi.fn(async () => true),
     createExclusive: vi.fn(async () => ({ state: 'exists' as const })),
+    replaceAtomic: vi.fn(async () => ({ state: 'conflict' as const })),
   };
 }
 
@@ -232,13 +257,13 @@ function overrideHealthResult(
   replacement: Awaited<ReturnType<PreflightPorts['healthHttp']['get']>>
 ): void {
   const originalGet = ports.healthHttp.get;
-  ports.healthHttp.get = vi.fn(async (url: string) =>
-    url === targetUrl ? replacement : await originalGet(url)
+  ports.healthHttp.get = vi.fn(async (url: string, options) =>
+    url === targetUrl ? replacement : await originalGet(url, options)
   );
 }
 
 describe('evaluator config schemas', () => {
-  it('accepts the exact version-one config and canonicalizes it with a final newline', () => {
+  it('accepts the exact version-two config and canonicalizes it with a final newline', () => {
     expect(EvaluatorConfigSchema.parse(VALID_CONFIG)).toEqual(VALID_CONFIG);
     expect(canonicalizeEvaluatorConfig(VALID_CONFIG)).toBe(
       `${JSON.stringify(VALID_CONFIG, null, 2)}\n`
@@ -248,7 +273,7 @@ describe('evaluator config schemas', () => {
   it.each([
     ['unknown key', { ...VALID_CONFIG, unexpected: true }],
     ['missing key', { ...VALID_CONFIG, userId: undefined }],
-    ['wrong version', { ...VALID_CONFIG, schemaVersion: 2 }],
+    ['wrong version', { ...VALID_CONFIG, schemaVersion: 1 }],
     ['blank alias', { ...VALID_CONFIG, accountAlias: '' }],
     ['untrimmed alias', { ...VALID_CONFIG, accountAlias: ' operator ' }],
     ['long alias', { ...VALID_CONFIG, accountAlias: 'a'.repeat(65) }],
@@ -270,6 +295,17 @@ describe('evaluator config schemas', () => {
     ['long user ID', { ...VALID_CONFIG, userId: 'u'.repeat(513) }],
     ['invalid Matrix user ID', { ...VALID_CONFIG, matrixUserId: 'operator' }],
     ['relative token path', { ...VALID_CONFIG, matrixAccessTokenFile: 'token' }],
+    [
+      'relative outbound auth token path',
+      { ...VALID_CONFIG, matrixOutboundAuthTokenFile: 'outbound-token' },
+    ],
+    [
+      'reused Matrix homeserver token path',
+      {
+        ...VALID_CONFIG,
+        matrixOutboundAuthTokenFile: VALID_CONFIG.matrixAccessTokenFile,
+      },
+    ],
     ['relative targets path', { ...VALID_CONFIG, matrixTargetsFile: 'targets.json' }],
   ])('rejects %s', (_name, candidate) => {
     expect(EvaluatorConfigSchema.safeParse(candidate).success).toBe(false);
@@ -284,6 +320,11 @@ describe('evaluator config schemas', () => {
     expect(
       parseEvaluatorConfigContents(JSON.stringify({ ...VALID_CONFIG, secret: 'sentinel' }))
     ).toEqual({ ok: false });
+  });
+
+  it('recognizes the exact legacy version-one shape as requiring an explicit upgrade', () => {
+    expect(parseEvaluatorConfigContents(JSON.stringify(LEGACY_CONFIG_V1))).toEqual({ ok: false });
+    expect(EvaluatorConfigSchema.safeParse(LEGACY_CONFIG_V1).success).toBe(false);
   });
 
   it('strictly parses Matrix targets and exact room IDs', () => {
@@ -339,6 +380,150 @@ describe('createNodeProtectedFilePort', () => {
       ok: true,
       contents: 'protected contents',
     });
+  });
+
+  it('refuses an atomic replacement when the protected contents no longer match', async () => {
+    const port = createNodeProtectedFilePort({ expectedUid: UID, nonce: () => TEST_NONCE });
+
+    await expect(
+      port.replaceAtomic(protectedFile, 'stale protected contents', 'replacement contents', {
+        mode: 0o600,
+        maxBytes: CONFIG_MAX_BYTES,
+      })
+    ).resolves.toEqual({ state: 'conflict' });
+    expect(await readFile(protectedFile, 'utf8')).toBe('protected contents');
+    expect((await readdir(privateDirectory)).sort()).toEqual(['protected.json']);
+  });
+
+  it('reports whether the trusted atomic-upgrade lock is idle', async () => {
+    const port = createNodeProtectedFilePort({ expectedUid: UID });
+    const lockPath = join(privateDirectory, '.protected.json.upgrade.lock');
+
+    await expect(port.isAtomicReplaceIdle(protectedFile)).resolves.toBe(true);
+    await writeFile(lockPath, '', { mode: 0o600 });
+    await chmod(lockPath, 0o600);
+    await expect(port.isAtomicReplaceIdle(protectedFile)).resolves.toBe(false);
+  });
+
+  it('serializes a trusted replacement injected immediately before publish', async () => {
+    const policy = { mode: 0o600, maxBytes: CONFIG_MAX_BYTES } as const;
+    const injectedPort = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => '00000000-0000-4000-8000-000000000002',
+    });
+    let injectedResult: Awaited<ReturnType<ProtectedFilePort['replaceAtomic']>> | undefined;
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: {
+        rename: async (sourcePath, destinationPath) => {
+          injectedResult = await injectedPort.replaceAtomic(
+            destinationPath,
+            'protected contents',
+            'concurrent replacement',
+            policy
+          );
+          await rename(sourcePath, destinationPath);
+        },
+      },
+    });
+
+    await expect(
+      port.replaceAtomic(protectedFile, 'protected contents', 'serialized replacement', policy)
+    ).resolves.toEqual({ state: 'replaced' });
+    expect(injectedResult).toEqual({ state: 'conflict' });
+    expect(await readFile(protectedFile, 'utf8')).toBe('serialized replacement');
+    expect((await readdir(privateDirectory)).sort()).toEqual(['protected.json']);
+  });
+
+  it('fsyncs the containing directory after publish before reporting replacement', async () => {
+    const events: string[] = [];
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: {
+        open: async (path, flags, mode) => {
+          const handle = await open(path, flags, mode);
+          if (path === privateDirectory && (flags & constants.O_DIRECTORY) !== 0) {
+            const sync = handle.sync.bind(handle);
+            vi.spyOn(handle, 'sync').mockImplementation(async () => {
+              events.push('directory_fsync');
+              await sync();
+            });
+          }
+          return handle;
+        },
+        rename: async (sourcePath, destinationPath) => {
+          events.push('publish');
+          await rename(sourcePath, destinationPath);
+        },
+      },
+    });
+
+    await expect(
+      port.replaceAtomic(protectedFile, 'protected contents', 'durable replacement', {
+        mode: 0o600,
+        maxBytes: CONFIG_MAX_BYTES,
+      })
+    ).resolves.toEqual({ state: 'replaced' });
+    expect(events).toEqual(['publish', 'directory_fsync', 'directory_fsync']);
+    expect(await readFile(protectedFile, 'utf8')).toBe('durable replacement');
+    expect((await readdir(privateDirectory)).sort()).toEqual(['protected.json']);
+  });
+
+  it('never reports replacement when the post-publish directory fsync fails', async () => {
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: {
+        open: async (path, flags, mode) => {
+          const handle = await open(path, flags, mode);
+          if (path === privateDirectory && (flags & constants.O_DIRECTORY) !== 0) {
+            vi.spyOn(handle, 'sync').mockRejectedValue(new Error('directory fsync failure'));
+          }
+          return handle;
+        },
+      },
+    });
+
+    await expect(
+      port.replaceAtomic(protectedFile, 'protected contents', 'published but unconfirmed', {
+        mode: 0o600,
+        maxBytes: CONFIG_MAX_BYTES,
+      })
+    ).resolves.toEqual({ state: 'failed' });
+  });
+
+  it('never reports replacement when durable lock cleanup fsync fails', async () => {
+    let directorySyncCalls = 0;
+    const port = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: {
+        open: async (path, flags, mode) => {
+          const handle = await open(path, flags, mode);
+          if (path === privateDirectory && (flags & constants.O_DIRECTORY) !== 0) {
+            const sync = handle.sync.bind(handle);
+            vi.spyOn(handle, 'sync').mockImplementation(async () => {
+              directorySyncCalls += 1;
+              if (directorySyncCalls === 2) {
+                throw new Error('lock cleanup fsync failure');
+              }
+              await sync();
+            });
+          }
+          return handle;
+        },
+      },
+    });
+
+    await expect(
+      port.replaceAtomic(protectedFile, 'protected contents', 'cleanup unconfirmed', {
+        mode: 0o600,
+        maxBytes: CONFIG_MAX_BYTES,
+      })
+    ).resolves.toEqual({ state: 'failed' });
+    expect(directorySyncCalls).toBe(2);
   });
 
   it('maps missing, symlink, non-regular, wrong-owner, wrong-mode, and oversized files', async () => {
@@ -710,15 +895,20 @@ describe('setupEvaluatorConfig', () => {
     const candidate: EvaluatorConfig = {
       ...VALID_CONFIG,
       matrixAccessTokenFile: join(secretsDirectory, 'matrix-token'),
+      matrixOutboundAuthTokenFile: join(secretsDirectory, 'matrix-outbound-auth-token'),
       matrixTargetsFile: join(secretsDirectory, 'matrix-targets.json'),
     };
     await writeFile(candidate.matrixAccessTokenFile, 'synthetic-matrix-token\n', { mode: 0o600 });
+    await writeFile(candidate.matrixOutboundAuthTokenFile, 'synthetic-outbound-token\n', {
+      mode: 0o600,
+    });
     await writeFile(
       candidate.matrixTargetsFile,
       JSON.stringify({ 'synthetic-source': { intex_agent: '!agent-room:home-dev' } }),
       { mode: 0o600 }
     );
     await chmod(candidate.matrixAccessTokenFile, 0o600);
+    await chmod(candidate.matrixOutboundAuthTokenFile, 0o600);
     await chmod(candidate.matrixTargetsFile, 0o600);
     const protectedFiles = createNodeProtectedFilePort({ expectedUid: UID });
     const ports = createSetupPorts(candidate, protectedFiles);
@@ -748,6 +938,201 @@ describe('setupEvaluatorConfig', () => {
       exitCode: 2,
       code: 'CONFIG_CONFLICT',
     });
+  });
+
+  it('atomically upgrades an exact protected version-one config to version two', async () => {
+    const secretsDirectory = join(rootDirectory, 'upgrade-secrets');
+    const configDirectory = join(rootDirectory, 'upgrade-config');
+    const configPath = join(configDirectory, 'intex-agent-evals.json');
+    await mkdir(secretsDirectory, { mode: 0o700 });
+    await mkdir(configDirectory, { mode: 0o700 });
+    await chmod(secretsDirectory, 0o700);
+    await chmod(configDirectory, 0o700);
+    const candidate: EvaluatorConfig = {
+      ...VALID_CONFIG,
+      matrixAccessTokenFile: join(secretsDirectory, 'matrix-token'),
+      matrixOutboundAuthTokenFile: join(secretsDirectory, 'matrix-outbound-auth-token'),
+      matrixTargetsFile: join(secretsDirectory, 'matrix-targets.json'),
+    };
+    const legacyConfig = {
+      schemaVersion: 1,
+      accountAlias: candidate.accountAlias,
+      userId: candidate.userId,
+      matrixUserId: candidate.matrixUserId,
+      matrixAccessTokenFile: candidate.matrixAccessTokenFile,
+      matrixTargetsFile: candidate.matrixTargetsFile,
+    };
+    await writeFile(candidate.matrixAccessTokenFile, 'synthetic-matrix-token\n', { mode: 0o600 });
+    await writeFile(candidate.matrixOutboundAuthTokenFile, 'synthetic-outbound-token\n', {
+      mode: 0o600,
+    });
+    await writeFile(
+      candidate.matrixTargetsFile,
+      JSON.stringify({ 'synthetic-source': { intex_agent: '!agent-room:home-dev' } }),
+      { mode: 0o600 }
+    );
+    await writeFile(configPath, `${JSON.stringify(legacyConfig, null, 2)}\n`, { mode: 0o600 });
+    for (const protectedPath of [
+      candidate.matrixAccessTokenFile,
+      candidate.matrixOutboundAuthTokenFile,
+      candidate.matrixTargetsFile,
+      configPath,
+    ]) {
+      await chmod(protectedPath, 0o600);
+    }
+    const ports = createSetupPorts(
+      candidate,
+      createNodeProtectedFilePort({ expectedUid: UID, nonce: () => TEST_NONCE })
+    );
+    ports.configPath = configPath;
+
+    await expect(setupEvaluatorConfig(candidate, ports)).resolves.toMatchObject({
+      ok: true,
+      exitCode: 0,
+      state: 'upgraded',
+      accountAlias: candidate.accountAlias,
+    });
+    expect(await readFile(configPath, 'utf8')).toBe(canonicalizeEvaluatorConfig(candidate));
+    expect((await lstat(configPath)).mode & 0o7777).toBe(0o600);
+    expect((await readdir(configDirectory)).sort()).toEqual(['intex-agent-evals.json']);
+  });
+
+  it('blocks setup and preflight while a version-two publish still holds the upgrade lock', async () => {
+    const secretsDirectory = join(rootDirectory, 'concurrent-upgrade-secrets');
+    const configDirectory = join(rootDirectory, 'concurrent-upgrade-config');
+    const configPath = join(configDirectory, 'intex-agent-evals.json');
+    await mkdir(secretsDirectory, { mode: 0o700 });
+    await mkdir(configDirectory, { mode: 0o700 });
+    await chmod(secretsDirectory, 0o700);
+    await chmod(configDirectory, 0o700);
+    const candidate: EvaluatorConfig = {
+      ...VALID_CONFIG,
+      matrixAccessTokenFile: join(secretsDirectory, 'matrix-token'),
+      matrixOutboundAuthTokenFile: join(secretsDirectory, 'matrix-outbound-auth-token'),
+      matrixTargetsFile: join(secretsDirectory, 'matrix-targets.json'),
+    };
+    const legacyConfig = {
+      schemaVersion: 1,
+      accountAlias: candidate.accountAlias,
+      userId: candidate.userId,
+      matrixUserId: candidate.matrixUserId,
+      matrixAccessTokenFile: candidate.matrixAccessTokenFile,
+      matrixTargetsFile: candidate.matrixTargetsFile,
+    };
+    await writeFile(candidate.matrixAccessTokenFile, 'synthetic-matrix-token\n', { mode: 0o600 });
+    await writeFile(candidate.matrixOutboundAuthTokenFile, 'synthetic-outbound-token\n', {
+      mode: 0o600,
+    });
+    await writeFile(
+      candidate.matrixTargetsFile,
+      JSON.stringify({ 'synthetic-source': { intex_agent: '!agent-room:home-dev' } }),
+      { mode: 0o600 }
+    );
+    await writeFile(configPath, `${JSON.stringify(legacyConfig, null, 2)}\n`, { mode: 0o600 });
+    for (const protectedPath of [
+      candidate.matrixAccessTokenFile,
+      candidate.matrixOutboundAuthTokenFile,
+      candidate.matrixTargetsFile,
+      configPath,
+    ]) {
+      await chmod(protectedPath, 0o600);
+    }
+
+    let signalPublished: (() => void) | undefined;
+    const published = new Promise<void>((resolve) => {
+      signalPublished = resolve;
+    });
+    let releaseDurability: (() => void) | undefined;
+    const durabilityReleased = new Promise<void>((resolve) => {
+      releaseDurability = resolve;
+    });
+    const upgradingPort = createNodeProtectedFilePort({
+      expectedUid: UID,
+      nonce: () => TEST_NONCE,
+      fileSystem: {
+        rename: async (sourcePath, destinationPath) => {
+          await rename(sourcePath, destinationPath);
+          signalPublished?.();
+          await durabilityReleased;
+        },
+      },
+    });
+    const upgradingPorts = createSetupPorts(candidate, upgradingPort);
+    upgradingPorts.configPath = configPath;
+    const upgradeResultPromise = setupEvaluatorConfig(candidate, upgradingPorts);
+    await published;
+
+    const observingPort = createNodeProtectedFilePort({ expectedUid: UID });
+    const observingSetupPorts = createSetupPorts(candidate, observingPort);
+    observingSetupPorts.configPath = configPath;
+    const observingPreflightPorts: PreflightPorts = {
+      ...createPreflightPorts(candidate),
+      configPath,
+      protectedFiles: observingPort,
+    };
+    const concurrentSetupResult = await setupEvaluatorConfig(candidate, observingSetupPorts);
+    const concurrentPreflightResult = await runPreflight(observingPreflightPorts);
+
+    releaseDurability?.();
+    const upgradeResult = await upgradeResultPromise;
+
+    expect(concurrentSetupResult).toMatchObject({
+      ok: false,
+      exitCode: 2,
+      code: 'CONFIG_CONFLICT',
+    });
+    expect(concurrentPreflightResult).toMatchObject({
+      ok: false,
+      exitCode: 2,
+      code: 'CONFIG_CONFLICT',
+    });
+    expect(upgradeResult).toMatchObject({
+      ok: true,
+      exitCode: 0,
+      state: 'upgraded',
+    });
+    expect((await readdir(configDirectory)).sort()).toEqual(['intex-agent-evals.json']);
+  });
+
+  it('does not publish a version-two config when legacy identity or atomic compare differs', async () => {
+    for (const testCase of ['legacy_identity_changed', 'atomic_compare_changed'] as const) {
+      const protectedFiles = createFakeProtectedFiles(VALID_CONFIG);
+      const ports = createSetupPorts(VALID_CONFIG, protectedFiles);
+      const originalRead = protectedFiles.read;
+      protectedFiles.createExclusive = vi.fn(async () => ({ state: 'exists' as const }));
+      protectedFiles.read = vi.fn(async (path, policy) => {
+        if (path !== ports.configPath) {
+          return await originalRead(path, policy);
+        }
+        return {
+          ok: true as const,
+          contents: `${JSON.stringify(
+            {
+              ...LEGACY_CONFIG_V1,
+              userId:
+                testCase === 'legacy_identity_changed'
+                  ? 'auth0|different-private-user'
+                  : LEGACY_CONFIG_V1.userId,
+            },
+            null,
+            2
+          )}\n`,
+        };
+      });
+      if (testCase === 'atomic_compare_changed') {
+        protectedFiles.replaceAtomic = vi.fn(async () => ({ state: 'conflict' as const }));
+      }
+
+      const result = await setupEvaluatorConfig(VALID_CONFIG, ports);
+
+      expect(result).toMatchObject({ ok: false, exitCode: 2, code: 'CONFIG_CONFLICT' });
+      expect(JSON.stringify(result)).not.toContain('different-private-user');
+      if (testCase === 'legacy_identity_changed') {
+        expect(protectedFiles.replaceAtomic).not.toHaveBeenCalled();
+      } else {
+        expect(protectedFiles.replaceAtomic).toHaveBeenCalledOnce();
+      }
+    }
   });
 
   it('maps an EEXIST race to a conflict after a secure differing-file read', async () => {
@@ -785,15 +1170,20 @@ describe('setupEvaluatorConfig', () => {
     const candidate: EvaluatorConfig = {
       ...VALID_CONFIG,
       matrixAccessTokenFile: join(secretsDirectory, 'matrix-token'),
+      matrixOutboundAuthTokenFile: join(secretsDirectory, 'matrix-outbound-auth-token'),
       matrixTargetsFile: join(secretsDirectory, 'matrix-targets.json'),
     };
     await writeFile(candidate.matrixAccessTokenFile, 'synthetic-matrix-token\n', { mode: 0o600 });
+    await writeFile(candidate.matrixOutboundAuthTokenFile, 'synthetic-outbound-token\n', {
+      mode: 0o600,
+    });
     await writeFile(
       candidate.matrixTargetsFile,
       JSON.stringify({ 'synthetic-source': { intex_agent: '!agent-room:home-dev' } }),
       { mode: 0o600 }
     );
     await chmod(candidate.matrixAccessTokenFile, 0o600);
+    await chmod(candidate.matrixOutboundAuthTokenFile, 0o600);
     await chmod(candidate.matrixTargetsFile, 0o600);
 
     let staleCanonicalStats: Stats | undefined;
@@ -873,7 +1263,9 @@ describe('setupEvaluatorConfig', () => {
     expect(serialized).not.toContain(VALID_CONFIG.userId);
     expect(serialized).not.toContain(VALID_CONFIG.matrixUserId);
     expect(serialized).not.toContain(VALID_CONFIG.matrixAccessTokenFile);
+    expect(serialized).not.toContain(VALID_CONFIG.matrixOutboundAuthTokenFile);
     expect(serialized).not.toContain('synthetic-matrix-token');
+    expect(serialized).not.toContain('synthetic-outbound-token');
   });
 
   it('uses the configured config size bound on secure reread', async () => {
@@ -925,8 +1317,10 @@ describe('withValidatedAccountContext', () => {
     for (const privateValue of [
       VALID_CONFIG.userId,
       VALID_CONFIG.matrixUserId,
+      VALID_CONFIG.matrixOutboundAuthTokenFile,
       'https://matrix.synthetic.test',
       'synthetic-matrix-token',
+      'synthetic-outbound-token',
       '!agent-room:home-dev',
     ]) {
       expect(serialized).not.toContain(privateValue);
@@ -942,14 +1336,14 @@ describe('withValidatedAccountContext', () => {
         : await originalRead(path, policy)
     );
     const originalHealthGet = ports.healthHttp.get;
-    ports.healthHttp.get = vi.fn(async (url) =>
+    ports.healthHttp.get = vi.fn(async (url, options) =>
       url === MATRIX_ADAPTER_HEALTH_URL
         ? {
             ok: true as const,
             status: 200,
             body: { ...runningMatrixHealth(), sourceAccountId: 'constructor' },
           }
-        : await originalHealthGet(url)
+        : await originalHealthGet(url, options)
     );
     const callback = vi.fn(async () => undefined);
 
@@ -977,14 +1371,14 @@ describe('withValidatedAccountContext', () => {
           : await originalRead(path, policy)
       );
       const originalHealthGet = ports.healthHttp.get;
-      ports.healthHttp.get = vi.fn(async (url) =>
+      ports.healthHttp.get = vi.fn(async (url, options) =>
         url === MATRIX_ADAPTER_HEALTH_URL
           ? {
               ok: true as const,
               status: 200,
               body: { ...runningMatrixHealth(), sourceAccountId: inheritedKey },
             }
-          : await originalHealthGet(url)
+          : await originalHealthGet(url, options)
       );
       const callback = vi.fn(async () => undefined);
 
@@ -1023,6 +1417,7 @@ describe('withValidatedAccountContext', () => {
     expect(result).toMatchObject({ ok: false, code: 'UNEXPECTED_FAILURE' });
     expect(JSON.stringify(result)).not.toContain('private callback exception sentinel');
     expect(JSON.stringify(result)).not.toContain('synthetic-matrix-token');
+    expect(JSON.stringify(result)).not.toContain('synthetic-outbound-token');
   });
 });
 
@@ -1061,7 +1456,9 @@ describe('withValidatedProductionMatrixAccountContext', () => {
     });
     expect(callback).toHaveBeenCalledOnce();
     expect(ports.healthHttp.get).toHaveBeenCalledOnce();
-    expect(ports.healthHttp.get).toHaveBeenCalledWith(MATRIX_ADAPTER_HEALTH_URL);
+    expect(ports.healthHttp.get).toHaveBeenCalledWith(MATRIX_ADAPTER_HEALTH_URL, {
+      bearerToken: 'synthetic-outbound-token',
+    });
     expect(ports.whatsapp.getDeliveryStatus).not.toHaveBeenCalled();
   });
 });
@@ -1099,14 +1496,18 @@ describe('runPreflight', () => {
     });
     expect(ports.healthHttp.get).toHaveBeenNthCalledWith(1, INTEX_AGENT_HEALTH_URL);
     expect(ports.healthHttp.get).toHaveBeenNthCalledWith(2, WHATSAPP_HEALTH_URL);
-    expect(ports.healthHttp.get).toHaveBeenNthCalledWith(3, MATRIX_ADAPTER_HEALTH_URL);
+    expect(ports.healthHttp.get).toHaveBeenNthCalledWith(3, MATRIX_ADAPTER_HEALTH_URL, {
+      bearerToken: 'synthetic-outbound-token',
+    });
     const serialized = JSON.stringify(result);
     for (const secret of [
       VALID_CONFIG.userId,
       VALID_CONFIG.matrixUserId,
       VALID_CONFIG.matrixAccessTokenFile,
+      VALID_CONFIG.matrixOutboundAuthTokenFile,
       VALID_CONFIG.matrixTargetsFile,
       'synthetic-matrix-token',
+      'synthetic-outbound-token',
       'synthetic-source',
       '!agent-room:home-dev',
     ]) {
@@ -1196,8 +1597,27 @@ describe('runPreflight', () => {
     expect(JSON.stringify(result)).not.toContain('private secret sentinel');
   });
 
+  it('reports a legacy version-one config as requiring an explicit upgrade', async () => {
+    const ports = createPreflightPorts();
+    vi.mocked(ports.protectedFiles.read).mockResolvedValueOnce({
+      ok: true,
+      contents: `${JSON.stringify(LEGACY_CONFIG_V1, null, 2)}\n`,
+    });
+
+    const result = await runPreflight(ports);
+
+    expect(result).toMatchObject({ ok: false, exitCode: 2, code: 'CONFIG_UPGRADE_REQUIRED' });
+    expect(ports.healthHttp.get).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(LEGACY_CONFIG_V1.matrixAccessTokenFile);
+  });
+
   it.each([
     [VALID_CONFIG.matrixAccessTokenFile, 'unsafe', 'MATRIX_TOKEN_FILE_UNSAFE'],
+    [
+      VALID_CONFIG.matrixOutboundAuthTokenFile,
+      'unreadable',
+      'MATRIX_OUTBOUND_AUTH_TOKEN_FILE_UNSAFE',
+    ],
     [VALID_CONFIG.matrixTargetsFile, 'too_large', 'MATRIX_TARGETS_FILE_UNSAFE'],
   ] as const)('maps protected referenced-file failure for %s', async (path, reason, code) => {
     const ports = createPreflightPorts();
@@ -1212,7 +1632,7 @@ describe('runPreflight', () => {
     expect(ports.healthHttp.get).not.toHaveBeenCalled();
   });
 
-  it('rejects a whitespace-only token and malformed targets before health checks', async () => {
+  it('rejects whitespace-only Matrix and outbound tokens before health checks', async () => {
     const tokenPorts = createPreflightPorts();
     const tokenRead = tokenPorts.protectedFiles.read;
     tokenPorts.protectedFiles.read = vi.fn(async (path, policy) =>
@@ -1225,6 +1645,39 @@ describe('runPreflight', () => {
       code: 'MATRIX_TOKEN_INVALID',
     });
 
+    const outboundPorts = createPreflightPorts();
+    const outboundRead = outboundPorts.protectedFiles.read;
+    outboundPorts.protectedFiles.read = vi.fn(async (path, policy) =>
+      path === VALID_CONFIG.matrixOutboundAuthTokenFile
+        ? { ok: true as const, contents: ' \n ' }
+        : await outboundRead(path, policy)
+    );
+    await expect(runPreflight(outboundPorts)).resolves.toMatchObject({
+      ok: false,
+      code: 'MATRIX_OUTBOUND_AUTH_TOKEN_INVALID',
+    });
+  });
+
+  it('rejects reuse of the Matrix homeserver token as outbound health authorization', async () => {
+    const ports = createPreflightPorts();
+    const originalRead = ports.protectedFiles.read;
+    ports.protectedFiles.read = vi.fn(async (path, policy) =>
+      path === VALID_CONFIG.matrixOutboundAuthTokenFile
+        ? { ok: true as const, contents: 'synthetic-matrix-token\n' }
+        : await originalRead(path, policy)
+    );
+
+    const result = await runPreflight(ports);
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: 'MATRIX_OUTBOUND_AUTH_TOKEN_INVALID',
+    });
+    expect(ports.healthHttp.get).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('synthetic-matrix-token');
+  });
+
+  it('rejects malformed targets before health checks', async () => {
     const targetPorts = createPreflightPorts();
     const targetRead = targetPorts.protectedFiles.read;
     targetPorts.protectedFiles.read = vi.fn(async (path, policy) =>
@@ -1237,7 +1690,7 @@ describe('runPreflight', () => {
     expect(JSON.stringify(targetResult)).not.toContain('private target sentinel');
   });
 
-  it('uses the exact protected-read bounds for config, token, and targets', async () => {
+  it('uses the exact protected-read bounds for config, both tokens, and targets', async () => {
     const ports = createPreflightPorts();
 
     await runPreflight(ports);
@@ -1250,6 +1703,13 @@ describe('runPreflight', () => {
       mode: 0o600,
       maxBytes: MATRIX_TOKEN_MAX_BYTES,
     });
+    expect(ports.protectedFiles.read).toHaveBeenCalledWith(
+      VALID_CONFIG.matrixOutboundAuthTokenFile,
+      {
+        mode: 0o600,
+        maxBytes: MATRIX_OUTBOUND_AUTH_TOKEN_MAX_BYTES,
+      }
+    );
     expect(ports.protectedFiles.read).toHaveBeenCalledWith(VALID_CONFIG.matrixTargetsFile, {
       mode: 0o600,
       maxBytes: MATRIX_TARGETS_MAX_BYTES,
@@ -1535,6 +1995,32 @@ describe('production preflight adapters', () => {
         signal: expect.any(AbortSignal),
       })
     );
+  });
+
+  it('adds the protected Matrix outbound bearer only to the requested health call', async () => {
+    const outboundToken = 'private-outbound-token-sentinel';
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify(runningMatrixHealth()), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+    );
+    const port = createHealthHttpPort({ fetchImpl, timeoutMs: 50, maxBytes: 4096 });
+
+    const result = await port.get(MATRIX_ADAPTER_HEALTH_URL, { bearerToken: outboundToken });
+
+    expect(result).toEqual({ ok: true, status: 200, body: runningMatrixHealth() });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      MATRIX_ADAPTER_HEALTH_URL,
+      expect.objectContaining({
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${outboundToken}`,
+        },
+      })
+    );
+    expect(JSON.stringify(result)).not.toContain(outboundToken);
   });
 
   it.each([

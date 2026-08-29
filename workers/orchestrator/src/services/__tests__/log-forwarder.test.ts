@@ -148,6 +148,33 @@ describe('LogForwarder', () => {
   });
 
   describe('fallback secret derivation', () => {
+    it('rebinds an existing fallback forwarding state to the registered task owner', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.appendChunk('task-adopted', 'repair started\n');
+
+      forwarder.registerTask(
+        'task-adopted',
+        'task-secret',
+        'https://task-owner.example/internal/webhooks/task-complete'
+      );
+      forwarder.appendChunk('task-adopted', 'repair complete\n');
+      await forwarder.flush('task-adopted');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0]?.[0]).toBe('https://task-owner.example/internal/logs');
+    });
+
+    it('retains the fallback callback owner when adopting state without a webhook URL', async () => {
+      fetchSpy.mockResolvedValue(okResponse());
+      forwarder.appendChunk('task-fallback-owner', 'repair started\n');
+
+      forwarder.registerTask('task-fallback-owner', 'task-secret');
+      await forwarder.flush('task-fallback-owner');
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0]?.[0]).toBe('http://localhost:3000/internal/logs');
+    });
+
     it('derives webhook secret from orchestratorSecret when task not registered', async () => {
       const expectedSecret = createHmac('sha256', baseConfig.orchestratorSecret)
         .update('task-unregistered')

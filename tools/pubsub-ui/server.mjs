@@ -2,11 +2,9 @@ import express from 'express';
 import { PubSub } from '@google-cloud/pubsub';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import {
-  createPubSubPushEnvelope,
-  resolvePubSubProjectId,
-  resolvePubSubProjectIds,
-} from './pubsub-forwarding.mjs';
+import { createPubSubPushEnvelope, resolvePubSubProjectId } from './pubsub-forwarding.mjs';
+import { collectPubSubDrainTopology, PubSubDrainTelemetry } from './pubsub-drain.mjs';
+import { buildExpectedDrainTopology, TOPICS, TOPIC_ENDPOINTS } from './topology.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -15,41 +13,11 @@ const PORT = process.env.PORT || 8105;
 const INTEXURAOS_INTERNAL_AUTH_TOKEN =
   process.env.INTEXURAOS_INTERNAL_AUTH_TOKEN || 'local-dev-token';
 
-const TOPICS = [
-  'whatsapp-media-cleanup',
-  'whatsapp-send-message',
-  'whatsapp-webhook-process',
-  'whatsapp-audio-stored',
-  'whatsapp-transcription-completed',
-  'intex-message-ingest',
-  'research-process',
-  'llm-analytics',
-  'llm-call',
-  'bookmark-enrich',
-  'bookmark-summarize',
-  'pr-triage',
-  'message-digest-runs',
-  'intexuraos-runtime-credential-canary-dev',
-];
+const EXPECTED_DRAIN_TOPOLOGY = buildExpectedDrainTopology(process.env);
 
-const TOPIC_ENDPOINTS = {
-  'whatsapp-send-message': 'http://host.docker.internal:8113/internal/whatsapp/pubsub/send-message',
-  'whatsapp-media-cleanup':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/media-cleanup',
-  'whatsapp-webhook-process':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/process-webhook',
-  'whatsapp-transcription-completed':
-    'http://host.docker.internal:8113/internal/whatsapp/pubsub/transcription-completed',
-  'intex-message-ingest': 'http://host.docker.internal:8134/internal/intex-agent/messages',
-  'research-process': 'http://host.docker.internal:8116/internal/llm/pubsub/process-research',
-  'llm-analytics': 'http://host.docker.internal:8116/internal/llm/pubsub/report-analytics',
-  'llm-call': 'http://host.docker.internal:8116/internal/llm/pubsub/process-llm-call',
-  'bookmark-enrich': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/enrich',
-  'bookmark-summarize': 'http://host.docker.internal:8124/internal/bookmarks/pubsub/summarize',
-  'pr-triage': 'http://host.docker.internal:8128/internal/code/pubsub/pr-triage',
-  'message-digest-runs': 'http://host.docker.internal:8135/internal/message-digests/pubsub/run',
-  'intexuraos-runtime-credential-canary-dev': null,
-};
+const drainTelemetry = new PubSubDrainTelemetry({
+  expectedTopology: EXPECTED_DRAIN_TOPOLOGY,
+});
 
 const app = express();
 app.use(express.json());
@@ -82,48 +50,62 @@ async function setupTopicSubscription(topicName, projectId) {
   const [exists] = await topic.exists();
 
   if (!exists) {
-    await topic.create();
-    console.log(`[PubSub UI] Created topic: ${topicName} (${projectId})`);
+    throw new Error(`Required topic is missing: ${topicName} (${projectId})`);
   }
 
   const subscriptionName = `${topicName}-ui-monitor`;
   const subscription = topic.subscription(subscriptionName);
+  const drainSubscription = {
+    projectId,
+    topicName,
+    subscriptionName,
+    classification: TOPIC_ENDPOINTS[topicName] === null ? 'monitor-only' : 'forwarded',
+  };
   const [subExists] = await subscription.exists();
 
   if (!subExists) {
-    await subscription.create();
-    console.log(`[PubSub UI] Created subscription: ${subscriptionName} (${projectId})`);
+    throw new Error(`Required subscription is missing: ${subscriptionName} (${projectId})`);
   }
 
   subscription.on('message', async (message) => {
-    const event = {
-      topic: topicName,
-      messageId: message.id,
-      publishTime: message.publishTime,
-      data: JSON.parse(message.data.toString()),
-      attributes: message.attributes,
-      receivedAt: new Date().toISOString(),
-    };
+    await drainTelemetry.observeMessage({
+      subscription: drainSubscription,
+      forward: async () => {
+        const event = {
+          topic: topicName,
+          messageId: message.id,
+          publishTime: message.publishTime,
+          data: JSON.parse(message.data.toString()),
+          attributes: message.attributes,
+          receivedAt: new Date().toISOString(),
+        };
 
-    console.log(`[PubSub UI] Received message on ${topicName}:`, event.data.type);
+        console.log(`[PubSub UI] Received message on ${topicName}:`, event.data.type);
 
-    broadcastToClients({
-      type: 'event',
-      event,
+        broadcastToClients({
+          type: 'event',
+          event,
+        });
+
+        return await forwardToServiceEndpoint(topicName, message);
+      },
+      ack: () => message.ack(),
+      nack: () => message.nack(),
     });
-
-    const forwarded = await forwardToServiceEndpoint(topicName, message);
-
-    if (forwarded) {
-      message.ack();
-    } else {
-      message.nack();
-    }
   });
 
   subscription.on('error', (error) => {
+    drainTelemetry.recordSubscriberError(drainSubscription);
+    drainTelemetry.recordListenerStopped(drainSubscription);
     console.error(`[PubSub UI] Subscription error on ${topicName} (${projectId}):`, error);
   });
+
+  subscription.on('close', () => {
+    drainTelemetry.recordListenerStopped(drainSubscription);
+    console.error(`[PubSub UI] Subscription closed on ${topicName} (${projectId})`);
+  });
+
+  drainTelemetry.recordListenerStarted(drainSubscription);
 
   console.log(`[PubSub UI] Listening on ${topicName} (${projectId})`);
 }
@@ -207,13 +189,13 @@ async function setupTopicsAndSubscriptions() {
   console.log('[PubSub UI] ===========================================');
   console.log('[PubSub UI] Setting up topics and subscriptions...');
 
-  for (const topicName of TOPICS) {
-    for (const projectId of resolvePubSubProjectIds(topicName, process.env)) {
-      try {
-        await setupTopicSubscription(topicName, projectId);
-      } catch (error) {
-        console.error(`[PubSub UI] Error setting up ${topicName} (${projectId}):`, error);
-      }
+  for (const drainSubscription of EXPECTED_DRAIN_TOPOLOGY) {
+    const { projectId, topicName } = drainSubscription;
+    try {
+      await setupTopicSubscription(topicName, projectId);
+    } catch (error) {
+      drainTelemetry.recordSetupError(drainSubscription);
+      console.error(`[PubSub UI] Error setting up ${topicName} (${projectId}):`, error);
     }
   }
 
@@ -269,8 +251,32 @@ app.get('/events', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', topics: TOPICS, clients: clients.size });
+app.get('/health', async (_req, res) => {
+  let drain;
+  try {
+    drain = drainTelemetry.snapshot(
+      await collectPubSubDrainTopology({
+        projectIds: EXPECTED_DRAIN_TOPOLOGY.map(({ projectId }) => projectId),
+        getClient: getPubSubClient,
+      })
+    );
+  } catch {
+    drainTelemetry.recordTopologyRefreshError();
+    drain = drainTelemetry.snapshot({
+      topics: [],
+      subscriptions: [],
+      topologyObservedAt: new Date().toISOString(),
+      topologyRefreshFailed: true,
+    });
+  }
+
+  res.json({
+    status: 'ok',
+    topics: TOPICS,
+    clients: clients.size,
+    drainContractVersion: 1,
+    drain,
+  });
 });
 
 app.get('/', (req, res) => {

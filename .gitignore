@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 !.claude/skills/coverage/
+.vitest-reports/
 *.log
 .tsbuildinfo
 *.tsbuildinfo

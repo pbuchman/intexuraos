@@ -9,7 +9,6 @@ import {
   readFileSync,
   readlinkSync,
   readdirSync,
-  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -376,54 +375,6 @@ function makeStaleDevSyncClaim(options: {
   );
   writeFileSync(join(claimPath, 'ticket'), '1\n', { mode: 0o600 });
   return workDirectoryName;
-}
-
-function makeLegacyDevProjection(options: {
-  githubKeyOutput: string;
-  outputPath: string;
-  packageOutputDir: string;
-  payloadPath: string;
-  privateKeyPem: string;
-  tempRoot: string;
-  version: string;
-}): void {
-  const scratchOutput = join(options.tempRoot, 'scratch.envrc');
-  const scratchKey = join(options.tempRoot, 'scratch-key.pem');
-  const scratchPackages = join(options.tempRoot, 'scratch-packages');
-  const syncResult = syncDevPackage({
-    githubKeyOutput: scratchKey,
-    outputPath: scratchOutput,
-    packageOutputDir: scratchPackages,
-    payloadPath: options.payloadPath,
-    tempRoot: options.tempRoot,
-    version: options.version,
-  });
-  expect(syncResult.status).toBe(0);
-
-  execFileSync(
-    'node',
-    [
-      resolve(repoRoot, 'scripts/secret-package.mjs'),
-      'render',
-      '--environment',
-      'dev',
-      '--version',
-      options.version,
-      '--project-id',
-      'test-project',
-      '--output-dir',
-      options.packageOutputDir,
-      '--payload-file',
-      options.payloadPath,
-    ],
-    { cwd: repoRoot, env: { ...process.env, HOME: options.tempRoot }, stdio: 'pipe' }
-  );
-  copyFileSync(scratchOutput, options.outputPath);
-  copyFileSync(scratchKey, options.githubKeyOutput);
-  expect(readFileSync(options.githubKeyOutput, 'utf8')).toBe(options.privateKeyPem);
-  rmSync(scratchPackages, { recursive: true, force: true });
-  rmSync(scratchOutput, { force: true });
-  rmSync(scratchKey, { force: true });
 }
 
 function expectCompleteDevProjection(options: {
@@ -1723,6 +1674,10 @@ describe('orchestrator environment generator', () => {
     const generated = parse(readFileSync(outputPath, 'utf8'));
     expect(generated['INTEXURAOS_REPOSITORY_URL']).toBe(
       'https://github.com/example/intexuraos.git'
+    );
+    expect(generated['INTEXURAOS_CODE_AGENT_URL']).toBe('https://intexuraos.cloud/api/code');
+    expect(generated['INTEXURAOS_USAGE_WEBHOOK_URL']).toBe(
+      'https://intexuraos.cloud/api/code/internal/webhooks/usage-events'
     );
     expect(generated['INTEXURAOS_INTERNAL_AUTH_TOKEN']).toBe('internal-token');
     expect(generated['INTEXURAOS_GITHUB_APP_ID']).toBe('123');

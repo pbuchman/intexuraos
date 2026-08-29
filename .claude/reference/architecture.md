@@ -45,4 +45,8 @@ The monorepo has three deployment modes: Cloud Run apps, Cloud Functions workers
 
 Code-agent owns callback URL generation when it creates or drains a task. Orchestrator owns execution only. This keeps orchestrator independent from deployment environments and lets any worker machine execute tasks for any code-agent instance.
 
-Public dev/prod callback URLs are externally routable through nginx and MUST use `/api/code/internal/...`. Direct `/internal/...` callback URLs are valid only for localhost/test or explicitly host-local service URLs.
+Every new public callback is production-owned and MUST use
+`https://intexuraos.cloud/api/code/internal/...`. A persisted legacy DEV callback may be read for
+historical investigation or a controlled recovery drill, but it is never an orchestrator fallback.
+Direct `/internal/...` callback URLs are valid only for localhost/test or explicitly host-local
+service URLs. `workerLocation` selects an execution machine and never selects a callback owner.

@@ -130,11 +130,14 @@ Expected response:
 
 ```json
 {
-  "healthContractVersion": 1,
+  "healthContractVersion": 2,
   "status": "ready",
   "capacity": 2,
   "running": 0,
   "available": 2,
+  "workerContainers": 0,
+  "pendingTerminalCallbacks": 0,
+  "terminalCallbackActivityTotal": 24,
   "githubTokenExpiresAt": "2026-04-22T15:30:00.000Z",
   "workerAuths": {
     "claude": { "status": "active", "authMode": "oauth", "refreshSupported": true, "expiresInMinutes": 210, "subscriptionType": "max" },
@@ -144,9 +147,34 @@ Expected response:
   "diskHealthy": true,
   "providerApiKeys": {
     "OPENROUTER_API_KEY": { "configured": true }
+  },
+  "logForwarderDrain": {
+    "counterEpochId": "00112233445566778899aabbccddeeff",
+    "processStartedAt": "2026-08-28T09:00:00.000Z",
+    "activeForwarders": 0,
+    "bufferedBytes": 0,
+    "partialLineBytes": 0,
+    "queuedChunks": 0,
+    "inFlightBatches": 0,
+    "inFlightChunks": 0,
+    "activeFlushOperations": 0,
+    "openUploadRequests": 0,
+    "detachedUploadRetryPromises": 0,
+    "droppedChunksTotal": 0,
+    "forwarderActivityTotal": 0,
+    "lastActivityAt": null
   }
 }
 ```
+
+`counterEpochId` is a new random 128-bit value for each orchestrator process. During a drain proof,
+all gauges, `workerContainers`, and `pendingTerminalCallbacks` must remain zero. The process
+identity, epoch, `terminalCallbackActivityTotal`, log-forwarder monotonic counters, and
+`lastActivityAt` must remain unchanged across the complete witness/anchor/read sequence. A `null`
+ownership gauge is UNKNOWN, never zero.
+
+`openUploadRequests` remains non-zero from request start until the response body has been explicitly
+cancelled and the HTTP exchange is released; receiving response headers alone does not close it.
 
 ## Part 2: Submit a Task
 

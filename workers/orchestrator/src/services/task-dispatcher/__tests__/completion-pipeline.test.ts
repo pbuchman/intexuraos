@@ -212,5 +212,67 @@ describe('CompletionPipeline', () => {
       await vi.advanceTimersByTimeAsync(31_000);
       vi.useRealTimers();
     });
+
+    it('stops the log forwarder only after status and preserve tail logs', async () => {
+      const task = makeTask({ taskId: 'final-tail-preserve', agentType: 'execution' });
+      harness.tasks.set(task.taskId, task);
+      const mutableCtx = harness.ctx as unknown as {
+        preserveWorkerContainers: boolean;
+        statusUpdateClient: typeof harness.ctx.statusUpdateClient;
+      };
+      mutableCtx.preserveWorkerContainers = true;
+      mutableCtx.statusUpdateClient = {
+        commit: vi.fn().mockResolvedValue({
+          ok: false,
+          error: { type: 'network', message: 'status unavailable' },
+        }),
+      } as never;
+      harness.ctx.isolation.provider.preserveWorker = vi.fn().mockResolvedValue(true);
+      cp = new CompletionPipeline(harness.ctx);
+
+      await cp.finalizeTask(task, 'completed', { result: { branch: 'b', commits: 1 } });
+
+      const tailMessages = harness.appendOrchestratorTaskLog.mock.calls.map(([, message]) =>
+        String(message)
+      );
+      expect(tailMessages).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('STATUS_UPDATE_COMMIT_FAILED'),
+          expect.stringContaining('Preserved worker container for debugging'),
+        ])
+      );
+      const finalStopOrder = harness.logForwarderFlushAndStop.mock.invocationCallOrder.at(-1);
+      const lastAppendOrder = harness.appendOrchestratorTaskLog.mock.invocationCallOrder.at(-1);
+      if (finalStopOrder === undefined || lastAppendOrder === undefined) {
+        throw new Error('Missing final log append or flush-and-stop call');
+      }
+      expect(finalStopOrder).toBeGreaterThan(lastAppendOrder);
+    });
+
+    it('stops the log forwarder only after a cleanup-failure tail log', async () => {
+      const task = makeTask({ taskId: 'final-tail-cleanup' });
+      harness.tasks.set(task.taskId, task);
+      const mutableCtx = harness.ctx as unknown as {
+        statusUpdateClient: typeof harness.ctx.statusUpdateClient;
+      };
+      mutableCtx.statusUpdateClient = {
+        commit: vi.fn().mockResolvedValue({ ok: true, value: undefined }),
+      } as never;
+      harness.ctx.teardownAttempt = vi.fn().mockRejectedValue(new Error('cleanup unavailable'));
+      cp = new CompletionPipeline(harness.ctx);
+
+      await cp.finalizeTask(task, 'completed', { result: { branch: 'b', commits: 1 } });
+
+      expect(harness.appendOrchestratorTaskLog).toHaveBeenCalledWith(
+        task.taskId,
+        expect.stringContaining('Worker cleanup after finalization failed')
+      );
+      const finalStopOrder = harness.logForwarderFlushAndStop.mock.invocationCallOrder.at(-1);
+      const lastAppendOrder = harness.appendOrchestratorTaskLog.mock.invocationCallOrder.at(-1);
+      if (finalStopOrder === undefined || lastAppendOrder === undefined) {
+        throw new Error('Missing cleanup tail append or flush-and-stop call');
+      }
+      expect(finalStopOrder).toBeGreaterThan(lastAppendOrder);
+    });
   });
 });

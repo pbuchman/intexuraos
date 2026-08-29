@@ -90,6 +90,33 @@ describe('fetchDispatchMetadata', () => {
     expect(result).toBeNull();
   });
 
+  it.each(['file:///tmp/callback', 'ftp://example.com/callback', 'mailto:ops@example.com'])(
+    'returns null for dispatch metadata with non-HTTP callback URL %s',
+    async (webhookUrl) => {
+      nock(codeAgentUrl)
+        .get('/internal/tasks/task-bad-callback/dispatch-metadata')
+        .matchHeader('x-internal-auth', authToken)
+        .reply(200, {
+          taskId: 'task-bad-callback',
+          prompt: 'Resume work',
+          repository: 'pbuchman/intexuraos',
+          baseBranch: 'development',
+          agentType: 'execution',
+          workerType: 'auto',
+          linearIssueId: null,
+          webhookSecret: 'secret-123',
+          prNumber: null,
+          webhookUrl,
+          continuationPrBranch: null,
+          trackingCommentId: null,
+        });
+
+      await expect(
+        fetchDispatchMetadata({ codeAgentUrl, internalAuthToken: authToken }, 'task-bad-callback')
+      ).resolves.toBeNull();
+    }
+  );
+
   it('returns null when fetch throws', async () => {
     const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(new Error('network unavailable'));
 

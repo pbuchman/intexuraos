@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev-setup.mjs && pnpm exec pm2 start ecosystem.config.cjs --update-env && pnpm exec pm2 logs",
-    "emulators:start": "node scripts/docker-compose-local.mjs up -d",
+    "emulators:start": "node scripts/docker-compose-local.mjs start",
     "emulators:stop": "node scripts/docker-compose-local.mjs down",
     "emulators:logs": "node scripts/docker-compose-local.mjs logs -f",
     "services:start": "pnpm exec pm2 start ecosystem.config.cjs --update-env",
@@ -55,6 +55,8 @@
     "verify:terraform-secrets": "node scripts/verify-terraform-secrets.mjs",
     "verify:secret-packages": "node scripts/verify-secret-packages.mjs",
     "verify:credential-files": "node scripts/verify-credential-files.mjs",
+    "verify:dev-edge-profiles": "node scripts/validate-dev-caddy-profiles.mjs",
+    "verify:production-dev-dependencies": "node scripts/verify-production-dev-dependencies.mjs",
     "verify:pubsub": "node scripts/verify-pubsub.mjs",
     "verify:logging": "node scripts/verify-logging.mjs",
     "verify:incoming-request-logging": "node scripts/verify-incoming-request-logging.mjs",

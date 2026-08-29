@@ -48,13 +48,20 @@ describe('local development scripts', () => {
 
   it('runs emulator compose commands through the Docker config wrapper', () => {
     expect(packageJson.scripts['emulators:start']).toBe(
-      'node scripts/docker-compose-local.mjs up -d'
+      'node scripts/docker-compose-local.mjs start'
     );
     expect(packageJson.scripts['emulators:stop']).toBe(
       'node scripts/docker-compose-local.mjs down'
     );
     expect(packageJson.scripts['emulators:logs']).toBe(
       'node scripts/docker-compose-local.mjs logs -f'
+    );
+    expect(devSetupSource).toContain(
+      "import { buildLocalEmulatorStartPlan } from './lib/local-emulator-lifecycle.mjs';"
+    );
+    expect(devSetupSource).toContain('for (const command of buildLocalEmulatorStartPlan())');
+    expect(devSetupSource).toContain(
+      "execFileSync('docker', ['compose', '-f', composeFile, ...command]"
     );
   });
 });

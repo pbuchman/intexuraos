@@ -59,6 +59,12 @@ describe('coverage sharding helpers', () => {
     expect(mergeStep).not.toContain('--coverage.thresholds.');
   });
 
+  it('keeps transient blob reports out of repository inventory between failed CI runs', () => {
+    const gitignore = readFileSync('.gitignore', 'utf-8');
+
+    expect(gitignore.split('\n')).toContain('.vitest-reports/');
+  });
+
   it('recognizes the known Vitest coverage tmp ENOENT race', () => {
     expect(
       isKnownVitestCoverageTmpRace(

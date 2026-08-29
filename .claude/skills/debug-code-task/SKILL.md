@@ -9,21 +9,22 @@ Investigate code-agent task execution by fetching task metadata and logs from Fi
 
 ## Invocation Detection
 
-| Input Pattern                                           | Action                    |
-| ------------------------------------------------------- | ------------------------- |
-| `https://dev.intexuraos.cloud/#/code-tasks/task_*`      | Extract task ID, env=dev  |
-| `https://intexuraos.cloud/#/code-tasks/task_*`          | Extract task ID, env=prod |
-| `task_<uuid>` + "debug"/"investigate"/"what went wrong" | Use task ID directly      |
+| Input Pattern                                           | Action                                      |
+| ------------------------------------------------------- | ------------------------------------------- |
+| `https://dev.intexuraos.cloud/#/code-tasks/task_*`      | Extract task ID; legacy DEV-link provenance |
+| `https://intexuraos.cloud/#/code-tasks/task_*`          | Extract task ID, env=prod                   |
+| `task_<uuid>` + "debug"/"investigate"/"what went wrong" | Use task ID directly                        |
 
 Do not use this skill for WhatsApp Assistant session URLs such as `https://intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`, `https://dev.intexuraos.cloud/#/whatsapp/sessions?session=intex_session_*`, or direct `intex_session_*` inputs. Use `debug-intex-session` for those.
 
-## Phase 1: Environment Detection
+## Phase 1: Link Provenance
 
 Parse the URL. Do NOT fetch it — hash-routed SPA returns only shell HTML.
 
-| Signal | dev                    | prod                           |
-| ------ | ---------------------- | ------------------------------ |
-| URL    | `dev.intexuraos.cloud` | `intexuraos.cloud` (no `dev.`) |
+`dev.intexuraos.cloud` is accepted only as a historical investigation input. Home Dev is a
+production-owned worker host, not a live DEV application runtime; new tasks and callbacks are
+production-owned. Do not infer runtime availability, data ownership, credential mode, or callback
+ownership from the link hostname.
 
 Run `uname -n` to confirm current machine.
 
@@ -53,7 +54,10 @@ Present log lines to user. Do NOT analyze or speculate about root cause without 
 
 Only needed when Firestore logs are insufficient.
 
-The orchestrator runs on the same machine as the worker. Read `workerLocation` from the task document (Phase 2) to determine which machine.
+The orchestrator runs on the same machine as the worker. Read `workerLocation` from the task
+document (Phase 2) to determine which machine. `workerLocation` identifies execution placement
+only; it never determines callback ownership. When callback ownership matters, use the persisted
+task callback contract; public production callbacks use `https://intexuraos.cloud/api/code`.
 
 ### Orchestrator Logs
 

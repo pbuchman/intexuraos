@@ -1,6 +1,13 @@
 # 04 - Cloud Run Services
 
-This document describes the Cloud Run service configuration and operations.
+> **Historical reference.** This page records the retired Cloud Run application
+> fleet. It is not a current deployment or DEV-resume runbook. The current
+> application runtime uses manual exact-SHA production deployment on Hetzner;
+> the retained Home Dev application profile is normally hibernated. Do not use
+> the commands below to deploy the current application or to start Home Dev.
+
+The remaining sections describe the former Cloud Run service configuration and
+operations for historical investigation only.
 
 ## Services Overview
 
@@ -170,7 +177,9 @@ gcloud run deploy intexuraos-<service-name> \
 
 Backend services follow this pattern. Service names correspond to their `apps/` directory names (e.g. `apps/code-agent` -> `intexuraos-code-agent`).
 
-In normal operation, deployments are handled automatically by Cloud Build on push to the `development` branch (managed by Terraform).
+This historical command is not part of normal operation. Current application
+deployments are not triggered by pushes to `development`; follow the current
+Hetzner production runbook or the explicit Home Dev resume runbook instead.
 
 ## Rollback
 
@@ -222,7 +231,7 @@ gcloud run services update intexuraos-user-service \
 
 ## Summary
 
-After completing these steps, you should have:
+For the retired fleet, completing these historical steps resulted in:
 
 - [x] Cloud Run services deployed and healthy
 - [x] Health endpoints responding

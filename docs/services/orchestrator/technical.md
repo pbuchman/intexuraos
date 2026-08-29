@@ -249,7 +249,7 @@ Added `inactivityRestartCount` to the Task model, tracking lifetime inactivity r
 | GET    | `/tasks/:id`           | None        | -                                   | `200 Task` or `404`                                            |
 | DELETE | `/tasks/:id`           | None        | -                                   | `200 { taskId, status: "cancelled" }` or `404`/`409`           |
 | POST   | `/tasks/:id/message`   | HMAC signed | `{ message: string }`               | `200 SendMessageResult` or `404`/`409`/`410`                   |
-| GET    | `/health`              | None        | -                                   | `200 { healthContractVersion, status, capacity, running, available, workerAuths, providerApiKeys }` |
+| GET    | `/health`              | None        | -                                   | `200 { healthContractVersion: 2, status, capacity, running, available, workerContainers, pendingTerminalCallbacks, terminalCallbackActivityTotal, workerAuths, providerApiKeys, dockerHealthy, diskHealthy, logForwarderDrain }` |
 | GET    | `/meta/worker-image`   | None        | -                                   | `200` image diagnostics or `{ error }` if unavailable          |
 | POST   | `/admin/shutdown`      | HMAC signed | -                                   | `200 { status: "shutting_down" }`                              |
 | POST   | `/admin/refresh-token` | HMAC signed | -                                   | `200 { status: "refreshed", tokenExpiresAt }`                  |
@@ -265,6 +265,14 @@ Dispatch requests require three headers:
 | `X-Dispatch-Signature` | HMAC-SHA256 of `{timestamp}.{nonce}.{body}` |
 
 Verification rejects requests with timestamps older than 5 minutes and replayed nonces (10-minute TTL cache).
+
+`logForwarderDrain` is a privacy-safe process aggregate. It reports buffer, partial-line, queue,
+batch, chunk, active-flush, open-upload-request, and detached-retry gauges plus process-lifetime
+dropped-chunk/activity counters. Top-level drain ownership also reports every Docker worker
+container, persisted or in-flight terminal callbacks, and a monotonic terminal-callback activity
+counter. It contains no task ID, callback URL, log content, or secret. A drain verifier must treat
+`null` ownership as UNKNOWN and require unchanged process identity, `counterEpochId`, and monotonic
+counters; zero gauges from a restarted process are not proof of continuity.
 
 ### CreateTaskRequest Schema
 

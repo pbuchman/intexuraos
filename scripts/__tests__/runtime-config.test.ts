@@ -90,7 +90,7 @@ describe('versioned runtime configuration', () => {
     expect(Object.hasOwn(dev, 'INTEXURAOS_GOOGLE_OAUTH_REDIRECT_URI')).toBe(false);
     expect(dev['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toBe('http://127.0.0.1:8099');
     expect(prod['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL']).toBe(
-      'https://dev.intexuraos.cloud/api/matrix-outbound'
+      'https://matrix-outbound.intexuraos.cloud/api/matrix-outbound'
     );
   });
 

@@ -132,11 +132,13 @@ function readAllowedEnvironment(source, userHome) {
       'intexuraos',
       'home-orchestrator-sa-key.json'
     ),
+    INTEXURAOS_CODE_AGENT_URL: 'https://intexuraos.cloud/api/code',
     INTEXURAOS_ENVIRONMENT: 'dev',
     INTEXURAOS_RUNTIME: 'dev',
+    INTEXURAOS_USAGE_WEBHOOK_URL:
+      'https://intexuraos.cloud/api/code/internal/webhooks/usage-events',
   };
   const defaults = {
-    INTEXURAOS_CODE_AGENT_URL: 'http://localhost:8128',
     INTEXURAOS_GITHUB_APP_PRIVATE_KEY_PATH: join(userHome, '.code-orchestrator', 'github-app.pem'),
     INTEXURAOS_PROJECT_ID: source.INTEXURAOS_PROJECT_ID ?? source.PROJECT_ID,
     INTEXURAOS_REPOSITORY_PATH: join(userHome, '.code-orchestrator', 'repo'),

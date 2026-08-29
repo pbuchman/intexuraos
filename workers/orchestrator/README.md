@@ -84,14 +84,24 @@ service never receives the full host environment or Secret Manager access:
 and the DEV package's GitHub App PEM is rendered to a protected host path.
 `.envrc.local` is only for host-specific non-secret overrides.
 
+Home Dev is a production-owned worker host. The generator pins the Code Agent
+base to `https://intexuraos.cloud/api/code` and usage events to
+`https://intexuraos.cloud/api/code/internal/webhooks/usage-events`; inherited
+localhost or DEV URLs cannot override them. A task's `webhookUrl` remains the
+authority for logs, lifecycle, metrics, compliance, status, and completion.
+When present, it never silently switches to the fixed fallback: an invalid URL
+fails closed and a valid non-canonical URL retains its callback owner.
+The fixed `dev` environment/runtime values are legacy host and observability
+tags only; see [the identity decision](../../docs/operations/orchestrator-identity-decision.md).
+
 ### Required (startup fails if missing)
 
 | Variable                            | Source                    | Description                                                                                                        |
 | ----------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `INTEXURAOS_REPOSITORY_URL`         | versioned config          | GitHub repo URL for clone/fetch                                                                                    |
-| `INTEXURAOS_CODE_AGENT_URL`         | host default/override     | Webhook callback URL                                                                                               |
+| `INTEXURAOS_CODE_AGENT_URL`         | generator-fixed PROD URL  | Fallback `https://intexuraos.cloud/api/code`; a task callback remains authoritative                                |
 | `INTEXURAOS_ORCHESTRATOR_SECRET`    | DEV projection            | HMAC signing secret                                                                                                |
-| `INTEXURAOS_USAGE_WEBHOOK_URL`      | `.envrc.local`            | Usage events webhook URL (code-agent gateway)                                                                      |
+| `INTEXURAOS_USAGE_WEBHOOK_URL`      | generator-fixed PROD URL  | `https://intexuraos.cloud/api/code/internal/webhooks/usage-events`                                                 |
 | `INTEXURAOS_PROJECT_ID`             | generated                 | Retained GCP project metadata                                                                                      |
 | `INTEXURAOS_ENVIRONMENT`            | generated                 | Fixed home-dev environment tag (`dev`)                                                                             |
 | `INTEXURAOS_RUNTIME`                | generated                 | Fixed home-dev runtime tag (`dev`)                                                                                 |
@@ -207,41 +217,40 @@ curl -s http://localhost:8199/health | jq .
 
 #### Rebuilding and Deploying Changes
 
-The systemd service runs from a built artifact — it does NOT auto-rebuild on code changes. After modifying orchestrator code:
+The production-owned Home Dev worker runs from a built artifact and does not auto-rebuild on code
+changes. A push to `development` neither deploys nor restarts it. Activate only an exact reviewed
+artifact during the authorized M7.3 procedure in the
+[DEV hibernation runbook](../../docs/operations/dev-hibernation.md), after its zero-work and identity
+gates pass:
 
 ```bash
-# 1. Build new artifact
+# 1. In the staged checkout, prove and build the exact reviewed artifact
 cd ~/deploy/intexuraos
+test "$(git rev-parse HEAD)" = "<reviewed-40-character-sha>"
 pnpm build   # builds shared packages
 pnpm --filter orchestrator build
 
-# 2. Restart the service (picks up new dist/index.js)
+# 2. Only after the runbook's zero-work gate, restart the retained worker
 sudo systemctl restart intexuraos-orchestrator@pbuchman
 
 # 3. Verify
 curl -s http://localhost:8199/health | jq .
-
-# Note: This is automated by the webhook handler on pushes to development.
 ```
 
-#### Switching to Dev Mode (Local Development)
+Do not use a webhook handler or an unreviewed live-checkout rebuild as a deployment path.
 
-To run the orchestrator with hot-reload for development:
+#### Local Development (Developer Host Only)
+
+Do not replace the production-owned Home Dev service with a hot-reload process. On a developer
+machine, run the orchestrator from the local checkout instead:
 
 ```bash
-# 1. Stop the systemd service (otherwise it auto-restarts on port 8199)
-sudo systemctl stop intexuraos-orchestrator@pbuchman
-
-# 2. Load env vars
-cd ~/deploy/intexuraos   # or any workspace
+# 1. Load a local development projection
+cd <local-intexuraos-checkout>
 set -a && source ~/.code-orchestrator/env && set +a
 
-# 3. Run with tsx watch (hot-reload on source changes)
+# 2. Run with tsx watch
 pnpm --filter orchestrator dev
-
-# 4. When done, restore the service
-# Press Ctrl+C to stop dev mode, then:
-sudo systemctl start intexuraos-orchestrator@pbuchman
 ```
 
 #### Updating Runtime Configuration Or Secrets
@@ -276,6 +285,8 @@ The generator always replaces any inherited `GOOGLE_APPLICATION_CREDENTIALS`
 with `${HOME}/.config/intexuraos/home-orchestrator-sa-key.json`; that dedicated
 identity can only pull from the DEV Artifact Registry repository. It is a host
 bootstrap file, is never packaged, and is never forwarded to a code worker.
+The generator likewise replaces inherited Code Agent and usage-event URLs with
+their exact production values; do not edit the generated environment by hand.
 
 #### Full Recovery (from scratch)
 

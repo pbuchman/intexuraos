@@ -185,10 +185,15 @@ Open http://localhost:8105 to view the Pub/Sub monitoring dashboard:
 
 ### Common Issues
 
-**"Topic not found" errors**: The pubsub-ui container creates topics on startup. If PM2 services started before pubsub-ui, restart them:
+**"Topic not found" errors**: `pnpm run emulators:start` explicitly runs the one-shot bootstrap in
+a disposable `--rm` container after the emulator is healthy and before it starts `pubsub-ui`. The
+long-running server entrypoint is deliberately non-mutating and fails closed when topology is
+incomplete. A bridge-only restart or drain-telemetry activation must never run the bootstrap.
+Inspect the container first:
 
 ```bash
-pnpm exec pm2 restart all
+docker compose -f docker/docker-compose.local.yaml ps -a pubsub-ui
+docker compose -f docker/docker-compose.local.yaml logs pubsub-ui
 ```
 
 **Messages not processing**: Verify pubsub-ui is running:
@@ -196,7 +201,12 @@ pnpm exec pm2 restart all
 ```bash
 docker compose -f docker/docker-compose.local.yaml ps
 curl http://localhost:8105/health | jq '.topics | length'  # Should be 14
+curl http://localhost:8105/health | jq '{version: .drainContractVersion, match: .drain.topologyMatch}'
 ```
+
+The health endpoint refreshes its topology exclusively with ListTopics/ListSubscriptions and
+reports versioned privacy-safe drain telemetry. It never pull-probes, acknowledges, seeks, or
+inspects a message as part of health collection.
 
 ## Verification
 

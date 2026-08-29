@@ -28,7 +28,13 @@ gcloud artifacts repositories list --location=europe-central2
 
 **Project ID:** `intexuraos-dev-pbuchman`
 
-**Single project for both environments.** This project is authoritative for resources serving BOTH `dev.intexuraos.cloud` (PM2 on `home-dev`) AND `intexuraos.cloud` (Cloud Run services, Cloud Functions, the GCS bucket that hosts the prod web bundle, Pub/Sub topics, secrets). The `-dev-pbuchman` suffix is legacy and does NOT imply a separate prod project — none exists. Accordingly, the only Terraform environment directory in this repo is `terraform/environments/dev/`, which owns infrastructure for both domains. Do not author a sibling `prod` environment directory unless a future migration introduces a real second project.
+**DEV is a retained configuration label and is normally hibernated.** This project remains
+authoritative for retained DEV recovery data/configuration and for production resources serving
+`intexuraos.cloud` (Cloud Functions, the production web bundle, Pub/Sub, and secrets). The DEV PM2
+and emulator runtime is not normally running on Home Dev. The `-dev-pbuchman` suffix and the only
+Terraform directory, `terraform/environments/dev/`, are legacy names and do not imply a separate
+production project. Do not author a sibling `prod` environment directory unless a future
+migration introduces a real second project.
 
 **Artifact Registry URL:** `europe-central2-docker.pkg.dev/intexuraos-dev-pbuchman/intexuraos-dev`
 
@@ -62,8 +68,8 @@ resource-level DEV accessor. Its transitional external key path is
 Terraform must not create or store that key. Local Mac operators prefer user
 ADC plus impersonation of the same service account.
 
-Local/home-dev runtime and orchestration use two other external, non-packaged
-credentials. `ixos-home-runtime-dev` has only the Hetzner-equivalent data-plane
+Local runtime, the retained Home Dev recovery profile, and Home Dev orchestration use two other
+external, non-packaged credentials. `ixos-home-runtime-dev` has only the Hetzner-equivalent data-plane
 union (Firestore, Firebase Auth, logging, Pub/Sub publish, and object access to
 the three runtime buckets) and is selected from
 `${HOME}/.config/intexuraos/home-runtime-sa-key.json` by `.envrc.local`.
@@ -217,17 +223,17 @@ Do not add GCP Cloud Run or app/web Cloud Build deployment paths for migrated se
 
 ## Pub/Sub Topic Registration
 
-**RULE:** When adding a NEW Pub/Sub topic, you MUST update THREE locations:
+**RULE:** When adding a NEW Pub/Sub topic, you MUST review all FIVE locations below and update each
+applicable artifact. Terraform, topology, README, and the publish test are mandatory; update the UI
+when the topic is intended to appear in the dashboard.
 
 1. **Terraform:** `terraform/environments/dev/main.tf` — Add `module "pubsub_<topic-name>"` declaration
-2. **Pub/Sub UI:** `tools/pubsub-ui/server.mjs` — Add to `TOPICS` array and `TOPIC_ENDPOINTS` mapping
-3. **Test Script:** `scripts/pubsub-publish-test.mjs` — Add event template to `EVENTS` object
+2. **Pub/Sub topology:** `tools/pubsub-ui/topology.mjs` — Add one closed-classification entry
+3. **Pub/Sub UI:** `tools/pubsub-ui/index.html` — Add dashboard metadata/template when applicable
+4. **README:** `tools/pubsub-ui/README.md` — Update the documented topic and forwarding tables
+5. **Test Script:** `scripts/pubsub-publish-test.mjs` — Add event template to `EVENTS` object
 
-**Why:** The Pub/Sub UI auto-creates topics on emulator startup and provides manual testing interface. Missing registration breaks local development workflow.
-
-**Files to update:**
-
-- `tools/pubsub-ui/server.mjs` — TOPICS array + TOPIC_ENDPOINTS object
-- `tools/pubsub-ui/index.html` — CSS styles, dropdown option, EVENT_TEMPLATES
-- `tools/pubsub-ui/README.md` — Documentation tables
-- `scripts/pubsub-publish-test.mjs` — Event type + usage docs
+**Why:** Local startup explicitly runs the one-shot `bootstrap.mjs` topology mutation before the
+non-mutating long-running UI/bridge. Missing registration breaks local development and makes drain
+topology fail closed. A bridge-only restart or M7.0 telemetry activation must never invoke the
+bootstrap.

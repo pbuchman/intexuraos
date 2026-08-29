@@ -148,6 +148,28 @@ finish() {
   exit "$1"
 }
 emit "__INTEX_AGENT_EVAL_${frame_id}_BEGIN__"
+if [ "${2-}" != 'matrix-corpus' ]; then
+  mode_record='/var/lib/intexuraos-dev/runtime-mode.env'
+  if [ ! -r "$mode_record" ]; then
+    emit 'dev_runtime_mode_unavailable'
+    finish 2
+  fi
+  if ! runtime_mode=$(sed -n 's/^MODE=//p' "$mode_record"); then
+    emit 'dev_runtime_mode_unavailable'
+    finish 2
+  fi
+  case $runtime_mode in
+    active-pre-cutover|active-post-cutover) ;;
+    hibernated)
+      emit 'DEV_RUNTIME_HIBERNATED'
+      finish 2
+      ;;
+    *)
+      emit 'dev_runtime_mode_unavailable'
+      finish 2
+      ;;
+  esac
+fi
 if ! cd "$HOME/deploy/intexuraos" >/dev/null 2>&1; then
   emit 'remote_environment_unavailable'
   finish 2
@@ -238,7 +260,7 @@ run_ssh() {
 }
 
 readonly safe_check_pattern='(runtime|environment|config|matrix_files|intex_agent_health|whatsapp_health|matrix_health|firebase_identity|matrix_identity|whatsapp_delivery|scenario_catalog|minimax_probe)'
-readonly safe_failure_pattern='(HOME_DEV_REQUIRED|REQUIRED_ENV_MISSING|SETUP_TTY_REQUIRED|CONFIG_NOT_FOUND|CONFIG_INVALID|CONFIG_PARENT_UNSAFE|CONFIG_FILE_UNSAFE|CONFIG_CONFLICT|CONFIG_WRITE_FAILED|MATRIX_TOKEN_FILE_UNSAFE|MATRIX_TOKEN_INVALID|MATRIX_TARGETS_FILE_UNSAFE|MATRIX_TARGETS_INVALID|INTEX_AGENT_HEALTH_FAILED|WHATSAPP_HEALTH_FAILED|MATRIX_HEALTH_FAILED|FIREBASE_IDENTITY_MISSING|FIREBASE_IDENTITY_DISABLED|FIREBASE_CHECK_FAILED|MATRIX_IDENTITY_MISMATCH|MATRIX_WHOAMI_UNAUTHORIZED|MATRIX_WHOAMI_FAILED|WHATSAPP_DELIVERY_NOT_READY|WHATSAPP_DELIVERY_FAILED|SCENARIO_CATALOG_FAILED|MINIMAX_KEY_MISSING|MINIMAX_PROBE_TIMEOUT|MINIMAX_PROBE_INVALID|MINIMAX_PROBE_FAILED|UNEXPECTED_FAILURE)'
+readonly safe_failure_pattern='(HOME_DEV_REQUIRED|REQUIRED_ENV_MISSING|SETUP_TTY_REQUIRED|CONFIG_NOT_FOUND|CONFIG_INVALID|CONFIG_UPGRADE_REQUIRED|CONFIG_PARENT_UNSAFE|CONFIG_FILE_UNSAFE|CONFIG_CONFLICT|CONFIG_WRITE_FAILED|MATRIX_TOKEN_FILE_UNSAFE|MATRIX_TOKEN_INVALID|MATRIX_OUTBOUND_AUTH_TOKEN_FILE_UNSAFE|MATRIX_OUTBOUND_AUTH_TOKEN_INVALID|MATRIX_TARGETS_FILE_UNSAFE|MATRIX_TARGETS_INVALID|INTEX_AGENT_HEALTH_FAILED|WHATSAPP_HEALTH_FAILED|MATRIX_HEALTH_FAILED|FIREBASE_IDENTITY_MISSING|FIREBASE_IDENTITY_DISABLED|FIREBASE_CHECK_FAILED|MATRIX_IDENTITY_MISMATCH|MATRIX_WHOAMI_UNAUTHORIZED|MATRIX_WHOAMI_FAILED|WHATSAPP_DELIVERY_NOT_READY|WHATSAPP_DELIVERY_FAILED|SCENARIO_CATALOG_FAILED|MINIMAX_KEY_MISSING|MINIMAX_PROBE_TIMEOUT|MINIMAX_PROBE_INVALID|MINIMAX_PROBE_FAILED|UNEXPECTED_FAILURE)'
 readonly safe_alias_pattern='^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$'
 readonly safe_run_id_pattern='[a-z0-9][a-z0-9._-]{0,95}'
 readonly matrix_corpus_failure_pattern='(REVISION_INVALID|REVISION_MISMATCH|IMPLEMENTATION_PATHS_DIRTY|PRODUCTION_RUNTIME_REQUIRED|SERVICES_NOT_READY|USER_NOT_READY|ACCOUNT_TUPLE_INVALID|MATRIX_NOT_READY|WHATSAPP_NOT_READY|CAPABILITY_BOUNDARY_NOT_READY|CATALOG_INVALID|MODEL_BINDING_INVALID|RUN_CONFLICT|ARTIFACT_ROOT_NOT_READY|PREFLIGHT_UNEXPECTED_FAILURE)'
@@ -270,7 +292,7 @@ is_safe_preflight_fail_line() {
 
 is_safe_setup_pass_line() {
   local line=$1
-  local pattern='^setup result PASS (created|already_configured) account (.+)$'
+  local pattern='^setup result PASS (created|upgraded|already_configured) account (.+)$'
   [[ $line =~ $pattern ]] && is_safe_alias "${BASH_REMATCH[2]}"
 }
 
@@ -318,10 +340,12 @@ filter_setup_stream() {
             printf '%s\n' "$line"
             ;;
           'setup input canonical_user_id' | 'setup input matrix_user_id' | \
-            'setup input matrix_access_token_file' | 'setup input matrix_targets_file')
+            'setup input matrix_access_token_file' | \
+            'setup input matrix_outbound_auth_token_file' | 'setup input matrix_targets_file')
             printf '%s\n' "$line"
             ;;
-          'revision_mismatch' | 'remote_environment_unavailable')
+          'DEV_RUNTIME_HIBERNATED' | 'dev_runtime_mode_unavailable' | \
+            'revision_mismatch' | 'remote_environment_unavailable')
             if [[ -z $payload_status ]]; then
               terminal_line=$line
               payload_status=2
@@ -666,7 +690,7 @@ extract_validated_payload() {
   [[ -n $payload && $payload == *$'\n' ]] || return 1
 
   if [[ $expected_status == 2 && \
-    ($payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n' || $payload == $'remote_implementation_paths_dirty\n') ]]; then
+    ($payload == $'DEV_RUNTIME_HIBERNATED\n' || $payload == $'dev_runtime_mode_unavailable\n' || $payload == $'revision_mismatch\n' || $payload == $'remote_environment_unavailable\n' || $payload == $'remote_implementation_paths_dirty\n') ]]; then
     printf -v "$destination_name" '%s' "$payload"
     return 0
   fi

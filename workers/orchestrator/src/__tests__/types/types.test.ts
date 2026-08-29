@@ -66,11 +66,14 @@ describe('Orchestrator Types', () => {
 
     it('validates HealthResponse structure', () => {
       const health: HealthResponse = {
-        healthContractVersion: 1,
+        healthContractVersion: 2,
         status: 'ready',
         capacity: 5,
         running: 2,
         available: 3,
+        workerContainers: 0,
+        pendingTerminalCallbacks: 0,
+        terminalCallbackActivityTotal: 0,
         githubTokenExpiresAt: null,
         dockerHealthy: true,
         diskHealthy: true,
@@ -91,6 +94,22 @@ describe('Orchestrator Types', () => {
           },
         },
         providerApiKeys: {},
+        logForwarderDrain: {
+          counterEpochId: '00112233445566778899aabbccddeeff',
+          processStartedAt: '2026-08-28T10:00:00.000Z',
+          activeForwarders: 0,
+          bufferedBytes: 0,
+          partialLineBytes: 0,
+          queuedChunks: 0,
+          inFlightBatches: 0,
+          inFlightChunks: 0,
+          activeFlushOperations: 0,
+          openUploadRequests: 0,
+          detachedUploadRetryPromises: 0,
+          droppedChunksTotal: 0,
+          forwarderActivityTotal: 0,
+          lastActivityAt: null,
+        },
       };
 
       expect(health.status).toBe('ready');

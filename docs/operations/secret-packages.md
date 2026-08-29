@@ -1,12 +1,13 @@
 # Secret Packages Operations
 
-This runbook describes the final package model after the destructive security
-cutover. It contains no rollback, legacy-read, dual-package, recovery, or soak
-procedure. If a step fails, keep the affected services stopped, fix forward,
-and repeat the failed verification.
+This runbook describes the final package model after the completed destructive security cutover. It
+contains no rollback, legacy-read, dual-package, recovery, or soak procedure; old-key compatibility
+is forbidden. If a step fails, keep affected production services stopped, fix forward, and repeat
+the failed verification; retained DEV application recovery follows the separate hibernation
+runbook.
 
-The cutover itself is governed only by
-[Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md).
+The [Secret Exposure Final Cutover Plan](./secret-exposure-final-cutover-plan.md) is a historical
+archive and is not current execution authority.
 
 ## Final State
 
@@ -83,10 +84,10 @@ cutover is verified.
 Repeat independently for PROD. Never reuse a DEV payload for PROD or vice
 versa.
 
-## Render And Start DEV
+## Render And Stage Retained DEV
 
-Stop Home Dev writers before changing the package version. Then render the
-exact DEV version:
+If the retained DEV application stack is active under an approved recovery window, stop its writers
+before changing the package version. Then render the exact DEV version on Home Dev:
 
 ```bash
 SECRET_PACKAGE_GOOGLE_APPLICATION_CREDENTIALS=/home/pbuchman/.config/intexuraos/secret-renderer-sa-key.json \
@@ -102,7 +103,10 @@ Required result:
 - no obsolete secret name, projection, or package version is selected;
 - orchestrator and Alloy projections validate before their services start.
 
-Start Home Dev only after the static web build and package validation pass.
+Do not start the retained DEV PM2 stack as part of package staging. Normal completion leaves the DEV
+application profile hibernated. A live recovery check requires a separately authorized
+`intexuraos-dev-mode resume` transaction, all runbook gates, and a final return to hibernation. The
+production-owned orchestrator remains a separate retained Home Dev service.
 
 ## Render And Start PROD
 
@@ -134,11 +138,13 @@ timestamp, and numeric package version.
 2. Create the replacement at the provider or generate it locally.
 3. Build complete DEV and PROD candidates from their active numeric versions.
 4. Publish one new numeric version per environment.
-5. Update both tracked pins and deploy the same reviewed SHA to Home Dev and
-   production.
-6. Run provider, application, browser, and direct-origin smoke tests.
-7. Revoke the old provider credential and destroy every older package version.
-8. Delete all private candidate and receipt files.
+5. Update both tracked pins, deploy the exact reviewed SHA to production, and stage that SHA plus
+   the retained DEV projection on Home Dev without starting the DEV application stack.
+6. Run production provider, application, browser, and direct-origin smoke tests. If DEV recovery
+   must be tested, use a separately authorized resume-and-rehibernate drill.
+7. Verify the final Home Dev application mode is `hibernated`.
+8. Revoke the old provider credential and destroy every older package version.
+9. Delete all private candidate and receipt files.
 
 For encrypted Firestore values, run the tracked one-time offline migrator while
 all writers are stopped. Runtime receives only the new key. The old and new
@@ -155,7 +161,8 @@ Every package operation finishes only when all checks below pass:
 - secret payloads never enter Terraform state, Git, logs, or evidence;
 - old credentials reject requests or are absent;
 - obsolete package/native versions are destroyed;
-- Home Dev and production run the same reviewed SHA;
+- production runs the reviewed SHA and Home Dev stages that same SHA with the DEV application
+  profile hibernated, except during a bounded recovery drill;
 - PM2, systemd, nginx, Alloy, public/direct health, Auth0, Firebase, OAuth,
   WhatsApp, Matrix, transcription, OpenRouter, and browser smokes pass;
 - Secret Manager inventory contains only the four final application containers

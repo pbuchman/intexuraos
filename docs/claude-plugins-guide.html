@@ -649,6 +649,16 @@
           agents configured for the IntexuraOS monorepo.
         </p>
 
+        <div class="tip-box warning">
+          <h5>Historical snapshot</h5>
+          <p>
+            This page captures a retired tool configuration and is not operational deployment
+            guidance. In particular, its Cloud Run, push-to-development, and
+            <code class="inline-code">/verify-deployment</code> examples must not be used to deploy
+            production or resume the normally hibernated DEV profile.
+          </p>
+        </div>
+
         <div class="stats">
           <div class="stat-card">
             <div class="stat-number">5</div>
@@ -2062,8 +2072,8 @@ Task tool with subagent_type=<span class="syntax-string">"pr-review-toolkit:sile
             <div class="card-content">
               <div class="card-body">
                 <p class="card-description">
-                  Verify Cloud Run deployment health after pushing to development branch. Monitors 7
-                  services.
+                  Historical verifier for the retired Cloud Run and push-to-development flow; it is
+                  not a current deployment command.
                 </p>
 
                 <div class="tools-list">
@@ -2790,7 +2800,10 @@ Task tool with subagent_type=<span class="syntax-string">"pr-review-toolkit:sile
                     <div class="step-number">5</div>
                     <div class="step-content">
                       <h5>Deploy & Verify</h5>
-                      <p>Commit, push, then <code class="inline-code">/verify-deployment</code></p>
+                      <p>
+                        Follow the current exact-SHA production runbook; do not use the historical
+                        <code class="inline-code">/verify-deployment</code> command.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -4554,6 +4567,13 @@ Found 3 issues:
           </div>
           <div class="card-content">
             <div class="card-body">
+              <div class="tip-box warning">
+                <h5>Historical example only</h5>
+                <p>
+                  This retired Cloud Run output is preserved for reference and is not a valid
+                  production or DEV verification path.
+                </p>
+              </div>
               <div class="example-block">
                 <div class="example-header">
                   <span class="example-label">/verify-deployment</span>

@@ -42,15 +42,19 @@ While the app is in "Testing" status, add your Google account(s) as test users. 
 2. Click **Create Credentials** → **OAuth client ID**
 3. Fill in:
 
-| Field                      | Dev Value                                                              | Prod Value                                                         |
-| -------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| Application type           | Web application                                                        | Web application                                                    |
-| Name                       | `IntexuraOS Dev`                                                       | `IntexuraOS`                                                       |
-| Authorized redirect URIs   | `https://dev.intexuraos.cloud/api/user-service/oauth/google/callback`  | `https://intexuraos.cloud/api/user-service/oauth/google/callback`  |
+| Field                    | Retained DEV recovery value                                             | Production value                                                    |
+| ------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Application type         | Web application                                                         | Web application                                                     |
+| Name                     | `IntexuraOS Dev`                                                        | `IntexuraOS`                                                        |
+| Authorized redirect URIs | `https://dev.intexuraos.cloud/api/user-service/oauth/google/callback`   | `https://intexuraos.cloud/api/user-service/oauth/google/callback`   |
 
 4. Copy the **Client ID** and **Client Secret**
 
 > **Note:** Google OAuth uses refresh tokens. The `access_type: 'offline'` and `prompt: 'consent'` parameters ensure a refresh token is returned on first authorization.
+
+Keep the retained DEV recovery redirect allow-listed so a reviewed resume remains possible, but
+do not use it for routine authorization or verification while DEV is hibernated. Normal OAuth
+traffic and all ordinary checks use production.
 
 ## Step 3: Configure Client ID And Secret
 
@@ -73,15 +77,19 @@ echo -n "YOUR_GOOGLE_CLIENT_SECRET" | gcloud secrets versions add INTEXURAOS_GOO
 Use `versions add` rather than `create`; Terraform owns the client-secret
 container. Do not add versions for the client ID or redirect URI.
 
-## Step 4: Add to Dev Environment
+## Step 4: Stage The Retained DEV Recovery Configuration
 
-On home-dev, regenerate the merged environment and restart user-service:
+During an approved Home Dev staging window, regenerate the merged environment without starting the
+retained DEV application stack:
 
 ```bash
 ./scripts/sync-secrets.sh
 direnv allow
-pm2 restart user-service
 ```
+
+Do not restart `user-service` while DEV is hibernated. If callback recovery must be exercised, use
+the DEV hibernation runbook's explicitly authorized resume transaction; its mode controller owns
+validation and service start order. A direct `pm2 restart` is not a resume procedure.
 
 ## Step 5: Deploy The Versioned Configuration
 
@@ -108,7 +116,7 @@ node scripts/render-runtime-config.mjs --environment dev --format dotenv \
 gcloud secrets versions list INTEXURAOS_GOOGLE_OAUTH_CLIENT_SECRET --project=intexuraos-dev-pbuchman
 
 # Test the OAuth initiation endpoint
-curl -X POST https://dev.intexuraos.cloud/api/user-service/oauth/connections/google/initiate \
+curl -X POST https://intexuraos.cloud/api/user-service/oauth/connections/google/initiate \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

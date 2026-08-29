@@ -220,6 +220,13 @@ export interface IsolationProvider {
 
   listWorkerContainers?(): Promise<DiscoveredContainer[]>;
 
+  /**
+   * Count every Docker container owned by the worker namespace for fail-closed
+   * drain evidence. Implementations must reject when the backing runtime cannot
+   * be queried; callers treat a missing method or rejection as unknown.
+   */
+  getDrainWorkerContainerCount?(): Promise<number>;
+
   startPeriodicCleanup?(): void;
 
   stopPeriodicCleanup?(): void;

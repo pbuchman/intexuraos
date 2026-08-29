@@ -40,6 +40,7 @@ const CONFIG_FIELDS = [
   'userId',
   'matrixUserId',
   'matrixAccessTokenFile',
+  'matrixOutboundAuthTokenFile',
   'matrixTargetsFile',
 ] as const;
 
@@ -100,12 +101,27 @@ describe('Intex Agent evaluation documentation', () => {
     expect(runbook).toContain(
       '`scripts/run-intex-agent-evals-home-dev.sh matrix-corpus` exits before Git, SSH, or any'
     );
+    expect(runbook).toContain('`MODE=hibernated`');
+    expect(runbook).toContain('`DEV_RUNTIME_HIBERNATED`');
+    expect(runbook).toMatch(/production `matrix-corpus` wrapper is exempt/u);
     expect(runbook).toContain('20 scenarios and 60 turns');
     expect(runbook).toContain('or:deepseek/deepseek-v4-flash');
 
     for (const field of CONFIG_FIELDS) {
       expect(runbook).toContain(`"${field}"`);
     }
+    expect(runbook).toContain(
+      '`matrixOutboundAuthTokenFile` is distinct from `matrixAccessTokenFile`'
+    );
+    expect(runbook).toContain(
+      '`GET http://127.0.0.1:8099/health` requires `Authorization: Bearer`'
+    );
+    expect(runbook).toContain('"schemaVersion": 2');
+    expect(runbook).toContain('`CONFIG_UPGRADE_REQUIRED`');
+    expect(runbook).toContain('`setup result PASS upgraded`');
+    expect(runbook).toContain('atomically replaces the protected version-one file');
+    expect(runbook).toContain('fsyncs the containing directory before reporting success');
+    expect(runbook).toContain('fsyncs the directory again after removing the upgrade lock');
 
     expect(runbook).toContain(
       '| `0` | All executed deterministic and MiniMax checks passed. | Preserve report path and continue. |'

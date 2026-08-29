@@ -44,7 +44,6 @@ vi.mock('../bootstrap/env-config.js', () => ({
       errorHubHost: 'home-dev.example.ts.net:8443',
       openRouterApiKey: '',
       logLevel: 'info',
-      environment: 'test',
     };
   }),
 }));
@@ -135,13 +134,13 @@ vi.mock('pino', () => {
   return { default: pino };
 });
 
-// Mock initWorker so the bootstrap path doesn't touch Sentry / OTel during
-// unit tests. The mock returns a fake logger + flush so we can assert that
-// `flush` is forwarded into `main()` on the SIGTERM handoff.
+// Mock the closed observability identity boundary so the bootstrap path does
+// not touch Sentry / OTel during unit tests. Its own unit tests verify the
+// private branded identity value is forwarded only to initWorker().
 const mockFlush = vi.fn(async () => undefined);
-vi.mock('@intexuraos/infra-sentry', () => ({
-  initWorker: vi.fn(() => {
-    callOrder.push('initWorker');
+vi.mock('../bootstrap/observability-identity.js', () => ({
+  initOrchestratorObservability: vi.fn(() => {
+    callOrder.push('initOrchestratorObservability');
     return {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
       flush: mockFlush,
@@ -171,7 +170,7 @@ import {
 } from '../bootstrap/service-wiring.js';
 import { ensureRepository } from '../services/repo-manager.js';
 import { main } from '../main.js';
-import { initWorker } from '@intexuraos/infra-sentry';
+import { initOrchestratorObservability } from '../bootstrap/observability-identity.js';
 
 describe('start() — full bootstrap happy path', () => {
   beforeEach(() => {
@@ -198,16 +197,14 @@ describe('start() — full bootstrap happy path', () => {
       expect.anything()
     );
     expect(startCredentialRefreshLoop).toHaveBeenCalledOnce();
-    expect(initWorker).toHaveBeenCalledOnce();
+    expect(initOrchestratorObservability).toHaveBeenCalledOnce();
     expect(main).toHaveBeenCalledOnce();
   });
 
-  it('initializes the worker with serviceName=orchestrator and the env environment', async () => {
+  it('initializes observability through the closed identity boundary', async () => {
     await start();
 
-    expect(initWorker).toHaveBeenCalledWith(
-      expect.objectContaining({ serviceName: 'orchestrator', environment: 'test' })
-    );
+    expect(initOrchestratorObservability).toHaveBeenCalledWith({});
   });
 
   it('forwards the flush callback returned by initWorker into main()', async () => {
@@ -221,7 +218,7 @@ describe('start() — full bootstrap happy path', () => {
     expect(mainArgs).toContain(mockFlush);
   });
 
-  it('forwards sentryDsn and release into initWorker when env supplies them', async () => {
+  it('forwards sentryDsn and release into the observability boundary when env supplies them', async () => {
     // Drives the truthy arms of the conditional spreads in start.ts:
     //   ...(env.sentryDsn !== undefined ? { sentryDsn: env.sentryDsn } : {})
     //   ...(env.release !== undefined ? { release: env.release } : {})
@@ -248,21 +245,16 @@ describe('start() — full bootstrap happy path', () => {
       errorHubHost: 'home-dev.example.ts.net:8443',
       openRouterApiKey: '',
       logLevel: 'info',
-      environment: 'production',
       sentryDsn: 'https://x@sentry.io/1',
       release: 'orchestrator-00099-rev',
     });
 
     await start();
 
-    expect(initWorker).toHaveBeenCalledWith(
-      expect.objectContaining({
-        serviceName: 'orchestrator',
-        environment: 'production',
-        sentryDsn: 'https://x@sentry.io/1',
-        release: 'orchestrator-00099-rev',
-      })
-    );
+    expect(initOrchestratorObservability).toHaveBeenCalledWith({
+      sentryDsn: 'https://x@sentry.io/1',
+      release: 'orchestrator-00099-rev',
+    });
   });
 
   it('invokes bootstrap modules in the documented order', async () => {
@@ -282,7 +274,7 @@ describe('start() — full bootstrap happy path', () => {
       'validateGcpCredentials',
       'fetchGitHubKeys',
       'ensurePortAvailable',
-      'initWorker',
+      'initOrchestratorObservability',
       'ensureRepository',
       'buildOrchestratorServices',
       'startCredentialRefreshLoop',
@@ -346,7 +338,6 @@ describe('start() — full bootstrap happy path', () => {
       gitUserNameOverride: 'Test User',
       gitUserEmailOverride: 'test@example.com',
       logLevel: 'info',
-      environment: 'test',
     });
 
     await start();

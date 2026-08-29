@@ -12,12 +12,13 @@
  *   pnpm run dev:sync     # Sync + start emulators + start services
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { createDockerComposeEnv } from './lib/docker-compose-env.mjs';
+import { buildLocalEmulatorStartPlan } from './lib/local-emulator-lifecycle.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = join(__dirname, '..');
@@ -201,11 +202,13 @@ async function startEmulators() {
 
   const dockerEnv = createDockerComposeEnv();
   try {
-    execSync(`docker compose -f "${composeFile}" up -d --build`, {
-      cwd: ROOT_DIR,
-      env: dockerEnv.env,
-      stdio: 'inherit',
-    });
+    for (const command of buildLocalEmulatorStartPlan()) {
+      execFileSync('docker', ['compose', '-f', composeFile, ...command], {
+        cwd: ROOT_DIR,
+        env: dockerEnv.env,
+        stdio: 'inherit',
+      });
+    }
   } catch (error) {
     throw new Error(`Failed to start emulators: ${error.message}`);
   } finally {
@@ -249,7 +252,7 @@ async function verifyDockerServices(composeFile) {
     if (missing.length > 0) {
       throw new Error(
         `Required Docker services not running: ${missing.join(', ')}\n` +
-          'Try: docker compose -f docker/docker-compose.local.yaml up -d --build'
+          'Try: pnpm run emulators:start'
       );
     }
 

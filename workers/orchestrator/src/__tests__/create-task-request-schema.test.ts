@@ -2,6 +2,31 @@ import { describe, expect, it } from 'vitest';
 import { CreateTaskRequestSchema } from '../types/schemas.js';
 
 describe('CreateTaskRequestSchema', () => {
+  const callbackRequest = {
+    taskId: 'task_00000000-0000-0000-0000-0000000000f1',
+    workerType: 'auto',
+    prompt: 'Validate callback ownership',
+    webhookSecret: 'secret',
+  } as const;
+
+  it.each(['file:///tmp/callback', 'ftp://example.com/callback', 'mailto:callback@example.com'])(
+    'rejects non-HTTP callback URL %s before task creation',
+    (webhookUrl) => {
+      expect(CreateTaskRequestSchema.safeParse({ ...callbackRequest, webhookUrl }).success).toBe(
+        false
+      );
+    }
+  );
+
+  it.each(['http://localhost:8080/callback', 'https://example.com/callback'])(
+    'accepts HTTP(S) callback URL %s',
+    (webhookUrl) => {
+      expect(CreateTaskRequestSchema.safeParse({ ...callbackRequest, webhookUrl }).success).toBe(
+        true
+      );
+    }
+  );
+
   it('accepts Sentry agent tasks with issue context', () => {
     const result = CreateTaskRequestSchema.safeParse({
       taskId: 'task_00000000-0000-0000-0000-0000000000a4',

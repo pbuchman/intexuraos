@@ -298,6 +298,7 @@ export function registerRoutes(
   app.get('/health', async (_request, reply) => {
     const running = dispatcher.getRunningCount();
     const capacity = dispatcher.getCapacity();
+    const drainOwnership = await dispatcher.getDrainOwnershipSnapshot();
     const tokenExpiry = tokenService.getExpiresAt();
     /* v8 ignore start -- ts-type: nullish coalescing fallback for optional workerAuthRegistry parameter @preserve */
     const workerAuths = workerAuthRegistry?.getStates() ?? {
@@ -321,16 +322,18 @@ export function registerRoutes(
     /* v8 ignore stop @preserve */
 
     reply.send({
-      healthContractVersion: 1,
+      healthContractVersion: 2,
       status: getStatus?.() ?? 'ready',
       capacity,
       running,
       available: capacity - running,
+      ...drainOwnership,
       githubTokenExpiresAt: tokenExpiry?.toISOString() ?? null,
       workerAuths,
       providerApiKeys,
       dockerHealthy: healthDetails.docker,
       diskHealthy: healthDetails.disk,
+      logForwarderDrain: dispatcher.getLogForwarderDrainSnapshot(),
     });
   });
 

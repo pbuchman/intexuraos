@@ -179,7 +179,7 @@ describe('config validation', () => {
   it('requires Cloudflare service credentials only for the HTTPS production adapter', async () => {
     const { validateConfigEnv } = await import('../config.js');
     process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_URL'] =
-      'https://dev.intexuraos.cloud/api/matrix-outbound';
+      'https://matrix-outbound.intexuraos.cloud/api/matrix-outbound';
     process.env['INTEXURAOS_MATRIX_OUTBOUND_ADAPTER_AUTH_TOKEN'] = 'matrix-token';
     delete process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_ID'];
     delete process.env['INTEXURAOS_MATRIX_OUTBOUND_CF_ACCESS_CLIENT_SECRET'];
