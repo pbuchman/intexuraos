@@ -63,8 +63,7 @@ function validateFixture(fixture, validationRoot) {
   const { bytes, fixturePath, sha256 } = assertFixtureMatchesGenerator(fixture);
   const isolatedDirectory = resolve(validationRoot, fixture.name.replace(/\.caddy$/u, ''));
   const isolatedConfig = resolve(isolatedDirectory, 'Caddyfile');
-  const isolatedLogDirectory = resolve(isolatedDirectory, 'logs');
-  mkdirSync(isolatedLogDirectory, { recursive: true });
+  mkdirSync(isolatedDirectory, { recursive: true });
   copyFileSync(fixturePath, isolatedConfig);
   if (!readFileSync(isolatedConfig).equals(bytes)) {
     throw new Error(`${fixture.name} isolated validation copy does not match source bytes`);
@@ -81,7 +80,7 @@ function validateFixture(fixture, validationRoot) {
       '--security-opt=no-new-privileges',
       '--pull=never',
       `--volume=${isolatedConfig}:/validation/Caddyfile:ro`,
-      `--volume=${isolatedLogDirectory}:/var/log/caddy`,
+      '--tmpfs=/var/log/caddy:rw,noexec,nosuid,nodev,size=16m,mode=1777',
       '--tmpfs=/config:rw,noexec,nosuid,nodev,size=16m',
       '--tmpfs=/data:rw,noexec,nosuid,nodev,size=16m',
       '--workdir=/validation',

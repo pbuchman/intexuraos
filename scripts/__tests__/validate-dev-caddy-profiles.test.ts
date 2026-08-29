@@ -108,6 +108,12 @@ describe('DEV Caddy profile validator', () => {
       expect(call).toContain('--cap-add=NET_BIND_SERVICE');
       expect(call).toContain('--security-opt=no-new-privileges');
       expect(call).toContain('--pull=never');
+      expect(call).toContain('--tmpfs=/var/log/caddy:rw,noexec,nosuid,nodev,size=16m,mode=1777');
+      expect(
+        call.some(
+          (argument) => argument.startsWith('--volume=') && argument.includes(':/var/log/caddy')
+        )
+      ).toBe(false);
       expect(call).toContain(CADDY_IMAGE);
       expect(call.slice(-6)).toEqual([
         'caddy',
